@@ -24,6 +24,11 @@ struct NvencEncoder::Impl {
     FILE*                      out = nullptr;
     EncoderConfig              cfg{};
     uint32_t                   width = 0, height = 0;
+    // Giữ lại để nvEncReconfigureEncoder (đổi bitrate) — API đòi cả bộ tham số khởi
+    // tạo chứ không nhận riêng trường cần đổi. initParams.encodeConfig phải trỏ vào
+    // encCfg (thành viên), không phải biến cục bộ của Init.
+    NV_ENC_CONFIG              encCfg{};
+    NV_ENC_INITIALIZE_PARAMS   initParams{};
     uint64_t                   frameCount = 0;
     uint64_t                   totalBytes = 0;
 
@@ -90,7 +95,7 @@ struct NvencEncoder::Impl {
         s = nv.nvEncGetEncodePresetConfigEx(enc, codecGuid, presetGuid, tuning, &preset);
         if (s != NV_ENC_SUCCESS) return Fail("GetEncodePresetConfigEx", s);
 
-        NV_ENC_CONFIG encCfg = preset.presetCfg;
+        encCfg = preset.presetCfg;
         encCfg.gopLength = NVENC_INFINITE_GOPLENGTH;   // IDR theo yêu cầu, không định kỳ
         encCfg.frameIntervalP = 1;                     // không B-frame (độ trễ thấp)
         encCfg.rcParams.rateControlMode = NV_ENC_PARAMS_RC_CBR;
@@ -105,7 +110,8 @@ struct NvencEncoder::Impl {
             encCfg.encodeCodecConfig.h264Config.repeatSPSPPS = 1;
         }
 
-        NV_ENC_INITIALIZE_PARAMS ip{};
+        initParams = {};
+        NV_ENC_INITIALIZE_PARAMS& ip = initParams;
         ip.version = NV_ENC_INITIALIZE_PARAMS_VER;
         ip.encodeGUID = codecGuid;
         ip.presetGUID = presetGuid;
@@ -145,6 +151,22 @@ struct NvencEncoder::Impl {
             width, height, cfg.fps, cfg.bitrateBps / 1e6,
             cfg.codec == Codec::HEVC ? "HEVC" : "H264",
             path.empty() ? L"callback" : path.c_str());
+        return true;
+    }
+
+    // Đổi bitrate không dựng lại session: chuỗi inter-frame giữ nguyên, không cần IDR.
+    bool SetBitrate(uint32_t bitrateBps) {
+        if (!enc || !bitrateBps) return false;
+        cfg.bitrateBps = bitrateBps;
+        encCfg.rcParams.averageBitRate = bitrateBps;
+        encCfg.rcParams.vbvBufferSize = bitrateBps / (cfg.fps ? cfg.fps : 60);
+        encCfg.rcParams.vbvInitialDelay = encCfg.rcParams.vbvBufferSize;
+
+        NV_ENC_RECONFIGURE_PARAMS rp{};
+        rp.version = NV_ENC_RECONFIGURE_PARAMS_VER;
+        rp.reInitEncodeParams = initParams;      // encodeConfig vẫn trỏ vào encCfg
+        NVENCSTATUS s = nv.nvEncReconfigureEncoder(enc, &rp);
+        if (s != NV_ENC_SUCCESS) return Fail("ReconfigureEncoder", s);
         return true;
     }
 
@@ -260,5 +282,8 @@ bool NvencEncoder::Init(ID3D11Device* device, const EncoderConfig& cfg) {
 }
 bool NvencEncoder::Encode(ID3D11Texture2D* frame, uint64_t ts, bool forceKeyframe) {
     return impl_ && impl_->Encode(frame, ts, forceKeyframe);
+}
+bool NvencEncoder::SetBitrate(uint32_t bitrateBps) {
+    return impl_ && impl_->SetBitrate(bitrateBps);
 }
 void NvencEncoder::Finish() { if (impl_) impl_->Finish(); }

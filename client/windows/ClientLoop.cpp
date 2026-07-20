@@ -168,6 +168,15 @@ int RunClient(const ClientOptions& opt) {
             negW.store(np.width);
             negH.store(np.height); // main thấy kích thước -> tạo cửa sổ preview
         };
+        cb.onReconfig = [&](const rgc::NegotiatedParams& np) {
+            std::printf("[Client] Host reconfigured: %ux%u, %.1f Mbps\n",
+                        np.width, np.height, np.bitrateBps / 1e6);
+            negW.store(np.width);
+            negH.store(np.height);
+            // Không dựng lại decoder/renderer: MfDecoder tự đàm phán lại kích thước
+            // khi gặp SPS mới (MF_E_TRANSFORM_STREAM_CHANGE) và Renderer tự tạo lại
+            // video processor theo kích thước frame giải mã (EnsureVideoProcessor).
+        };
         cb.onRtt = [&](uint32_t rttUs) {
             uint32_t cur = minRttUs.load(std::memory_order_relaxed);
             while ((!cur || rttUs < cur) &&
@@ -203,12 +212,19 @@ int RunClient(const ClientOptions& opt) {
                 const auto h = rgc::ParseCommonHeader(span);
                 if (h && h->chan == rgc::Chan::Video) {
                     if (h->sessionId == session.sessionId() && session.sessionId() != 0) {
-                        if (const auto v = rgc::ParseVideoPacket(*h, rgc::PayloadOf(span))) {
-                            session.NotifyVideoPacket(now);
-                            if (!reasm) {
-                                const uint32_t fps = session.params().fps ? session.params().fps : 60;
-                                reasm = std::make_unique<rgc::Reassembler>(1'000'000 / fps);
+                        const auto pl = rgc::PayloadOf(span);
+                        if (!reasm) {
+                            const uint32_t fps = session.params().fps ? session.params().fps : 60;
+                            reasm = std::make_unique<rgc::Reassembler>(1'000'000 / fps);
+                        }
+                        if (h->type == rgc::MsgType::FecPacket) {
+                            if (const auto v = rgc::ParseFecPacket(*h, pl)) {
+                                session.NotifyVideoPacket(now);
+                                reasm->PushFec(*v, now);
+                                stBytes += v->parity.size();
                             }
+                        } else if (const auto v = rgc::ParseVideoPacket(*h, pl)) {
+                            session.NotifyVideoPacket(now);
                             reasm->Push(*v, now);
                             stBytes += v->payload.size();
                         }
@@ -271,12 +287,14 @@ int RunClient(const ClientOptions& opt) {
                 const double lossPct = (pkts + lost) ? 100.0 * lost / double(pkts + lost) : 0.0;
                 const int64_t e2e = lastE2eUs.load();
                 const uint32_t rendered = stRendered.load(std::memory_order_relaxed);
+                const uint64_t recovered = st.packetsRecovered - lastStats.packetsRecovered;
                 std::printf("[Client] %2.0f fps | %6.0f kbps | dropped %llu frame | lost %4.1f%%"
-                            " pkts | RTT %.1f ms | e2e ~%.1f ms\n",
+                            " pkts | fec+%llu | RTT %.1f ms | e2e ~%.1f ms\n",
                             rendered / secs,
                             stBytes * 8.0 / 1000.0 / secs,
                             (unsigned long long)(st.framesDropped - lastStats.framesDropped),
                             lossPct,
+                            (unsigned long long)recovered,
                             session.lastRttUs() / 1000.0,
                             e2e >= 0 ? e2e / 1000.0 : 0.0);
 
@@ -291,6 +309,16 @@ int RunClient(const ClientOptions& opt) {
                     std::lock_guard<std::mutex> lk(statsMutex);
                     statusText = statusBuf;
                 }
+
+                // GD5: cùng số liệu đó gửi ngược cho host để nó siết/nới bitrate.
+                // Gửi cả khi 0% mất gói — host cần tín hiệu "đường thông" mới dám
+                // nới lên lại, im lặng bị hiểu là mất kết nối.
+                rgc::Feedback fb;
+                fb.lostFrames      = uint16_t(st.framesDropped - lastStats.framesDropped);
+                fb.lossPct         = uint8_t(lossPct + 0.5);
+                fb.rttMs           = uint16_t(session.lastRttUs() / 1000);
+                fb.recvBitrateKbps = uint32_t(stBytes * 8.0 / 1000.0 / secs);
+                session.SendFeedback(fb);
 
                 lastStats = st;
                 stRendered.store(0, std::memory_order_relaxed);

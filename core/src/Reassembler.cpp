@@ -4,11 +4,9 @@
 
 namespace rgc {
 
-void Reassembler::Push(const VideoPacketView& pkt, uint64_t nowUs) {
-    ++stats_.packetsReceived;
-    if (pkt.payload.empty()) return; // Packetizer không bao giờ phát mảnh rỗng
-    const uint32_t id = pkt.hdr.frameId;
-    if (haveBarrier_ && id <= barrierId_) return; // gói muộn của frame đã phát/bỏ
+Reassembler::Pending* Reassembler::Slot(uint32_t id, uint16_t pktCount,
+                                        uint64_t timestampUs, uint64_t nowUs) {
+    if (haveBarrier_ && id <= barrierId_) return nullptr; // gói muộn của frame đã phát/bỏ
 
     auto it = pending_.find(id);
     if (it == pending_.end()) {
@@ -17,20 +15,86 @@ void Reassembler::Push(const VideoPacketView& pkt, uint64_t nowUs) {
             Drop(pending_.begin(), true);
         it = pending_.emplace(id, Pending{}).first;
         Pending& f = it->second;
-        f.pktCount = pkt.hdr.pktCount;
-        f.pieces.resize(pkt.hdr.pktCount);
-        f.timestampUs = pkt.hdr.timestampUs;
+        f.pktCount = pktCount;
+        f.pieces.resize(pktCount);
+        f.timestampUs = timestampUs;
         f.firstSeenUs = nowUs;
     }
+    if (it->second.pktCount != pktCount) return nullptr; // gói hỏng / không khớp frame
+    return &it->second;
+}
 
-    Pending& f = it->second;
-    if (pkt.hdr.pktCount != f.pktCount || pkt.hdr.pktIndex >= f.pktCount) return; // gói hỏng
+void Reassembler::Push(const VideoPacketView& pkt, uint64_t nowUs) {
+    ++stats_.packetsReceived;
+    if (pkt.payload.empty()) return; // Packetizer không bao giờ phát mảnh rỗng
+
+    Pending* fp = Slot(pkt.hdr.frameId, pkt.hdr.pktCount, pkt.hdr.timestampUs, nowUs);
+    if (!fp) return;
+    Pending& f = *fp;
+    if (pkt.hdr.pktIndex >= f.pktCount) return; // gói hỏng
     auto& slot = f.pieces[pkt.hdr.pktIndex];
     if (!slot.empty()) return; // trùng
     slot.assign(pkt.payload.begin(), pkt.payload.end());
     f.bytes += slot.size();
     f.idr = f.idr || pkt.idr;
     ++f.received;
+
+    // Gói này có thể là mảnh cuối nhóm cần để parity (đã tới trước) dùng được.
+    TryRecover(f, uint8_t(pkt.hdr.pktIndex / kFecGroupSize));
+}
+
+void Reassembler::PushFec(const FecPacketView& pkt, uint64_t nowUs) {
+    ++stats_.fecReceived;
+    if (pkt.parity.size() < kFecLenPrefix) return;
+
+    Pending* fp = Slot(pkt.hdr.frameId, pkt.hdr.pktCount, pkt.hdr.timestampUs, nowUs);
+    if (!fp) return;
+    Pending& f = *fp;
+    f.idr = f.idr || pkt.idr;
+
+    auto& slot = f.parity[pkt.hdr.groupIndex];
+    if (!slot.empty()) return; // trùng
+    slot.assign(pkt.parity.begin(), pkt.parity.end());
+    TryRecover(f, pkt.hdr.groupIndex);
+}
+
+bool Reassembler::TryRecover(Pending& f, uint8_t group) {
+    auto pit = f.parity.find(group);
+    if (pit == f.parity.end()) return false;
+    const std::vector<uint8_t>& par = pit->second;
+
+    const size_t first = size_t(group) * kFecGroupSize;
+    if (first >= f.pktCount) return false;
+    size_t last = first + kFecGroupSize;
+    if (last > f.pktCount) last = f.pktCount;
+
+    // Parity XOR chỉ gỡ được MỘT ẩn số. Không thiếu gói nào thì thôi, thiếu ≥2 thì chịu.
+    size_t missing = 0, missingIdx = 0;
+    for (size_t i = first; i < last; ++i)
+        if (f.pieces[i].empty()) { ++missing; missingIdx = i; }
+    if (missing != 1) return false;
+
+    // XOR ngược: parity ^ (mọi mảnh đã có) = mảnh thiếu, kèm 2 byte độ dài đứng đầu.
+    std::vector<uint8_t> rec(par);
+    for (size_t i = first; i < last; ++i) {
+        if (i == missingIdx) continue;
+        const auto& p = f.pieces[i];
+        rec[0] ^= uint8_t(p.size() >> 8);
+        rec[1] ^= uint8_t(p.size() & 0xFF);
+        for (size_t b = 0; b < p.size(); ++b) rec[kFecLenPrefix + b] ^= p[b];
+    }
+
+    const size_t len = (size_t(rec[0]) << 8) | rec[1];
+    // Độ dài dựng ra phải hợp lệ: parity hỏng/không cùng frame sẽ cho số vô nghĩa,
+    // nhét bừa vào NAL còn tệ hơn bỏ frame.
+    if (len == 0 || len > kMaxVideoPayload || kFecLenPrefix + len > rec.size()) return false;
+
+    f.pieces[missingIdx].assign(rec.begin() + kFecLenPrefix,
+                                rec.begin() + kFecLenPrefix + len);
+    f.bytes += len;
+    ++f.received;
+    ++stats_.packetsRecovered;
+    return true;
 }
 
 std::optional<Reassembler::Frame> Reassembler::PopReady(uint64_t nowUs) {

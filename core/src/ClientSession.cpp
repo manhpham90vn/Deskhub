@@ -51,6 +51,21 @@ bool ClientSession::HandlePacket(std::span<const uint8_t> pkt, uint64_t nowUs) {
         if (cb_.onRtt) cb_.onRtt(lastRttUs_);
         return true;
     }
+    case MsgType::Reconfig: {
+        if (h->sessionId != sessionId_ || sessionId_ == 0) return false;
+        if (state_ != State::Starting && state_ != State::Streaming) return false;
+        const auto m = ParseReconfig(payload);
+        if (!m) return false;
+        lastRecvUs_ = nowUs;
+        // Kích thước 0 = host gửi hỏng; giữ nguyên còn hơn dựng decoder 0x0.
+        if (m->width && m->height) {
+            params_.width  = m->width;
+            params_.height = m->height;
+        }
+        if (m->bitrateBps) params_.bitrateBps = m->bitrateBps;
+        if (cb_.onReconfig) cb_.onReconfig(params_);
+        return true;
+    }
     case MsgType::Bye:
         if (h->sessionId != sessionId_ || sessionId_ == 0) return false;
         Die("host ended the session (BYE)");
@@ -105,6 +120,12 @@ void ClientSession::Tick(uint64_t nowUs) {
         const size_t n = BuildRequestKeyframe(buf_, sessionId_);
         if (n && cb_.send) cb_.send(std::span<const uint8_t>(buf_, n));
     }
+}
+
+void ClientSession::SendFeedback(const Feedback& fb) {
+    if (state_ != State::Streaming) return;
+    const size_t n = BuildFeedback(buf_, sessionId_, fb);
+    if (n && cb_.send) cb_.send(std::span<const uint8_t>(buf_, n));
 }
 
 void ClientSession::SendBye() {

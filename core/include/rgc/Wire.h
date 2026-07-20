@@ -13,7 +13,21 @@ inline constexpr uint8_t kProtocolVersion  = 1;
 inline constexpr size_t  kMaxDatagram      = 1200; // an toàn MTU Internet
 inline constexpr size_t  kCommonHeaderSize = 8;
 inline constexpr size_t  kVideoHeaderSize  = 16;
-inline constexpr size_t  kMaxVideoPayload  = kMaxDatagram - kCommonHeaderSize - kVideoHeaderSize; // 1176
+inline constexpr size_t  kFecHeaderSize    = 16;
+
+// FEC (GĐ5): mỗi kFecGroupSize gói video liên tiếp trong một frame được kèm MỘT gói
+// parity = XOR của cả nhóm. Mất đúng 1 gói trong nhóm thì khôi phục được, không phải
+// bỏ cả frame và xin IDR (IDR to gấp nhiều lần P-frame, mất gói lúc đang nghẽn mà
+// đáp bằng IDR là đổ thêm dầu vào lửa). Mất ≥2 gói cùng nhóm thì chịu, quay về
+// đường cũ. Chi phí băng thông = 1/kFecGroupSize.
+inline constexpr uint16_t kFecGroupSize = 8;
+
+// Parity phải XOR được cả ĐỘ DÀI (gói cuối frame ngắn hơn các gói khác), nên payload
+// của nó là 2 byte lenXor + dữ liệu XOR. Gói FEC vì thế chật hơn gói video thường →
+// lấy nó làm ràng buộc để cả hai loại vừa một datagram.
+inline constexpr size_t  kFecLenPrefix    = 2;
+inline constexpr size_t  kMaxVideoPayload =
+    kMaxDatagram - kCommonHeaderSize - kFecHeaderSize - kFecLenPrefix; // 1174
 
 inline constexpr size_t  kInputHeaderSize = 5;  // seq(u32) + count(u8)
 inline constexpr size_t  kInputEventSize  = 19; // evType+ts+a+b+state+absolute
@@ -29,6 +43,7 @@ enum class MsgType : uint8_t {
     Start           = 0x03,
     Bye             = 0x04,
     VideoPacket     = 0x10,
+    FecPacket       = 0x11, // GĐ5: parity XOR cho một nhóm gói video
     InputEvent      = 0x20, // GĐ4
     Ping            = 0x30,
     Pong            = 0x31,
@@ -134,6 +149,24 @@ struct VideoPacketView {
     std::span<const uint8_t> payload;
 };
 
+// Gói parity. `groupIndex` thay cho pktIndex đầu nhóm: nhóm g phủ các gói
+// [g*kFecGroupSize, min((g+1)*kFecGroupSize, pktCount)) — suy được, khỏi tốn byte.
+// timestampUs/pktCount/idr đi kèm để khôi phục được cả frame chỉ có 1 gói (nhóm 1
+// phần tử: parity chính là bản sao gói đó).
+struct FecHeader {
+    uint32_t frameId;
+    uint64_t timestampUs;
+    uint16_t pktCount;
+    uint8_t  groupIndex;
+};
+
+struct FecPacketView {
+    FecHeader hdr;
+    bool idr;
+    // kFecLenPrefix byte lenXor (big-endian) rồi tới dữ liệu XOR đã đệm 0.
+    std::span<const uint8_t> parity;
+};
+
 // ---- Build: ghi trọn một datagram (header chung + payload) vào out.
 // Trả về số byte đã ghi, hoặc 0 nếu out không đủ chỗ. ----
 size_t BuildHello(std::span<uint8_t> out, const Hello& m);
@@ -147,6 +180,9 @@ size_t BuildRequestKeyframe(std::span<uint8_t> out, uint32_t sessionId);
 size_t BuildReconfig(std::span<uint8_t> out, uint32_t sessionId, const Reconfig& m);
 size_t BuildVideoPacket(std::span<uint8_t> out, uint32_t sessionId, const VideoHeader& vh,
                         bool idr, bool frameEnd, std::span<const uint8_t> payload);
+// `parity` gồm cả 2 byte lenXor đứng đầu (xem FecPacketView).
+size_t BuildFecPacket(std::span<uint8_t> out, uint32_t sessionId, const FecHeader& fh,
+                      bool idr, std::span<const uint8_t> parity);
 // `firstSeq` là seq của events[0]; event thứ i mang seq = firstSeq + i (§6).
 // Trả 0 nếu events rỗng, quá kMaxInputEvents, hoặc out thiếu chỗ.
 size_t BuildInputEvents(std::span<uint8_t> out, uint32_t sessionId, uint32_t firstSeq,
@@ -164,6 +200,8 @@ std::optional<Feedback> ParseFeedback(std::span<const uint8_t> payload);
 std::optional<Reconfig> ParseReconfig(std::span<const uint8_t> payload);
 std::optional<VideoPacketView> ParseVideoPacket(const CommonHeader& h,
                                                 std::span<const uint8_t> payload);
+std::optional<FecPacketView> ParseFecPacket(const CommonHeader& h,
+                                            std::span<const uint8_t> payload);
 // Giải mã batch input vào `out` (đủ chỗ cho kMaxInputEvents). Trả số event đã ghi
 // và đặt `firstSeq`; 0 nếu gói hỏng/rỗng/không khớp count.
 size_t ParseInputEvents(std::span<const uint8_t> payload, uint32_t& firstSeq,

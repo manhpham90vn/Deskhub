@@ -46,6 +46,7 @@ Sau header 8 byte là payload tùy `Type`.
 | 0x03 | START | control | C→A | có |
 | 0x04 | STOP / BYE | control | cả hai | có |
 | 0x10 | VIDEO_PACKET | video | A→C | không |
+| 0x11 | FEC_PACKET | video | A→C | không (parity) |
 | 0x20 | INPUT_EVENT | input | C→A | tin cậy nhẹ (retry key) |
 | 0x30 | PING | control | cả hai | không |
 | 0x31 | PONG | control | cả hai | không |
@@ -97,8 +98,12 @@ Một frame nén có thể lớn hơn MTU → cắt thành nhiều gói. Header 
 +--------+--------+--------+--------+--------+--------+--------+--------+
 | ...timestampUs                    | pktIndex(u16)  | pktCount(u16)  |
 +--------+--------+--------+--------+--------+--------+--------+--------+
-| payload (mảnh NAL, ≤ 1176 byte)  ...                                |
+| payload (mảnh NAL, ≤ 1174 byte)  ...                                |
 ```
+
+> Trần payload là **1174** chứ không phải 1176 (= 1200 − 8 − 16): gói FEC dưới đây có
+> header 16 byte **cộng** 2 byte `lenXor`, nên nó mới là ràng buộc chặt nhất. Lấy chung
+> một trần cho cả hai để parity luôn phủ trọn được mảnh dữ liệu lớn nhất.
 
 | Trường | Kiểu | Ý nghĩa |
 |--------|------|---------|
@@ -119,6 +124,33 @@ Một frame nén có thể lớn hơn MTU → cắt thành nhiều gói. Header 
    decode lỗi lan → gửi **REQUEST_KEYFRAME**.
 
 **Không có ACK cho video.** Độ tin cậy đến từ IDR-on-demand + (tùy chọn) FEC, không từ retransmit.
+
+## 5b. Kênh FEC (FEC_PACKET, 0x11) — GĐ5
+
+Mỗi **8 gói video liên tiếp** trong một frame (`kFecGroupSize`) được kèm MỘT gói parity
+= XOR của cả nhóm. Mất đúng 1 gói trong nhóm → client dựng lại được, không phải bỏ frame
+và xin IDR. Mất ≥2 gói cùng nhóm → parity vô dụng, quay về chính sách §5.
+
+```
++--------+--------+--------+--------+--------+--------+--------+--------+
+| frameId (u32)                     | timestampUs (u64) ...           |
++--------+--------+--------+--------+--------+--------+--------+--------+
+| ...timestampUs                    | pktCount(u16)  | grpIdx | rsv    |
++--------+--------+--------+--------+--------+--------+--------+--------+
+| lenXor(u16)     | dữ liệu XOR (đệm 0 tới độ dài lớn nhất trong nhóm) |
+```
+
+| Trường | Kiểu | Ý nghĩa |
+|--------|------|---------|
+| frameId / timestampUs / pktCount | | Như VIDEO_PACKET — đủ để dựng lại frame chỉ có 1 gói. |
+| grpIdx | u8 | Nhóm phủ các mảnh `[grpIdx*8, min((grpIdx+1)*8, pktCount))`. |
+| rsv | u8 | Dự trữ, phải bằng 0. |
+| lenXor | u16 | XOR **độ dài** các mảnh trong nhóm — mảnh cuối frame ngắn hơn, không có trường này thì không biết cắt ở đâu. |
+
+Cờ `IDR` ở header chung mang cùng giá trị với các gói dữ liệu của frame.
+
+**Bật/tắt động.** FEC tốn 1/8 băng thông nên Agent chỉ bật khi FEEDBACK báo mất gói
+≥1%, và tắt sau 5 giây liên tiếp sạch (tắt chậm hơn bật vì mất gói hay đến theo cụm).
 
 ## 6. Kênh input (INPUT_EVENT, 0x20)
 
@@ -184,7 +216,13 @@ Ping định kỳ (vd. mỗi 1s) để đo RTT, phát hiện mất kết nối.
 | rttMs | u16 | RTT hiện tại. |
 | recvBitrateKbps | u32 | Bitrate thực nhận. |
 
-Agent dùng để **điều chỉnh bitrate encoder** (congestion control đơn giản: mất nhiều → giảm bitrate).
+Agent dùng để **điều chỉnh bitrate encoder**. Luật hiện tại (GĐ5, `AgentLoop`): mất ≥5%
+→ ×0.75; ≥2% → ×0.90; ≤1% và đã 2 giây không giảm → +5% trần mỗi giây. Kẹp trong
+[1 Mbps, bitrate người dùng đặt]. Giảm nhân / tăng cộng là có chủ ý — mất gói UDP gần
+như luôn là hàng đợi router đầy, nới nhanh ngay sau đó chỉ làm nghẽn lại theo chu kỳ.
+
+Client gửi FEEDBACK **kể cả khi 0% mất gói**: im lặng bị Agent hiểu là mất kết nối chứ
+không phải đường thông, và Agent cần tín hiệu sạch mới dám nới bitrate lên lại.
 
 ### REQUEST_KEYFRAME (0x33)
 Rỗng payload (hoặc kèm `frameId` cuối nhận tốt). Agent gọi `encoder.RequestKeyframe()`.
@@ -192,12 +230,21 @@ Rỗng payload (hoặc kèm `frameId` cuối nhận tốt). Agent gọi `encoder
 ### RECONFIG (0x34) — Agent thông báo đổi tham số
 | Trường | Kiểu | Ý nghĩa |
 |--------|------|---------|
-| width | u16 | Độ phân giải mới (khi cửa sổ game resize — code hiện đã bắt sự kiện này). |
+| width | u16 | Độ phân giải mới (khi cửa sổ game resize). |
 | height | u16 | |
 | bitrateBps | u32 | Bitrate mới. |
 
-Khi cửa sổ game đổi kích thước, Agent (đã phát hiện trong `TryGetFrame`) gửi RECONFIG để
-client tái tạo decoder/renderer đúng kích thước.
+Khi cửa sổ đang chia sẻ đổi kích thước, WGC tạo lại frame pool và Agent **bắt buộc phải
+dựng lại encoder** — encoder gắn chặt với kích thước cũ. Agent gửi RECONFIG **kèm IDR**:
+stream đổi SPS giữa chừng, không có IDR thì client chỉ có rác tới keyframe kế tiếp.
+
+Phía client, RECONFIG chỉ để cập nhật hiển thị: `MfDecoder` tự đàm phán lại kích thước
+khi gặp SPS mới (`MF_E_TRANSFORM_STREAM_CHANGE`) và `Renderer` tự dựng lại video
+processor theo kích thước frame giải mã — không bên nào cần dựng lại từ đầu.
+
+**Kích thước nén luôn là số chẵn.** NV12 lấy mẫu chroma 2×2; cửa sổ rộng/cao lẻ được cắt
+xuống số chẵn gần nhất, không thì `CreateTexture2D(NV12)` trả `E_INVALIDARG`. Số trong
+RECONFIG/HELLO_ACK là kích thước **đã cắt**, tức là cái thật sự nằm trong stream.
 
 ## 8. Máy trạng thái phiên
 

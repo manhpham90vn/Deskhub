@@ -33,6 +33,10 @@ struct NegotiatedParams {
 struct ClientCallbacks {
     std::function<void(std::span<const uint8_t>)> send;
     std::function<void(const NegotiatedParams&)> onReady; // dựng decoder/renderer
+    // RECONFIG: host đổi kích thước nguồn hoặc bitrate giữa phiên. params() đã cập
+    // nhật khi callback chạy. Host gửi kèm IDR nên decoder tự đàm phán lại kích
+    // thước qua MF_E_TRANSFORM_STREAM_CHANGE — caller chỉ cần cập nhật hiển thị.
+    std::function<void(const NegotiatedParams&)> onReconfig;
     std::function<void(uint32_t rttUs)> onRtt;            // mỗi PONG
     std::function<void(const char* reason)> onDisconnect; // từ chối/BYE/timeout
 };
@@ -62,6 +66,11 @@ public:
     // Giữ cờ xin IDR: Tick phát REQUEST_KEYFRAME mỗi 250ms tới khi Cancel.
     void RequestKeyframe() { keyframeWanted_ = true; }
     void CancelKeyframeRequest() { keyframeWanted_ = false; }
+
+    // Gửi FEEDBACK cho host (GĐ5). Caller gọi ~1s/lần từ khối thống kê của mình —
+    // ClientSession không tự đo được mất gói (Reassembler nằm ngoài). Bỏ qua nếu
+    // chưa STREAMING.
+    void SendFeedback(const Feedback& fb);
 
     // Báo host mình rời đi (gửi 1 lần, best-effort) và kết thúc phiên.
     void SendBye();

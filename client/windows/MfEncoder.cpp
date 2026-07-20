@@ -290,6 +290,16 @@ struct MfEncoder::Impl {
         return true;
     }
 
+    // Đổi bitrate giữa chừng. cfg.bitrateBps được cập nhật để lần ReinitTransform
+    // sau (force keyframe trên driver không hỗ trợ ICodecAPI) không quay về số cũ.
+    bool SetBitrate(uint32_t bitrateBps) {
+        if (!bitrateBps) return false;
+        cfg.bitrateBps = bitrateBps;
+        if (!codecApi || !codecApi->IsSupported(&CODECAPI_AVEncCommonMeanBitRate)) return false;
+        VARIANT v{}; v.vt = VT_UI4; v.ulVal = (ULONG)bitrateBps;
+        return SUCCEEDED(codecApi->SetValue(&CODECAPI_AVEncCommonMeanBitRate, &v));
+    }
+
     // Xin IDR. true = sẵn sàng nhận frame kế tiếp (có thể vừa tạo lại transform).
     // false = hỏng hoàn toàn.
     bool RequestKeyFrame() {
@@ -307,10 +317,16 @@ struct MfEncoder::Impl {
         MF_CHECK(device.As(&videoDevice), "ID3D11VideoDevice");
         MF_CHECK(context.As(&videoContext), "ID3D11VideoContext");
 
+        // Đầu vào theo kích thước texture THẬT (có thể lẻ), đầu ra theo kích thước
+        // nén (chẵn). Khai báo lệch làm CreateVideoProcessorInputView có thể từ chối
+        // texture nguồn - enumerator này chính là thứ validate view ở ConvertToNv12.
+        const uint32_t inW = cfg.srcWidth ? cfg.srcWidth : cfg.width;
+        const uint32_t inH = cfg.srcHeight ? cfg.srcHeight : cfg.height;
+
         D3D11_VIDEO_PROCESSOR_CONTENT_DESC cd{};
         cd.InputFrameFormat = D3D11_VIDEO_FRAME_FORMAT_PROGRESSIVE;
-        cd.InputWidth = cfg.width;
-        cd.InputHeight = cfg.height;
+        cd.InputWidth = inW;
+        cd.InputHeight = inH;
         cd.OutputWidth = cfg.width;
         cd.OutputHeight = cfg.height;
         cd.Usage = D3D11_VIDEO_USAGE_PLAYBACK_NORMAL;
@@ -612,6 +628,10 @@ bool MfEncoder::Init(ID3D11Device* device, const EncoderConfig& cfg) {
 
 bool MfEncoder::Encode(ID3D11Texture2D* frame, uint64_t timestampUs, bool forceKeyframe) {
     return impl_ && impl_->Encode(frame, timestampUs, forceKeyframe);
+}
+
+bool MfEncoder::SetBitrate(uint32_t bitrateBps) {
+    return impl_ && impl_->SetBitrate(bitrateBps);
 }
 
 void MfEncoder::Finish() { if (impl_) impl_->Finish(); }

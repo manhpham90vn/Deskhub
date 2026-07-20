@@ -31,12 +31,17 @@ public:
     };
 
     struct Stats {
+        // CHỈ gói dữ liệu (Push), không tính parity: caller lấy tỉ lệ mất gói từ
+        // packetsLost/(packetsReceived+packetsLost), trộn parity vào mẫu số sẽ làm
+        // tỉ lệ đó tụt xuống đúng lúc FEC đang bật — tức là đúng lúc đang mất gói.
         uint64_t packetsReceived = 0; // mọi gói đưa vào Push (kể cả trùng/muộn)
+        uint64_t fecReceived     = 0; // gói parity đưa vào PushFec
         uint64_t framesCompleted = 0; // frame trả ra qua PopReady
         uint64_t framesDropped   = 0; // frame bỏ vì thiếu mảnh (mất gói thật)
         uint64_t framesSkipped   = 0; // frame lành nhưng bị nuốt khi chờ IDR
         uint64_t packetsLost     = 0; // ước lượng: mảnh còn thiếu của các frame đã bỏ
         uint64_t lossEvents      = 0;
+        uint64_t packetsRecovered = 0; // mảnh dựng lại được từ parity FEC
     };
 
     // `frameIntervalUs`: khoảng cách frame kỳ vọng (1e6/fps) — mốc cho timeout bỏ frame.
@@ -44,6 +49,10 @@ public:
         : frameIntervalUs_(frameIntervalUs ? frameIntervalUs : 16'667) {}
 
     void Push(const VideoPacketView& pkt, uint64_t nowUs);
+
+    // Gói parity FEC. Nếu nhóm nó phủ đang thiếu ĐÚNG một mảnh thì mảnh đó được
+    // dựng lại ngay tại đây và frame có thể hoàn chỉnh mà không cần xin IDR.
+    void PushFec(const FecPacketView& pkt, uint64_t nowUs);
 
     // Frame kế tiếp theo thứ tự nếu đã đủ mảnh (gọi lặp tới khi trả nullopt).
     std::optional<Frame> PopReady(uint64_t nowUs);
@@ -59,6 +68,9 @@ public:
 private:
     struct Pending {
         std::vector<std::vector<uint8_t>> pieces; // theo pktIndex; rỗng = chưa nhận
+        // Parity đã nhận theo groupIndex (dữ liệu gồm cả 2 byte lenXor đứng đầu).
+        // Giữ lại vì parity có thể tới TRƯỚC gói dữ liệu cuối của nhóm bị đảo thứ tự.
+        std::map<uint8_t, std::vector<uint8_t>> parity;
         uint16_t pktCount = 0;
         uint16_t received = 0;
         uint64_t timestampUs = 0;
@@ -70,6 +82,10 @@ private:
     using PendingMap = std::map<uint32_t, Pending>;
 
     void Drop(PendingMap::iterator it, bool loss);
+    // Tạo/lấy chỗ ghép cho frame `id`; nullptr nếu gói thuộc frame đã phát/đã bỏ.
+    Pending* Slot(uint32_t id, uint16_t pktCount, uint64_t timestampUs, uint64_t nowUs);
+    // Thử dựng lại mảnh thiếu của nhóm `group` trong `f`. true = vừa khôi phục được.
+    bool TryRecover(Pending& f, uint8_t group);
 
     static constexpr size_t kMaxPendingFrames = 4;
 

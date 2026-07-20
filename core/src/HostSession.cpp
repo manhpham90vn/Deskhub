@@ -58,10 +58,13 @@ bool HostSession::HandlePacket(std::span<const uint8_t> pkt, uint64_t nowUs) {
         lastRecvUs_ = nowUs;
         input_.HandlePacket(payload, cb_.onInput);
         return true;
-    case MsgType::Feedback: // GĐ5 mới xử lý — v1 chỉ nuôi timeout
+    case MsgType::Feedback: {
         if (state() == State::Idle || h->sessionId != sessionId()) return false;
         lastRecvUs_ = nowUs;
-        return true;
+        const auto m = ParseFeedback(payload);
+        if (m && cb_.onFeedback) cb_.onFeedback(*m);
+        return true; // gói vẫn nuôi timeout kể cả khi payload hỏng
+    }
     case MsgType::Bye:
         if (state() == State::Idle || h->sessionId != sessionId()) return false;
         Disconnect();

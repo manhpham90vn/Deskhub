@@ -18,6 +18,11 @@ public:
     void SetSessionId(uint32_t id) { sessionId_ = id; }
     uint32_t sessionId() const { return sessionId_; }
 
+    // GĐ5: bật/tắt gói parity FEC (mặc định TẮT). Chi phí 1/kFecGroupSize băng thông
+    // nên chỉ bật khi đường truyền đang thực sự mất gói — Agent bật/tắt theo FEEDBACK.
+    void SetFecEnabled(bool on) { fec_ = on; }
+    bool fecEnabled() const { return fec_; }
+
     // Cắt `nal` thành các gói ≤ kMaxVideoPayload byte payload: mọi gói trừ gói cuối
     // mang ĐÚNG kMaxVideoPayload byte (offset suy được từ pktIndex). Gọi `send` cho
     // từng datagram theo thứ tự pktIndex tăng dần; gói cuối mang cờ FrameEnd.
@@ -27,7 +32,10 @@ public:
 
 private:
     uint32_t sessionId_ = 0;
+    bool     fec_ = false;
     uint8_t  buf_[kMaxDatagram] = {};
+    // Tích lũy XOR của nhóm hiện tại: 2 byte lenXor + dữ liệu, đệm 0 tới hết nhóm.
+    uint8_t  parity_[kFecLenPrefix + kMaxVideoPayload] = {};
 };
 
 } // namespace rgc

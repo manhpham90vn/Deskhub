@@ -155,11 +155,44 @@ trong `Wire`); client/windows: `InputCapture.h/.cpp`, `InputInjector.h/.cpp`.
 Chạy: như GĐ3, input bật sẵn. `--noinput` = chỉ xem (đặt được ở cả hai vai trò).
 `client.exe <app> --injecttest` = thử riêng đường bơm input, không cần mạng (dev).
 
-## Giai đoạn 5 — Ổn định & chất lượng
-- ⬜ RECONFIG khi cửa sổ resize (REQUEST_KEYFRAME đã làm ở GĐ3).
-- ⬜ FEEDBACK → điều chỉnh bitrate (congestion control đơn giản).
-- ⬜ Slicing + (tùy chọn) FEC để mất gói không hỏng cả frame.
-- ⬜ UILayer client: kết nối, thống kê, phím tắt khóa chuột.
+## Giai đoạn 5 — Ổn định & chất lượng ✅ XONG phần code, CHỜ kiểm chứng 2 máy
+- ✅ **RECONFIG khi cửa sổ resize**. Thread FrameArrived phát hiện đổi kích thước → vứt
+  encoder + texture cache, dựng lại ngay ở frame đó; thread Recv gửi RECONFIG + IDR.
+  Client không phải dựng lại gì: `MfDecoder` tự đàm phán lại qua
+  `MF_E_TRANSFORM_STREAM_CHANGE`, `Renderer.EnsureVideoProcessor` tự theo kích thước
+  frame giải mã. RECONFIG chỉ để cập nhật hiển thị + `HostSession::SetOffer` (client
+  kết nối lại sau đó phải nhận số mới).
+- ✅ **Kích thước nén luôn chẵn**: NV12 chroma 2×2, cửa sổ lẻ (1689×1392) làm
+  `CreateTexture2D(NV12)` trả `E_INVALIDARG` → không có backend nào chạy được trên máy
+  không-NVIDIA. `EncoderConfig` tách `width/height` (kích thước nén, chẵn) khỏi
+  `srcWidth/srcHeight` (texture WGC thật, có thể lẻ) — video processor cần cả hai để
+  khai báo content desc đúng, khai lệch thì `CreateVideoProcessorInputView` từ chối.
+- ✅ **FEEDBACK → bitrate**. `IVideoEncoder::SetBitrate` (NVENC: `nvEncReconfigureEncoder`;
+  MF: `CODECAPI_AVEncCommonMeanBitRate`) — không dựng lại encoder nên không cần IDR.
+  Luật giảm-nhân/tăng-cộng, chi tiết ở `04-protocol.md` §7.
+- ✅ **FEC parity XOR** theo nhóm 8 gói (`FEC_PACKET 0x11`): mất 1 gói/nhóm là dựng lại
+  được, không phải bỏ frame + xin IDR (IDR to hơn P-frame nhiều lần — đáp mất gói bằng
+  IDR đúng lúc đang nghẽn là đổ thêm dầu vào lửa). Bật/tắt động theo FEEDBACK để không
+  trả 12.5% overhead khi đường sạch.
+- ✅ **UILayer client** (đã làm cùng đợt GUI GĐ5): overlay số liệu trên cửa sổ preview,
+  2 nút khóa chuột / tạm dừng đi cùng đường với F9/F10.
+- ✅ **Kiểm chứng M1** `--nettest`: 6 ca FEC PASS (khôi phục gói giữa, khôi phục gói cuối
+  ngắn, frame khôi phục giống hệt từng byte, 2 mất cùng nhóm thì rơi về chính sách cũ,
+  frame 1 gói dựng lại từ parity, mặc định tắt). Toàn bộ suite GĐ3/GĐ4 không hồi quy dù
+  `kMaxVideoPayload` đổi 1176→1174.
+- ⬜ **Còn lại**: **M3** hai máy LAN — congestion control và FEC mới chỉ chạy đúng trên
+  giấy + self-test, chưa lần nào gặp mất gói thật. **M4** giả lập drop 2–5% (clumsy) để
+  chỉnh ngưỡng 2%/5% và nhóm FEC 8 cho khớp số đo thật.
+- ⬜ Slicing (nhiều slice/frame) **chưa làm**: chỉ có ích nếu decoder chịu tiêu thụ frame
+  thiếu mảnh, mà `MfDecoder` hiện đòi NAL trọn vẹn. Làm slicing mà không sửa đường decode
+  thì không được gì — để lại tới khi có số đo M4 cho thấy FEC chưa đủ.
+
+**File đổi ở GĐ5:** core: `Wire.h/.cpp` (FEC_PACKET, kMaxVideoPayload), `Packetizer.h/.cpp`
+(sinh parity), `Reassembler.h/.cpp` (`PushFec`/`TryRecover`), `HostSession` (`SetOffer`,
+`onFeedback`), `ClientSession` (`onReconfig`, `SendFeedback`); client/windows:
+`IVideoEncoder.h` (`SetBitrate`, `srcWidth/srcHeight`), `MfEncoder`, `NvencEncoder`,
+`AgentLoop`, `ClientLoop`, `NetTest`, `main.cpp` (khôi phục `--nettest`).
+Chạy self-test: `client.exe --nettest`.
 
 ## Giai đoạn 6 — Mở rộng (tùy nhu cầu)
 - ⬜ Mã hóa (DTLS/AEAD).

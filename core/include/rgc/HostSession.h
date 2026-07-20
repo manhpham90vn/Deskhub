@@ -32,6 +32,9 @@ struct HostCallbacks {
     std::function<void()> onStart;           // nhận START → force IDR, bắt đầu đẩy video
     std::function<void()> onKeyframeRequest; // REQUEST_KEYFRAME từ client
     std::function<void()> onDisconnect;      // BYE hoặc timeout → đã quay về IDLE
+    // FEEDBACK từ client (~1s/lần): mất gói, RTT, bitrate nhận thực tế. Caller
+    // dùng để siết/nới bitrate encoder (GĐ5). Số liệu là của cửa sổ 1s vừa qua.
+    std::function<void(const Feedback&)> onFeedback;
     // Event input đã khử trùng, đúng thứ tự (GĐ4). Caller bơm vào InputInjector.
     // LƯU Ý: onDisconnect phải nhả hết phím/nút đang giữ — mất kết nối giữa lúc
     // giữ phím mà không nhả sẽ kẹt phím ở máy host.
@@ -44,6 +47,11 @@ public:
 
     HostSession(HostCallbacks cb, StreamParams offer)
         : cb_(std::move(cb)), offer_(offer) {}
+
+    // Cửa sổ nguồn đổi kích thước / bitrate bị siết: HELLO_ACK sau này phải mang số
+    // mới, không thì client kết nối lại sẽ dựng decoder theo kích thước đã chết.
+    // Gửi RECONFIG cho client đang chạy là việc của caller (nó giữ địa chỉ peer).
+    void SetOffer(const StreamParams& p) { offer_ = p; }
 
     // Trả true nếu gói hợp lệ và thuộc phiên hiện tại (caller cập nhật peer addr).
     bool HandlePacket(std::span<const uint8_t> pkt, uint64_t nowUs);

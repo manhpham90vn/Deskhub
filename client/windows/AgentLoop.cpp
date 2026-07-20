@@ -81,7 +81,11 @@ int RunAgent(HWND target, const AgentOptions& opt) {
         std::wprintf(L"    %hs:%u    (%ls)\n", a.ip.c_str(), opt.port, a.name.c_str());
 
     // --- Trạng thái chia sẻ giữa thread FrameArrived và thread Recv ---
-    std::atomic<uint32_t> srcW{0}, srcH{0};
+    std::atomic<uint32_t> srcW{0}, srcH{0};       // kích thước NÉN (đã làm chẵn)
+    std::atomic<uint32_t> srcTexW{0}, srcTexH{0}; // kích thước texture WGC thật
+    std::atomic<bool>     sizeChanged{false};     // dat o FrameArrived, tieu thu o Recv
+    std::atomic<bool>     wantFec{false};         // dat o Recv, ap dung o FrameArrived
+    std::atomic<uint32_t> curBitrateBps{opt.bitrateMbps * 1'000'000u};
     std::atomic<bool>     netReady{false};   // session da tao xong (sau frame dau)
     std::atomic<bool>     failed{false};
     std::atomic<bool>     forceIdr{false};   // cau IDR: dat o Recv, tieu thu o Encode
@@ -110,6 +114,9 @@ int RunAgent(HWND target, const AgentOptions& opt) {
         if (!pp) return;
         const NetAddr peer = NetAddr::Unpack(pp);
         packetizer.SetSessionId(session->sessionId());
+        // Packetizer là single-thread (thread này). Thread Recv chỉ đặt ý muốn qua
+        // atomic, việc bật/tắt thật diễn ra ở đây — khỏi cần khóa.
+        packetizer.SetFecEnabled(wantFec.load(std::memory_order_relaxed));
         const size_t pkts = packetizer.SendFrame(std::span<const uint8_t>(data, size),
                                                  nextFrameId++, tsUs, keyframe,
             [&](std::span<const uint8_t> d) {
@@ -120,18 +127,22 @@ int RunAgent(HWND target, const AgentOptions& opt) {
     };
 
     // Tạo encoder nếu chưa có. GỌI DƯỚI encMutex. false = backend không dùng được.
-    auto ensureEncoder = [&](uint32_t w, uint32_t h) -> bool {
+    // `w`/`h` là kích thước NÉN (chẵn); `sw`/`sh` là kích thước texture thật.
+    auto ensureEncoder = [&](uint32_t w, uint32_t h, uint32_t sw, uint32_t sh) -> bool {
         if (encoder) return true;
         EncoderConfig cfg;
         cfg.width = w;
         cfg.height = h;
+        cfg.srcWidth = sw;
+        cfg.srcHeight = sh;
         cfg.fps = opt.fps;
-        cfg.bitrateBps = opt.bitrateMbps * 1'000'000u;
+        cfg.bitrateBps = curBitrateBps.load(std::memory_order_relaxed);
         cfg.outputPath.clear(); // không file — NAL chỉ đi qua onPacket
         cfg.onPacket = onPacket;
         encoder = CreateEncoder(gpu.device.Get(), cfg);
         if (!encoder) {
-            std::printf("[Agent] GD3 needs NVENC (MF doesn't emit NAL yet) — stopping.\n");
+            std::printf("[Agent] No usable encoder backend (NVENC + Media Foundation"
+                        " both failed) — stopping.\n");
             failed.store(true);
             return false;
         }
@@ -140,12 +151,32 @@ int RunAgent(HWND target, const AgentOptions& opt) {
 
     auto onFrame = [&](const FrameInfo& fi) {
         captured.fetch_add(1, std::memory_order_relaxed);
-        // NV12 lấy mẫu chroma 2x2 -> bề rộng/cao lẻ làm CreateTexture2D(NV12) trả
-        // E_INVALIDARG. Làm tròn xuống số chẵn; cột/hàng lẻ dư bị source rect cắt bỏ.
-        if (!srcW.load()) { srcW.store(fi.width & ~1u); srcH.store(fi.height & ~1u); }
         if (failed.load()) return;
 
+        // NV12 lấy mẫu chroma 2x2 -> bề rộng/cao lẻ làm CreateTexture2D(NV12) trả
+        // E_INVALIDARG. Nén ở kích thước chẵn nhỏ hơn; cột/hàng lẻ dư bị cắt.
+        const uint32_t encW = fi.width & ~1u, encH = fi.height & ~1u;
+        if (!encW || !encH) return;
+
         std::lock_guard<std::mutex> lk(encMutex);
+
+        // Người dùng kéo đổi kích thước cửa sổ đang chia sẻ. Encoder và texture cache
+        // đều gắn chặt với kích thước cũ -> vứt cả hai, dựng lại ngay ở frame này.
+        // Cờ sizeChanged để thread Recv báo RECONFIG + IDR cho client.
+        if (srcW.load() != encW || srcH.load() != encH) {
+            if (srcW.load())
+                std::printf("[Agent] Source resized %ux%u -> %ux%u, rebuilding encoder.\n",
+                            srcW.load(), srcH.load(), encW, encH);
+            srcW.store(encW);
+            srcH.store(encH);
+            srcTexW.store(fi.width);
+            srcTexH.store(fi.height);
+            encoder.reset();
+            cachedTex.Reset();
+            haveCached.store(false, std::memory_order_release);
+            sizeChanged.store(true, std::memory_order_release);
+        }
+
         // Lưu bản sao frame cuối (texture của WGC chỉ sống trong callback).
         if (!cachedTex) {
             D3D11_TEXTURE2D_DESC d{};
@@ -164,7 +195,7 @@ int RunAgent(HWND target, const AgentOptions& opt) {
         lastFrameUs.store(QpcUs(), std::memory_order_relaxed);
 
         if (!netReady.load(std::memory_order_acquire)) return;
-        if (!ensureEncoder(fi.width, fi.height)) return;
+        if (!ensureEncoder(encW, encH, fi.width, fi.height)) return;
         // Encode liên tục kể cả khi chưa có client (đơn giản, VBV ổn định);
         // NAL bị bỏ ở onPacket nếu chưa STREAMING.
         encoder->Encode(fi.texture, QpcUs(), forceIdr.exchange(false));
@@ -208,6 +239,51 @@ int RunAgent(HWND target, const AgentOptions& opt) {
         std::printf("[Agent] Client START — beginning video push.\n");
     };
     cb.onKeyframeRequest = [&] { forceIdr.store(true); };
+    // GD5 congestion control. Mất gói trên UDP gần như luôn là hàng đợi router đầy,
+    // nên phản ứng đúng là GIẢM NHANH (nhân) rồi bò lên lại từ từ (cộng) — nới nhanh
+    // sau khi vừa mất gói chỉ làm nghẽn trở lại theo chu kỳ.
+    // Ngưỡng 2%/5%: dưới 2% H.264 tự che được bằng IDR sau loss, trên 5% là hình vỡ rõ.
+    const uint32_t maxBitrate = opt.bitrateMbps * 1'000'000u;
+    const uint32_t minBitrate = 1'000'000u; // dưới mức này hình nát, thà bỏ frame
+    uint64_t lastDecreaseUs = 0;
+    int cleanSeconds = 0; // số lần FEEDBACK liên tiếp không mất gói
+    cb.onFeedback = [&, maxBitrate, minBitrate](const rgc::Feedback& fb) {
+        const uint64_t now = QpcUs();
+
+        // FEC tốn 1/kFecGroupSize băng thông nên chỉ bật khi đang thực sự mất gói.
+        // Tắt phải chậm hơn bật (5 giây sạch): mất gói thường đến theo cụm, tắt ngay
+        // sau cụm đầu là vừa kịp không có parity cho cụm sau.
+        if (fb.lossPct >= 1) {
+            cleanSeconds = 0;
+            if (!wantFec.exchange(true, std::memory_order_relaxed))
+                std::printf("[Agent] FEC on (loss %u%%).\n", fb.lossPct);
+        } else if (++cleanSeconds >= 5) {
+            if (wantFec.exchange(false, std::memory_order_relaxed))
+                std::printf("[Agent] FEC off (link clean).\n");
+        }
+        const uint32_t cur = curBitrateBps.load(std::memory_order_relaxed);
+        uint32_t next = cur;
+        if (fb.lossPct >= 5) {
+            next = cur - cur / 4;              // ×0.75
+            lastDecreaseUs = now;
+        } else if (fb.lossPct >= 2) {
+            next = cur - cur / 10;             // ×0.90
+            lastDecreaseUs = now;
+        } else if (fb.lossPct <= 1 && now - lastDecreaseUs > 2'000'000) {
+            next = cur + maxBitrate / 20;      // +5% trần mỗi giây
+        }
+        if (next > maxBitrate) next = maxBitrate;
+        if (next < minBitrate) next = minBitrate;
+        // Bỏ qua thay đổi vụn: mỗi lần gọi encoder là một lần đàm phán lại rate control.
+        if (next == cur || (next > cur ? next - cur : cur - next) < cur / 50) return;
+
+        std::lock_guard<std::mutex> lk(encMutex);
+        if (encoder && encoder->SetBitrate(next)) {
+            curBitrateBps.store(next, std::memory_order_relaxed);
+            std::printf("[Agent] Bitrate %.1f -> %.1f Mbps (loss %u%%, RTT %u ms)\n",
+                        cur / 1e6, next / 1e6, fb.lossPct, fb.rttMs);
+        }
+    };
     cb.onInput = [&](const rgc::InputEvent& e) { injector.Apply(e); };
     cb.onDisconnect = [&] {
         peerPacked.store(0, std::memory_order_release);
@@ -241,13 +317,34 @@ int RunAgent(HWND target, const AgentOptions& opt) {
         }
         session->Tick(now);
 
+        // Cửa sổ nguồn vừa đổi kích thước (thread FrameArrived đã dựng lại encoder).
+        // Báo client kích thước mới + IDR: stream đổi SPS giữa chừng, không có IDR
+        // thì decoder client chỉ có rác cho tới keyframe kế tiếp.
+        if (sizeChanged.exchange(false, std::memory_order_acq_rel)) {
+            rgc::StreamParams np = offer;
+            np.width  = uint16_t(srcW.load());
+            np.height = uint16_t(srcH.load());
+            np.bitrateBps = curBitrateBps.load(std::memory_order_relaxed);
+            offer = np;
+            session->SetOffer(np); // HELLO phát lại sau này phải mang số mới
+            const uint64_t pp = peerPacked.load(std::memory_order_acquire);
+            if (pp && session->state() == rgc::HostSession::State::Streaming) {
+                rgc::Reconfig rc{np.width, np.height, np.bitrateBps};
+                uint8_t rbuf[rgc::kMaxDatagram];
+                const size_t rn = rgc::BuildReconfig(rbuf, session->sessionId(), rc);
+                if (rn) sock.SendTo(NetAddr::Unpack(pp), rbuf, rn);
+                forceIdr.store(true);
+            }
+        }
+
         // Yêu cầu IDR đang treo mà nguồn đang TĨNH (>200ms không có FrameArrived —
         // WGC chỉ phát khi nội dung đổi) -> encode lại frame cache để client có hình.
         if (session->state() == rgc::HostSession::State::Streaming &&
             forceIdr.load() && haveCached.load(std::memory_order_acquire) &&
             now - lastFrameUs.load(std::memory_order_relaxed) > 200'000) {
             std::lock_guard<std::mutex> lk(encMutex);
-            if (ensureEncoder(srcW.load(), srcH.load()) && forceIdr.exchange(false))
+            if (ensureEncoder(srcW.load(), srcH.load(), srcTexW.load(), srcTexH.load()) &&
+                forceIdr.exchange(false))
                 encoder->Encode(cachedTex.Get(), QpcUs(), true);
         }
 

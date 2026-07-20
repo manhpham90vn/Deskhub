@@ -126,6 +126,24 @@ size_t BuildVideoPacket(std::span<uint8_t> out, uint32_t sessionId, const VideoH
     return total;
 }
 
+size_t BuildFecPacket(std::span<uint8_t> out, uint32_t sessionId, const FecHeader& fh,
+                      bool idr, std::span<const uint8_t> parity) {
+    if (parity.size() < kFecLenPrefix ||
+        parity.size() > kFecLenPrefix + kMaxVideoPayload) return 0;
+    const uint8_t flags = idr ? kVideoFlagIdr : 0;
+    const size_t total = WriteCommon(out, MsgType::FecPacket, flags, Chan::Video, sessionId,
+                                     kFecHeaderSize + parity.size());
+    if (!total) return 0;
+    uint8_t* p = out.data() + kCommonHeaderSize;
+    PutU32(p, fh.frameId);
+    PutU64(p + 4, fh.timestampUs);
+    PutU16(p + 12, fh.pktCount);
+    p[14] = fh.groupIndex;
+    p[15] = 0; // dự trữ
+    std::memcpy(p + kFecHeaderSize, parity.data(), parity.size());
+    return total;
+}
+
 size_t BuildInputEvents(std::span<uint8_t> out, uint32_t sessionId, uint32_t firstSeq,
                         std::span<const InputEvent> events) {
     if (events.empty() || events.size() > kMaxInputEvents) return 0;
@@ -229,6 +247,23 @@ std::optional<VideoPacketView> ParseVideoPacket(const CommonHeader& h,
     v.frameEnd = (h.flags & kVideoFlagFrameEnd) != 0;
     v.payload  = payload.subspan(kVideoHeaderSize);
     if (v.hdr.pktCount == 0 || v.hdr.pktIndex >= v.hdr.pktCount) return std::nullopt;
+    return v;
+}
+
+std::optional<FecPacketView> ParseFecPacket(const CommonHeader& h,
+                                            std::span<const uint8_t> payload) {
+    if (payload.size() < kFecHeaderSize + kFecLenPrefix) return std::nullopt;
+    const uint8_t* p = payload.data();
+    FecPacketView v;
+    v.hdr.frameId     = GetU32(p);
+    v.hdr.timestampUs = GetU64(p + 4);
+    v.hdr.pktCount    = GetU16(p + 12);
+    v.hdr.groupIndex  = p[14];
+    v.idr    = (h.flags & kVideoFlagIdr) != 0;
+    v.parity = payload.subspan(kFecHeaderSize);
+    if (v.hdr.pktCount == 0) return std::nullopt;
+    // Nhóm phải nằm trong frame, không thì parity không phủ gói nào.
+    if (size_t(v.hdr.groupIndex) * kFecGroupSize >= v.hdr.pktCount) return std::nullopt;
     return v;
 }
 
