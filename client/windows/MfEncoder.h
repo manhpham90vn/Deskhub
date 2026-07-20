@@ -1,14 +1,17 @@
 #pragma once
 //
-// Backend encoder dung Media Foundation SinkWriter.
+// Backend encoder dung thang H.264/HEVC Encoder MFT (Media Foundation), khong qua
+// IMFSinkWriter/container - de xuat duoc NAL Annex-B tho cho callback onPacket (streaming).
 //
-// Vi sao MF cho Giai doan 1:
-//   - Co san trong Windows SDK, khong can tai NVIDIA Video Codec SDK.
-//   - Tu chon hardware MFT theo device D3D11: NVENC (NVIDIA) / QSV (Intel), hoac software (CPU).
-//     => hien thuc san chuoi NVIDIA -> Intel -> CPU chi bang viec chon adapter o GpuSelect.
-//   - Nhan thang texture D3D11 (VRAM), SinkWriter tu chuyen mau sang NV12 bang GPU.
-//
-// Gioi han: xuat ra file container (.mp4). Duong tra NAL de streaming se them o GD3.
+// Vi sao MF cho agent khong-NVIDIA (Intel QSV / AMD VCE / software fallback):
+//   - Co san trong Windows SDK, khong can SDK hang thu ba.
+//   - MFTEnumEx tu tim MFT phu hop device D3D11 dang dung (uu tien HW nho SORTANDFILTER).
+//   - Dau vao NV12 tu chinh D3D11 device dang capture (VRAM) - tu chuyen mau BGRA->NV12
+//     bang D3D11 Video Processor (khong dong bo CPU).
+//   - MFT phan cung thuong BAT DONG BO (async) - phai unlock + bat su kien
+//     (IMFMediaEventGenerator) truoc khi goi ProcessInput/ProcessOutput.
+//   - SPS/PPS lay tu MF_MT_MPEG_SEQUENCE_HEADER cua kieu dau ra, tu chen truoc moi IDR
+//     (tuong duong repeatSPSPPS cua NVENC) de client join/phuc hoi giua chung decode duoc.
 //
 #include "IVideoEncoder.h"
 

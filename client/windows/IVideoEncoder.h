@@ -32,8 +32,8 @@ struct EncoderConfig {
     RateControl  rc = RateControl::CBR;
     bool         lowLatency = true;
     std::wstring outputPath = L"output.mp4";  // rong = khong ghi file
-    // GD2+: duong NAL trong process (loopback) / len mang (GD3). Hien chi backend
-    // NVENC ho tro; MF con ghi container qua SinkWriter nen Init that bai neu set.
+    // GD2+: duong NAL trong process (loopback) / len mang (GD3). Ca NVENC lan MF
+    // (Encoder MFT thang, khong qua SinkWriter) deu ho tro.
     PacketHandler onPacket;
 };
 
