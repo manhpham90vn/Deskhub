@@ -31,6 +31,7 @@
 
 #include "AgentLoop.h"
 #include "ClientLoop.h"
+#include "DiagLog.h"
 #include "ElevatedShare.h"
 #include "net/NetInfo.h"
 #include "ui/SourcePickerDialog.h"
@@ -49,6 +50,7 @@ constexpr int kIdEditAddr    = 202;
 constexpr int kIdConnect     = 203;
 constexpr int kIdChkViewOnly = 204;
 constexpr int kIdExit        = 205;
+constexpr int kIdChkSaveLog  = 206;
 
 // Giá trị mặc định khi ô trống/nhập sai - giống hệt mặc định --port/--fps/
 // --bitrate cũ.
@@ -77,8 +79,29 @@ struct MenuState {
     HWND editBitrate = nullptr;
     HWND editAddr = nullptr;
     HWND chkViewOnly = nullptr;
+    HWND chkSaveLog = nullptr;
     bool quit = false;
 };
+
+bool WantDiagLog(const MenuState& st) {
+    return SendMessageW(st.chkSaveLog, BM_GETCHECK, 0, 0) == BST_CHECKED;
+}
+
+// Phiên xong thì chỉ đường tới file: người dùng bật log là đang chuẩn bị gửi nó đi,
+// mà log nằm cạnh exe — chỗ không phải ai cũng biết tìm.
+void ReportDiagLog(HWND owner, const DiagLogRedirect& log, bool wanted) {
+    if (!wanted) return;
+    if (log.active()) {
+        const std::wstring msg = L"Diagnostic log saved to:\n\n" + log.path();
+        MessageBoxW(owner, msg.c_str(), L"RemoteGame", MB_OK | MB_ICONINFORMATION);
+    } else {
+        MessageBoxW(owner,
+                    L"Could not create the diagnostic log file next to the program.\n\n"
+                    L"The session ran normally, but nothing was recorded. Try moving "
+                    L"the program to a folder you can write to (for example Desktop).",
+                    L"RemoteGame", MB_OK | MB_ICONWARNING);
+    }
+}
 
 void DoShare(MenuState& st) {
     std::vector<AgentSource> sources;
@@ -90,6 +113,9 @@ void DoShare(MenuState& st) {
     ao.fps = GetEditUint(st.editFps, kDefaultFps);
     ao.bitrateMbps = GetEditUint(st.editBitrate, kDefaultBitrateMbps);
     ao.allowInput = allow;
+    // Đặt trước nhánh elevate: nếu phiên nhảy sang instance admin thì cờ này là thứ
+    // duy nhất mang yêu cầu ghi log đi cùng (ElevatedShare.cpp thêm --diag-log).
+    ao.diagLog = WantDiagLog(st);
 
     // UIPI: input chỉ đi tới được cửa sổ của tiến trình có integrity level không
     // cao hơn mình. Host quyền thường vẫn capture được game/app chạy admin nhưng
@@ -114,9 +140,14 @@ void DoShare(MenuState& st) {
     }
 
     ShowWindow(st.hwnd, SW_HIDE);
-    RunAgent(sources, ao);
-    ShowWindow(st.hwnd, SW_SHOW);
-    SetForegroundWindow(st.hwnd);
+    {
+        DiagLogRedirect log; // scope riêng: trả stdout về console trước khi hiện menu
+        if (ao.diagLog) log.Start(DiagRole::Agent);
+        RunAgent(sources, ao);
+        ShowWindow(st.hwnd, SW_SHOW);
+        SetForegroundWindow(st.hwnd);
+        ReportDiagLog(st.hwnd, log, ao.diagLog);
+    }
 }
 
 void DoConnect(MenuState& st) {
@@ -153,9 +184,15 @@ void DoConnect(MenuState& st) {
     }
 
     ShowWindow(st.hwnd, SW_HIDE);
-    RunClient(co);
-    ShowWindow(st.hwnd, SW_SHOW);
-    SetForegroundWindow(st.hwnd);
+    {
+        const bool wantLog = WantDiagLog(st);
+        DiagLogRedirect log; // scope riêng: trả stdout về console trước khi hiện menu
+        if (wantLog) log.Start(DiagRole::Client);
+        RunClient(co);
+        ShowWindow(st.hwnd, SW_SHOW);
+        SetForegroundWindow(st.hwnd);
+        ReportDiagLog(st.hwnd, log, wantLog);
+    }
 }
 
 LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
@@ -190,7 +227,7 @@ int RunMainMenuWindow() {
     wc.hbrBackground = (HBRUSH)(COLOR_BTNFACE + 1);
     RegisterClassW(&wc);
 
-    constexpr int kW = 460, kH = 400;
+    constexpr int kW = 460, kH = 424; // +24: checkbox lưu log ở dưới View only
     const DWORD style = WS_OVERLAPPEDWINDOW & ~(WS_THICKFRAME | WS_MAXIMIZEBOX);
     RECT wr{ 0, 0, kW, kH };
     AdjustWindowRect(&wr, style, FALSE);
@@ -249,6 +286,12 @@ int RunMainMenuWindow() {
 
     st.chkViewOnly = mk(L"BUTTON", L"View only, don't send input (applies when connecting)",
                          BS_AUTOCHECKBOX, 16, 262, kW - 32, 20, kIdChkViewOnly);
+
+    // Áp cho CẢ HAI vai: tick rồi bấm Share ra diag-agent-*.log, bấm Connect ra
+    // diag-client-*.log. Một checkbox chung vì người dùng chỉ cần nhớ một thao tác
+    // ("bật cái này rồi tái hiện lỗi"), còn tên file thì chương trình tự phân biệt.
+    st.chkSaveLog = mk(L"BUTTON", L"Save diagnostic log to a file next to this program",
+                        BS_AUTOCHECKBOX, 16, 286, kW - 32, 20, kIdChkSaveLog);
 
     mk(L"BUTTON", L"Exit", BS_PUSHBUTTON, 16, kH - 60, 100, 28, kIdExit);
 

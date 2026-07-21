@@ -17,6 +17,7 @@ add_executable(client
     AgentLoop.cpp
     ClientLoop.cpp
     ElevatedShare.cpp
+    DiagLog.cpp
 
     net/UdpSocket.cpp
     net/NetInfo.cpp

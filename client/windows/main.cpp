@@ -37,6 +37,7 @@
 #include <cstdio>
 
 #include "AgentLoop.h"
+#include "DiagLog.h"
 #include "ElevatedShare.h"
 #include "ui/MainMenuWindow.h"
 #include "capture/WindowCapture.h"
@@ -67,7 +68,14 @@ int main() {
         const bool elevatedShare = ParseElevatedShareArgs(wargc, wargv, sources, opt);
         LocalFree(wargv);
         if (elevatedShare) {
-            RunAgent(sources, opt);
+            // Instance này LÀ phiên host thật. Redirect của shell gốc không với tới
+            // đây (UAC dựng tiến trình mới), nên tự mở file log lấy — xem DiagLog.h.
+            // Scope riêng: stdout phải về lại console trước khi mở menu.
+            {
+                DiagLogRedirect diagLog;
+                if (opt.diagLog) diagLog.Start(DiagRole::Agent);
+                RunAgent(sources, opt);
+            }
             return RunMainMenuWindow();
         }
     }
