@@ -1,0 +1,17 @@
+{
+    "version": 4,
+    "configurations": [
+        {
+            "name": "Windows (host + client)",
+            "compileCommands": "${workspaceFolder}/out/build/x64-debug/compile_commands.json",
+            "cppStandard": "c++20",
+            "intelliSenseMode": "windows-msvc-x64"
+        },
+        {
+            "name": "Android (NDK)",
+            "compileCommands": "${workspaceFolder}/client/android/app/.cxx/tools/debug/arm64-v8a/compile_commands.json",
+            "cppStandard": "c++20",
+            "intelliSenseMode": "linux-clang-arm64"
+        }
+    ]
+}
