@@ -63,27 +63,37 @@ phía client. Để chuyển đổi được, client cần SPS/PPS đi kèm mỗ
 
 ```
 core/                           ★ DÙNG CHUNG GIỮA CÁC OS — thuần C++20, namespace `rgc`
-├── include/rgc/                public header (include qua "rgc/...")
-│   ├── ByteOrder.h ✅          đọc/ghi u16/u32/u64 big-endian (shift byte)
-│   ├── Wire.h ✅               hằng số Type/Chan/Flags, struct message,
+├── include/rgc/                public header (include qua "rgc/<nhóm>/...")
+│   ├── wire/ByteOrder.h ✅     đọc/ghi u16/u32/u64 big-endian (shift byte)
+│   ├── wire/Wire.h ✅          hằng số Type/Chan/Flags, struct message,
 │   │                           Build*/Parse* cho mọi loại gói v1
-│   ├── Packetizer.h ✅         NAL frame → N mảnh VIDEO_PACKET ≤ MTU
-│   ├── Reassembler.h ✅        mảnh → frame hoàn chỉnh; phát hiện mất; chính sách bỏ
-│   ├── HostSession.h ✅        máy trạng thái phía Agent (IDLE→READY→STREAMING)
-│   └── ClientSession.h ✅      máy trạng thái phía Client (handshake, ping, timeout)
-├── src/                        Wire.cpp ✅; Packetizer/Reassembler/*Session.cpp ✅
+│   ├── transport/Packetizer.h ✅   NAL frame → N mảnh VIDEO_PACKET ≤ MTU
+│   ├── transport/Reassembler.h ✅  mảnh → frame hoàn chỉnh; phát hiện mất; chính sách bỏ
+│   ├── session/HostSession.h ✅    máy trạng thái phía Agent (IDLE→READY→STREAMING)
+│   ├── session/ClientSession.h ✅  máy trạng thái phía Client (handshake, ping, timeout)
+│   ├── input/InputSender.h ✅      gom + đánh seq + gửi lặp sự kiện chuột/phím
+│   ├── input/InputReceiver.h ✅    khử trùng, đếm mất
+│   ├── control/BitrateController.h ✅  policy bitrate/FEC phía host (GĐ5)
+│   └── control/LinkStats.h ✅         gom thống kê 1s + dựng Feedback phía client
+├── src/                        gương theo nhóm của include/rgc/
+├── tests/CoreTests.cpp ✅      test offline (không mạng/GPU) → target `core_tests`
 └── CMakeLists.txt              static lib `core`; build được standalone
                                 cho macOS/Ubuntu/iOS/Android
 
+platform/                       ★ lớp MỎNG bọc header hệ điều hành — core không được chạm
+└── include/rgcp/Clock.h ✅     NowUs() đơn điệu (QPC trên Windows, CLOCK_MONOTONIC nơi khác)
+
 client/
-└── windows/                    app Windows — MỘT exe `client.exe` (kiểu AnyDesk), link `core`
-    ├── UdpSocket.h/.cpp ✅     platform: winsock2 (sau: #ifdef BSD sockets)
-    ├── NetInfo.h/.cpp ✅       liệt kê IPv4 theo card mạng (menu chính + agent in địa chỉ)
-    ├── AgentLoop.cpp ✅        ghép: capture+encode (GĐ2) + Packetizer + HostSession + socket
-    ├── ClientLoop.cpp ✅       ghép: socket + Reassembler + ClientSession + MfDecoder + Renderer
-    ├── NetTest.cpp ✅          --nettest: self-test M1 (offline, chỉ dùng core)
-    └── main.cpp ✅             parse arg → --serve / --connect / --nettest / các mode cũ
-(sau này: client/macos, client/linux, client/ios, client/android — mỗi OS một app)
+├── windows/                    app Windows — MỘT exe `client.exe` (kiểu AnyDesk), link `core`
+│   ├── net/UdpSocket.h/.cpp ✅ platform: winsock2 (sau: #ifdef BSD sockets)
+│   ├── net/NetInfo.h/.cpp ✅   liệt kê IPv4 theo card mạng (menu chính + agent in địa chỉ)
+│   ├── capture/ encode/ ✅     WGC + D3D11; NVENC / Media Foundation
+│   ├── decode/ input/ ui/ ✅   MfDecoder + Renderer; bơm/bắt input; dialog Win32
+│   ├── AgentLoop.cpp ✅        ghép: capture+encode (GĐ2) + Packetizer + HostSession + socket
+│   ├── ClientLoop.cpp ✅       ghép: socket + Reassembler + ClientSession + MfDecoder + Renderer
+│   └── main.cpp ✅             vào thẳng GUI (MainMenuWindow); không còn CLI
+└── android/                    app Android — UI Kotlin + lõi C++ (cpp/: net/, decode/)
+(sau này: client/macos, client/linux, client/ios — mỗi OS một app)
 ```
 
 **Một file duy nhất, kiểu AnyDesk (quyết định cố định):** người dùng chỉ tải **một exe**
@@ -264,7 +274,7 @@ Log mỗi 1s ở client (console): `fps nhận | kbps | frame bỏ | %gói mất
 
 | # | Nội dung | Kiểm chứng |
 |---|----------|-----------|
-| M1 | `core` + self-test `--nettest`: packetize → trộn thứ tự/bỏ gói giả lập → reassemble | bytes ra == vào; loss event đúng lúc; không cần mạng |
+| M1 | `core` + self-test `core_tests`: packetize → trộn thứ tự/bỏ gói giả lập → reassemble | bytes ra == vào; loss event đúng lúc; không cần mạng |
 | M2 | Agent + Client 2 process **cùng máy** qua 127.0.0.1 | hình như `--loopback` GĐ2, qua UDP thật |
 | M3 | **Hai máy LAN** | realtime, log đủ chỉ số — tiêu chí xong GĐ3 |
 | M4 | Giả lập mạng xấu (tool clumsy: drop 2–5%) | vỡ hình ≤ vài trăm ms rồi tự phục hồi qua IDR |
@@ -313,8 +323,9 @@ Hai bài học giữ lại:
    `encMutex` trong callback FrameArrived của WGC. Bản pacing đầu ngủ ở đó và kéo
    stream về ~0 kbps, e2e 13,8 giây. Phải xếp hàng rồi rải ở thread riêng.
 
-`client/windows/Pacer.{h,cpp}` còn trong repo nhưng **không nối vào build** — giữ làm
-nguyên liệu nếu quay lại, với chính sách chọn tốc độ khác.
+`client/windows/net/Pacer.{h,cpp}` còn trong repo nhưng **không nối vào build** — giữ làm
+nguyên liệu nếu quay lại, với chính sách chọn tốc độ khác. (CMakeLists có dòng comment
+đúng chỗ nó sẽ nằm, để lần sau khỏi phải đi tìm.)
 
 ### Hướng chưa loại trừ
 
@@ -328,7 +339,7 @@ riêng trước khi thiết kế lại bất cứ thứ gì — chưa đo thì c
 1. ✅ Lập thư viện `core/` (CMake target `core`, app link vào; toàn repo build
    CMake + Ninja, cấu trúc `core/` + `client/<os>/`) với `rgc/ByteOrder.h` +
    `rgc/Wire.h` + `Wire.cpp` (+ `04-protocol.md` đã cập nhật header 8 byte).
-2. ✅ `Packetizer` + `Reassembler` (trong core) + mode `--nettest` (M1 PASS 2026-07-20:
+2. ✅ `Packetizer` + `Reassembler` (trong core) + target `core_tests` (M1 PASS 2026-07-20:
    in-order / trộn thứ tự / mất gói / trùng gói / join giữa chừng / timeout đầu hàng
    / mô phỏng handshake 2 session — bytes ra == vào, loss event đúng lúc).
 3. ✅ `UdpSocket` (winsock; tắt `SIO_UDP_CONNRESET`, SO_RCVBUF 4MB) +

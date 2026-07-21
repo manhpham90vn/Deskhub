@@ -21,10 +21,10 @@
 #include <string>
 #include <thread>
 
-#include "MediaCodecDecoder.h"
-#include "UdpSocket.h"
+#include "decode/MediaCodecDecoder.h"
+#include "net/UdpSocket.h"
 
-#include "rgc/Reassembler.h"
+#include "rgc/transport/Reassembler.h"
 
 class ClientLoop {
 public:

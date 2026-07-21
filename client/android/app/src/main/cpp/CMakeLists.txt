@@ -11,20 +11,31 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 # <repo>/client/android/app/src/main/cpp -> lùi 6 mức về gốc repo.
 get_filename_component(RGC_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../../../../../.." ABSOLUTE)
 add_subdirectory(${RGC_ROOT}/core ${CMAKE_CURRENT_BINARY_DIR}/core)
+# platform/ — lớp mỏng bọc header hệ điều hành (Clock.h); INTERFACE lib, không sinh
+# .a. Nhánh #else của Clock.h (clock_gettime) là nhánh Android dùng.
+add_subdirectory(${RGC_ROOT}/platform ${CMAKE_CURRENT_BINARY_DIR}/platform)
 
 # Không còn native_app_glue: vòng đời app do Activity Kotlin lo, native chỉ là thư
 # viện được gọi qua JNI. Nhờ vậy cũng bỏ được cả trò -u ANativeActivity_onCreate.
+# Nhóm theo thư mục con giống client/windows: net/ (socket, truy vấn nguồn),
+# decode/ (MediaCodec). Ở gốc còn JniBridge (mặt tiếp xúc Kotlin) + ClientLoop.
 add_library(remotegame SHARED
     JniBridge.cpp
     ClientLoop.cpp
-    MediaCodecDecoder.cpp
-    SourceQuery.cpp
-    UdpSocket.cpp
+
+    net/UdpSocket.cpp
+    net/SourceQuery.cpp
+
+    decode/MediaCodecDecoder.cpp
 )
+
+# Include gốc cpp/ để mọi #include ghi đủ đường dẫn nhóm ("net/UdpSocket.h").
+target_include_directories(remotegame PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 target_link_libraries(remotegame
     PRIVATE
         core        # rgc:: Wire/ClientSession/Reassembler/...
+        platform    # NowUs()
         android     # ANativeWindow, ANativeWindow_fromSurface
         mediandk    # AMediaCodec, AMediaFormat
         log

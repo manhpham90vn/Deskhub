@@ -19,8 +19,8 @@
 
 #include "ClientLoop.h"
 #include "Log.h"
-#include "SourceQuery.h"
-#include "UdpSocket.h"
+#include "net/SourceQuery.h"
+#include "net/UdpSocket.h"
 
 namespace {
 

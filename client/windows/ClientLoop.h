@@ -11,8 +11,8 @@
 #include <cstdint>
 #include <vector>
 
-#include "UdpSocket.h"
-#include "rgc/Wire.h"
+#include "net/UdpSocket.h"
+#include "rgc/wire/Wire.h"
 
 struct ClientOptions {
     NetAddr server;           // địa chỉ agent

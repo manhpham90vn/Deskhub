@@ -30,16 +30,17 @@
 
 #include <wrl/client.h>
 
-#include "GpuSelect.h"
-#include "InputInjector.h"
-#include "IVideoEncoder.h"
-#include "NetInfo.h"
-#include "TimeUs.h"
-#include "UdpSocket.h"
-#include "WindowCapture.h"
+#include "capture/GpuSelect.h"
+#include "input/InputInjector.h"
+#include "encode/IVideoEncoder.h"
+#include "net/NetInfo.h"
+#include "rgcp/Clock.h"
+#include "net/UdpSocket.h"
+#include "capture/WindowCapture.h"
 
-#include "rgc/HostSession.h"
-#include "rgc/Packetizer.h"
+#include "rgc/control/BitrateController.h"
+#include "rgc/session/HostSession.h"
+#include "rgc/transport/Packetizer.h"
 
 namespace {
 
@@ -65,6 +66,9 @@ const char* StateName(rgc::HostSession::State s) {
 // Toàn bộ trạng thái của MỘT nguồn. Chứa mutex/atomic nên không copy/move được —
 // giữ trong vector<unique_ptr>.
 struct SourcePipeline {
+    SourcePipeline(uint32_t startBps, uint32_t minBps)
+        : curBitrateBps(startBps), rate(startBps, minBps) {}
+
     // --- Cấu hình, cố định sau khi dựng ---
     uint8_t       sourceId = 0;
     CaptureTarget target;
@@ -105,8 +109,9 @@ struct SourcePipeline {
     std::atomic<uint64_t> lastFrameUs{0};
 
     // --- Congestion control, chỉ thread Recv chạm ---
-    uint64_t lastDecreaseUs = 0;
-    int      cleanSeconds = 0;
+    // Policy thuần ở core; curBitrateBps/wantFec ở trên là bản sao atomic cho thread
+    // FrameArrived đọc (nó không được chạm vào rate).
+    rgc::BitrateController rate;
 
     // --- Thống kê cửa sổ 1s, chỉ thread Recv chạm ---
     uint32_t lastCaptured = 0;
@@ -155,11 +160,10 @@ int RunAgent(std::span<const AgentSource> sources, const AgentOptions& opt) {
 
     std::vector<std::unique_ptr<SourcePipeline>> pipes;
     for (size_t i = 0; i < sources.size(); ++i) {
-        auto p = std::make_unique<SourcePipeline>();
+        auto p = std::make_unique<SourcePipeline>(startBitrate, minBitrate);
         p->sourceId = uint8_t(i);
         p->target   = sources[i].target;
         p->name     = sources[i].name;
-        p->curBitrateBps.store(startBitrate);
         pipes.push_back(std::move(p));
     }
 
@@ -257,13 +261,13 @@ int RunAgent(std::span<const AgentSource> sources, const AgentOptions& opt) {
                 gpu.context->CopyResource(p->cachedTex.Get(), fi.texture);
                 p->haveCached.store(true, std::memory_order_release);
             }
-            p->lastFrameUs.store(QpcUs(), std::memory_order_relaxed);
+            p->lastFrameUs.store(NowUs(), std::memory_order_relaxed);
 
             if (!p->netReady.load(std::memory_order_acquire)) return;
             if (!ensureEncoder(encW, encH, fi.width, fi.height)) return;
             // Encode liên tục kể cả khi chưa có client (đơn giản, VBV ổn định);
             // NAL bị bỏ ở onPacket nếu chưa STREAMING.
-            p->encoder->Encode(fi.texture, QpcUs(), p->forceIdr.exchange(false));
+            p->encoder->Encode(fi.texture, NowUs(), p->forceIdr.exchange(false));
         };
 
         if (!p->capture.Start(p->target, gpu.device.Get(), onFrame)) {
@@ -352,41 +356,30 @@ int RunAgent(std::span<const AgentSource> sources, const AgentOptions& opt) {
         // GD5 congestion control, RIÊNG từng nguồn: hai nguồn có thể đi cùng một
         // đường mạng nhưng bitrate của chúng độc lập nhau, và client có thể chỉ
         // đang xem một trong hai.
-        cb.onFeedback = [p, maxBitrate, minBitrate](const rgc::Feedback& fb) {
-            const uint64_t now = QpcUs();
+        // GD5 congestion control: policy nằm ở rgc::BitrateController (core, test
+        // được offline). Ở đây chỉ còn phần dính thiết bị — đẩy quyết định xuống
+        // encoder, cập nhật atomic cho thread FrameArrived, và in log.
+        cb.onFeedback = [p](const rgc::Feedback& fb) {
+            const rgc::BitrateDecision d = p->rate.Update(fb, NowUs());
 
-            // FEC tốn 1/kFecGroupSize băng thông nên chỉ bật khi đang thực sự mất
-            // gói. Tắt chậm hơn bật (5 giây sạch): mất gói thường đến theo cụm.
-            if (fb.lossPct >= 1) {
-                p->cleanSeconds = 0;
-                if (!p->wantFec.exchange(true, std::memory_order_relaxed))
+            if (d.fecToggled) {
+                p->wantFec.store(d.fecEnabled, std::memory_order_relaxed);
+                if (d.fecEnabled)
                     std::printf("[Agent][%s] FEC on (loss %u%%).\n", p->name.c_str(), fb.lossPct);
-            } else if (++p->cleanSeconds >= 5) {
-                if (p->wantFec.exchange(false, std::memory_order_relaxed))
+                else
                     std::printf("[Agent][%s] FEC off (link clean).\n", p->name.c_str());
             }
 
-            const uint32_t cur = p->curBitrateBps.load(std::memory_order_relaxed);
-            uint32_t next = cur;
-            if (fb.lossPct >= 5) {
-                next = cur - cur / 4;          // ×0.75
-                p->lastDecreaseUs = now;
-            } else if (fb.lossPct >= 2) {
-                next = cur - cur / 10;         // ×0.90
-                p->lastDecreaseUs = now;
-            } else if (fb.lossPct <= 1 && now - p->lastDecreaseUs > 2'000'000) {
-                next = cur + maxBitrate / 20;  // +5% trần mỗi giây
-            }
-            if (next > maxBitrate) next = maxBitrate;
-            if (next < minBitrate) next = minBitrate;
-            // Bỏ qua thay đổi vụn: mỗi lần gọi là một lần đàm phán lại rate control.
-            if (next == cur || (next > cur ? next - cur : cur - next) < cur / 50) return;
+            if (!d.changeBitrate) return;
 
+            const uint32_t cur = p->rate.bitrateBps();
             std::lock_guard<std::mutex> lk(p->encMutex);
-            if (p->encoder && p->encoder->SetBitrate(next)) {
-                p->curBitrateBps.store(next, std::memory_order_relaxed);
+            // Encoder từ chối thì KHÔNG commit: lần Feedback sau tính lại từ mức cũ.
+            if (p->encoder && p->encoder->SetBitrate(d.bitrateBps)) {
+                p->rate.CommitBitrate(d.bitrateBps);
+                p->curBitrateBps.store(d.bitrateBps, std::memory_order_relaxed);
                 std::printf("[Agent][%s] Bitrate %.1f -> %.1f Mbps (loss %u%%, RTT %u ms)\n",
-                            p->name.c_str(), cur / 1e6, next / 1e6, fb.lossPct, fb.rttMs);
+                            p->name.c_str(), cur / 1e6, d.bitrateBps / 1e6, fb.lossPct, fb.rttMs);
             }
         };
 
@@ -402,7 +395,7 @@ int RunAgent(std::span<const AgentSource> sources, const AgentOptions& opt) {
 
     // --- Vòng Recv (thread chính), dùng chung cho mọi nguồn ---
     uint8_t buf[rgc::kMaxDatagram];
-    uint64_t lastStatUs = QpcUs();
+    uint64_t lastStatUs = NowUs();
     bool anyFailed = false;
 
     for (;;) {
@@ -415,7 +408,7 @@ int RunAgent(std::span<const AgentSource> sources, const AgentOptions& opt) {
 
         NetAddr from;
         const int n = sock.RecvFrom(buf, sizeof(buf), from);
-        const uint64_t now = QpcUs();
+        const uint64_t now = NowUs();
         if (n < 0) { std::printf("[Agent] Socket error — stopping.\n"); anyFailed = true; break; }
 
         if (n > 0) {
@@ -492,7 +485,7 @@ int RunAgent(std::span<const AgentSource> sources, const AgentOptions& opt) {
                 if (p->ensureEncoderFn(p->srcW.load(), p->srcH.load(),
                                        p->srcTexW.load(), p->srcTexH.load()) &&
                     p->forceIdr.exchange(false))
-                    p->encoder->Encode(p->cachedTex.Get(), QpcUs(), true);
+                    p->encoder->Encode(p->cachedTex.Get(), NowUs(), true);
             }
         }
 

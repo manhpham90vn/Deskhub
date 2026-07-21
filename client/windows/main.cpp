@@ -5,6 +5,9 @@
 // Chạy:  client.exe (không tham số) -> mở màn hình chính: nút "Chia sẻ ứng
 // dụng" (mở WindowPickerDialog.h rồi RunAgent) hoặc ô nhập IP + nút "Kết nối"
 // (RunClient). Bitrate/FPS/port chỉnh trực tiếp trong cửa sổ đó.
+//
+// Test offline của core KHÔNG còn ở đây (trước là `client.exe --nettest`): nó đã
+// thành target riêng core_tests, xem core/tests/CoreTests.cpp.
 
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
@@ -16,21 +19,13 @@
 
 #include "AgentLoop.h"
 #include "ElevatedShare.h"
-#include "MainMenuWindow.h"
-#include "NetTest.h"
-#include "WindowCapture.h"
+#include "ui/MainMenuWindow.h"
+#include "capture/WindowCapture.h"
 
 #include <shellapi.h>
 #include <vector>
 
-#include <cstring>
-
-int main(int argc, char** argv) {
-    // GD5 bỏ CLI, nhưng self-test offline (M1) vẫn phải chạy được - nó không cần
-    // GUI, không cần mạng, và là thứ duy nhất kiểm chứng được core trên một máy.
-    for (int i = 1; i < argc; ++i)
-        if (std::strcmp(argv[i], "--nettest") == 0) return RunNetTest();
-
+int main() {
     SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     // UTF-8 cho console để wprintf in đúng tiêu đề cửa sổ có dấu (tiếng Việt...).
     std::setlocale(LC_ALL, ".UTF8");

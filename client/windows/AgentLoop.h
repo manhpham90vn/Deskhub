@@ -14,7 +14,7 @@
 #include <string>
 #include <vector>
 
-#include "WindowCapture.h"
+#include "capture/WindowCapture.h"
 
 struct AgentOptions {
     uint16_t port = 47777;

@@ -4,9 +4,21 @@ Stream + điều khiển game từ xa. Mỗi OS **một exe duy nhất** (kiểu
 khiển hoàn toàn qua giao diện Win32 — không cần tham số dòng lệnh.
 
 ```
-core/            phần dùng chung giữa các OS (protocol, C++20 thuần)
+core/            phần dùng chung giữa các OS (protocol, C++20 thuần, không header OS)
+platform/        lớp mỏng bọc header hệ điều hành (Clock.h) — cái core không được chạm
 client/windows/  app Windows (một exe: host + client)
+client/android/  app Android (UI Kotlin + lõi C++ dùng chung; hiện chỉ vai trò client)
 docs/            tài liệu thiết kế (bắt đầu từ docs/README.md)
+```
+
+`core/` chia theo tầng: `wire/` (khung byte) → `transport/` (cắt/ghép gói, FEC) →
+`session/` (handshake, vòng đời phiên), cộng `input/` và `control/` (bitrate, thống kê).
+`client/windows/` chia theo chức năng: `net/ capture/ encode/ decode/ input/ ui/`.
+
+## Test
+
+```
+make test              # core_tests — chạy offline, không cần mạng/GPU
 ```
 
 ## Yêu cầu
@@ -30,7 +42,7 @@ make release           # release
 make run       # chạy client.exe, mở thẳng man hình chính (GUI)
 ```
 
-Cửa sổ chính (`MainMenuWindow`, xem `client/windows/MainMenuWindow.h`) hiện địa chỉ
+Cửa sổ chính (`MainMenuWindow`, xem `client/windows/ui/MainMenuWindow.h`) hiện địa chỉ
 IP máy này theo từng card mạng, ô chỉnh **Port/FPS/Bitrate**, nút **"Chia sẻ ứng
 dụng trên máy này"** (mở hộp thoại chọn cửa sổ nguồn — `WindowPickerDialog.h` — rồi
 làm host) và ô nhập IP + nút **"Kết nối"** để làm client. Checkbox "Cho phép người

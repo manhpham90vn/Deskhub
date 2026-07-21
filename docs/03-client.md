@@ -35,7 +35,7 @@ Client
 
 ### Trừu tượng hóa
 
-> **Trạng thái (GĐ2 ✅):** interface thực tế ở `client/windows/IVideoDecoder.h`
+> **Trạng thái (GĐ2 ✅):** interface thực tế ở `client/windows/decode/IVideoDecoder.h`
 > (`DecoderConfig`/`DecodedFrame`); backend `MfDecoder.cpp` — H.264 MFT đồng bộ +
 > D3D11VA, output NV12 nằm trong VRAM, `MF_LOW_LATENCY`. Renderer dùng chung device.
 

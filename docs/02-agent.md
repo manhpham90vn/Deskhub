@@ -7,7 +7,7 @@ Agent chạy trên máy có game. Trách nhiệm: bắt hình, nén, gửi video
 
 ```
 Agent
-├── CaptureModule      (ĐÃ CÓ — WindowCapture.h/.cpp trong client/windows/)
+├── CaptureModule      (ĐÃ CÓ — client/windows/capture/WindowCapture.h/.cpp)
 ├── EncoderModule      (nén texture VRAM → NAL)
 ├── TransportModule    (UDP send/recv, packetize/depacketize)
 ├── InputInjector      (nhận input decode → bơm vào game)

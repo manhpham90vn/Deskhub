@@ -3,6 +3,7 @@
 #   make            build debug
 #   make release    build release
 #   make run ARGS="notepad.exe --loopback"
+#   make test       chay core_tests (offline)
 #   make clean
 
 SHELL := cmd.exe
@@ -24,7 +25,11 @@ release:
 run: debug
 	out\build\x64-debug\client\windows\client.exe $(ARGS)
 
+# Test cua core: offline, khong can mang/GPU. Exit code 0 = pass.
+test: debug
+	out\build\x64-debug\core\core_tests.exe
+
 clean:
 	@$(DEVCMD) cmake -E rm -rf out
 
-.PHONY: all debug release run clean
+.PHONY: all debug release run test clean

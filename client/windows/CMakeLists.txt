@@ -9,33 +9,48 @@
 set(NVENC_INTERFACE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../third_party/nvenc-13.0/include/ffnvcodec"
     CACHE PATH "Thu muc chua nvEncodeAPI.h")
 
+# Nguồn nhóm theo thư mục con: net/ (socket, pacing), capture/ (WGC + D3D11),
+# encode/ + decode/ (codec), input/, ui/ (dialog Win32). Ở gốc chỉ còn main + hai
+# vai trò (AgentLoop = host, ClientLoop = client) + ElevatedShare (vòng đời UAC).
 add_executable(client
     main.cpp
-    WindowCapture.cpp
-    WindowFinder.cpp
-    BmpWriter.cpp
-    GpuSelect.cpp
-    MfEncoder.cpp
-    NvencEncoder.cpp
-    EncoderFactory.cpp
-    MfDecoder.cpp
-    Renderer.cpp
-    UdpSocket.cpp
-    NetInfo.cpp
     AgentLoop.cpp
     ClientLoop.cpp
-    InputCapture.cpp
-    InputInjector.cpp
-    NetTest.cpp
     ElevatedShare.cpp
-    WindowPickerDialog.cpp
-    SourcePickerDialog.cpp
-    MainMenuWindow.cpp
+
+    net/UdpSocket.cpp
+    net/NetInfo.cpp
+    # net/Pacer.cpp — CHƯA nối vào build: không file nào include Pacer.h và nó chưa
+    # từng được compile (thêm ở c55a8f9 nhưng thiếu bước wire vào Packetizer).
+    # Giữ nguyên trạng thái cũ ở đây; xem ghi chú đầu net/Pacer.h.
+
+    capture/WindowCapture.cpp
+    capture/WindowFinder.cpp
+    capture/GpuSelect.cpp
+    capture/BmpWriter.cpp
+
+    encode/MfEncoder.cpp
+    encode/NvencEncoder.cpp
+    encode/EncoderFactory.cpp
+
+    decode/MfDecoder.cpp
+    decode/Renderer.cpp
+
+    input/InputCapture.cpp
+    input/InputInjector.cpp
+
+    ui/MainMenuWindow.cpp
+    ui/WindowPickerDialog.cpp
+    ui/SourcePickerDialog.cpp
 )
 
 target_compile_definitions(client PRIVATE UNICODE _UNICODE _CONSOLE)
-target_include_directories(client PRIVATE "${NVENC_INTERFACE_DIR}")
-target_link_libraries(client PRIVATE core)
+# Include gốc client/windows để mọi #include ghi đủ đường dẫn nhóm ("net/UdpSocket.h").
+target_include_directories(client PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}"
+    "${NVENC_INTERFACE_DIR}"
+)
+target_link_libraries(client PRIVATE core platform)
 
 if(MSVC)
     target_compile_options(client PRIVATE /W3 /permissive- /sdl)

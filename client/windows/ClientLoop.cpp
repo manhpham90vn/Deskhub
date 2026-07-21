@@ -33,14 +33,15 @@
 #include <thread>
 #include <vector>
 
-#include "GpuSelect.h"
-#include "InputCapture.h"
-#include "IVideoDecoder.h"
-#include "Renderer.h"
-#include "TimeUs.h"
+#include "capture/GpuSelect.h"
+#include "input/InputCapture.h"
+#include "decode/IVideoDecoder.h"
+#include "decode/Renderer.h"
+#include "rgcp/Clock.h"
 
-#include "rgc/ClientSession.h"
-#include "rgc/Reassembler.h"
+#include "rgc/control/LinkStats.h"
+#include "rgc/session/ClientSession.h"
+#include "rgc/transport/Reassembler.h"
 
 namespace {
 
@@ -113,7 +114,7 @@ void StreamRecvLoop(ClientStream& s, const ClientOptions& opt, ID3D11Device* dev
         const uint32_t rtt = minRttUs.load(std::memory_order_relaxed);
         if (rtt) {
             const int64_t offset = ackDeltaUs.load(std::memory_order_relaxed) - int64_t(rtt) / 2;
-            lastE2eUs.store(int64_t(QpcUs()) - offset - int64_t(df.timestampUs));
+            lastE2eUs.store(int64_t(NowUs()) - offset - int64_t(df.timestampUs));
         }
     };
 
@@ -132,9 +133,9 @@ void StreamRecvLoop(ClientStream& s, const ClientOptions& opt, ID3D11Device* dev
             }
             if (!decoder) continue; // không nên xảy ra: decoder tạo trước frame đầu
 
-            const uint64_t decStartUs = QpcUs();
+            const uint64_t decStartUs = NowUs();
             const bool decodeOk = decoder->Decode(f.nal.data(), f.nal.size(), f.timestampUs);
-            const uint64_t decMs = (QpcUs() - decStartUs) / 1000;
+            const uint64_t decMs = (NowUs() - decStartUs) / 1000;
             if (decMs > 20) {
                 std::printf("[Client][%s] WARNING: decode+render took %llu ms for one frame\n",
                             s.src.name.c_str(), (unsigned long long)decMs);
@@ -146,7 +147,7 @@ void StreamRecvLoop(ClientStream& s, const ClientOptions& opt, ID3D11Device* dev
     rgc::ClientCallbacks cb;
     cb.send = [&](std::span<const uint8_t> d) { s.sock.SendTo(opt.server, d.data(), d.size()); };
     cb.onReady = [&](const rgc::NegotiatedParams& np) {
-        ackDeltaUs.store(int64_t(QpcUs()) - int64_t(np.timebaseUs), std::memory_order_relaxed);
+        ackDeltaUs.store(int64_t(NowUs()) - int64_t(np.timebaseUs), std::memory_order_relaxed);
         std::printf("[Client][%s] Negotiation done: H264 %ux%u @%ufps, %.1f Mbps\n",
                     s.src.name.c_str(), np.width, np.height, np.fps, np.bitrateBps / 1e6);
         s.negW.store(np.width);
@@ -173,23 +174,22 @@ void StreamRecvLoop(ClientStream& s, const ClientOptions& opt, ID3D11Device* dev
     rgc::ClientSession session(cb);
 
     rgc::Hello hello;
-    hello.clientId   = uint32_t(QpcUs()) ^ GetCurrentProcessId() ^ (uint32_t(s.src.sourceId) << 24);
+    hello.clientId   = uint32_t(NowUs()) ^ GetCurrentProcessId() ^ (uint32_t(s.src.sourceId) << 24);
     hello.codecMask  = rgc::kCodecMaskH264;
     hello.maxWidth   = uint16_t(GetSystemMetrics(SM_CXSCREEN));
     hello.maxHeight  = uint16_t(GetSystemMetrics(SM_CYSCREEN));
     hello.desiredFps = 60;
     hello.features   = 0;
     hello.sourceId   = s.src.sourceId;
-    session.Start(hello, QpcUs());
+    session.Start(hello, NowUs());
 
     uint8_t buf[rgc::kMaxDatagram];
-    uint64_t lastStatUs = QpcUs();
-    rgc::Reassembler::Stats lastStats{};
+    rgc::LinkStats linkStats(NowUs());
 
     while (!s.quit.load() && !g_ctrlC.load() && !s.failed.load()) {
         NetAddr from;
         const int n = s.sock.RecvFrom(buf, sizeof(buf), from);
-        const uint64_t now = QpcUs();
+        const uint64_t now = NowUs();
         if (n < 0) {
             std::printf("[Client][%s] Socket error.\n", s.src.name.c_str());
             s.failed.store(true);
@@ -267,50 +267,37 @@ void StreamRecvLoop(ClientStream& s, const ClientOptions& opt, ID3D11Device* dev
         session.Tick(now);
         if (session.state() == rgc::ClientSession::State::Dead) break;
 
-        if (now - lastStatUs >= 1'000'000) {
-            const double secs = (now - lastStatUs) / 1e6;
+        if (linkStats.Due(now)) {
             const auto st = reasm ? reasm->stats() : rgc::Reassembler::Stats{};
-            const uint64_t pkts = st.packetsReceived - lastStats.packetsReceived;
-            const uint64_t lost = st.packetsLost - lastStats.packetsLost;
-            const double lossPct = (pkts + lost) ? 100.0 * lost / double(pkts + lost) : 0.0;
+            const uint32_t rendered = stRendered.exchange(0, std::memory_order_relaxed);
+            const rgc::LinkWindow w = linkStats.Close(st, stBytes, rendered, now);
             const int64_t e2e = lastE2eUs.load();
-            const uint32_t rendered = stRendered.load(std::memory_order_relaxed);
-            const uint64_t recovered = st.packetsRecovered - lastStats.packetsRecovered;
+
             std::printf("[Client][%s] %2.0f fps | %6.0f kbps | dropped %llu frame | lost %4.1f%%"
                         " pkts | fec+%llu | RTT %.1f ms | e2e ~%.1f ms\n",
                         s.src.name.c_str(),
-                        rendered / secs,
-                        stBytes * 8.0 / 1000.0 / secs,
-                        (unsigned long long)(st.framesDropped - lastStats.framesDropped),
-                        lossPct,
-                        (unsigned long long)recovered,
+                        w.fps,
+                        w.kbps,
+                        (unsigned long long)w.framesDropped,
+                        w.lossPct,
+                        (unsigned long long)w.packetsRecovered,
                         session.lastRttUs() / 1000.0,
                         e2e >= 0 ? e2e / 1000.0 : 0.0);
 
             wchar_t statusBuf[160];
             swprintf(statusBuf, 160,
                 L"%2.0f fps | %5.0f kbps | lost %4.1f%% pkts | RTT %4.1f ms | e2e ~%4.1f ms",
-                rendered / secs, stBytes * 8.0 / 1000.0 / secs, lossPct,
+                w.fps, w.kbps, w.lossPct,
                 session.lastRttUs() / 1000.0, e2e >= 0 ? e2e / 1000.0 : 0.0);
             {
                 std::lock_guard<std::mutex> lk(s.statsMutex);
                 s.statusText = statusBuf;
             }
 
-            // Số liệu đó gửi ngược cho host để nó siết/nới bitrate. Gửi cả khi 0%
-            // mất gói — host cần tín hiệu "đường thông" mới dám nới lên lại, im
-            // lặng bị hiểu là mất kết nối.
-            rgc::Feedback fb;
-            fb.lostFrames      = uint16_t(st.framesDropped - lastStats.framesDropped);
-            fb.lossPct         = uint8_t(lossPct + 0.5);
-            fb.rttMs           = uint16_t(session.lastRttUs() / 1000);
-            fb.recvBitrateKbps = uint32_t(stBytes * 8.0 / 1000.0 / secs);
-            session.SendFeedback(fb);
+            // Số liệu đó gửi ngược cho host để nó siết/nới bitrate.
+            session.SendFeedback(rgc::MakeFeedback(w, session.lastRttUs()));
 
-            lastStats = st;
-            stRendered.store(0, std::memory_order_relaxed);
             stBytes = 0;
-            lastStatUs = now;
         }
     }
 
@@ -337,10 +324,10 @@ bool QueryHostSources(const NetAddr& server, std::vector<rgc::SourceInfo>& out) 
 
     // Phát lại mỗi 500ms trong ~3s: LIST_SOURCES đi trên UDP, gói đầu mất là chuyện
     // bình thường và người dùng đang đứng chờ ở hộp thoại.
-    const uint64_t startUs = QpcUs();
+    const uint64_t startUs = NowUs();
     uint64_t lastSendUs = 0;
-    while (QpcUs() - startUs < 3'000'000 && !g_ctrlC.load()) {
-        const uint64_t now = QpcUs();
+    while (NowUs() - startUs < 3'000'000 && !g_ctrlC.load()) {
+        const uint64_t now = NowUs();
         if (now - lastSendUs >= 500'000) {
             lastSendUs = now;
             sock.SendTo(server, buf, qn);

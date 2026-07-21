@@ -6,10 +6,11 @@
 #include <memory>
 
 #include "Log.h"
-#include "TimeUs.h"
+#include "rgcp/Clock.h"
 
-#include "rgc/ClientSession.h"
-#include "rgc/Wire.h"
+#include "rgc/control/LinkStats.h"
+#include "rgc/session/ClientSession.h"
+#include "rgc/wire/Wire.h"
 
 ClientLoop::~ClientLoop() { Stop(); }
 
@@ -221,8 +222,7 @@ void ClientLoop::NetThread() {
 
     uint8_t buf[rgc::kMaxDatagram];
     uint64_t stBytes = 0;
-    uint64_t lastStatUs = NowUs();
-    rgc::Reassembler::Stats lastStats{};
+    rgc::LinkStats linkStats(NowUs());
 
     while (!quit_.load()) {
         NetAddr from;
@@ -288,45 +288,38 @@ void ClientLoop::NetThread() {
                          : Phase::Connecting,
                      std::memory_order_release);
 
-        if (now - lastStatUs >= 1'000'000) {
-            const double secs = (now - lastStatUs) / 1e6;
+        if (linkStats.Due(now)) {
             const auto st = reasm ? reasm->stats() : rgc::Reassembler::Stats{};
-            const uint64_t pkts = st.packetsReceived - lastStats.packetsReceived;
-            const uint64_t lost = st.packetsLost - lastStats.packetsLost;
-            const double lossPct = (pkts + lost) ? 100.0 * lost / double(pkts + lost) : 0.0;
-            const int64_t e2e = lastE2eUs_.load();
             const uint32_t rendered = stRendered_.exchange(0, std::memory_order_relaxed);
+            const rgc::LinkWindow w = linkStats.Close(st, stBytes, rendered, now);
+            const int64_t e2e = lastE2eUs_.load();
 
             LOGI("[Client] %2.0f fps | %6.0f kbps | dropped %" PRIu64 " frame | lost %4.1f%% pkts"
                  " | fec+%" PRIu64 " | RTT %.1f ms | e2e ~%.1f ms",
-                 rendered / secs,
-                 stBytes * 8.0 / 1000.0 / secs,
-                 st.framesDropped - lastStats.framesDropped,
-                 lossPct,
-                 st.packetsRecovered - lastStats.packetsRecovered,
+                 w.fps,
+                 w.kbps,
+                 w.framesDropped,
+                 w.lossPct,
+                 w.packetsRecovered,
                  session.lastRttUs() / 1000.0,
                  e2e >= 0 ? e2e / 1000.0 : 0.0);
 
             // Chỉ in khi giây vừa rồi CÓ mất gói: chùm-1 thì FEC hiện tại cứu được,
             // chùm ≥2 thì không (xem Stats::lossRuns).
-            uint64_t d[7], runs = 0;
-            for (size_t i = 0; i < 7; ++i) {
-                d[i] = st.lossRuns[i] - lastStats.lossRuns[i];
-                runs += d[i];
-            }
-            if (runs)
+            if (w.lossRunTotal)
                 LOGI("[Client]   loss runs: 1x%" PRIu64 " 2x%" PRIu64 " 3x%" PRIu64
                      " 4-7x%" PRIu64 " 8-15x%" PRIu64 " 16-31x%" PRIu64 " 32+x%" PRIu64
                      "  | longest ever %" PRIu64 " pkts",
-                     d[0], d[1], d[2], d[3], d[4], d[5], d[6], st.lossRunMax);
+                     w.lossRuns[0], w.lossRuns[1], w.lossRuns[2], w.lossRuns[3],
+                     w.lossRuns[4], w.lossRuns[5], w.lossRuns[6], w.lossRunMax);
 
             // Bản gọn cho overlay trên màn hình (logcat giữ bản đầy đủ ở trên).
             char ui[160];
             std::snprintf(ui, sizeof(ui),
                           "%.0f fps  %.1f Mbps  loss %.1f%%  RTT %.0f ms  e2e %.0f ms",
-                          rendered / secs,
-                          stBytes * 8.0 / 1e6 / secs,
-                          lossPct,
+                          w.fps,
+                          w.kbps / 1000.0,
+                          w.lossPct,
                           session.lastRttUs() / 1000.0,
                           e2e >= 0 ? e2e / 1000.0 : 0.0);
             {
@@ -334,18 +327,9 @@ void ClientLoop::NetThread() {
                 statusLine_ = ui;
             }
 
-            // Gửi cả khi mất gói 0% — host cần tín hiệu "đường thông" mới dám nới
-            // bitrate lên lại; im lặng bị hiểu là mất kết nối.
-            rgc::Feedback fb;
-            fb.lostFrames      = uint16_t(st.framesDropped - lastStats.framesDropped);
-            fb.lossPct         = uint8_t(lossPct + 0.5);
-            fb.rttMs           = uint16_t(session.lastRttUs() / 1000);
-            fb.recvBitrateKbps = uint32_t(stBytes * 8.0 / 1000.0 / secs);
-            session.SendFeedback(fb);
+            session.SendFeedback(rgc::MakeFeedback(w, session.lastRttUs()));
 
-            lastStats = st;
             stBytes = 0;
-            lastStatUs = now;
         }
     }
 

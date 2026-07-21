@@ -6,9 +6,19 @@ vai trò: `client.exe --serve` = host (máy chạy game), `client.exe --connect 
 ## Cấu trúc & build
 
 ```
-core/            phần dùng chung giữa các OS (protocol, thuần C++20)
+core/            phần dùng chung giữa các OS (protocol, thuần C++20, KHÔNG header OS)
+  include/rgc/ + src/, chia theo tầng:
+    wire/        khung byte trên dây (header chung, build/parse từng message)
+    transport/   cắt/ghép frame ↔ datagram, FEC, chống trùng & mất gói
+    session/     handshake + vòng đời phiên hai phía (host/client)
+    input/       chuỗi sự kiện chuột/phím có thứ tự
+    control/     policy điều tiết: bitrate/FEC (host), gom thống kê (client)
+  tests/         core_tests — chạy offline, mọi toolchain dựng được core
+platform/        lớp mỏng bọc header hệ điều hành (Clock.h) — cái core không được chạm
 client/windows/  app Windows (một exe: host + client)
+                 net/ capture/ encode/ decode/ input/ ui/; gốc giữ main + hai vai trò
 client/android/  app Android (UI Kotlin + lõi C++ dùng chung; hiện chỉ vai trò client)
+                 cpp/: net/ decode/; gốc giữ JniBridge + ClientLoop
 docs/            tài liệu
 ```
 
@@ -17,6 +27,7 @@ Build (CMake + Ninja — hoặc mở folder bằng Visual Studio):
 ```
 cmake --preset x64-debug && cmake --build --preset x64-debug
 → out/build/x64-debug/client/windows/client.exe
+→ out/build/x64-debug/core/core_tests.exe   (hoặc: make test)
 ```
 
 ## Mục lục
