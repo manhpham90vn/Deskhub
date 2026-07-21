@@ -1,16 +1,38 @@
 #pragma once
+// =============================================================================
+// WindowCapture.h — bắt hình một cửa sổ HOẶC một màn hình bằng Windows Graphics
+// Capture (WGC). Đầu nguồn của toàn bộ luồng video.
 //
-// WindowCapture - bắt hình một cửa sổ HOẶC cả một màn hình bằng Windows Graphics
-// Capture. (Tên lớp giữ từ GĐ0 khi chỉ có đường cửa sổ; WGC dùng chung một
-// GraphicsCaptureItem cho cả hai nên phần còn lại của lớp không phân biệt.)
+// NHIỆM VỤ
+//   Biến một HWND/HMONITOR thành dòng texture D3D11 chảy đều đặn ra callback.
+//   (Tên lớp giữ từ GĐ0 khi mới chỉ có đường cửa sổ; WGC dùng chung một
+//   GraphicsCaptureItem cho cả hai nên phần còn lại của lớp không phân biệt.)
 //
-// Thiết kế:
-//   - Hoạt động theo sự kiện FrameArrived (không polling) để giảm độ trễ và tải CPU.
-//   - Giữ winrt hoàn toàn trong file .cpp (PIMPL). Header này chỉ lộ D3D11/COM thuần,
-//     nên EncoderModule tiêu thụ được mà không kéo theo winrt.
-//   - D3D11 device được chia sẻ ra ngoài qua Device()/Context() để encoder dùng chung
-//     texture, tránh copy chéo device.
+// VỊ TRÍ TRONG LUỒNG DỮ LIỆU
+//   WindowFinder → **WindowCapture** → IVideoEncoder → Packetizer → Pacer → UDP
 //
+// BA QUYẾT ĐỊNH THIẾT KẾ
+//   1. THEO SỰ KIỆN, KHÔNG POLLING. WGC bắn FrameArrived mỗi khi nội dung đổi. Hỏi
+//      vòng theo nhịp cố định vừa thêm độ trễ (trung bình nửa chu kỳ) vừa đốt CPU
+//      khi màn hình đứng yên. Đổi lại: callback chạy trên thread của WGC, không
+//      phải thread ta kiểm soát — xem cảnh báo bên dưới.
+//
+//   2. PIMPL ĐỂ GIẤU winrt. Toàn bộ C++/WinRT nằm trong .cpp. Header này chỉ lộ
+//      D3D11/COM thuần, nên encoder tiêu thụ được mà không phải kéo theo bộ header
+//      WinRT rất nặng (xem thêm CaptureTypes.h).
+//
+//   3. CHIA SẺ D3D11 DEVICE ra ngoài qua Device()/Context(). Encoder dùng chung
+//      device thì texture không bao giờ phải rời VRAM — xem GpuSelect.h.
+//
+// ⚠ CALLBACK CHẠY TRÊN THREAD-POOL CỦA WGC
+//   Hai hệ quả bắt buộc phải nhớ:
+//     - Phải xử lý NHANH. Giữ chỗ trong frame pool lâu là làm nghẽn cả đường bắt
+//       hình. Tuyệt đối không ngủ trong đó (xem Pacer.h — bài học phải trả giá).
+//     - Không giữ FrameInfo::texture sau khi callback trả về (xem CaptureTypes.h).
+//
+// LIÊN QUAN: capture/CaptureTypes.h (FrameInfo), capture/GpuSelect.h (device dùng
+//            chung), capture/WindowFinder.h (nguồn HWND), AgentLoop.cpp
+// =============================================================================
 #include "capture/CaptureTypes.h"
 #include <functional>
 #include <memory>

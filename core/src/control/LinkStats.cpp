@@ -1,3 +1,18 @@
+// =============================================================================
+// LinkStats.cpp — cài đặt phép lấy hiệu giữa hai ảnh chụp bộ đếm.
+//
+// Toàn bộ file là hai hàm ngắn, nhưng ý tưởng cần nắm là:
+//
+//   Close() KHÔNG chỉ đọc số — nó còn CHỐT ảnh chụp mới (prev_ = cur) và dời mốc
+//   thời gian (lastUs_ = nowUs). Nghĩa là gọi Close() hai lần liên tiếp sẽ cho lần
+//   thứ hai toàn số 0. Đây là hàm có TÁC DỤNG PHỤ, không phải hàm truy vấn — người
+//   gọi phải kiểm tra Due() trước và chỉ gọi một lần cho mỗi cửa sổ.
+//
+//   Mọi trường "…InWindow" trong LinkWindow là HIỆU so với lần đóng trước, trừ
+//   lossRunMax — nó là kỷ lục tích luỹ từ đầu phiên nên chép thẳng, không lấy hiệu.
+//
+// LIÊN QUAN: rgc/control/LinkStats.h (thiết kế + lý do tách lớp)
+// =============================================================================
 #include "rgc/control/LinkStats.h"
 
 namespace rgc {
@@ -11,6 +26,8 @@ LinkWindow LinkStats::Close(const Reassembler::Stats& cur, uint64_t videoBytes,
     const uint64_t elapsedUs = nowUs - lastUs_;
     w.secs = elapsedUs / 1e6;
 
+    // Lấy hiệu so với ảnh chụp lần trước. Trừ số không dấu ở đây an toàn vì các bộ
+    // đếm của Reassembler chỉ tăng, không bao giờ giảm hay bị reset giữa phiên.
     w.packetsReceived  = cur.packetsReceived  - prev_.packetsReceived;
     w.packetsLost      = cur.packetsLost      - prev_.packetsLost;
     w.packetsRecovered = cur.packetsRecovered - prev_.packetsRecovered;
@@ -22,6 +39,8 @@ LinkWindow LinkStats::Close(const Reassembler::Stats& cur, uint64_t videoBytes,
     }
     w.lossRunMax = cur.lossRunMax;
 
+    // Mẫu số là số gói LẼ RA phải nhận = nhận được + mất. Bảo vệ phép chia cho 0:
+    // giây đầu tiên sau khi kết nối thường chưa có gói video nào.
     const uint64_t seen = w.packetsReceived + w.packetsLost;
     w.lossPct = seen ? 100.0 * double(w.packetsLost) / double(seen) : 0.0;
 
@@ -30,11 +49,16 @@ LinkWindow LinkStats::Close(const Reassembler::Stats& cur, uint64_t videoBytes,
         w.kbps = videoBytes * 8.0 / 1000.0 / w.secs;
     }
 
+    // Chốt ảnh chụp và mốc thời gian cho cửa sổ kế tiếp — xem ghi chú về tác dụng
+    // phụ ở đầu file.
     prev_  = cur;
     lastUs_ = nowUs;
     return w;
 }
 
+// Nén cửa sổ vừa đóng vào 9 byte của gói FEEDBACK. Mọi trường đều bị thu hẹp kiểu:
+// các con số này chỉ để host điều chỉnh bitrate theo bậc thang thô, không cần độ
+// chính xác cao, và kênh control phải nhẹ vì nó chạy song song với luồng video.
 Feedback MakeFeedback(const LinkWindow& w, uint32_t rttUs) {
     Feedback fb;
     fb.lostFrames      = uint16_t(w.framesDropped);

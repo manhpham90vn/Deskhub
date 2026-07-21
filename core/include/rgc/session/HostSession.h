@@ -1,13 +1,40 @@
 #pragma once
-// HostSession — máy trạng thái phía Agent (host): IDLE → READY → STREAMING.
+// =============================================================================
+// HostSession.h — máy trạng thái của một phiên, phía HOST (Agent).
 //
-// Thuần C++20: không socket, không thread, không đồng hồ. Byte vào qua
-// HandlePacket, byte ra qua callback `send`, thời gian bơm từ ngoài (`nowUs`).
-// Caller (AgentLoop) sở hữu socket và địa chỉ peer; HandlePacket trả true khi
-// gói hợp lệ thuộc phiên → caller cập nhật peer theo địa chỉ nguồn (roaming §1.5).
+// NHIỆM VỤ
+//   Giữ trạng thái "đang có client nào, phiên số mấy, đã bắt đầu phát chưa" và xử
+//   lý toàn bộ kênh Control đến từ client. Đây là bộ não của phía host; AgentLoop
+//   chỉ lo phần cơ bắp (socket, encoder, capture) và phản ứng qua callback.
 //
-// Thread-model: HandlePacket/Tick chạy trên MỘT thread (Recv). state()/sessionId()
-// đọc được từ thread khác (thread encode hỏi "đã STREAMING chưa?") — atomic.
+// MÁY TRẠNG THÁI
+//   IDLE ──HELLO(codec hợp lệ)──→ READY ──START──→ STREAMING
+//     ↑                                                │
+//     └──────────── BYE / timeout 5 giây ──────────────┘
+//
+//   IDLE      — chưa có ai. Chỉ HELLO được xử lý.
+//   READY     — đã cấp sessionId và gửi HELLO_ACK, đang đợi client sẵn sàng.
+//   STREAMING — client đã gửi START; từ đây mới nhận input và mới đẩy video.
+//
+//   v1 chỉ phục vụ MỘT client mỗi phiên: HELLO từ clientId khác trong lúc đang bận
+//   bị từ chối bằng HELLO_ACK có codec = Rejected.
+//
+// VÌ SAO TÁCH KHỎI SOCKET, THREAD, ĐỒNG HỒ
+//   Byte vào qua HandlePacket, byte ra qua callback `send`, thời gian bơm từ ngoài
+//   (`nowUs`). Nhờ vậy toàn bộ logic bắt tay, timeout, khử trùng input đều kiểm
+//   chứng được trong CoreTests mà không cần mở cổng mạng hay chờ đồng hồ thật.
+//   Caller (AgentLoop) sở hữu socket và địa chỉ peer; HandlePacket trả true khi gói
+//   hợp lệ thuộc phiên → caller cập nhật peer theo địa chỉ nguồn (roaming §1.5).
+//
+// MÔ HÌNH LUỒNG
+//   HandlePacket/Tick chạy trên MỘT thread (Recv). Riêng state()/sessionId() phải
+//   đọc được từ thread khác — thread encode hỏi "đã STREAMING chưa?" trước mỗi
+//   frame — nên hai trường đó là std::atomic. Mọi trường còn lại chỉ thread Recv
+//   chạm tới, kể cả bộ đệm buf_.
+//
+// LIÊN QUAN: rgc/session/ClientSession.h (đầu kia), rgc/input/InputReceiver.h,
+//            client/windows/AgentLoop.cpp (người dùng), docs/04-protocol.md
+// =============================================================================
 #include "rgc/input/InputReceiver.h"
 #include "rgc/wire/Wire.h"
 

@@ -1,7 +1,29 @@
 #pragma once
+// =============================================================================
+// WindowFinder.h — tìm và liệt kê cửa sổ có thể chọn làm nguồn stream.
 //
-// Tìm cửa sổ chính của một tiến trình theo tên file exe.
+// NHIỆM VỤ
+//   Hai đường vào, phục vụ hai cách người dùng chỉ định nguồn:
+//     FindWindowByProcessName() — dòng lệnh: `client.exe notepad.exe`.
+//     ListCapturableWindows()   — giao diện: hiện danh sách cho người dùng bấm chọn.
 //
+// VỊ TRÍ TRONG LUỒNG
+//   **WindowFinder** → WindowCapture → IVideoEncoder → Packetizer → UDP
+//   Đây là bước đầu tiên: từ một cái tên hoặc một cú bấm chuột ra được HWND.
+//
+// VÌ SAO "CAPTURABLE" CẦN LỌC NHIỀU ĐẾN THẾ
+//   EnumWindows trả về hàng trăm HWND, phần lớn không phải thứ người dùng nghĩ là
+//   "cửa sổ": cửa sổ công cụ ẩn, cửa sổ con thuộc sở hữu cửa sổ khác, ứng dụng UWP
+//   đã bị treo nhưng vẫn báo là hiển thị. Đưa hết vào danh sách thì nó dài vô dụng
+//   và đầy mục chọn vào là hỏng. Bộ lọc cụ thể nằm ở WindowFinder.cpp.
+//
+// SẮP XẾP THEO DIỆN TÍCH GIẢM DẦN
+//   Cửa sổ người dùng muốn chia sẻ hầu như luôn là cửa sổ lớn nhất (game, trình
+//   duyệt), nên để nó lên đầu danh sách là đoán đúng trong đa số trường hợp.
+//
+// LIÊN QUAN: capture/WindowCapture.h (bước tiếp theo),
+//            ui/WindowPickerDialog.h (hiển thị danh sách)
+// =============================================================================
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #include <windows.h>

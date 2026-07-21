@@ -1,8 +1,26 @@
-// Factory chọn backend encoder theo chuỗi ưu tiên.
+// =============================================================================
+// EncoderFactory.cpp — chọn backend encoder theo chuỗi ưu tiên.
 //
-// Thứ tự: NVENC (NVIDIA, độ trễ thấp nhất) -> Media Foundation (NVIDIA/Intel/AMD/software).
-// Khớp chuỗi phần cứng NVIDIA -> Intel -> CPU: nếu không có NVIDIA, NVENC Init thất bại
-// và tự rơi xuống MF (MF lại tự chọn HW theo device, hoặc software).
+// NHIỆM VỤ
+//   Trả về encoder đầu tiên khởi tạo được trên device đang dùng. Người gọi không
+//   cần biết máy có GPU gì.
+//
+// CHIẾN LƯỢC: THỬ RỒI RỚT DẦN
+//   1. NVENC — độ trễ thấp nhất, nhưng chỉ chạy trên card NVIDIA.
+//   2. Media Foundation — có mặt trên mọi máy Windows, tự chọn phần cứng theo
+//      device (Intel QSV, AMD VCE) hoặc rớt tiếp xuống encoder phần mềm.
+//
+//   Không cần hỏi trước "máy này có GPU gì" — cứ gọi Init() và để nó thất bại. Đây
+//   là cách đáng tin hơn hẳn việc đoán theo tên adapter: NVENC có thể vắng mặt ngay
+//   trên máy NVIDIA (driver quá cũ, hoặc dòng card bị cắt tính năng), và chỉ có
+//   chính lời gọi Init mới biết chắc.
+//
+//   Thứ tự này khớp với chuỗi ưu tiên phần cứng ở GpuSelect (NVIDIA → Intel → CPU),
+//   nhưng hai bên độc lập nhau: GpuSelect chọn nơi TÍNH, factory chọn cách NÉN.
+//
+// LIÊN QUAN: encode/IVideoEncoder.h (giao diện), capture/GpuSelect.h (chuỗi ưu
+//            tiên song song), AgentLoop.cpp (người gọi)
+// =============================================================================
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #include "encode/IVideoEncoder.h"

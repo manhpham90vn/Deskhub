@@ -1,3 +1,30 @@
+// =============================================================================
+// Wire.cpp — cài đặt các hàm dựng/giải mã datagram khai báo ở Wire.h.
+//
+// NHIỆM VỤ
+//   Chuyển qua lại giữa struct trong bộ nhớ và chuỗi byte trên đường truyền.
+//   Mỗi hàm Build* có đúng một hàm Parse* đối xứng; hai bên PHẢI khớp nhau về
+//   thứ tự và độ rộng từng trường, nên chúng được đặt cạnh nhau theo cặp và mọi
+//   thay đổi phải sửa cả hai cùng lúc (CoreTests.cpp có test khứ hồi cho từng cặp).
+//
+// BỐ CỤC FILE
+//   1. namespace vô danh — tiện ích nội bộ: WriteCommon, BuildEmpty,
+//      BuildPingPongImpl, Utf8TruncLen.
+//   2. Các hàm Build*  — dựng gói, theo thứ tự: bắt tay → điều khiển → video/FEC → input.
+//   3. Các hàm Parse*  — giải gói, cùng thứ tự.
+//
+// NGUYÊN TẮC AN TOÀN XUYÊN SUỐT
+//   - Build*: WriteCommon kiểm tra sức chứa của `out` MỘT LẦN cho cả header lẫn
+//     payload rồi trả về tổng kích thước. Sau khi nó trả về khác 0, mọi lệnh ghi
+//     phía dưới đã được bảo đảm nằm trong biên — nên chúng không kiểm tra lại nữa.
+//   - Parse*: kiểm tra `payload.size()` trước MỌI lần đọc. Dữ liệu đến từ mạng là
+//     dữ liệu không tin được: một datagram cụt hoặc bị dựng ác ý không được phép
+//     làm đọc ngoài biên. Đây là ranh giới tin cậy của toàn bộ chương trình.
+//   - Không hàm nào ở đây giữ trạng thái giữa các lần gọi.
+//
+// LIÊN QUAN: rgc/wire/Wire.h (khai báo + giải thích từng thông điệp),
+//            rgc/wire/ByteOrder.h (PutU16/GetU32/...), docs/04-protocol.md
+// =============================================================================
 #include "rgc/wire/Wire.h"
 #include "rgc/wire/ByteOrder.h"
 
@@ -8,6 +35,11 @@ namespace rgc {
 namespace {
 
 // Ghi header chung; trả về tổng kích thước datagram, 0 nếu out thiếu chỗ.
+//
+// Đây là CỬA KIỂM TRA BIÊN DUY NHẤT của mọi hàm Build*: người gọi truyền vào kích
+// thước payload nó sắp ghi, hàm này đối chiếu với sức chứa thật của `out`. Nhờ vậy
+// các hàm Build* phía dưới ghi thẳng bằng con trỏ mà không phải kiểm tra từng lần —
+// đổi lại, người gọi BẮT BUỘC phải truyền payloadSize đúng bằng số byte nó sẽ ghi.
 size_t WriteCommon(std::span<uint8_t> out, MsgType type, uint8_t flags, Chan chan,
                    uint32_t sessionId, size_t payloadSize) {
     const size_t total = kCommonHeaderSize + payloadSize;
@@ -20,6 +52,8 @@ size_t WriteCommon(std::span<uint8_t> out, MsgType type, uint8_t flags, Chan cha
     return total;
 }
 
+// Thông điệp không có payload — chỉ cần header chung là đủ mang hết ý nghĩa
+// (START, BYE, LIST_SOURCES, REQUEST_KEYFRAME). Loại thông điệp nằm ở byte type.
 size_t BuildEmpty(std::span<uint8_t> out, MsgType type, uint32_t sessionId) {
     return WriteCommon(out, type, 0, Chan::Control, sessionId, 0);
 }
@@ -33,9 +67,13 @@ size_t Utf8TruncLen(const std::string& s, size_t limit) {
     return n;
 }
 
+// PING và PONG có payload y hệt nhau, chỉ khác byte type — PONG là bản dội lại
+// nguyên văn payload của PING. Nhờ giữ nguyên sendTimeUs (đồng hồ CLIENT) mà client
+// tính được RTT chỉ bằng một phép trừ, không cần bảng tra pingId → thời điểm gửi,
+// và hai đồng hồ không cần đồng bộ với nhau.
 size_t BuildPingPongImpl(std::span<uint8_t> out, MsgType type, uint32_t sessionId,
                          const PingPong& m) {
-    constexpr size_t kPayload = 12;
+    constexpr size_t kPayload = 12; // pingId(4) + sendTimeUs(8)
     const size_t total = WriteCommon(out, type, 0, Chan::Control, sessionId, kPayload);
     if (!total) return 0;
     uint8_t* p = out.data() + kCommonHeaderSize;
@@ -46,7 +84,10 @@ size_t BuildPingPongImpl(std::span<uint8_t> out, MsgType type, uint32_t sessionI
 
 } // namespace
 
+// HELLO: client tự giới thiệu và nêu khả năng của mình. sessionId = 0 vì phiên
+// chưa tồn tại — chính HELLO_ACK mới cấp số phiên.
 size_t BuildHello(std::span<uint8_t> out, const Hello& m) {
+    // clientId(4) codecMask(2) maxW(2) maxH(2) fps(1) features(2) sourceId(1)
     constexpr size_t kPayload = 14;
     const size_t total = WriteCommon(out, MsgType::Hello, 0, Chan::Control, 0, kPayload);
     if (!total) return 0;
@@ -65,6 +106,14 @@ size_t BuildListSources(std::span<uint8_t> out) {
     return BuildEmpty(out, MsgType::ListSources, 0);
 }
 
+// SOURCE_LIST: host liệt kê các cửa sổ đang chia sẻ. Đây là thông điệp DUY NHẤT có
+// payload dài thay đổi (tên cửa sổ dài ngắn khác nhau), nên nó phải đếm hai lượt:
+// lượt một tính tổng kích thước để WriteCommon kiểm tra biên, lượt hai mới ghi thật.
+//
+// Định dạng: count(1) rồi count bản ghi
+//            [ sourceId(1) width(2) height(2) nameLen(1) name(nameLen) ].
+// sessionId = 0: client hỏi danh sách TRƯỚC khi có phiên (nó cần danh sách để chọn
+// nguồn rồi mới gửi HELLO kèm sourceId).
 size_t BuildSourceList(std::span<uint8_t> out, std::span<const SourceInfo> sources) {
     const size_t n = sources.size() < kMaxSources ? sources.size() : kMaxSources;
     // Đếm trước để biết tổng kích thước: WriteCommon cần payloadSize ngay từ đầu.
@@ -75,6 +124,8 @@ size_t BuildSourceList(std::span<uint8_t> out, std::span<const SourceInfo> sourc
     const size_t total = WriteCommon(out, MsgType::SourceList, 0, Chan::Control, 0, payload);
     if (!total) return 0;
 
+    // Lượt hai: ghi thật. `p` chạy tiến dần vì bản ghi có độ dài thay đổi, không
+    // tính được offset cố định như các thông điệp khác.
     uint8_t* p = out.data() + kCommonHeaderSize;
     *p++ = uint8_t(n);
     for (size_t i = 0; i < n; ++i) {
@@ -90,7 +141,11 @@ size_t BuildSourceList(std::span<uint8_t> out, std::span<const SourceInfo> sourc
     return total;
 }
 
+// HELLO_ACK: host chốt tham số phiên (hoặc từ chối bằng codec = Rejected).
+// sessionId nằm trong PAYLOAD chứ không phải header, vì lúc gửi gói này client
+// chưa biết số phiên nên không thể đối chiếu trường header.
 size_t BuildHelloAck(std::span<uint8_t> out, const HelloAck& m) {
+    // sessionId(4) codec(1) w(2) h(2) fps(1) bitrate(4) timebaseUs(8)
     constexpr size_t kPayload = 22;
     const size_t total = WriteCommon(out, MsgType::HelloAck, 0, Chan::Control, 0, kPayload);
     if (!total) return 0;
@@ -121,7 +176,10 @@ size_t BuildPong(std::span<uint8_t> out, uint32_t sessionId, const PingPong& m) 
     return BuildPingPongImpl(out, MsgType::Pong, sessionId, m);
 }
 
+// FEEDBACK: báo cáo chất lượng đường truyền của cửa sổ 1 giây vừa qua, client gửi
+// ngược cho host. Đầu vào của BitrateController.
 size_t BuildFeedback(std::span<uint8_t> out, uint32_t sessionId, const Feedback& m) {
+    // lostFrames(2) lossPct(1) rttMs(2) recvBitrateKbps(4)
     constexpr size_t kPayload = 9;
     const size_t total = WriteCommon(out, MsgType::Feedback, 0, Chan::Control, sessionId, kPayload);
     if (!total) return 0;
@@ -144,8 +202,10 @@ size_t BuildSetFocus(std::span<uint8_t> out, uint32_t sessionId, bool focused) {
     return total;
 }
 
+// RECONFIG: host báo đổi kích thước nguồn hoặc bitrate GIỮA phiên, client không
+// phải bắt tay lại. Host gửi kèm một IDR ngay sau đó để decoder bám được.
 size_t BuildReconfig(std::span<uint8_t> out, uint32_t sessionId, const Reconfig& m) {
-    constexpr size_t kPayload = 8;
+    constexpr size_t kPayload = 8; // w(2) h(2) bitrate(4)
     const size_t total = WriteCommon(out, MsgType::Reconfig, 0, Chan::Control, sessionId, kPayload);
     if (!total) return 0;
     uint8_t* p = out.data() + kCommonHeaderSize;
@@ -155,8 +215,13 @@ size_t BuildReconfig(std::span<uint8_t> out, uint32_t sessionId, const Reconfig&
     return total;
 }
 
+// VIDEO_PACKET: một mảnh của frame đã mã hoá. Đi trên kênh Video.
+// Hai cờ nằm ở byte `flags` của header chung chứ không tốn byte payload: `idr` cho
+// Reassembler biết có thể bắt đầu giải mã từ frame này, `frameEnd` đánh dấu mảnh cuối.
 size_t BuildVideoPacket(std::span<uint8_t> out, uint32_t sessionId, const VideoHeader& vh,
                         bool idr, bool frameEnd, std::span<const uint8_t> payload) {
+    // Chặn ở đây thay vì để WriteCommon phát hiện: vượt ngưỡng này nghĩa là
+    // Packetizer cắt sai, và gói vượt MTU sẽ bị phân mảnh IP rồi mất cả cụm.
     if (payload.size() > kMaxVideoPayload) return 0;
     const uint8_t flags = (idr ? kVideoFlagIdr : 0) | (frameEnd ? kVideoFlagFrameEnd : 0);
     const size_t total = WriteCommon(out, MsgType::VideoPacket, flags, Chan::Video, sessionId,
@@ -190,6 +255,13 @@ size_t BuildFecPacket(std::span<uint8_t> out, uint32_t sessionId, const FecHeade
     return total;
 }
 
+// INPUT_EVENT: một LÔ event bàn phím/chuột. Gộp nhiều event vào một datagram thay
+// vì mỗi event một gói, vì header 8 byte cho một event 19 byte là quá phí, và chuột
+// di chuyển sinh event dày đặc (hàng trăm mỗi giây).
+//
+// Chỉ seq của event ĐẦU TIÊN được ghi; event thứ i mang seq = firstSeq + i, suy ra
+// được nên khỏi tốn 4 byte mỗi event. InputReceiver dựa vào đúng quy ước này để
+// khử trùng khi InputSender gửi lặp.
 size_t BuildInputEvents(std::span<uint8_t> out, uint32_t sessionId, uint32_t firstSeq,
                         std::span<const InputEvent> events) {
     if (events.empty() || events.size() > kMaxInputEvents) return 0;
@@ -213,6 +285,16 @@ size_t BuildInputEvents(std::span<uint8_t> out, uint32_t sessionId, uint32_t fir
     return total;
 }
 
+// ---------------------------------------------------------------------------
+// PHẦN GIẢI MÃ. Từ đây trở xuống, dữ liệu vào ĐẾN TỪ MẠNG và không được tin.
+// Mọi hàm kiểm tra độ dài trước khi đọc; gói không hợp lệ trả nullopt/0 chứ không
+// bao giờ ném ngoại lệ hay đọc ngoài biên.
+// ---------------------------------------------------------------------------
+
+// Bước đầu tiên cho MỌI datagram nhận được. Lọc luôn gói sai phiên bản giao thức
+// ở đây, vì diễn giải payload của một phiên bản khác sẽ cho kết quả rác.
+// Không kiểm tra `type`/`chan` có nằm trong enum không — người gọi dùng switch và
+// tự bỏ qua nhánh default, cách đó chịu được việc phiên bản sau thêm loại mới.
 std::optional<CommonHeader> ParseCommonHeader(std::span<const uint8_t> datagram) {
     if (datagram.size() < kCommonHeaderSize) return std::nullopt;
     if (datagram[0] != kProtocolVersion) return std::nullopt;
@@ -230,6 +312,9 @@ std::span<const uint8_t> PayloadOf(std::span<const uint8_t> datagram) {
     return datagram.subspan(kCommonHeaderSize);
 }
 
+// Chấp nhận 13 byte (bản trước GĐ6) lẫn 14 byte — xem ghi chú về sourceId bên dưới.
+// Đây là lý do dùng `<` chứ không phải `!=`: gói DÀI hơn dự kiến cũng nhận, để
+// phiên bản sau thêm trường vào cuối mà không phá client cũ.
 std::optional<Hello> ParseHello(std::span<const uint8_t> payload) {
     if (payload.size() < 13) return std::nullopt;
     const uint8_t* p = payload.data();
@@ -245,6 +330,10 @@ std::optional<Hello> ParseHello(std::span<const uint8_t> payload) {
     return m;
 }
 
+// Đối xứng với BuildSourceList. Trường `count` ở đầu gói do BÊN KIA khai báo, nên
+// nó là con số không tin được: kẹp về sức chứa của `out` trước, rồi vẫn kiểm tra
+// biên ở từng bản ghi — một gói khai count=200 với payload 10 byte không được phép
+// làm gì hơn là trả về danh sách rỗng.
 size_t ParseSourceList(std::span<const uint8_t> payload, std::span<SourceInfo> out) {
     if (payload.empty()) return 0;
     size_t count = payload[0];
@@ -349,6 +438,9 @@ size_t ParseInputEvents(std::span<const uint8_t> payload, uint32_t& firstSeq,
     const uint8_t* p = payload.data();
     const size_t count = p[4];
     if (count == 0 || count > out.size()) return 0;
+    // Bắt buộc: `count` do bên gửi khai, phải đối chiếu với độ dài THẬT của payload
+    // trước khi lặp. Thiếu dòng này, một gói khai 62 event nhưng chỉ mang 1 sẽ đọc
+    // tràn hơn 1KB ngoài bộ đệm nhận.
     if (payload.size() < kInputHeaderSize + count * kInputEventSize) return 0;
     firstSeq = GetU32(p);
     const uint8_t* e = p + kInputHeaderSize;

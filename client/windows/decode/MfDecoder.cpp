@@ -1,3 +1,32 @@
+// =============================================================================
+// MfDecoder.cpp — cài đặt đường giải mã Media Foundation.
+//
+// BỐ CỤC
+//   Init()                — dựng MFT, gắn D3D device, đặt kiểu vào/ra.
+//   NegotiateOutputType() — chọn NV12 trong danh sách MFT đề nghị.
+//   Decode()              — nạp một NAL vào MFT rồi vét output.
+//   DrainOutputs()        — rút mọi frame đã giải xong.
+//   Deliver()             — bóc texture + subresource ra, gọi callback.
+//
+// THỨ TỰ ĐẶT KIỂU NGƯỢC VỚI ENCODER
+//   Ở đây SetInputType đi TRƯỚC, rồi mới thương lượng đầu ra. Hợp lý: decoder phải
+//   biết nó đang giải mã cái gì rồi mới nói được nó xuất ra được những định dạng
+//   nào. Bên MfEncoder thì ngược lại (xem ghi chú ở đó).
+//
+// MF_E_TRANSFORM_STREAM_CHANGE LÀ ĐƯỜNG CHẠY BÌNH THƯỜNG, KHÔNG PHẢI LỖI
+//   Kích thước thật của video nằm trong SPS, mà SPS chỉ đến cùng dữ liệu. Nên MFT
+//   hay báo STREAM_CHANGE sau vài frame đầu để nói "kích thước thật khác cái anh
+//   khai lúc Init". Ta chỉ việc thương lượng lại kiểu đầu ra rồi chạy tiếp.
+//   Đây cũng là cách host đổi độ phân giải giữa chừng (RECONFIG) mà client không
+//   phải dựng lại decoder — khác hẳn bản Android, nơi MediaCodec buộc phải dựng lại.
+//
+// ⚠ QUY TẮC SỞ HỮU SAMPLE ĐẦU RA
+//   MFT tự cấp sample (mftProvides == true) và trao cho ta MỘT tham chiếu. Ta phải
+//   tự nhả — đó là việc của ComPtr::Attach trong DrainOutputs. Quên thì rò VRAM,
+//   và pool của decoder cạn sau vài trăm frame.
+//
+// LIÊN QUAN: decode/MfDecoder.h (vì sao chọn MF), decode/IVideoDecoder.h
+// =============================================================================
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #include "decode/MfDecoder.h"
@@ -55,7 +84,9 @@ struct MfDecoder::Impl {
         cfg = c;
         onFrame = std::move(handler);
 
-        // MFT + video processor chạm vào immediate context từ nhiều luồng -> bật khóa.
+        // BẮT BUỘC, cùng lý do như MfEncoder::Init: immediate context của D3D11 mặc
+        // định không an toàn đa luồng, mà MFT chạy việc trên thread riêng còn ta gọi
+        // từ thread Decode. Thiếu là hỏng ngẫu nhiên, rất khó tái hiện.
         ComPtr<ID3D10Multithread> mt;
         if (SUCCEEDED(device->QueryInterface(IID_PPV_ARGS(&mt)))) {
             mt->SetMultithreadProtected(TRUE);
@@ -107,6 +138,8 @@ struct MfDecoder::Impl {
             MFSetAttributeSize(inType.Get(), MF_MT_FRAME_SIZE, cfg.width, cfg.height);
         }
         MFSetAttributeRatio(inType.Get(), MF_MT_FRAME_RATE, cfg.fps ? cfg.fps : 60, 1);
+        // MixedInterlaceOrProgressive chứ không khai cứng Progressive: để MFT tự đọc
+        // từ SPS. Khai cứng mà stream khác đi thì nó từ chối kiểu đầu vào.
         inType->SetUINT32(MF_MT_INTERLACE_MODE, MFVideoInterlace_MixedInterlaceOrProgressive);
         MFD_CHECK(mft->SetInputType(0, inType.Get(), 0), "SetInputType");
 
@@ -162,7 +195,7 @@ struct MfDecoder::Impl {
 
         HRESULT hr = mft->ProcessInput(0, sample.Get(), 0);
         if (hr == MF_E_NOTACCEPTING) {
-            // MFT đầy output -> rút hết rồi nạp lại.
+            // MFT đầy output chưa ai lấy -> rút sạch rồi thử lại đúng một lần.
             if (!DrainOutputs()) return false;
             hr = mft->ProcessInput(0, sample.Get(), 0);
         }
@@ -200,13 +233,19 @@ struct MfDecoder::Impl {
                 return false;
             }
 
+            // Attach (không AddRef) vì MFT đã trao ta quyền sở hữu tham chiếu đó.
+            // ComPtr sẽ Release khi ra khỏi vòng — xem quy tắc sở hữu ở đầu file.
             ComPtr<IMFSample> outSample;
-            outSample.Attach(ob.pSample);  // MFT cấp sample, mình giữ 1 ref -> tự release
+            outSample.Attach(ob.pSample);
             if (outSample && !Deliver(outSample.Get())) return false;
         }
     }
 
-    // Rút texture NV12 + subresource từ sample và gọi callback.
+    // Bóc texture NV12 + subresource ra khỏi sample rồi gọi callback.
+    //
+    // GetSubresourceIndex là mấu chốt: texture trả về là một TEXTURE-ARRAY dùng
+    // chung, frame này nằm ở lát nào thì chỉ số đó nói. Xem cảnh báo ở
+    // IVideoDecoder.h — bỏ qua nó là vẽ nhầm frame.
     bool Deliver(IMFSample* sample) {
         ComPtr<IMFMediaBuffer> buffer;
         MFD_CHECK(sample->GetBufferByIndex(0, &buffer), "GetBufferByIndex");

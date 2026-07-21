@@ -1,3 +1,25 @@
+// =============================================================================
+// WindowPickerDialog.cpp — cài đặt hộp thoại chọn nguồn chia sẻ phía host.
+//
+// KHUÔN MẪU "HỘP THOẠI MODAL TỰ DỰNG"
+//   Giống hệt SourcePickerDialog.cpp: tự tạo cửa sổ, vô hiệu hoá cửa sổ cha, chạy
+//   vòng lặp message riêng tới khi xong. Xem giải thích đầy đủ ở file đó.
+//
+// DỰNG DANH SÁCH: HAI NGUỒN GỘP LÀM MỘT
+//   CollectMonitor (qua EnumDisplayMonitors) cho các màn hình, rồi
+//   ListCapturableWindows() cho các cửa sổ. Cả hai đổ vào cùng một vector Entry,
+//   mỗi Entry mang một CaptureTarget — kiểu đó vốn đã bọc được cả HWND lẫn
+//   HMONITOR nên phần còn lại của chương trình không phải phân biệt.
+//
+// BA CHUỖI CHO MỘT NGUỒN, đừng nhầm lẫn
+//   Entry::label — hiện trong listbox, có kèm kích thước cho người dùng dễ nhận ra.
+//   Entry::name  — tên GỬI CHO CLIENT, không kèm kích thước (client tự biết).
+//   ToUtf8       — đổi name sang UTF-8 trước khi lên dây, vì client có thể không
+//                  phải máy Windows. Hàm đối xứng FromUtf8 ở SourcePickerDialog.cpp.
+//
+// LIÊN QUAN: ui/WindowPickerDialog.h (vai trò + lý do gộp checkbox),
+//            capture/WindowFinder.h (nguồn danh sách), AgentLoop.h (AgentSource)
+// =============================================================================
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #include "ui/WindowPickerDialog.h"

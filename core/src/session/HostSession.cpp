@@ -1,3 +1,29 @@
+// =============================================================================
+// HostSession.cpp — cài đặt máy trạng thái và bộ định tuyến thông điệp phía host.
+//
+// HandlePacket là một switch lớn trên loại thông điệp, và mọi nhánh (trừ HELLO)
+// đều mở đầu bằng CÙNG MỘT ĐÔI KIỂM TRA:
+//
+//     if (state() == ... || h->sessionId != sessionId()) return false;
+//     lastRecvUs_ = nowUs;
+//
+//   - Kiểm tra trạng thái: thông điệp đến sai giai đoạn thì bỏ. Ví dụ INPUT_EVENT
+//     lúc chưa STREAMING là vô nghĩa vì host còn chưa biết client là ai.
+//   - Kiểm tra sessionId: chặn gói lạc từ phiên cũ hoặc từ máy khác trên mạng.
+//     UDP không có kết nối, ai cũng gửi tới cổng này được, nên đây là hàng rào duy
+//     nhất phân biệt "client của tôi" với phần còn lại của Internet.
+//   - lastRecvUs_ = nowUs: mọi gói hợp lệ đều NUÔI TIMEOUT. Chỉ cần client còn nói
+//     chuyện, bất kể nói gì, phiên vẫn sống.
+//
+// GIÁ TRỊ TRẢ VỀ CÓ Ý NGHĨA RIÊNG
+//   true không chỉ là "gói hợp lệ" — AgentLoop dùng nó làm tín hiệu cập nhật địa
+//   chỉ peer theo địa chỉ nguồn của gói (client đổi IP khi chuyển Wi-Fi/4G vẫn giữ
+//   được phiên). Vì thế BYE trả về false dù nó là gói hoàn toàn hợp lệ: phiên vừa
+//   đóng, cập nhật peer theo nó là vô nghĩa.
+//
+// LIÊN QUAN: rgc/session/HostSession.h (máy trạng thái + lý do thiết kế),
+//            ClientSession.cpp (đầu kia)
+// =============================================================================
 #include "rgc/session/HostSession.h"
 
 namespace rgc {
@@ -17,6 +43,8 @@ bool HostSession::HandlePacket(std::span<const uint8_t> pkt, uint64_t nowUs) {
             return false;
         }
         if (st == State::Idle) {
+            // v1 chỉ phát H.264. Client không giải mã được thì từ chối ngay ở bước
+            // bắt tay, thay vì để nó ngồi nhìn màn hình đen không hiểu vì sao.
             if (!(m->codecMask & kCodecMaskH264)) { SendReject(); return false; }
             clientId_ = m->clientId;
             // sessionId từ đồng hồ caller trộn clientId — đủ để phân biệt phiên, khác 0.
@@ -33,6 +61,9 @@ bool HostSession::HandlePacket(std::span<const uint8_t> pkt, uint64_t nowUs) {
     case MsgType::Start:
         if (state() == State::Idle || h->sessionId != sessionId()) return false;
         lastRecvUs_ = nowUs;
+        // Client phát lại START tới khi thấy video nên gói này hay đến nhiều lần;
+        // chỉ lần đầu mới đổi trạng thái và gọi onStart (nó ép encoder ra IDR —
+        // gọi lặp sẽ làm luồng hình giật vì IDR nặng gấp nhiều lần P-frame).
         if (state() != State::Streaming) {
             state_.store(State::Streaming, std::memory_order_release);
             if (cb_.onStart) cb_.onStart();
@@ -81,6 +112,9 @@ bool HostSession::HandlePacket(std::span<const uint8_t> pkt, uint64_t nowUs) {
     }
 }
 
+// Gọi đều đặn từ vòng lặp Recv. Việc duy nhất: phát hiện client biến mất không kịp
+// nói lời chào. UDP không báo đứt kết nối, nên im lặng quá kSessionTimeoutUs là dấu
+// hiệu duy nhất ta có — có thể client rút mạng, tắt máy, hoặc sập nguồn.
 void HostSession::Tick(uint64_t nowUs) {
     if (state() == State::Idle) return;
     if (nowUs - lastRecvUs_ > kSessionTimeoutUs) Disconnect();
@@ -99,6 +133,9 @@ void HostSession::SendHelloAck(uint64_t nowUs) {
     if (n && cb_.send) cb_.send(std::span<const uint8_t>(buf_, n));
 }
 
+// Từ chối = HELLO_ACK với codec = Rejected, mọi trường khác để 0. Dùng lại chính
+// thông điệp ACK thay vì thêm một loại "REJECT" riêng: client vốn đã phải chờ ACK,
+// nên nó nhận được câu trả lời dứt khoát ngay thay vì đợi hết 10 giây rồi bỏ cuộc.
 void HostSession::SendReject() {
     HelloAck a{};
     a.codec = Codec::Rejected;

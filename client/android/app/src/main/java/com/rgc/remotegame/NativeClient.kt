@@ -1,3 +1,31 @@
+// =============================================================================
+// NativeClient.kt — mặt tiền Kotlin của libremotegame.so.
+//
+// NHIỆM VỤ
+//   Chỗ DUY NHẤT trong phần Kotlin được phép gọi xuống C++. Mọi Activity đi qua
+//   đây, không Activity nào tự khai báo external fun của riêng nó.
+//
+// VỊ TRÍ TRONG KIẾN TRÚC
+//   MainActivity / StreamActivity → **NativeClient** → JniBridge.cpp → ClientLoop
+//
+// RÀNG BUỘC SỐNG CÒN: TÊN PHẢI KHỚP TỪNG CHỮ
+//   Tên hàm native ở đây quyết định tên hàm C++ bên JniBridge.cpp
+//   (Java_com_rgc_remotegame_NativeClient_*). Liên kết diễn ra LÚC CHẠY theo chuỗi,
+//   nên đổi tên gói, tên object, hay tên hàm mà quên sửa bên C++ thì trình dịch
+//   KHÔNG báo gì — app chỉ chết bằng UnsatisfiedLinkError khi chạm tới hàm đó.
+//
+// VÌ SAO LÀ `object` CHỨ KHÔNG PHẢI CLASS
+//   Tầng C++ giữ đúng một ClientLoop toàn cục, nên một thực thể duy nhất bên Kotlin
+//   là ánh xạ đúng của thực tế đó. Khối init nạp thư viện .so đúng một lần, lần đầu
+//   có ai chạm tới object.
+//
+// PHÂN TẦNG TRONG CHÍNH FILE NÀY
+//   Hàm `external` là raw, gọi thẳng. Riêng nativeListSources được bọc lại thành
+//   suspend fun listSources() vì nó chặn 3 giây — không ai được gọi bản raw đó từ
+//   main thread. Đó là lý do nó `private` còn các hàm khác thì không.
+//
+// LIÊN QUAN: JniBridge.cpp (phía C++, phải khớp tên), MainActivity.kt, StreamActivity.kt
+// =============================================================================
 package com.rgc.remotegame
 
 import android.view.Surface
@@ -11,12 +39,15 @@ import kotlinx.coroutines.withContext
  */
 object NativeClient {
 
-    // Trùng ClientLoop::Phase bên C++.
+    // Trùng ClientLoop::Phase bên C++ — bốn giá trị này là một enum bị tách làm đôi
+    // qua ranh giới JNI (nativePhase trả jint), nên sửa một bên phải sửa cả bên kia.
     const val PHASE_IDLE = 0
     const val PHASE_CONNECTING = 1
     const val PHASE_STREAMING = 2
     const val PHASE_ENDED = 3
 
+    // Nạp .so một lần, lần đầu có ai chạm tới object này. Phải chạy trước mọi lời
+    // gọi external fun, và khối init của object bảo đảm đúng điều đó.
     init {
         System.loadLibrary("remotegame")
     }

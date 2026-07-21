@@ -1,14 +1,31 @@
 #pragma once
+// =============================================================================
+// ElevatedShare.h — xin quyền admin cho vai trò HOST khi bật điều khiển.
 //
-// ElevatedShare - xin quyền admin cho vai trò HOST khi bật điều khiển.
+// VẤN ĐỀ: UIPI (User Interface Privilege Isolation)
+//   Windows không cho một tiến trình ở mức toàn vẹn THẤP gửi input tới cửa sổ của
+//   tiến trình ở mức CAO hơn. Hệ quả rất khó chẩn đoán: host chạy quyền thường vẫn
+//   bắt hình được game/ứng dụng chạy admin bình thường — hình vẫn hiện đẹp — nhưng
+//   SendInput bị nuốt IM LẶNG. Không lỗi, không cảnh báo, chỉ là bấm gì cũng không
+//   có gì xảy ra. (Xem docs/07-phase4-input.md.)
 //
-// UIPI: một tiến trình integrity level thấp hơn không được gửi input tới cửa sổ
-// của tiến trình cao hơn. Nên host chạy quyền thường sẽ capture được hình của
-// game/app chạy admin nhưng SendInput bị nuốt im lặng (xem docs/07-phase4-input.md).
-// Vì vậy khi người dùng bấm Share với "cho phép điều khiển", ta relaunch chính
-// exe này qua ShellExecuteEx verb "runas" (bung UAC) và bàn giao nguyên phiên
-// share sang instance mới bằng dòng lệnh - người dùng không phải chọn nguồn lại.
+// GIẢI PHÁP: TỰ KHỞI ĐỘNG LẠI Ở MỨC CAO HƠN
+//   Khi người dùng bấm Share có tick "cho phép điều khiển", ta chạy lại chính exe
+//   này qua ShellExecuteEx với verb "runas" — Windows bung hộp thoại UAC. Instance
+//   mới nhận nguyên phiên share qua DÒNG LỆNH nên người dùng KHÔNG phải chọn nguồn
+//   lần thứ hai.
 //
+// LUỒNG ĐẦY ĐỦ
+//   Instance thường: MainMenu → chọn nguồn → RelaunchElevatedShare() → thoát
+//   Instance admin:  main() → ParseElevatedShareArgs() → RunAgent() → MainMenu
+//
+// VÌ SAO CHỈ XIN QUYỀN KHI CẦN
+//   Chia sẻ chỉ-xem không cần admin. Bắt nâng quyền ngay từ đầu vừa phiền vừa tạo
+//   thói quen bấm Yes ở UAC mà không đọc. Chỉ xin đúng lúc tính năng thật sự đòi.
+//
+// LIÊN QUAN: main.cpp (đường vào của instance admin), ui/MainMenuWindow.cpp (nơi
+//            gọi relaunch), input/InputInjector.h, docs/07-phase4-input.md
+// =============================================================================
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #include <windows.h>

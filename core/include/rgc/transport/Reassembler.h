@@ -1,6 +1,48 @@
 #pragma once
-// Reassembler — ghép các gói VIDEO_PACKET (UDP, có thể lạc thứ tự/mất/trùng)
-// thành frame NAL hoàn chỉnh, TRẢ THEO THỨ TỰ frameId (H.264 inter-frame cần thứ tự).
+// =============================================================================
+// Reassembler.h — ghép mảnh UDP thành frame hoàn chỉnh, phía CLIENT.
+//
+// NHIỆM VỤ
+//   Đảo ngược việc Packetizer đã làm, nhưng trong điều kiện khắc nghiệt hơn nhiều:
+//   UDP không bảo đảm gì cả, nên mảnh có thể đến LẠC THỨ TỰ, TRÙNG, hoặc MẤT HẲN.
+//   Lớp này gom mảnh theo frameId, biết khi nào một frame đã đủ, và — quan trọng
+//   nhất — biết khi nào nên TỪ BỎ một frame thay vì chờ mãi.
+//
+// VỊ TRÍ TRONG LUỒNG DỮ LIỆU
+//   UDP ~~~> **Reassembler** → IVideoDecoder → Renderer
+//   Đây là nơi duy nhất trong client hiểu "gói" — từ PopReady trở đi mọi thứ làm
+//   việc với frame nguyên vẹn.
+//
+// BA BÀI TOÁN PHẢI GIẢI CÙNG LÚC
+//   1. GHÉP. Mảnh đến lộn xộn nên phải có chỗ chứa dở dang (Pending) cho nhiều
+//      frame song song, tối đa kMaxPendingFrames = 4.
+//   2. THỨ TỰ. H.264 dùng inter-frame: frame N tham chiếu frame N-1. Giải mã lệch
+//      thứ tự cho ra hình vỡ, nên PopReady chỉ trả frame theo đúng frameId tăng dần
+//      và không bao giờ nhảy cóc qua frame chưa xong.
+//   3. TỪ BỎ ĐÚNG LÚC. Chờ một mảnh không bao giờ tới sẽ treo cả luồng hình. Nhưng
+//      bỏ quá sớm thì phí một frame lẽ ra cứu được. Cân bằng này là phần "Chính
+//      sách v1" ngay bên dưới.
+//
+// KHÔI PHỤC BẰNG FEC
+//   Nếu host bật FEC, mỗi nhóm kFecGroupSize mảnh có kèm một gói parity. Thiếu
+//   ĐÚNG một mảnh trong nhóm thì TryRecover dựng lại được bằng XOR ngược — frame
+//   vẫn hoàn chỉnh, không phải bỏ và không phải xin IDR. Thiếu từ hai mảnh trở lên
+//   thì parity vô dụng (một phương trình không giải nổi hai ẩn).
+//
+// VÌ SAO PHẢI CHỜ IDR SAU KHI MẤT FRAME
+//   Encoder dùng GOP vô hạn (không tự phát IDR định kỳ, vì IDR nặng gấp nhiều lần
+//   P-frame). Mất một frame nghĩa là mọi frame sau đó tham chiếu vào dữ liệu client
+//   không có → giải mã tiếp chỉ sinh vỡ hình lem luốc kéo dài. Nên khi mất, lớp này
+//   nuốt sạch frame non-IDR và bật cờ để client xin REQUEST_KEYFRAME.
+//
+// MÔ HÌNH LUỒNG
+//   Thuần C++20, không thread, không đồng hồ — thời gian bơm từ ngoài qua `nowUs`
+//   (nhờ vậy test tua nhanh thời gian được, không phải sleep thật). Dùng trên MỘT
+//   thread (thread Recv của client).
+//
+// LIÊN QUAN: rgc/transport/Packetizer.h (đầu kia), rgc/control/LinkStats.h (đọc
+//            stats() của lớp này), docs/06-phase3-transport.md §5
+// =============================================================================
 //
 // Chính sách v1 (docs/06-phase3-transport.md §5):
 //   - Giữ tối đa 4 frame đang ghép; gói thuộc frame đã phát/đã bỏ → bỏ.

@@ -1,9 +1,37 @@
 #pragma once
+// =============================================================================
+// UdpSocket.h — bọc BSD socket, bản Android. Lớp mỏng platform-specific (docs/06 §1.3).
 //
-// UdpSocket — bản Android (BSD sockets) của lớp mỏng platform-specific ở docs/06 §1.3.
-// API GIỮ NGUYÊN như client/windows/UdpSocket.h để phần logic port sang đọc y hệt;
-// core (rgc) vẫn không biết đến lớp này.
+// NHIỆM VỤ
+//   Che khác biệt giữa API socket của các hệ điều hành sau MỘT API duy nhất, để
+//   phần logic phía trên (ClientLoop, SourceQuery) đọc y hệt nhau ở mọi nền tảng.
+//   API ở đây GIỮ NGUYÊN từng chữ so với client/windows/net/UdpSocket.h — port
+//   code qua lại chỉ là chép, không phải viết lại.
 //
+// VỊ TRÍ TRONG KIẾN TRÚC
+//   core/ (rgc) tuyệt đối không biết đến lớp này: nó chỉ nhận/giao byte qua callback
+//   `send` và hàm HandlePacket. Toàn bộ hiểu biết về socket của app nằm ở đây và ở
+//   người gọi trực tiếp nó.
+//
+// KHÁC BIỆT SO VỚI BẢN WINDOWS
+//   - Dùng file descriptor (int, -1 = đóng) thay cho SOCKET của winsock.
+//   - Không cần WSAStartup/WSACleanup.
+//   - Không cần tắt SIO_UDP_CONNRESET (xem ghi chú trong Open()).
+//   Ngoài ba điểm đó, hai bản gần như trùng khít.
+//
+// QUY ƯỚC ĐỊA CHỈ
+//   NetAddr giữ IP ở HOST byte order chứ không phải network byte order. Việc đổi
+//   thứ tự byte dồn hết vào ranh giới gọi API hệ thống (htonl/ntohl trong .cpp),
+//   nên mọi chỗ khác trong app so sánh và in địa chỉ một cách tự nhiên.
+//
+// SỞ HỮU TÀI NGUYÊN
+//   Lớp này sở hữu file descriptor: destructor tự đóng, và copy bị CẤM (nếu cho
+//   copy thì hai đối tượng cùng giữ một fd và cái nào hủy trước sẽ đóng fd của cái
+//   kia). Truyền đi thì dùng tham chiếu, đừng truyền theo giá trị.
+//
+// LIÊN QUAN: client/windows/net/UdpSocket.h (bản song song, cùng API),
+//            net/SourceQuery.h, ClientLoop.h (người dùng), docs/06 §1.3
+// =============================================================================
 #include <cstdint>
 #include <string>
 

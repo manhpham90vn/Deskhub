@@ -1,3 +1,37 @@
+// =============================================================================
+// InputInjector.cpp — cài đặt việc bơm input vào máy host bằng SendInput.
+//
+// BỐ CỤC
+//   ScreenToVirtualDesk() — pixel màn hình → toạ độ chuẩn hoá của SendInput.
+//   ForceForeground()     — kéo cửa sổ đích lên foreground (xem cảnh báo bên dưới).
+//   Init/InitMonitor()    — chọn gốc toạ độ: cửa sổ, hay cả màn hình.
+//   Apply()               — đường chính, phân nhánh theo loại event.
+//   SendKey/SendButton/SendMove* — các lời gọi SendInput cụ thể.
+//   ReleaseAll()          — nhả sạch phím/nút đang giữ.
+//
+// HAI TẦNG QUY ĐỔI TOẠ ĐỘ — dễ nhầm nếu không tách bạch
+//   1. Client gửi 0..65535 tương đối với VÙNG CLIENT của cửa sổ nguồn.
+//      → quy về pixel trong client rect, rồi ra pixel màn hình.
+//   2. SendInput lại đòi 0..65535 tương đối với MÀN HÌNH ẢO (mọi màn hình ghép lại).
+//      → ScreenToVirtualDesk làm bước này.
+//   Hai thang cùng dải 0..65535 nhưng gốc và độ dài khác hẳn nhau; nhầm chúng cho
+//   ra con trỏ lệch chỗ mà vẫn "trông có vẻ đúng" ở màn hình đơn.
+//
+// ⚠ ForceForeground DÙNG ĐÚNG MỘT THỦ THUẬT ĐƯỢC CÔNG NHẬN
+//   Windows chặn SetForegroundWindow từ tiến trình không giữ focus. Cách vòng qua
+//   (mọi phần mềm điều khiển từ xa đều dùng) là tạm GẮN input queue của mình vào
+//   luồng đang sở hữu cửa sổ foreground. Bắt buộc phải gỡ ra ngay sau đó — để dính
+//   thì hai luồng dùng chung trạng thái bàn phím và sinh lỗi rất khó hiểu.
+//
+// TRẠNG THÁI PHẢI GIỮ: keysDown_ VÀ buttonsDown_
+//   Đây không phải tối ưu mà là yêu cầu đúng đắn: không nhớ thì không nhả được khi
+//   mất kết nối, và phím kẹt là lỗi tệ nhất của cả hệ thống (xem InputInjector.h).
+//   keysDown_ khoá theo SCANCODE kèm bit E0, không phải theo vk — hai phím khác
+//   nhau có thể cùng vk (Ctrl trái/phải) nhưng scancode luôn phân biệt được.
+//
+// LIÊN QUAN: input/InputInjector.h (hai cơ chế an toàn + ánh xạ toạ độ),
+//            input/InputCapture.cpp (đầu kia), docs/07-phase4-input.md
+// =============================================================================
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #define _CRT_SECURE_NO_WARNINGS
@@ -94,6 +128,10 @@ void InputInjector::SetEnabled(bool on) {
     enabled_ = on;
 }
 
+// Ưu tiên scancode, lùi về mã phím ảo chỉ khi client không gửi được scancode.
+// Thứ tự ưu tiên này là điểm mấu chốt của cả tính năng điều khiển game — xem
+// InputInjector.h. KEYEVENTF_EXTENDEDKEY cho các phím có tiền tố E0 (mũi tên,
+// Ctrl/Alt phải, phím trên cụm numpad): thiếu cờ này thì mũi tên hoá thành phím số.
 void InputInjector::SendKey(int32_t vk, int32_t scan, bool down) {
     INPUT in{};
     in.type = INPUT_KEYBOARD;
@@ -117,6 +155,12 @@ void InputInjector::SendButton(rgc::MouseButton btn, bool down) {
     if (in.mi.dwFlags) SendInput(1, &in, sizeof(INPUT));
 }
 
+// Quy đổi hai tầng — xem sơ đồ ở đầu file. Nhánh trên cho nguồn là cả màn hình
+// (gốc là rect monitor), nhánh dưới cho nguồn là một cửa sổ (gốc là client rect).
+//
+// Dùng (w-1) và 65535 làm mẫu số/tử số để hai đầu mút khớp chính xác: giá trị 65535
+// phải rơi đúng vào pixel cuối cùng, không hụt một pixel. InputCapture chuẩn hoá
+// theo đúng công thức nghịch đảo.
 void InputInjector::SendMoveAbsolute(int32_t nx, int32_t ny) {
     POINT pt{};
     if (monitor_) {
@@ -157,6 +201,12 @@ void InputInjector::SendMoveRelative(int32_t dx, int32_t dy) {
     SendInput(1, &in, sizeof(INPUT));
 }
 
+// Chốt an toàn số 1 (xem InputInjector.h). Gọi trước MỌI lần bơm.
+//
+// Hàm này có TÁC DỤNG PHỤ có chủ ý: lần đầu phát hiện mất focus, nó gọi ReleaseAll.
+// Bắt buộc — người ngồi ở máy host alt-tab đi trong lúc client đang giữ phím W thì
+// sự kiện nhả sẽ bị bỏ qua ở các vòng sau, và phím kẹt lại vĩnh viễn.
+// hadFocus_ chỉ để log một lần mỗi lần đổi trạng thái, không phải mỗi event.
 bool InputInjector::TargetHasFocus() {
     // Chia sẻ cả màn hình: không có ứng dụng nào "ngoài phạm vi chia sẻ" để bảo vệ.
     if (monitor_) return true;
@@ -267,6 +317,11 @@ int InputInjector::SelfTest(HWND target, const char* text) {
     return inj.applied() ? 0 : 1;
 }
 
+// Chốt an toàn số 2: nhả sạch mọi thứ đang giữ. Gọi khi mất kết nối (BYE/timeout),
+// khi mất focus, và khi kết thúc phiên.
+//
+// Không kiểm tra TargetHasFocus ở đây — cố tình. Đúng lúc cần nhả nhất chính là
+// lúc đã mất focus; đòi có focus mới cho nhả thì phím sẽ kẹt vĩnh viễn.
 void InputInjector::ReleaseAll() {
     if (keysDown_.empty() && buttonsDown_.empty()) return;
     std::printf("[Inject] Releasing %zu keys + %zu mouse buttons still held.\n",

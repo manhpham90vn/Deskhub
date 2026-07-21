@@ -1,12 +1,45 @@
 #pragma once
-// ClientSession — máy trạng thái phía client: HELLO (retry) → nhận HELLO_ACK →
-// onReady (client dựng decoder/renderer) → START (retry tới khi có video) →
-// STREAMING (PING mỗi 1s, timeout 5s, REQUEST_KEYFRAME khi Reassembler báo loss).
+// =============================================================================
+// ClientSession.h — máy trạng thái của một phiên, phía CLIENT.
 //
-// Thuần C++20 như HostSession: byte vào qua HandlePacket (chỉ gói Control —
-// gói Video caller tự đưa vào Reassembler rồi gọi NotifyVideoPacket để nuôi
-// timeout), byte ra qua callback `send`, thời gian bơm từ ngoài.
-// Toàn bộ chạy trên MỘT thread (thread Recv của client) — không khóa.
+// NHIỆM VỤ
+//   Đối tác của HostSession. Lo toàn bộ việc bắt tay, giữ nhịp, và mọi thứ phát đi
+//   trên kênh Control: PING đo RTT, REQUEST_KEYFRAME khi mất hình, FEEDBACK báo
+//   chất lượng, SET_FOCUS khi người dùng đổi cửa sổ, và cả hàng đợi input.
+//
+// MÁY TRẠNG THÁI
+//   Idle ──Start()──→ Hello ──HELLO_ACK──→ Starting ──gói video đầu tiên──→ Streaming
+//                       │                     │                                │
+//                       │ 10 giây im lặng     └──── BYE / timeout 5 giây ──────┤
+//                       └──────────────────────────────────────────────────→ Dead
+//
+//   Hello    — phát HELLO lại mỗi 0.5 giây tới khi có ACK, bỏ cuộc sau 10 giây.
+//   Starting — đã có tham số phiên, đã gọi onReady để client dựng decoder; phát
+//              START lại mỗi 0.5 giây. Chuyển sang Streaming khi thấy gói video
+//              đầu tiên — đó là bằng chứng duy nhất rằng host đã nhận được START.
+//   Streaming— chạy bình thường: PING mỗi giây, timeout 5 giây.
+//   Dead     — đã gọi onDisconnect; không tự hồi phục, client phải tạo phiên mới.
+//
+// VÌ SAO PHẢI PHÁT LẠI HELLO VÀ START
+//   Cả hai đi trên UDP và đều không có ACK riêng. Mất HELLO thì host không biết có
+//   ai gọi; mất START thì host nằm chờ ở READY còn client ngồi nhìn màn hình đen.
+//   Cứ phát lại đều đặn là xong — HostSession chịu được gói lặp (HELLO lặp chỉ làm
+//   nó gửi lại ACK, START lặp không đổi gì).
+//
+// PHÂN CÔNG VỚI NGƯỜI GỌI
+//   Lớp này CHỈ xử lý kênh Control. Gói Video do caller tự đưa thẳng vào
+//   Reassembler (đường nóng, không nên đi vòng), rồi gọi NotifyVideoPacket để nuôi
+//   timeout và đẩy Starting → Streaming. Tương tự, lớp này không tự đo được mất gói
+//   nên FEEDBACK phải do caller dựng từ LinkStats rồi đưa vào SendFeedback.
+//
+// MÔ HÌNH LUỒNG
+//   Thuần C++20 như HostSession: byte ra qua callback `send`, thời gian bơm từ
+//   ngoài. Toàn bộ chạy trên MỘT thread (thread Recv của client) — không khoá,
+//   và khác HostSession, ở đây không có trường atomic nào.
+//
+// LIÊN QUAN: rgc/session/HostSession.h (đầu kia), rgc/input/InputSender.h,
+//            rgc/transport/Reassembler.h, rgc/control/LinkStats.h
+// =============================================================================
 #include "rgc/input/InputSender.h"
 #include "rgc/wire/Wire.h"
 

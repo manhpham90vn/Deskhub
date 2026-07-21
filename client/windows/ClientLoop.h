@@ -1,10 +1,29 @@
 #pragma once
-// ClientLoop - vai trò CLIENT: UdpSocket + Reassembler + ClientSession (core) +
-// MfDecoder + Renderer (GD2). Xem docs/06 §5.
+// =============================================================================
+// ClientLoop.h — vai trò CLIENT: giao diện gọi vào phía xem.
 //
-// GD6: xem NHIỀU nguồn của cùng một host cùng lúc. Mỗi nguồn là một phiên độc lập
-// (socket riêng, ClientSession riêng, cửa sổ preview riêng) — xem chú thích ở
-// rgc::SourceInfo về lý do không dùng streamId chung một phiên.
+// NHIỆM VỤ
+//   Khai báo hai đường vào: hỏi host có nguồn gì (QueryHostSources) và chạy phiên
+//   xem (RunClient). Phần ghép nối nằm ở ClientLoop.cpp — đọc header khối ở đó để
+//   hiểu kiến trúc luồng.
+//
+// VỊ TRÍ TRONG LUỒNG NGƯỜI DÙNG
+//   MainMenuWindow (gõ IP) → QueryHostSources() → SourcePickerDialog → RunClient()
+//   RunClient CHẶN tới khi người dùng đóng hết cửa sổ preview / Ctrl+C / mất kết nối.
+//
+// GĐ6: XEM NHIỀU NGUỒN CÙNG LÚC
+//   Mỗi nguồn là một phiên HOÀN TOÀN độc lập: socket riêng, ClientSession riêng,
+//   cửa sổ preview riêng, cặp thread Recv+Decode riêng. Không dùng streamId chung
+//   một phiên — lý do đầy đủ ở chú thích của rgc::SourceInfo trong Wire.h.
+//   `sources` rỗng = xem nguồn 0, giữ đường cũ chạy được với host chỉ chia sẻ một thứ.
+//
+// VÌ SAO QueryHostSources TÁCH RIÊNG KHỎI RunClient
+//   Nó chạy TRƯỚC khi có phiên và phải trả kết quả cho hộp thoại chọn nguồn. Cùng
+//   lý do như SourceQuery.h bên Android tách khỏi ClientLoop bên đó.
+//
+// LIÊN QUAN: ClientLoop.cpp (kiến trúc luồng + ước lượng trễ e2e), AgentLoop.h
+//            (phía đối diện), ui/SourcePickerDialog.h, docs/06 §5
+// =============================================================================
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #include <windows.h>

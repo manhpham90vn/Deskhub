@@ -1,3 +1,26 @@
+// =============================================================================
+// Packetizer.cpp — cài đặt SendFrame: cắt mảnh, phát gói, tích luỹ parity FEC.
+//
+// File chỉ có một hàm, nhưng nó gánh hai việc đan xen nhau trong cùng một vòng lặp:
+//
+//   1. CẮT VÀ PHÁT. Frame được chia thành các mảnh kMaxVideoPayload byte, mảnh
+//      cuối lấy phần dư. Mỗi mảnh thành một datagram VIDEO_PACKET gửi ngay.
+//
+//   2. TÍCH LUỸ PARITY (nếu bật FEC). Cứ kFecGroupSize mảnh liên tiếp thì XOR lại
+//      với nhau thành một gói parity, phát ngay sau mảnh cuối của nhóm. Mất đúng
+//      một mảnh trong nhóm thì bên nhận dựng lại được bằng phép XOR ngược.
+//
+// Hai việc này nằm chung một vòng lặp thay vì tách hai lượt vì frame có thể nặng
+// vài chục KB: lặp hai lượt nghĩa là đọc lại toàn bộ dữ liệu lần nữa, trên đường
+// nóng chạy 60 lần mỗi giây.
+//
+// VÌ SAO KHÔNG CẤP PHÁT GÌ Ở ĐÂY
+//   Hàm này chạy mỗi frame, tức 60 lần/giây với mỗi lần vài chục datagram. Bộ đệm
+//   buf_ và parity_ là thành viên của lớp, dùng lại qua từng lần gọi; không có
+//   std::vector nào được tạo trên đường này.
+//
+// LIÊN QUAN: rgc/transport/Packetizer.h (thiết kế + lý do), Reassembler.cpp (đầu kia)
+// =============================================================================
 #include "rgc/transport/Packetizer.h"
 
 #include <cstring>
@@ -7,8 +30,9 @@ namespace rgc {
 size_t Packetizer::SendFrame(std::span<const uint8_t> nal, uint32_t frameId,
                              uint64_t timestampUs, bool idr, const SendFn& send) {
     if (nal.empty() || !send) return 0;
+    // Phép chia làm tròn LÊN: mảnh cuối thường không đầy nhưng vẫn tính là một mảnh.
     const size_t count = (nal.size() + kMaxVideoPayload - 1) / kMaxVideoPayload;
-    if (count > 0xFFFF) return 0;
+    if (count > 0xFFFF) return 0; // pktIndex/pktCount là u16 — không đánh số nổi
     // groupIndex là u8: quá 256 nhóm thì không đánh số được → gửi trần, không FEC.
     const bool fec = fec_ && (count + kFecGroupSize - 1) / kFecGroupSize <= 256;
 
@@ -33,9 +57,12 @@ size_t Packetizer::SendFrame(std::span<const uint8_t> nal, uint32_t frameId,
         return true;
     };
 
+    // Phần tử trung hoà của XOR là 0, nên nhóm mới luôn bắt đầu từ bộ đệm sạch.
     if (fec) std::memset(parity_, 0, sizeof(parity_));
 
     for (size_t i = 0; i < count; ++i) {
+        // Vị trí mảnh suy từ chỉ số vì mọi mảnh trừ mảnh cuối đều dài bằng nhau —
+        // đây chính là quy ước cho phép bỏ trường offset khỏi header video.
         const size_t off = i * kMaxVideoPayload;
         const size_t len = (nal.size() - off < kMaxVideoPayload) ? nal.size() - off
                                                                  : kMaxVideoPayload;
@@ -54,6 +81,9 @@ size_t Packetizer::SendFrame(std::span<const uint8_t> nal, uint32_t frameId,
         for (size_t b = 0; b < len; ++b)
             parity_[kFecLenPrefix + b] ^= nal[off + b];
 
+        // Nhóm đóng lại khi đủ kFecGroupSize mảnh, HOẶC khi frame hết — nhóm cuối
+        // của frame thường không đầy, và parity của nhóm lẻ đó vẫn có ích (nhóm một
+        // phần tử thì parity đúng bằng bản sao của mảnh đó).
         const bool groupEnd = ((i + 1) % kFecGroupSize == 0) || frameEnd;
         if (groupEnd) {
             if (!flushParity(i / kFecGroupSize)) return 0;

@@ -1,3 +1,30 @@
+// =============================================================================
+// Renderer.cpp — cài đặt cửa sổ preview, swapchain và đường vẽ.
+//
+// BỐ CỤC
+//   WndProc()      — thủ tục cửa sổ; chuyển message cho msgHook TRƯỚC mọi thứ khác.
+//   CreateOverlay()— dựng dòng số liệu + hai nút bằng child window.
+//   Init()         — đăng ký lớp cửa sổ, tạo cửa sổ, swapchain, video processor.
+//   RenderNV12()   — đường nóng: chuyển màu + Present.
+//
+// VÌ SAO msgHook ĐƯỢC XEM MESSAGE TRƯỚC
+//   Khi InputCapture đang lái input sang máy kia, nó phải NUỐT sạch phím và chuột —
+//   kể cả ESC — để người dùng gõ vào máy từ xa chứ không phải vào cửa sổ này. Trả
+//   true nghĩa là "đã tiêu thụ", và WndProc dừng ngay tại đó.
+//
+// CACHE INPUT VIEW THEO CẶP (texture, slice)
+//   Khác capture (khoá theo mỗi con trỏ texture), ở đây khoá phải là CẶP: decoder
+//   dùng một texture-array chung, nên cùng một con trỏ texture ứng với nhiều frame
+//   khác nhau, phân biệt bằng array slice. Khoá thiếu slice sẽ vẽ nhầm frame —
+//   xem cảnh báo ở IVideoDecoder.h.
+//
+// ⚠ renderMutex BẢO VỆ CÁI GÌ
+//   RenderNV12 chạy trên luồng decode, còn việc huỷ cửa sổ/swapchain xảy ra trên
+//   luồng main. Không có khoá thì main có thể thả swapchain ngay giữa lúc luồng
+//   decode đang vẽ vào nó.
+//
+// LIÊN QUAN: decode/Renderer.h (bốn quyết định thiết kế + mô hình luồng)
+// =============================================================================
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #include "decode/Renderer.h"
@@ -149,9 +176,16 @@ struct Renderer::Impl {
         wc.hInstance = GetModuleHandleW(nullptr);
         wc.lpszClassName = kWndClass;
         wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
-        RegisterClassW(&wc);  // lần 2 trả ALREADY_EXISTS - không sao
+        // GĐ6 mở nhiều cửa sổ preview cùng lúc nên hàm này chạy nhiều lần; lần thứ
+        // hai trở đi RegisterClassW trả ALREADY_EXISTS. Không sao, lớp đã có sẵn.
+        RegisterClassW(&wc);
 
+        // Bỏ THICKFRAME và MAXIMIZEBOX: swapchain tạo theo kích thước cố định, cho
+        // người dùng kéo giãn thì phải xử lý cả đường ResizeBuffers — chưa cần.
         const DWORD style = WS_OVERLAPPEDWINDOW & ~(WS_THICKFRAME | WS_MAXIMIZEBOX);
+        // AdjustWindowRect đổi kích thước VÙNG CLIENT mong muốn thành kích thước cả
+        // cửa sổ (cộng viền và thanh tiêu đề). Không có bước này thì video bị viền
+        // ăn mất một dải.
         RECT wr{ 0, 0, (LONG)clientW, (LONG)clientH };
         AdjustWindowRect(&wr, style, FALSE);
         hwnd = CreateWindowExW(0, kWndClass, title, style,
@@ -177,7 +211,7 @@ struct Renderer::Impl {
         sd.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
         sd.SampleDesc.Count = 1;
         sd.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
-        sd.BufferCount = 2;
+        sd.BufferCount = 2; // tối thiểu của flip-model; nhiều hơn chỉ thêm độ trễ
         sd.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
         sd.Scaling = DXGI_SCALING_STRETCH;
         RND_CHECK(factory->CreateSwapChainForHwnd(device.Get(), hwnd, &sd, nullptr, nullptr,
@@ -194,8 +228,13 @@ struct Renderer::Impl {
     }
 
     // Tạo (lại) video processor cho kích thước nguồn `w x h`.
+    //
+    // Video processor gắn chặt với kích thước nguồn, nên host đổi độ phân giải giữa
+    // chừng là phải dựng lại. Thoát sớm khi kích thước không đổi — đây là đường
+    // nóng, chạy mỗi frame.
     bool EnsureVideoProcessor(uint32_t w, uint32_t h) {
         if (vp && w == vpSrcW && h == vpSrcH) return true;
+        // Các input view cũ gắn với enumerator cũ nên không dùng lại được.
         inViews.clear();
         outView.Reset();
         vp.Reset();
@@ -220,7 +259,9 @@ struct Renderer::Impl {
                                                               &od, &outView),
                   "CreateVideoProcessorOutputView");
 
-        // Chỉ lấy đúng vùng hình thật (texture decoder có thể align lớn hơn).
+        // Cắt đúng vùng hình THẬT. Decoder căn texture theo bội số macroblock nên nó
+        // thường lớn hơn kích thước hiển thị; không đặt source rect thì phần đệm
+        // (rác) cũng bị co giãn lên màn hình.
         RECT src{ 0, 0, (LONG)w, (LONG)h };
         videoContext->VideoProcessorSetStreamSourceRect(vp.Get(), 0, TRUE, &src);
         RECT dst{ 0, 0, (LONG)clientW, (LONG)clientH };
@@ -236,6 +277,8 @@ struct Renderer::Impl {
         if (closed.load() || !swapchain) return false;
         if (!EnsureVideoProcessor(w, h)) return false;
 
+        // Khoá là CẶP (texture, slice), không phải riêng con trỏ texture — xem ghi
+        // chú ở đầu file về texture-array của decoder.
         auto key = std::make_pair(tex, subresource);
         auto it = inViews.find(key);
         if (it == inViews.end()) {
@@ -261,6 +304,8 @@ struct Renderer::Impl {
             dumpBmpPath.clear();
         }
 
+        // Present(0) = không chờ VSync. Chấp nhận xé hình để bỏ được tới ~16 ms độ
+        // trễ — đánh đổi đúng cho ứng dụng tương tác.
         RND_CHECK(swapchain->Present(0, 0), "Present");
         return true;
     }
@@ -314,6 +359,9 @@ void Renderer::ClientSize(uint32_t& w, uint32_t& h) const {
     h = impl_ ? impl_->clientH : 0;
 }
 
+// Bơm message của cả LUỒNG, không riêng cửa sổ nào — đó là lý do hàm này static.
+// PeekMessage với hwnd = nullptr lấy message của mọi cửa sổ trên luồng hiện tại,
+// nên một lời gọi phục vụ hết các cửa sổ preview đang mở (GĐ6 mở nhiều nguồn).
 void Renderer::Pump() {
     MSG msg;
     while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {

@@ -1,24 +1,42 @@
 #pragma once
+// =============================================================================
+// InputInjector.h — bơm input nhận được vào máy này, phía HOST (GĐ4).
 //
-// InputInjector (GD4, phía HOST) - nhận rgc::InputEvent từ client và bơm vào
-// máy này bằng SendInput.
+// NHIỆM VỤ
+//   Đối tác của InputCapture: nhận rgc::InputEvent đã khử trùng và biến nó thành
+//   thao tác thật trên máy host bằng SendInput.
 //
-// Ánh xạ tọa độ: client gửi tọa độ CHUẨN HÓA (0..65535) trong khung hình nó
-// nhìn thấy = vùng client của cửa sổ đang chia sẻ. Host quy đổi ngược về pixel
-// trong client rect của cửa sổ đích, rồi đổi sang tọa độ màn hình ảo cho
-// SendInput. Nhờ vậy client thu nhỏ cửa sổ preview vẫn trỏ đúng chỗ.
+// VỊ TRÍ TRONG LUỒNG DỮ LIỆU
+//   InputCapture (client) → UDP ~~~> InputReceiver → **InputInjector** → SendInput
 //
-// Bàn phím bơm bằng SCANCODE (KEYEVENTF_SCANCODE) chứ không bằng mã phím ảo:
-// game dùng DirectInput/Raw Input đọc thẳng scancode, gửi vk không thôi thì
-// game không thấy gì (đây là lý do phần lớn công cụ remote không điều khiển
-// được game).
+// ÁNH XẠ TOẠ ĐỘ
+//   Client gửi toạ độ CHUẨN HOÁ (0..65535) trong khung hình nó nhìn thấy, tức là
+//   vùng client của cửa sổ đang chia sẻ. Host quy đổi ngược về pixel trong client
+//   rect của cửa sổ đích, rồi đổi tiếp sang toạ độ màn hình ảo cho SendInput.
+//   Nhờ đi qua thang chuẩn hoá này mà client thu nhỏ cửa sổ preview bao nhiêu tuỳ
+//   ý vẫn trỏ đúng chỗ.
 //
-// Chống KẸT PHÍM: injector nhớ mọi phím/nút đang giữ. Client mất kết nối giữa
-// lúc đang giữ W (chạy tới) mà không nhận được sự kiện nhả -> nhân vật chạy mãi.
-// ReleaseAll() nhả hết, HostSession gọi khi BYE/timeout.
+// BƠM BẰNG SCANCODE, KHÔNG PHẢI MÃ PHÍM ẢO
+//   KEYEVENTF_SCANCODE. Game dùng DirectInput/Raw Input đọc thẳng scancode; gửi vk
+//   không thôi thì game không thấy gì. Đây là lý do phần lớn công cụ điều khiển từ
+//   xa không chơi được game — và là điểm đối xứng với InputCapture ở đầu kia.
 //
-// Apply() được gọi từ luồng Recv của AgentLoop.
+// ⚠ HAI CƠ CHẾ AN TOÀN, cả hai đều bắt buộc
+//   1. CHỐT FOREGROUND (TargetHasFocus). SendInput bơm vào cửa sổ ĐANG FOREGROUND
+//      chứ không vào một HWND cụ thể. Nếu người ngồi ở máy host bấm sang ứng dụng
+//      khác, mọi phím/chuột từ xa sẽ rơi vào ứng dụng đó — vừa sai vừa NGUY HIỂM
+//      (người điều khiển từ xa vô tình gõ vào trình duyệt, terminal của chủ máy).
+//      Nên: chỉ bơm khi cửa sổ đang chia sẻ thật sự đang foreground.
+//   2. CHỐNG KẸT PHÍM (ReleaseAll). Injector nhớ mọi phím/nút đang giữ. Client mất
+//      kết nối giữa lúc đang giữ W thì sự kiện nhả không bao giờ tới, và nhân vật
+//      chạy mãi. HostSession gọi ReleaseAll khi BYE/timeout.
 //
+// MÔ HÌNH LUỒNG
+//   Apply() được gọi từ luồng Recv của AgentLoop.
+//
+// LIÊN QUAN: input/InputCapture.h (đầu kia), rgc/input/InputReceiver.h,
+//            rgc/session/HostSession.h (nơi gọi ReleaseAll), docs/07-phase4-input.md
+// =============================================================================
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #include <windows.h>

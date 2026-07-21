@@ -1,3 +1,20 @@
+// =============================================================================
+// Pacer.cpp — cài đặt việc rải gói: đồng hồ tín dụng + giấc ngủ độ phân giải cao.
+//
+// MÔ HÌNH: MỘT MỐC THỜI GIAN DUY NHẤT
+//   Toàn bộ trạng thái là `nextUs_` — thời điểm sớm nhất được phép gửi gói kế tiếp.
+//   Mỗi lần Gate():
+//     1. Nếu nextUs_ đã lùi vào quá khứ thì kéo nó về hiện tại (chống tích tín dụng).
+//     2. Nếu còn phải chờ đủ lâu thì ngủ.
+//     3. Cộng vào nextUs_ thời gian mà `bytes` byte đáng lẽ chiếm ở tốc độ rateBps_.
+//   Không có hàng đợi, không có token bucket, không cấp phát gì — chỉ một số u64.
+//
+// HAI QUYẾT ĐỊNH ĐÁNG CHÚ Ý, cả hai đều được giải thích tại chỗ bên dưới:
+//   - kMinSleepUs = 500: không rải từng gói mà phát thành chùm nhỏ ~500 µs.
+//   - Dùng waitable timer độ phân giải cao thay cho Sleep().
+//
+// LIÊN QUAN: net/Pacer.h (vấn đề nó giải quyết + số đo thật + cảnh báo về thread)
+// =============================================================================
 #include "net/Pacer.h"
 
 #include "rgcp/Clock.h"
@@ -16,6 +33,8 @@ Pacer::~Pacer() {
     if (timer_) CloseHandle(timer_);
 }
 
+// Ngủ chính xác `us` micro-giây. Timer được tạo LƯỜI và giữ lại dùng tiếp — tạo
+// handle mới mỗi lần ngủ sẽ tốn hơn cả giấc ngủ.
 void Pacer::SleepUs(uint64_t us) {
     // Sleep() thường của Windows bám theo tick scheduler (tệ nhất ~15.6ms) — dùng nó
     // ở đây thì pacing hỏng hoàn toàn vì ta cần độ chính xác dưới mili giây.
@@ -39,8 +58,9 @@ void Pacer::SleepUs(uint64_t us) {
     Sleep(DWORD((us + 999) / 1000));
 }
 
+// Chặn tới khi được phép gửi thêm `bytes` byte. Gọi ngay trước sendto().
 void Pacer::Gate(size_t bytes) {
-    if (!rateBps_ || !bytes) return;
+    if (!rateBps_ || !bytes) return; // rate 0 = tắt pacing
 
     const uint64_t now = NowUs();
 
@@ -51,5 +71,11 @@ void Pacer::Gate(size_t bytes) {
 
     if (const uint64_t waitUs = nextUs_ - now; waitUs >= kMinSleepUs) SleepUs(waitUs);
 
+    // Ghi nợ: `bytes` byte ở tốc độ rateBps_ chiếm bấy nhiêu micro-giây.
+    //   bytes * 8       -> bit
+    //   * 1'000'000     -> đổi giây sang micro-giây
+    //   / rateBps_      -> thời gian truyền
+    // Nhân TRƯỚC chia để không mất phần lẻ; với gói ≤1200 byte thì tử số cỡ 1e10,
+    // còn rất xa ngưỡng tràn u64.
     nextUs_ += uint64_t(bytes) * 8 * 1'000'000ull / rateBps_;
 }

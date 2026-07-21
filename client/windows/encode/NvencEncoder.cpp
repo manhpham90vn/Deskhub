@@ -1,3 +1,39 @@
+// =============================================================================
+// NvencEncoder.cpp — cài đặt backend NVENC.
+//
+// VÒNG ĐỜI MỘT FRAME QUA NVENC — bốn bước, và mỗi bước có một cái bẫy riêng
+//   1. REGISTER  — báo cho NVENC biết một texture D3D11 (làm MỘT LẦN cho mỗi
+//                  texture, kết quả nhớ trong `registered`).
+//   2. MAP       — khoá texture đã đăng ký để dùng cho lần nén này.
+//   3. ENCODE    — nvEncEncodePicture.
+//   4. UNMAP     — nhả ra. BẮT BUỘC, kể cả khi bước 3 thất bại; thiếu là rò tài
+//                  nguyên và vài frame sau sẽ hết chỗ map.
+//
+// VÌ SAO PHẢI NHỚ ĐĂNG KÝ (map `registered`)
+//   nvEncRegisterResource khá đắt. WGC chỉ luân phiên vài texture cố định (frame
+//   pool sâu 2), nên đăng ký lại mỗi frame là lãng phí thuần tuý. Khoá theo con trỏ
+//   texture; các mục được huỷ đăng ký một lượt trong Cleanup().
+//
+// TẠI SAO encCfg VÀ initParams LÀ THÀNH VIÊN, KHÔNG PHẢI BIẾN CỤC BỘ CỦA Init()
+//   nvEncReconfigureEncoder (đổi bitrate) đòi NGUYÊN bộ tham số khởi tạo chứ không
+//   nhận riêng trường cần đổi, nên ta phải giữ chúng sống suốt phiên. Quan trọng
+//   hơn: initParams.encodeConfig là CON TRỎ trỏ vào encCfg — nếu encCfg là biến cục
+//   bộ của Init thì con trỏ đó thành treo ngay khi Init trả về, và lần đổi bitrate
+//   đầu tiên sẽ đọc phải bộ nhớ rác.
+//
+// GOP VÔ HẠN — quyết định xuyên suốt cả dự án
+//   gopLength = NVENC_INFINITE_GOPLENGTH: encoder KHÔNG tự phát IDR định kỳ. IDR chỉ
+//   ra khi có người xin (forceKeyframe). Lý do: IDR nặng gấp nhiều lần P-frame, phát
+//   đều đặn là đốt băng thông vô ích khi đường truyền đang tốt. Đổi lại, phía nhận
+//   phải chủ động xin IDR mỗi khi mất frame — xem Reassembler.h.
+//
+// KHÔNG B-FRAME (frameIntervalP = 1)
+//   B-frame tham chiếu cả frame TƯƠNG LAI, nên encoder phải giữ lại vài frame trước
+//   khi xuất được cái đầu tiên. Với streaming tương tác thì độ trễ đó không đáng đổi
+//   lấy chút bitrate tiết kiệm được.
+//
+// LIÊN QUAN: encode/NvencEncoder.h (vì sao NVENC đứng đầu chuỗi + nạp DLL động)
+// =============================================================================
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #define _CRT_SECURE_NO_WARNINGS
@@ -51,7 +87,9 @@ struct NvencEncoder::Impl {
         dll = LoadLibraryW(L"nvEncodeAPI64.dll");
         if (!dll) { std::printf("[NVENC] Failed to load nvEncodeAPI64.dll (NVIDIA driver missing?).\n"); return false; }
 
-        // Kiểm tra driver đủ mới so với header.
+        // Driver cũ hơn header SDK ta dịch cùng: các struct đã đổi bố cục nên gọi
+        // vào sẽ hỏng theo cách khó đoán. Phát hiện sớm và trả false để factory rớt
+        // sang Media Foundation — an toàn hơn nhiều so với để nó chạy rồi sập.
         auto getMax = (PFN_MaxVersion)GetProcAddress(dll, "NvEncodeAPIGetMaxSupportedVersion");
         if (getMax) {
             uint32_t driverMax = 0;
@@ -88,7 +126,10 @@ struct NvencEncoder::Impl {
         const GUID presetGuid = NV_ENC_PRESET_P4_GUID;
         const NV_ENC_TUNING_INFO tuning = NV_ENC_TUNING_INFO_ULTRA_LOW_LATENCY;
 
-        // Lấy cấu hình preset rồi tinh chỉnh cho low-latency.
+        // Lấy cấu hình preset làm nền rồi mới tinh chỉnh, thay vì điền tay từ số 0:
+        // NV_ENC_CONFIG có hàng chục trường, phần lớn ta không có ý kiến gì. Xin bộ
+        // mặc định của preset rồi sửa đúng vài trường mình quan tâm là cách vừa gọn
+        // vừa bền qua các đời SDK.
         NV_ENC_PRESET_CONFIG preset{};
         preset.version = NV_ENC_PRESET_CONFIG_VER;
         preset.presetCfg.version = NV_ENC_CONFIG_VER;
@@ -100,13 +141,20 @@ struct NvencEncoder::Impl {
         encCfg.frameIntervalP = 1;                     // không B-frame (độ trễ thấp)
         encCfg.rcParams.rateControlMode = NV_ENC_PARAMS_RC_CBR;
         encCfg.rcParams.averageBitRate = cfg.bitrateBps;
-        encCfg.rcParams.vbvBufferSize = cfg.bitrateBps / (cfg.fps ? cfg.fps : 60); // ~1 frame
+        // VBV buffer ~ đúng một frame. Đây là "ngân sách dồn" mà encoder được phép
+        // vượt tạm: đặt nhỏ thì kích thước từng frame đều đặn, đổi lại chất lượng
+        // dao động ở cảnh động. Với streaming thì đều đặn quan trọng hơn — một frame
+        // phình to đột ngột chính là thứ tạo ra chùm gói mà Pacer đang phải chống.
+        encCfg.rcParams.vbvBufferSize = cfg.bitrateBps / (cfg.fps ? cfg.fps : 60);
         encCfg.rcParams.vbvInitialDelay = encCfg.rcParams.vbvBufferSize;
         if (cfg.codec == Codec::HEVC) {
             encCfg.encodeCodecConfig.hevcConfig.idrPeriod = NVENC_INFINITE_GOPLENGTH;
             encCfg.encodeCodecConfig.hevcConfig.repeatSPSPPS = 1;
         } else {
             encCfg.encodeCodecConfig.h264Config.idrPeriod = NVENC_INFINITE_GOPLENGTH;
+            // repeatSPSPPS: nhét SPS/PPS vào TRƯỚC MỖI IDR thay vì chỉ một lần đầu
+            // stream. Bắt buộc với UDP: client vào giữa chừng, hoặc vừa mất gói rồi
+            // xin IDR, sẽ không có tham số giải mã nếu chúng chỉ được gửi lúc đầu.
             encCfg.encodeCodecConfig.h264Config.repeatSPSPPS = 1;
         }
 
@@ -181,7 +229,10 @@ struct NvencEncoder::Impl {
         rr.height = height;
         rr.pitch = 0;
         rr.resourceToRegister = tex;
-        rr.bufferFormat = NV_ENC_BUFFER_FORMAT_ARGB;  // B8G8R8A8 từ WGC
+        // ARGB trong cách gọi tên của NVENC chính là B8G8R8A8 mà WGC giao ra. Khác
+        // MfEncoder, NVENC nhận thẳng định dạng này và tự chuyển sang NV12 bên trong
+        // — không cần video processor riêng.
+        rr.bufferFormat = NV_ENC_BUFFER_FORMAT_ARGB;
         NVENCSTATUS s = nv.nvEncRegisterResource(enc, &rr);
         if (s != NV_ENC_SUCCESS) { Fail("RegisterResource", s); return nullptr; }
         registered[tex] = rr.registeredResource;
@@ -217,13 +268,20 @@ struct NvencEncoder::Impl {
         if (s == NV_ENC_SUCCESS) {
             ok = WriteOutput();
         } else if (s != NV_ENC_ERR_NEED_MORE_INPUT) {
+            // NEED_MORE_INPUT không phải lỗi: encoder đã nhận frame nhưng chưa xuất
+            // gì. Cấu hình hiện tại (không B-frame) hiếm khi rơi vào đây, nhưng bỏ
+            // qua nó cho đúng hợp đồng API.
             ok = Fail("EncodePicture", s);
         }
 
+        // Unmap DÙ THÀNH CÔNG HAY KHÔNG — xem bước 4 ở đầu file. Đây là lý do hàm
+        // không return sớm ở nhánh lỗi phía trên mà đi qua biến `ok`.
         nv.nvEncUnmapInputResource(enc, mp.mappedResource);
         return ok;
     }
 
+    // Lấy dữ liệu đã nén ra khỏi buffer bitstream và giao cho hai đường ra.
+    // Lock/Unlock phải đi thành cặp: giữ khoá lâu là chặn encoder ghi frame kế tiếp.
     bool WriteOutput() {
         NV_ENC_LOCK_BITSTREAM lb{};
         lb.version = NV_ENC_LOCK_BITSTREAM_VER;
@@ -239,6 +297,8 @@ struct NvencEncoder::Impl {
         }
         totalBytes += lb.bitstreamSizeInBytes;
         ++frameCount;
+        // In 5 frame đầu (để thấy stream đã khởi động đúng) rồi thưa dần mỗi giây —
+        // in từng frame ở 60 fps sẽ làm console thành thứ không đọc được.
         if (frameCount <= 5 || frameCount % 60 == 0) {
             std::printf("[NVENC] frame %llu: %u byte%s\n", (unsigned long long)frameCount,
                 lb.bitstreamSizeInBytes, keyframe ? " (IDR)" : "");
@@ -259,6 +319,9 @@ struct NvencEncoder::Impl {
             (unsigned long long)frameCount, totalBytes / 1e6);
     }
 
+    // Dọn theo đúng thứ tự ngược với lúc tạo: tài nguyên đã đăng ký → buffer →
+    // session → file → DLL. Huỷ session trước khi huỷ đăng ký sẽ làm các handle
+    // registered thành vô nghĩa.
     void Cleanup() {
         if (enc) {
             for (auto& kv : registered) nv.nvEncUnregisterResource(enc, kv.second);

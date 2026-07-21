@@ -1,11 +1,41 @@
 #pragma once
+// =============================================================================
+// IVideoEncoder.h — giao diện trừu tượng cho mọi backend nén video.
 //
-// Interface encoder video - tách khỏi backend cụ thể (Media Foundation / NVENC / ...).
-// Cho phép đổi backend theo GPU (chuỗi NVIDIA -> Intel -> CPU) mà không sửa module gọi.
+// NHIỆM VỤ
+//   Tách phần gọi encoder khỏi backend cụ thể (NVENC / Media Foundation / sau này
+//   có thể thêm cái khác). Nhờ vậy AgentLoop viết một lần và chạy được trên máy
+//   NVIDIA, Intel, AMD, hay thậm chí không có GPU — đúng chuỗi ưu tiên phần cứng
+//   mà GpuSelect dựng ra.
 //
-// Giai đoạn 1: xuất ra FILE (.mp4/.h264) để kiểm chứng bằng ffplay.
-// Giai đoạn 3: sẽ thêm đường callback trả NAL để gọi lên mạng (không đổi interface này nhiều).
+// VỊ TRÍ TRONG LUỒNG DỮ LIỆU
+//   WindowCapture → **IVideoEncoder** → Packetizer → Pacer → UDP
+//   Vào là texture D3D11 trong VRAM, ra là NAL Annex-B qua callback onPacket.
 //
+// HAI ĐƯỜNG RA, DÙNG ĐƯỢC CÙNG LÚC
+//   outputPath — ghi file .h264/.mp4, dùng để kiểm chứng bằng ffplay (di sản GĐ1,
+//                vẫn giữ vì nó là cách gỡ lỗi nhanh nhất khi hình ra sai).
+//   onPacket   — trả NAL cho tầng mạng. Đây là đường thật của streaming.
+//   Để rỗng cái nào thì tắt đường đó.
+//
+// ⚠ QUY TẮC VÒNG ĐỜI CỦA onPacket
+//   Callback chạy ĐỒNG BỘ trên chính thread gọi Encode(), và `data` chỉ hợp lệ
+//   trong phạm vi lời gọi. Hai hệ quả:
+//     - Phải copy hoặc tiêu thụ ngay, không giữ con trỏ lại.
+//     - Không được làm việc chậm trong đó. Encode() thường được gọi từ callback
+//       FrameArrived của WGC, nên ngủ ở đây là làm đứng cả đường bắt hình — xem
+//       Pacer.h về đúng lỗi này và cái giá của nó.
+//
+// VÌ SAO CÓ CẢ width/height LẪN srcWidth/srcHeight
+//   H.264 dùng NV12, lấy mẫu chroma theo khối 2×2, nên kích thước NÉN bắt buộc phải
+//   CHẴN. Nhưng cửa sổ người dùng chọn có thể rộng hoặc cao lẻ. Khi đó ta nén ở
+//   kích thước chẵn nhỏ hơn một điểm ảnh, còn texture đưa vào vẫn giữ kích thước
+//   lẻ thật — video processor cần biết CẢ HAI để cắt cho đúng thay vì co giãn méo.
+//   Bằng nhau thì để srcWidth/srcHeight = 0.
+//
+// LIÊN QUAN: encode/NvencEncoder.h, encode/MfEncoder.h (hai bản cài đặt),
+//            encode/EncoderFactory.cpp (chọn cái nào), capture/CaptureTypes.h
+// =============================================================================
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #include <windows.h>

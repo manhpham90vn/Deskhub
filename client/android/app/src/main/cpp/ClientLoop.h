@@ -1,16 +1,47 @@
 #pragma once
+// =============================================================================
+// ClientLoop.h — vòng đời một phiên xem trên Android. Lớp trung tâm của phần C++.
 //
-// ClientLoop — vòng đời client trên Android, bản port của client/windows/ClientLoop.cpp
-// cho GĐ3 (view-only: chưa gửi input). Nguồn muốn xem do caller chọn sẵn qua
-// QuerySources() (SourceQuery.h) rồi truyền vào Start().
+// NHIỆM VỤ
+//   Nối bốn thứ lại với nhau thành một phiên chạy được: socket UDP, máy trạng thái
+//   ClientSession của core, bộ ghép mảnh Reassembler, và bộ giải mã MediaCodec.
+//   Bản port của client/windows/ClientLoop.cpp cho GĐ3 (view-only: CHƯA gửi input).
+//   Nguồn muốn xem do caller chọn sẵn qua QuerySources() rồi truyền vào Start().
 //
-// Ba thread, đúng lý do như bên Windows:
-//   Main (UI thread của Activity): giao/thu hồi Surface, hỏi trạng thái.
-//   Net: recvfrom -> ClientSession + Reassembler -> đẩy frame vào hàng đợi.
-//   Decode: rút frame -> MediaCodecDecoder -> Surface.
-// Vì sao tách Net và Decode: nếu decode chặn thread Net thì recvfrom ngừng nghe,
-// buffer UDP của OS tràn và sinh mất gói THẬT.
+// BA THREAD, VÀ LÝ DO CÓ TỪNG CÁI
+//   Main (UI thread của Activity) — giao/thu hồi Surface, hỏi trạng thái để vẽ overlay.
+//   Net    — recvfrom → ClientSession + Reassembler → đẩy frame vào hàng đợi.
+//   Decode — rút frame khỏi hàng đợi → MediaCodecDecoder → Surface.
 //
+//   Vì sao Net và Decode phải tách: nếu giải mã chạy ngay trên thread Net thì trong
+//   lúc nó bận, recvfrom ngừng nghe, buffer UDP của hệ điều hành tràn và sinh mất
+//   gói THẬT — loại mất mát mà cả FEC lẫn xin IDR đều không cứu được, vì gói đã bị
+//   vứt trước khi tới tay chương trình.
+//
+// HAI CƠ CHẾ ĐỒNG BỘ, ĐỪNG NHẦM LẪN
+//   1. HÀNG ĐỢI FRAME (decMutex_/decCv_/decQueue_) — Net sản xuất, Decode tiêu thụ.
+//      Có giới hạn kMaxQueuedFrames = 3: đầy thì VỨT frame cũ nhất chứ không chặn
+//      thread Net. Thà bỏ hình còn hơn nghẽn đường nhận (xem lý do ở trên).
+//
+//   2. BẮT TAY SURFACE (winMutex_/winCv_/winAckCv_/winGen_/winAckGen_) — Main giao
+//      hoặc thu hồi Surface, và phải CHỜ Decode xác nhận đã buông. Đây là cơ chế
+//      duy nhất trong app mà một thread chặn để đợi thread khác, và nó bắt buộc
+//      phải có: ANativeWindow bị hủy trong khi codec còn đang render vào đó là lỗi
+//      dùng-sau-giải-phóng, thường biểu hiện thành app chết ngay lập tức.
+//      Cách làm là đếm thế hệ: Main tăng winGen_, Decode ack bằng winAckGen_. Dùng
+//      số đếm thay cho cờ bool để nhiều lần đổi liên tiếp không nuốt mất lần nào.
+//      Cờ decodeExited_ là lối thoát chống treo vĩnh viễn khi thread Decode đã chết.
+//
+// VÌ SAO NHIỀU std::atomic ĐẾN THẾ
+//   Các trường chỉ mang một giá trị đơn (kích thước video, cờ xin dựng lại codec,
+//   số frame đã render) được đọc/ghi chéo giữa các thread nhưng không cần đồng bộ
+//   với gì khác, nên atomic là đủ và rẻ hơn khoá. Chỉ những thứ đi thành CỤM —
+//   chuỗi trạng thái, hàng đợi frame, trạng thái Surface — mới cần mutex.
+//
+// LIÊN QUAN: JniBridge.cpp (người gọi duy nhất), decode/MediaCodecDecoder.h,
+//            rgc/session/ClientSession.h, rgc/transport/Reassembler.h,
+//            client/windows/ClientLoop.cpp (bản song song)
+// =============================================================================
 #include <android/native_window.h>
 
 #include <atomic>

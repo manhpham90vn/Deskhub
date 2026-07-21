@@ -1,11 +1,26 @@
 #pragma once
-// AgentLoop - vai trò HOST: capture + encoder (GD2) + Packetizer + HostSession
-// (core) + UdpSocket. Xem docs/06-phase3-transport.md §4.
+// =============================================================================
+// AgentLoop.h — vai trò HOST: giao diện gọi vào phía chia sẻ.
 //
-// GD6: chia sẻ NHIỀU nguồn cùng lúc (cửa sổ và/hoặc cả màn hình) trên MỘT cổng UDP.
-// Mỗi nguồn có sourceId riêng và mỗi cặp (client, nguồn) là một phiên độc lập —
-// xem chú thích ở rgc::SourceInfo (core/include/rgc/Wire.h) về lý do chọn cách này
-// thay vì nhét streamId vào header video.
+// NHIỆM VỤ
+//   Khai báo đúng ba thứ: nguồn chia sẻ (AgentSource), tuỳ chọn phiên
+//   (AgentOptions), và hàm chạy phiên (RunAgent). Toàn bộ phần ghép nối nằm ở
+//   AgentLoop.cpp — đọc header khối ở đó để hiểu kiến trúc luồng.
+//
+// VỊ TRÍ TRONG KIẾN TRÚC
+//   MainMenuWindow → WindowPickerDialog → **RunAgent()**
+//   RunAgent CHẶN tới khi mọi nguồn đóng / Ctrl+C / lỗi, rồi trả exit code.
+//
+// GĐ6: NHIỀU NGUỒN, MỘT CỔNG
+//   Chia sẻ nhiều cửa sổ và/hoặc cả màn hình cùng lúc trên MỘT cổng UDP. Mỗi nguồn
+//   có sourceId riêng, và mỗi cặp (client, nguồn) là một PHIÊN ĐỘC LẬP với
+//   sessionId riêng — không nhét streamId vào header video. Lý do đầy đủ ở chú
+//   thích của rgc::SourceInfo trong core/include/rgc/wire/Wire.h.
+//
+// LIÊN QUAN: AgentLoop.cpp (kiến trúc luồng + định tuyến gói), ClientLoop.h (phía
+//            đối diện), capture/WindowCapture.h (CaptureTarget),
+//            docs/06-phase3-transport.md §4
+// =============================================================================
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #include <windows.h>

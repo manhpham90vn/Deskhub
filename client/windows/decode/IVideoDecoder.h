@@ -1,12 +1,33 @@
 #pragma once
+// =============================================================================
+// IVideoDecoder.h — giao diện trừu tượng cho backend giải mã video.
 //
-// Interface decoder video - đối xứng với IVideoEncoder, tách khỏi backend cụ thể.
+// NHIỆM VỤ
+//   Đối xứng với IVideoEncoder: vào là NAL Annex-B, ra là texture trong VRAM.
+//   Hiện chỉ có một bản cài đặt (Media Foundation), nhưng giữ giao diện để sau này
+//   thêm NVDEC không phải sửa nơi gọi.
 //
-// Giai đoạn 2 (loopback): nhận NAL Annex-B từ encoder trong CÙNG process, giải mã
-// bằng hardware (D3D11VA qua Media Foundation) ra texture NV12 trong VRAM, đưa cho
-// Renderer vẽ lên swapchain. Giai đoạn 3 sẽ nhận NAL từ mạng thay vì loopback -
-// interface này không đổi.
+// VỊ TRÍ TRONG LUỒNG DỮ LIỆU
+//   UDP ~~~> Reassembler → **IVideoDecoder** → Renderer → màn hình
+//   Giao diện này được dựng từ GĐ2 khi còn chạy loopback (encoder và decoder trong
+//   CÙNG một process, không qua mạng). Sang GĐ3 nguồn NAL đổi từ loopback sang
+//   mạng, và giao diện không phải đổi gì — đó là điều nó được thiết kế để làm.
 //
+// ⚠ HAI TRƯỜNG PHẢI ĐI CÙNG NHAU: texture VÀ subresource
+//   Decoder không cấp một texture riêng cho mỗi frame. Nó dùng một TEXTURE-ARRAY
+//   làm pool, và mỗi frame là một lát (array slice) trong đó. Nghĩa là `texture`
+//   giống nhau qua nhiều frame liên tiếp, chỉ `subresource` đổi. Dùng texture mà
+//   quên subresource sẽ vẽ ra một frame khác — hình sai chứ không crash, nên rất
+//   khó lần ra.
+//
+// ⚠ VÒNG ĐỜI: chỉ hợp lệ trong phạm vi callback
+//   Cùng quy tắc như FrameInfo bên capture (xem CaptureTypes.h). Lát texture sẽ
+//   được decoder dùng lại cho frame sau ngay khi callback trả về — render hoặc
+//   copy ngay, không giữ con trỏ lại.
+//
+// LIÊN QUAN: decode/MfDecoder.h (bản cài đặt), decode/Renderer.h (bên tiêu thụ),
+//            encode/IVideoEncoder.h (đối xứng, và nguồn của enum Codec)
+// =============================================================================
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #include <windows.h>

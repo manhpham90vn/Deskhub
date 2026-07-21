@@ -1,7 +1,41 @@
 #pragma once
-// Wire format protocol v1 — đặc tả gốc: docs/04-protocol.md (nguồn chân lý).
-// Thuần C++20, không header hệ điều hành — dùng chung cho Agent và mọi client
-// (Windows/macOS/Ubuntu/iOS/Android). Mọi trường số trên wire là big-endian.
+// =============================================================================
+// Wire.h — đặc tả giao thức v1: kiểu thông điệp, hằng số, và API dựng/giải mã gói.
+//
+// NHIỆM VỤ
+//   Định nghĩa DUY NHẤT về "một byte ở vị trí nào có ý nghĩa gì" trong dự án.
+//   Mọi thứ chạy trên UDP đều đi qua đây: host dựng gói bằng các hàm Build*,
+//   client giải bằng các hàm Parse* (và ngược lại). Không module nào khác được
+//   phép tự đọc/ghi byte của datagram.
+//   Đặc tả bằng văn bản nằm ở docs/04-protocol.md và là NGUỒN CHÂN LÝ — sửa mã ở
+//   đây mà không sửa tài liệu là làm hai bản đặc tả mâu thuẫn nhau.
+//
+// CẤU TRÚC MỘT DATAGRAM
+//   [ header chung 8 byte ][ payload riêng theo từng loại thông điệp ]
+//   Header chung (CommonHeader): ver(1) type(1) flags(1) chan(1) sessionId(4).
+//   Gói video/FEC có thêm một header con (16 byte) đứng đầu payload.
+//   Mọi trường số là big-endian (xem ByteOrder.h).
+//
+// VÌ SAO THUẦN C++20, KHÔNG HEADER HỆ ĐIỀU HÀNH
+//   File này được biên dịch bởi cả Agent Windows (MSVC), client Windows, và
+//   client Android (NDK/clang), sau này thêm macOS/iOS/Ubuntu. Giữ nó không phụ
+//   thuộc nền tảng là điều kiện để cả hai đầu của đường truyền dùng CHUNG một mã
+//   nguồn — hai bản cài đặt song song của cùng một giao thức chắc chắn sẽ lệch
+//   nhau, và lỗi lệch giao thức rất khó chẩn đoán qua UDP.
+//
+// QUY ƯỚC CHUNG CỦA API
+//   Build*(out, ...) → ghi TRỌN một datagram vào `out`, trả số byte đã ghi, hoặc
+//                      0 nếu `out` không đủ chỗ. Không bao giờ ghi tràn.
+//   Parse*(payload)  → trả std::optional, nullopt nếu gói ngắn/sai định dạng.
+//   Không hàm nào cấp phát bộ nhớ động (trừ std::string tên nguồn) và không hàm
+//   nào giữ trạng thái — an toàn khi gọi từ nhiều thread trên các bộ đệm khác nhau.
+//
+// LIÊN QUAN
+//   rgc/wire/ByteOrder.h — lớp dịch byte bên dưới
+//   rgc/transport/Packetizer.h, Reassembler.h — người dùng chính của kênh video
+//   rgc/session/HostSession.h, ClientSession.h — người dùng chính của kênh control
+//   docs/04-protocol.md — đặc tả gốc
+// =============================================================================
 #include <cstddef>
 #include <cstdint>
 #include <optional>

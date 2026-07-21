@@ -1,3 +1,26 @@
+// =============================================================================
+// MainMenuWindow.cpp — cài đặt màn hình chính bằng Win32 thuần.
+//
+// VÌ SAO WIN32 THUẦN, KHÔNG DÙNG FILE .rc HAY FRAMEWORK GIAO DIỆN
+//   Cửa sổ và các control đều tạo bằng CreateWindowExW trong mã. Đổi lại việc phải
+//   tự tính toạ độ, ta được: không phụ thuộc thư viện ngoài, không có bước biên
+//   dịch tài nguyên, và file exe chạy độc lập không cần cài gì. Với một giao diện
+//   chỉ vài ô nhập và bốn nút thì đó là đánh đổi đúng.
+//
+// KHUÔN MẪU: CÁC HẰNG kId*
+//   Mỗi control có một id số nguyên; WM_COMMAND báo về kèm id đó để biết ai vừa
+//   được bấm. Gom hằng lên đầu file thay vì rải số trong mã.
+//
+// ĐƯỜNG RẼ HAI VAI
+//   Nút Chia sẻ  → WindowPickerDialog → RunAgent()  (chặn tới khi phiên kết thúc)
+//   Nút Kết nối  → QueryHostSources → SourcePickerDialog → RunClient()
+//   Cả hai đều CHẶN: cửa sổ chính đứng yên trong lúc phiên chạy, và hiện lại khi
+//   phiên kết thúc. Đơn giản hơn nhiều so với chạy nền, và đúng với thực tế người
+//   dùng chỉ làm một việc tại một thời điểm.
+//
+// LIÊN QUAN: ui/MainMenuWindow.h (vai trò + lý do bỏ CLI), ui/WindowPickerDialog.h,
+//            ui/SourcePickerDialog.h, AgentLoop.h, ClientLoop.h
+// =============================================================================
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #include "ui/MainMenuWindow.h"

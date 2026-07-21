@@ -1,13 +1,38 @@
 #pragma once
-// InputReceiver — phía host: nhận gói INPUT_EVENT, khử trùng và phát ra theo
-// đúng thứ tự phát sinh ở client.
+// =============================================================================
+// InputReceiver.h — khử trùng và phát lại event input theo đúng thứ tự, phía HOST.
 //
-// Mỗi event mang seq riêng (= firstSeq của gói + chỉ số trong gói), nên:
-//   - event đã áp dụng đến lại (do InputSender gửi lặp) → seq ≤ lastApplied → bỏ;
-//   - gói đến trễ/đảo thứ tự → toàn bộ là seq cũ → bỏ, không "tua ngược" thao tác;
-//   - nhảy seq → đếm được đúng số event mất thật sự (thống kê, không tự phục hồi).
+// NHIỆM VỤ
+//   Đối tác của InputSender. Vì bên gửi cố tình gửi LẶP mỗi event khoảng ba lần
+//   để chống kẹt phím, bên nhận bắt buộc phải có chỗ lọc — nếu không, một cú bấm
+//   phím sẽ thành ba cú bấm và mọi thứ gõ ra đều nhân ba.
 //
-// Thuần C++20, dùng trên MỘT thread (thread Recv của host).
+// VỊ TRÍ TRONG LUỒNG DỮ LIỆU
+//   InputSender (client) → UDP ~~~> HostSession → **InputReceiver** → InputInjector
+//
+// CƠ CHẾ: MỘT CON SỐ DUY NHẤT
+//   Toàn bộ trạng thái của lớp này là lastAppliedSeq_ — seq của event cuối cùng đã
+//   áp dụng. Mỗi event mang seq riêng (= firstSeq của gói + chỉ số trong gói), nên
+//   luật rất gọn: seq ≤ lastApplied thì bỏ, ngược lại thì áp dụng và cập nhật mốc.
+//   Từ luật đó suy ra ba hành vi mong muốn:
+//     - event đã áp dụng đến lại (do gửi lặp)     → bỏ, đếm vào duplicates;
+//     - gói đến trễ/đảo thứ tự (toàn seq cũ)      → bỏ, không "tua ngược" thao tác;
+//     - nhảy seq                                  → đếm được đúng số event mất thật.
+//
+//   Không có bộ đệm sắp xếp lại, không có cửa sổ trượt: event input đã trễ thì
+//   không còn giá trị, giữ lại để áp dụng sau chỉ làm con trỏ chuột giật lùi.
+//
+// KHÔNG TỰ PHỤC HỒI MẤT MÁT
+//   Thống kê `lost` chỉ để quan sát. Việc chống mất gói nằm ở phía gửi (dư thừa +
+//   phát lại); ở đây không có gì để yêu cầu gửi lại, và cũng không nên có — một
+//   event input đến muộn vài trăm mili-giây thì tệ hơn là không đến.
+//
+// MÔ HÌNH LUỒNG
+//   Thuần C++20, dùng trên MỘT thread (thread Recv của host).
+//
+// LIÊN QUAN: rgc/input/InputSender.h (đầu kia), rgc/session/HostSession.h
+// =============================================================================
+//
 #include "rgc/wire/Wire.h"
 
 #include <cstdint>

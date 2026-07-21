@@ -1,3 +1,27 @@
+// =============================================================================
+// InputCapture.cpp — cài đặt việc bắt phím/chuột từ cửa sổ preview.
+//
+// HAI NGUỒN MESSAGE, DÙNG CHO HAI VIỆC KHÁC NHAU
+//   Raw Input (WM_INPUT)  — bàn phím (cần scancode) và chuột ở chế độ TƯƠNG ĐỐI
+//                           (cần delta thô, không qua tăng tốc con trỏ của Windows).
+//   Message thường        — chuột ở chế độ TUYỆT ĐỐI (WM_MOUSEMOVE cho toạ độ
+//                           client), nút chuột, con lăn.
+//   Cả hai cùng chạy: đó là lý do KHÔNG dùng cờ RIDEV_NOLEGACY khi đăng ký.
+//
+// HAI CỜ RAW INPUT CỐ Ý KHÔNG DÙNG — mỗi cái vì một lý do riêng
+//   RIDEV_NOLEGACY  — sẽ tắt message thường, mà ta còn cần chúng (xem trên), kể cả
+//                     WM_CLOSE và việc kéo cửa sổ.
+//   RIDEV_INPUTSINK — sẽ bắt input KỂ CẢ khi cửa sổ không focus. Không muốn: người
+//                     dùng alt-tab ra ngoài thì phải gõ vào máy mình như bình thường.
+//
+// QUY ƯỚC "TIÊU THỤ" MESSAGE
+//   OnMessage trả true nghĩa là Renderer bỏ qua message đó hoàn toàn. Khi đang bật
+//   gửi input, ta nuốt gần như mọi thứ — kể cả ESC — để người dùng gõ vào MÁY KIA.
+//   Riêng F9/F10 luôn được xử lý tại chỗ vì đó là hai phím thoát hiểm.
+//
+// LIÊN QUAN: input/InputCapture.h (hai chế độ chuột + lý do), input/InputInjector.cpp
+//            (đầu kia, đối xứng từng bước)
+// =============================================================================
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #define _CRT_SECURE_NO_WARNINGS
@@ -91,6 +115,14 @@ void InputCapture::TogglePause() {
     std::printf("[Input] %s sending input.\n", enabled_ ? "RESUMED" : "PAUSED");
 }
 
+// Vào/ra chế độ tương đối. Ba việc phải làm cùng lúc khi khoá chuột, và cả ba đều
+// cần thiết: ClipCursor giữ con trỏ trong cửa sổ (không cho lạc sang màn hình
+// khác), ShowCursor ẩn nó đi (game đã tự vẽ tâm ngắm rồi), SetCapture để vẫn nhận
+// được message chuột khi con trỏ chạm mép.
+//
+// Vòng `while (ShowCursor(...))`: ShowCursor là BỘ ĐẾM chứ không phải cờ bật/tắt.
+// Gọi một lần chưa chắc ẩn được nếu nơi khác đã tăng đếm lên; phải lặp tới khi
+// dấu của bộ đếm đổi.
 void InputCapture::SetRelativeMode(bool on) {
     if (relative_ == on) return;
     relative_ = on;
@@ -126,6 +158,9 @@ void InputCapture::Emit(rgc::InputType type, int32_t a, int32_t b,
     sink_(e);
 }
 
+// Đếm số nút đang giữ để biết lúc nào được nhả SetCapture. Không đếm mà nhả ngay
+// khi có một nút lên thì thao tác kéo-thả bằng hai nút sẽ đứt giữa chừng — và tệ
+// hơn, sự kiện nhả của nút còn lại rơi ra ngoài cửa sổ, gây kẹt nút ở máy host.
 void InputCapture::EmitButton(rgc::MouseButton btn, bool down) {
     // Giữ chuột khi nhấn để vẫn nhận được nút-nhả ngoài vùng cửa sổ (kéo thả).
     if (down) {
@@ -140,7 +175,9 @@ void InputCapture::OnRawInput(LPARAM lp) {
     UINT size = 0;
     if (GetRawInputData((HRAWINPUT)lp, RID_INPUT, nullptr, &size, sizeof(RAWINPUTHEADER)) != 0)
         return;
-    // RAWINPUT có kích thước thay đổi; buffer tính đủ cho cả hai loại thiết bị.
+    // RAWINPUT có kích thước thay đổi theo loại thiết bị; +64 là dư cho cả hai loại
+    // ta đăng ký. Đệm trên stack để không cấp phát trên đường nóng — chuột di chuyển
+    // sinh hàng trăm message mỗi giây. alignas(8) vì RAWINPUT chứa trường 64-bit.
     alignas(8) BYTE buf[sizeof(RAWINPUT) + 64];
     if (size > sizeof(buf)) return;
     if (GetRawInputData((HRAWINPUT)lp, RID_INPUT, buf, &size, sizeof(RAWINPUTHEADER)) != size)

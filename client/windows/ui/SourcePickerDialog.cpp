@@ -1,3 +1,22 @@
+// =============================================================================
+// SourcePickerDialog.cpp — cài đặt hộp thoại chọn nguồn phía client.
+//
+// KHUÔN MẪU "HỘP THOẠI MODAL TỰ DỰNG"
+//   Không dùng DialogBox của Win32 (đòi file tài nguyên .rc) mà tự tạo cửa sổ rồi
+//   chạy vòng lặp message riêng cho tới khi `done`. Ba bước:
+//     1. EnableWindow(owner, FALSE) — vô hiệu hoá cửa sổ cha, tạo cảm giác modal.
+//     2. Vòng lặp message riêng chạy tới khi người dùng bấm OK/Huỷ.
+//     3. EnableWindow(owner, TRUE) và trả kết quả.
+//   WindowPickerDialog.cpp dùng đúng khuôn này — sửa một bên nên xem lại bên kia.
+//
+// FromUtf8 — VÌ SAO CẦN
+//   Tên nguồn đi trên dây là UTF-8 (host có thể phục vụ client không phải Windows),
+//   còn control Win32 cần UTF-16. Đây là chỗ đổi. Hàm đối xứng ToUtf8 nằm ở
+//   WindowPickerDialog.cpp, nơi tên đi theo chiều ngược lại.
+//
+// LIÊN QUAN: ui/SourcePickerDialog.h (vai trò), ui/WindowPickerDialog.cpp (cùng
+//            khuôn mẫu, chiều ngược lại), rgc/wire/Wire.h (SourceInfo)
+// =============================================================================
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #include "ui/SourcePickerDialog.h"

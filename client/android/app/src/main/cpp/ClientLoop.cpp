@@ -1,3 +1,38 @@
+// =============================================================================
+// ClientLoop.cpp — cài đặt vòng đời phiên, thread Net và thread Decode.
+//
+// BỐ CỤC
+//   Start/Stop/SetWindow  — gọi từ MAIN thread (qua JniBridge).
+//   StatusLine/EndReason  — gọi từ MAIN thread, đọc dữ liệu do Net ghi.
+//   DecodeThread()        — vòng lặp thread Decode.
+//   NetThread()           — vòng lặp thread Net; bản port sát của StreamRecvLoop
+//                           bên Windows.
+//
+// THREAD NÀO CHẠM GÌ — bảng này là thứ cần nắm trước khi sửa bất cứ dòng nào:
+//
+//   Main   : server_, sourceId_ (chỉ trước khi thread chạy), window_, winGen_,
+//            đọc statusLine_/endReason_ dưới khoá.
+//   Net    : sock_, ClientSession, Reassembler, LinkStats, ghi statusLine_/
+//            endReason_ dưới khoá, đẩy vào decQueue_.
+//   Decode : MediaCodecDecoder, rút khỏi decQueue_, đọc window_ dưới khoá,
+//            ghi winAckGen_.
+//
+// VÒNG LẶP THREAD NET LÀM 6 VIỆC MỖI VÒNG, THEO ĐÚNG THỨ TỰ NÀY:
+//   1. recvfrom (chặn tối đa 10 ms — đó là trần độ trễ của Tick khi màn hình tĩnh).
+//   2. Phân loại gói: kênh Video thì vào Reassembler, còn lại giao cho ClientSession.
+//   3. Rút frame đã ghép đủ, đẩy sang thread Decode.
+//   4. Gom các lý do cần xin IDR (mất gói, lỗi codec, hàng đợi tràn).
+//   5. session.Tick() — phát ping/input/keyframe theo lịch.
+//   6. Mỗi giây: đóng cửa sổ thống kê, in log, gửi FEEDBACK.
+//
+// BA ĐƯỜNG DẪN TỚI "XIN IDR" — cả ba đều gộp vào session.RequestKeyframe():
+//   - Reassembler báo mất frame hoặc đang chờ IDR;
+//   - decodeFailed_  : codec hỏng hoặc Surface vừa đổi → chuỗi inter-frame vô nghĩa;
+//   - queueOverflow_ : hàng đợi đầy, ta đã tự vứt frame → cũng đứt chuỗi tham chiếu.
+//   Cả ba đều dùng exchange() để đọc-và-xoá nguyên tử, tránh xin lặp mãi.
+//
+// LIÊN QUAN: ClientLoop.h (kiến trúc thread + hai cơ chế đồng bộ)
+// =============================================================================
 #include "ClientLoop.h"
 
 #include <chrono>
@@ -49,6 +84,10 @@ bool ClientLoop::Start(const NetAddr& server, uint8_t sourceId) {
     return true;
 }
 
+// Dừng phiên và chờ cả hai thread thoát hẳn. Thứ tự bắt buộc: bật cờ quit_ TRƯỚC
+// rồi mới đánh thức — đánh thức trước thì thread có thể kiểm tra cờ khi nó còn false
+// rồi ngủ tiếp, và join() sẽ treo mãi. Đánh thức cả hai biến điều kiện vì mỗi thread
+// có thể đang chờ ở một trong hai chỗ khác nhau.
 void ClientLoop::Stop() {
     quit_.store(true);
     decCv_.notify_all();
@@ -58,6 +97,12 @@ void ClientLoop::Stop() {
     sock_.Close();
 }
 
+// Giao Surface mới, hoặc nullptr khi hệ điều hành thu hồi.
+//
+// Hàm này CHẶN main thread tới khi thread Decode xác nhận đã buông Surface cũ — xem
+// mục "bắt tay Surface" ở ClientLoop.h về lý do bắt buộc phải chặn. Đây là chỗ duy
+// nhất trong app có nguy cơ treo UI, nên điều kiện chờ có thêm decodeExited_ làm lối
+// thoát: thread Decode chết trước khi ack thì main vẫn đi tiếp được.
 void ClientLoop::SetWindow(ANativeWindow* window) {
     std::unique_lock<std::mutex> lk(winMutex_);
     window_ = window;
@@ -72,6 +117,9 @@ void ClientLoop::SetWindow(ANativeWindow* window) {
 // ---------------------------------------------------------------------------
 // Thread Decode
 // ---------------------------------------------------------------------------
+// Vòng lặp bốn bước, lặp lại tới khi quit_. Codec được dựng LƯỜI ở bước (3) — chỉ
+// khi đã có đủ cả Surface lẫn kích thước đàm phán, mà hai thứ đó đến từ hai thread
+// khác nhau và không theo thứ tự cố định.
 void ClientLoop::DecodeThread() {
     MediaCodecDecoder decoder;
 
@@ -81,7 +129,12 @@ void ClientLoop::DecodeThread() {
         {
             std::unique_lock<std::mutex> lk(winMutex_);
             if (winAckGen_ != winGen_) {
+                // Chụp lại thế hệ TRƯỚC khi nhả khoá: main có thể đổi Surface lần
+                // nữa trong lúc ta đang Shutdown, và ack nhầm thế hệ mới sẽ khiến
+                // lần đổi đó bị bỏ qua vĩnh viễn.
                 const uint64_t gen = winGen_;
+                // Nhả khoá khi Shutdown vì nó tốn vài chục ms; giữ khoá suốt thời
+                // gian đó sẽ chặn main thread ngay trong SetWindow.
                 lk.unlock();
                 decoder.Shutdown();
                 lk.lock();
@@ -99,6 +152,9 @@ void ClientLoop::DecodeThread() {
         rgc::Reassembler::Frame f;
         {
             std::unique_lock<std::mutex> lk(decMutex_);
+            // wait_for chứ không wait: phải tỉnh dậy định kỳ để quay lại bước (1)
+            // phục vụ yêu cầu đổi Surface, kể cả khi không có frame nào tới. 20 ms
+            // là trần độ trễ của việc ack Surface — đủ nhanh để main không thấy khựng.
             decCv_.wait_for(lk, std::chrono::milliseconds(20), [this] {
                 return quit_.load() || !decQueue_.empty();
             });
@@ -132,6 +188,8 @@ void ClientLoop::DecodeThread() {
             // decode sai chỉ sinh vỡ hình vài chục ms rồi IDR tới, chấp nhận được.
         }
 
+        // 4) Giải mã và render. Đo thời gian để phát hiện máy quá yếu hoặc codec đang
+        //    vật lộn: quá 20 ms cho một frame là đã chậm hơn nhịp 60 fps.
         const uint64_t t0 = NowUs();
         const bool ok = decoder.Decode(f.nal.data(), f.nal.size(), f.timestampUs);
         const uint64_t decMs = (NowUs() - t0) / 1000;
@@ -148,6 +206,19 @@ void ClientLoop::DecodeThread() {
             stRendered_.fetch_add(n, std::memory_order_relaxed);
 
         // Trễ e2e: đo trên frame VỪA LÊN MÀN HÌNH, theo đồng hồ host đã hiệu chỉnh.
+        //
+        // Hai đồng hồ (host và máy này) không đồng bộ với nhau, nên phải ước lượng
+        // độ lệch giữa chúng:
+        //   ackDeltaUs_ = đồng hồ ta - timebaseUs của host, chụp lúc nhận HELLO_ACK.
+        //                 Nhưng HELLO_ACK mất nửa vòng để tới nơi, nên số này đã bị
+        //                 cộng thêm chừng ấy →
+        //   offset      = ackDelta - rtt/2, tức là bù lại nửa vòng đó.
+        //   e2e         = bây giờ - offset - pts của frame.
+        //
+        // Dùng RTT NHỎ NHẤT từng thấy chứ không phải RTT hiện tại: mẫu nhỏ nhất là
+        // mẫu ít bị hàng đợi trên đường làm nhiễu nhất, nên nó gần với độ trễ đường
+        // truyền thật hơn. Con số này là ƯỚC LƯỢNG để theo dõi, không phải phép đo
+        // chính xác — nó gộp cả sai số đồng hồ lẫn thời gian hiển thị.
         const uint32_t rtt = minRttUs_.load(std::memory_order_relaxed);
         const uint64_t pts = decoder.lastRenderedPtsUs();
         if (rtt && pts) {
@@ -169,6 +240,10 @@ void ClientLoop::DecodeThread() {
 // ---------------------------------------------------------------------------
 // Thread Net — bản port sát của StreamRecvLoop bên Windows
 // ---------------------------------------------------------------------------
+// Xem sơ đồ 6 bước ở đầu file. Phần mở đầu dưới đây dựng các callback của
+// ClientSession — chúng chạy TRÊN CHÍNH THREAD NÀY (bên trong HandlePacket/Tick),
+// nên chúng đọc/ghi trạng thái thoải mái, chỉ cần khoá khi chạm vào thứ mà thread
+// khác cũng chạm.
 void ClientLoop::NetThread() {
     std::unique_ptr<rgc::Reassembler> reasm; // tạo sau khi biết fps đàm phán
 
@@ -193,6 +268,11 @@ void ClientLoop::NetThread() {
         // dựng lại codec là đường chắc chắn nhất. Host gửi kèm IDR nên không mất gì.
         rebuildDecoder_.store(true);
     };
+    // Giữ RTT NHỎ NHẤT từng thấy (dùng để ước lượng trễ e2e, xem DecodeThread).
+    // Vòng compare_exchange là cách chuẩn để cập nhật "giá trị nhỏ nhất" trên một
+    // atomic: nếu có thread khác chen vào giữa chừng, `cur` được nạp lại giá trị mới
+    // và điều kiện được xét lại — nên không bao giờ ghi đè bằng một số lớn hơn.
+    // compare_exchange_weak được phép thất bại giả, và vòng lặp đã xử lý sẵn.
     cb.onRtt = [this](uint32_t rttUs) {
         uint32_t cur = minRttUs_.load(std::memory_order_relaxed);
         while ((!cur || rttUs < cur) &&
@@ -209,6 +289,8 @@ void ClientLoop::NetThread() {
     rgc::ClientSession session(cb);
 
     rgc::Hello hello;
+    // clientId chỉ cần phân biệt được hai client, không cần bí mật hay bền vững —
+    // lấy đồng hồ micro-giây là đủ ngẫu nhiên cho mục đích đó.
     hello.clientId   = uint32_t(NowUs());
     hello.codecMask  = rgc::kCodecMaskH264;
     // Chưa biết kích thước surface lúc gửi HELLO (và đằng nào host cũng stream đúng
@@ -238,9 +320,15 @@ void ClientLoop::NetThread() {
         if (n > 0) {
             const auto span = std::span<const uint8_t>(buf, size_t(n));
             const auto h = rgc::ParseCommonHeader(span);
+            // Kênh Video đi thẳng vào Reassembler, KHÔNG qua ClientSession — đó là
+            // đường nóng, mỗi giây hàng nghìn gói. ClientSession chỉ được báo bằng
+            // NotifyVideoPacket để nuôi timeout và thoát khỏi trạng thái Starting.
             if (h && h->chan == rgc::Chan::Video) {
+                // sessionId != 0 loại được gói lạc trước khi phiên hình thành.
                 if (h->sessionId == session.sessionId() && session.sessionId() != 0) {
                     const auto pl = rgc::PayloadOf(span);
+                    // Dựng Reassembler lười: nó cần fps đàm phán để đặt mốc timeout,
+                    // mà fps chỉ biết sau khi HELLO_ACK về.
                     if (!reasm) {
                         const uint32_t fps = session.params().fps ? session.params().fps : 60;
                         reasm = std::make_unique<rgc::Reassembler>(1'000'000 / fps);
@@ -263,10 +351,15 @@ void ClientLoop::NetThread() {
         }
 
         if (reasm) {
+            // Vét hết frame đã đủ mảnh: một lần recvfrom có thể hoàn thành nhiều frame.
             while (auto f = reasm->PopReady(now)) {
+                // IDR đã về → thôi xin keyframe, kẻo host phát IDR liên tục.
                 if (f->idr) session.CancelKeyframeRequest();
                 {
                     std::lock_guard<std::mutex> lk(decMutex_);
+                    // Hàng đợi đầy: VỨT frame CŨ NHẤT chứ không chặn thread Net và
+                    // cũng không vứt frame vừa tới. Frame cũ nhất là frame lỗi thời
+                    // nhất — giữ nó lại chỉ làm hình trễ thêm mà chẳng ai muốn xem.
                     if (decQueue_.size() >= kMaxQueuedFrames) {
                         decQueue_.pop_front();
                         queueOverflow_.store(true, std::memory_order_release);
@@ -277,6 +370,8 @@ void ClientLoop::NetThread() {
             }
             if (reasm->TakeLossEvent() || reasm->WaitingForIdr()) session.RequestKeyframe();
         }
+        // Hai lý do còn lại đến từ thread Decode. exchange() đọc-và-xoá nguyên tử:
+        // xin một lần cho mỗi sự cố, không lặp lại mãi ở các vòng sau.
         if (decodeFailed_.exchange(false, std::memory_order_acq_rel)) session.RequestKeyframe();
         if (queueOverflow_.exchange(false, std::memory_order_acq_rel)) session.RequestKeyframe();
 
@@ -288,6 +383,7 @@ void ClientLoop::NetThread() {
                          : Phase::Connecting,
                      std::memory_order_release);
 
+        // Mỗi giây: chốt cửa sổ thống kê, in log, cập nhật overlay, gửi FEEDBACK.
         if (linkStats.Due(now)) {
             const auto st = reasm ? reasm->stats() : rgc::Reassembler::Stats{};
             const uint32_t rendered = stRendered_.exchange(0, std::memory_order_relaxed);
@@ -333,7 +429,10 @@ void ClientLoop::NetThread() {
         }
     }
 
-    session.SendBye(); // best-effort; buf_ của session chỉ dùng trên thread này
+    // Chào host trước khi đi, gửi một lần và không chờ hồi đáp. Không bắt buộc —
+    // host cũng tự phát hiện sau 5 giây timeout — nhưng nó giải phóng phiên ngay,
+    // để lần kết nối sau không bị từ chối vì host tưởng còn client cũ.
+    session.SendBye(); // buf_ của session chỉ dùng trên thread này
     quit_.store(true);
     decCv_.notify_all();
     {

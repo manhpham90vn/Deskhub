@@ -1,14 +1,35 @@
+// =============================================================================
+// JniBridge.cpp — mặt tiền JNI của libremotegame.so, thay cho NativeActivity cũ.
 //
-// JniBridge — mặt tiền JNI của libremotegame.so, thay cho NativeActivity cũ.
+// NHIỆM VỤ
+//   Ranh giới giữa Kotlin và C++. Cố ý MỎNG: Kotlin lo phần người dùng nhìn thấy
+//   (ô nhập IP, nút bấm, chữ trạng thái), C++ lo mạng và giải mã. Ở đây không có
+//   logic nào ngoài chuyển đổi kiểu và giữ vòng đời của một ClientLoop.
 //
-// Ranh giới cố ý mỏng: Kotlin lo phần người dùng nhìn thấy (ô nhập IP, nút, chữ
-// trạng thái), C++ lo mạng + giải mã. Không có logic nào ở đây ngoài chuyển đổi
-// kiểu và giữ MỘT ClientLoop toàn cục.
+// VỊ TRÍ TRONG KIẾN TRÚC
+//   MainActivity/StreamActivity (Kotlin) → NativeClient.kt → **JniBridge.cpp**
+//                                                              → ClientLoop → core
 //
-// Vì sao toàn cục thay vì trả con trỏ về cho Kotlin giữ: app chỉ xem được một
-// nguồn tại một thời điểm (view-only v1), nên một biến tĩnh vừa đủ và bỏ được cả
-// lớp lỗi "Kotlin giữ con trỏ đã hủy". Mọi hàm dưới đây gọi từ UI thread.
+// QUY TẮC ĐẶT TÊN CỦA JNI — CẠM BẪY LỚN NHẤT Ở FILE NÀY
+//   Tên hàm phải là Java_<gói>_<lớp>_<hàm> với dấu chấm đổi thành gạch dưới. Đây
+//   là liên kết theo TÊN CHUỖI, thực hiện lúc chạy: đổi tên gói, tên lớp, hoặc tên
+//   hàm ở NativeClient.kt mà quên sửa ở đây thì KHÔNG có lỗi biên dịch nào cả —
+//   app dịch ra bình thường rồi chết bằng UnsatisfiedLinkError ngay khi chạm vào
+//   hàm đó. Sửa một bên là phải sửa bên kia.
 //
+// VÌ SAO BIẾN TOÀN CỤC THAY VÌ TRẢ CON TRỎ CHO KOTLIN GIỮ
+//   App chỉ xem được một nguồn tại một thời điểm (view-only v1), nên một biến tĩnh
+//   vừa đủ. Đổi lại ta bỏ được cả một lớp lỗi: Kotlin cầm con trỏ dưới dạng jlong,
+//   giữ nó qua một lần xoay màn hình, rồi gọi vào một đối tượng đã bị hủy.
+//
+// MÔ HÌNH LUỒNG
+//   Mọi hàm ở đây gọi từ UI thread, TRỪ nativeListSources — nó chặn tới 3 giây nên
+//   phía Kotlin đã bọc trong Dispatchers.IO. Vì chỉ có một thread gọi vào, hai biến
+//   toàn cục dưới đây không cần khoá.
+//
+// LIÊN QUAN: NativeClient.kt (phía Kotlin, phải khớp tên từng chữ), ClientLoop.h,
+//            net/SourceQuery.h
+// =============================================================================
 #include <android/native_window_jni.h>
 #include <jni.h>
 
@@ -26,6 +47,10 @@ namespace {
 
 constexpr uint16_t kDefaultPort = 47777; // trùng client/windows/MainMenuWindow.cpp
 
+// Phiên đang chạy (null = chưa kết nối) và Surface đang giữ (null = app ở nền).
+// Hai thứ này ĐỘC LẬP về thời điểm xuất hiện: Surface có thể sẵn sàng trước khi
+// người dùng bấm Connect, hoặc ngược lại. Mọi chỗ dùng chúng đều phải chịu được cả
+// hai thứ tự — đó là lý do nativeStart và nativeSetSurface đều kiểm tra cái kia.
 std::unique_ptr<ClientLoop> g_client;
 ANativeWindow* g_window = nullptr;
 
@@ -94,6 +119,8 @@ Java_com_rgc_remotegame_NativeClient_nativeStart(JNIEnv* env, jobject, jstring a
     return JNI_TRUE;
 }
 
+// Stop() chờ cả hai thread thoát hẳn rồi reset mới hủy đối tượng — nên sau khi hàm
+// này trả về, không còn thread nào của phiên cũ chạm vào Surface nữa.
 JNIEXPORT void JNICALL
 Java_com_rgc_remotegame_NativeClient_nativeStop(JNIEnv*, jobject) {
     if (g_client) {
@@ -102,12 +129,22 @@ Java_com_rgc_remotegame_NativeClient_nativeStop(JNIEnv*, jobject) {
     }
 }
 
+// Giao hoặc thu hồi Surface. Đây là hàm tinh tế nhất file — nó quản lý vòng đời của
+// một tài nguyên mà hai bên cùng nắm giữ.
+//
+// ANativeWindow_fromSurface TĂNG bộ đếm tham chiếu, nên mỗi lần gọi nó phải có đúng
+// một lần ANativeWindow_release đối ứng. Thiếu release là rò; thừa release là hủy
+// sớm một cửa sổ mà codec còn đang vẽ vào.
+//
 // surface = null khi Surface bị hủy. Phải gọi TRƯỚC khi Surface thật sự biến mất
 // (tức trong surfaceDestroyed), vì SetWindow chặn tới khi codec buông nó ra.
 JNIEXPORT void JNICALL
 Java_com_rgc_remotegame_NativeClient_nativeSetSurface(JNIEnv* env, jobject, jobject surface) {
     if (surface) {
         ANativeWindow* w = ANativeWindow_fromSurface(env, surface);
+        // Đã giữ một cửa sổ KHÁC: buông nó theo đúng thứ tự an toàn trước khi thay.
+        // So sánh g_window != w là cần thiết — Android có thể giao lại đúng Surface
+        // cũ, và lúc đó release rồi dùng tiếp là hủy nhầm cái đang cần.
         if (g_window && g_window != w) {
             if (g_client) g_client->SetWindow(nullptr);
             ANativeWindow_release(g_window);

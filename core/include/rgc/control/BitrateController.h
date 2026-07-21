@@ -1,17 +1,39 @@
 #pragma once
+// =============================================================================
+// BitrateController.h — chính sách chống nghẽn (congestion control) phía HOST.
 //
-// BitrateController — policy congestion control phía HOST (GD5), tách khỏi
-// AgentLoop để test được: vào là Feedback của client, ra là bitrate đề nghị +
-// nên bật/tắt FEC. Không đụng encoder, không đụng socket, không đụng thời gian
-// thực — nowUs do caller bơm vào.
+// NHIỆM VỤ
+//   Trả lời một câu hỏi duy nhất, mỗi giây một lần: "client vừa báo mất X% gói,
+//   vậy nên phát ở bitrate nào và có cần bật FEC không?". Vào là gói Feedback, ra
+//   là một BitrateDecision. Không đụng encoder, không đụng socket, không đọc đồng
+//   hồ — nowUs do người gọi bơm vào.
 //
-// Vì sao đáng tách: đây là chỗ duy nhất trong dự án có ngưỡng và trễ (×0.75/×0.90,
-// +5% trần mỗi giây, 2 giây nguội sau khi tụt, 5 giây sạch mới tắt FEC). Trước đây
-// nó nằm trong một lambda giữa hàm RunAgent 432 dòng nên không cách nào kiểm chứng
-// ngoài việc chạy thật rồi ngồi nhìn log.
+// VỊ TRÍ TRONG LUỒNG DỮ LIỆU
+//   client: LinkStats → MakeFeedback → UDP
+//                                       ~~~> host: HostSession::onFeedback
+//                                              → **BitrateController::Update()**
+//                                              → encoder.SetBitrate() + Packetizer.SetFecEnabled()
 //
-// MỘT controller cho MỘT nguồn: chia sẻ nhiều cửa sổ thì bitrate của chúng độc lập
-// nhau, và client có thể chỉ đang xem một trong số đó.
+// CHIẾN LƯỢC: TỤT NHANH, LÊN CHẬM
+//   Mất ≥5% → ×0.75 (lùi mạnh). Mất ≥2% → ×0.90 (lùi nhẹ). Đường truyền sạch và đã
+//   nguội 2 giây → +5% trần. Đây là dạng AIMD quen thuộc: nghẽn thì phải thoát cho
+//   nhanh vì hàng đợi đang đầy và mỗi mili-giây chậm trễ là thêm gói mất; còn dò
+//   lên thì phải chậm, vì dò quá tay chỉ tạo ra đúng cái nghẽn vừa thoát khỏi.
+//
+// VÌ SAO ĐÁNG TÁCH THÀNH LỚP RIÊNG
+//   Đây là chỗ duy nhất trong dự án có ngưỡng và trễ (×0.75/×0.90, +5% trần mỗi
+//   giây, 2 giây nguội sau khi tụt, 5 giây sạch mới tắt FEC). Trước đây nó nằm
+//   trong một lambda giữa hàm RunAgent 432 dòng nên không cách nào kiểm chứng
+//   ngoài việc chạy thật rồi ngồi nhìn log.
+//
+// MỘT CONTROLLER CHO MỘT NGUỒN
+//   Chia sẻ nhiều cửa sổ thì bitrate của chúng độc lập nhau, và client có thể chỉ
+//   đang xem một trong số đó.
+//
+// LIÊN QUAN: rgc/control/LinkStats.h (bên sinh ra Feedback ở phía client),
+//            rgc/session/HostSession.h (nơi gọi Update)
+// =============================================================================
+//
 #include <cstdint>
 
 #include "rgc/wire/Wire.h"

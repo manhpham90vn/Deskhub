@@ -1,16 +1,40 @@
 #pragma once
+// =============================================================================
+// Renderer.h — cửa sổ preview + DXGI swapchain, vẽ frame NV12 từ decoder.
 //
-// Renderer - cửa sổ preview + DXGI swapchain, vẽ frame NV12 từ decoder.
+// NHIỆM VỤ
+//   Chặng cuối của luồng video phía client. Ngoài việc vẽ, nó còn sở hữu cửa sổ
+//   nên gánh thêm hai vai trò phụ: làm đường ống chuyển message cho InputCapture,
+//   và hiển thị overlay (dòng số liệu + hai nút điều khiển).
 //
-// Thiết kế:
-//   - Chuyển màu NV12 -> BGRA + scale bằng D3D11 Video Processor (phần cứng,
-//     không cần viết shader). Input view trỏ thẳng vào texture pool của decoder
-//     (kèm array slice) -> zero-copy từ decode đến swapchain.
-//   - Swapchain flip-model (FLIP_DISCARD) + Present(0) cho độ trễ thấp.
-//   - Cửa sổ tạo và bơm message trên luồng GỌI Init/Pump (main). RenderNV12 được
-//     phép gọi từ luồng khác (chuỗi callback decode); device đã bật
-//     multithread-protected nên immediate context an toàn.
+// VỊ TRÍ TRONG LUỒNG DỮ LIỆU
+//   UDP ~~~> Reassembler → IVideoDecoder → **Renderer** → màn hình
 //
+// BỐN QUYẾT ĐỊNH THIẾT KẾ
+//   1. CHUYỂN MÀU BẰNG VIDEO PROCESSOR. NV12 → BGRA và co giãn đều do D3D11 Video
+//      Processor làm, tức là phần cứng, không phải viết shader. Input view trỏ
+//      THẲNG vào texture pool của decoder (kèm array slice) nên khung hình không
+//      rời VRAM trên cả chặng decode → màn hình.
+//   2. SWAPCHAIN FLIP-MODEL + Present(0). FLIP_DISCARD bỏ được một lần copy so với
+//      mô hình bitblt cũ; Present(0) là không chờ VSync — thà xé hình còn hơn thêm
+//      tới 16 ms độ trễ vào một ứng dụng tương tác.
+//   3. OVERLAY BẰNG CHILD WINDOW THƯỜNG, không vẽ vào swapchain. DWM tự ghép chúng
+//      lên trên. Cách này rẻ và không đụng gì tới đường video.
+//   4. RENDERER KHÔNG BIẾT NGỮ NGHĨA INPUT. Nó chỉ chuyển tiếp message thô ra
+//      ngoài qua MessageHook, và báo id nút vừa bấm qua CommandHook. Mọi hiểu biết
+//      về khoá chuột / tạm dừng nằm ở InputCapture.
+//
+// ⚠ MÔ HÌNH LUỒNG — hai nhóm hàm, hai luồng khác nhau
+//   Luồng đã gọi Init/Pump (main): Init, Pump, SetStatusText, SetToggleState,
+//                                   RequestDumpBmp, Hwnd, ClientSize.
+//   Luồng khác (chuỗi callback decode): RenderNV12.
+//   RenderNV12 gọi được từ luồng khác vì device đã bật multithread-protected và
+//   lớp này tự khoá renderMutex. Các hàm còn lại đụng tới cửa sổ Win32 nên PHẢI ở
+//   đúng luồng tạo ra nó.
+//
+// LIÊN QUAN: decode/IVideoDecoder.h (nguồn frame), input/InputCapture.h (bên gắn
+//            MessageHook), ClientLoop.cpp (người dùng), capture/BmpWriter.h
+// =============================================================================
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #include <windows.h>

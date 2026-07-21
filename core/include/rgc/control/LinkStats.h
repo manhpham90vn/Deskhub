@@ -1,16 +1,38 @@
 #pragma once
+// =============================================================================
+// LinkStats.h — quy đổi bộ đếm tích luỹ thành số liệu MỘT CỬA SỔ, phía client.
 //
-// LinkStats — gom số liệu một CỬA SỔ thống kê (mặc định 1 giây) phía client và
-// dẫn ra các con số phái sinh + gói Feedback gửi ngược cho host.
+// NHIỆM VỤ
+//   Reassembler đếm mọi thứ theo kiểu TÍCH LUỸ từ đầu phiên (tổng gói nhận, tổng
+//   gói mất...). Nhưng thứ có ý nghĩa để hiển thị và để báo cáo cho host lại là số
+//   liệu của MỘT GIÂY VỪA RỒI. Lớp này giữ ảnh chụp lần trước, lấy hiệu, rồi chia
+//   cho thời gian thật đã trôi để ra fps / kbps / % mất gói.
+//
+// VỊ TRÍ TRONG LUỒNG DỮ LIỆU
+//   Reassembler::Stats ──┐
+//   bộ đếm byte video  ──┼─→ **LinkStats::Close()** → LinkWindow ─→ overlay/log
+//   số frame đã render ──┘                                       └─→ MakeFeedback()
+//                                                                     → host → BitrateController
+//
+// VÌ SAO TÁCH RA
+//   Hai client (Windows, Android) trước đây chép nguyên khối tính lossPct và dựng
+//   Feedback — giống nhau từng dòng, kể cả cái làm tròn +0.5. Chỉ phần IN RA là
+//   khác nhau thật (printf/wchar overlay vs LOGI/logcat), nên chỗ đó vẫn để ở từng
+//   client; phần TÍNH nằm hết ở đây và test được offline.
 //
 // Vì sao tách ra: hai client (Windows, Android) trước đây chép nguyên khối tính
 // lossPct và dựng Feedback — giống nhau từng dòng, kể cả cái làm tròn +0.5. Chỉ
 // phần IN RA là khác nhau thật (printf/wchar overlay vs LOGI/logcat), nên chỗ đó
 // vẫn để ở từng client; phần TÍNH nằm hết ở đây và test được offline.
 //
-// Không có atomic/mutex trong này: bộ đếm byte và số frame đã render do luồng khác
-// ghi, client tự giữ atomic của mình rồi truyền số đã đọc vào Close(). Nhờ vậy
-// LinkStats thuần logic, không dính mô hình luồng của bất kỳ nền tảng nào.
+// MÔ HÌNH LUỒNG
+//   Không có atomic/mutex trong này: bộ đếm byte và số frame đã render do luồng
+//   khác ghi, client tự giữ atomic của mình rồi truyền số đã đọc vào Close(). Nhờ
+//   vậy LinkStats thuần logic, không dính mô hình luồng của bất kỳ nền tảng nào.
+//
+// LIÊN QUAN: rgc/transport/Reassembler.h (nguồn số liệu),
+//            rgc/control/BitrateController.h (bên nhận Feedback ở phía host)
+// =============================================================================
 #include <cstdint>
 
 #include "rgc/transport/Reassembler.h"

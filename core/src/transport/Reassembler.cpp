@@ -1,9 +1,38 @@
+// =============================================================================
+// Reassembler.cpp — cài đặt việc ghép mảnh, khôi phục FEC và chính sách bỏ frame.
+//
+// BỐ CỤC (theo dòng chảy của một gói qua lớp này)
+//   Slot()       — tìm/tạo chỗ ghép cho một frameId, và chặn gói quá muộn.
+//   Push()       — nhận mảnh dữ liệu.
+//   PushFec()    — nhận gói parity.
+//   TryRecover() — thử dựng lại mảnh thiếu bằng XOR ngược.
+//   PopReady()   — quyết định: trả frame ra, hay bỏ nó, hay chờ thêm.
+//   Drop()       — bỏ một frame, cập nhật thống kê và mốc chặn.
+//
+// KHÁI NIỆM "BARRIER" (barrierId_)
+//   Mốc frameId mà mọi frame ≤ nó đã được phát ra hoặc đã bị bỏ. Gói đến sau mốc
+//   này là gói lạc quá muộn — nhận vào chỉ tổ dựng lại một frame đã lỡ, và nếu
+//   phát ra sẽ đưa decoder đi lùi thời gian. Nên chúng bị bỏ ngay tại Slot().
+//
+// CẤU TRÚC DỮ LIỆU
+//   pending_ là std::map (cây đỏ-đen) chứ không phải unordered_map, vì lớp này cần
+//   duyệt theo THỨ TỰ frameId liên tục: pending_.begin() luôn là frame cũ nhất,
+//   tức là frame kế tiếp phải phát. Với tối đa 4 phần tử thì chi phí cây không đáng kể.
+//
+// VỀ THỜI GIAN
+//   Không gọi đồng hồ hệ thống ở bất cứ đâu; `nowUs` do người gọi bơm vào. Đó là
+//   lý do CoreTests kiểm chứng được cả đường timeout mà không phải sleep thật.
+//
+// LIÊN QUAN: rgc/transport/Reassembler.h (thiết kế + chính sách), Packetizer.cpp
+// =============================================================================
 #include "rgc/transport/Reassembler.h"
 
 #include <iterator>
 
 namespace rgc {
 
+// Cổng vào chung của Push và PushFec: mọi gói đều phải qua đây để lấy chỗ ghép.
+// Trả nullptr nghĩa là "bỏ gói này" — quá muộn, hoặc không khớp frame đang ghép.
 Reassembler::Pending* Reassembler::Slot(uint32_t id, uint16_t pktCount,
                                         uint64_t timestampUs, uint64_t nowUs) {
     if (haveBarrier_ && id <= barrierId_) return nullptr; // gói muộn của frame đã phát/bỏ
@@ -24,6 +53,9 @@ Reassembler::Pending* Reassembler::Slot(uint32_t id, uint16_t pktCount,
     return &it->second;
 }
 
+// Nhận một mảnh dữ liệu. Đếm packetsReceived TRƯỚC mọi kiểm tra, kể cả với gói
+// trùng hay quá muộn: đây là mẫu số của tỉ lệ mất gói, bỏ sót gói nào ở đây sẽ làm
+// tỉ lệ báo cáo cho host lệch đi.
 void Reassembler::Push(const VideoPacketView& pkt, uint64_t nowUs) {
     ++stats_.packetsReceived;
     if (pkt.payload.empty()) return; // Packetizer không bao giờ phát mảnh rỗng
@@ -43,6 +75,9 @@ void Reassembler::Push(const VideoPacketView& pkt, uint64_t nowUs) {
     TryRecover(f, uint8_t(pkt.hdr.pktIndex / kFecGroupSize));
 }
 
+// Nhận một gói parity. Đếm riêng vào fecReceived chứ KHÔNG cộng vào
+// packetsReceived — trộn parity vào mẫu số sẽ làm tỉ lệ mất gói tụt xuống đúng vào
+// lúc FEC đang bật, tức là đúng lúc đường truyền đang có vấn đề cần báo cáo.
 void Reassembler::PushFec(const FecPacketView& pkt, uint64_t nowUs) {
     ++stats_.fecReceived;
     if (pkt.parity.size() < kFecLenPrefix) return;
@@ -58,6 +93,15 @@ void Reassembler::PushFec(const FecPacketView& pkt, uint64_t nowUs) {
     TryRecover(f, pkt.hdr.groupIndex);
 }
 
+// Thử dựng lại mảnh thiếu của một nhóm FEC.
+//
+// Nguyên lý: parity = m₁ ⊕ m₂ ⊕ … ⊕ mₙ. XOR có tính chất tự nghịch đảo, nên nếu
+// thiếu mảnh mₖ thì mₖ = parity ⊕ (mọi mảnh còn lại). Đúng một ẩn số thì giải được;
+// hai ẩn trở lên thì một phương trình là không đủ.
+//
+// Gọi từ CẢ HAI đường (Push và PushFec) vì không biết trước cái nào tới sau: mảnh
+// dữ liệu cuối cùng có thể tới sau parity, hoặc ngược lại. Gọi thừa là vô hại —
+// hàm tự thoát ngay khi điều kiện chưa đủ.
 bool Reassembler::TryRecover(Pending& f, uint8_t group) {
     auto pit = f.parity.find(group);
     if (pit == f.parity.end()) return false;
@@ -97,6 +141,13 @@ bool Reassembler::TryRecover(Pending& f, uint8_t group) {
     return true;
 }
 
+// Trái tim của chính sách. Mỗi vòng lặp chỉ xét frame CŨ NHẤT (đầu hàng) và quyết
+// một trong ba điều:
+//   - đủ mảnh → ghép lại, trả ra, dời barrier;
+//   - hết hy vọng (quá hạn, hoặc đã bị hai frame mới hơn vượt mặt) → bỏ, xét tiếp;
+//   - còn hy vọng → dừng, trả nullopt.
+// Không bao giờ nhảy qua đầu hàng để trả frame sau, kể cả khi frame sau đã đủ:
+// decoder H.264 cần đúng thứ tự.
 std::optional<Reassembler::Frame> Reassembler::PopReady(uint64_t nowUs) {
     while (!pending_.empty()) {
         auto head = pending_.begin();
@@ -107,6 +158,9 @@ std::optional<Reassembler::Frame> Reassembler::PopReady(uint64_t nowUs) {
                 Drop(head, false);
                 continue;
             }
+            // Nối các mảnh theo đúng thứ tự pktIndex thành NAL Annex-B liền mạch —
+            // đúng chuỗi byte mà encoder đã đẻ ra ở đầu kia. reserve trước theo
+            // f.bytes để chỉ cấp phát một lần.
             Frame out;
             out.frameId     = head->first;
             out.timestampUs = f.timestampUs;
@@ -141,6 +195,12 @@ bool Reassembler::TakeLossEvent() {
     return e;
 }
 
+// Bỏ một frame khỏi hàng chờ. `loss` phân biệt hai tình huống rất khác nhau:
+//   true  — frame thiếu mảnh vì MẤT GÓI THẬT. Tính vào thống kê mất mát, bật cờ
+//           xin keyframe, và chuyển sang trạng thái chờ IDR.
+//   false — frame LÀNH LẶN nhưng bị nuốt vì đang chờ IDR. Không phải lỗi đường
+//           truyền, chỉ tính vào framesSkipped.
+// Dù theo đường nào, barrier vẫn được dời tới để gói lạc của frame này bị chặn.
 void Reassembler::Drop(PendingMap::iterator it, bool loss) {
     if (loss) {
         ++stats_.framesDropped;

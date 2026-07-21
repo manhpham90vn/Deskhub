@@ -1,14 +1,33 @@
-// client.exe - MỘT exe kiểu AnyDesk chứa cả hai vai trò (host + client).
+// =============================================================================
+// main.cpp — điểm vào của client.exe. MỘT exe kiểu AnyDesk chứa CẢ HAI vai trò.
 //
-// GD5: toàn bộ điều khiển qua GUI Win32 (MainMenuWindow.h) - không còn CLI.
-// Build: CMake + Ninja (CMakePresets.json, preset x64-debug/x64-release).
-// Chạy:  client.exe (không tham số) -> mở màn hình chính: nút "Chia sẻ ứng
-// dụng" (mở WindowPickerDialog.h rồi RunAgent) hoặc ô nhập IP + nút "Kết nối"
-// (RunClient). Bitrate/FPS/port chỉnh trực tiếp trong cửa sổ đó.
+// NHIỆM VỤ
+//   Dựng môi trường tiến trình rồi giao quyền cho màn hình chính. Bản thân file
+//   này không có logic nghiệp vụ nào — nó chỉ làm bốn việc khởi tạo và rẽ nhánh.
 //
-// Test offline của core KHÔNG còn ở đây (trước là `client.exe --nettest`): nó đã
-// thành target riêng core_tests, xem core/tests/CoreTests.cpp.
-
+// VÌ SAO MỘT EXE CHO CẢ HOST LẪN CLIENT
+//   Người dùng tải một file, chạy lên, rồi tự chọn mình đang chia sẻ hay đang xem.
+//   Hai exe riêng nghĩa là phải giải thích cho người dùng cài cái nào ở máy nào —
+//   đúng thứ khiến phần mềm điều khiển từ xa khó dùng.
+//
+// BỐN VIỆC KHỞI TẠO, mỗi cái có lý do riêng (chi tiết ở từng dòng bên dưới)
+//   1. DPI awareness — không có thì Windows co giãn giả và toạ độ chuột lệch hết.
+//   2. UTF-8 cho console — để in được tiêu đề cửa sổ tiếng Việt.
+//   3. Tắt buffer stdout — để log ra ngay cả khi bị redirect.
+//   4. capture::InitRuntime() — khởi tạo WinRT, bắt buộc trước khi dùng WGC.
+//
+// HAI ĐƯỜNG VÀO
+//   Bình thường          → RunMainMenuWindow().
+//   Vừa được UAC nâng quyền → nhận lại nguồn qua dòng lệnh, vào thẳng RunAgent()
+//                             rồi mới về màn hình chính. Xem ElevatedShare.h.
+//
+// GHI CHÚ LỊCH SỬ
+//   Test offline của core từng nằm ở đây (`client.exe --nettest`). Nay là target
+//   riêng — xem core/tests/CoreTests.cpp.
+//
+// LIÊN QUAN: ui/MainMenuWindow.h, ElevatedShare.h, AgentLoop.h,
+//            capture/WindowCapture.h (InitRuntime)
+// =============================================================================
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #define _CRT_SECURE_NO_WARNINGS
@@ -26,6 +45,9 @@
 #include <vector>
 
 int main() {
+    // PER_MONITOR_AWARE_V2: nói với Windows rằng ta tự xử lý tỉ lệ DPI. Không khai
+    // thì Windows co giãn giả cửa sổ, và GetClientRect trả kích thước ĐÃ co giãn —
+    // toạ độ chuột quy đổi ra sẽ lệch trên mọi máy đặt tỉ lệ khác 100%.
     SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     // UTF-8 cho console để wprintf in đúng tiêu đề cửa sổ có dấu (tiếng Việt...).
     std::setlocale(LC_ALL, ".UTF8");

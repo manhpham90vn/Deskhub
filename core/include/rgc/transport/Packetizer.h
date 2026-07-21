@@ -1,8 +1,36 @@
 #pragma once
-// Packetizer — cắt một NAL frame (Annex-B) thành N gói VIDEO_PACKET ≤ kMaxDatagram.
-// Thuần C++20, không sở hữu socket: từng datagram được giao ra ngoài qua callback
-// `send` (caller quyết định gửi đi đâu — winsock, BSD socket, NWConnection...).
-// Dùng trên MỘT thread (thread encode của Agent); không tự khóa.
+// =============================================================================
+// Packetizer.h — cắt frame đã mã hoá thành các datagram UDP, phía HOST.
+//
+// NHIỆM VỤ
+//   Encoder đẻ ra một frame H.264 dạng Annex-B có thể nặng vài chục KB; UDP chỉ
+//   chở an toàn ~1200 byte mỗi datagram. Packetizer cắt frame đó thành N mảnh,
+//   gắn header video (frameId, timestamp, pktIndex, pktCount) cho từng mảnh, và
+//   tuỳ chọn phát thêm gói parity FEC. Đối tác ở đầu kia là Reassembler.
+//
+// VỊ TRÍ TRONG LUỒNG DỮ LIỆU
+//   WindowCapture → IVideoEncoder → **Packetizer** → UDP ~~~> Reassembler
+//                                                              → IVideoDecoder → Renderer
+//
+// VÌ SAO KHÔNG SỞ HỮU SOCKET
+//   Từng datagram được giao ra ngoài qua callback `send`. Nhờ vậy cùng một mã
+//   chạy được trên winsock, BSD socket, NWConnection..., và quan trọng hơn là
+//   test được offline: CoreTests nối thẳng `send` của Packetizer vào Push của
+//   Reassembler, thậm chí cố tình bỏ vài gói giữa chừng để kiểm chứng FEC.
+//
+// CÁCH CẮT MẢNH
+//   Mọi mảnh trừ mảnh cuối mang ĐÚNG kMaxVideoPayload byte. Nhờ quy tắc cố định
+//   này, bên nhận suy được vị trí của mảnh trong frame chỉ từ pktIndex, không cần
+//   trường offset trên wire. Mảnh cuối mang cờ FrameEnd.
+//
+// MÔ HÌNH LUỒNG
+//   Dùng trên MỘT thread (thread encode của Agent) và KHÔNG tự khoá. Bộ đệm
+//   buf_/parity_ là thành viên chứ không phải biến cục bộ để tránh cấp phát trên
+//   đường nóng — cái giá là mỗi thread phải có Packetizer riêng của nó.
+//
+// LIÊN QUAN: rgc/transport/Reassembler.h (đầu kia), rgc/wire/Wire.h,
+//            docs/06-phase3-transport.md
+// =============================================================================
 #include "rgc/wire/Wire.h"
 
 #include <cstdint>

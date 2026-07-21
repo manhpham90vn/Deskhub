@@ -1,3 +1,30 @@
+// =============================================================================
+// MainActivity.kt — màn hình đầu tiên: nhập địa chỉ host rồi chọn cửa sổ muốn xem.
+//
+// NHIỆM VỤ
+//   Dẫn người dùng qua ba bước tới lúc mở được StreamActivity. Nhớ lại địa chỉ lần
+//   trước để khỏi phải gõ lại IP mỗi lần mở app — đây là app dùng đi dùng lại với
+//   đúng một cái máy.
+//
+// BA BƯỚC, MÔ HÌNH HOÁ BẰNG sealed interface Step
+//   Address  — gõ địa chỉ.
+//   Querying — đang hỏi host có những nguồn nào (chặn tới 3 giây, có vòng quay).
+//   Picking  — host trả về nhiều nguồn, cho chọn.
+//   Dùng sealed interface thay cho vài biến boolean rời rạc: trình dịch bắt buộc
+//   `when` phải phủ hết mọi nhánh, nên thêm bước mới sau này không thể quên chỗ nào.
+//   Step.Picking mang luôn danh sách nguồn — dữ liệu chỉ tồn tại ở đúng bước cần nó.
+//
+// ĐƯỜNG TẮT: BỎ QUA BƯỚC CHỌN
+//   Host im lặng (bản trước GĐ6 không biết LIST_SOURCES) hoặc chỉ chia sẻ một cửa
+//   sổ → vào thẳng, không bắt chọn giữa một lựa chọn duy nhất. Lỗi thật, nếu có, sẽ
+//   do tầng dưới báo lên ở StreamActivity.
+//
+// VÌ SAO CÓ ĐƯỜNG CHẠY THẲNG TỪ adb
+//   Truyền extra "addr" là mở luôn StreamActivity, bỏ qua mọi bước. Dùng để test
+//   nhanh mà không phải gõ IP trên bàn phím ảo — xem lệnh cụ thể trong onCreate.
+//
+// LIÊN QUAN: StreamActivity.kt (màn hình tiếp theo), NativeClient.kt (listSources)
+// =============================================================================
 package com.rgc.remotegame
 
 import android.content.Context
@@ -96,7 +123,8 @@ private fun MainScreen(
     val scope = rememberCoroutineScope()
 
     // Đang hỏi hoặc đang chọn: Back quay về ô địa chỉ thay vì thoát app. Coroutine hỏi
-    // nguồn vẫn chạy nốt 3 giây của nó, nhưng kết quả bị bỏ qua vì step đã đổi.
+    // nguồn vẫn chạy nốt 3 giây của nó (lời gọi JNI đang chặn, không hủy giữa chừng
+    // được), nhưng kết quả bị bỏ qua nhờ phép kiểm tra step ở chỗ nhận kết quả.
     BackHandler(enabled = step != Step.Address) { step = Step.Address }
 
     when (val s = step) {
@@ -107,6 +135,9 @@ private fun MainScreen(
                 onRemember(addr)
                 step = Step.Querying
                 scope.launch {
+                    // listSources là suspend fun, tự chuyển sang Dispatchers.IO —
+                    // main thread không bị chặn suốt 3 giây (nếu chặn, Android dựng
+                    // hộp thoại ANR).
                     val sources = NativeClient.listSources(addr)
                     if (step !is Step.Querying) return@launch // người dùng đã bấm Back
                     // Rỗng = host im lặng hoặc host đời cũ; một nguồn = không có gì để

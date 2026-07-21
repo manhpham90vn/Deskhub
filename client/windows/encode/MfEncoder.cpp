@@ -1,3 +1,44 @@
+// =============================================================================
+// MfEncoder.cpp — cài đặt backend Media Foundation. File dài nhất dự án, và độ dài
+// đó gần như hoàn toàn đến từ việc phải chiều theo sự khác nhau giữa các driver.
+//
+// BỐ CỤC
+//   FindActivate()        — tìm MFT encoder D3D11-aware.
+//   ConfigureTransform()  — đặt kiểu vào/ra, rate control, bật streaming.
+//   ReinitTransform()     — dựng lại transform từ đầu (đường xin IDR dự phòng).
+//   SetupColorConvert()   — dựng video processor BGRA → NV12.
+//   ConvertToNv12()       — chạy chuyển màu cho một frame.
+//   Encode()              — đường chính: chuyển màu → ProcessInput → rút output.
+//   PullOneOutput()       — rút một sample, xử lý cả STREAM_CHANGE.
+//   EmitSample()          — bóc NAL, chèn SPS/PPS, giao cho file/callback.
+//
+// ⚠ HAI ĐƯỜNG CHẠY SONG SONG: ĐỒNG BỘ VÀ BẤT ĐỒNG BỘ
+//   Đây là điều quan trọng nhất cần nắm. MFT phần mềm thường ĐỒNG BỘ, MFT phần cứng
+//   thường BẤT ĐỒNG BỘ, và hai loại có luật gọi khác hẳn nhau:
+//
+//     Đồng bộ  — gọi ProcessInput rồi ProcessOutput thoải mái theo ý mình.
+//                (DrainOutputsSync: rút tới khi NEED_MORE_INPUT.)
+//     Bất đồng bộ — TUYỆT ĐỐI không được gọi ProcessInput/ProcessOutput tuỳ ý. Phải
+//                chờ MFT bắn sự kiện METransformNeedInput / METransformHaveOutput
+//                rồi mới gọi tương ứng. Gọi sai lúc thì hỏng transform.
+//                (WaitForNeedInputAsync.)
+//
+//   Cờ `isAsync` phân nhánh ở bốn chỗ: Encode(), PullOneOutput() (số lần thử lại),
+//   Finish(), và ConfigureTransform() (phải MF_TRANSFORM_ASYNC_UNLOCK trước khi gọi
+//   bất cứ hàm nào khác). Sửa bất kỳ chỗ nào phải nghĩ cho cả hai đường.
+//
+// BA CHỖ PHẢI ĐI ĐƯỜNG VÒNG VÌ DRIVER KHÔNG ĐÁNG TIN — đều đã kiểm chứng bằng thử
+// nghiệm thật, đừng "dọn dẹp" chúng nếu chưa đo lại:
+//   1. MF_SA_D3D11_AWARE đọc trên IMFActivate không đáng tin → phải activate rồi mới
+//      đọc thuộc tính trên chính transform (FindActivate).
+//   2. Force-keyframe qua ICodecAPI không có tác dụng trên vài driver (Intel QSV) →
+//      đường lùi là dựng lại nguyên transform (ReinitTransform).
+//   3. MFSampleExtension_CleanPoint không đáng tin → tự quét NAL tìm type 5 để biết
+//      frame nào là IDR (ContainsIdrNal).
+//
+// LIÊN QUAN: encode/MfEncoder.h (vì sao dùng MFT trần), encode/NvencEncoder.cpp
+//            (bản đối chiếu, đơn giản hơn nhiều), encode/IVideoEncoder.h
+// =============================================================================
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #define _CRT_SECURE_NO_WARNINGS
@@ -20,8 +61,12 @@
 
 using Microsoft::WRL::ComPtr;
 
-// In lỗi HRESULT rồi return false/void.
-#define MF_CHECK(expr, msg)                                                       \
+// Gọi một hàm trả HRESULT; hỏng thì in mã lỗi rồi thoát hàm. Có macro vì file này
+// gọi hàng trăm lời gọi COM và viết tay `if (FAILED(hr))` cho từng cái sẽ che mất
+// mạch logic. Bọc trong do/while(0) để dùng được trong `if` không ngoặc.
+//
+// Biến thể: MF_CHECK trả false, MF_CHECKI trả -1 (cho hàm trả int).
+#define MF_CHECK(expr, msg)                                                     \
     do {                                                                          \
         HRESULT _hr = (expr);                                                     \
         if (FAILED(_hr)) {                                                        \
@@ -141,7 +186,9 @@ struct MfEncoder::Impl {
         ComPtr<IMFAttributes> mftAttrs;
         MF_CHECK(mft->GetAttributes(&mftAttrs), "GetAttributes");
 
-        // MFT phần cứng thường là async - phải mở khóa TRƯỚC khi gọi method nào khác.
+        // MFT phần cứng thường là async, và ở trạng thái KHOÁ khi vừa tạo ra. Phải
+        // mở khoá TRƯỚC khi gọi bất kỳ method nào khác, nếu không mọi lời gọi sau
+        // đều trả lỗi. Xem mục "hai đường chạy song song" ở đầu file.
         UINT32 asyncFlag = 0;
         mftAttrs->GetUINT32(MF_TRANSFORM_ASYNC, &asyncFlag);
         isAsync = asyncFlag != 0;
@@ -153,7 +200,9 @@ struct MfEncoder::Impl {
         MF_CHECK(mft->ProcessMessage(MFT_MESSAGE_SET_D3D_MANAGER, (ULONG_PTR)deviceManager.Get()),
                  "SET_D3D_MANAGER");
 
-        // --- Kiểu đầu ra: H.264/HEVC nén (đặt trước input - encoder cần biết đích) ---
+        // --- Kiểu ĐẦU RA đặt trước ĐẦU VÀO. Thứ tự này bắt buộc với encoder MFT:
+        //     tập kiểu đầu vào hợp lệ phụ thuộc vào đích đã chọn, nên đặt ngược lại
+        //     thì SetInputType sẽ bị từ chối. (Với decoder MFT thì ngược lại.) ---
         ComPtr<IMFMediaType> outType;
         MF_CHECK(MFCreateMediaType(&outType), "MFCreateMediaType(out)");
         outType->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Video);
@@ -185,6 +234,9 @@ struct MfEncoder::Impl {
 
         if (!SetupRateControl()) return false;
 
+        // Ai cấp bộ nhớ cho sample đầu ra: MFT tự cấp, hay ta phải cấp sẵn rồi đưa
+        // vào? Hai đường xử lý khác nhau ở PullOneOutput, và cờ này quyết định đi
+        // đường nào. Hỏi lại mỗi lần đổi kiểu đầu ra (xem RenegotiateOutputType).
         MFT_OUTPUT_STREAM_INFO si{};
         MF_CHECK(mft->GetOutputStreamInfo(0, &si), "GetOutputStreamInfo");
         outputProvidesSamples = (si.dwFlags & (MFT_OUTPUT_STREAM_PROVIDES_SAMPLES |
@@ -226,7 +278,10 @@ struct MfEncoder::Impl {
         device = dev;
         device->GetImmediateContext(&context);
 
-        // MFT + video processor chạm vào immediate context từ nhiều luồng -> bật khóa.
+        // BẮT BUỘC: D3D11 immediate context mặc định KHÔNG an toàn đa luồng, mà MFT
+        // phần cứng chạy công việc trên thread riêng của nó còn ta gọi video
+        // processor từ thread capture. Thiếu dòng này thì hỏng ngẫu nhiên — sai hình
+        // hoặc sập, và rất khó tái hiện vì phụ thuộc thời điểm.
         ComPtr<ID3D10Multithread> mt;
         if (SUCCEEDED(device->QueryInterface(IID_PPV_ARGS(&mt)))) {
             mt->SetMultithreadProtected(TRUE);
@@ -366,6 +421,11 @@ struct MfEncoder::Impl {
         return true;
     }
 
+    // Chuyển một frame BGRA sang NV12 bằng GPU. Kết quả nằm ở nv12Tex (dùng lại
+    // qua từng frame — không cấp phát gì trên đường nóng).
+    //
+    // Input view được nhớ theo con trỏ texture vì WGC chỉ luân phiên vài texture cố
+    // định (frame pool sâu 2) — cùng lý do như map `registered` của NvencEncoder.
     bool ConvertToNv12(ID3D11Texture2D* bgra) {
         auto it = vpInViews.find(bgra);
         if (it == vpInViews.end()) {
@@ -428,6 +488,9 @@ struct MfEncoder::Impl {
         LONGLONG timeHns = 0;
         sample->GetSampleTime(&timeHns);
         const uint64_t tsUs = firstTsUs + (uint64_t)(timeHns / 10);
+        // Chèn SPS/PPS trước MỖI IDR — tương đương repeatSPSPPS của NVENC. Bắt buộc
+        // với UDP: client vào giữa chừng hoặc vừa mất gói sẽ không có tham số giải
+        // mã nếu chúng chỉ xuất hiện một lần ở đầu stream.
         const bool prependHeader = keyframe && !spsPps.empty();
 
         if (out) {
@@ -575,12 +638,18 @@ struct MfEncoder::Impl {
         MF_CHECK(MFCreateSample(&sample), "MFCreateSample");
         MF_CHECK(sample->AddBuffer(buffer.Get()), "AddBuffer");
 
+        // MF muốn mốc thời gian bắt đầu từ 0, còn capture giao ra đồng hồ hệ thống.
+        // Nhớ mốc đầu tiên rồi trừ đi; EmitSample cộng lại để trả về thang gốc.
+        // Đơn vị của MF là 100ns nên phải nhân 10 từ micro-giây.
         if (!haveFirstTs) { firstTsUs = timestampUs; haveFirstTs = true; }
         const LONGLONG timeHns = static_cast<LONGLONG>((timestampUs - firstTsUs) * 10ull);
         const LONGLONG durHns = static_cast<LONGLONG>(10'000'000ull / (cfg.fps ? cfg.fps : 60));
         sample->SetSampleTime(timeHns);
         sample->SetSampleDuration(durHns);
 
+        // Đường đồng bộ: NOTACCEPTING nghĩa là MFT đang đầy output chưa ai lấy. Rút
+        // sạch rồi thử lại một lần. Đường bất đồng bộ không gặp tình huống này vì
+        // WaitForNeedInputAsync ở trên đã bảo đảm MFT đang sẵn sàng nhận.
         HRESULT hr = mft->ProcessInput(0, sample.Get(), 0);
         if (!isAsync && hr == MF_E_NOTACCEPTING) {
             if (!DrainOutputsSync()) return false;
@@ -591,9 +660,13 @@ struct MfEncoder::Impl {
         return isAsync ? true : DrainOutputsSync();
     }
 
+    // Vét nốt những frame encoder còn giữ rồi đóng stream. DRAIN bảo MFT "không còn
+    // input nữa, xuất hết ra đi".
     void Finish() {
         if (!streaming) return;
         mft->ProcessMessage(MFT_MESSAGE_COMMAND_DRAIN, 0);
+        // Trần 256 vòng để không treo vĩnh viễn nếu MFT không bao giờ báo xong —
+        // vét thiếu vài frame cuối lúc đóng phiên là vô hại, treo thì không.
         for (int i = 0; i < 256; ++i) {
             if (isAsync) {
                 ComPtr<IMFMediaEvent> ev;

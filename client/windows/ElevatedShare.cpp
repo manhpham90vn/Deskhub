@@ -1,3 +1,32 @@
+// =============================================================================
+// ElevatedShare.cpp — cài đặt việc bàn giao phiên share sang instance admin.
+//
+// BÀI TOÁN TRUYỀN DỮ LIỆU QUA DÒNG LỆNH
+//   Instance mới do UAC dựng lên là một TIẾN TRÌNH KHÁC, nên không chia sẻ được bộ
+//   nhớ. Kênh duy nhất là dòng lệnh. Mà nội dung phải truyền lại là tên cửa sổ —
+//   tiêu đề tự do do người dùng và ứng dụng khác đặt: có dấu tiếng Việt, khoảng
+//   trắng, dấu nháy kép, ký tự điều khiển.
+//
+//   Luật quoting của CommandLineToArgvW nổi tiếng rắc rối (dấu gạch chéo ngược
+//   trước dấu nháy có nghĩa đặc biệt, và số lượng lẻ/chẵn cho kết quả khác nhau).
+//   Thay vì cố thoát chuỗi cho đúng, ta HEX HOÁ toàn bộ: mỗi token trên dòng lệnh
+//   chỉ còn [0-9a-f], không còn ký tự nào có nghĩa đặc biệt để phải lo.
+//   Đắt gấp đôi về độ dài, nhưng bỏ hẳn được cả một lớp lỗi.
+//
+// BỐ CỤC
+//   HexEncode/HexDecode        — mã hoá tên nguồn cho an toàn qua dòng lệnh.
+//   IsProcessElevated()        — tiến trình hiện tại có đang chạy admin không.
+//   RelaunchElevatedShare()    — bung UAC, dựng dòng lệnh, khởi động instance mới.
+//   ParseElevatedShareArgs()   — phía instance mới: đọc lại nguồn + tuỳ chọn.
+//
+// PHÂN BIỆT "NGƯỜI DÙNG BẤM NO" VỚI "LỖI THẬT"
+//   RelaunchElevatedShare trả về cờ outCancelled riêng. Hai trường hợp này cần
+//   phản ứng khác nhau: bấm No thì im lặng quay lại (người dùng đã quyết định),
+//   còn lỗi thật thì phải báo cho người dùng biết vì sao không share được.
+//
+// LIÊN QUAN: ElevatedShare.h (vấn đề UIPI + luồng đầy đủ), main.cpp (đường vào
+//            của instance admin), AgentLoop.h (AgentSource/AgentOptions)
+// =============================================================================
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #include "ElevatedShare.h"

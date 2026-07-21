@@ -1,9 +1,39 @@
 #pragma once
+// =============================================================================
+// UdpSocket.h — bọc winsock2. Lớp mỏng platform-specific của GĐ3 (docs/06 §1.3).
 //
-// UdpSocket - lớp mỏng platform-specific duy nhất của GD3 (docs/06 §1.3).
-// Windows: winsock2. Sau này các OS khác #ifdef sang BSD sockets - API giữ nguyên.
-// Core (rgc) KHÔNG biết đến lớp này: byte vào/ra core qua callback/span.
+// NHIỆM VỤ
+//   Che khác biệt giữa API socket của các hệ điều hành sau MỘT API duy nhất, để
+//   phần logic phía trên (AgentLoop, ClientLoop) đọc y hệt nhau ở mọi nền tảng.
+//   API ở đây trùng từng chữ với client/android/.../net/UdpSocket.h — port code
+//   qua lại chỉ là chép, không phải viết lại.
 //
+// VỊ TRÍ TRONG KIẾN TRÚC
+//   core/ (rgc) tuyệt đối không biết đến lớp này: nó chỉ nhận/giao byte qua callback
+//   `send` và hàm HandlePacket. Toàn bộ hiểu biết về socket của chương trình nằm ở
+//   đây và ở người gọi trực tiếp nó.
+//
+// VÌ SAO sock_ LÀ uint64_t CHỨ KHÔNG PHẢI SOCKET
+//   Khai báo kiểu SOCKET trong header này sẽ kéo winsock2.h vào mọi file include nó,
+//   và winsock2.h xung khắc với windows.h nếu sai thứ tự (lỗi kinh điển: phải include
+//   winsock2.h TRƯỚC windows.h, không thì hàng trăm lỗi định nghĩa lại). Giấu nó
+//   sau uint64_t giữ header này sạch; ~0ull đóng vai INVALID_SOCKET.
+//
+// QUY ƯỚC ĐỊA CHỈ
+//   NetAddr giữ IP ở HOST byte order chứ không phải network byte order. Việc đổi
+//   thứ tự byte dồn hết vào ranh giới gọi API hệ thống (htonl/ntohl trong .cpp),
+//   nên mọi chỗ khác trong app so sánh và in địa chỉ một cách tự nhiên.
+//   Pack()/Unpack() ép NetAddr vào một u64 để hai thread chia sẻ nó qua std::atomic
+//   mà không cần khoá — AgentLoop dùng để cập nhật địa chỉ peer khi client roaming.
+//
+// SỞ HỮU TÀI NGUYÊN
+//   Lớp này sở hữu socket VÀ vòng đời WSAStartup/WSACleanup: destructor tự dọn, và
+//   copy bị CẤM (hai đối tượng cùng giữ một handle thì cái nào hủy trước sẽ đóng
+//   socket của cái kia). Truyền đi thì dùng tham chiếu.
+//
+// LIÊN QUAN: client/android/app/src/main/cpp/net/UdpSocket.h (bản song song),
+//            AgentLoop.cpp, ClientLoop.cpp (người dùng), docs/06 §1.3
+// =============================================================================
 #include <cstdint>
 #include <string>
 

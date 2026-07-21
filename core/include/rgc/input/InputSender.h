@@ -1,16 +1,38 @@
 #pragma once
-// InputSender — gom event input phía client thành gói INPUT_EVENT (§6 của
-// docs/04-protocol.md), đánh seq liên tục và GỬI LẶP để chống kẹt phím.
+// =============================================================================
+// InputSender.h — gom và gửi event bàn phím/chuột, phía CLIENT.
 //
-// Vì sao lặp: kênh input không có ACK. Mất gói chứa event "nhả phím" là lỗi
-// nghiêm trọng nhất (nhân vật chạy mãi). Chính sách v1: mỗi datagram kèm theo
-// đuôi các event đã gửi gần nhất (redundancy), và sau khi hết event mới thì
-// phát lại đuôi đó thêm vài lần cách nhau kRepeatIntervalUs. Mỗi event vì thế
-// đi qua đường truyền ~3 lần trong ~50 ms — mất lẻ tẻ không còn ảnh hưởng.
-// Bên nhận (InputReceiver) khử trùng bằng seq nên gửi lặp là vô hại.
+// NHIỆM VỤ
+//   Nhận event thô từ tầng bắt input của client, đánh số thứ tự (seq) liên tục,
+//   gom thành lô rồi phát thành gói INPUT_EVENT. Đối tác ở đầu kia là InputReceiver.
 //
-// Thuần C++20: không socket, không đồng hồ (thời gian bơm từ ngoài).
-// Dùng trên MỘT thread (thread Recv của client); không tự khoá.
+// VỊ TRÍ TRONG LUỒNG DỮ LIỆU
+//   InputCapture (client) → **InputSender** → UDP ~~~> InputReceiver (host)
+//                                                        → InputInjector → SendInput()
+//
+// BÀI TOÁN CỐT LÕI: KẸT PHÍM
+//   Kênh input không có ACK, mà mất gói chứa event "nhả phím" là lỗi nghiêm trọng
+//   nhất trong toàn hệ thống — nhân vật trong game sẽ chạy mãi không dừng, và
+//   người dùng không có cách nào sửa ngoài việc ngắt kết nối. Một khung hình mất
+//   thì chớp mắt là qua; một phím kẹt thì hỏng cả phiên chơi.
+//
+// CHÍNH SÁCH v1: DƯ THỪA + PHÁT LẠI
+//   Mỗi datagram kèm theo đuôi kInputRedundancy event đã gửi gần nhất. Sau khi hết
+//   event mới, đuôi đó còn được phát lại kInputRepeatCount lần nữa, cách nhau
+//   kInputRepeatIntervalUs. Mỗi event vì thế đi qua đường truyền khoảng 3 lần
+//   trong ~50 ms — mất lẻ tẻ không còn ảnh hưởng gì.
+//   Chi phí rất rẻ: một event chỉ 19 byte, và người ta không bấm phím nhanh tới
+//   mức lấp đầy được băng thông.
+//   Gửi lặp là VÔ HẠI vì InputReceiver khử trùng theo seq.
+//
+// MÔ HÌNH LUỒNG
+//   Thuần C++20: không socket, không đồng hồ (thời gian bơm từ ngoài).
+//   Dùng trên MỘT thread (thread Recv của client); không tự khoá.
+//
+// LIÊN QUAN: rgc/input/InputReceiver.h (đầu kia), rgc/session/ClientSession.h
+//            (nơi gọi Queue/Flush), docs/04-protocol.md §6
+// =============================================================================
+//
 #include "rgc/wire/Wire.h"
 
 #include <cstdint>

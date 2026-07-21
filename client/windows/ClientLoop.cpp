@@ -1,23 +1,49 @@
-// ClientLoop - vòng đời phía client:
+// =============================================================================
+// ClientLoop.cpp — vai trò CLIENT. Nơi mọi thứ của phía xem được ghép lại.
 //
-//   Thread Main: bơm message cho MỌI cửa sổ preview (PeekMessage không lọc theo
-//       HWND nên một vòng Pump phục vụ hết), tạo cửa sổ khi phiên tương ứng đàm
-//       phán xong, và lái InputCapture theo cửa sổ đang focus.
-//   Mỗi nguồn có một Thread Recv riêng (vòng chính của phiên đó):
+// NHIỆM VỤ
+//   Đối xứng với AgentLoop: nối UdpSocket + ClientSession + Reassembler +
+//   MfDecoder + Renderer + InputCapture thành một phiên xem chạy được. Không cài
+//   đặt thuật toán nào, chỉ điều phối và quản lý luồng.
+//
+// ⚠ KIẾN TRÚC LUỒNG — với N nguồn thì có 2N+1 thread
+//
+//   THREAD MAIN (một, dùng chung):
+//       Bơm message cho MỌI cửa sổ preview — PeekMessage không lọc theo HWND nên
+//       một vòng Pump phục vụ hết (xem Renderer::Pump). Tạo cửa sổ khi phiên tương
+//       ứng đàm phán xong, và lái InputCapture theo cửa sổ đang focus.
+//
+//   THREAD RECV (mỗi nguồn một cái) — vòng chính của phiên đó:
 //       recvfrom (timeout 10ms)
-//       ├─ gói Video/FEC -> ClientSession.NotifyVideoPacket + Reassembler.Push(Fec)
-//       │                   -> PopReady -> đẩy vào hàng đợi cho Thread Decode
-//       ├─ gói Control   -> ClientSession.HandlePacket (HELLO_ACK/PONG/RECONFIG/BYE)
-//       └─ mỗi vòng      -> mất gói? xin IDR ; Tick ; thống kê + FEEDBACK mỗi 1s
-//   Mỗi nguồn có một Thread Decode riêng: rút frame từ hàng đợi -> MfDecoder.Decode
-//       -> Renderer.RenderNV12. Tách khỏi Thread Recv vì decode+render GPU có thể
-//       mất vài chục ms khi máy bận — nếu chặn Thread Recv thì recvfrom ngừng nghe
-//       đúng lúc đó, UDP buffer của OS đầy rồi tràn, gây mất gói THẬT chứ không
-//       còn là "giả" nữa. Hàng đợi giới hạn kMaxQueuedFrames: theo không kịp thì
-//       bỏ frame cũ nhất và xin IDR (chuỗi inter-frame đã đứt).
+//       ├─ gói Video/FEC → ClientSession.NotifyVideoPacket + Reassembler.Push(Fec)
+//       │                  → PopReady → đẩy vào hàng đợi cho Thread Decode
+//       ├─ gói Control   → ClientSession.HandlePacket (HELLO_ACK/PONG/RECONFIG/BYE)
+//       └─ mỗi vòng      → mất gói? xin IDR ; Tick ; thống kê + FEEDBACK mỗi 1s
 //
-// Trễ e2e ước lượng (docs/06 §7): offset đồng hồ host-client
-//   D = (t_client_nhận_ACK − timebase_host) − RTT_min/2 ;  e2e = now − D − ts_frame.
+//   THREAD DECODE (mỗi nguồn một cái):
+//       rút frame khỏi hàng đợi → MfDecoder.Decode → Renderer.RenderNV12.
+//
+// VÌ SAO DECODE PHẢI TÁCH KHỎI RECV — lý do quan trọng nhất của cả file
+//   Decode + render GPU có thể mất vài chục mili-giây khi máy bận. Nếu việc đó chặn
+//   Thread Recv thì recvfrom ngừng nghe đúng lúc đó, buffer UDP của hệ điều hành
+//   đầy rồi tràn, và ta mất gói THẬT — loại mất mát mà FEC lẫn xin IDR đều không
+//   cứu được, vì gói bị vứt trước khi đến tay chương trình.
+//   Hàng đợi giới hạn kMaxQueuedFrames: theo không kịp thì BỎ frame cũ nhất và xin
+//   IDR (chuỗi inter-frame đã đứt). Thà bỏ hình còn hơn nghẽn đường nhận.
+//   (Bản Android dựng đúng kiến trúc này — xem client/android/.../ClientLoop.h.)
+//
+// ƯỚC LƯỢNG TRỄ E2E (docs/06 §7)
+//   Hai đồng hồ không đồng bộ, nên phải ước lượng độ lệch D giữa chúng:
+//       D   = (t_client_nhận_ACK − timebase_host) − RTT_min/2
+//       e2e = now − D − ts_frame
+//   Trừ RTT_min/2 vì HELLO_ACK mất nửa vòng để tới nơi. Dùng RTT NHỎ NHẤT từng thấy
+//   vì đó là mẫu ít bị hàng đợi trên đường làm nhiễu nhất. Đây là con số để theo
+//   dõi, không phải phép đo chính xác.
+//
+// LIÊN QUAN: ClientLoop.h, AgentLoop.cpp (phía đối diện), decode/Renderer.h,
+//            input/InputCapture.h, rgc/session/ClientSession.h,
+//            rgc/transport/Reassembler.h, docs/06 §5 §7
+// =============================================================================
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #define _CRT_SECURE_NO_WARNINGS
@@ -57,6 +83,14 @@ BOOL WINAPI CtrlHandler(DWORD type) {
 
 // Toàn bộ trạng thái của MỘT nguồn đang xem. Chứa mutex/atomic/thread nên không
 // copy/move được — giữ trong vector<unique_ptr>.
+//
+// ĐỌC KỸ CHÚ THÍCH TỪNG TRƯỜNG trước khi thêm trường mới: mỗi cái đều ghi rõ thread
+// nào ghi và thread nào đọc. Ba loại dữ liệu qua ranh giới thread ở đây:
+//   atomic đơn lẻ  — cờ và số đơn (negW/negH, quit, hasFocus...): không cần đồng bộ
+//                    với gì khác nên atomic là đủ và rẻ.
+//   inputMutex     — hàng đợi input: Main gom, Recv gửi.
+//   statsMutex     — chuỗi hiển thị: Recv ghi, Main đọc.
+// Đối chiếu với SourcePipeline bên AgentLoop.cpp — cùng khuôn tổ chức.
 struct ClientStream {
     rgc::SourceInfo src;
     UdpSocket sock;
@@ -86,7 +120,18 @@ struct ClientStream {
     std::thread recvThread;
 };
 
-// Vòng đời mạng+giải mã của một nguồn. Chạy trên thread Recv riêng của nguồn đó.
+// Vòng đời mạng + giải mã của một nguồn. Chạy trên thread Recv riêng của nguồn đó.
+//
+// Hàm dài nhất file, gồm ba phần:
+//   1. Dựng các callback của ClientSession (chúng chạy TRÊN CHÍNH THREAD NÀY, bên
+//      trong HandlePacket/Tick — nên đọc/ghi trạng thái thoải mái, chỉ khoá khi
+//      chạm vào thứ thread Main cũng chạm).
+//   2. Gửi HELLO và phóng thread Decode khi đàm phán xong.
+//   3. Vòng lặp chính: recvfrom → phân loại gói → rút frame → Tick → thống kê.
+//
+// Gói Video đi THẲNG vào Reassembler, không qua ClientSession — đó là đường nóng,
+// mỗi giây hàng nghìn gói. ClientSession chỉ được báo bằng NotifyVideoPacket để
+// nuôi timeout và thoát khỏi trạng thái Starting.
 void StreamRecvLoop(ClientStream& s, const ClientOptions& opt, ID3D11Device* device) {
     std::unique_ptr<rgc::Reassembler> reasm; // tạo sau khi biết fps đàm phán
     std::unique_ptr<IVideoDecoder> decoder;  // tạo ở đây, chỉ Decode() trên thread Decode
@@ -312,6 +357,15 @@ void StreamRecvLoop(ClientStream& s, const ClientOptions& opt, ID3D11Device* dev
 
 } // namespace
 
+// Hỏi host đang chia sẻ những gì, TRƯỚC khi có phiên nào.
+//
+// Socket riêng, sống đúng trong hàm này — ClientStream chưa tồn tại lúc này. Cùng
+// thiết kế với SourceQuery.cpp bên Android, kể cả hai mốc thời gian: hạn nhận
+// 200 ms phải NGẮN HƠN nhịp phát lại 500 ms, nếu không vòng lặp ngủ quên trong
+// recvfrom và bỏ lỡ thời điểm phát lại.
+//
+// Trả false = host im lặng suốt 3 giây. Không phải lỗi tử vong: có thể là host bản
+// trước GĐ6 không biết LIST_SOURCES, và người gọi sẽ lùi về nguồn 0.
 bool QueryHostSources(const NetAddr& server, std::vector<rgc::SourceInfo>& out) {
     out.clear();
     UdpSocket sock;
@@ -347,6 +401,14 @@ bool QueryHostSources(const NetAddr& server, std::vector<rgc::SourceInfo>& out) 
     return false;
 }
 
+// Chạy trọn một phiên xem. CHẶN tới khi đóng hết cửa sổ preview / Ctrl+C / mất
+// kết nối.
+//
+// Bốn giai đoạn:
+//   1. Chọn GPU, chuẩn hoá danh sách nguồn muốn xem.
+//   2. Dựng ClientStream + mở socket riêng cho từng nguồn.
+//   3. Phóng cặp thread Recv (Decode được thread Recv phóng khi đàm phán xong).
+//   4. Vòng Main: bơm message, tạo cửa sổ khi phiên sẵn sàng, lái InputCapture.
 int RunClient(const ClientOptions& opt) {
     g_ctrlC.store(false);
     SetConsoleCtrlHandler(CtrlHandler, TRUE);
@@ -372,7 +434,10 @@ int RunClient(const ClientOptions& opt) {
     for (auto& w : wanted) {
         auto s = std::make_unique<ClientStream>();
         s->src = std::move(w);
-        if (!s->sock.Open(0)) { // cổng ngẫu nhiên, MỘT socket cho mỗi nguồn
+        // MỘT socket riêng cho mỗi nguồn (cổng ngẫu nhiên). Khác phía host — bên đó
+        // dùng chung một cổng và tự định tuyến gói. Ở đây tách ra thì mỗi thread
+        // Recv có socket của riêng nó, khỏi phải khoá hay phân phối gói giữa thread.
+        if (!s->sock.Open(0)) {
             std::printf("[Client] Failed to open a socket for source %u.\n", s->src.sourceId);
             return 1;
         }

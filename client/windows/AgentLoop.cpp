@@ -1,21 +1,44 @@
-// AgentLoop - ghép chuỗi GD2 với mạng GD3, GD6 mở rộng cho nhiều nguồn:
+// =============================================================================
+// AgentLoop.cpp — vai trò HOST. Nơi mọi thứ của phía chia sẻ được ghép lại.
 //
-//   Mỗi nguồn (cửa sổ hoặc màn hình) = một SourcePipeline độc lập:
-//     Thread FrameArrived (WGC, MỘT thread riêng cho mỗi nguồn):
-//         capture -> encoder -> onPacket(NAL) -> Packetizer -> sock.SendTo(peer)
-//     Trạng thái phiên, encoder, bitrate, FEC, injector đều RIÊNG từng nguồn.
-//   Thread chính (Recv, DÙNG CHUNG cho mọi nguồn):
-//         recvfrom timeout 100ms -> định tuyến gói:
-//           LIST_SOURCES        -> trả SOURCE_LIST (danh sách nguồn đang chia sẻ)
-//           HELLO               -> theo hello.sourceId (phiên chưa có sessionId)
-//           còn lại             -> theo sessionId, khớp với phiên của từng nguồn
-//         -> mỗi vòng: Tick mọi phiên + in thống kê mỗi 1s
+// NHIỆM VỤ
+//   Ghép chuỗi bắt hình/mã hoá (GĐ2) với tầng mạng (GĐ3), rồi nhân lên cho nhiều
+//   nguồn (GĐ6). Đây là file điều phối lớn nhất phía host — bản thân nó không cài
+//   đặt thuật toán nào, mà nối các mảnh đã có và quản lý luồng giữa chúng.
 //
-// Vì sao một socket chung mà không phải mỗi nguồn một cổng: người dùng chỉ phải mở
-// một cổng firewall và chỉ phải nhớ một địa chỉ; client hỏi LIST_SOURCES là thấy hết.
+// ⚠ KIẾN TRÚC LUỒNG — điều quan trọng nhất phải nắm trước khi sửa
 //
-// ForceKeyframe là ATOMIC FLAG: đặt từ thread Recv (onStart/onKeyframeRequest),
-// tiêu thụ ở lần Encode kế tiếp trên thread FrameArrived (docs/06 §4).
+//   MỖI NGUỒN có một thread FrameArrived riêng (do WGC tạo):
+//       capture → encoder → onPacket(NAL) → Packetizer → Pacer → sock.SendTo(peer)
+//
+//   MỘT thread Recv DÙNG CHUNG cho mọi nguồn (chính là thread gọi RunAgent):
+//       recvfrom (timeout 100ms) → định tuyến gói → Tick mọi phiên → thống kê 1s/lần
+//
+//   Nghĩa là với N nguồn thì có N+1 thread, và mọi trạng thái đi qua ranh giới giữa
+//   chúng phải là atomic hoặc được mutex bảo vệ. SourcePipeline bên dưới ghi rõ
+//   từng trường thuộc về thread nào — ĐỌC PHẦN ĐÓ trước khi thêm trường mới.
+//
+// ĐỊNH TUYẾN GÓI ĐẾN — ba loại, ba cách tìm chủ
+//   LIST_SOURCES → không thuộc phiên nào; trả SOURCE_LIST liệt kê mọi nguồn.
+//   HELLO        → tìm theo hello.sourceId (lúc này chưa có sessionId).
+//   Còn lại      → tìm theo sessionId, khớp với phiên của từng nguồn.
+//
+// VÌ SAO MỘT SOCKET CHUNG, KHÔNG PHẢI MỖI NGUỒN MỘT CỔNG
+//   Người dùng chỉ phải mở một cổng firewall và chỉ phải nhớ một địa chỉ; client
+//   hỏi LIST_SOURCES là thấy hết. Cái giá là phải tự định tuyến gói như trên.
+//
+// HAI CƠ CHẾ ĐÁNG CHÚ Ý
+//   1. forceIdr là ATOMIC FLAG. Đặt từ thread Recv (onStart / onKeyframeRequest),
+//      tiêu thụ ở lần Encode kế tiếp trên thread FrameArrived. Không gọi thẳng
+//      encoder từ thread Recv được — nó thuộc thread kia (docs/06 §4).
+//   2. CACHE FRAME CUỐI. WGC chỉ phát frame khi nội dung ĐỔI. Nguồn đang tĩnh
+//      (menu, màn hình đứng im) mà client xin IDR thì không có frame nào để nén —
+//      không cache thì client vào xem màn hình tĩnh sẽ đen VĨNH VIỄN.
+//
+// LIÊN QUAN: AgentLoop.h (AgentSource/AgentOptions), ClientLoop.cpp (phía đối
+//            diện), rgc/session/HostSession.h, rgc/transport/Packetizer.h,
+//            net/Pacer.h, docs/06-phase3-transport.md §4
+// =============================================================================
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #define _CRT_SECURE_NO_WARNINGS
@@ -120,6 +143,17 @@ struct SourcePipeline {
 
 } // namespace
 
+// Chạy trọn một phiên chia sẻ. CHẶN tới khi mọi nguồn đóng / Ctrl+C / lỗi.
+//
+// Sáu giai đoạn, đánh dấu bằng các mốc "--- ... ---" bên dưới:
+//   1. Kiểm tra đầu vào, chọn GPU, mở socket.
+//   2. Dựng SourcePipeline cho từng nguồn.
+//   3. Khởi động capture — từ đây các thread FrameArrived bắt đầu chạy.
+//   4. ĐỢI frame đầu của từng nguồn: phải biết kích thước thật rồi mới chào được
+//      trong HELLO_ACK. Nguồn không phát frame nào trong 10 giây thì bỏ, không kéo
+//      cả phiên xuống theo.
+//   5. Dựng HostSession + InputInjector cho từng nguồn còn sống.
+//   6. Vòng Recv — phần thân chính, chạy tới khi kết thúc.
 int RunAgent(std::span<const AgentSource> sources, const AgentOptions& opt) {
     g_ctrlC.store(false);
     SetConsoleCtrlHandler(CtrlHandler, TRUE);
@@ -156,7 +190,9 @@ int RunAgent(std::span<const AgentSource> sources, const AgentOptions& opt) {
 
     const uint32_t startBitrate = opt.bitrateMbps * 1'000'000u;
     const uint32_t maxBitrate   = startBitrate;
-    const uint32_t minBitrate   = 1'000'000u; // dưới mức này hình nát, thà bỏ frame
+    // Sàn bitrate: dưới mức này hình nát tới mức vô dụng, thà bỏ frame còn hơn.
+    // Đây là tham số `minBps` của BitrateController — nó không bao giờ tụt quá đây.
+    const uint32_t minBitrate   = 1'000'000u;
 
     std::vector<std::unique_ptr<SourcePipeline>> pipes;
     for (size_t i = 0; i < sources.size(); ++i) {
@@ -216,6 +252,14 @@ int RunAgent(std::span<const AgentSource> sources, const AgentOptions& opt) {
         };
         p->ensureEncoderFn = ensureEncoder;
 
+        // Đường nóng của nguồn này. CHẠY TRÊN THREAD FrameArrived CỦA WGC — không
+        // phải thread Recv. Bốn việc, theo thứ tự:
+        //   1. Làm chẵn kích thước (ràng buộc NV12).
+        //   2. Phát hiện đổi kích thước → vứt encoder + cache, báo cho thread Recv.
+        //   3. Chép frame vào cache (để còn cái mà encode khi nguồn đứng yên).
+        //   4. Encode.
+        // Giữ encMutex suốt từ bước 2: thread Recv cũng chạm vào encoder và cachedTex
+        // khi nó phải encode lại frame tĩnh lúc client xin IDR.
         auto onFrame = [p, &gpu, ensureEncoder](const FrameInfo& fi) {
             p->captured.fetch_add(1, std::memory_order_relaxed);
             if (p->failed.load()) return;
@@ -246,7 +290,10 @@ int RunAgent(std::span<const AgentSource> sources, const AgentOptions& opt) {
                 p->sizeChanged.store(true, std::memory_order_release);
             }
 
-            // Lưu bản sao frame cuối (texture của WGC chỉ sống trong callback).
+            // Lưu bản SAO của frame cuối. Bắt buộc phải copy chứ không giữ con trỏ:
+            // texture của WGC chỉ sống trong phạm vi callback (xem CaptureTypes.h).
+            // Đây là thứ cứu trường hợp nguồn đứng yên — xem "cache frame cuối" ở
+            // đầu file. Texture cache tạo lười, một lần, rồi CopyResource mỗi frame.
             if (!p->cachedTex) {
                 D3D11_TEXTURE2D_DESC d{};
                 fi.texture->GetDesc(&d);
@@ -263,6 +310,9 @@ int RunAgent(std::span<const AgentSource> sources, const AgentOptions& opt) {
             }
             p->lastFrameUs.store(NowUs(), std::memory_order_relaxed);
 
+            // Chặn ở đây chứ không sớm hơn: mọi bước trên (cache frame, ghi nhận
+            // kích thước) vẫn phải chạy TRƯỚC khi có client, vì giai đoạn 4 của
+            // RunAgent đang đợi đúng srcW để dựng offer.
             if (!p->netReady.load(std::memory_order_acquire)) return;
             if (!ensureEncoder(encW, encH, fi.width, fi.height)) return;
             // Encode liên tục kể cả khi chưa có client (đơn giản, VBV ổn định);
@@ -394,6 +444,14 @@ int RunAgent(std::span<const AgentSource> sources, const AgentOptions& opt) {
     std::printf("[Agent] Sharing %zu source(s). Waiting for client...\n", live.size());
 
     // --- Vòng Recv (thread chính), dùng chung cho mọi nguồn ---
+    //
+    // Mỗi vòng làm bốn việc, theo thứ tự:
+    //   1. Kiểm tra điều kiện dừng (Ctrl+C, hoặc MỌI nguồn đã đóng).
+    //   2. recvfrom — chặn tối đa 100 ms, nên vòng lặp luôn quay đủ nhanh để Tick.
+    //   3. Định tuyến gói vừa nhận về đúng SourcePipeline (xem sơ đồ đầu file).
+    //   4. Tick mọi phiên + in thống kê mỗi giây.
+    //
+    // Một cửa sổ đóng KHÔNG giết cả phiên: chỉ dừng khi không còn nguồn nào sống.
     uint8_t buf[rgc::kMaxDatagram];
     uint64_t lastStatUs = NowUs();
     bool anyFailed = false;

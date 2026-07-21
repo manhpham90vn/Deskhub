@@ -1,3 +1,33 @@
+// =============================================================================
+// StreamActivity.kt — màn hình xem: khung hình + overlay trạng thái.
+//
+// NHIỆM VỤ
+//   Dựng Surface cho bộ giải mã vẽ vào, khởi động phiên, và hiển thị dòng trạng
+//   thái. Nhận địa chỉ host và sourceId qua Intent extra từ MainActivity.
+//
+// ĐIỀU QUAN TRỌNG NHẤT: KHUNG HÌNH KHÔNG ĐI QUA COMPOSE
+//   Compose chỉ lo phần chrome (chữ trạng thái, bố cục, letterbox). Pixel của video
+//   đi thẳng từ bộ giải mã phần cứng ra màn hình qua hardware composer, không qua
+//   view hierarchy, không qua CPU. Compose không hề biết tới nội dung đó.
+//
+// VÌ SAO SurfaceView CHỨ KHÔNG PHẢI TextureView
+//   TextureView đi qua view hierarchy, thêm một lần copy trên GPU và khoảng một
+//   frame trễ. Với một app mà độ trễ là tiêu chí hàng đầu thì đó là cái giá vô lý.
+//   Đổi lại, SurfaceView không xoay/biến hình mượt được — ta không cần hai thứ đó.
+//
+// VÒNG ĐỜI SURFACE LÀ PHẦN DỄ SAI NHẤT
+//   surfaceCreated  → giao Surface xuống C++.
+//   surfaceDestroyed → thu hồi, và lời gọi này CHẶN tới khi bộ giải mã buông ra.
+//   Thứ tự đó bắt buộc: hàm surfaceDestroyed trả về là hệ điều hành hủy Surface
+//   thật, codec còn vẽ vào đó là lỗi dùng-sau-giải-phóng.
+//
+// VÌ SAO HỎI TRẠNG THÁI THEO NHỊP THAY VÌ ĐỂ C++ GỌI NGƯỢC LÊN
+//   Gọi ngược từ C++ vào JVM đòi phải gắn thread vào JVM và giữ global ref, và phải
+//   làm mỗi frame. Hỏi 500 ms một lần rẻ hơn nhiều, mà overlay chỉ đổi mỗi giây một
+//   lần nên không cần nhanh hơn.
+//
+// LIÊN QUAN: MainActivity.kt (nơi mở màn hình này), NativeClient.kt, ClientLoop.h
+// =============================================================================
 package com.rgc.remotegame
 
 import android.os.Bundle
@@ -60,6 +90,8 @@ class StreamActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Người xem không chạm màn hình trong lúc xem, nên nếu không giữ cờ này thì
+        // máy tự tắt màn hình giữa chừng — kéo theo Surface bị hủy và phiên đứt.
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
         val addr = intent.getStringExtra("addr").orEmpty()
@@ -106,9 +138,11 @@ private fun StreamScreen(
             statusLine = NativeClient.nativeStatusLine()
             videoW = NativeClient.nativeVideoWidth()
             videoH = NativeClient.nativeVideoHeight()
+            // Hết phiên thì thoát hẳn coroutine: lý do kết thúc không đổi nữa, hỏi
+            // tiếp chỉ tốn pin. LaunchedEffect tự hủy coroutine khi rời màn hình.
             if (phase == NativeClient.PHASE_ENDED) {
                 endReason = NativeClient.nativeEndReason()
-                return@LaunchedEffect // hết phiên, thôi hỏi nữa
+                return@LaunchedEffect
             }
             delay(500)
         }
