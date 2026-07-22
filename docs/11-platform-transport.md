@@ -80,7 +80,7 @@ Vai **client** thì mọi nền tảng đều làm được (chỉ cần nhận 
 - **Listen**: trình duyệt **chỉ làm client, không mở được listen socket** → không thể là
   host mà kẻ khác kết nối tới. Mobile listen được nhưng thường sau CGNAT và bị OS treo nền.
 
-Cộng điểm khái niệm: host là "máy đang chạy game cần điều khiển" — đó là PC.
+Cộng điểm khái niệm: host là "máy đang chạy ứng dụng cần điều khiển" — đó là PC.
 
 **Kết luận:** host = **desktop** (Windows nay; macOS/Linux sau). iOS/Android/web là nền tảng
 **client-only**. (Nếu sau này thêm mục tiêu "chỉ chia sẻ màn hình để xem, không điều khiển"

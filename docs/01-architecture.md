@@ -5,8 +5,8 @@
 Hai **vai trò**, giao tiếp qua mạng IP. Vai độc lập với OS — mỗi OS chỉ thay các *backend*
 phần cứng bên dưới:
 
-- **Agent** (host): chạy trên máy đang chạy game. Bắt hình, nén, gửi video; nhận input và
-  bơm vào game. **Chỉ desktop**: Windows · macOS · Ubuntu.
+- **Agent** (host): chạy trên máy có ứng dụng cần điều khiển (game, IDE, trình duyệt…). Bắt
+  hình, nén, gửi video; nhận input và bơm vào ứng dụng đó. **Chỉ desktop**: Windows · macOS · Ubuntu.
 - **Client** (controller): chạy trên máy người dùng. Nhận video, hiển thị; bắt chuột/phím
   và gửi đi. **Mọi nền tảng**: Windows · macOS · Ubuntu · iOS · Android · Web.
 

@@ -1,11 +1,12 @@
-# Remote Game Control — Tài liệu thiết kế
+# Deskhub — Tài liệu thiết kế
 
-Tài liệu thiết kế của **Deskhub**. Giới thiệu dự án + hướng dẫn chạy ở **README gốc repo**;
-đây là phần thiết kế chi tiết. Điều khiển & stream máy chơi game từ xa, **đa nền tảng**.
+Tài liệu thiết kế của **Deskhub** — điều khiển & stream **bất kỳ ứng dụng nào trên PC** từ xa
+(code, duyệt web, game…), **đa nền tảng**. Giới thiệu dự án + hướng dẫn tải/chạy ở **README
+gốc repo**; đây là phần thiết kế chi tiết.
 
 ## 🎯 Mục tiêu
 
-- **Agent (host): Windows · macOS · Ubuntu** — máy chạy game, bắt hình + nhận điều khiển.
+- **Agent (host): Windows · macOS · Ubuntu** — máy chạy ứng dụng cần điều khiển: bắt hình + nhận điều khiển.
 - **Client: Windows · macOS · Ubuntu · iOS · Android · Web** — máy xem + điều khiển.
 
 Kiểu **AnyDesk**: mỗi **desktop OS là MỘT app duy nhất** chứa **cả hai vai trò** (agent +
@@ -33,7 +34,7 @@ Transport: **native (mọi client trừ web) dùng UDP; web dùng QUIC/WebTransp
 ## Vai trò (chung mọi nền tảng)
 
 - **Agent** = capture màn hình/cửa sổ → **encode phần cứng** → gửi video; nhận input →
-  **inject** vào game. Backend theo OS (Win: WGC/NVENC/SendInput · mac: ScreenCaptureKit/
+  **inject** vào ứng dụng đích. Backend theo OS (Win: WGC/NVENC/SendInput · mac: ScreenCaptureKit/
   VideoToolbox/CGEvent · Ubuntu: PipeWire/VAAPI/uinput). Chi tiết: `02-agent.md`.
 - **Client** = nhận video → **decode phần cứng** → render; bắt chuột/phím → gửi. Backend
   theo nền tảng (Win: MF+D3D11 · mac: VideoToolbox+Metal · Ubuntu: VAAPI · Android:

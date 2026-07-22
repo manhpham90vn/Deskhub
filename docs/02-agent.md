@@ -1,8 +1,9 @@
 # 02 — Thiết kế Agent (host)
 
-Agent chạy trên máy có game — vai **host**, chỉ trên **desktop: Windows · macOS · Ubuntu**
-(mobile/web không host được, `11-platform-transport.md` §3). Trách nhiệm: bắt hình, nén,
-gửi video, nhận input và bơm vào game. Đây là thành phần phức tạp nhất của hệ.
+Agent chạy trên máy có ứng dụng cần điều khiển (game, IDE, trình duyệt…) — vai **host**, chỉ
+trên **desktop: Windows · macOS · Ubuntu** (mobile/web không host được,
+`11-platform-transport.md` §3). Trách nhiệm: bắt hình, nén, gửi video, nhận input và bơm vào
+ứng dụng đích. Đây là thành phần phức tạp nhất của hệ.
 
 Vai trò và điều phối (§1, §4, §6, §7) **giống nhau mọi OS**; chỉ ba backend phần cứng —
 **capture · encode · inject** — đổi theo OS (§1b). Phần dưới mô tả **bản tham chiếu Windows**
