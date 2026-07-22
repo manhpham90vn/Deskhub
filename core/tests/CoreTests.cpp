@@ -60,10 +60,10 @@ std::vector<TestFrame> MakeFrames(size_t count, size_t gop) {
         f.idr = (i % gop) == 0;
         size_t size = 0;
         switch (Rnd() % 4) {
-        case 0: size = 80 + Rnd() % 300; break;
-        case 1: size = kMaxVideoPayload; break;
-        case 2: size = kMaxVideoPayload + 1; break;
-        default: size = 8'000 + Rnd() % 40'000; break;
+            case 0: size = 80 + Rnd() % 300; break;
+            case 1: size = kMaxVideoPayload; break;
+            case 2: size = kMaxVideoPayload + 1; break;
+            default: size = 8'000 + Rnd() % 40'000; break;
         }
         f.nal.resize(size);
         for (auto& b : f.nal) b = uint8_t(Rnd());
@@ -77,21 +77,30 @@ using Datagram = std::vector<uint8_t>;
 std::vector<Datagram> Packetize(Packetizer& pk, const TestFrame& f, uint64_t tsUs) {
     std::vector<Datagram> out;
     pk.SendFrame(f.nal, f.id, tsUs, f.idr,
-                 [&](std::span<const uint8_t> d) { out.emplace_back(d.begin(), d.end()); });
+        [&](std::span<const uint8_t> d) { out.emplace_back(d.begin(), d.end()); });
     return out;
 }
 
 void Feed(Reassembler& ra, const Datagram& d, uint64_t nowUs) {
     const auto h = ParseCommonHeader(d);
-    if (!h) { Check(false, "ParseCommonHeader on packet from Packetizer"); return; }
+    if (!h) {
+        Check(false, "ParseCommonHeader on packet from Packetizer");
+        return;
+    }
     if (h->type == MsgType::FecPacket) {
         const auto v = ParseFecPacket(*h, PayloadOf(d));
-        if (!v) { Check(false, "ParseFecPacket on packet from Packetizer"); return; }
+        if (!v) {
+            Check(false, "ParseFecPacket on packet from Packetizer");
+            return;
+        }
         ra.PushFec(*v, nowUs);
         return;
     }
     const auto v = ParseVideoPacket(*h, PayloadOf(d));
-    if (!v) { Check(false, "ParseVideoPacket on packet from Packetizer"); return; }
+    if (!v) {
+        Check(false, "ParseVideoPacket on packet from Packetizer");
+        return;
+    }
     ra.Push(*v, nowUs);
 }
 
@@ -128,15 +137,17 @@ void TestWireRoundtrip() {
     Check(ch && ch->type == MsgType::Hello && ch->sessionId == 0, "HELLO header");
     auto hp = ParseHello(PayloadOf(std::span<const uint8_t>(buf, n)));
     Check(hp && hp->clientId == h.clientId && hp->codecMask == h.codecMask &&
-          hp->maxWidth == h.maxWidth && hp->maxHeight == h.maxHeight &&
-          hp->desiredFps == h.desiredFps && hp->features == h.features, "HELLO payload");
+              hp->maxWidth == h.maxWidth && hp->maxHeight == h.maxHeight &&
+              hp->desiredFps == h.desiredFps && hp->features == h.features,
+        "HELLO payload");
 
     HelloAck a{0xCAFE0001, Codec::H264, 1920, 1080, 60, 20'000'000, 123'456'789'012ull};
     n = BuildHelloAck(buf, a);
     auto ap = ParseHelloAck(PayloadOf(std::span<const uint8_t>(buf, n)));
     Check(ap && ap->sessionId == a.sessionId && ap->codec == a.codec &&
-          ap->width == a.width && ap->height == a.height && ap->fps == a.fps &&
-          ap->bitrateBps == a.bitrateBps && ap->timebaseUs == a.timebaseUs, "HELLO_ACK payload");
+              ap->width == a.width && ap->height == a.height && ap->fps == a.fps &&
+              ap->bitrateBps == a.bitrateBps && ap->timebaseUs == a.timebaseUs,
+        "HELLO_ACK payload");
 
     PingPong p{7, 999'999'999'999ull};
     n = BuildPing(buf, 0xCAFE0001, p);
@@ -162,7 +173,7 @@ void TestInOrder() {
         for (const auto& d : Packetize(pk, f, now)) Feed(ra, d, now);
         while (auto out = ra.PopReady(now)) {
             Check(popped < frames.size() && SameFrame(*out, frames[popped]),
-                  "output frame == input frame (in-order)");
+                "output frame == input frame (in-order)");
             ++popped;
         }
         now += 16'667;
@@ -185,7 +196,7 @@ void TestReorder() {
         if (i + 1 < frames.size()) {
             auto more = Packetize(pk, frames[i + 1], now + 16'667);
             batch.insert(batch.end(), std::make_move_iterator(more.begin()),
-                         std::make_move_iterator(more.end()));
+                std::make_move_iterator(more.end()));
         }
         for (size_t k = batch.size(); k > 1; --k)
             std::swap(batch[k - 1], batch[Rnd() % k]);
@@ -298,7 +309,7 @@ struct FecCase {
 };
 
 void RunFecCase(const FecCase& c, std::vector<uint32_t>& got, Reassembler::Stats& stats,
-                std::vector<TestFrame>& frames) {
+    std::vector<TestFrame>& frames) {
     Packetizer pk;
     pk.SetSessionId(42);
     pk.SetFecEnabled(true);
@@ -319,7 +330,8 @@ void RunFecCase(const FecCase& c, std::vector<uint32_t>& got, Reassembler::Stats
             std::vector<size_t> pos;
             for (size_t d : c.dropIdx) pos.push_back(NthDataPacket(pkts, d));
             std::sort(pos.begin(), pos.end(), std::greater<size_t>());
-            for (size_t p : pos) if (p < pkts.size()) pkts.erase(pkts.begin() + p);
+            for (size_t p : pos)
+                if (p < pkts.size()) pkts.erase(pkts.begin() + p);
         }
         for (const auto& d : pkts) Feed(ra, d, now);
         while (auto out = ra.PopReady(now)) got.push_back(out->frameId);
@@ -629,9 +641,9 @@ void TestSessions() {
 
 InputEvent MakeKey(int32_t vk, int32_t scan, bool down) {
     InputEvent e;
-    e.type  = InputType::Key;
-    e.a     = vk;
-    e.b     = scan;
+    e.type = InputType::Key;
+    e.a = vk;
+    e.b = scan;
     e.state = down ? 1 : 0;
     return e;
 }
@@ -642,13 +654,20 @@ void TestInputWireRoundtrip() {
     std::vector<InputEvent> in;
     in.push_back(MakeKey('W', 0x11, true));
     InputEvent mv;
-    mv.type = InputType::MouseMove; mv.a = -1234; mv.b = 5678; mv.absolute = 0;
+    mv.type = InputType::MouseMove;
+    mv.a = -1234;
+    mv.b = 5678;
+    mv.absolute = 0;
     in.push_back(mv);
     InputEvent ab;
-    ab.type = InputType::MouseMove; ab.a = 65535; ab.b = 0; ab.absolute = 1;
+    ab.type = InputType::MouseMove;
+    ab.a = 65535;
+    ab.b = 0;
+    ab.absolute = 1;
     in.push_back(ab);
     InputEvent wh;
-    wh.type = InputType::MouseWheel; wh.b = -120;
+    wh.type = InputType::MouseWheel;
+    wh.b = -120;
     in.push_back(wh);
     for (auto& e : in) e.timestampUs = 0x0123456789ABCDEFull;
 
@@ -662,12 +681,13 @@ void TestInputWireRoundtrip() {
     InputEvent out[kMaxInputEvents];
     uint32_t firstSeq = 0;
     const size_t got = ParseInputEvents(PayloadOf(std::span<const uint8_t>(buf, n)),
-                                        firstSeq, out);
+        firstSeq, out);
     Check(got == in.size() && firstSeq == 77, "event count + firstSeq correct");
     for (size_t i = 0; i < got && i < in.size(); ++i) {
         Check(out[i].type == in[i].type && out[i].a == in[i].a && out[i].b == in[i].b &&
-              out[i].state == in[i].state && out[i].absolute == in[i].absolute &&
-              out[i].timestampUs == in[i].timestampUs, "event roundtrip intact");
+                  out[i].state == in[i].state && out[i].absolute == in[i].absolute &&
+                  out[i].timestampUs == in[i].timestampUs,
+            "event roundtrip intact");
     }
     // Số âm phải sống sót (a = -1234) - lỗi kinh điển khi ép i32 qua u32.
     Check(got >= 2 && out[1].a == -1234, "negative coordinate keeps correct sign");
@@ -697,22 +717,28 @@ void TestInputSenderReceiver() {
         sender.Flush(now, send);
     }
     // Vài vòng không có event mới -> sender phát lại đuôi.
-    for (int i = 0; i < 4; ++i) { now += kInputRepeatIntervalUs; sender.Flush(now, send); }
+    for (int i = 0; i < 4; ++i) {
+        now += kInputRepeatIntervalUs;
+        sender.Flush(now, send);
+    }
 
     // Bỏ 1/3 số datagram (mất gói nặng hơn thực tế nhiều).
     std::vector<InputEvent> applied;
     auto apply = [&](const InputEvent& e) { applied.push_back(e); };
     size_t dropped = 0;
     for (size_t i = 0; i < wire.size(); ++i) {
-        if (i % 3 == 1) { ++dropped; continue; }
+        if (i % 3 == 1) {
+            ++dropped;
+            continue;
+        }
         receiver.HandlePacket(PayloadOf(wire[i]), apply);
     }
     Check(dropped > 0, "packet loss was simulated");
     Check(applied.size() == sentEvents.size(),
-          "every event arrives exactly once despite losing 1/3 of packets (no stuck keys, no duplicates)");
+        "every event arrives exactly once despite losing 1/3 of packets (no stuck keys, no duplicates)");
     for (size_t i = 0; i < applied.size() && i < sentEvents.size(); ++i) {
         Check(applied[i].a == sentEvents[i].a && applied[i].state == sentEvents[i].state,
-              "event correct order and content");
+            "event correct order and content");
     }
     Check(receiver.stats().duplicates > 0, "duplicates were deduped (confirms repeats were sent)");
     Check(receiver.stats().lost == 0, "no events lost");
@@ -749,7 +775,7 @@ void TestInputReorder() {
 Feedback Fb(uint8_t lossPct, uint16_t rttMs = 20) {
     Feedback fb{};
     fb.lossPct = lossPct;
-    fb.rttMs   = rttMs;
+    fb.rttMs = rttMs;
     return fb;
 }
 
@@ -856,13 +882,13 @@ void TestLinkStatsWindow() {
     Check(ls.Due(1'000'000), "window due at 1s");
 
     Reassembler::Stats st{};
-    st.packetsReceived  = 900;
-    st.packetsLost      = 100;
+    st.packetsReceived = 900;
+    st.packetsLost = 100;
     st.packetsRecovered = 7;
-    st.framesDropped    = 3;
-    st.lossRuns[0]      = 2;
-    st.lossRuns[3]      = 1;
-    st.lossRunMax       = 6;
+    st.framesDropped = 3;
+    st.lossRuns[0] = 2;
+    st.lossRuns[3] = 1;
+    st.lossRunMax = 6;
 
     const LinkWindow w = ls.Close(st, 250'000 /*bytes*/, 60 /*frames*/, 1'000'000);
     Check(w.packetsLost == 100 && w.packetsReceived == 900, "first window = raw counters");
@@ -873,8 +899,8 @@ void TestLinkStatsWindow() {
 
     // Cửa sổ thứ hai phải là CHÊNH LỆCH, không phải tổng tích luỹ.
     st.packetsReceived += 1000;
-    st.packetsLost     += 0;
-    st.framesDropped   += 1;
+    st.packetsLost += 0;
+    st.framesDropped += 1;
     const LinkWindow w2 = ls.Close(st, 500'000, 60, 2'000'000);
     Check(w2.packetsReceived == 1000 && w2.packetsLost == 0, "second window is a delta");
     Check(w2.lossPct == 0.0, "clean second reports 0% loss");
@@ -895,9 +921,9 @@ void TestLinkStatsUsesRealElapsed() {
 void TestFeedbackFromWindow() {
     std::printf("[M1] LinkStats: Feedback packet mirrors the window...\n");
     LinkWindow w;
-    w.lossPct       = 3.6;
+    w.lossPct = 3.6;
     w.framesDropped = 2;
-    w.kbps          = 8'500.4;
+    w.kbps = 8'500.4;
 
     const Feedback fb = MakeFeedback(w, 21'400 /*rttUs*/);
     Check(fb.lossPct == 4, "lossPct rounds to nearest (3.6 -> 4)");

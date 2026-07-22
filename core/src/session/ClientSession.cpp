@@ -34,9 +34,9 @@
 namespace deskhub {
 
 void ClientSession::Start(const Hello& hello, uint64_t nowUs) {
-    hello_      = hello;
-    state_      = State::Hello;
-    startedUs_  = nowUs;
+    hello_ = hello;
+    state_ = State::Hello;
+    startedUs_ = nowUs;
     lastRecvUs_ = nowUs;
     lastSentUs_ = nowUs;
     SendHello();
@@ -48,64 +48,64 @@ bool ClientSession::HandlePacket(std::span<const uint8_t> pkt, uint64_t nowUs) {
     const auto payload = PayloadOf(pkt);
 
     switch (h->type) {
-    case MsgType::HelloAck: {
-        const auto m = ParseHelloAck(payload);
-        if (!m) return false;
-        // Ta phát HELLO lại mỗi 0.5 giây nên host cũng ACK lại từng ấy lần. Chỉ cái
-        // đầu tiên có tác dụng; những cái sau trả true (gói hợp lệ, nuôi timeout)
-        // nhưng không đụng vào trạng thái — dựng lại decoder giữa phiên là hỏng hình.
-        if (state_ != State::Hello) return true;
-        if (m->codec == Codec::Rejected) {
-            Die("host rejected (busy or codec mismatch)");
-            return false;
-        }
-        sessionId_ = m->sessionId;
-        params_.codec      = m->codec;
-        params_.width      = m->width;
-        params_.height     = m->height;
-        params_.fps        = m->fps;
-        params_.bitrateBps = m->bitrateBps;
-        params_.timebaseUs = m->timebaseUs;
-        state_      = State::Starting;
-        lastRecvUs_ = nowUs;
-        lastSentUs_ = nowUs;
-        if (cb_.onReady) cb_.onReady(params_);
-        SendStart();
-        return true;
-    }
-    case MsgType::Pong: {
-        if (state_ == State::Idle || state_ == State::Dead) return false;
-        if (h->sessionId != sessionId_) return false;
-        const auto m = ParsePingPong(payload);
-        if (!m) return false;
-        lastRecvUs_ = nowUs;
-        // sendTimeUs là đồng hồ CLIENT do chính ta đặt vào PING và host dội lại
-        // nguyên văn — nên hiệu này là RTT thật, và hai đồng hồ không cần đồng bộ.
-        lastRttUs_  = uint32_t(nowUs - m->sendTimeUs);
-        if (cb_.onRtt) cb_.onRtt(lastRttUs_);
-        return true;
-    }
-    case MsgType::Reconfig: {
-        if (h->sessionId != sessionId_ || sessionId_ == 0) return false;
-        if (state_ != State::Starting && state_ != State::Streaming) return false;
-        const auto m = ParseReconfig(payload);
-        if (!m) return false;
-        lastRecvUs_ = nowUs;
-        // Kích thước 0 = host gửi hỏng; giữ nguyên còn hơn dựng decoder 0x0.
-        if (m->width && m->height) {
-            params_.width  = m->width;
+        case MsgType::HelloAck: {
+            const auto m = ParseHelloAck(payload);
+            if (!m) return false;
+            // Ta phát HELLO lại mỗi 0.5 giây nên host cũng ACK lại từng ấy lần. Chỉ cái
+            // đầu tiên có tác dụng; những cái sau trả true (gói hợp lệ, nuôi timeout)
+            // nhưng không đụng vào trạng thái — dựng lại decoder giữa phiên là hỏng hình.
+            if (state_ != State::Hello) return true;
+            if (m->codec == Codec::Rejected) {
+                Die("host rejected (busy or codec mismatch)");
+                return false;
+            }
+            sessionId_ = m->sessionId;
+            params_.codec = m->codec;
+            params_.width = m->width;
             params_.height = m->height;
+            params_.fps = m->fps;
+            params_.bitrateBps = m->bitrateBps;
+            params_.timebaseUs = m->timebaseUs;
+            state_ = State::Starting;
+            lastRecvUs_ = nowUs;
+            lastSentUs_ = nowUs;
+            if (cb_.onReady) cb_.onReady(params_);
+            SendStart();
+            return true;
         }
-        if (m->bitrateBps) params_.bitrateBps = m->bitrateBps;
-        if (cb_.onReconfig) cb_.onReconfig(params_);
-        return true;
-    }
-    case MsgType::Bye:
-        if (h->sessionId != sessionId_ || sessionId_ == 0) return false;
-        Die("host ended the session (BYE)");
-        return false;
-    default:
-        return false;
+        case MsgType::Pong: {
+            if (state_ == State::Idle || state_ == State::Dead) return false;
+            if (h->sessionId != sessionId_) return false;
+            const auto m = ParsePingPong(payload);
+            if (!m) return false;
+            lastRecvUs_ = nowUs;
+            // sendTimeUs là đồng hồ CLIENT do chính ta đặt vào PING và host dội lại
+            // nguyên văn — nên hiệu này là RTT thật, và hai đồng hồ không cần đồng bộ.
+            lastRttUs_ = uint32_t(nowUs - m->sendTimeUs);
+            if (cb_.onRtt) cb_.onRtt(lastRttUs_);
+            return true;
+        }
+        case MsgType::Reconfig: {
+            if (h->sessionId != sessionId_ || sessionId_ == 0) return false;
+            if (state_ != State::Starting && state_ != State::Streaming) return false;
+            const auto m = ParseReconfig(payload);
+            if (!m) return false;
+            lastRecvUs_ = nowUs;
+            // Kích thước 0 = host gửi hỏng; giữ nguyên còn hơn dựng decoder 0x0.
+            if (m->width && m->height) {
+                params_.width = m->width;
+                params_.height = m->height;
+            }
+            if (m->bitrateBps) params_.bitrateBps = m->bitrateBps;
+            if (cb_.onReconfig) cb_.onReconfig(params_);
+            return true;
+        }
+        case MsgType::Bye:
+            if (h->sessionId != sessionId_ || sessionId_ == 0) return false;
+            Die("host ended the session (BYE)");
+            return false;
+        default:
+            return false;
     }
 }
 
@@ -136,21 +136,33 @@ void ClientSession::Tick(uint64_t nowUs) {
     // Phần đầu: việc riêng của từng trạng thái. Starting cố ý dùng `break` chứ
     // không `return` — nó vẫn cần ping và kiểm tra timeout y như Streaming.
     switch (state_) {
-    case State::Idle:
-    case State::Dead:
-        return;
-    case State::Hello:
-        if (nowUs - startedUs_ > kHelloGiveUpUs) { Die("could not connect (timed out)"); return; }
-        if (nowUs - lastSentUs_ >= kHelloRetryUs) { lastSentUs_ = nowUs; SendHello(); }
-        return;
-    case State::Starting:
-        if (nowUs - lastSentUs_ >= kHelloRetryUs) { lastSentUs_ = nowUs; SendStart(); }
-        break; // vẫn ping/timeout như Streaming
-    case State::Streaming:
-        break;
+        case State::Idle:
+        case State::Dead:
+            return;
+        case State::Hello:
+            if (nowUs - startedUs_ > kHelloGiveUpUs) {
+                Die("could not connect (timed out)");
+                return;
+            }
+            if (nowUs - lastSentUs_ >= kHelloRetryUs) {
+                lastSentUs_ = nowUs;
+                SendHello();
+            }
+            return;
+        case State::Starting:
+            if (nowUs - lastSentUs_ >= kHelloRetryUs) {
+                lastSentUs_ = nowUs;
+                SendStart();
+            }
+            break; // vẫn ping/timeout như Streaming
+        case State::Streaming:
+            break;
     }
 
-    if (nowUs - lastRecvUs_ > kSessionTimeoutUs) { Die("lost contact with host (timeout)"); return; }
+    if (nowUs - lastRecvUs_ > kSessionTimeoutUs) {
+        Die("lost contact with host (timeout)");
+        return;
+    }
 
     if (nowUs - lastPingUs_ >= kPingIntervalUs) {
         lastPingUs_ = nowUs;

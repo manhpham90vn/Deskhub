@@ -37,12 +37,16 @@
 
 // Địa chỉ IPv4 dạng host byte order — POD, copy rẻ.
 struct NetAddr {
-    uint32_t ip = 0;   // host byte order (127.0.0.1 = 0x7F000001)
+    uint32_t ip = 0; // host byte order (127.0.0.1 = 0x7F000001)
     uint16_t port = 0;
 
     bool operator==(const NetAddr&) const = default;
-    uint64_t Pack() const { return (uint64_t(ip) << 16) | port; }
-    static NetAddr Unpack(uint64_t v) { return NetAddr{uint32_t(v >> 16), uint16_t(v)}; }
+    uint64_t Pack() const {
+        return (uint64_t(ip) << 16) | port;
+    }
+    static NetAddr Unpack(uint64_t v) {
+        return NetAddr{uint32_t(v >> 16), uint16_t(v)};
+    }
     std::string ToString() const;
 };
 
@@ -68,7 +72,9 @@ public:
     int RecvFrom(uint8_t* buf, size_t cap, NetAddr& from);
 
     void Close();
-    bool IsOpen() const { return fd_ >= 0; }
+    bool IsOpen() const {
+        return fd_ >= 0;
+    }
 
 private:
     int fd_ = -1;

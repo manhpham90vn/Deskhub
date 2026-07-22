@@ -43,9 +43,9 @@ bool IsProcessElevated();
 // True = instance mới đã chạy (instance gọi nên thoát). False = chưa elevate được;
 // `outCancelled` phân biệt người dùng bấm No ở UAC với lỗi thật sự.
 bool RelaunchElevatedShare(std::span<const AgentSource> sources,
-                           const AgentOptions& opt, bool& outCancelled);
+    const AgentOptions& opt, bool& outCancelled);
 
 // Đọc phiên share do instance không-admin bàn giao qua dòng lệnh.
 // False khi dòng lệnh không phải dạng bàn giao (chạy bình thường -> mở main menu).
 bool ParseElevatedShareArgs(int adeskhub, wchar_t** argv,
-                            std::vector<AgentSource>& outSources, AgentOptions& outOpt);
+    std::vector<AgentSource>& outSources, AgentOptions& outOpt);

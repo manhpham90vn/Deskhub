@@ -33,8 +33,8 @@
 using Microsoft::WRL::ComPtr;
 
 static bool CopyToCpu(ID3D11Device* device, ID3D11DeviceContext* context,
-                      ID3D11Texture2D* src, std::vector<uint8_t>& outBgra,
-                      UINT& outW, UINT& outH) {
+    ID3D11Texture2D* src, std::vector<uint8_t>& outBgra,
+    UINT& outW, UINT& outH) {
     D3D11_TEXTURE2D_DESC desc{};
     src->GetDesc(&desc);
     outW = desc.Width;
@@ -45,8 +45,8 @@ static bool CopyToCpu(ID3D11Device* device, ID3D11DeviceContext* context,
     // nhau về kích thước và định dạng.
     D3D11_TEXTURE2D_DESC sd = desc;
     sd.Usage = D3D11_USAGE_STAGING;
-    sd.BindFlags = 0;      // staging không gắn được vào pipeline
-    sd.MiscFlags = 0;      // bỏ cờ chia sẻ của texture gốc nếu có
+    sd.BindFlags = 0; // staging không gắn được vào pipeline
+    sd.MiscFlags = 0; // bỏ cờ chia sẻ của texture gốc nếu có
     sd.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
 
     ComPtr<ID3D11Texture2D> staging;
@@ -60,7 +60,7 @@ static bool CopyToCpu(ID3D11Device* device, ID3D11DeviceContext* context,
     outBgra.resize(static_cast<size_t>(desc.Width) * desc.Height * 4);
     const uint8_t* srcRow = static_cast<const uint8_t*>(mapped.pData);
     uint8_t* dstRow = outBgra.data();
-    const size_t   rowSize = static_cast<size_t>(desc.Width) * 4;
+    const size_t rowSize = static_cast<size_t>(desc.Width) * 4;
 
     // Chép từng hàng: nguồn nhảy theo RowPitch (có đệm), đích đi liền nhau.
     // Xem ghi chú về RowPitch ở đầu file.
@@ -74,7 +74,7 @@ static bool CopyToCpu(ID3D11Device* device, ID3D11DeviceContext* context,
 }
 
 static bool WriteBmp(const std::string& path, const std::vector<uint8_t>& bgra,
-                     UINT width, UINT height) {
+    UINT width, UINT height) {
     BITMAPFILEHEADER fh{};
     BITMAPINFOHEADER ih{};
     const DWORD pixelBytes = static_cast<DWORD>(width) * height * 4;
@@ -104,7 +104,7 @@ static bool WriteBmp(const std::string& path, const std::vector<uint8_t>& bgra,
 }
 
 bool SaveTextureToBmp(ID3D11Device* device, ID3D11DeviceContext* context,
-                      ID3D11Texture2D* src, const std::string& path) {
+    ID3D11Texture2D* src, const std::string& path) {
     std::vector<uint8_t> pixels;
     UINT w = 0, h = 0;
     if (!CopyToCpu(device, context, src, pixels, w, h)) return false;

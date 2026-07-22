@@ -33,4 +33,4 @@
 // Copy `src` (BGRA, VRAM) về CPU rồi ghi ra file BMP 32-bit tại `path`.
 // Trả về false nếu copy hoặc ghi thất bại.
 bool SaveTextureToBmp(ID3D11Device* device, ID3D11DeviceContext* context,
-                      ID3D11Texture2D* src, const std::string& path);
+    ID3D11Texture2D* src, const std::string& path);

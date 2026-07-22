@@ -36,16 +36,20 @@
 #include <string>
 #include <vector>
 
-enum class GpuVendor { Nvidia, Intel, Amd, Microsoft /*WARP - software*/, Unknown };
+enum class GpuVendor { Nvidia,
+    Intel,
+    Amd,
+    Microsoft /*WARP - software*/,
+    Unknown };
 
 const wchar_t* GpuVendorName(GpuVendor v);
 
 struct GpuChoice {
-    Microsoft::WRL::ComPtr<ID3D11Device>        device;
+    Microsoft::WRL::ComPtr<ID3D11Device> device;
     Microsoft::WRL::ComPtr<ID3D11DeviceContext> context;
-    std::wstring                                description;   // tên adapter
-    GpuVendor                                   vendor = GpuVendor::Unknown;
-    bool                                        hardware = false; // false = WARP/software
+    std::wstring description; // tên adapter
+    GpuVendor vendor = GpuVendor::Unknown;
+    bool hardware = false; // false = WARP/software
 };
 
 // Tạo D3D11 device trên GPU đầu tiên khớp `preference` (theo thứ tự). Nếu không adapter

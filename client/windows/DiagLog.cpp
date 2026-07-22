@@ -49,8 +49,8 @@ bool DiagLogRedirect::Start(DiagRole role) {
     // giật khoảng 8 rưỡi", và họ đọc giờ trên đồng hồ máy mình.
     wchar_t name[64];
     swprintf(name, 64, L"diag-%ls-%04u%02u%02u-%02u%02u%02u.log",
-             role == DiagRole::Agent ? L"agent" : L"client",
-             t.wYear, t.wMonth, t.wDay, t.wHour, t.wMinute, t.wSecond);
+        role == DiagRole::Agent ? L"agent" : L"client",
+        t.wYear, t.wMonth, t.wDay, t.wHour, t.wMinute, t.wSecond);
 
     const std::wstring full = ExeDir() + name;
 
@@ -58,7 +58,10 @@ bool DiagLogRedirect::Start(DiagRole role) {
     savedOut_ = _dup(_fileno(stdout));
 
     if (!_wfreopen(full.c_str(), L"w", stdout)) {
-        if (savedOut_ >= 0) { _close(savedOut_); savedOut_ = -1; }
+        if (savedOut_ >= 0) {
+            _close(savedOut_);
+            savedOut_ = -1;
+        }
         return false;
     }
     setvbuf(stdout, nullptr, _IONBF, 0); // freopen vừa xoá mất thiết lập của main()
@@ -73,8 +76,8 @@ bool DiagLogRedirect::Start(DiagRole role) {
     active_ = true;
 
     std::printf("[DiagLog] %ls role=%ls started %04u-%02u-%02u %02u:%02u:%02u\n",
-                name, role == DiagRole::Agent ? L"agent" : L"client",
-                t.wYear, t.wMonth, t.wDay, t.wHour, t.wMinute, t.wSecond);
+        name, role == DiagRole::Agent ? L"agent" : L"client",
+        t.wYear, t.wMonth, t.wDay, t.wHour, t.wMinute, t.wSecond);
     return true;
 }
 
@@ -96,4 +99,6 @@ void DiagLogRedirect::Stop() {
     active_ = false;
 }
 
-DiagLogRedirect::~DiagLogRedirect() { Stop(); }
+DiagLogRedirect::~DiagLogRedirect() {
+    Stop();
+}

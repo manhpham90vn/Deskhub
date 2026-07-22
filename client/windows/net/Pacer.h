@@ -52,7 +52,9 @@ public:
     Pacer& operator=(const Pacer&) = delete;
 
     // 0 = tắt pacing (Gate trả về ngay). Đổi giữa chừng có hiệu lực từ gói kế tiếp.
-    void SetRateBps(uint64_t rateBps) { rateBps_ = rateBps; }
+    void SetRateBps(uint64_t rateBps) {
+        rateBps_ = rateBps;
+    }
 
     // CHẶN tới khi được phép gửi thêm `bytes` byte. Gọi ngay trước sendto().
     void Gate(size_t bytes);
@@ -61,6 +63,6 @@ private:
     void SleepUs(uint64_t us);
 
     uint64_t rateBps_ = 0;
-    uint64_t nextUs_  = 0;       // thời điểm sớm nhất được phép gửi gói kế tiếp
-    HANDLE   timer_   = nullptr; // waitable timer độ phân giải cao, tạo lười
+    uint64_t nextUs_ = 0;    // thời điểm sớm nhất được phép gửi gói kế tiếp
+    HANDLE timer_ = nullptr; // waitable timer độ phân giải cao, tạo lười
 };

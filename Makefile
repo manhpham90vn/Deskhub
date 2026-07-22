@@ -4,6 +4,8 @@
 #   make release    build release
 #   make run ARGS="notepad.exe --loopback"
 #   make test       chạy core_tests (offline)
+#   make format     áp clang-format (C++) + ktlint (Kotlin) tại chỗ
+#   make lint       kiểm tra style, không sửa (dùng trước khi push cho khớp CI)
 #   make clean
 
 SHELL := cmd.exe
@@ -29,7 +31,14 @@ run: debug
 test: debug
 	out\build\x64-debug\core\core_tests.exe
 
+# Format/lint dùng chung một script PowerShell (tự dò clang-format trong VS + ktlint).
+format:
+	@powershell -NoProfile -ExecutionPolicy Bypass -File scripts\codestyle.ps1
+
+lint:
+	@powershell -NoProfile -ExecutionPolicy Bypass -File scripts\codestyle.ps1 -Check
+
 clean:
 	@$(DEVCMD) cmake -E rm -rf out
 
-.PHONY: all debug release run test clean
+.PHONY: all debug release run test format lint clean

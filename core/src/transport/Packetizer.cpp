@@ -28,7 +28,7 @@
 namespace deskhub {
 
 size_t Packetizer::SendFrame(std::span<const uint8_t> nal, uint32_t frameId,
-                             uint64_t timestampUs, bool idr, const SendFn& send) {
+    uint64_t timestampUs, bool idr, const SendFn& send) {
     if (nal.empty() || !send) return 0;
     // Phép chia làm tròn LÊN: mảnh cuối thường không đầy nhưng vẫn tính là một mảnh.
     const size_t count = (nal.size() + kMaxVideoPayload - 1) / kMaxVideoPayload;
@@ -37,21 +37,21 @@ size_t Packetizer::SendFrame(std::span<const uint8_t> nal, uint32_t frameId,
     const bool fec = fec_ && (count + kFecGroupSize - 1) / kFecGroupSize <= 256;
 
     VideoHeader vh;
-    vh.frameId     = frameId;
+    vh.frameId = frameId;
     vh.timestampUs = timestampUs;
-    vh.pktCount    = uint16_t(count);
+    vh.pktCount = uint16_t(count);
 
     FecHeader fh;
-    fh.frameId     = frameId;
+    fh.frameId = frameId;
     fh.timestampUs = timestampUs;
-    fh.pktCount    = uint16_t(count);
+    fh.pktCount = uint16_t(count);
 
     // Parity đi SAU cả nhóm: gửi trước thì nó tới trước gói dữ liệu và bên nhận phải
     // giữ chỗ chờ; gửi sau thì lúc nó tới ta đã biết chính xác còn thiếu gói nào.
     auto flushParity = [&](size_t groupIdx) -> bool {
         fh.groupIndex = uint8_t(groupIdx);
         const size_t n = BuildFecPacket(buf_, sessionId_, fh, idr,
-                                        std::span<const uint8_t>(parity_, sizeof(parity_)));
+            std::span<const uint8_t>(parity_, sizeof(parity_)));
         if (!n) return false;
         send(std::span<const uint8_t>(buf_, n));
         return true;
@@ -69,7 +69,7 @@ size_t Packetizer::SendFrame(std::span<const uint8_t> nal, uint32_t frameId,
         vh.pktIndex = uint16_t(i);
         const bool frameEnd = (i + 1 == count);
         const size_t n = BuildVideoPacket(buf_, sessionId_, vh, idr, frameEnd,
-                                          nal.subspan(off, len));
+            nal.subspan(off, len));
         if (!n) return 0;
         send(std::span<const uint8_t>(buf_, n));
 

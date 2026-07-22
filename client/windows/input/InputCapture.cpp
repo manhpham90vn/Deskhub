@@ -39,8 +39,8 @@
 namespace {
 
 constexpr USHORT kUsagePageGeneric = 0x01;
-constexpr USHORT kUsageMouse       = 0x02;
-constexpr USHORT kUsageKeyboard    = 0x06;
+constexpr USHORT kUsageMouse = 0x02;
+constexpr USHORT kUsageKeyboard = 0x06;
 
 constexpr int kToggleRelativeKey = VK_F9; // bật/tắt khóa chuột (chế độ tương đối)
 
@@ -66,11 +66,11 @@ bool InputCapture::Attach(HWND hwnd, Sink sink) {
     // vào máy mình như bình thường.
     RAWINPUTDEVICE rid[2] = {};
     rid[0].usUsagePage = kUsagePageGeneric;
-    rid[0].usUsage     = kUsageMouse;
-    rid[0].hwndTarget  = hwnd;
+    rid[0].usUsage = kUsageMouse;
+    rid[0].hwndTarget = hwnd;
     rid[1].usUsagePage = kUsagePageGeneric;
-    rid[1].usUsage     = kUsageKeyboard;
-    rid[1].hwndTarget  = hwnd;
+    rid[1].usUsage = kUsageKeyboard;
+    rid[1].hwndTarget = hwnd;
     if (!RegisterRawInputDevices(rid, 2, sizeof(RAWINPUTDEVICE))) {
         std::printf("[Input] RegisterRawInputDevices failed: %lu\n", GetLastError());
         return false;
@@ -88,11 +88,11 @@ void InputCapture::Detach() {
     // Hủy đăng ký: usUsagePage/Usage như cũ + RIDEV_REMOVE, hwndTarget phải NULL.
     RAWINPUTDEVICE rid[2] = {};
     rid[0].usUsagePage = kUsagePageGeneric;
-    rid[0].usUsage     = kUsageMouse;
-    rid[0].dwFlags     = RIDEV_REMOVE;
+    rid[0].usUsage = kUsageMouse;
+    rid[0].dwFlags = RIDEV_REMOVE;
     rid[1].usUsagePage = kUsagePageGeneric;
-    rid[1].usUsage     = kUsageKeyboard;
-    rid[1].dwFlags     = RIDEV_REMOVE;
+    rid[1].usUsage = kUsageKeyboard;
+    rid[1].dwFlags = RIDEV_REMOVE;
     RegisterRawInputDevices(rid, 2, sizeof(RAWINPUTDEVICE));
     attached_ = false;
     hwnd_ = nullptr;
@@ -129,10 +129,10 @@ void InputCapture::SetRelativeMode(bool on) {
     if (on) {
         RECT r{};
         GetClientRect(hwnd_, &r);
-        POINT tl{ r.left, r.top }, br{ r.right, r.bottom };
+        POINT tl{r.left, r.top}, br{r.right, r.bottom};
         ClientToScreen(hwnd_, &tl);
         ClientToScreen(hwnd_, &br);
-        RECT screen{ tl.x, tl.y, br.x, br.y };
+        RECT screen{tl.x, tl.y, br.x, br.y};
         ClipCursor(&screen); // giữ con trỏ trong cửa sổ preview
         while (ShowCursor(FALSE) >= 0) {}
         SetCapture(hwnd_);
@@ -146,15 +146,15 @@ void InputCapture::SetRelativeMode(bool on) {
 }
 
 void InputCapture::Emit(deskhub::InputType type, int32_t a, int32_t b,
-                        uint8_t state, uint8_t absolute) {
+    uint8_t state, uint8_t absolute) {
     if (!enabled_ || !sink_) return;
     deskhub::InputEvent e;
-    e.type        = type;
+    e.type = type;
     e.timestampUs = NowUs();
-    e.a           = a;
-    e.b           = b;
-    e.state       = state;
-    e.absolute    = absolute;
+    e.a = a;
+    e.b = b;
+    e.state = state;
+    e.absolute = absolute;
     sink_(e);
 }
 
@@ -219,52 +219,54 @@ bool InputCapture::OnMessage(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     if (!attached_ || hwnd != hwnd_) return false;
 
     switch (msg) {
-    case WM_INPUT:
-        OnRawInput(lp);
-        return false; // WM_INPUT PHẢI đi tiếp tới DefWindowProc để hệ thống dọn
+        case WM_INPUT:
+            OnRawInput(lp);
+            return false; // WM_INPUT PHẢI đi tiếp tới DefWindowProc để hệ thống dọn
 
-    case WM_MOUSEMOVE: {
-        if (relative_) return true; // delta lấy từ Raw Input rồi
-        RECT r{};
-        GetClientRect(hwnd_, &r);
-        Emit(deskhub::InputType::MouseMove,
-             Normalize(GET_X_LPARAM(lp), uint32_t(r.right - r.left)),
-             Normalize(GET_Y_LPARAM(lp), uint32_t(r.bottom - r.top)), 0, 1);
-        return true;
-    }
+        case WM_MOUSEMOVE: {
+            if (relative_) return true; // delta lấy từ Raw Input rồi
+            RECT r{};
+            GetClientRect(hwnd_, &r);
+            Emit(deskhub::InputType::MouseMove,
+                Normalize(GET_X_LPARAM(lp), uint32_t(r.right - r.left)),
+                Normalize(GET_Y_LPARAM(lp), uint32_t(r.bottom - r.top)), 0, 1);
+            return true;
+        }
 
-    case WM_LBUTTONDOWN: EmitButton(deskhub::MouseButton::Left, true);    return true;
-    case WM_LBUTTONUP:   EmitButton(deskhub::MouseButton::Left, false);   return true;
-    case WM_RBUTTONDOWN: EmitButton(deskhub::MouseButton::Right, true);   return true;
-    case WM_RBUTTONUP:   EmitButton(deskhub::MouseButton::Right, false);  return true;
-    case WM_MBUTTONDOWN: EmitButton(deskhub::MouseButton::Middle, true);  return true;
-    case WM_MBUTTONUP:   EmitButton(deskhub::MouseButton::Middle, false); return true;
-    case WM_XBUTTONDOWN:
-        EmitButton(GET_XBUTTON_WPARAM(wp) == XBUTTON1 ? deskhub::MouseButton::X1
-                                                      : deskhub::MouseButton::X2, true);
-        return true;
-    case WM_XBUTTONUP:
-        EmitButton(GET_XBUTTON_WPARAM(wp) == XBUTTON1 ? deskhub::MouseButton::X1
-                                                      : deskhub::MouseButton::X2, false);
-        return true;
+        case WM_LBUTTONDOWN: EmitButton(deskhub::MouseButton::Left, true); return true;
+        case WM_LBUTTONUP: EmitButton(deskhub::MouseButton::Left, false); return true;
+        case WM_RBUTTONDOWN: EmitButton(deskhub::MouseButton::Right, true); return true;
+        case WM_RBUTTONUP: EmitButton(deskhub::MouseButton::Right, false); return true;
+        case WM_MBUTTONDOWN: EmitButton(deskhub::MouseButton::Middle, true); return true;
+        case WM_MBUTTONUP: EmitButton(deskhub::MouseButton::Middle, false); return true;
+        case WM_XBUTTONDOWN:
+            EmitButton(GET_XBUTTON_WPARAM(wp) == XBUTTON1 ? deskhub::MouseButton::X1
+                                                          : deskhub::MouseButton::X2,
+                true);
+            return true;
+        case WM_XBUTTONUP:
+            EmitButton(GET_XBUTTON_WPARAM(wp) == XBUTTON1 ? deskhub::MouseButton::X1
+                                                          : deskhub::MouseButton::X2,
+                false);
+            return true;
 
-    case WM_MOUSEWHEEL:
-        Emit(deskhub::InputType::MouseWheel, 0, GET_WHEEL_DELTA_WPARAM(wp), 0, 0);
-        return true;
+        case WM_MOUSEWHEEL:
+            Emit(deskhub::InputType::MouseWheel, 0, GET_WHEEL_DELTA_WPARAM(wp), 0, 0);
+            return true;
 
-    // Phím đã lấy qua WM_INPUT; nuốt message thường để Renderer không đóng cửa sổ
-    // khi người dùng bấm ESC trong game ở máy kia. (WM_CLOSE vẫn đóng được.)
-    case WM_KEYDOWN:
-    case WM_KEYUP:
-    case WM_SYSKEYDOWN:
-    case WM_SYSKEYUP:
-    case WM_CHAR:
-        return enabled_;
+        // Phím đã lấy qua WM_INPUT; nuốt message thường để Renderer không đóng cửa sổ
+        // khi người dùng bấm ESC trong game ở máy kia. (WM_CLOSE vẫn đóng được.)
+        case WM_KEYDOWN:
+        case WM_KEYUP:
+        case WM_SYSKEYDOWN:
+        case WM_SYSKEYUP:
+        case WM_CHAR:
+            return enabled_;
 
-    case WM_KILLFOCUS:
-        // Mất focus khi đang khóa chuột -> thả ra, không thì người dùng kẹt con trỏ.
-        SetRelativeMode(false);
-        return false;
+        case WM_KILLFOCUS:
+            // Mất focus khi đang khóa chuột -> thả ra, không thì người dùng kẹt con trỏ.
+            SetRelativeMode(false);
+            return false;
     }
     return false;
 }

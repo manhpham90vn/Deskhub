@@ -41,10 +41,10 @@
 namespace deskhub {
 
 struct BitrateDecision {
-    uint32_t bitrateBps   = 0;     // mức ĐỀ NGHỊ (đã kẹp trong [min,max])
-    bool     changeBitrate = false; // false = giữ nguyên, đừng đàm phán lại rate control
-    bool     fecEnabled   = false; // trạng thái FEC mong muốn sau lần cập nhật này
-    bool     fecToggled   = false; // true = vừa đổi so với trước (để log một lần)
+    uint32_t bitrateBps = 0;    // mức ĐỀ NGHỊ (đã kẹp trong [min,max])
+    bool changeBitrate = false; // false = giữ nguyên, đừng đàm phán lại rate control
+    bool fecEnabled = false;    // trạng thái FEC mong muốn sau lần cập nhật này
+    bool fecToggled = false;    // true = vừa đổi so với trước (để log một lần)
 };
 
 class BitrateController {
@@ -61,10 +61,16 @@ public:
     // Trạng thái FEC thì commit luôn vì không có đường thất bại.
     BitrateDecision Update(const Feedback& fb, uint64_t nowUs);
 
-    void CommitBitrate(uint32_t bps) { cur_ = bps; }
+    void CommitBitrate(uint32_t bps) {
+        cur_ = bps;
+    }
 
-    uint32_t bitrateBps() const { return cur_; }
-    bool     fecEnabled() const { return fec_; }
+    uint32_t bitrateBps() const {
+        return cur_;
+    }
+    bool fecEnabled() const {
+        return fec_;
+    }
 
 private:
     uint32_t cur_;
@@ -72,8 +78,8 @@ private:
     uint32_t min_;
 
     uint64_t lastDecreaseUs_ = 0;
-    int      cleanSeconds_   = 0;
-    bool     fec_            = false;
+    int cleanSeconds_ = 0;
+    bool fec_ = false;
 };
 
 } // namespace deskhub

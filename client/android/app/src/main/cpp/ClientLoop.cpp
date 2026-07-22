@@ -47,7 +47,9 @@
 #include "deskhub/session/ClientSession.h"
 #include "deskhub/wire/Wire.h"
 
-ClientLoop::~ClientLoop() { Stop(); }
+ClientLoop::~ClientLoop() {
+    Stop();
+}
 
 std::string ClientLoop::StatusLine() {
     std::lock_guard<std::mutex> lk(textMutex_);
@@ -60,7 +62,7 @@ std::string ClientLoop::EndReason() {
 }
 
 bool ClientLoop::Start(const NetAddr& server, uint8_t sourceId) {
-    server_   = server;
+    server_ = server;
     sourceId_ = sourceId;
     if (!sock_.Open(0)) { // cổng ngẫu nhiên
         LOGE("[Client] Failed to open socket.");
@@ -79,7 +81,7 @@ bool ClientLoop::Start(const NetAddr& server, uint8_t sourceId) {
         endReason_.clear();
     }
     decodeThread_ = std::thread([this] { DecodeThread(); });
-    netThread_    = std::thread([this] { NetThread(); });
+    netThread_ = std::thread([this] { NetThread(); });
     LOGI("[Client] Connecting to %s (source %u) ...", server_.ToString().c_str(), sourceId_);
     return true;
 }
@@ -259,13 +261,13 @@ void ClientLoop::NetThread() {
     cb.onReady = [this](const deskhub::NegotiatedParams& np) {
         ackDeltaUs_.store(int64_t(NowUs()) - int64_t(np.timebaseUs), std::memory_order_relaxed);
         LOGI("[Client] Negotiation done: H264 %ux%u @%ufps, %.1f Mbps",
-             np.width, np.height, np.fps, np.bitrateBps / 1e6);
+            np.width, np.height, np.fps, np.bitrateBps / 1e6);
         negW_.store(np.width);
         negH_.store(np.height);
     };
     cb.onReconfig = [this](const deskhub::NegotiatedParams& np) {
         LOGI("[Client] Host reconfigured: %ux%u, %.1f Mbps",
-             np.width, np.height, np.bitrateBps / 1e6);
+            np.width, np.height, np.bitrateBps / 1e6);
         negW_.store(np.width);
         negH_.store(np.height);
         // Khác MfDecoder (tự đàm phán lại qua MF_E_TRANSFORM_STREAM_CHANGE):
@@ -296,15 +298,15 @@ void ClientLoop::NetThread() {
     deskhub::Hello hello;
     // clientId chỉ cần phân biệt được hai client, không cần bí mật hay bền vững —
     // lấy đồng hồ micro-giây là đủ ngẫu nhiên cho mục đích đó.
-    hello.clientId   = uint32_t(NowUs());
-    hello.codecMask  = deskhub::kCodecMaskH264;
+    hello.clientId = uint32_t(NowUs());
+    hello.codecMask = deskhub::kCodecMaskH264;
     // Chưa biết kích thước surface lúc gửi HELLO (và đằng nào host cũng stream đúng
     // kích thước cửa sổ nguồn) -> khai trần rộng rãi, để host tự quyết.
-    hello.maxWidth   = 3840;
-    hello.maxHeight  = 2160;
+    hello.maxWidth = 3840;
+    hello.maxHeight = 2160;
     hello.desiredFps = 60;
-    hello.features   = 0;
-    hello.sourceId   = sourceId_;
+    hello.features = 0;
+    hello.sourceId = sourceId_;
     session.Start(hello, NowUs());
 
     uint8_t buf[deskhub::kMaxDatagram];
@@ -316,7 +318,7 @@ void ClientLoop::NetThread() {
     uint32_t dgAsmMsSum = 0, dgAsmMsMax = 0, dgAsmCount = 0; // t_asm: mảnh đầu → ghép xong
     uint32_t dgDqDrop = 0;                                   // frame vứt vì hàng đợi đầy
     uint32_t dgLoopBusyMaxMs = 0;                            // vòng Net bận nhất
-    uint64_t kfReqUs = 0; // thời điểm bắt đầu xin keyframe; 0 = không treo
+    uint64_t kfReqUs = 0;                                    // thời điểm bắt đầu xin keyframe; 0 = không treo
 
     while (!quit_.load()) {
         NetAddr from;
@@ -354,12 +356,14 @@ void ClientLoop::NetThread() {
                                 const bool head = d.firstMissing == 0;
                                 const bool tail = d.lastMissing + 1 == d.total;
                                 pos = head && tail ? "all" : tail ? "tail"
-                                                   : head ? "head" : "mid";
+                                                         : head   ? "head"
+                                                                  : "mid";
                             }
-                            LOGW("[DIAG] evt=frame_drop id=%u reason=%s miss=%u/%u pos=%s"
-                                 " idr=%u waited_ms=%u got_bytes=%u",
-                                 d.frameId, kReason[size_t(d.reason)], d.missing, d.total,
-                                 pos, d.idr ? 1 : 0, d.waitedMs, d.bytesGot);
+                            LOGW(
+                                "[DIAG] evt=frame_drop id=%u reason=%s miss=%u/%u pos=%s"
+                                " idr=%u waited_ms=%u got_bytes=%u",
+                                d.frameId, kReason[size_t(d.reason)], d.missing, d.total,
+                                pos, d.idr ? 1 : 0, d.waitedMs, d.bytesGot);
                         };
                     }
                     if (h->type == deskhub::MsgType::FecPacket) {
@@ -398,7 +402,7 @@ void ClientLoop::NetThread() {
                     session.CancelKeyframeRequest();
                     if (kfReqUs) {
                         LOGI("[DIAG] evt=idr_rx bytes=%zu after_ms=%" PRIu64,
-                             f->nal.size(), (now - kfReqUs) / 1000);
+                            f->nal.size(), (now - kfReqUs) / 1000);
                         kfReqUs = 0;
                     }
                 }
@@ -423,8 +427,10 @@ void ClientLoop::NetThread() {
                 }
                 decCv_.notify_one();
             }
-            if (reasm->TakeLossEvent()) requestKf("loss");
-            else if (reasm->WaitingForIdr()) requestKf("wait_idr");
+            if (reasm->TakeLossEvent())
+                requestKf("loss");
+            else if (reasm->WaitingForIdr())
+                requestKf("wait_idr");
         }
         // Hai lý do còn lại đến từ thread Decode. exchange() đọc-và-xoá nguyên tử:
         // xin một lần cho mỗi sự cố, không lặp lại mãi ở các vòng sau.
@@ -437,7 +443,7 @@ void ClientLoop::NetThread() {
         phase_.store(session.state() == deskhub::ClientSession::State::Streaming
                          ? Phase::Streaming
                          : Phase::Connecting,
-                     std::memory_order_release);
+            std::memory_order_release);
 
         // Mỗi giây: chốt cửa sổ thống kê, in log, cập nhật overlay, gửi FEEDBACK.
         if (linkStats.Due(now)) {
@@ -446,15 +452,16 @@ void ClientLoop::NetThread() {
             const deskhub::LinkWindow w = linkStats.Close(st, stBytes, rendered, now);
             const int64_t e2e = lastE2eUs_.load();
 
-            LOGI("[Client] %2.0f fps | %6.0f kbps | dropped %" PRIu64 " frame | lost %4.1f%% pkts"
+            LOGI("[Client] %2.0f fps | %6.0f kbps | dropped %" PRIu64
+                 " frame | lost %4.1f%% pkts"
                  " | fec+%" PRIu64 " | RTT %.1f ms | e2e ~%.1f ms",
-                 w.fps,
-                 w.kbps,
-                 w.framesDropped,
-                 w.lossPct,
-                 w.packetsRecovered,
-                 session.lastRttUs() / 1000.0,
-                 e2e >= 0 ? e2e / 1000.0 : 0.0);
+                w.fps,
+                w.kbps,
+                w.framesDropped,
+                w.lossPct,
+                w.packetsRecovered,
+                session.lastRttUs() / 1000.0,
+                e2e >= 0 ? e2e / 1000.0 : 0.0);
 
             // Chỉ in khi giây vừa rồi CÓ mất gói: chùm-1 thì FEC hiện tại cứu được,
             // chùm ≥2 thì không (xem Stats::lossRuns).
@@ -462,18 +469,18 @@ void ClientLoop::NetThread() {
                 LOGI("[Client]   loss runs: 1x%" PRIu64 " 2x%" PRIu64 " 3x%" PRIu64
                      " 4-7x%" PRIu64 " 8-15x%" PRIu64 " 16-31x%" PRIu64 " 32+x%" PRIu64
                      "  | longest ever %" PRIu64 " pkts",
-                     w.lossRuns[0], w.lossRuns[1], w.lossRuns[2], w.lossRuns[3],
-                     w.lossRuns[4], w.lossRuns[5], w.lossRuns[6], w.lossRunMax);
+                    w.lossRuns[0], w.lossRuns[1], w.lossRuns[2], w.lossRuns[3],
+                    w.lossRuns[4], w.lossRuns[5], w.lossRuns[6], w.lossRunMax);
 
             // Bản gọn cho overlay trên màn hình (logcat giữ bản đầy đủ ở trên).
             char ui[160];
             std::snprintf(ui, sizeof(ui),
-                          "%.0f fps  %.1f Mbps  loss %.1f%%  RTT %.0f ms  e2e %.0f ms",
-                          w.fps,
-                          w.kbps / 1000.0,
-                          w.lossPct,
-                          session.lastRttUs() / 1000.0,
-                          e2e >= 0 ? e2e / 1000.0 : 0.0);
+                "%.0f fps  %.1f Mbps  loss %.1f%%  RTT %.0f ms  e2e %.0f ms",
+                w.fps,
+                w.kbps / 1000.0,
+                w.lossPct,
+                session.lastRttUs() / 1000.0,
+                e2e >= 0 ? e2e / 1000.0 : 0.0);
             {
                 std::lock_guard<std::mutex> lk(textMutex_);
                 statusLine_ = ui;
@@ -487,14 +494,15 @@ void ClientLoop::NetThread() {
                 const uint32_t dc = dgDecCount_.exchange(0, std::memory_order_relaxed);
                 const uint32_t ds = dgDecMsSum_.exchange(0, std::memory_order_relaxed);
                 const uint32_t dm = dgDecMsMax_.exchange(0, std::memory_order_relaxed);
-                LOGI("[DIAG] evt=sum asm_ms=%.1f/%u dec_ms=%.1f/%u dq_drop=%u"
-                     " late=%" PRIu64 " late_ms_avg=%.0f late_ms_max=%" PRIu64
-                     " gap_ms_max=%u loop_busy_ms_max=%u",
-                     dgAsmCount ? double(dgAsmMsSum) / dgAsmCount : 0.0, dgAsmMsMax,
-                     dc ? double(ds) / dc : 0.0, dm,
-                     dgDqDrop,
-                     w.latePackets, w.lateMsAvg, w.lateMsMax,
-                     reasm ? reasm->TakeMaxGapMs() : 0, dgLoopBusyMaxMs);
+                LOGI(
+                    "[DIAG] evt=sum asm_ms=%.1f/%u dec_ms=%.1f/%u dq_drop=%u"
+                    " late=%" PRIu64 " late_ms_avg=%.0f late_ms_max=%" PRIu64
+                    " gap_ms_max=%u loop_busy_ms_max=%u",
+                    dgAsmCount ? double(dgAsmMsSum) / dgAsmCount : 0.0, dgAsmMsMax,
+                    dc ? double(ds) / dc : 0.0, dm,
+                    dgDqDrop,
+                    w.latePackets, w.lateMsAvg, w.lateMsMax,
+                    reasm ? reasm->TakeMaxGapMs() : 0, dgLoopBusyMaxMs);
                 dgAsmMsSum = dgAsmMsMax = dgAsmCount = 0;
                 dgDqDrop = 0;
                 dgLoopBusyMaxMs = 0;

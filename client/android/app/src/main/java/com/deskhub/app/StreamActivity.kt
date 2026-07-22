@@ -70,23 +70,28 @@ import kotlinx.coroutines.delay
  * qua view hierarchy, thêm một lần copy GPU và khoảng một frame trễ.
  */
 class StreamActivity : ComponentActivity() {
-
     private var started = false
 
     // Giữ ở Activity chứ không tạo trong composable: callback này phải sống đúng
     // bằng vòng đời SurfaceView, không được dựng lại theo mỗi lần recomposition.
-    private val holderCallback = object : SurfaceHolder.Callback {
-        override fun surfaceCreated(holder: SurfaceHolder) {
-            NativeClient.nativeSetSurface(holder.surface)
-        }
+    private val holderCallback =
+        object : SurfaceHolder.Callback {
+            override fun surfaceCreated(holder: SurfaceHolder) {
+                NativeClient.nativeSetSurface(holder.surface)
+            }
 
-        override fun surfaceChanged(h: SurfaceHolder, f: Int, w: Int, ht: Int) {}
+            override fun surfaceChanged(
+                h: SurfaceHolder,
+                f: Int,
+                w: Int,
+                ht: Int,
+            ) {}
 
-        override fun surfaceDestroyed(holder: SurfaceHolder) {
-            // Chặn tới khi bộ giải mã buông surface — xem chú thích ở NativeClient.
-            NativeClient.nativeSetSurface(null)
+            override fun surfaceDestroyed(holder: SurfaceHolder) {
+                // Chặn tới khi bộ giải mã buông surface — xem chú thích ở NativeClient.
+                NativeClient.nativeSetSurface(null)
+            }
         }
-    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -104,7 +109,7 @@ class StreamActivity : ComponentActivity() {
                     address = addr,
                     started = started,
                     holderCallback = holderCallback,
-                    onDismiss = { finish() }
+                    onDismiss = { finish() },
                 )
             }
         }
@@ -121,7 +126,7 @@ private fun StreamScreen(
     address: String,
     started: Boolean,
     holderCallback: SurfaceHolder.Callback,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
 ) {
     var phase by remember { mutableIntStateOf(NativeClient.PHASE_IDLE) }
     var statusLine by remember { mutableStateOf("") }
@@ -148,32 +153,35 @@ private fun StreamScreen(
         }
     }
 
-    val message = when {
-        !started -> stringResource(R.string.invalid_address, address)
-        phase == NativeClient.PHASE_ENDED -> stringResource(R.string.disconnected, endReason)
-        phase == NativeClient.PHASE_STREAMING -> statusLine
-        else -> stringResource(R.string.connecting_to, address)
-    }
+    val message =
+        when {
+            !started -> stringResource(R.string.invalid_address, address)
+            phase == NativeClient.PHASE_ENDED -> stringResource(R.string.disconnected, endReason)
+            phase == NativeClient.PHASE_STREAMING -> statusLine
+            else -> stringResource(R.string.connecting_to, address)
+        }
 
     // Hết phiên thì chạm vào đâu cũng quay lại màn hình nhập địa chỉ.
-    val rootModifier = Modifier
-        .fillMaxSize()
-        .background(Color.Black)
-        .let { if (phase == NativeClient.PHASE_ENDED) it.clickable(onClick = onDismiss) else it }
+    val rootModifier =
+        Modifier
+            .fillMaxSize()
+            .background(Color.Black)
+            .let { if (phase == NativeClient.PHASE_ENDED) it.clickable(onClick = onDismiss) else it }
 
     Box(modifier = rootModifier, contentAlignment = Alignment.Center) {
         if (started) {
             // Modifier.aspectRatio lo luôn việc letterbox theo tỉ lệ video — đây là
             // thứ bản NativeActivity thuần không làm nổi (phải tự tính layout params).
             val videoModifier =
-                if (videoW > 0 && videoH > 0)
+                if (videoW > 0 && videoH > 0) {
                     Modifier.aspectRatio(videoW.toFloat() / videoH.toFloat())
-                else
+                } else {
                     Modifier.fillMaxSize()
+                }
 
             AndroidView(
                 factory = { ctx -> SurfaceView(ctx).apply { holder.addCallback(holderCallback) } },
-                modifier = videoModifier
+                modifier = videoModifier,
             )
         }
 
@@ -182,13 +190,13 @@ private fun StreamScreen(
                 text = message,
                 color = Color.White,
                 fontSize = 13.sp,
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .padding(top = 12.dp)
-                    .background(Color(0xA0000000))
-                    .padding(horizontal = 12.dp, vertical = 6.dp)
+                modifier =
+                    Modifier
+                        .align(Alignment.TopCenter)
+                        .padding(top = 12.dp)
+                        .background(Color(0xA0000000))
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
             )
         }
     }
-
 }

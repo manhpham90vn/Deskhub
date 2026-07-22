@@ -36,4 +36,4 @@
 // dùng bấm Hủy/đóng cửa sổ hoặc không chọn nguồn nào. `outAllowInput` chỉ có ý
 // nghĩa khi trả về true.
 bool ShowWindowPickerDialog(HWND owner, std::vector<AgentSource>& outSources,
-                            bool& outAllowInput);
+    bool& outAllowInput);

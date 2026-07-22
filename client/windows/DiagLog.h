@@ -31,7 +31,8 @@
 // =============================================================================
 #include <string>
 
-enum class DiagRole { Agent, Client };
+enum class DiagRole { Agent,
+    Client };
 
 // Đổi hướng stdout+stderr sang file trong suốt một phiên, trả lại như cũ khi hết
 // phạm vi. RAII vì màn hình chính chạy nhiều phiên liên tiếp: mỗi phiên một file,
@@ -49,14 +50,18 @@ public:
     // là không có log.
     bool Start(DiagRole role);
 
-    bool active() const { return active_; }
-    const std::wstring& path() const { return path_; }
+    bool active() const {
+        return active_;
+    }
+    const std::wstring& path() const {
+        return path_;
+    }
 
 private:
     void Stop();
 
     std::wstring path_;
-    int  savedOut_ = -1;   // fd gốc của stdout/stderr, giữ để trả lại
-    int  savedErr_ = -1;
+    int savedOut_ = -1; // fd gốc của stdout/stderr, giữ để trả lại
+    int savedErr_ = -1;
     bool active_ = false;
 };

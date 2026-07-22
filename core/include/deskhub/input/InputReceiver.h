@@ -58,11 +58,13 @@ public:
 
     void Reset(); // phiên mới: quên seq đã áp dụng
 
-    const Stats& stats() const { return stats_; }
+    const Stats& stats() const {
+        return stats_;
+    }
 
 private:
     int64_t lastAppliedSeq_ = -1; // -1 = chưa nhận event nào
-    Stats   stats_{};
+    Stats stats_{};
 };
 
 } // namespace deskhub

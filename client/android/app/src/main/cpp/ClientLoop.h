@@ -61,7 +61,10 @@ class ClientLoop {
 public:
     // Trạng thái cho tầng UI hiển thị. Không trùng ClientSession::State: UI chỉ cần
     // biết "đang quay bánh xe" hay "đã có hình", không cần Hello/Starting.
-    enum class Phase : int32_t { Idle = 0, Connecting = 1, Streaming = 2, Ended = 3 };
+    enum class Phase : int32_t { Idle = 0,
+        Connecting = 1,
+        Streaming = 2,
+        Ended = 3 };
 
     ClientLoop() = default;
     ~ClientLoop();
@@ -79,9 +82,13 @@ public:
     void SetWindow(ANativeWindow* window);
 
     // true khi phiên đã kết thúc (host BYE / timeout / lỗi) — main thoát app.
-    bool Finished() const { return finished_.load(std::memory_order_acquire); }
+    bool Finished() const {
+        return finished_.load(std::memory_order_acquire);
+    }
 
-    Phase phase() const { return phase_.load(std::memory_order_acquire); }
+    Phase phase() const {
+        return phase_.load(std::memory_order_acquire);
+    }
 
     // Dòng số liệu cho overlay (fps/kbps/RTT/e2e), cập nhật 1s/lần. Chuỗi rỗng khi
     // chưa có số liệu. Có khóa vì UI thread đọc còn thread Net ghi.
@@ -91,50 +98,54 @@ public:
     std::string EndReason();
 
     // Kích thước video đàm phán được — UI dùng để đặt đúng tỉ lệ khung SurfaceView.
-    uint32_t videoWidth() const { return negW_.load(); }
-    uint32_t videoHeight() const { return negH_.load(); }
+    uint32_t videoWidth() const {
+        return negW_.load();
+    }
+    uint32_t videoHeight() const {
+        return negH_.load();
+    }
 
 private:
     void NetThread();
     void DecodeThread();
 
-    NetAddr   server_{};
-    uint8_t   sourceId_ = 0;
+    NetAddr server_{};
+    uint8_t sourceId_ = 0;
     UdpSocket sock_;
 
     std::thread netThread_;
     std::thread decodeThread_;
 
-    std::atomic<bool>  quit_{false};
-    std::atomic<bool>  finished_{false};
+    std::atomic<bool> quit_{false};
+    std::atomic<bool> finished_{false};
     std::atomic<Phase> phase_{Phase::Idle};
 
     // Chuỗi hiển thị: thread Net ghi, UI thread đọc.
-    std::mutex  textMutex_;
+    std::mutex textMutex_;
     std::string statusLine_;
     std::string endReason_;
 
     // Tham số đàm phán được (thread Net ghi, thread Decode đọc).
     std::atomic<uint32_t> negW_{0}, negH_{0};
-    std::atomic<bool>     rebuildDecoder_{false}; // RECONFIG -> dựng lại codec
+    std::atomic<bool> rebuildDecoder_{false}; // RECONFIG -> dựng lại codec
 
     // Surface: bắt tay theo thế hệ. Main tăng winGen_, Decode ack bằng winAckGen_.
-    std::mutex              winMutex_;
-    std::condition_variable winCv_;      // báo Decode có thay đổi
-    std::condition_variable winAckCv_;   // báo Main thay đổi đã được áp dụng
-    ANativeWindow*          window_ = nullptr;
-    uint64_t                winGen_ = 0;
-    uint64_t                winAckGen_ = 0;
-    bool                    decodeExited_ = false;
+    std::mutex winMutex_;
+    std::condition_variable winCv_;    // báo Decode có thay đổi
+    std::condition_variable winAckCv_; // báo Main thay đổi đã được áp dụng
+    ANativeWindow* window_ = nullptr;
+    uint64_t winGen_ = 0;
+    uint64_t winAckGen_ = 0;
+    bool decodeExited_ = false;
 
     // Hàng đợi frame Net -> Decode.
     static constexpr size_t kMaxQueuedFrames = 3;
-    std::mutex                          decMutex_;
-    std::condition_variable             decCv_;
+    std::mutex decMutex_;
+    std::condition_variable decCv_;
     std::deque<deskhub::Reassembler::Frame> decQueue_;
 
-    std::atomic<bool>     decodeFailed_{false};
-    std::atomic<bool>     queueOverflow_{false};
+    std::atomic<bool> decodeFailed_{false};
+    std::atomic<bool> queueOverflow_{false};
     std::atomic<uint32_t> stRendered_{0};
 
     // --- Chẩn đoán (docs/09): t_dec của cửa sổ 1s. Thread Decode ghi, thread Net
@@ -143,7 +154,7 @@ private:
     std::atomic<uint32_t> dgDecMsSum_{0}, dgDecMsMax_{0}, dgDecCount_{0};
 
     // Ước lượng trễ e2e (docs/06 §7): Net ghi, Decode đọc.
-    std::atomic<int64_t>  ackDeltaUs_{0};
+    std::atomic<int64_t> ackDeltaUs_{0};
     std::atomic<uint32_t> minRttUs_{0};
-    std::atomic<int64_t>  lastE2eUs_{-1};
+    std::atomic<int64_t> lastE2eUs_{-1};
 };

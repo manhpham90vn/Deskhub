@@ -54,8 +54,12 @@ constexpr long kWantProfiles =
 struct ComScope {
     HRESULT hr;
     ComScope() : hr(CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED)) {}
-    ~ComScope() { if (SUCCEEDED(hr)) CoUninitialize(); }
-    bool ok() const { return SUCCEEDED(hr) || hr == RPC_E_CHANGED_MODE; }
+    ~ComScope() {
+        if (SUCCEEDED(hr)) CoUninitialize();
+    }
+    bool ok() const {
+        return SUCCEEDED(hr) || hr == RPC_E_CHANGED_MODE;
+    }
 };
 
 std::wstring SelfPath() {
@@ -73,7 +77,8 @@ INetFwRules* OpenRules(INetFwPolicy2** outPolicy) {
     *outPolicy = nullptr;
     INetFwPolicy2* policy = nullptr;
     if (FAILED(CoCreateInstance(__uuidof(NetFwPolicy2), nullptr, CLSCTX_INPROC_SERVER,
-                                __uuidof(INetFwPolicy2), (void**)&policy)) || !policy)
+            __uuidof(INetFwPolicy2), (void**)&policy)) ||
+        !policy)
         return nullptr;
     INetFwRules* rules = nullptr;
     if (FAILED(policy->get_Rules(&rules)) || !rules) {
@@ -151,7 +156,10 @@ void RemoveConflictingBlockRules(INetFwRules* rules, const std::wstring& exe) {
         }
         en->Release();
         for (const auto& n : victims)
-            if (BSTR b = SysAllocString(n.c_str())) { rules->Remove(b); SysFreeString(b); }
+            if (BSTR b = SysAllocString(n.c_str())) {
+                rules->Remove(b);
+                SysFreeString(b);
+            }
     }
     unk->Release();
 }
@@ -160,13 +168,14 @@ void RemoveConflictingBlockRules(INetFwRules* rules, const std::wstring& exe) {
 bool AddOwnRule(INetFwRules* rules, const std::wstring& exe) {
     INetFwRule* rule = nullptr;
     if (FAILED(CoCreateInstance(__uuidof(NetFwRule), nullptr, CLSCTX_INPROC_SERVER,
-                                __uuidof(INetFwRule), (void**)&rule)) || !rule)
+            __uuidof(INetFwRule), (void**)&rule)) ||
+        !rule)
         return false;
 
     bool ok = false;
     BSTR name = SysAllocString(kRuleName);
     BSTR desc = SysAllocString(L"Allow incoming connections for Deskhub host.");
-    BSTR app  = SysAllocString(exe.c_str());
+    BSTR app = SysAllocString(exe.c_str());
     if (name && app) {
         rule->put_Name(name);
         if (desc) rule->put_Description(desc);

@@ -25,7 +25,7 @@
 
 struct AdapterAddr {
     std::wstring name; // tên thân thiện của adapter ("Ethernet", "Wi-Fi"...)
-    std::string  ip;   // "192.168.1.10"
+    std::string ip;    // "192.168.1.10"
 };
 
 // Chỉ trả về adapter đang Up, bỏ loopback và địa chỉ APIPA 169.254.x.x.

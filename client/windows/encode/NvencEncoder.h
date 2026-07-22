@@ -40,7 +40,9 @@ public:
     bool Encode(ID3D11Texture2D* frame, uint64_t timestampUs, bool forceKeyframe) override;
     bool SetBitrate(uint32_t bitrateBps) override;
     void Finish() override;
-    const wchar_t* BackendName() const override { return L"NVENC (NVIDIA)"; }
+    const wchar_t* BackendName() const override {
+        return L"NVENC (NVIDIA)";
+    }
 
 private:
     struct Impl;

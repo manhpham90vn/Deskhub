@@ -30,11 +30,11 @@ using Microsoft::WRL::ComPtr;
 
 const wchar_t* GpuVendorName(GpuVendor v) {
     switch (v) {
-        case GpuVendor::Nvidia:    return L"NVIDIA";
-        case GpuVendor::Intel:     return L"Intel";
-        case GpuVendor::Amd:       return L"AMD";
+        case GpuVendor::Nvidia: return L"NVIDIA";
+        case GpuVendor::Intel: return L"Intel";
+        case GpuVendor::Amd: return L"AMD";
         case GpuVendor::Microsoft: return L"Microsoft (WARP/software)";
-        default:                   return L"Unknown";
+        default: return L"Unknown";
     }
 }
 
@@ -45,24 +45,22 @@ static GpuVendor VendorFromId(UINT vendorId) {
         case 0x8086: return GpuVendor::Intel;
         case 0x1002: return GpuVendor::Amd;
         case 0x1414: return GpuVendor::Microsoft;
-        default:     return GpuVendor::Unknown;
+        default: return GpuVendor::Unknown;
     }
 }
 
 // Cố gắng tạo device trên một adapter cụ thể (nullptr = WARP).
 static bool TryCreateOnAdapter(IDXGIAdapter1* adapter, D3D_DRIVER_TYPE driverType,
-                               GpuChoice& out) {
+    GpuChoice& out) {
     // Hai cờ này đều BẮT BUỘC, thiếu cái nào cũng hỏng ở tận tầng trên:
     //   BGRA_SUPPORT  — Windows.Graphics.Capture giao frame ở định dạng BGRA.
     //   VIDEO_SUPPORT — mở đường cho Media Foundation dùng encoder/decoder phần
     //                   cứng trên chính device này.
-    const UINT flags = D3D11_CREATE_DEVICE_BGRA_SUPPORT
-                     | D3D11_CREATE_DEVICE_VIDEO_SUPPORT;
+    const UINT flags = D3D11_CREATE_DEVICE_BGRA_SUPPORT | D3D11_CREATE_DEVICE_VIDEO_SUPPORT;
     // Xếp từ cao xuống thấp: D3D11CreateDevice lấy mức đầu tiên adapter đáp ứng
     // được. 10_1 là sàn — thấp hơn nữa thì không chạy nổi đường video phần cứng.
     const D3D_FEATURE_LEVEL levels[] = {
-        D3D_FEATURE_LEVEL_11_1, D3D_FEATURE_LEVEL_11_0, D3D_FEATURE_LEVEL_10_1
-    };
+        D3D_FEATURE_LEVEL_11_1, D3D_FEATURE_LEVEL_11_0, D3D_FEATURE_LEVEL_10_1};
 
     HRESULT hr = D3D11CreateDevice(
         adapter, driverType, nullptr, flags,

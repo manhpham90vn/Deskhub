@@ -68,7 +68,7 @@ namespace capture {
 void InitRuntime() {
     winrt::init_apartment(winrt::apartment_type::multi_threaded);
 }
-}  // namespace capture
+} // namespace capture
 
 // Lấy interface D3D11 gốc ra khỏi một đối tượng WinRT (surface -> ID3D11Texture2D).
 template <typename T>
@@ -81,25 +81,24 @@ static winrt::com_ptr<T> GetDXGIInterface(winrt::Windows::Foundation::IInspectab
 
 // ---------------------------------------------------------------------------
 struct WindowCapture::Impl {
-    winrt::com_ptr<ID3D11Device>        d3dDevice;
+    winrt::com_ptr<ID3D11Device> d3dDevice;
     winrt::com_ptr<ID3D11DeviceContext> d3dContext;
 
-    wgd3::IDirect3DDevice               winrtDevice{ nullptr };
-    wgc::GraphicsCaptureItem            item{ nullptr };
-    wgc::Direct3D11CaptureFramePool     framePool{ nullptr };
-    wgc::GraphicsCaptureSession         session{ nullptr };
-    winrt::event_token                  closedToken{};
-    winrt::event_token                  frameArrivedToken{};
-    wg::SizeInt32                       lastSize{};
+    wgd3::IDirect3DDevice winrtDevice{nullptr};
+    wgc::GraphicsCaptureItem item{nullptr};
+    wgc::Direct3D11CaptureFramePool framePool{nullptr};
+    wgc::GraphicsCaptureSession session{nullptr};
+    winrt::event_token closedToken{};
+    winrt::event_token frameArrivedToken{};
+    wg::SizeInt32 lastSize{};
 
-    FrameHandler                        onFrame;
-    std::atomic<bool>                   closed{ false };
-    std::atomic<uint64_t>               frameId{ 0 };
+    FrameHandler onFrame;
+    std::atomic<bool> closed{false};
+    std::atomic<uint64_t> frameId{0};
 
     bool CreateDevice() {
         const D3D_FEATURE_LEVEL levels[] = {
-            D3D_FEATURE_LEVEL_11_1, D3D_FEATURE_LEVEL_11_0, D3D_FEATURE_LEVEL_10_1
-        };
+            D3D_FEATURE_LEVEL_11_1, D3D_FEATURE_LEVEL_11_0, D3D_FEATURE_LEVEL_10_1};
         HRESULT hr = D3D11CreateDevice(
             nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr,
             D3D11_CREATE_DEVICE_BGRA_SUPPORT,
@@ -159,10 +158,12 @@ struct WindowCapture::Impl {
 // ---------------------------------------------------------------------------
 WindowCapture::WindowCapture() : impl_(std::make_unique<Impl>()) {}
 
-WindowCapture::~WindowCapture() { Stop(); }
+WindowCapture::~WindowCapture() {
+    Stop();
+}
 
 bool WindowCapture::Start(const CaptureTarget& target, ID3D11Device* device,
-                          FrameHandler onFrame) {
+    FrameHandler onFrame) {
     if (!wgc::GraphicsCaptureSession::IsSupported()) {
         std::printf("Windows Graphics Capture is not supported on this machine.\n");
         return false;
@@ -178,8 +179,7 @@ bool WindowCapture::Start(const CaptureTarget& target, ID3D11Device* device,
     if (device) {
         impl_->d3dDevice.copy_from(device);
         impl_->d3dDevice->GetImmediateContext(impl_->d3dContext.put());
-    }
-    else if (!impl_->CreateDevice()) {
+    } else if (!impl_->CreateDevice()) {
         return false;
     }
 
@@ -196,12 +196,12 @@ bool WindowCapture::Start(const CaptureTarget& target, ID3D11Device* device,
     const HRESULT hr =
         target.hwnd
             ? interop->CreateForWindow(target.hwnd, winrt::guid_of<wgc::GraphicsCaptureItem>(),
-                                       winrt::put_abi(impl_->item))
+                  winrt::put_abi(impl_->item))
             : interop->CreateForMonitor(target.monitor, winrt::guid_of<wgc::GraphicsCaptureItem>(),
-                                        winrt::put_abi(impl_->item));
+                  winrt::put_abi(impl_->item));
     if (FAILED(hr)) {
         std::printf("%s failed: 0x%08lX\n",
-                    target.hwnd ? "CreateForWindow" : "CreateForMonitor", (unsigned long)hr);
+            target.hwnd ? "CreateForWindow" : "CreateForMonitor", (unsigned long)hr);
         return false;
     }
 
@@ -223,15 +223,14 @@ bool WindowCapture::Start(const CaptureTarget& target, ID3D11Device* device,
     //    Con trỏ tắt vì phía client tự vẽ con trỏ của mình; viền vàng tắt vì nó lọt
     //    vào khung hình gửi đi.
     if (ApiInformation::IsPropertyPresent(
-        L"Windows.Graphics.Capture.GraphicsCaptureSession", L"IsCursorCaptureEnabled")) {
+            L"Windows.Graphics.Capture.GraphicsCaptureSession", L"IsCursorCaptureEnabled")) {
         impl_->session.IsCursorCaptureEnabled(false);
     }
     if (ApiInformation::IsPropertyPresent(
-        L"Windows.Graphics.Capture.GraphicsCaptureSession", L"IsBorderRequired")) {
+            L"Windows.Graphics.Capture.GraphicsCaptureSession", L"IsBorderRequired")) {
         try {
             impl_->session.IsBorderRequired(false);
-        }
-        catch (winrt::hresult_error const&) {
+        } catch (winrt::hresult_error const&) {
             // Một số cấu hình đòi quyền riêng - không sao, chỉ là còn viền vàng.
         }
     }
@@ -269,7 +268,13 @@ void WindowCapture::Stop() {
     impl_->onFrame = nullptr;
 }
 
-bool WindowCapture::Closed() const { return impl_->closed; }
+bool WindowCapture::Closed() const {
+    return impl_->closed;
+}
 
-ID3D11Device*        WindowCapture::Device() const { return impl_->d3dDevice.get(); }
-ID3D11DeviceContext* WindowCapture::Context() const { return impl_->d3dContext.get(); }
+ID3D11Device* WindowCapture::Device() const {
+    return impl_->d3dDevice.get();
+}
+ID3D11DeviceContext* WindowCapture::Context() const {
+    return impl_->d3dContext.get();
+}

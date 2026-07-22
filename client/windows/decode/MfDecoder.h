@@ -34,9 +34,11 @@ public:
     ~MfDecoder() override;
 
     bool Init(ID3D11Device* device, const DecoderConfig& cfg,
-              FrameHandler onFrame) override;
+        FrameHandler onFrame) override;
     bool Decode(const uint8_t* data, size_t size, uint64_t timestampUs) override;
-    const wchar_t* BackendName() const override { return L"Media Foundation (D3D11VA)"; }
+    const wchar_t* BackendName() const override {
+        return L"Media Foundation (D3D11VA)";
+    }
 
 private:
     struct Impl;

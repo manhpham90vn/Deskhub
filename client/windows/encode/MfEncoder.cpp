@@ -66,62 +66,62 @@ using Microsoft::WRL::ComPtr;
 // mạch logic. Bọc trong do/while(0) để dùng được trong `if` không ngoặc.
 //
 // Biến thể: MF_CHECK trả false, MF_CHECKI trả -1 (cho hàm trả int).
-#define MF_CHECK(expr, msg)                                                     \
-    do {                                                                          \
-        HRESULT _hr = (expr);                                                     \
-        if (FAILED(_hr)) {                                                        \
-            std::printf("[MfEncoder] %s failed: 0x%08lX\n", (msg),                \
-                        (unsigned long)_hr);                                      \
-            return false;                                                         \
-        }                                                                         \
+#define MF_CHECK(expr, msg)                                        \
+    do {                                                           \
+        HRESULT _hr = (expr);                                      \
+        if (FAILED(_hr)) {                                         \
+            std::printf("[MfEncoder] %s failed: 0x%08lX\n", (msg), \
+                (unsigned long)_hr);                               \
+            return false;                                          \
+        }                                                          \
     } while (0)
 
 // Biến thể trả -1 (dùng trong hàm trả int).
-#define MF_CHECKI(expr, msg)                                                      \
-    do {                                                                          \
-        HRESULT _hr = (expr);                                                     \
-        if (FAILED(_hr)) {                                                        \
-            std::printf("[MfEncoder] %s failed: 0x%08lX\n", (msg),                \
-                        (unsigned long)_hr);                                      \
-            return -1;                                                            \
-        }                                                                         \
+#define MF_CHECKI(expr, msg)                                       \
+    do {                                                           \
+        HRESULT _hr = (expr);                                      \
+        if (FAILED(_hr)) {                                         \
+            std::printf("[MfEncoder] %s failed: 0x%08lX\n", (msg), \
+                (unsigned long)_hr);                               \
+            return -1;                                             \
+        }                                                          \
     } while (0)
 
 struct MfEncoder::Impl {
-    ComPtr<IMFActivate>           activate;     // giữ lại để tạo-lại transform khi cần (xin keyframe)
-    ComPtr<IMFTransform>          mft;
-    ComPtr<IMFMediaEventGenerator> events;      // chỉ dùng khi isAsync
-    ComPtr<IMFDXGIDeviceManager>  deviceManager;
-    ComPtr<ICodecAPI>             codecApi;     // rate control / force keyframe (không bắt buộc)
+    ComPtr<IMFActivate> activate; // giữ lại để tạo-lại transform khi cần (xin keyframe)
+    ComPtr<IMFTransform> mft;
+    ComPtr<IMFMediaEventGenerator> events; // chỉ dùng khi isAsync
+    ComPtr<IMFDXGIDeviceManager> deviceManager;
+    ComPtr<ICodecAPI> codecApi; // rate control / force keyframe (không bắt buộc)
 
-    ComPtr<ID3D11Device>          device;
-    ComPtr<ID3D11DeviceContext>   context;
-    ComPtr<ID3D11VideoDevice>     videoDevice;
-    ComPtr<ID3D11VideoContext>    videoContext;
+    ComPtr<ID3D11Device> device;
+    ComPtr<ID3D11DeviceContext> context;
+    ComPtr<ID3D11VideoDevice> videoDevice;
+    ComPtr<ID3D11VideoContext> videoContext;
     ComPtr<ID3D11VideoProcessorEnumerator> vpEnum;
-    ComPtr<ID3D11VideoProcessor>  vp;
-    ComPtr<ID3D11Texture2D>       nv12Tex;       // scratch: BGRA (WGC) -> NV12 (đầu vào encoder)
+    ComPtr<ID3D11VideoProcessor> vp;
+    ComPtr<ID3D11Texture2D> nv12Tex; // scratch: BGRA (WGC) -> NV12 (đầu vào encoder)
     ComPtr<ID3D11VideoProcessorOutputView> vpOutView;
     // Cache input view theo texture nguồn: WGC dùng lại vài texture (pool depth 2).
     std::map<ID3D11Texture2D*, ComPtr<ID3D11VideoProcessorInputView>> vpInViews;
 
     EncoderConfig cfg{};
-    UINT     resetToken = 0;
-    bool     mfStarted = false;
-    bool     streaming = false;
-    bool     isAsync = false;
-    bool     outputProvidesSamples = false;
-    bool     haveFirstTs = false;
+    UINT resetToken = 0;
+    bool mfStarted = false;
+    bool streaming = false;
+    bool isAsync = false;
+    bool outputProvidesSamples = false;
+    bool haveFirstTs = false;
     uint64_t firstTsUs = 0;
     // Số sự kiện METransformNeedInput đã tiêu thụ TRƯỚC bởi PumpAsyncEvents —
     // WaitForNeedInputAsync trừ dần thay vì chặn chờ sự kiện đã lấy mất.
-    int       needInputCredit = 0;
+    int needInputCredit = 0;
     ULONGLONG lastEncodeTickMs = 0; // phát hiện nhịp input thưa (nguồn tĩnh/keepalive)
-    bool      rcLogged = false;     // log kết quả CodecAPI đúng một lần (Reinit gọi lại)
+    bool rcLogged = false;          // log kết quả CodecAPI đúng một lần (Reinit gọi lại)
     uint64_t frameCount = 0;
     uint64_t totalBytes = 0;
-    FILE*    out = nullptr;
-    std::vector<uint8_t> spsPps;  // extradata Annex-B (SPS+PPS), chèn trước mỗi IDR
+    FILE* out = nullptr;
+    std::vector<uint8_t> spsPps; // extradata Annex-B (SPS+PPS), chèn trước mỗi IDR
 
     ~Impl() {
         if (mft && streaming) {
@@ -133,7 +133,10 @@ struct MfEncoder::Impl {
         codecApi.Reset();
         if (activate) activate->ShutdownObject();
         deviceManager.Reset();
-        if (out) { std::fclose(out); out = nullptr; }
+        if (out) {
+            std::fclose(out);
+            out = nullptr;
+        }
         if (mfStarted) MFShutdown();
     }
 
@@ -144,13 +147,13 @@ struct MfEncoder::Impl {
     // Tìm + chọn IMFActivate D3D11-aware phù hợp (chỉ làm 1 lần, giữ lại trong `activate`
     // để tạo-lại transform rẻ khi cần xin keyframe - xem ReinitTransform()).
     bool FindActivate() {
-        MFT_REGISTER_TYPE_INFO outInfo{ MFMediaType_Video, SubtypeFor(cfg.codec) };
+        MFT_REGISTER_TYPE_INFO outInfo{MFMediaType_Video, SubtypeFor(cfg.codec)};
         IMFActivate** activates = nullptr;
         UINT32 count = 0;
         MF_CHECK(MFTEnumEx(MFT_CATEGORY_VIDEO_ENCODER,
-                           MFT_ENUM_FLAG_HARDWARE | MFT_ENUM_FLAG_SORTANDFILTER,
-                           nullptr, &outInfo, &activates, &count),
-                 "MFTEnumEx");
+                     MFT_ENUM_FLAG_HARDWARE | MFT_ENUM_FLAG_SORTANDFILTER,
+                     nullptr, &outInfo, &activates, &count),
+            "MFTEnumEx");
         if (count == 0) {
             std::printf("[MfEncoder] No encoder MFT found.\n");
             return false;
@@ -172,7 +175,10 @@ struct MfEncoder::Impl {
             UINT32 aware = 0;
             candidateAttrs->GetUINT32(MF_SA_D3D11_AWARE, &aware);
             std::wprintf(L"[MfEncoder] Found MFT: %ls (D3D11-aware=%u)\n", name, aware);
-            if (!aware) { activates[i]->ShutdownObject(); continue; }
+            if (!aware) {
+                activates[i]->ShutdownObject();
+                continue;
+            }
             activate = activates[i];
             mft = candidate;
         }
@@ -203,7 +209,7 @@ struct MfEncoder::Impl {
         }
 
         MF_CHECK(mft->ProcessMessage(MFT_MESSAGE_SET_D3D_MANAGER, (ULONG_PTR)deviceManager.Get()),
-                 "SET_D3D_MANAGER");
+            "SET_D3D_MANAGER");
 
         // --- Kiểu ĐẦU RA đặt trước ĐẦU VÀO. Thứ tự này bắt buộc với encoder MFT:
         //     tập kiểu đầu vào hợp lệ phụ thuộc vào đích đã chọn, nên đặt ngược lại
@@ -218,11 +224,11 @@ struct MfEncoder::Impl {
             outType->SetUINT32(MF_MT_MPEG2_PROFILE, eAVEncH264VProfile_Main);
         }
         MF_CHECK(MFSetAttributeSize(outType.Get(), MF_MT_FRAME_SIZE, cfg.width, cfg.height),
-                 "FRAME_SIZE(out)");
+            "FRAME_SIZE(out)");
         MF_CHECK(MFSetAttributeRatio(outType.Get(), MF_MT_FRAME_RATE, cfg.fps, 1),
-                 "FRAME_RATE(out)");
+            "FRAME_RATE(out)");
         MF_CHECK(MFSetAttributeRatio(outType.Get(), MF_MT_PIXEL_ASPECT_RATIO, 1, 1),
-                 "PAR(out)");
+            "PAR(out)");
         MF_CHECK(mft->SetOutputType(0, outType.Get(), 0), "SetOutputType");
 
         // --- Kiểu đầu vào: NV12 (encoder phần cứng không nhận BGRA thẳng - tự chuyển màu) ---
@@ -232,9 +238,9 @@ struct MfEncoder::Impl {
         inType->SetGUID(MF_MT_SUBTYPE, MFVideoFormat_NV12);
         inType->SetUINT32(MF_MT_INTERLACE_MODE, MFVideoInterlace_Progressive);
         MF_CHECK(MFSetAttributeSize(inType.Get(), MF_MT_FRAME_SIZE, cfg.width, cfg.height),
-                 "FRAME_SIZE(in)");
+            "FRAME_SIZE(in)");
         MF_CHECK(MFSetAttributeRatio(inType.Get(), MF_MT_FRAME_RATE, cfg.fps, 1),
-                 "FRAME_RATE(in)");
+            "FRAME_RATE(in)");
         MF_CHECK(mft->SetInputType(0, inType.Get(), 0), "SetInputType");
 
         if (!SetupRateControl()) return false;
@@ -245,12 +251,12 @@ struct MfEncoder::Impl {
         MFT_OUTPUT_STREAM_INFO si{};
         MF_CHECK(mft->GetOutputStreamInfo(0, &si), "GetOutputStreamInfo");
         outputProvidesSamples = (si.dwFlags & (MFT_OUTPUT_STREAM_PROVIDES_SAMPLES |
-                                               MFT_OUTPUT_STREAM_CAN_PROVIDE_SAMPLES)) != 0;
+                                                  MFT_OUTPUT_STREAM_CAN_PROVIDE_SAMPLES)) != 0;
 
         MF_CHECK(mft->ProcessMessage(MFT_MESSAGE_NOTIFY_BEGIN_STREAMING, 0),
-                 "NOTIFY_BEGIN_STREAMING");
+            "NOTIFY_BEGIN_STREAMING");
         MF_CHECK(mft->ProcessMessage(MFT_MESSAGE_NOTIFY_START_OF_STREAM, 0),
-                 "NOTIFY_START_OF_STREAM");
+            "NOTIFY_START_OF_STREAM");
         streaming = true;
         return true;
     }
@@ -279,7 +285,7 @@ struct MfEncoder::Impl {
             std::printf("[MfEncoder] Failed to recreate encoder for keyframe request.\n");
             return false;
         }
-        spsPps.clear();  // transform mới - lấy lại extradata riêng của nó
+        spsPps.clear(); // transform mới - lấy lại extradata riêng của nó
         return ConfigureTransform();
     }
 
@@ -303,7 +309,7 @@ struct MfEncoder::Impl {
         if (!FindActivate()) return false;
 
         MF_CHECK(MFCreateDXGIDeviceManager(&resetToken, &deviceManager),
-                 "MFCreateDXGIDeviceManager");
+            "MFCreateDXGIDeviceManager");
         MF_CHECK(deviceManager->ResetDevice(device.Get(), resetToken), "ResetDevice");
 
         if (!ConfigureTransform()) return false;
@@ -316,17 +322,20 @@ struct MfEncoder::Impl {
             if (dot != std::wstring::npos && path.substr(dot) == L".mp4")
                 path = path.substr(0, dot) + L".h264";
             out = _wfopen(path.c_str(), L"wb");
-            if (!out) { std::printf("[MfEncoder] Failed to open output file.\n"); return false; }
+            if (!out) {
+                std::printf("[MfEncoder] Failed to open output file.\n");
+                return false;
+            }
         } else if (!cfg.onPacket) {
             std::printf("[MfEncoder] No outputPath or onPacket - no output destination.\n");
             return false;
         }
 
         std::printf("[MfEncoder] Initialized: %ux%u @%ufps, %.1f Mbps, %s%s -> %s\n",
-                    cfg.width, cfg.height, cfg.fps, cfg.bitrateBps / 1e6,
-                    cfg.codec == Codec::HEVC ? "HEVC" : "H264",
-                    isAsync ? " (async MFT)" : " (sync MFT)",
-                    out ? "file" : "callback");
+            cfg.width, cfg.height, cfg.fps, cfg.bitrateBps / 1e6,
+            cfg.codec == Codec::HEVC ? "HEVC" : "H264",
+            isAsync ? " (async MFT)" : " (sync MFT)",
+            out ? "file" : "callback");
         return true;
     }
 
@@ -345,21 +354,31 @@ struct MfEncoder::Impl {
             if (log) std::printf("[MfEncoder] codecapi %s: %s\n", name, what);
         };
         auto setUI4 = [&](const GUID& api, ULONG val, const char* name) {
-            if (!codecApi->IsSupported(&api)) { report(name, "NOT SUPPORTED"); return; }
-            VARIANT v{}; v.vt = VT_UI4; v.ulVal = val;
+            if (!codecApi->IsSupported(&api)) {
+                report(name, "NOT SUPPORTED");
+                return;
+            }
+            VARIANT v{};
+            v.vt = VT_UI4;
+            v.ulVal = val;
             report(name, SUCCEEDED(codecApi->SetValue(&api, &v)) ? "ok" : "SetValue FAILED");
         };
         auto setBool = [&](const GUID& api, bool val, const char* name) {
-            if (!codecApi->IsSupported(&api)) { report(name, "NOT SUPPORTED"); return; }
-            VARIANT v{}; v.vt = VT_BOOL; v.boolVal = val ? VARIANT_TRUE : VARIANT_FALSE;
+            if (!codecApi->IsSupported(&api)) {
+                report(name, "NOT SUPPORTED");
+                return;
+            }
+            VARIANT v{};
+            v.vt = VT_BOOL;
+            v.boolVal = val ? VARIANT_TRUE : VARIANT_FALSE;
             report(name, SUCCEEDED(codecApi->SetValue(&api, &v)) ? "ok" : "SetValue FAILED");
         };
         setUI4(CODECAPI_AVEncCommonRateControlMode, (ULONG)eAVEncCommonRateControlMode_CBR,
-               "RateControlMode=CBR");
+            "RateControlMode=CBR");
         setUI4(CODECAPI_AVEncCommonMeanBitRate, (ULONG)cfg.bitrateBps, "MeanBitRate");
         setBool(CODECAPI_AVEncCommonLowLatency, true, "CommonLowLatency");
         setBool(CODECAPI_AVLowLatencyMode, true, "LowLatencyMode");
-        setUI4(CODECAPI_AVEncMPVGOPSize, 0x7fffffff, "GOPSize");  // ~vô hạn, IDR theo yêu cầu
+        setUI4(CODECAPI_AVEncMPVGOPSize, 0x7fffffff, "GOPSize"); // ~vô hạn, IDR theo yêu cầu
         // VBV ~2 frame (đơn vị BIT): trần cho cú dồn của một frame. Không có nó,
         // QSV đẻ IDR ~196 KB — gấp ~5 lần ngân sách frame @20Mbps/60fps (đo
         // 2026-07-21) — thành chùm 160+ gói, đúng thủ phạm burst-loss trên Wi-Fi
@@ -382,7 +401,9 @@ struct MfEncoder::Impl {
         if (!bitrateBps) return false;
         cfg.bitrateBps = bitrateBps;
         if (!codecApi || !codecApi->IsSupported(&CODECAPI_AVEncCommonMeanBitRate)) return false;
-        VARIANT v{}; v.vt = VT_UI4; v.ulVal = (ULONG)bitrateBps;
+        VARIANT v{};
+        v.vt = VT_UI4;
+        v.ulVal = (ULONG)bitrateBps;
         return SUCCEEDED(codecApi->SetValue(&CODECAPI_AVEncCommonMeanBitRate, &v));
     }
 
@@ -390,7 +411,9 @@ struct MfEncoder::Impl {
     // false = hỏng hoàn toàn.
     bool RequestKeyFrame() {
         if (codecApi && codecApi->IsSupported(&CODECAPI_AVEncVideoForceKeyFrame)) {
-            VARIANT v{}; v.vt = VT_UI4; v.ulVal = 1;
+            VARIANT v{};
+            v.vt = VT_UI4;
+            v.ulVal = 1;
             if (SUCCEEDED(codecApi->SetValue(&CODECAPI_AVEncVideoForceKeyFrame, &v))) return true;
         }
         // Driver này không hỗ trợ force qua ICodecAPI (đã xác nhận qua kiểm thử thật với
@@ -417,7 +440,7 @@ struct MfEncoder::Impl {
         cd.OutputHeight = cfg.height;
         cd.Usage = D3D11_VIDEO_USAGE_PLAYBACK_NORMAL;
         MF_CHECK(videoDevice->CreateVideoProcessorEnumerator(&cd, &vpEnum),
-                 "CreateVideoProcessorEnumerator");
+            "CreateVideoProcessorEnumerator");
 
         UINT fmtFlags = 0;
         HRESULT hr = vpEnum->CheckVideoProcessorFormat(DXGI_FORMAT_NV12, &fmtFlags);
@@ -443,10 +466,10 @@ struct MfEncoder::Impl {
         od.ViewDimension = D3D11_VPOV_DIMENSION_TEXTURE2D;
         od.Texture2D.MipSlice = 0;
         MF_CHECK(videoDevice->CreateVideoProcessorOutputView(nv12Tex.Get(), vpEnum.Get(), &od,
-                                                              &vpOutView),
-                 "CreateVideoProcessorOutputView");
+                     &vpOutView),
+            "CreateVideoProcessorOutputView");
 
-        RECT rect{ 0, 0, (LONG)cfg.width, (LONG)cfg.height };
+        RECT rect{0, 0, (LONG)cfg.width, (LONG)cfg.height};
         videoContext->VideoProcessorSetStreamSourceRect(vp.Get(), 0, TRUE, &rect);
         videoContext->VideoProcessorSetStreamDestRect(vp.Get(), 0, TRUE, &rect);
         return true;
@@ -466,14 +489,14 @@ struct MfEncoder::Impl {
             vd.Texture2D.ArraySlice = 0;
             ComPtr<ID3D11VideoProcessorInputView> view;
             MF_CHECK(videoDevice->CreateVideoProcessorInputView(bgra, vpEnum.Get(), &vd, &view),
-                     "CreateVideoProcessorInputView");
+                "CreateVideoProcessorInputView");
             it = vpInViews.emplace(bgra, std::move(view)).first;
         }
         D3D11_VIDEO_PROCESSOR_STREAM stream{};
         stream.Enable = TRUE;
         stream.pInputSurface = it->second.Get();
         MF_CHECK(videoContext->VideoProcessorBlt(vp.Get(), vpOutView.Get(), 0, 1, &stream),
-                 "VideoProcessorBlt");
+            "VideoProcessorBlt");
         return true;
     }
 
@@ -496,9 +519,12 @@ struct MfEncoder::Impl {
         for (size_t i = 0; i + 3 < len; ++i) {
             if (data[i] != 0 || data[i + 1] != 0) continue;
             size_t hdr;
-            if (data[i + 2] == 1) hdr = i + 3;
-            else if (data[i + 2] == 0 && i + 4 < len && data[i + 3] == 1) hdr = i + 4;
-            else continue;
+            if (data[i + 2] == 1)
+                hdr = i + 3;
+            else if (data[i + 2] == 0 && i + 4 < len && data[i + 3] == 1)
+                hdr = i + 4;
+            else
+                continue;
             if (hdr < len && (data[hdr] & 0x1F) == 5) return true;
             i = hdr;
         }
@@ -543,7 +569,7 @@ struct MfEncoder::Impl {
         ++frameCount;
         if (frameCount <= 5 || frameCount % 60 == 0) {
             std::printf("[MfEncoder] frame %llu: %lu byte%s\n", (unsigned long long)frameCount,
-                        len, keyframe ? " (IDR)" : "");
+                len, keyframe ? " (IDR)" : "");
         }
         buffer->Unlock();
         return true;
@@ -558,7 +584,7 @@ struct MfEncoder::Impl {
             if (hr == MF_E_NO_MORE_TYPES) break;
             if (FAILED(hr)) {
                 std::printf("[MfEncoder] GetOutputAvailableType failed: 0x%08lX\n",
-                            (unsigned long)hr);
+                    (unsigned long)hr);
                 return false;
             }
             GUID sub{};
@@ -568,7 +594,7 @@ struct MfEncoder::Impl {
                 MFT_OUTPUT_STREAM_INFO si{};
                 if (SUCCEEDED(mft->GetOutputStreamInfo(0, &si))) {
                     outputProvidesSamples = (si.dwFlags & (MFT_OUTPUT_STREAM_PROVIDES_SAMPLES |
-                                                           MFT_OUTPUT_STREAM_CAN_PROVIDE_SAMPLES)) != 0;
+                                                              MFT_OUTPUT_STREAM_CAN_PROVIDE_SAMPLES)) != 0;
                 }
                 return true;
             }
@@ -592,20 +618,23 @@ struct MfEncoder::Impl {
                 MF_CHECKI(mft->GetOutputStreamInfo(0, &si), "GetOutputStreamInfo");
                 ComPtr<IMFMediaBuffer> buf;
                 MF_CHECKI(MFCreateMemoryBuffer(si.cbSize ? si.cbSize : (1u << 20), &buf),
-                          "MFCreateMemoryBuffer(out)");
+                    "MFCreateMemoryBuffer(out)");
                 MF_CHECKI(MFCreateSample(&ownedSample), "MFCreateSample(out)");
                 MF_CHECKI(ownedSample->AddBuffer(buf.Get()), "AddBuffer(out)");
                 ob.pSample = ownedSample.Get();
             }
             DWORD status = 0;
             HRESULT hr = mft->ProcessOutput(0, 1, &ob, &status);
-            if (ob.pEvents) { ob.pEvents->Release(); ob.pEvents = nullptr; }
+            if (ob.pEvents) {
+                ob.pEvents->Release();
+                ob.pEvents = nullptr;
+            }
 
             if (hr == MF_E_TRANSFORM_NEED_MORE_INPUT) return 0;
             if (hr == MF_E_TRANSFORM_STREAM_CHANGE) {
                 if (ob.pSample && outputProvidesSamples) ob.pSample->Release();
                 if (!RenegotiateOutputType()) return -1;
-                continue;  // đồng bộ: thử lại ngay. Bất đồng bộ: hết lượt (maxAttempts=1), return 0.
+                continue; // đồng bộ: thử lại ngay. Bất đồng bộ: hết lượt (maxAttempts=1), return 0.
             }
             if (FAILED(hr)) {
                 if (ob.pSample && outputProvidesSamples) ob.pSample->Release();
@@ -614,8 +643,10 @@ struct MfEncoder::Impl {
             }
 
             ComPtr<IMFSample> sample;
-            if (outputProvidesSamples) sample.Attach(ob.pSample);
-            else sample = ownedSample;
+            if (outputProvidesSamples)
+                sample.Attach(ob.pSample);
+            else
+                sample = ownedSample;
             if (!sample) return 0;
             return EmitSample(sample.Get()) ? 1 : -1;
         }
@@ -635,7 +666,10 @@ struct MfEncoder::Impl {
     // được báo dọc đường (không được gọi ProcessInput/Output ngoài sự kiện như thế này).
     bool WaitForNeedInputAsync() {
         // NeedInput đã được PumpAsyncEvents lấy trước rồi thì khỏi chặn chờ.
-        if (needInputCredit > 0) { --needInputCredit; return true; }
+        if (needInputCredit > 0) {
+            --needInputCredit;
+            return true;
+        }
         // Chờ CÓ HẠN (poll NO_WAIT + ngủ 1ms, trần 1s) thay vì GetEvent chặn vô
         // hạn: encode chạy dưới encMutex trên cả thread Recv (keepalive/IDR tĩnh),
         // GetEvent treo là thread Recv treo theo — đo 2026-07-21 thấy RTT nhảy
@@ -707,8 +741,8 @@ struct MfEncoder::Impl {
 
         ComPtr<IMFMediaBuffer> buffer;
         MF_CHECK(MFCreateDXGISurfaceBuffer(__uuidof(ID3D11Texture2D), nv12Tex.Get(), 0, FALSE,
-                                           &buffer),
-                 "MFCreateDXGISurfaceBuffer");
+                     &buffer),
+            "MFCreateDXGISurfaceBuffer");
         ComPtr<IMF2DBuffer2> buf2d;
         if (SUCCEEDED(buffer.As(&buf2d))) {
             DWORD len = 0;
@@ -722,7 +756,10 @@ struct MfEncoder::Impl {
         // MF muốn mốc thời gian bắt đầu từ 0, còn capture giao ra đồng hồ hệ thống.
         // Nhớ mốc đầu tiên rồi trừ đi; EmitSample cộng lại để trả về thang gốc.
         // Đơn vị của MF là 100ns nên phải nhân 10 từ micro-giây.
-        if (!haveFirstTs) { firstTsUs = timestampUs; haveFirstTs = true; }
+        if (!haveFirstTs) {
+            firstTsUs = timestampUs;
+            haveFirstTs = true;
+        }
         const LONGLONG timeHns = static_cast<LONGLONG>((timestampUs - firstTsUs) * 10ull);
         const LONGLONG durHns = static_cast<LONGLONG>(10'000'000ull / (cfg.fps ? cfg.fps : 60));
         sample->SetSampleTime(timeHns);
@@ -762,7 +799,10 @@ struct MfEncoder::Impl {
                 if (FAILED(events->GetEvent(0, &ev))) break;
                 MediaEventType met = MEUnknown;
                 ev->GetType(&met);
-                if (met == METransformHaveOutput) { if (PullOneOutput() < 0) break; continue; }
+                if (met == METransformHaveOutput) {
+                    if (PullOneOutput() < 0) break;
+                    continue;
+                }
                 if (met == METransformDrainComplete) break;
             } else {
                 int r = PullOneOutput();
@@ -775,7 +815,7 @@ struct MfEncoder::Impl {
         streaming = false;
         if (out) std::fflush(out);
         std::printf("[MfEncoder] Encoded %llu frame, %.2f MB.\n",
-                    (unsigned long long)frameCount, totalBytes / 1e6);
+            (unsigned long long)frameCount, totalBytes / 1e6);
     }
 };
 
@@ -784,7 +824,10 @@ MfEncoder::~MfEncoder() = default;
 
 bool MfEncoder::Init(ID3D11Device* device, const EncoderConfig& cfg) {
     impl_ = std::make_unique<Impl>();
-    if (!impl_->Init(device, cfg)) { impl_.reset(); return false; }
+    if (!impl_->Init(device, cfg)) {
+        impl_.reset();
+        return false;
+    }
     return true;
 }
 
@@ -796,4 +839,6 @@ bool MfEncoder::SetBitrate(uint32_t bitrateBps) {
     return impl_ && impl_->SetBitrate(bitrateBps);
 }
 
-void MfEncoder::Finish() { if (impl_) impl_->Finish(); }
+void MfEncoder::Finish() {
+    if (impl_) impl_->Finish();
+}

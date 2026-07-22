@@ -69,10 +69,16 @@ public:
     void ReleaseAll();
 
     void SetEnabled(bool on);
-    bool enabled() const { return enabled_; }
+    bool enabled() const {
+        return enabled_;
+    }
 
-    uint64_t applied() const { return applied_; }
-    uint64_t skipped() const { return skipped_; }
+    uint64_t applied() const {
+        return applied_;
+    }
+    uint64_t skipped() const {
+        return skipped_;
+    }
 
     // Dev (--injecttest): gõ một chuỗi ASCII vào cửa sổ `target` bằng chính
     // đường bơm thật (scancode). Để kiểm chứng riêng nửa "bơm input" mà không
@@ -92,12 +98,12 @@ private:
     void SendMoveAbsolute(int32_t nx, int32_t ny);
     void SendMoveRelative(int32_t dx, int32_t dy);
 
-    HWND     target_ = nullptr;  // đúng một trong hai khác nullptr
+    HWND target_ = nullptr; // đúng một trong hai khác nullptr
     HMONITOR monitor_ = nullptr;
     bool enabled_ = true;
-    bool hadFocus_ = true;   // để chỉ log một lần mỗi khi đổi trạng thái focus
+    bool hadFocus_ = true; // để chỉ log một lần mỗi khi đổi trạng thái focus
     uint64_t applied_ = 0;
-    uint64_t skipped_ = 0;   // event bị bỏ vì cửa sổ đích không còn foreground
-    std::map<int32_t, int32_t> keysDown_;     // scancode (kèm bit E0) -> mã phím ảo
+    uint64_t skipped_ = 0;                // event bị bỏ vì cửa sổ đích không còn foreground
+    std::map<int32_t, int32_t> keysDown_; // scancode (kèm bit E0) -> mã phím ảo
     std::set<deskhub::MouseButton> buttonsDown_;
 };

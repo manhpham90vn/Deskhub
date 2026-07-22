@@ -52,8 +52,12 @@ public:
 
     // Tạm dừng/tiếp tục gửi input (vd. chưa STREAMING, hoặc người dùng tắt).
     void SetEnabled(bool on);
-    bool enabled() const { return enabled_; }
-    bool relativeMode() const { return relative_; }
+    bool enabled() const {
+        return enabled_;
+    }
+    bool relativeMode() const {
+        return relative_;
+    }
 
     // GD5: cùng đường với phím tắt F9/F10, để nút bấm trên overlay preview gọi
     // trực tiếp (không lặp lại logic).
@@ -68,8 +72,8 @@ private:
 
     HWND hwnd_ = nullptr;
     Sink sink_;
-    bool enabled_  = false;
+    bool enabled_ = false;
     bool relative_ = false;
     bool attached_ = false;
-    int  buttonsDown_ = 0; // đếm nút đang giữ -> biết khi nào nhả SetCapture
+    int buttonsDown_ = 0; // đếm nút đang giữ -> biết khi nào nhả SetCapture
 };

@@ -38,7 +38,6 @@ import kotlinx.coroutines.withContext
  * lớp là phải sửa cả bên C++.
  */
 object NativeClient {
-
     // Trùng ClientLoop::Phase bên C++ — bốn giá trị này là một enum bị tách làm đôi
     // qua ranh giới JNI (nativePhase trả jint), nên sửa một bên phải sửa cả bên kia.
     const val PHASE_IDLE = 0
@@ -62,7 +61,11 @@ object NativeClient {
      * `sourceId` lấy từ [listSources]; 0 = nguồn đầu tiên, cũng là thứ host đời cũ
      * (chỉ một nguồn) hiểu được. false nếu địa chỉ sai cú pháp.
      */
-    external fun nativeStart(addr: String, sourceId: Int): Boolean
+    external fun nativeStart(
+        addr: String,
+        sourceId: Int,
+    ): Boolean
+
     external fun nativeStop()
 
     /**
@@ -73,13 +76,22 @@ object NativeClient {
     external fun nativeSetSurface(surface: Surface?)
 
     external fun nativePhase(): Int
+
     external fun nativeStatusLine(): String
+
     external fun nativeEndReason(): String
+
     external fun nativeVideoWidth(): Int
+
     external fun nativeVideoHeight(): Int
 
     /** Một cửa sổ host đang chia sẻ. `name` chỉ để hiển thị. */
-    data class Source(val id: Int, val width: Int, val height: Int, val name: String)
+    data class Source(
+        val id: Int,
+        val width: Int,
+        val height: Int,
+        val name: String,
+    )
 
     /**
      * Bọc [nativeListSources] và giải mã dạng "id\twidth\theight\tname" mà JNI trả về
@@ -89,13 +101,14 @@ object NativeClient {
      * Danh sách rỗng = host im lặng HOẶC không chia sẻ gì; caller cứ thử nguồn 0 và
      * để tầng dưới báo lỗi thật.
      */
-    suspend fun listSources(addr: String): List<Source> = withContext(Dispatchers.IO) {
-        nativeListSources(addr).mapNotNull { line ->
-            // limit = 4: tiêu đề cửa sổ có thể chứa tab, không được cắt tiếp.
-            val f = line.split('\t', limit = 4)
-            if (f.size < 4) return@mapNotNull null
-            val id = f[0].toIntOrNull() ?: return@mapNotNull null
-            Source(id, f[1].toIntOrNull() ?: 0, f[2].toIntOrNull() ?: 0, f[3])
+    suspend fun listSources(addr: String): List<Source> =
+        withContext(Dispatchers.IO) {
+            nativeListSources(addr).mapNotNull { line ->
+                // limit = 4: tiêu đề cửa sổ có thể chứa tab, không được cắt tiếp.
+                val f = line.split('\t', limit = 4)
+                if (f.size < 4) return@mapNotNull null
+                val id = f[0].toIntOrNull() ?: return@mapNotNull null
+                Source(id, f[1].toIntOrNull() ?: 0, f[2].toIntOrNull() ?: 0, f[3])
+            }
         }
-    }
 }

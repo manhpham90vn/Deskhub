@@ -1,9 +1,15 @@
 # Style C++ của Deskhub — bám sát code hiện có: thụt 4 space, ngoặc mở dính dòng,
-# con trỏ áp trái (uint8_t* p), namespace không thụt thêm. SortIncludes tắt vì các
-# file gom include theo nhóm có comment, sắp lại sẽ phá thứ tự cố ý đó.
+# con trỏ áp trái (uint8_t* p), namespace không thụt thêm.
+#
+# ColumnLimit: 0 là lựa chọn cố ý — TÔN TRỌNG ngắt dòng của tác giả. Repo này căn
+# tay nhiều biểu thức và bọc comment tiếng Việt theo bề rộng riêng; nếu để giới hạn
+# cột, clang-format sẽ gộp/bẻ lại và phá hết. Với 0 nó chỉ chuẩn hoá thụt lề, khoảng
+# trắng quanh toán tử, vị trí ngoặc, căn con trỏ — không đụng cấu trúc dòng.
+# ReflowComments tắt để không nắn lại phần chữ trong comment.
+# SortIncludes tắt vì include gom theo nhóm có comment, sắp lại sẽ phá thứ tự cố ý.
 BasedOnStyle: Google
 Standard: c++20
-ColumnLimit: 100
+ColumnLimit: 0
 IndentWidth: 4
 TabWidth: 4
 UseTab: Never
@@ -13,7 +19,14 @@ DerivePointerAlignment: false
 NamespaceIndentation: None
 BreakBeforeBraces: Attach
 AllowShortFunctionsOnASingleLine: Empty
-AllowShortIfStatementsOnASingleLine: false
-AllowShortLoopsOnASingleLine: false
+AllowShortIfStatementsOnASingleLine: WithoutElse
+AllowShortLoopsOnASingleLine: true
+AllowShortCaseLabelsOnASingleLine: true
+AllowShortBlocksOnASingleLine: Empty
+SpacesBeforeTrailingComments: 1
+AlignAfterOpenBracket: DontAlign
+BinPackArguments: true
+BinPackParameters: true
 Cpp11BracedListStyle: true
+ReflowComments: false
 SortIncludes: false

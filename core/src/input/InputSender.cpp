@@ -56,7 +56,7 @@ size_t InputSender::SendRange(size_t from, size_t to, const SendFn& send) {
     InputEvent tmp[kMaxInputEvents];
     for (size_t i = 0; i < n; ++i) tmp[i] = history_[from + i];
     const size_t bytes = BuildInputEvents(buf_, sessionId_, firstSeq_ + uint32_t(from),
-                                          std::span<const InputEvent>(tmp, n));
+        std::span<const InputEvent>(tmp, n));
     if (!bytes) return 0;
     send(std::span<const uint8_t>(buf_, bytes));
     return 1;
@@ -90,19 +90,19 @@ size_t InputSender::Flush(uint64_t nowUs, const SendFn& send) {
     // phần sau là event chưa ai thấy bao giờ.
     size_t sent = 0;
     while (unsent_ > 0) {
-        const size_t total    = history_.size();
-        const size_t newFrom  = total - unsent_;              // ranh giới đã/chưa gửi
-        const size_t batch    = std::min(unsent_, kInputBatchMax);
+        const size_t total = history_.size();
+        const size_t newFrom = total - unsent_; // ranh giới đã/chưa gửi
+        const size_t batch = std::min(unsent_, kInputBatchMax);
         // std::min trước khi trừ: newFrom có thể nhỏ hơn kInputRedundancy (lúc mới
         // bắt đầu phiên, chưa gửi gì), và đây là số không dấu nên trừ thẳng sẽ tràn
         // xuống một con số khổng lồ.
-        const size_t from     = newFrom - std::min(newFrom, kInputRedundancy);
+        const size_t from = newFrom - std::min(newFrom, kInputRedundancy);
         sent += SendRange(from, newFrom + batch, send);
         unsent_ -= batch;
     }
     // Đã có dữ liệu mới đi ra → nạp lại quota phát lại, tính từ mốc thời gian này.
     repeatsLeft_ = kInputRepeatCount;
-    lastSendUs_  = nowUs;
+    lastSendUs_ = nowUs;
     return sent;
 }
 

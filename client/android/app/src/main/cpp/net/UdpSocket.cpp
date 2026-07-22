@@ -36,7 +36,7 @@
 std::string NetAddr::ToString() const {
     char b[32];
     std::snprintf(b, sizeof(b), "%u.%u.%u.%u:%u",
-                  (ip >> 24) & 0xFF, (ip >> 16) & 0xFF, (ip >> 8) & 0xFF, ip & 0xFF, port);
+        (ip >> 24) & 0xFF, (ip >> 16) & 0xFF, (ip >> 8) & 0xFF, ip & 0xFF, port);
     return b;
 }
 
@@ -64,7 +64,9 @@ bool ParseNetAddr(const std::string& s, uint16_t defaultPort, NetAddr& out) {
     return true;
 }
 
-UdpSocket::~UdpSocket() { Close(); }
+UdpSocket::~UdpSocket() {
+    Close();
+}
 
 // Mở socket UDP và bind. Ghi vào fd_ CHỈ KHI mọi bước đã thành công — thất bại
 // giữa chừng thì đóng fd cục bộ và để đối tượng nguyên trạng "chưa mở", nên gọi

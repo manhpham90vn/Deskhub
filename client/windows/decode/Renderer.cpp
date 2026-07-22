@@ -44,14 +44,14 @@
 
 using Microsoft::WRL::ComPtr;
 
-#define RND_CHECK(expr, msg)                                                      \
-    do {                                                                          \
-        HRESULT _hr = (expr);                                                     \
-        if (FAILED(_hr)) {                                                        \
-            std::printf("[Renderer] %s failed: 0x%08lX\n", (msg),                 \
-                        (unsigned long)_hr);                                      \
-            return false;                                                         \
-        }                                                                         \
+#define RND_CHECK(expr, msg)                                      \
+    do {                                                          \
+        HRESULT _hr = (expr);                                     \
+        if (FAILED(_hr)) {                                        \
+            std::printf("[Renderer] %s failed: 0x%08lX\n", (msg), \
+                (unsigned long)_hr);                              \
+            return false;                                         \
+        }                                                         \
     } while (0)
 
 namespace {
@@ -59,30 +59,31 @@ constexpr wchar_t kWndClass[] = L"LoopbackPreviewWnd";
 }
 
 struct Renderer::Impl {
-    HWND                                  hwnd = nullptr;
-    HWND                                  statusLabel = nullptr;
-    HWND                                  btnLock = nullptr;
-    HWND                                  btnPause = nullptr;
-    HBRUSH                                labelBrush = nullptr; // nền dòng số liệu
-    Renderer::CommandHook                 cmdHook;    // GD5: nút overlay -> bên ngoài
-    ComPtr<ID3D11Device>                  device;
-    ComPtr<ID3D11DeviceContext>           context;
-    ComPtr<IDXGISwapChain1>               swapchain;
-    ComPtr<ID3D11Texture2D>               backbuffer;
-    ComPtr<ID3D11VideoDevice>             videoDevice;
-    ComPtr<ID3D11VideoContext>            videoContext;
+    HWND hwnd = nullptr;
+    HWND statusLabel = nullptr;
+    HWND btnLock = nullptr;
+    HWND btnPause = nullptr;
+    HBRUSH labelBrush = nullptr;   // nền dòng số liệu
+    Renderer::CommandHook cmdHook; // GD5: nút overlay -> bên ngoài
+    ComPtr<ID3D11Device> device;
+    ComPtr<ID3D11DeviceContext> context;
+    ComPtr<IDXGISwapChain1> swapchain;
+    ComPtr<ID3D11Texture2D> backbuffer;
+    ComPtr<ID3D11VideoDevice> videoDevice;
+    ComPtr<ID3D11VideoContext> videoContext;
     ComPtr<ID3D11VideoProcessorEnumerator> vpEnum;
-    ComPtr<ID3D11VideoProcessor>          vp;
+    ComPtr<ID3D11VideoProcessor> vp;
     ComPtr<ID3D11VideoProcessorOutputView> outView;
     // Cache input view theo (texture, slice): pool decoder dùng lại vài texture.
     std::map<std::pair<ID3D11Texture2D*, UINT>,
-             ComPtr<ID3D11VideoProcessorInputView>> inViews;
-    std::mutex        renderMutex;   // RenderNV12 từ luồng decode vs hủy từ main
-    std::atomic<bool> closed{ false };
-    uint32_t vpSrcW = 0, vpSrcH = 0;    // kích thước nguồn mà VP hiện tại phục vụ
+        ComPtr<ID3D11VideoProcessorInputView>>
+        inViews;
+    std::mutex renderMutex; // RenderNV12 từ luồng decode vs hủy từ main
+    std::atomic<bool> closed{false};
+    uint32_t vpSrcW = 0, vpSrcH = 0; // kích thước nguồn mà VP hiện tại phục vụ
     uint32_t clientW = 0, clientH = 0;
-    std::string dumpBmpPath;            // rỗng = không dump
-    Renderer::MessageHook msgHook;      // chỉ đọc/ghi trên luồng message (main)
+    std::string dumpBmpPath;       // rỗng = không dump
+    Renderer::MessageHook msgHook; // chỉ đọc/ghi trên luồng message (main)
 
     ~Impl() {
         if (hwnd) DestroyWindow(hwnd); // hủy cả child (label + 2 nút)
@@ -95,31 +96,31 @@ struct Renderer::Impl {
         // cả phím/chuột (kể cả ESC) để người dùng gõ vào MÁY KIA, không phải đây.
         if (self && self->msgHook && self->msgHook(h, msg, wp, lp)) return 0;
         switch (msg) {
-        case WM_CLOSE:
-            if (self) self->closed.store(true);
-            return 0;  // main tự đóng dẹp; không DestroyWindow ở đây
-        case WM_KEYDOWN:
-            if (wp == VK_ESCAPE && self) self->closed.store(true);
-            return 0;
-        case WM_CTLCOLORSTATIC:
-            // Nền dòng số liệu: chữ sáng trên nền tối để đọc được trên video.
-            if (self && (HWND)lp == self->statusLabel) {
-                HDC hdc = (HDC)wp;
-                SetTextColor(hdc, RGB(240, 240, 240));
-                SetBkColor(hdc, RGB(20, 20, 20));
-                return (LRESULT)self->labelBrush;
-            }
-            break;
-        case WM_COMMAND:
-            // GD5: 2 nút overlay (kBtnLock/kBtnPause) -> báo ra ngoài, giống hệt
-            // đường phím tắt F9/F10. Renderer không tự đổi trạng thái nút - bên
-            // ngoài gọi lại SetToggleState() sau khi xử lý xong.
-            if (self && self->cmdHook && HIWORD(wp) == BN_CLICKED) {
-                const int id = LOWORD(wp);
-                if (id == Renderer::kBtnLock || id == Renderer::kBtnPause)
-                    self->cmdHook(id);
-            }
-            return 0;
+            case WM_CLOSE:
+                if (self) self->closed.store(true);
+                return 0; // main tự đóng dẹp; không DestroyWindow ở đây
+            case WM_KEYDOWN:
+                if (wp == VK_ESCAPE && self) self->closed.store(true);
+                return 0;
+            case WM_CTLCOLORSTATIC:
+                // Nền dòng số liệu: chữ sáng trên nền tối để đọc được trên video.
+                if (self && (HWND)lp == self->statusLabel) {
+                    HDC hdc = (HDC)wp;
+                    SetTextColor(hdc, RGB(240, 240, 240));
+                    SetBkColor(hdc, RGB(20, 20, 20));
+                    return (LRESULT)self->labelBrush;
+                }
+                break;
+            case WM_COMMAND:
+                // GD5: 2 nút overlay (kBtnLock/kBtnPause) -> báo ra ngoài, giống hệt
+                // đường phím tắt F9/F10. Renderer không tự đổi trạng thái nút - bên
+                // ngoài gọi lại SetToggleState() sau khi xử lý xong.
+                if (self && self->cmdHook && HIWORD(wp) == BN_CLICKED) {
+                    const int id = LOWORD(wp);
+                    if (id == Renderer::kBtnLock || id == Renderer::kBtnPause)
+                        self->cmdHook(id);
+                }
+                return 0;
         }
         return DefWindowProcW(h, msg, wp, lp);
     }
@@ -134,8 +135,7 @@ struct Renderer::Impl {
         const int btnW = 130, btnH = 24, pad = 8;
         statusLabel = CreateWindowExW(0, L"STATIC", L"",
             WS_CHILD | WS_VISIBLE | SS_LEFT | SS_NOPREFIX,
-            pad, pad, (int)clientW > 2 * (btnW + pad) + 400
-                ? 400 : (int)clientW - 2 * (btnW + pad) - pad,
+            pad, pad, (int)clientW > 2 * (btnW + pad) + 400 ? 400 : (int)clientW - 2 * (btnW + pad) - pad,
             btnH, hwnd, nullptr, GetModuleHandleW(nullptr), nullptr);
 
         btnLock = CreateWindowExW(0, L"BUTTON", L"\U0001F512 Lock mouse (F9)",
@@ -148,7 +148,7 @@ struct Renderer::Impl {
             (int)clientW - pad - btnW, pad, btnW, btnH,
             hwnd, (HMENU)(INT_PTR)Renderer::kBtnPause, GetModuleHandleW(nullptr), nullptr);
 
-        for (HWND c : { statusLabel, btnLock, btnPause })
+        for (HWND c : {statusLabel, btnLock, btnPause})
             if (c) SendMessageW(c, WM_SETFONT, (WPARAM)font, TRUE);
     }
 
@@ -166,10 +166,20 @@ struct Renderer::Impl {
         SystemParametersInfoW(SPI_GETWORKAREA, 0, &wa, 0);
         const uint32_t maxW = (uint32_t)((wa.right - wa.left) * 9 / 10);
         const uint32_t maxH = (uint32_t)((wa.bottom - wa.top) * 9 / 10);
-        clientW = srcW; clientH = srcH;
-        if (clientW > maxW) { clientH = clientH * maxW / clientW; clientW = maxW; }
-        if (clientH > maxH) { clientW = clientW * maxH / clientH; clientH = maxH; }
-        if (!clientW || !clientH) { std::printf("[Renderer] Source size = 0.\n"); return false; }
+        clientW = srcW;
+        clientH = srcH;
+        if (clientW > maxW) {
+            clientH = clientH * maxW / clientW;
+            clientW = maxW;
+        }
+        if (clientH > maxH) {
+            clientW = clientW * maxH / clientH;
+            clientH = maxH;
+        }
+        if (!clientW || !clientH) {
+            std::printf("[Renderer] Source size = 0.\n");
+            return false;
+        }
 
         WNDCLASSW wc{};
         wc.lpfnWndProc = WndProc;
@@ -186,13 +196,16 @@ struct Renderer::Impl {
         // AdjustWindowRect đổi kích thước VÙNG CLIENT mong muốn thành kích thước cả
         // cửa sổ (cộng viền và thanh tiêu đề). Không có bước này thì video bị viền
         // ăn mất một dải.
-        RECT wr{ 0, 0, (LONG)clientW, (LONG)clientH };
+        RECT wr{0, 0, (LONG)clientW, (LONG)clientH};
         AdjustWindowRect(&wr, style, FALSE);
         hwnd = CreateWindowExW(0, kWndClass, title, style,
-                               CW_USEDEFAULT, CW_USEDEFAULT,
-                               wr.right - wr.left, wr.bottom - wr.top,
-                               nullptr, nullptr, wc.hInstance, nullptr);
-        if (!hwnd) { std::printf("[Renderer] CreateWindow failed.\n"); return false; }
+            CW_USEDEFAULT, CW_USEDEFAULT,
+            wr.right - wr.left, wr.bottom - wr.top,
+            nullptr, nullptr, wc.hInstance, nullptr);
+        if (!hwnd) {
+            std::printf("[Renderer] CreateWindow failed.\n");
+            return false;
+        }
         SetWindowLongPtrW(hwnd, GWLP_USERDATA, (LONG_PTR)this);
         ShowWindow(hwnd, SW_SHOW);
         CreateOverlay();
@@ -215,15 +228,15 @@ struct Renderer::Impl {
         sd.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
         sd.Scaling = DXGI_SCALING_STRETCH;
         RND_CHECK(factory->CreateSwapChainForHwnd(device.Get(), hwnd, &sd, nullptr, nullptr,
-                                                  &swapchain),
-                  "CreateSwapChainForHwnd");
+                      &swapchain),
+            "CreateSwapChainForHwnd");
         RND_CHECK(swapchain->GetBuffer(0, IID_PPV_ARGS(&backbuffer)), "GetBuffer");
 
         RND_CHECK(device.As(&videoDevice), "ID3D11VideoDevice");
         RND_CHECK(context.As(&videoContext), "ID3D11VideoContext");
 
         std::printf("[Renderer] Preview window %ux%u (source %ux%u).\n",
-                    clientW, clientH, srcW, srcH);
+            clientW, clientH, srcW, srcH);
         return true;
     }
 
@@ -248,23 +261,23 @@ struct Renderer::Impl {
         cd.OutputHeight = clientH;
         cd.Usage = D3D11_VIDEO_USAGE_PLAYBACK_NORMAL;
         RND_CHECK(videoDevice->CreateVideoProcessorEnumerator(&cd, &vpEnum),
-                  "CreateVideoProcessorEnumerator");
+            "CreateVideoProcessorEnumerator");
         RND_CHECK(videoDevice->CreateVideoProcessor(vpEnum.Get(), 0, &vp),
-                  "CreateVideoProcessor");
+            "CreateVideoProcessor");
 
         D3D11_VIDEO_PROCESSOR_OUTPUT_VIEW_DESC od{};
         od.ViewDimension = D3D11_VPOV_DIMENSION_TEXTURE2D;
         od.Texture2D.MipSlice = 0;
         RND_CHECK(videoDevice->CreateVideoProcessorOutputView(backbuffer.Get(), vpEnum.Get(),
-                                                              &od, &outView),
-                  "CreateVideoProcessorOutputView");
+                      &od, &outView),
+            "CreateVideoProcessorOutputView");
 
         // Cắt đúng vùng hình THẬT. Decoder căn texture theo bội số macroblock nên nó
         // thường lớn hơn kích thước hiển thị; không đặt source rect thì phần đệm
         // (rác) cũng bị co giãn lên màn hình.
-        RECT src{ 0, 0, (LONG)w, (LONG)h };
+        RECT src{0, 0, (LONG)w, (LONG)h};
         videoContext->VideoProcessorSetStreamSourceRect(vp.Get(), 0, TRUE, &src);
-        RECT dst{ 0, 0, (LONG)clientW, (LONG)clientH };
+        RECT dst{0, 0, (LONG)clientW, (LONG)clientH};
         videoContext->VideoProcessorSetStreamDestRect(vp.Get(), 0, TRUE, &dst);
 
         vpSrcW = w;
@@ -288,7 +301,7 @@ struct Renderer::Impl {
             vd.Texture2D.ArraySlice = subresource;
             ComPtr<ID3D11VideoProcessorInputView> view;
             RND_CHECK(videoDevice->CreateVideoProcessorInputView(tex, vpEnum.Get(), &vd, &view),
-                      "CreateVideoProcessorInputView");
+                "CreateVideoProcessorInputView");
             it = inViews.emplace(key, std::move(view)).first;
         }
 
@@ -296,7 +309,7 @@ struct Renderer::Impl {
         stream.Enable = TRUE;
         stream.pInputSurface = it->second.Get();
         RND_CHECK(videoContext->VideoProcessorBlt(vp.Get(), outView.Get(), 0, 1, &stream),
-                  "VideoProcessorBlt");
+            "VideoProcessorBlt");
 
         if (!dumpBmpPath.empty()) {
             if (SaveTextureToBmp(device.Get(), context.Get(), backbuffer.Get(), dumpBmpPath))
@@ -316,12 +329,15 @@ Renderer::~Renderer() = default;
 
 bool Renderer::Init(ID3D11Device* device, uint32_t srcW, uint32_t srcH, const wchar_t* title) {
     impl_ = std::make_unique<Impl>();
-    if (!impl_->Init(device, srcW, srcH, title)) { impl_.reset(); return false; }
+    if (!impl_->Init(device, srcW, srcH, title)) {
+        impl_.reset();
+        return false;
+    }
     return true;
 }
 
 bool Renderer::RenderNV12(ID3D11Texture2D* tex, UINT subresource,
-                          uint32_t width, uint32_t height) {
+    uint32_t width, uint32_t height) {
     return impl_ && impl_->RenderNV12(tex, subresource, width, height);
 }
 
@@ -352,7 +368,9 @@ void Renderer::SetToggleState(bool locked, bool paused) {
         SendMessageW(impl_->btnPause, BM_SETCHECK, paused ? BST_CHECKED : BST_UNCHECKED, 0);
 }
 
-HWND Renderer::Hwnd() const { return impl_ ? impl_->hwnd : nullptr; }
+HWND Renderer::Hwnd() const {
+    return impl_ ? impl_->hwnd : nullptr;
+}
 
 void Renderer::ClientSize(uint32_t& w, uint32_t& h) const {
     w = impl_ ? impl_->clientW : 0;
@@ -370,4 +388,6 @@ void Renderer::Pump() {
     }
 }
 
-bool Renderer::Closed() const { return impl_ && impl_->closed.load(); }
+bool Renderer::Closed() const {
+    return impl_ && impl_->closed.load();
+}

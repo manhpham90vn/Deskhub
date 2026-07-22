@@ -41,7 +41,7 @@ namespace {
 // các hàm Build* phía dưới ghi thẳng bằng con trỏ mà không phải kiểm tra từng lần —
 // đổi lại, người gọi BẮT BUỘC phải truyền payloadSize đúng bằng số byte nó sẽ ghi.
 size_t WriteCommon(std::span<uint8_t> out, MsgType type, uint8_t flags, Chan chan,
-                   uint32_t sessionId, size_t payloadSize) {
+    uint32_t sessionId, size_t payloadSize) {
     const size_t total = kCommonHeaderSize + payloadSize;
     if (out.size() < total) return 0;
     out[0] = kProtocolVersion;
@@ -72,7 +72,7 @@ size_t Utf8TruncLen(const std::string& s, size_t limit) {
 // tính được RTT chỉ bằng một phép trừ, không cần bảng tra pingId → thời điểm gửi,
 // và hai đồng hồ không cần đồng bộ với nhau.
 size_t BuildPingPongImpl(std::span<uint8_t> out, MsgType type, uint32_t sessionId,
-                         const PingPong& m) {
+    const PingPong& m) {
     constexpr size_t kPayload = 12; // pingId(4) + sendTimeUs(8)
     const size_t total = WriteCommon(out, type, 0, Chan::Control, sessionId, kPayload);
     if (!total) return 0;
@@ -132,8 +132,10 @@ size_t BuildSourceList(std::span<uint8_t> out, std::span<const SourceInfo> sourc
         const SourceInfo& s = sources[i];
         const size_t nameLen = Utf8TruncLen(s.name, kMaxSourceNameBytes);
         *p++ = s.sourceId;
-        PutU16(p, s.width);   p += 2;
-        PutU16(p, s.height);  p += 2;
+        PutU16(p, s.width);
+        p += 2;
+        PutU16(p, s.height);
+        p += 2;
         *p++ = uint8_t(nameLen);
         if (nameLen) std::memcpy(p, s.name.data(), nameLen);
         p += nameLen;
@@ -219,13 +221,13 @@ size_t BuildReconfig(std::span<uint8_t> out, uint32_t sessionId, const Reconfig&
 // Hai cờ nằm ở byte `flags` của header chung chứ không tốn byte payload: `idr` cho
 // Reassembler biết có thể bắt đầu giải mã từ frame này, `frameEnd` đánh dấu mảnh cuối.
 size_t BuildVideoPacket(std::span<uint8_t> out, uint32_t sessionId, const VideoHeader& vh,
-                        bool idr, bool frameEnd, std::span<const uint8_t> payload) {
+    bool idr, bool frameEnd, std::span<const uint8_t> payload) {
     // Chặn ở đây thay vì để WriteCommon phát hiện: vượt ngưỡng này nghĩa là
     // Packetizer cắt sai, và gói vượt MTU sẽ bị phân mảnh IP rồi mất cả cụm.
     if (payload.size() > kMaxVideoPayload) return 0;
     const uint8_t flags = (idr ? kVideoFlagIdr : 0) | (frameEnd ? kVideoFlagFrameEnd : 0);
     const size_t total = WriteCommon(out, MsgType::VideoPacket, flags, Chan::Video, sessionId,
-                                     kVideoHeaderSize + payload.size());
+        kVideoHeaderSize + payload.size());
     if (!total) return 0;
     uint8_t* p = out.data() + kCommonHeaderSize;
     PutU32(p, vh.frameId);
@@ -238,12 +240,12 @@ size_t BuildVideoPacket(std::span<uint8_t> out, uint32_t sessionId, const VideoH
 }
 
 size_t BuildFecPacket(std::span<uint8_t> out, uint32_t sessionId, const FecHeader& fh,
-                      bool idr, std::span<const uint8_t> parity) {
+    bool idr, std::span<const uint8_t> parity) {
     if (parity.size() < kFecLenPrefix ||
         parity.size() > kFecLenPrefix + kMaxVideoPayload) return 0;
     const uint8_t flags = idr ? kVideoFlagIdr : 0;
     const size_t total = WriteCommon(out, MsgType::FecPacket, flags, Chan::Video, sessionId,
-                                     kFecHeaderSize + parity.size());
+        kFecHeaderSize + parity.size());
     if (!total) return 0;
     uint8_t* p = out.data() + kCommonHeaderSize;
     PutU32(p, fh.frameId);
@@ -263,11 +265,11 @@ size_t BuildFecPacket(std::span<uint8_t> out, uint32_t sessionId, const FecHeade
 // được nên khỏi tốn 4 byte mỗi event. InputReceiver dựa vào đúng quy ước này để
 // khử trùng khi InputSender gửi lặp.
 size_t BuildInputEvents(std::span<uint8_t> out, uint32_t sessionId, uint32_t firstSeq,
-                        std::span<const InputEvent> events) {
+    std::span<const InputEvent> events) {
     if (events.empty() || events.size() > kMaxInputEvents) return 0;
     const size_t payloadSize = kInputHeaderSize + events.size() * kInputEventSize;
     const size_t total = WriteCommon(out, MsgType::InputEvent, 0, Chan::Input, sessionId,
-                                     payloadSize);
+        payloadSize);
     if (!total) return 0;
     uint8_t* p = out.data() + kCommonHeaderSize;
     PutU32(p, firstSeq);
@@ -276,7 +278,7 @@ size_t BuildInputEvents(std::span<uint8_t> out, uint32_t sessionId, uint32_t fir
     for (const auto& ev : events) {
         e[0] = uint8_t(ev.type);
         PutU64(e + 1, ev.timestampUs);
-        PutU32(e + 9, uint32_t(ev.a));  // i32 gửi dưới dạng bit-pattern u32
+        PutU32(e + 9, uint32_t(ev.a)); // i32 gửi dưới dạng bit-pattern u32
         PutU32(e + 13, uint32_t(ev.b));
         e[17] = ev.state;
         e[18] = ev.absolute;
@@ -299,10 +301,10 @@ std::optional<CommonHeader> ParseCommonHeader(std::span<const uint8_t> datagram)
     if (datagram.size() < kCommonHeaderSize) return std::nullopt;
     if (datagram[0] != kProtocolVersion) return std::nullopt;
     CommonHeader h;
-    h.ver       = datagram[0];
-    h.type      = MsgType(datagram[1]);
-    h.flags     = datagram[2];
-    h.chan      = Chan(datagram[3]);
+    h.ver = datagram[0];
+    h.type = MsgType(datagram[1]);
+    h.flags = datagram[2];
+    h.chan = Chan(datagram[3]);
     h.sessionId = GetU32(datagram.data() + 4);
     return h;
 }
@@ -319,14 +321,14 @@ std::optional<Hello> ParseHello(std::span<const uint8_t> payload) {
     if (payload.size() < 13) return std::nullopt;
     const uint8_t* p = payload.data();
     Hello m;
-    m.clientId   = GetU32(p);
-    m.codecMask  = GetU16(p + 4);
-    m.maxWidth   = GetU16(p + 6);
-    m.maxHeight  = GetU16(p + 8);
+    m.clientId = GetU32(p);
+    m.codecMask = GetU16(p + 4);
+    m.maxWidth = GetU16(p + 6);
+    m.maxHeight = GetU16(p + 8);
     m.desiredFps = p[10];
-    m.features   = GetU16(p + 11);
+    m.features = GetU16(p + 11);
     // sourceId thêm ở GĐ6; gói 13 byte của bản cũ vẫn đọc được, hiểu là nguồn 0.
-    m.sourceId   = payload.size() >= 14 ? p[13] : 0;
+    m.sourceId = payload.size() >= 14 ? p[13] : 0;
     return m;
 }
 
@@ -348,8 +350,8 @@ size_t ParseSourceList(std::span<const uint8_t> payload, std::span<SourceInfo> o
         if (off + 6 + nameLen > payload.size()) break;
         SourceInfo s;
         s.sourceId = p[0];
-        s.width    = GetU16(p + 1);
-        s.height   = GetU16(p + 3);
+        s.width = GetU16(p + 1);
+        s.height = GetU16(p + 3);
         s.name.assign(reinterpret_cast<const char*>(p + 6), nameLen);
         out[written++] = std::move(s);
         off += 6 + nameLen;
@@ -361,11 +363,11 @@ std::optional<HelloAck> ParseHelloAck(std::span<const uint8_t> payload) {
     if (payload.size() < 22) return std::nullopt;
     const uint8_t* p = payload.data();
     HelloAck m;
-    m.sessionId  = GetU32(p);
-    m.codec      = Codec(p[4]);
-    m.width      = GetU16(p + 5);
-    m.height     = GetU16(p + 7);
-    m.fps        = p[9];
+    m.sessionId = GetU32(p);
+    m.codec = Codec(p[4]);
+    m.width = GetU16(p + 5);
+    m.height = GetU16(p + 7);
+    m.fps = p[9];
     m.bitrateBps = GetU32(p + 10);
     m.timebaseUs = GetU64(p + 14);
     return m;
@@ -381,9 +383,9 @@ std::optional<Feedback> ParseFeedback(std::span<const uint8_t> payload) {
     if (payload.size() < 9) return std::nullopt;
     const uint8_t* p = payload.data();
     Feedback m;
-    m.lostFrames      = GetU16(p);
-    m.lossPct         = p[2];
-    m.rttMs           = GetU16(p + 3);
+    m.lostFrames = GetU16(p);
+    m.lossPct = p[2];
+    m.rttMs = GetU16(p + 3);
     m.recvBitrateKbps = GetU32(p + 5);
     return m;
 }
@@ -400,31 +402,31 @@ std::optional<bool> ParseSetFocus(std::span<const uint8_t> payload) {
 }
 
 std::optional<VideoPacketView> ParseVideoPacket(const CommonHeader& h,
-                                                std::span<const uint8_t> payload) {
+    std::span<const uint8_t> payload) {
     if (payload.size() < kVideoHeaderSize) return std::nullopt;
     const uint8_t* p = payload.data();
     VideoPacketView v;
-    v.hdr.frameId     = GetU32(p);
+    v.hdr.frameId = GetU32(p);
     v.hdr.timestampUs = GetU64(p + 4);
-    v.hdr.pktIndex    = GetU16(p + 12);
-    v.hdr.pktCount    = GetU16(p + 14);
-    v.idr      = (h.flags & kVideoFlagIdr) != 0;
+    v.hdr.pktIndex = GetU16(p + 12);
+    v.hdr.pktCount = GetU16(p + 14);
+    v.idr = (h.flags & kVideoFlagIdr) != 0;
     v.frameEnd = (h.flags & kVideoFlagFrameEnd) != 0;
-    v.payload  = payload.subspan(kVideoHeaderSize);
+    v.payload = payload.subspan(kVideoHeaderSize);
     if (v.hdr.pktCount == 0 || v.hdr.pktIndex >= v.hdr.pktCount) return std::nullopt;
     return v;
 }
 
 std::optional<FecPacketView> ParseFecPacket(const CommonHeader& h,
-                                            std::span<const uint8_t> payload) {
+    std::span<const uint8_t> payload) {
     if (payload.size() < kFecHeaderSize + kFecLenPrefix) return std::nullopt;
     const uint8_t* p = payload.data();
     FecPacketView v;
-    v.hdr.frameId     = GetU32(p);
+    v.hdr.frameId = GetU32(p);
     v.hdr.timestampUs = GetU64(p + 4);
-    v.hdr.pktCount    = GetU16(p + 12);
-    v.hdr.groupIndex  = p[14];
-    v.idr    = (h.flags & kVideoFlagIdr) != 0;
+    v.hdr.pktCount = GetU16(p + 12);
+    v.hdr.groupIndex = p[14];
+    v.idr = (h.flags & kVideoFlagIdr) != 0;
     v.parity = payload.subspan(kFecHeaderSize);
     if (v.hdr.pktCount == 0) return std::nullopt;
     // Nhóm phải nằm trong frame, không thì parity không phủ gói nào.
@@ -433,7 +435,7 @@ std::optional<FecPacketView> ParseFecPacket(const CommonHeader& h,
 }
 
 size_t ParseInputEvents(std::span<const uint8_t> payload, uint32_t& firstSeq,
-                        std::span<InputEvent> out) {
+    std::span<InputEvent> out) {
     if (payload.size() < kInputHeaderSize) return 0;
     const uint8_t* p = payload.data();
     const size_t count = p[4];
@@ -446,12 +448,12 @@ size_t ParseInputEvents(std::span<const uint8_t> payload, uint32_t& firstSeq,
     const uint8_t* e = p + kInputHeaderSize;
     for (size_t i = 0; i < count; ++i) {
         InputEvent ev;
-        ev.type        = InputType(e[0]);
+        ev.type = InputType(e[0]);
         ev.timestampUs = GetU64(e + 1);
-        ev.a           = int32_t(GetU32(e + 9));
-        ev.b           = int32_t(GetU32(e + 13));
-        ev.state       = e[17];
-        ev.absolute    = e[18];
+        ev.a = int32_t(GetU32(e + 9));
+        ev.b = int32_t(GetU32(e + 13));
+        ev.state = e[17];
+        ev.absolute = e[18];
         out[i] = ev;
         e += kInputEventSize;
     }

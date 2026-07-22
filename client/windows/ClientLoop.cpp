@@ -96,12 +96,12 @@ BOOL WINAPI CtrlHandler(DWORD type) {
 struct ClientStream {
     deskhub::SourceInfo src;
     UdpSocket sock;
-    Renderer  renderer;
+    Renderer renderer;
 
-    std::atomic<bool>     rendererReady{false};
+    std::atomic<bool> rendererReady{false};
     std::atomic<uint32_t> negW{0}, negH{0}; // kích thước đàm phán — main tạo renderer
-    std::atomic<bool>     quit{false};
-    std::atomic<bool>     failed{false};
+    std::atomic<bool> quit{false};
+    std::atomic<bool> failed{false};
 
     // Input do luồng Main gom -> luồng Recv đánh seq và gửi. Khóa chỉ giữ vài chục
     // nano giây quanh push/swap, không nằm trên đường nóng của video.
@@ -115,7 +115,7 @@ struct ClientStream {
     std::atomic<bool> hasFocus{false};
 
     // Dòng số liệu cho overlay: ghi từ luồng Recv, đọc từ luồng Main.
-    std::mutex   statsMutex;
+    std::mutex statsMutex;
     std::wstring statusText;
     std::wstring lastAppliedStatus; // chỉ luồng Main
 
@@ -144,12 +144,12 @@ void StreamRecvLoop(ClientStream& s, const ClientOptions& opt, ID3D11Device* dev
     std::atomic<uint32_t> decW{0}, decH{0}, decFps{0};
 
     // Ước lượng trễ e2e — ghi ở thread Recv, đọc ở thread Decode (trong onDecoded).
-    std::atomic<int64_t>  ackDeltaUs{0};  // t_client_nhận_ACK − timebase_host
-    std::atomic<uint32_t> minRttUs{0};    // 0 = chưa có PONG nào
-    std::atomic<int64_t>  lastE2eUs{-1};
+    std::atomic<int64_t> ackDeltaUs{0}; // t_client_nhận_ACK − timebase_host
+    std::atomic<uint32_t> minRttUs{0};  // 0 = chưa có PONG nào
+    std::atomic<int64_t> lastE2eUs{-1};
 
-    uint64_t stBytes = 0;                 // byte payload video nhận được (chỉ thread Recv)
-    std::atomic<uint32_t> stRendered{0};  // ghi từ thread Decode, đọc từ thread Recv
+    uint64_t stBytes = 0;                // byte payload video nhận được (chỉ thread Recv)
+    std::atomic<uint32_t> stRendered{0}; // ghi từ thread Decode, đọc từ thread Recv
 
     constexpr size_t kMaxQueuedFrames = 3;
     std::mutex decQueueMutex;
@@ -162,8 +162,8 @@ void StreamRecvLoop(ClientStream& s, const ClientOptions& opt, ID3D11Device* dev
     };
     std::deque<QItem> decQueue;
     std::atomic<bool> decodeThreadStop{false};
-    std::atomic<bool> decodeFailedFlag{false};   // Decode() lỗi -> xin IDR
-    std::atomic<bool> queueOverflowFlag{false};  // đã bỏ frame vì đầy hàng đợi
+    std::atomic<bool> decodeFailedFlag{false};  // Decode() lỗi -> xin IDR
+    std::atomic<bool> queueOverflowFlag{false}; // đã bỏ frame vì đầy hàng đợi
 
     // --- Chẩn đoán (docs/09), bộ đếm cửa sổ 1s ---
     // Thread Decode ghi (atomic), thread Recv đọc-và-reset ở khối thống kê:
@@ -174,7 +174,7 @@ void StreamRecvLoop(ClientStream& s, const ClientOptions& opt, ID3D11Device* dev
     uint32_t dgAsmMsSum = 0, dgAsmMsMax = 0, dgAsmCount = 0; // t_asm: mảnh đầu → ghép xong
     uint32_t dgDqDepthMax = 0, dgDqDrop = 0;                 // K2: hàng đợi decode
     uint32_t dgLoopBusyMaxMs = 0;                            // K4: vòng Recv bận
-    uint64_t kfReqUs = 0; // K3: thời điểm bắt đầu xin keyframe; 0 = không treo
+    uint64_t kfReqUs = 0;                                    // K3: thời điểm bắt đầu xin keyframe; 0 = không treo
 
     // Cho tới khi đàm phán xong (onReady), phiên chưa nhận được gì — mọi số liệu 1s
     // đều là 0 và chỉ làm rối log lúc đang thử kết nối. Bật cờ này ở onReady rồi mới
@@ -211,12 +211,15 @@ void StreamRecvLoop(ClientStream& s, const ClientOptions& opt, ID3D11Device* dev
             // decW/decH/decFps chắc chắn đã có giá trị.
             if (!decoder) {
                 DecoderConfig dc;
-                dc.codec  = Codec::H264;
-                dc.width  = decW.load(std::memory_order_relaxed);
+                dc.codec = Codec::H264;
+                dc.width = decW.load(std::memory_order_relaxed);
                 dc.height = decH.load(std::memory_order_relaxed);
-                dc.fps    = decFps.load(std::memory_order_relaxed);
+                dc.fps = decFps.load(std::memory_order_relaxed);
                 decoder = CreateDecoder(device, dc, onDecoded);
-                if (!decoder) { s.failed.store(true); return; } // vòng Recv thấy failed
+                if (!decoder) {
+                    s.failed.store(true);
+                    return;
+                } // vòng Recv thấy failed
             }
             deskhub::Reassembler::Frame& f = it.frame;
 
@@ -234,7 +237,7 @@ void StreamRecvLoop(ClientStream& s, const ClientOptions& opt, ID3D11Device* dev
             dgDecCount.fetch_add(1, std::memory_order_relaxed);
             if (decMs > 20) {
                 std::printf("[Client][%s] WARNING: decode+render took %llu ms for one frame\n",
-                            s.src.name.c_str(), (unsigned long long)decMs);
+                    s.src.name.c_str(), (unsigned long long)decMs);
             }
             if (!decodeOk) decodeFailedFlag.store(true, std::memory_order_release);
         }
@@ -246,13 +249,13 @@ void StreamRecvLoop(ClientStream& s, const ClientOptions& opt, ID3D11Device* dev
         ackDeltaUs.store(int64_t(NowUs()) - int64_t(np.timebaseUs), std::memory_order_relaxed);
         negotiated = true; // từ đây thống kê 1s mới có nghĩa -> mở cổng in log
         std::printf("[Client][%s] Negotiation done: H264 %ux%u @%ufps, %.1f Mbps\n",
-                    s.src.name.c_str(), np.width, np.height, np.fps, np.bitrateBps / 1e6);
+            s.src.name.c_str(), np.width, np.height, np.fps, np.bitrateBps / 1e6);
         s.negW.store(np.width);
         s.negH.store(np.height); // main thấy kích thước -> tạo cửa sổ preview
     };
     cb.onReconfig = [&](const deskhub::NegotiatedParams& np) {
         std::printf("[Client][%s] Host reconfigured: %ux%u, %.1f Mbps\n",
-                    s.src.name.c_str(), np.width, np.height, np.bitrateBps / 1e6);
+            s.src.name.c_str(), np.width, np.height, np.bitrateBps / 1e6);
         s.negW.store(np.width);
         s.negH.store(np.height);
         // Không dựng lại decoder/renderer: MfDecoder tự đàm phán lại kích thước khi
@@ -271,13 +274,13 @@ void StreamRecvLoop(ClientStream& s, const ClientOptions& opt, ID3D11Device* dev
     deskhub::ClientSession session(cb);
 
     deskhub::Hello hello;
-    hello.clientId   = uint32_t(NowUs()) ^ GetCurrentProcessId() ^ (uint32_t(s.src.sourceId) << 24);
-    hello.codecMask  = deskhub::kCodecMaskH264;
-    hello.maxWidth   = uint16_t(GetSystemMetrics(SM_CXSCREEN));
-    hello.maxHeight  = uint16_t(GetSystemMetrics(SM_CYSCREEN));
+    hello.clientId = uint32_t(NowUs()) ^ GetCurrentProcessId() ^ (uint32_t(s.src.sourceId) << 24);
+    hello.codecMask = deskhub::kCodecMaskH264;
+    hello.maxWidth = uint16_t(GetSystemMetrics(SM_CXSCREEN));
+    hello.maxHeight = uint16_t(GetSystemMetrics(SM_CYSCREEN));
     hello.desiredFps = 60;
-    hello.features   = 0;
-    hello.sourceId   = s.src.sourceId;
+    hello.features = 0;
+    hello.sourceId = s.src.sourceId;
     session.Start(hello, NowUs());
 
     uint8_t buf[deskhub::kMaxDatagram];
@@ -318,14 +321,16 @@ void StreamRecvLoop(ClientStream& s, const ClientOptions& opt, ID3D11Device* dev
                                 const bool head = d.firstMissing == 0;
                                 const bool tail = d.lastMissing + 1 == d.total;
                                 pos = head && tail ? "all" : tail ? "tail"
-                                                   : head ? "head" : "mid";
+                                                         : head   ? "head"
+                                                                  : "mid";
                             }
-                            std::printf("[DIAG][%s] evt=frame_drop id=%u reason=%s"
-                                        " miss=%u/%u pos=%s idr=%u waited_ms=%u"
-                                        " got_bytes=%u\n",
-                                        s.src.name.c_str(), d.frameId,
-                                        kReason[size_t(d.reason)], d.missing, d.total,
-                                        pos, d.idr ? 1 : 0, d.waitedMs, d.bytesGot);
+                            std::printf(
+                                "[DIAG][%s] evt=frame_drop id=%u reason=%s"
+                                " miss=%u/%u pos=%s idr=%u waited_ms=%u"
+                                " got_bytes=%u\n",
+                                s.src.name.c_str(), d.frameId,
+                                kReason[size_t(d.reason)], d.missing, d.total,
+                                pos, d.idr ? 1 : 0, d.waitedMs, d.bytesGot);
                         };
                     }
                     if (h->type == deskhub::MsgType::FecPacket) {
@@ -363,8 +368,8 @@ void StreamRecvLoop(ClientStream& s, const ClientOptions& opt, ID3D11Device* dev
                     // K3: IDR đã về — bao lâu kể từ lúc bắt đầu xin?
                     if (kfReqUs) {
                         std::printf("[DIAG][%s] evt=idr_rx bytes=%zu after_ms=%llu\n",
-                                    s.src.name.c_str(), f->nal.size(),
-                                    (unsigned long long)((now - kfReqUs) / 1000));
+                            s.src.name.c_str(), f->nal.size(),
+                            (unsigned long long)((now - kfReqUs) / 1000));
                         kfReqUs = 0;
                     }
                 }
@@ -389,8 +394,10 @@ void StreamRecvLoop(ClientStream& s, const ClientOptions& opt, ID3D11Device* dev
                 }
                 decQueueCv.notify_one();
             }
-            if (reasm->TakeLossEvent()) requestKf("loss");
-            else if (reasm->WaitingForIdr()) requestKf("wait_idr");
+            if (reasm->TakeLossEvent())
+                requestKf("loss");
+            else if (reasm->WaitingForIdr())
+                requestKf("wait_idr");
         }
         if (decodeFailedFlag.exchange(false, std::memory_order_acq_rel)) requestKf("dec_fail");
         if (queueOverflowFlag.exchange(false, std::memory_order_acq_rel)) requestKf("q_overflow");
@@ -418,16 +425,17 @@ void StreamRecvLoop(ClientStream& s, const ClientOptions& opt, ID3D11Device* dev
             // Chỉ in thống kê + cập nhật overlay khi đã kết nối (đàm phán xong). Trước
             // đó toàn số 0.
             if (negotiated) {
-                std::printf("[Client][%s] %2.0f fps | %6.0f kbps | dropped %llu frame | lost %4.1f%%"
-                            " pkts | fec+%llu | RTT %.1f ms | e2e ~%.1f ms\n",
-                            s.src.name.c_str(),
-                            w.fps,
-                            w.kbps,
-                            (unsigned long long)w.framesDropped,
-                            w.lossPct,
-                            (unsigned long long)w.packetsRecovered,
-                            session.lastRttUs() / 1000.0,
-                            e2e >= 0 ? e2e / 1000.0 : 0.0);
+                std::printf(
+                    "[Client][%s] %2.0f fps | %6.0f kbps | dropped %llu frame | lost %4.1f%%"
+                    " pkts | fec+%llu | RTT %.1f ms | e2e ~%.1f ms\n",
+                    s.src.name.c_str(),
+                    w.fps,
+                    w.kbps,
+                    (unsigned long long)w.framesDropped,
+                    w.lossPct,
+                    (unsigned long long)w.packetsRecovered,
+                    session.lastRttUs() / 1000.0,
+                    e2e >= 0 ? e2e / 1000.0 : 0.0);
 
                 wchar_t statusBuf[160];
                 swprintf(statusBuf, 160,
@@ -455,17 +463,18 @@ void StreamRecvLoop(ClientStream& s, const ClientOptions& opt, ID3D11Device* dev
                 // Đọc-và-reset bộ đếm ở trên vẫn chạy để không tích lũy; chỉ hoãn IN
                 // cho tới khi kết nối xong.
                 if (negotiated)
-                    std::printf("[DIAG][%s] evt=sum asm_ms=%.1f/%u q_ms=%.1f/%u dec_ms=%.1f/%u"
-                            " dq_max=%u dq_drop=%u late=%llu late_ms_avg=%.0f late_ms_max=%llu"
-                            " gap_ms_max=%u loop_busy_ms_max=%u\n",
-                            s.src.name.c_str(),
-                            dgAsmCount ? double(dgAsmMsSum) / dgAsmCount : 0.0, dgAsmMsMax,
-                            dc ? double(qs) / dc : 0.0, qm,
-                            dc ? double(ds) / dc : 0.0, dm,
-                            dgDqDepthMax, dgDqDrop,
-                            (unsigned long long)w.latePackets, w.lateMsAvg,
-                            (unsigned long long)w.lateMsMax,
-                            reasm ? reasm->TakeMaxGapMs() : 0, dgLoopBusyMaxMs);
+                    std::printf(
+                        "[DIAG][%s] evt=sum asm_ms=%.1f/%u q_ms=%.1f/%u dec_ms=%.1f/%u"
+                        " dq_max=%u dq_drop=%u late=%llu late_ms_avg=%.0f late_ms_max=%llu"
+                        " gap_ms_max=%u loop_busy_ms_max=%u\n",
+                        s.src.name.c_str(),
+                        dgAsmCount ? double(dgAsmMsSum) / dgAsmCount : 0.0, dgAsmMsMax,
+                        dc ? double(qs) / dc : 0.0, qm,
+                        dc ? double(ds) / dc : 0.0, dm,
+                        dgDqDepthMax, dgDqDrop,
+                        (unsigned long long)w.latePackets, w.lateMsAvg,
+                        (unsigned long long)w.lateMsMax,
+                        reasm ? reasm->TakeMaxGapMs() : 0, dgLoopBusyMaxMs);
                 dgAsmMsSum = dgAsmMsMax = dgAsmCount = 0;
                 dgDqDepthMax = dgDqDrop = 0;
                 dgLoopBusyMaxMs = 0;
@@ -550,7 +559,7 @@ int RunClient(const ClientOptions& opt) {
     SetConsoleCtrlHandler(CtrlHandler, TRUE);
 
     GpuChoice gpu;
-    if (!CreateBestDevice({ GpuVendor::Nvidia, GpuVendor::Intel, GpuVendor::Amd }, gpu)) {
+    if (!CreateBestDevice({GpuVendor::Nvidia, GpuVendor::Intel, GpuVendor::Amd}, gpu)) {
         std::printf("[Client] Failed to create D3D11 device.\n");
         return 1;
     }
@@ -585,7 +594,7 @@ int RunClient(const ClientOptions& opt) {
     }
 
     std::printf("[Client] Connecting to %s (%zu source(s)) ...\n",
-                opt.server.ToString().c_str(), streams.size());
+        opt.server.ToString().c_str(), streams.size());
 
     for (auto& s : streams) {
         ClientStream* ps = s.get();
@@ -632,19 +641,22 @@ int RunClient(const ClientOptions& opt) {
 
         bool anyAlive = false;
         for (auto& s : streams) {
-            if (s->failed.load()) { anyFailed = true; continue; }
+            if (s->failed.load()) {
+                anyFailed = true;
+                continue;
+            }
 
             // Đàm phán xong -> dựng cửa sổ preview (Renderer phải Init/Pump trên
             // luồng bơm message, tức là luồng này).
             if (!s->rendererReady.load() && s->negW.load() && !s->quit.load()) {
                 wchar_t title[192];
                 const int wn = MultiByteToWideChar(CP_UTF8, 0, s->src.name.c_str(), -1,
-                                                   nullptr, 0);
+                    nullptr, 0);
                 std::wstring wname(wn > 0 ? size_t(wn - 1) : 0, L'\0');
                 if (wn > 0)
                     MultiByteToWideChar(CP_UTF8, 0, s->src.name.c_str(), -1, wname.data(), wn);
                 swprintf(title, 192, L"%ls — %ux%u", wname.c_str(), s->negW.load(),
-                         s->negH.load());
+                    s->negH.load());
                 if (!s->renderer.Init(gpu.device.Get(), s->negW.load(), s->negH.load(), title)) {
                     s->failed.store(true);
                     anyFailed = true;
@@ -653,20 +665,22 @@ int RunClient(const ClientOptions& opt) {
                 if (opt.saveBmp) s->renderer.RequestDumpBmp("client.bmp");
                 ClientStream* ps = s.get();
                 s->renderer.SetMessageHook([&input, ps, &inputOwner](HWND h, UINT m, WPARAM w,
-                                                                     LPARAM l) {
+                                               LPARAM l) {
                     // Chỉ cửa sổ đang giữ input mới được tiêu thụ message của nó.
                     return inputOwner == ps && input.OnMessage(h, m, w, l);
                 });
                 s->renderer.SetCommandHook([&input, ps, &inputOwner](int id) {
                     if (inputOwner != ps) return;
-                    if (id == Renderer::kBtnLock) input.ToggleRelativeMode();
-                    else if (id == Renderer::kBtnPause) input.TogglePause();
+                    if (id == Renderer::kBtnLock)
+                        input.ToggleRelativeMode();
+                    else if (id == Renderer::kBtnPause)
+                        input.TogglePause();
                     ps->renderer.SetToggleState(input.relativeMode(), !input.enabled());
                 });
                 s->rendererReady.store(true, std::memory_order_release);
                 if (!opt.sendInput)
                     std::printf("[Client][%s] VIEW ONLY - not sending input.\n",
-                                s->src.name.c_str());
+                        s->src.name.c_str());
             }
 
             if (s->rendererReady.load() && s->renderer.Closed()) s->quit.store(true);

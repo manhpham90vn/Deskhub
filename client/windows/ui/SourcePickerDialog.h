@@ -31,4 +31,4 @@
 // Hiện hộp thoại MODAL. `sources` là danh sách host trả về; `outSelected` nhận
 // những nguồn người dùng tick. Trả false nếu hủy hoặc không chọn gì.
 bool ShowSourcePickerDialog(HWND owner, const std::vector<deskhub::SourceInfo>& sources,
-                            std::vector<deskhub::SourceInfo>& outSelected);
+    std::vector<deskhub::SourceInfo>& outSelected);

@@ -37,11 +37,11 @@ HWND FindWindowByProcessName(const std::wstring& exeName);
 
 // Một cửa sổ có thể chọn làm nguồn stream.
 struct WindowInfo {
-    HWND         hwnd = nullptr;
-    std::wstring exeName;   // tên file exe, chữ thường
+    HWND hwnd = nullptr;
+    std::wstring exeName; // tên file exe, chữ thường
     std::wstring title;
-    uint32_t     width = 0, height = 0;   // kích thước client
-    bool         minimized = false;       // đang thu nhỏ -> cần restore trước khi capture
+    uint32_t width = 0, height = 0; // kích thước client
+    bool minimized = false;         // đang thu nhỏ -> cần restore trước khi capture
 };
 
 // Liệt kê các cửa sổ top-level capture được: hiển thị, không owner, có tiêu đề,

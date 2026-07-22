@@ -34,9 +34,9 @@
 #include "deskhub/wire/Wire.h"
 
 struct ClientOptions {
-    NetAddr server;           // địa chỉ agent
-    bool    saveBmp = false;
-    bool    sendInput = true; // GD4: đẩy phím/chuột tới host
+    NetAddr server; // địa chỉ agent
+    bool saveBmp = false;
+    bool sendInput = true; // GD4: đẩy phím/chuột tới host
     // Nguồn muốn xem (từ QueryHostSources). Rỗng = xem nguồn 0 — giữ đường cũ chạy
     // được với host chỉ chia sẻ một thứ.
     std::vector<deskhub::SourceInfo> sources;

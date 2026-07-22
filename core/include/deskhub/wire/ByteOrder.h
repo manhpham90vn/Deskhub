@@ -65,7 +65,7 @@ inline uint16_t GetU16(const uint8_t* p) noexcept {
 // (16 bit ở lý thuyết chuẩn C++) là hành vi không xác định.
 inline uint32_t GetU32(const uint8_t* p) noexcept {
     return (uint32_t(p[0]) << 24) | (uint32_t(p[1]) << 16) |
-           (uint32_t(p[2]) << 8)  |  uint32_t(p[3]);
+           (uint32_t(p[2]) << 8) | uint32_t(p[3]);
 }
 
 // Ghép hai nửa 32 bit. Nửa cao phải ép lên uint64_t trước khi dịch 32 bit.

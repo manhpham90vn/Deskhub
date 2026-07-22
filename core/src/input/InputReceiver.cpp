@@ -31,7 +31,10 @@ bool InputReceiver::HandlePacket(std::span<const uint8_t> payload, const ApplyFn
 
     for (size_t i = 0; i < n; ++i) {
         const int64_t seq = int64_t(firstSeq) + int64_t(i);
-        if (seq <= lastAppliedSeq_) { ++stats_.duplicates; continue; }
+        if (seq <= lastAppliedSeq_) {
+            ++stats_.duplicates;
+            continue;
+        }
         // Lỗ hổng: các seq giữa lastApplied và seq này không gói nào mang tới.
         if (lastAppliedSeq_ >= 0 && seq > lastAppliedSeq_ + 1)
             stats_.lost += uint64_t(seq - lastAppliedSeq_ - 1);

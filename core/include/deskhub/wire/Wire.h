@@ -44,11 +44,11 @@
 
 namespace deskhub {
 
-inline constexpr uint8_t kProtocolVersion  = 1;
-inline constexpr size_t  kMaxDatagram      = 1200; // an toàn MTU Internet
-inline constexpr size_t  kCommonHeaderSize = 8;
-inline constexpr size_t  kVideoHeaderSize  = 16;
-inline constexpr size_t  kFecHeaderSize    = 16;
+inline constexpr uint8_t kProtocolVersion = 1;
+inline constexpr size_t kMaxDatagram = 1200; // an toàn MTU Internet
+inline constexpr size_t kCommonHeaderSize = 8;
+inline constexpr size_t kVideoHeaderSize = 16;
+inline constexpr size_t kFecHeaderSize = 16;
 
 // FEC (GĐ5): mỗi kFecGroupSize gói video liên tiếp trong một frame được kèm MỘT gói
 // parity = XOR của cả nhóm. Mất đúng 1 gói trong nhóm thì khôi phục được, không phải
@@ -60,51 +60,57 @@ inline constexpr uint16_t kFecGroupSize = 8;
 // Parity phải XOR được cả ĐỘ DÀI (gói cuối frame ngắn hơn các gói khác), nên payload
 // của nó là 2 byte lenXor + dữ liệu XOR. Gói FEC vì thế chật hơn gói video thường →
 // lấy nó làm ràng buộc để cả hai loại vừa một datagram.
-inline constexpr size_t  kFecLenPrefix    = 2;
-inline constexpr size_t  kMaxVideoPayload =
+inline constexpr size_t kFecLenPrefix = 2;
+inline constexpr size_t kMaxVideoPayload =
     kMaxDatagram - kCommonHeaderSize - kFecHeaderSize - kFecLenPrefix; // 1174
 
-inline constexpr size_t  kInputHeaderSize = 5;  // seq(u32) + count(u8)
-inline constexpr size_t  kInputEventSize  = 19; // evType+ts+a+b+state+absolute
+inline constexpr size_t kInputHeaderSize = 5; // seq(u32) + count(u8)
+inline constexpr size_t kInputEventSize = 19; // evType+ts+a+b+state+absolute
 // Số event tối đa nhét vừa một datagram (thực tế gửi ít hơn nhiều).
-inline constexpr size_t  kMaxInputEvents =
+inline constexpr size_t kMaxInputEvents =
     (kMaxDatagram - kCommonHeaderSize - kInputHeaderSize) / kInputEventSize; // 62
 
-enum class Chan : uint8_t { Control = 0, Video = 1, Input = 2, Audio = 3 };
+enum class Chan : uint8_t { Control = 0,
+    Video = 1,
+    Input = 2,
+    Audio = 3 };
 
 enum class MsgType : uint8_t {
-    Hello           = 0x01,
-    HelloAck        = 0x02,
-    Start           = 0x03,
-    Bye             = 0x04,
-    ListSources     = 0x05, // GĐ6: client hỏi host đang chia sẻ những cửa sổ nào
-    SourceList      = 0x06, // GĐ6: host trả danh sách
-    VideoPacket     = 0x10,
-    FecPacket       = 0x11, // GĐ5: parity XOR cho một nhóm gói video
-    InputEvent      = 0x20, // GĐ4
-    Ping            = 0x30,
-    Pong            = 0x31,
-    Feedback        = 0x32,
+    Hello = 0x01,
+    HelloAck = 0x02,
+    Start = 0x03,
+    Bye = 0x04,
+    ListSources = 0x05, // GĐ6: client hỏi host đang chia sẻ những cửa sổ nào
+    SourceList = 0x06,  // GĐ6: host trả danh sách
+    VideoPacket = 0x10,
+    FecPacket = 0x11,  // GĐ5: parity XOR cho một nhóm gói video
+    InputEvent = 0x20, // GĐ4
+    Ping = 0x30,
+    Pong = 0x31,
+    Feedback = 0x32,
     RequestKeyframe = 0x33,
-    Reconfig        = 0x34,
-    SetFocus        = 0x35, // GĐ6: client báo cửa sổ preview của nguồn này vừa được focus
+    Reconfig = 0x34,
+    SetFocus = 0x35, // GĐ6: client báo cửa sổ preview của nguồn này vừa được focus
 };
 
 // Flags của VIDEO_PACKET
-inline constexpr uint8_t kVideoFlagIdr      = 1u << 0;
+inline constexpr uint8_t kVideoFlagIdr = 1u << 0;
 inline constexpr uint8_t kVideoFlagFrameEnd = 1u << 1;
 
 // codecMask trong HELLO / codec trong HELLO_ACK
 inline constexpr uint16_t kCodecMaskH264 = 1u << 0;
 inline constexpr uint16_t kCodecMaskHevc = 1u << 1;
-inline constexpr uint16_t kCodecMaskAv1  = 1u << 2;
-enum class Codec : uint8_t { H264 = 0, Hevc = 1, Av1 = 2, Rejected = 0xFF };
+inline constexpr uint16_t kCodecMaskAv1 = 1u << 2;
+enum class Codec : uint8_t { H264 = 0,
+    Hevc = 1,
+    Av1 = 2,
+    Rejected = 0xFF };
 
 struct CommonHeader {
-    uint8_t  ver;
-    MsgType  type;
-    uint8_t  flags;
-    Chan     chan;
+    uint8_t ver;
+    MsgType type;
+    uint8_t flags;
+    Chan chan;
     uint32_t sessionId; // 0 trong HELLO/HELLO_ACK; Agent cấp trong HELLO_ACK
 };
 
@@ -113,13 +119,13 @@ struct CommonHeader {
 // không nhét streamId vào header video/input. Nhờ vậy kênh video, input, FEC,
 // congestion control giữ nguyên y hệt trường hợp một nguồn, và mỗi nguồn tự điều
 // chỉnh bitrate / xin IDR theo tình trạng của riêng nó (mỗi nguồn một encoder).
-inline constexpr size_t kMaxSources          = 8;
-inline constexpr size_t kMaxSourceNameBytes  = 64; // tiêu đề cửa sổ, UTF-8, cắt bớt
+inline constexpr size_t kMaxSources = 8;
+inline constexpr size_t kMaxSourceNameBytes = 64; // tiêu đề cửa sổ, UTF-8, cắt bớt
 
 struct SourceInfo {
-    uint8_t     sourceId = 0;
-    uint16_t    width = 0;
-    uint16_t    height = 0;
+    uint8_t sourceId = 0;
+    uint16_t width = 0;
+    uint16_t height = 0;
     std::string name; // tiêu đề cửa sổ (UTF-8), chỉ để hiển thị
 };
 
@@ -128,17 +134,17 @@ struct Hello {
     uint16_t codecMask;
     uint16_t maxWidth;
     uint16_t maxHeight;
-    uint8_t  desiredFps;
+    uint8_t desiredFps;
     uint16_t features;
-    uint8_t  sourceId; // nguồn muốn xem (lấy từ SOURCE_LIST; 0 = nguồn đầu tiên)
+    uint8_t sourceId; // nguồn muốn xem (lấy từ SOURCE_LIST; 0 = nguồn đầu tiên)
 };
 
 struct HelloAck {
     uint32_t sessionId;
-    Codec    codec; // Rejected (0xFF) = từ chối
+    Codec codec; // Rejected (0xFF) = từ chối
     uint16_t width;
     uint16_t height;
-    uint8_t  fps;
+    uint8_t fps;
     uint32_t bitrateBps;
     uint64_t timebaseUs;
 };
@@ -150,7 +156,7 @@ struct PingPong {
 
 struct Feedback {
     uint16_t lostFrames;
-    uint8_t  lossPct;
+    uint8_t lossPct;
     uint16_t rttMs;
     uint32_t recvBitrateKbps;
 };
@@ -163,25 +169,29 @@ struct Reconfig {
 
 // ---- Kênh input (GĐ4) ----
 enum class InputType : uint8_t {
-    Key         = 1, // a = mã phím ảo (VK), b = scancode (bit8 = phím mở rộng E0)
-    MouseMove   = 2, // absolute=1: a/b = toạ độ chuẩn hoá 0..65535 trong client rect
+    Key = 1,         // a = mã phím ảo (VK), b = scancode (bit8 = phím mở rộng E0)
+    MouseMove = 2,   // absolute=1: a/b = toạ độ chuẩn hoá 0..65535 trong client rect
                      // absolute=0: a/b = delta thô (dx/dy) từ Raw Input
     MouseButton = 3, // a = MouseButton, b = 0
-    MouseWheel  = 4, // a = 0, b = delta (bội của 120), state bỏ qua
+    MouseWheel = 4,  // a = 0, b = delta (bội của 120), state bỏ qua
 };
 
-enum class MouseButton : uint8_t { Left = 1, Right = 2, Middle = 3, X1 = 4, X2 = 5 };
+enum class MouseButton : uint8_t { Left = 1,
+    Right = 2,
+    Middle = 3,
+    X1 = 4,
+    X2 = 5 };
 
 // b của Key: scancode ở 8 bit thấp, bit8 = cờ E0 (phím mở rộng: mũi tên, Ctrl phải...).
 inline constexpr int32_t kScanExtended = 0x100;
 
 struct InputEvent {
     InputType type = InputType::Key;
-    uint64_t  timestampUs = 0;
-    int32_t   a = 0;
-    int32_t   b = 0;
-    uint8_t   state = 0;    // 1 = nhấn/giữ, 0 = nhả. MouseMove/Wheel bỏ qua.
-    uint8_t   absolute = 0; // 1 = a/b là toạ độ tuyệt đối chuẩn hoá
+    uint64_t timestampUs = 0;
+    int32_t a = 0;
+    int32_t b = 0;
+    uint8_t state = 0;    // 1 = nhấn/giữ, 0 = nhả. MouseMove/Wheel bỏ qua.
+    uint8_t absolute = 0; // 1 = a/b là toạ độ tuyệt đối chuẩn hoá
 };
 
 // Event đổi TRẠNG THÁI: mất gói chứa nó gây kẹt phím → được gửi lặp (InputSender).
@@ -211,7 +221,7 @@ struct FecHeader {
     uint32_t frameId;
     uint64_t timestampUs;
     uint16_t pktCount;
-    uint8_t  groupIndex;
+    uint8_t groupIndex;
 };
 
 struct FecPacketView {
@@ -239,21 +249,21 @@ size_t BuildReconfig(std::span<uint8_t> out, uint32_t sessionId, const Reconfig&
 // sổ nguồn lên foreground. = 0: rời đi → host nhả hết phím đang giữ của phiên này.
 size_t BuildSetFocus(std::span<uint8_t> out, uint32_t sessionId, bool focused);
 size_t BuildVideoPacket(std::span<uint8_t> out, uint32_t sessionId, const VideoHeader& vh,
-                        bool idr, bool frameEnd, std::span<const uint8_t> payload);
+    bool idr, bool frameEnd, std::span<const uint8_t> payload);
 // `parity` gồm cả 2 byte lenXor đứng đầu (xem FecPacketView).
 size_t BuildFecPacket(std::span<uint8_t> out, uint32_t sessionId, const FecHeader& fh,
-                      bool idr, std::span<const uint8_t> parity);
+    bool idr, std::span<const uint8_t> parity);
 // `firstSeq` là seq của events[0]; event thứ i mang seq = firstSeq + i (§6).
 // Trả 0 nếu events rỗng, quá kMaxInputEvents, hoặc out thiếu chỗ.
 size_t BuildInputEvents(std::span<uint8_t> out, uint32_t sessionId, uint32_t firstSeq,
-                        std::span<const InputEvent> events);
+    std::span<const InputEvent> events);
 
 // ---- Parse. Trả về nullopt nếu gói ngắn/sai phiên bản. ----
 std::optional<CommonHeader> ParseCommonHeader(std::span<const uint8_t> datagram);
 // Phần payload sau header chung (rỗng nếu datagram ngắn hơn header).
 std::span<const uint8_t> PayloadOf(std::span<const uint8_t> datagram);
 
-std::optional<Hello>    ParseHello(std::span<const uint8_t> payload);
+std::optional<Hello> ParseHello(std::span<const uint8_t> payload);
 // Giải mã SOURCE_LIST vào `out` (đủ chỗ cho kMaxSources). Trả số nguồn đã ghi.
 size_t ParseSourceList(std::span<const uint8_t> payload, std::span<SourceInfo> out);
 std::optional<HelloAck> ParseHelloAck(std::span<const uint8_t> payload);
@@ -263,12 +273,12 @@ std::optional<Reconfig> ParseReconfig(std::span<const uint8_t> payload);
 // true = xin focus, false = nhả. nullopt nếu payload rỗng.
 std::optional<bool> ParseSetFocus(std::span<const uint8_t> payload);
 std::optional<VideoPacketView> ParseVideoPacket(const CommonHeader& h,
-                                                std::span<const uint8_t> payload);
+    std::span<const uint8_t> payload);
 std::optional<FecPacketView> ParseFecPacket(const CommonHeader& h,
-                                            std::span<const uint8_t> payload);
+    std::span<const uint8_t> payload);
 // Giải mã batch input vào `out` (đủ chỗ cho kMaxInputEvents). Trả số event đã ghi
 // và đặt `firstSeq`; 0 nếu gói hỏng/rỗng/không khớp count.
 size_t ParseInputEvents(std::span<const uint8_t> payload, uint32_t& firstSeq,
-                        std::span<InputEvent> out);
+    std::span<InputEvent> out);
 
 } // namespace deskhub

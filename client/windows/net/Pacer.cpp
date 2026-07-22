@@ -43,8 +43,8 @@ void Pacer::SleepUs(uint64_t us) {
     // trình này.
     if (!timer_) {
         timer_ = CreateWaitableTimerExW(nullptr, nullptr,
-                                        CREATE_WAITABLE_TIMER_HIGH_RESOLUTION,
-                                        TIMER_ALL_ACCESS);
+            CREATE_WAITABLE_TIMER_HIGH_RESOLUTION,
+            TIMER_ALL_ACCESS);
     }
     if (timer_) {
         LARGE_INTEGER due;

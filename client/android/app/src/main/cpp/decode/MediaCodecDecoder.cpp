@@ -46,10 +46,14 @@ size_t FirstVclOffset(const uint8_t* d, size_t n) {
     size_t i = 0;
     while (i + 3 < n) {
         size_t scLen = 0;
-        if (d[i] == 0 && d[i + 1] == 0 && d[i + 2] == 1) scLen = 3;
+        if (d[i] == 0 && d[i + 1] == 0 && d[i + 2] == 1)
+            scLen = 3;
         else if (i + 4 < n && d[i] == 0 && d[i + 1] == 0 && d[i + 2] == 0 && d[i + 3] == 1)
             scLen = 4;
-        if (scLen == 0) { ++i; continue; }
+        if (scLen == 0) {
+            ++i;
+            continue;
+        }
 
         const uint8_t type = d[i + scLen] & 0x1F;
         if (type >= 1 && type <= 5) return i; // slice — hết phần tham số
@@ -60,7 +64,9 @@ size_t FirstVclOffset(const uint8_t* d, size_t n) {
 
 } // namespace
 
-MediaCodecDecoder::~MediaCodecDecoder() { Shutdown(); }
+MediaCodecDecoder::~MediaCodecDecoder() {
+    Shutdown();
+}
 
 // Dựng codec mới. Gọi Shutdown() ngay đầu để Init() gọi lại nhiều lần vẫn an toàn —
 // đây là đường chạy thật, mỗi lần Surface đổi hoặc host RECONFIG là một lần dựng lại.
@@ -137,7 +143,7 @@ bool MediaCodecDecoder::Decode(const uint8_t* nal, size_t len, uint64_t ptsUs) {
             if (!buf || cap < csdLen) return false;
             std::memcpy(buf, nal, csdLen);
             if (AMediaCodec_queueInputBuffer(codec_, size_t(idx), 0, csdLen, 0,
-                                             AMEDIACODEC_BUFFER_FLAG_CODEC_CONFIG) != AMEDIA_OK)
+                    AMEDIACODEC_BUFFER_FLAG_CODEC_CONFIG) != AMEDIA_OK)
                 return false;
         }
         sentCsd_ = true;

@@ -45,28 +45,30 @@
 #include <memory>
 #include <string>
 
-enum class Codec { H264, HEVC };
-enum class RateControl { CBR, VBR };
+enum class Codec { H264,
+    HEVC };
+enum class RateControl { CBR,
+    VBR };
 
 // Nhận một gói NAL Annex-B vừa nén xong (1 frame). Chạy trên luồng gọi Encode().
 // `data` chỉ hợp lệ trong phạm vi callback - copy/tiêu thụ ngay.
 using PacketHandler = std::function<void(const uint8_t* data, size_t size,
-                                         uint64_t timestampUs, bool keyframe)>;
+    uint64_t timestampUs, bool keyframe)>;
 
 struct EncoderConfig {
-    Codec        codec = Codec::H264;
-    uint32_t     width = 0;   // kích thước NÉN - phải chẵn (NV12 lấy mẫu chroma 2x2)
-    uint32_t     height = 0;
+    Codec codec = Codec::H264;
+    uint32_t width = 0; // kích thước NÉN - phải chẵn (NV12 lấy mẫu chroma 2x2)
+    uint32_t height = 0;
     // Kích thước texture đầu vào THẬT, nếu khác `width`/`height` (0 = bằng nhau).
     // Cửa sổ rộng/cao lẻ phải nén ở kích thước chẵn nhỏ hơn, nhưng texture đưa vào
     // vẫn là kích thước lẻ - video processor cần biết cả hai để cắt cho đúng.
-    uint32_t     srcWidth = 0;
-    uint32_t     srcHeight = 0;
-    uint32_t     fps = 60;
-    uint32_t     bitrateBps = 20'000'000;
-    RateControl  rc = RateControl::CBR;
-    bool         lowLatency = true;
-    std::wstring outputPath = L"output.mp4";  // rỗng = không ghi file
+    uint32_t srcWidth = 0;
+    uint32_t srcHeight = 0;
+    uint32_t fps = 60;
+    uint32_t bitrateBps = 20'000'000;
+    RateControl rc = RateControl::CBR;
+    bool lowLatency = true;
+    std::wstring outputPath = L"output.mp4"; // rỗng = không ghi file
     // GD2+: đường NAL trong process (loopback) / lên mạng (GD3). Cả NVENC lẫn MF
     // (Encoder MFT thẳng, không qua SinkWriter) đều hỗ trợ.
     PacketHandler onPacket;

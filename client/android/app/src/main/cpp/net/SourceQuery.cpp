@@ -25,7 +25,7 @@
 
 namespace {
 constexpr uint64_t kQueryTimeoutUs = 3'000'000; // người dùng đang đứng chờ
-constexpr uint64_t kResendUs       = 500'000;
+constexpr uint64_t kResendUs = 500'000;
 } // namespace
 
 bool QuerySources(const NetAddr& server, std::vector<deskhub::SourceInfo>& out) {
@@ -75,6 +75,6 @@ bool QuerySources(const NetAddr& server, std::vector<deskhub::SourceInfo>& out) 
     // Hết 3 giây mà im lặng. Cảnh báo chứ không phải lỗi — host đời trước GĐ6 không
     // biết LIST_SOURCES, và caller sẽ tự lùi về nguồn 0.
     LOGW("[Sources] No SOURCE_LIST from %s after %llu ms.", server.ToString().c_str(),
-         (unsigned long long)(kQueryTimeoutUs / 1000));
+        (unsigned long long)(kQueryTimeoutUs / 1000));
     return false;
 }

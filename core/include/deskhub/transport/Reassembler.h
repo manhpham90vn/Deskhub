@@ -69,7 +69,7 @@ public:
     struct Frame {
         uint32_t frameId = 0;
         uint64_t timestampUs = 0;
-        bool     idr = false;
+        bool idr = false;
         // Thời điểm mảnh ĐẦU TIÊN của frame này tới — client trừ đi để đo thời gian
         // ghép (t_asm trong log chẩn đoán). Không dùng vào logic nào của lớp này.
         uint64_t firstSeenUs = 0;
@@ -89,13 +89,13 @@ public:
     // đuôi — dấu hiệu đặc trưng của burst, xem docs/06 §7b). Với PreIdr thì
     // missing == 0 và hai trường vị trí vô nghĩa.
     struct FrameDropInfo {
-        uint32_t   frameId = 0;
-        DropReason reason  = DropReason::Timeout;
-        uint16_t   missing = 0, total = 0;
-        uint16_t   firstMissing = 0, lastMissing = 0;
-        bool       idr = false;
-        uint32_t   waitedMs = 0;  // từ mảnh đầu tới lúc khai tử
-        uint32_t   bytesGot = 0;  // byte đã nhận được của frame này
+        uint32_t frameId = 0;
+        DropReason reason = DropReason::Timeout;
+        uint16_t missing = 0, total = 0;
+        uint16_t firstMissing = 0, lastMissing = 0;
+        bool idr = false;
+        uint32_t waitedMs = 0; // từ mảnh đầu tới lúc khai tử
+        uint32_t bytesGot = 0; // byte đã nhận được của frame này
     };
 
     // Callback chẩn đoán, tùy chọn. Core không I/O — client nối vào printf/logcat.
@@ -107,12 +107,12 @@ public:
         // packetsLost/(packetsReceived+packetsLost), trộn parity vào mẫu số sẽ làm
         // tỉ lệ đó tụt xuống đúng lúc FEC đang bật — tức là đúng lúc đang mất gói.
         uint64_t packetsReceived = 0; // mọi gói đưa vào Push (kể cả trùng/muộn)
-        uint64_t fecReceived     = 0; // gói parity đưa vào PushFec
+        uint64_t fecReceived = 0;     // gói parity đưa vào PushFec
         uint64_t framesCompleted = 0; // frame trả ra qua PopReady
-        uint64_t framesDropped   = 0; // frame bỏ vì thiếu mảnh (mất gói thật)
-        uint64_t framesSkipped   = 0; // frame lành nhưng bị nuốt khi chờ IDR
-        uint64_t packetsLost     = 0; // ước lượng: mảnh còn thiếu của các frame đã bỏ
-        uint64_t lossEvents      = 0;
+        uint64_t framesDropped = 0;   // frame bỏ vì thiếu mảnh (mất gói thật)
+        uint64_t framesSkipped = 0;   // frame lành nhưng bị nuốt khi chờ IDR
+        uint64_t packetsLost = 0;     // ước lượng: mảnh còn thiếu của các frame đã bỏ
+        uint64_t lossEvents = 0;
         uint64_t packetsRecovered = 0; // mảnh dựng lại được từ parity FEC
 
         // Phân bố ĐỘ DÀI CHÙM gói mất liên tiếp trong một frame bị bỏ, thang gấp đôi:
@@ -123,7 +123,7 @@ public:
         // chùm-20 đòi hai cách chữa hoàn toàn khác nhau — cái đầu interleave là xong,
         // cái sau phải chặn từ gốc (pacing/bitrate) vì không parity nào gánh nổi.
         uint64_t lossRuns[7] = {};
-        uint64_t lossRunMax  = 0; // chùm dài nhất từng thấy, tính bằng gói
+        uint64_t lossRunMax = 0; // chùm dài nhất từng thấy, tính bằng gói
 
         // Gói VỀ MUỘN: mảnh tới SAU khi frame của nó đã bị khai tử vì "mất gói".
         // Đây là phép đo phân xử câu hỏi mở của docs/06 §7b: nếu latePackets chiếm
@@ -131,8 +131,8 @@ public:
         // hết hạn trước khi đuôi kịp tới — và cách chữa (nới deadline, giảm cỡ
         // frame) khác hẳn với mất gói thật (bitrate, FEC, đường truyền).
         uint64_t latePackets = 0;
-        uint64_t lateMsSum   = 0; // tổng độ muộn — chia latePackets ra trung bình
-        uint64_t lateMsMax   = 0;
+        uint64_t lateMsSum = 0; // tổng độ muộn — chia latePackets ra trung bình
+        uint64_t lateMsMax = 0;
     };
 
     // `frameIntervalUs`: khoảng cách frame kỳ vọng (1e6/fps) — mốc cho timeout bỏ frame.
@@ -152,9 +152,13 @@ public:
     bool TakeLossEvent();
 
     // Đang nuốt frame chờ IDR (mới join hoặc vừa loss) — caller giữ yêu cầu keyframe.
-    bool WaitingForIdr() const { return waitingForIdr_; }
+    bool WaitingForIdr() const {
+        return waitingForIdr_;
+    }
 
-    const Stats& stats() const { return stats_; }
+    const Stats& stats() const {
+        return stats_;
+    }
 
     // Khoảng lặng DÀI NHẤT giữa hai gói video liên tiếp kể từ lần gọi trước (ms),
     // đọc-và-xoá. Client in mỗi 1s: gap ~trăm ms là dấu hiệu Wi-Fi nghẽn/power-save
@@ -174,10 +178,12 @@ private:
         uint16_t pktCount = 0;
         uint16_t received = 0;
         uint64_t timestampUs = 0;
-        bool     idr = false;
+        bool idr = false;
         uint64_t firstSeenUs = 0;
-        size_t   bytes = 0;
-        bool Complete() const { return pktCount != 0 && received == pktCount; }
+        size_t bytes = 0;
+        bool Complete() const {
+            return pktCount != 0 && received == pktCount;
+        }
     };
     using PendingMap = std::map<uint32_t, Pending>;
 
@@ -193,19 +199,22 @@ private:
 
     PendingMap pending_;
     uint64_t frameIntervalUs_;
-    bool     waitingForIdr_ = true; // join giữa chừng: chờ IDR đầu tiên
-    bool     lossEvent_ = false;
-    bool     haveBarrier_ = false;  // đã có mốc frameId không nhận lùi
-    uint32_t barrierId_ = 0;        // frame ≤ mốc này đã phát hoặc đã bỏ
-    Stats    stats_;
+    bool waitingForIdr_ = true; // join giữa chừng: chờ IDR đầu tiên
+    bool lossEvent_ = false;
+    bool haveBarrier_ = false; // đã có mốc frameId không nhận lùi
+    uint32_t barrierId_ = 0;   // frame ≤ mốc này đã phát hoặc đã bỏ
+    Stats stats_;
 
     // "Nghĩa địa" — ring các frame vừa khai tử vì mất gói, để nhận diện gói của
     // chúng còn lết về sau đó (đo "mất thật vs tới muộn", xem Stats::latePackets).
     // 16 entry ≈ 0.25s @60fps — gói muộn hơn thế thì tính là mất luôn cũng đúng.
-    struct Grave { uint32_t frameId = 0; uint64_t dropUs = 0; };
+    struct Grave {
+        uint32_t frameId = 0;
+        uint64_t dropUs = 0;
+    };
     static constexpr size_t kGraveyardSize = 16;
-    Grave    graveyard_[kGraveyardSize];
-    size_t   graveNext_ = 0;
+    Grave graveyard_[kGraveyardSize];
+    size_t graveNext_ = 0;
 
     uint64_t lastPushUs_ = 0; // mốc đo khoảng lặng giữa hai gói video liên tiếp
     uint32_t maxGapMs_ = 0;

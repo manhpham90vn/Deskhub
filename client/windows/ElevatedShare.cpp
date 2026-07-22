@@ -63,7 +63,7 @@ bool HexDecode(const std::wstring& in, std::string& out) {
     for (size_t i = 0; i < in.size(); i += 2) {
         int hi = -1, lo = -1;
         for (int k = 0; k < 16; ++k) {
-            if (in[i]     == L"0123456789abcdef"[k]) hi = k;
+            if (in[i] == L"0123456789abcdef"[k]) hi = k;
             if (in[i + 1] == L"0123456789abcdef"[k]) lo = k;
         }
         if (hi < 0 || lo < 0) return false;
@@ -115,13 +115,13 @@ bool IsProcessElevated() {
     TOKEN_ELEVATION elevation{};
     DWORD len = 0;
     const bool ok = GetTokenInformation(token, TokenElevation, &elevation,
-                                        sizeof(elevation), &len) != FALSE;
+                        sizeof(elevation), &len) != FALSE;
     CloseHandle(token);
     return ok && elevation.TokenIsElevated != 0;
 }
 
 bool RelaunchElevatedShare(std::span<const AgentSource> sources,
-                           const AgentOptions& opt, bool& outCancelled) {
+    const AgentOptions& opt, bool& outCancelled) {
     outCancelled = false;
 
     const std::wstring exe = SelfPath();
@@ -129,14 +129,14 @@ bool RelaunchElevatedShare(std::span<const AgentSource> sources,
 
     wchar_t nums[128];
     swprintf(nums, 128, L" --port %u --fps %u --bitrate %u",
-             unsigned(opt.port), unsigned(opt.fps), unsigned(opt.bitrateMbps));
+        unsigned(opt.port), unsigned(opt.fps), unsigned(opt.bitrateMbps));
 
     std::wstring args = kFlagShare;
     args += nums;
     if (opt.allowInput) args += L" --allow-input";
     // Không truyền cờ này thì phiên host thật (chạy trong instance admin) không ghi
     // log — đúng cái bẫy đã làm diag-host.log ra 0 byte. Xem DiagLog.h.
-    if (opt.diagLog)    args += L" --diag-log";
+    if (opt.diagLog) args += L" --diag-log";
     for (const auto& s : sources) args += L" --src " + EncodeSource(s);
 
     SHELLEXECUTEINFOW sei{};
@@ -156,7 +156,7 @@ bool RelaunchElevatedShare(std::span<const AgentSource> sources,
 }
 
 bool ParseElevatedShareArgs(int adeskhub, wchar_t** argv,
-                            std::vector<AgentSource>& outSources, AgentOptions& outOpt) {
+    std::vector<AgentSource>& outSources, AgentOptions& outOpt) {
     bool isShare = false;
     for (int i = 1; i < adeskhub; ++i)
         if (wcscmp(argv[i], kFlagShare) == 0) isShare = true;

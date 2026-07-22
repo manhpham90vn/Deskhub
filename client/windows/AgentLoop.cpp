@@ -82,9 +82,9 @@ BOOL WINAPI CtrlHandler(DWORD type) {
 
 const char* StateName(deskhub::HostSession::State s) {
     switch (s) {
-    case deskhub::HostSession::State::Idle:      return "IDLE";
-    case deskhub::HostSession::State::Ready:     return "READY";
-    case deskhub::HostSession::State::Streaming: return "STREAMING";
+        case deskhub::HostSession::State::Idle: return "IDLE";
+        case deskhub::HostSession::State::Ready: return "READY";
+        case deskhub::HostSession::State::Streaming: return "STREAMING";
     }
     return "?";
 }
@@ -107,32 +107,32 @@ struct SourcePipeline {
         : curBitrateBps(startBps), rate(startBps, minBps) {}
 
     // --- Cấu hình, cố định sau khi dựng ---
-    uint8_t       sourceId = 0;
+    uint8_t sourceId = 0;
     CaptureTarget target;
-    std::string   name;
+    std::string name;
 
     WindowCapture capture;
-    InputInjector injector;                    // chỉ thread Recv chạm
+    InputInjector injector;                        // chỉ thread Recv chạm
     std::unique_ptr<deskhub::HostSession> session; // tạo sau khi biết kích thước nguồn
     deskhub::StreamParams offer;                   // chỉ thread Recv chạm
-    deskhub::Packetizer   packetizer;              // chỉ thread FrameArrived chạm
+    deskhub::Packetizer packetizer;                // chỉ thread FrameArrived chạm
 
     // --- Chia sẻ giữa thread FrameArrived và thread Recv ---
     std::atomic<uint32_t> srcW{0}, srcH{0};       // kích thước NÉN (đã làm chẵn)
     std::atomic<uint32_t> srcTexW{0}, srcTexH{0}; // kích thước texture WGC thật
-    std::atomic<bool>     sizeChanged{false};
-    std::atomic<bool>     wantFec{false};
+    std::atomic<bool> sizeChanged{false};
+    std::atomic<bool> wantFec{false};
     std::atomic<uint32_t> curBitrateBps{0};
-    std::atomic<bool>     netReady{false};
+    std::atomic<bool> netReady{false};
     // failed = HỎNG THẬT, một chiều: không có backend encoder, capture không start
     // được. Nguồn coi như chết tới hết phiên.
-    std::atomic<bool>     failed{false};
+    std::atomic<bool> failed{false};
     // paused = TẠM không encode được (nguồn nhỏ hơn kMinEncode*), HAI CHIỀU. Tách
     // khỏi `failed` vì trước đây gộp chung: cửa sổ thu nhỏ làm ensureEncoder hỏng →
     // failed=true → onFrame thoát ngay ở đầu hàm → không bao giờ thấy cửa sổ mở lại
     // → phiên chết vĩnh viễn dù nguồn đã bình thường trở lại (log 21/07/2026).
-    std::atomic<bool>     paused{false};
-    std::atomic<bool>     forceIdr{false};
+    std::atomic<bool> paused{false};
+    std::atomic<bool> forceIdr{false};
     std::atomic<uint64_t> peerPacked{0}; // NetAddr::Pack của client hiện tại (0 = chưa có)
     std::atomic<uint64_t> bytesSent{0}, framesSent{0};
     std::atomic<uint32_t> captured{0};
@@ -149,7 +149,7 @@ struct SourcePipeline {
     // mà nguồn đang tĩnh (menu, màn hình đứng im) vẫn có cái để encode gửi đi —
     // không cache thì client join màn hình tĩnh sẽ đen vĩnh viễn.
     Microsoft::WRL::ComPtr<ID3D11Texture2D> cachedTex;
-    std::atomic<bool>     haveCached{false};
+    std::atomic<bool> haveCached{false};
     std::atomic<uint64_t> lastFrameUs{0};
     uint64_t lastKeepaliveUs = 0; // lần bơm lại frame cache gần nhất — chỉ thread Recv chạm
 
@@ -216,7 +216,7 @@ int RunAgent(std::span<const AgentSource> sources, const AgentOptions& opt) {
     }
 
     GpuChoice gpu;
-    if (!CreateBestDevice({ GpuVendor::Nvidia, GpuVendor::Intel, GpuVendor::Amd }, gpu)) {
+    if (!CreateBestDevice({GpuVendor::Nvidia, GpuVendor::Intel, GpuVendor::Amd}, gpu)) {
         std::printf("[Agent] Failed to create D3D11 device.\n");
         return 1;
     }
@@ -240,24 +240,29 @@ int RunAgent(std::span<const AgentSource> sources, const AgentOptions& opt) {
             const int p = int(opt.port) + i;
             if (p <= 0 || p > 65535) break;
             boundPort = uint16_t(p);
-            if (sock.Open(boundPort)) { opened = true; break; }
+            if (sock.Open(boundPort)) {
+                opened = true;
+                break;
+            }
             if (!sock.lastBindAddrInUse()) break; // lỗi khác cổng-bận -> dừng, Open đã in
         }
         if (!opened) {
             wchar_t m[512];
             swprintf(m, 512,
-                     L"Cannot start sharing: no free UDP port found from %u to %u.\n\n"
-                     L"Several Deskhub hosts may still be running in the background "
-                     L"(their windows stay hidden while sharing). Close them from Task "
-                     L"Manager (client.exe) and try again.",
-                     unsigned(opt.port), unsigned(opt.port) + kPortTries - 1);
+                L"Cannot start sharing: no free UDP port found from %u to %u.\n\n"
+                L"Several Deskhub hosts may still be running in the background "
+                L"(their windows stay hidden while sharing). Close them from Task "
+                L"Manager (client.exe) and try again.",
+                unsigned(opt.port), unsigned(opt.port) + kPortTries - 1);
             MessageBoxW(nullptr, m, L"Deskhub", MB_OK | MB_ICONWARNING);
             return 1;
         }
     }
     if (boundPort != opt.port)
-        std::printf("[Agent] Port %u was busy — using %u instead. Tell the other person "
-                    "to use this port.\n", unsigned(opt.port), unsigned(boundPort));
+        std::printf(
+            "[Agent] Port %u was busy — using %u instead. Tell the other person "
+            "to use this port.\n",
+            unsigned(opt.port), unsigned(boundPort));
     sock.SetRecvTimeout(100);
 
     // Mở firewall cho gói inbound tới được đây. Thêm rule cần admin; instance thường
@@ -267,27 +272,30 @@ int RunAgent(std::span<const AgentSource> sources, const AgentOptions& opt) {
     if (EnsureHostFirewallRule())
         std::printf("[Agent] Windows Firewall: inbound rule verified (all profiles).\n");
     else
-        std::printf("[Agent] Could not add/verify a Windows Firewall rule (needs admin). "
-                    "If the other machine cannot connect, allow client.exe through Windows "
-                    "Firewall for the current network.\n");
+        std::printf(
+            "[Agent] Could not add/verify a Windows Firewall rule (needs admin). "
+            "If the other machine cannot connect, allow client.exe through Windows "
+            "Firewall for the current network.\n");
 
-    std::printf("[Agent] Listening on UDP port %u. On the other machine, open client.exe"
-                " and enter one of:\n", boundPort);
+    std::printf(
+        "[Agent] Listening on UDP port %u. On the other machine, open client.exe"
+        " and enter one of:\n",
+        boundPort);
     for (const auto& a : ListLocalIPv4())
         std::wprintf(L"    %hs:%u    (%ls)\n", a.ip.c_str(), boundPort, a.name.c_str());
 
     const uint32_t startBitrate = opt.bitrateMbps * 1'000'000u;
-    const uint32_t maxBitrate   = startBitrate;
+    const uint32_t maxBitrate = startBitrate;
     // Sàn bitrate: dưới mức này hình nát tới mức vô dụng, thà bỏ frame còn hơn.
     // Đây là tham số `minBps` của BitrateController — nó không bao giờ tụt quá đây.
-    const uint32_t minBitrate   = 1'000'000u;
+    const uint32_t minBitrate = 1'000'000u;
 
     std::vector<std::unique_ptr<SourcePipeline>> pipes;
     for (size_t i = 0; i < sources.size(); ++i) {
         auto p = std::make_unique<SourcePipeline>(startBitrate, minBitrate);
         p->sourceId = uint8_t(i);
-        p->target   = sources[i].target;
-        p->name     = sources[i].name;
+        p->target = sources[i].target;
+        p->name = sources[i].name;
         pipes.push_back(std::move(p));
     }
 
@@ -297,7 +305,7 @@ int RunAgent(std::span<const AgentSource> sources, const AgentOptions& opt) {
 
         // NAL vừa nén xong (thread FrameArrived của nguồn này) -> cắt gói -> UDP.
         auto onPacket = [p, &sock](const uint8_t* data, size_t size, uint64_t tsUs,
-                                   bool keyframe) {
+                            bool keyframe) {
             if (!p->session || p->session->state() != deskhub::HostSession::State::Streaming) return;
             const uint64_t pp = p->peerPacked.load(std::memory_order_acquire);
             if (!pp) return;
@@ -334,12 +342,12 @@ int RunAgent(std::span<const AgentSource> sources, const AgentOptions& opt) {
         // Tạo encoder nếu chưa có. GỌI DƯỚI encMutex. false = backend không dùng được.
         // `w`/`h` là kích thước NÉN (chẵn); `sw`/`sh` là kích thước texture thật.
         auto ensureEncoder = [p, &gpu, &opt, onPacket](uint32_t w, uint32_t h,
-                                                       uint32_t sw, uint32_t sh) -> bool {
+                                 uint32_t sw, uint32_t sh) -> bool {
             if (p->encoder) return true;
             EncoderConfig cfg;
-            cfg.width  = w;
+            cfg.width = w;
             cfg.height = h;
-            cfg.srcWidth  = sw;
+            cfg.srcWidth = sw;
             cfg.srcHeight = sh;
             cfg.fps = opt.fps;
             cfg.bitrateBps = p->curBitrateBps.load(std::memory_order_relaxed);
@@ -347,8 +355,10 @@ int RunAgent(std::span<const AgentSource> sources, const AgentOptions& opt) {
             cfg.onPacket = onPacket;
             p->encoder = CreateEncoder(gpu.device.Get(), cfg);
             if (!p->encoder) {
-                std::printf("[Agent][%s] No usable encoder backend (NVENC + Media Foundation"
-                            " both failed).\n", p->name.c_str());
+                std::printf(
+                    "[Agent][%s] No usable encoder backend (NVENC + Media Foundation"
+                    " both failed).\n",
+                    p->name.c_str());
                 p->failed.store(true);
                 return false;
             }
@@ -381,9 +391,10 @@ int RunAgent(std::span<const AgentSource> sources, const AgentOptions& opt) {
             // RECONFIG + IDR cho client.
             if (p->srcW.load() != encW || p->srcH.load() != encH) {
                 if (p->srcW.load())
-                    std::printf("[Agent][%s] Source resized %ux%u -> %ux%u,"
-                                " rebuilding encoder.\n",
-                                p->name.c_str(), p->srcW.load(), p->srcH.load(), encW, encH);
+                    std::printf(
+                        "[Agent][%s] Source resized %ux%u -> %ux%u,"
+                        " rebuilding encoder.\n",
+                        p->name.c_str(), p->srcW.load(), p->srcH.load(), encW, encH);
                 p->srcW.store(encW);
                 p->srcH.store(encH);
                 p->srcTexW.store(fi.width);
@@ -408,14 +419,15 @@ int RunAgent(std::span<const AgentSource> sources, const AgentOptions& opt) {
             // thêm điều kiện ở đó.
             if (encW < kMinEncodeW || encH < kMinEncodeH) {
                 if (!p->paused.exchange(true, std::memory_order_acq_rel))
-                    std::printf("[Agent][%s] Source too small to encode (%ux%u) —"
-                                " paused, waiting for it to grow back.\n",
-                                p->name.c_str(), encW, encH);
+                    std::printf(
+                        "[Agent][%s] Source too small to encode (%ux%u) —"
+                        " paused, waiting for it to grow back.\n",
+                        p->name.c_str(), encW, encH);
                 return;
             }
             if (p->paused.exchange(false, std::memory_order_acq_rel))
                 std::printf("[Agent][%s] Source back to %ux%u — resuming.\n",
-                            p->name.c_str(), encW, encH);
+                    p->name.c_str(), encW, encH);
 
             // Lưu bản SAO của frame cuối. Bắt buộc phải copy chứ không giữ con trỏ:
             // texture của WGC chỉ sống trong phạm vi callback (xem CaptureTypes.h).
@@ -450,7 +462,7 @@ int RunAgent(std::span<const AgentSource> sources, const AgentOptions& opt) {
 
         if (!p->capture.Start(p->target, gpu.device.Get(), onFrame)) {
             std::printf("[Agent][%s] Failed to start capture — skipping this source.\n",
-                        p->name.c_str());
+                p->name.c_str());
             p->failed.store(true);
         }
     }
@@ -470,7 +482,7 @@ int RunAgent(std::span<const AgentSource> sources, const AgentOptions& opt) {
         if (p->failed.load() || !p->srcW.load()) {
             if (!p->failed.load())
                 std::printf("[Agent][%s] No frame within 10s — not sharing this source.\n",
-                            p->name.c_str());
+                    p->name.c_str());
             p->capture.Stop();
             p->failed.store(true);
             continue;
@@ -485,13 +497,13 @@ int RunAgent(std::span<const AgentSource> sources, const AgentOptions& opt) {
     // --- Dựng phiên + injector cho từng nguồn còn sống ---
     NetAddr replyAddr; // địa chỉ nguồn của gói đang xử lý (chỉ thread Recv dùng)
     for (SourcePipeline* p : live) {
-        p->offer.width      = uint16_t(p->srcW.load());
-        p->offer.height     = uint16_t(p->srcH.load());
-        p->offer.fps        = uint8_t(opt.fps);
+        p->offer.width = uint16_t(p->srcW.load());
+        p->offer.height = uint16_t(p->srcH.load());
+        p->offer.fps = uint8_t(opt.fps);
         p->offer.bitrateBps = startBitrate;
         std::printf("[Agent] Source %u \"%s\": %ux%u @%ufps, %u Mbps.\n",
-                    p->sourceId, p->name.c_str(), p->offer.width, p->offer.height,
-                    opt.fps, opt.bitrateMbps);
+            p->sourceId, p->name.c_str(), p->offer.width, p->offer.height,
+            opt.fps, opt.bitrateMbps);
 
         if (opt.allowInput) {
             const bool ok = p->target.hwnd ? p->injector.Init(p->target.hwnd)
@@ -523,8 +535,10 @@ int RunAgent(std::span<const AgentSource> sources, const AgentOptions& opt) {
                 return;
             }
             if (!p->injector.FocusTarget())
-                std::printf("[Agent][%s] Windows refused to bring this window to the front — "
-                            "click it once on this machine.\n", p->name.c_str());
+                std::printf(
+                    "[Agent][%s] Windows refused to bring this window to the front — "
+                    "click it once on this machine.\n",
+                    p->name.c_str());
         };
         cb.onDisconnect = [p] {
             p->peerPacked.store(0, std::memory_order_release);
@@ -557,7 +571,7 @@ int RunAgent(std::span<const AgentSource> sources, const AgentOptions& opt) {
                 p->rate.CommitBitrate(d.bitrateBps);
                 p->curBitrateBps.store(d.bitrateBps, std::memory_order_relaxed);
                 std::printf("[Agent][%s] Bitrate %.1f -> %.1f Mbps (loss %u%%, RTT %u ms)\n",
-                            p->name.c_str(), cur / 1e6, d.bitrateBps / 1e6, fb.lossPct, fb.rttMs);
+                    p->name.c_str(), cur / 1e6, d.bitrateBps / 1e6, fb.lossPct, fb.rttMs);
             }
         };
 
@@ -571,8 +585,8 @@ int RunAgent(std::span<const AgentSource> sources, const AgentOptions& opt) {
         // ăn" nhìn y hệt lỗi mạng/tiêu điểm — xem ElevatedShare.h.
         const bool elevated = IsProcessElevated();
         std::printf("[Agent] Client control allowed (mouse + keyboard). Host elevated: %s%s\n",
-                    elevated ? "YES" : "NO",
-                    elevated ? "" : " — input will NOT reach apps running as administrator");
+            elevated ? "YES" : "NO",
+            elevated ? "" : " — input will NOT reach apps running as administrator");
     } else {
         std::printf("[Agent] VIEW ONLY - input from client is ignored.\n");
     }
@@ -606,7 +620,11 @@ int RunAgent(std::span<const AgentSource> sources, const AgentOptions& opt) {
         NetAddr from;
         const int n = sock.RecvFrom(buf, sizeof(buf), from);
         const uint64_t now = NowUs();
-        if (n < 0) { std::printf("[Agent] Socket error — stopping.\n"); anyFailed = true; break; }
+        if (n < 0) {
+            std::printf("[Agent] Socket error — stopping.\n");
+            anyFailed = true;
+            break;
+        }
 
         if (n > 0) {
             replyAddr = from;
@@ -619,9 +637,9 @@ int RunAgent(std::span<const AgentSource> sources, const AgentOptions& opt) {
                     if (p->failed.load() || p->capture.Closed()) continue;
                     deskhub::SourceInfo si;
                     si.sourceId = p->sourceId;
-                    si.width    = uint16_t(p->srcW.load());
-                    si.height   = uint16_t(p->srcH.load());
-                    si.name     = p->name;
+                    si.width = uint16_t(p->srcW.load());
+                    si.height = uint16_t(p->srcH.load());
+                    si.name = p->name;
                     infos.push_back(std::move(si));
                 }
                 const size_t sn = deskhub::BuildSourceList(buf, infos);
@@ -645,7 +663,7 @@ int RunAgent(std::span<const AgentSource> sources, const AgentOptions& opt) {
                     if (dst->peerPacked.load(std::memory_order_relaxed) != pk) {
                         dst->peerPacked.store(pk, std::memory_order_release);
                         std::printf("[Agent][%s] Peer: %s\n", dst->name.c_str(),
-                                    from.ToString().c_str());
+                            from.ToString().c_str());
                     }
                 }
             }
@@ -660,9 +678,9 @@ int RunAgent(std::span<const AgentSource> sources, const AgentOptions& opt) {
             // chẩn đoán quan trọng nhất phía host.
             if (const uint64_t ib = p->dgIdrBytes.exchange(0, std::memory_order_acquire)) {
                 std::printf("[DIAG][%s] evt=idr bytes=%llu pkts=%u burst_ms=%u\n",
-                            p->name.c_str(), (unsigned long long)ib,
-                            p->dgIdrPkts.load(std::memory_order_relaxed),
-                            p->dgIdrBurstMs.load(std::memory_order_relaxed));
+                    p->name.c_str(), (unsigned long long)ib,
+                    p->dgIdrPkts.load(std::memory_order_relaxed),
+                    p->dgIdrBurstMs.load(std::memory_order_relaxed));
             }
 
             // Nguồn vừa đổi kích thước (thread FrameArrived đã dựng lại encoder).
@@ -674,8 +692,8 @@ int RunAgent(std::span<const AgentSource> sources, const AgentOptions& opt) {
             // trở lại, onFrame set cờ lần nữa nên RECONFIG vẫn được gửi đúng cỡ mới.
             if (!p->paused.load(std::memory_order_acquire) &&
                 p->sizeChanged.exchange(false, std::memory_order_acq_rel)) {
-                p->offer.width      = uint16_t(p->srcW.load());
-                p->offer.height     = uint16_t(p->srcH.load());
+                p->offer.width = uint16_t(p->srcW.load());
+                p->offer.height = uint16_t(p->srcH.load());
                 p->offer.bitrateBps = p->curBitrateBps.load(std::memory_order_relaxed);
                 p->session->SetOffer(p->offer); // HELLO phát lại sau phải mang số mới
                 const uint64_t pp = p->peerPacked.load(std::memory_order_acquire);
@@ -698,7 +716,7 @@ int RunAgent(std::span<const AgentSource> sources, const AgentOptions& opt) {
             //      (đo 2026-07-21). Bơm lại frame cache để đẩy nó ra; nội dung không
             //      đổi nên P-frame chỉ vài KB, chi phí không đáng kể.
             const uint64_t sinceFrameUs = now - p->lastFrameUs.load(std::memory_order_relaxed);
-            const bool wantIdrFlush  = p->forceIdr.load() && sinceFrameUs > 200'000;
+            const bool wantIdrFlush = p->forceIdr.load() && sinceFrameUs > 200'000;
             const bool wantKeepalive = sinceFrameUs > 500'000 &&
                                        now - p->lastKeepaliveUs >= 500'000;
             if (p->session->state() == deskhub::HostSession::State::Streaming &&
@@ -706,9 +724,9 @@ int RunAgent(std::span<const AgentSource> sources, const AgentOptions& opt) {
                 (wantIdrFlush || wantKeepalive)) {
                 std::lock_guard<std::mutex> lk(p->encMutex);
                 if (p->ensureEncoderFn(p->srcW.load(), p->srcH.load(),
-                                       p->srcTexW.load(), p->srcTexH.load())) {
+                        p->srcTexW.load(), p->srcTexH.load())) {
                     p->DiagEncode(p->encoder.get(), p->cachedTex.Get(),
-                                  p->forceIdr.exchange(false));
+                        p->forceIdr.exchange(false));
                     p->lastKeepaliveUs = now;
                 }
             }
@@ -725,15 +743,16 @@ int RunAgent(std::span<const AgentSource> sources, const AgentOptions& opt) {
                 // KHÔNG phải bằng chứng phím đã tới ứng dụng. Injector còn vứt tiếp ở
                 // cổng tiêu điểm — `skipped` là con số duy nhất lộ ra chuyện đó. Thiếu
                 // nó thì "gõ không ăn" không phân biệt được với "không nhận được gói".
-                std::printf("[Agent][%s] %-9s | capture %.0f fps | send %.0f fps, %.0f kbps"
-                            " | input %llu (lost %llu, skipped %llu)\n",
-                            p->name.c_str(), StateName(p->session->state()),
-                            (cap - p->lastCaptured) / secs,
-                            (fr - p->lastFrames) / secs,
-                            (by - p->lastBytes) * 8.0 / 1000.0 / secs,
-                            (unsigned long long)ist.applied,
-                            (unsigned long long)ist.lost,
-                            (unsigned long long)p->injector.skipped());
+                std::printf(
+                    "[Agent][%s] %-9s | capture %.0f fps | send %.0f fps, %.0f kbps"
+                    " | input %llu (lost %llu, skipped %llu)\n",
+                    p->name.c_str(), StateName(p->session->state()),
+                    (cap - p->lastCaptured) / secs,
+                    (fr - p->lastFrames) / secs,
+                    (by - p->lastBytes) * 8.0 / 1000.0 / secs,
+                    (unsigned long long)ist.applied,
+                    (unsigned long long)ist.lost,
+                    (unsigned long long)p->injector.skipped());
                 p->lastCaptured = cap;
                 p->lastBytes = by;
                 p->lastFrames = fr;
@@ -744,12 +763,13 @@ int RunAgent(std::span<const AgentSource> sources, const AgentOptions& opt) {
                     const uint32_t ec = p->dgEncCount.exchange(0, std::memory_order_relaxed);
                     const uint32_t es = p->dgEncMsSum.exchange(0, std::memory_order_relaxed);
                     const uint32_t em = p->dgEncMsMax.exchange(0, std::memory_order_relaxed);
-                    std::printf("[DIAG][%s] evt=sum enc_ms_avg=%.1f enc_ms_max=%u idr=%u"
-                                " burst_ms_max=%u send_fail=%u\n",
-                                p->name.c_str(), ec ? double(es) / ec : 0.0, em,
-                                p->dgIdrCount.exchange(0, std::memory_order_relaxed),
-                                p->dgBurstMsMax.exchange(0, std::memory_order_relaxed),
-                                p->dgSendFail.exchange(0, std::memory_order_relaxed));
+                    std::printf(
+                        "[DIAG][%s] evt=sum enc_ms_avg=%.1f enc_ms_max=%u idr=%u"
+                        " burst_ms_max=%u send_fail=%u\n",
+                        p->name.c_str(), ec ? double(es) / ec : 0.0, em,
+                        p->dgIdrCount.exchange(0, std::memory_order_relaxed),
+                        p->dgBurstMsMax.exchange(0, std::memory_order_relaxed),
+                        p->dgSendFail.exchange(0, std::memory_order_relaxed));
                 }
             }
             // Sức khỏe thread Recv (H3), chung cho mọi nguồn.
@@ -768,7 +788,7 @@ int RunAgent(std::span<const AgentSource> sources, const AgentOptions& opt) {
 
     // --- Dọn dẹp ---
     uint64_t totalFrames = 0;
-    double   totalMB = 0;
+    double totalMB = 0;
     for (SourcePipeline* p : live) {
         p->injector.ReleaseAll(); // thoát giữa lúc client đang giữ phím -> nhả ra
 
@@ -791,7 +811,7 @@ int RunAgent(std::span<const AgentSource> sources, const AgentOptions& opt) {
         totalMB += p->bytesSent.load() / 1e6;
     }
     std::printf("[Agent] Stopped. Total: %llu frames sent, %.2f MB.\n",
-                (unsigned long long)totalFrames, totalMB);
+        (unsigned long long)totalFrames, totalMB);
     SetConsoleCtrlHandler(CtrlHandler, FALSE);
     return anyFailed ? 1 : 0;
 }

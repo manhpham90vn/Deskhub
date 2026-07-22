@@ -41,10 +41,10 @@ BitrateDecision BitrateController::Update(const Feedback& fb, uint64_t nowUs) {
     // --- Bitrate ---
     uint32_t next = cur_;
     if (fb.lossPct >= 5) {
-        next = cur_ - cur_ / 4;         // ×0.75 — mất nhiều, lùi mạnh
+        next = cur_ - cur_ / 4; // ×0.75 — mất nhiều, lùi mạnh
         lastDecreaseUs_ = nowUs;
     } else if (fb.lossPct >= 2) {
-        next = cur_ - cur_ / 10;        // ×0.90 — chớm nghẽn, lùi nhẹ
+        next = cur_ - cur_ / 10; // ×0.90 — chớm nghẽn, lùi nhẹ
         lastDecreaseUs_ = nowUs;
     } else if (fb.lossPct <= 1 && nowUs - lastDecreaseUs_ > 2'000'000) {
         // Nới +5% TRẦN mỗi giây, và chỉ sau 2 giây không phải tụt: nới ngay sau khi

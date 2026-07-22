@@ -100,7 +100,7 @@ Java_com_deskhub_app_NativeClient_nativeListSources(JNIEnv* env, jobject, jstrin
 
 JNIEXPORT jboolean JNICALL
 Java_com_deskhub_app_NativeClient_nativeStart(JNIEnv* env, jobject, jstring addrStr,
-                                                 jint sourceId) {
+    jint sourceId) {
     const std::string addr = FromJString(env, addrStr);
 
     NetAddr server;

@@ -43,26 +43,26 @@ namespace deskhub {
 // Số liệu dẫn xuất của một cửa sổ vừa đóng. Mọi trường "…InWindow" là CHÊNH LỆCH
 // so với lần đóng trước, không phải tổng tích luỹ.
 struct LinkWindow {
-    double   secs    = 0.0; // độ dài thật của cửa sổ
-    double   fps     = 0.0; // frame render được / giây
-    double   kbps    = 0.0; // bitrate video nhận được
-    double   lossPct = 0.0; // % gói dữ liệu mất (KHÔNG tính parity vào mẫu số)
+    double secs = 0.0;    // độ dài thật của cửa sổ
+    double fps = 0.0;     // frame render được / giây
+    double kbps = 0.0;    // bitrate video nhận được
+    double lossPct = 0.0; // % gói dữ liệu mất (KHÔNG tính parity vào mẫu số)
 
-    uint64_t packetsReceived  = 0;
-    uint64_t packetsLost      = 0;
+    uint64_t packetsReceived = 0;
+    uint64_t packetsLost = 0;
     uint64_t packetsRecovered = 0; // dựng lại được nhờ parity FEC
-    uint64_t framesDropped    = 0;
+    uint64_t framesDropped = 0;
 
     // Phân bố độ dài chùm mất, cùng thang với Reassembler::Stats::lossRuns.
-    uint64_t lossRuns[7]  = {};
+    uint64_t lossRuns[7] = {};
     uint64_t lossRunTotal = 0; // tổng số chùm — 0 nghĩa là giây vừa rồi không mất gói
-    uint64_t lossRunMax   = 0; // chùm dài nhất TỪNG thấy (tích luỹ, không phải delta)
+    uint64_t lossRunMax = 0;   // chùm dài nhất TỪNG thấy (tích luỹ, không phải delta)
 
     // Gói "về muộn" trong cửa sổ (xem Reassembler::Stats::latePackets): gói của
     // frame đã khai tử mà còn lết về. lateMsAvg tính trên cửa sổ; lateMsMax tích luỹ.
     uint64_t latePackets = 0;
-    double   lateMsAvg   = 0.0;
-    uint64_t lateMsMax   = 0;
+    double lateMsAvg = 0.0;
+    uint64_t lateMsMax = 0;
 };
 
 class LinkStats {
@@ -71,12 +71,14 @@ public:
         : lastUs_(startUs), windowUs_(windowUs) {}
 
     // Đã đủ một cửa sổ chưa. Client gọi mỗi vòng lặp.
-    bool Due(uint64_t nowUs) const { return nowUs - lastUs_ >= windowUs_; }
+    bool Due(uint64_t nowUs) const {
+        return nowUs - lastUs_ >= windowUs_;
+    }
 
     // Đóng cửa sổ và mở cửa sổ mới tại nowUs. `videoBytes` / `renderedFrames` là
     // số đếm được TRONG cửa sổ này (client tự reset bộ đếm của nó sau khi gọi).
     LinkWindow Close(const Reassembler::Stats& cur, uint64_t videoBytes,
-                     uint32_t renderedFrames, uint64_t nowUs);
+        uint32_t renderedFrames, uint64_t nowUs);
 
 private:
     Reassembler::Stats prev_{};

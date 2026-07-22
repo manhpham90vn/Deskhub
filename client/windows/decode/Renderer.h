@@ -71,7 +71,7 @@ public:
     // GD5: overlay trên cửa sổ preview - 2 nút góc trên-phải. Renderer không
     // biết gì về ngữ nghĩa khóa chuột/tạm dừng, chỉ báo id nút vừa bấm ra ngoài
     // (giống SetMessageHook), giống hệt đường phím tắt F9/F10.
-    static constexpr int kBtnLock  = 1001; // == F9 (khóa/thả chuột tương đối)
+    static constexpr int kBtnLock = 1001;  // == F9 (khóa/thả chuột tương đối)
     static constexpr int kBtnPause = 1002; // == F10 (tạm dừng/tiếp tục gửi input)
     using CommandHook = std::function<void(int id)>;
     void SetCommandHook(CommandHook hook);

@@ -18,7 +18,7 @@
 namespace deskhub {
 
 LinkWindow LinkStats::Close(const Reassembler::Stats& cur, uint64_t videoBytes,
-                            uint32_t renderedFrames, uint64_t nowUs) {
+    uint32_t renderedFrames, uint64_t nowUs) {
     LinkWindow w;
     // Dùng độ dài THẬT của cửa sổ chứ không phải windowUs_: vòng lặp client bị
     // recvfrom chặn tới 100ms nên cửa sổ hay dài hơn 1s một chút, chia theo hằng số
@@ -28,10 +28,10 @@ LinkWindow LinkStats::Close(const Reassembler::Stats& cur, uint64_t videoBytes,
 
     // Lấy hiệu so với ảnh chụp lần trước. Trừ số không dấu ở đây an toàn vì các bộ
     // đếm của Reassembler chỉ tăng, không bao giờ giảm hay bị reset giữa phiên.
-    w.packetsReceived  = cur.packetsReceived  - prev_.packetsReceived;
-    w.packetsLost      = cur.packetsLost      - prev_.packetsLost;
+    w.packetsReceived = cur.packetsReceived - prev_.packetsReceived;
+    w.packetsLost = cur.packetsLost - prev_.packetsLost;
     w.packetsRecovered = cur.packetsRecovered - prev_.packetsRecovered;
-    w.framesDropped    = cur.framesDropped    - prev_.framesDropped;
+    w.framesDropped = cur.framesDropped - prev_.framesDropped;
 
     for (size_t i = 0; i < 7; ++i) {
         w.lossRuns[i] = cur.lossRuns[i] - prev_.lossRuns[i];
@@ -51,13 +51,13 @@ LinkWindow LinkStats::Close(const Reassembler::Stats& cur, uint64_t videoBytes,
     w.lossPct = seen ? 100.0 * double(w.packetsLost) / double(seen) : 0.0;
 
     if (w.secs > 0.0) {
-        w.fps  = renderedFrames / w.secs;
+        w.fps = renderedFrames / w.secs;
         w.kbps = videoBytes * 8.0 / 1000.0 / w.secs;
     }
 
     // Chốt ảnh chụp và mốc thời gian cho cửa sổ kế tiếp — xem ghi chú về tác dụng
     // phụ ở đầu file.
-    prev_  = cur;
+    prev_ = cur;
     lastUs_ = nowUs;
     return w;
 }
@@ -67,9 +67,9 @@ LinkWindow LinkStats::Close(const Reassembler::Stats& cur, uint64_t videoBytes,
 // chính xác cao, và kênh control phải nhẹ vì nó chạy song song với luồng video.
 Feedback MakeFeedback(const LinkWindow& w, uint32_t rttUs) {
     Feedback fb;
-    fb.lostFrames      = uint16_t(w.framesDropped);
-    fb.lossPct         = uint8_t(w.lossPct + 0.5); // làm tròn, kênh chỉ có 1 byte
-    fb.rttMs           = uint16_t(rttUs / 1000);
+    fb.lostFrames = uint16_t(w.framesDropped);
+    fb.lossPct = uint8_t(w.lossPct + 0.5); // làm tròn, kênh chỉ có 1 byte
+    fb.rttMs = uint16_t(rttUs / 1000);
     fb.recvBitrateKbps = uint32_t(w.kbps);
     return fb;
 }

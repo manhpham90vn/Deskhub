@@ -17,6 +17,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Ghim ĐÚNG phiên bản để kết quả trùng khít clang-format cục bộ (VS LLVM 22.1.3).
+      # clang-format khác major cho output khác nhau nên không dùng bản mặc định của runner.
+      - name: Install clang-format 22.1.3
+        run: pipx install clang-format==22.1.3
+
       - name: clang-format check
         run: |
           files=$(find core platform client -type f \

@@ -43,8 +43,8 @@ namespace {
 // (targetExe) vừa là chỗ tích luỹ kết quả tốt nhất tìm được (found/bestArea).
 struct WindowSearch {
     std::wstring targetExe;
-    HWND         found = nullptr;
-    LONG         bestArea = 0;
+    HWND found = nullptr;
+    LONG bestArea = 0;
 };
 
 // "C:\Games\Foo\Game.EXE" -> "game.exe". Hạ chữ thường để so sánh không phân biệt
@@ -80,8 +80,7 @@ std::wstring ExeNameOfWindow(HWND hwnd, DWORD* outPid = nullptr) {
 // UWP/app bị treo vẫn "visible" nhưng bị DWM cloak - không capture được.
 bool IsCloaked(HWND hwnd) {
     DWORD cloaked = 0;
-    return SUCCEEDED(DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, &cloaked, sizeof(cloaked)))
-        && cloaked != 0;
+    return SUCCEEDED(DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, &cloaked, sizeof(cloaked))) && cloaked != 0;
 }
 
 // Callback cho FindWindowByProcessName. Một tiến trình có thể có nhiều cửa sổ
@@ -137,7 +136,7 @@ BOOL CALLBACK ListProc(HWND hwnd, LPARAM lparam) {
     return TRUE;
 }
 
-}  // namespace
+} // namespace
 
 HWND FindWindowByProcessName(const std::wstring& exeName) {
     WindowSearch search;

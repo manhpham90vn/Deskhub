@@ -41,9 +41,11 @@ std::vector<AdapterAddr> ListLocalIPv4() {
         const ULONG flags = GAA_FLAG_SKIP_ANYCAST | GAA_FLAG_SKIP_MULTICAST |
                             GAA_FLAG_SKIP_DNS_SERVER;
         const ULONG r = GetAdaptersAddresses(AF_INET, flags, nullptr,
-                                             (IP_ADAPTER_ADDRESSES*)buf.data(), &size);
-        if (r == NO_ERROR) ok = true;
-        else if (r != ERROR_BUFFER_OVERFLOW) return out; // size đã được cập nhật -> thử lại
+            (IP_ADAPTER_ADDRESSES*)buf.data(), &size);
+        if (r == NO_ERROR)
+            ok = true;
+        else if (r != ERROR_BUFFER_OVERFLOW)
+            return out; // size đã được cập nhật -> thử lại
     }
     if (!ok) return out;
 

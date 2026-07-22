@@ -45,7 +45,9 @@ public:
     // `window` phải sống lâu hơn decoder (chủ sở hữu là main thread của app).
     bool Init(ANativeWindow* window, int width, int height);
     void Shutdown();
-    bool IsOpen() const { return codec_ != nullptr; }
+    bool IsOpen() const {
+        return codec_ != nullptr;
+    }
 
     // Nạp một frame Annex-B đã ghép đủ và vẽ các frame đã sẵn sàng.
     // false = lỗi codec -> caller dựng lại decoder và xin IDR.
@@ -57,14 +59,16 @@ public:
     // PTS (đồng hồ host) của frame vừa đưa lên màn hình gần nhất — mốc để tính trễ
     // e2e THẬT (tính lúc nạp vào codec sẽ bỏ sót cả phần decode + hiển thị).
     // 0 = chưa render frame nào.
-    uint64_t lastRenderedPtsUs() const { return lastRenderedPtsUs_; }
+    uint64_t lastRenderedPtsUs() const {
+        return lastRenderedPtsUs_;
+    }
 
 private:
     // Rút mọi output đang sẵn sàng và render. false = lỗi.
     bool DrainOutput();
 
     AMediaCodec* codec_ = nullptr;
-    bool     sentCsd_ = false;   // đã nạp SPS/PPS dưới cờ CODEC_CONFIG chưa
+    bool sentCsd_ = false; // đã nạp SPS/PPS dưới cờ CODEC_CONFIG chưa
     uint32_t rendered_ = 0;
     uint64_t lastRenderedPtsUs_ = 0;
 };

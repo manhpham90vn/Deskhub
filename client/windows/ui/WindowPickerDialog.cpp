@@ -34,18 +34,18 @@ namespace {
 
 constexpr wchar_t kWndClass[] = L"DeskhubWindowPicker";
 
-constexpr int kIdList     = 100;
-constexpr int kIdRefresh  = 101;
+constexpr int kIdList = 100;
+constexpr int kIdRefresh = 101;
 constexpr int kIdChkAllow = 102;
-constexpr int kIdOk       = 103;
-constexpr int kIdCancel   = 104;
-constexpr int kIdHint     = 105;
+constexpr int kIdOk = 103;
+constexpr int kIdCancel = 104;
+constexpr int kIdHint = 105;
 
 // Tên nguồn đi trên dây là UTF-8 (client có thể không phải Windows).
 std::string ToUtf8(const std::wstring& w) {
     if (w.empty()) return {};
     const int n = WideCharToMultiByte(CP_UTF8, 0, w.c_str(), int(w.size()),
-                                      nullptr, 0, nullptr, nullptr);
+        nullptr, 0, nullptr, nullptr);
     if (n <= 0) return {};
     std::string s(size_t(n), '\0');
     WideCharToMultiByte(CP_UTF8, 0, w.c_str(), int(w.size()), s.data(), n, nullptr, nullptr);
@@ -55,8 +55,8 @@ std::string ToUtf8(const std::wstring& w) {
 // Một dòng trong danh sách: nguồn kèm nhãn hiển thị.
 struct Entry {
     CaptureTarget target;
-    std::wstring  label; // hiện trong listbox
-    std::wstring  name;  // tên gửi cho client (không kèm kích thước)
+    std::wstring label; // hiện trong listbox
+    std::wstring name;  // tên gửi cho client (không kèm kích thước)
 };
 
 BOOL CALLBACK CollectMonitor(HMONITOR mon, HDC, LPRECT, LPARAM lp) {
@@ -89,7 +89,7 @@ std::vector<Entry> BuildEntries() {
             swprintf(label, 400, L"[%ls] %ls (minimized)", w.exeName.c_str(), w.title.c_str());
         } else {
             swprintf(label, 400, L"[%ls] %ls (%ux%u)", w.exeName.c_str(), w.title.c_str(),
-                     w.width, w.height);
+                w.width, w.height);
         }
         entries.push_back(Entry{CaptureTarget::Window(w.hwnd), label, w.title});
     }
@@ -141,7 +141,7 @@ void Confirm(PickerState& st) {
     if (st.result.size() > deskhub::kMaxSources) {
         wchar_t msg[160];
         swprintf(msg, 160, L"Please select at most %zu sources (you selected %zu).",
-                 deskhub::kMaxSources, st.result.size());
+            deskhub::kMaxSources, st.result.size());
         MessageBoxW(st.hwnd, msg, L"Deskhub", MB_OK | MB_ICONWARNING);
         st.result.clear();
         return;
@@ -154,20 +154,23 @@ void Confirm(PickerState& st) {
 LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
     auto* st = (PickerState*)GetWindowLongPtrW(h, GWLP_USERDATA);
     switch (msg) {
-    case WM_COMMAND:
-        if (!st) break;
-        switch (LOWORD(wp)) {
-        case kIdRefresh: Repopulate(*st); return 0;
-        case kIdOk: Confirm(*st); return 0;
-        case kIdCancel: st->done = true; return 0;
-        case kIdList:
-            if (HIWORD(wp) == LBN_DBLCLK) { Confirm(*st); return 0; }
+        case WM_COMMAND:
+            if (!st) break;
+            switch (LOWORD(wp)) {
+                case kIdRefresh: Repopulate(*st); return 0;
+                case kIdOk: Confirm(*st); return 0;
+                case kIdCancel: st->done = true; return 0;
+                case kIdList:
+                    if (HIWORD(wp) == LBN_DBLCLK) {
+                        Confirm(*st);
+                        return 0;
+                    }
+                    break;
+            }
             break;
-        }
-        break;
-    case WM_CLOSE:
-        if (st) st->done = true;
-        return 0;
+        case WM_CLOSE:
+            if (st) st->done = true;
+            return 0;
     }
     return DefWindowProcW(h, msg, wp, lp);
 }
@@ -175,7 +178,7 @@ LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
 } // namespace
 
 bool ShowWindowPickerDialog(HWND owner, std::vector<AgentSource>& outSources,
-                            bool& outAllowInput) {
+    bool& outAllowInput) {
     WNDCLASSW wc{};
     wc.lpfnWndProc = WndProc;
     wc.hInstance = GetModuleHandleW(nullptr);
@@ -186,18 +189,20 @@ bool ShowWindowPickerDialog(HWND owner, std::vector<AgentSource>& outSources,
 
     constexpr int kW = 520, kH = 420;
     RECT ownerRect{};
-    if (owner) GetWindowRect(owner, &ownerRect);
-    else SystemParametersInfoW(SPI_GETWORKAREA, 0, &ownerRect, 0);
+    if (owner)
+        GetWindowRect(owner, &ownerRect);
+    else
+        SystemParametersInfoW(SPI_GETWORKAREA, 0, &ownerRect, 0);
     const int x = ownerRect.left + ((ownerRect.right - ownerRect.left) - kW) / 2;
     const int y = ownerRect.top + ((ownerRect.bottom - ownerRect.top) - kH) / 2;
 
     const DWORD style = WS_POPUP | WS_CAPTION | WS_SYSMENU;
-    RECT wr{ 0, 0, kW, kH };
+    RECT wr{0, 0, kW, kH};
     AdjustWindowRect(&wr, style, FALSE);
     HWND dlg = CreateWindowExW(WS_EX_DLGMODALFRAME, kWndClass,
-                                L"Select what to share (screens and/or windows)",
-                                style, x, y, wr.right - wr.left, wr.bottom - wr.top,
-                                owner, nullptr, wc.hInstance, nullptr);
+        L"Select what to share (screens and/or windows)",
+        style, x, y, wr.right - wr.left, wr.bottom - wr.top,
+        owner, nullptr, wc.hInstance, nullptr);
     if (!dlg) return false;
 
     PickerState st;
@@ -207,7 +212,7 @@ bool ShowWindowPickerDialog(HWND owner, std::vector<AgentSource>& outSources,
     const HFONT font = (HFONT)GetStockObject(DEFAULT_GUI_FONT);
     auto mk = [&](const wchar_t* cls, const wchar_t* text, DWORD s, int cx, int cy, int cw, int ch, int id) {
         HWND c = CreateWindowExW(0, cls, text, s | WS_CHILD | WS_VISIBLE, cx, cy, cw, ch,
-                                  dlg, (HMENU)(INT_PTR)id, wc.hInstance, nullptr);
+            dlg, (HMENU)(INT_PTR)id, wc.hInstance, nullptr);
         if (c) SendMessageW(c, WM_SETFONT, (WPARAM)font, TRUE);
         return c;
     };
@@ -215,12 +220,12 @@ bool ShowWindowPickerDialog(HWND owner, std::vector<AgentSource>& outSources,
     // LBS_MULTIPLESEL: click là bật/tắt một dòng. Dễ hiểu hơn LBS_EXTENDEDSEL
     // (đòi giữ Ctrl) với thao tác "tick những thứ muốn chia sẻ".
     st.list = mk(L"LISTBOX", nullptr,
-                 LBS_NOTIFY | LBS_HASSTRINGS | LBS_MULTIPLESEL | WS_VSCROLL | WS_BORDER,
-                 12, 12, kW - 24, kH - 122, kIdList);
+        LBS_NOTIFY | LBS_HASSTRINGS | LBS_MULTIPLESEL | WS_VSCROLL | WS_BORDER,
+        12, 12, kW - 24, kH - 122, kIdList);
     mk(L"STATIC", L"Click each screen or window you want to share (you can pick several).",
-       0, 12, kH - 104, kW - 24, 18, kIdHint);
+        0, 12, kH - 104, kW - 24, 18, kIdHint);
     st.chkAllow = mk(L"BUTTON", L"Allow the other person to control mouse/keyboard",
-                      BS_AUTOCHECKBOX, 12, kH - 82, kW - 24, 20, kIdChkAllow);
+        BS_AUTOCHECKBOX, 12, kH - 82, kW - 24, 20, kIdChkAllow);
     SendMessageW(st.chkAllow, BM_SETCHECK, BST_CHECKED, 0);
     mk(L"BUTTON", L"Refresh", 0, 12, kH - 52, 90, 26, kIdRefresh);
     mk(L"BUTTON", L"Share", BS_DEFPUSHBUTTON, kW - 24 - 180, kH - 52, 86, 26, kIdOk);
@@ -241,7 +246,10 @@ bool ShowWindowPickerDialog(HWND owner, std::vector<AgentSource>& outSources,
         }
     }
 
-    if (owner) { EnableWindow(owner, TRUE); SetForegroundWindow(owner); }
+    if (owner) {
+        EnableWindow(owner, TRUE);
+        SetForegroundWindow(owner);
+    }
     DestroyWindow(dlg);
 
     outSources = std::move(st.result);

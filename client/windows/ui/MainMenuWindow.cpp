@@ -56,17 +56,17 @@ namespace {
 
 constexpr wchar_t kWndClass[] = L"DeskhubMainMenu";
 
-constexpr int kIdEditPort    = 200;
-constexpr int kIdEditFps     = 199;
+constexpr int kIdEditPort = 200;
+constexpr int kIdEditFps = 199;
 constexpr int kIdEditBitrate = 198;
-constexpr int kIdShare       = 201;
-constexpr int kIdEditAddr    = 202;
-constexpr int kIdConnect     = 203;
+constexpr int kIdShare = 201;
+constexpr int kIdEditAddr = 202;
+constexpr int kIdConnect = 203;
 constexpr int kIdChkViewOnly = 204;
-constexpr int kIdExit        = 205;
-constexpr int kIdChkSaveLog  = 206;
+constexpr int kIdExit = 205;
+constexpr int kIdChkSaveLog = 206;
 // Dải id cho các nút Copy: một dòng IP một nút, id = kIdCopyBase + chỉ số dòng.
-constexpr int kIdCopyBase    = 300;
+constexpr int kIdCopyBase = 300;
 
 // Giá trị mặc định khi ô trống/nhập sai - giống hệt mặc định --port/--fps/
 // --bitrate cũ.
@@ -130,10 +130,10 @@ void ReportDiagLog(HWND owner, const DiagLogRedirect& log, bool wanted) {
         MessageBoxW(owner, msg.c_str(), L"Deskhub", MB_OK | MB_ICONINFORMATION);
     } else {
         MessageBoxW(owner,
-                    L"Could not create the diagnostic log file next to the program.\n\n"
-                    L"The session ran normally, but nothing was recorded. Try moving "
-                    L"the program to a folder you can write to (for example Desktop).",
-                    L"Deskhub", MB_OK | MB_ICONWARNING);
+            L"Could not create the diagnostic log file next to the program.\n\n"
+            L"The session ran normally, but nothing was recorded. Try moving "
+            L"the program to a folder you can write to (for example Desktop).",
+            L"Deskhub", MB_OK | MB_ICONWARNING);
     }
 }
 
@@ -169,17 +169,20 @@ void DoShare(MenuState& st) {
         // Không nâng được quyền: nêu đúng hệ quả của TỪNG lý do đang áp dụng, để người
         // dùng biết chính xác cái gì sẽ không chạy.
         std::wstring msg = cancelled
-            ? std::wstring(L"Continuing without administrator rights.\n\n")
-            : std::wstring(L"Could not restart as administrator. Sharing continues "
-                           L"without it.\n\n");
+                               ? std::wstring(L"Continuing without administrator rights.\n\n")
+                               : std::wstring(
+                                     L"Could not restart as administrator. Sharing continues "
+                                     L"without it.\n\n");
         if (needFirewall)
-            msg += L"- Windows Firewall may block the other machine from connecting. "
-                   L"If it cannot connect, allow client.exe through Windows Firewall for "
-                   L"the network you are on, or run this program as administrator once.\n\n";
+            msg +=
+                L"- Windows Firewall may block the other machine from connecting. "
+                L"If it cannot connect, allow client.exe through Windows Firewall for "
+                L"the network you are on, or run this program as administrator once.\n\n";
         if (ao.allowInput)
-            msg += L"- Mouse/keyboard control will not reach apps that run as "
-                   L"administrator (games with anti-cheat, elevated tools). Everything "
-                   L"else still works.";
+            msg +=
+                L"- Mouse/keyboard control will not reach apps that run as "
+                L"administrator (games with anti-cheat, elevated tools). Everything "
+                L"else still works.";
         MessageBoxW(st.hwnd, msg.c_str(), L"Deskhub", MB_OK | MB_ICONWARNING);
     }
 
@@ -200,7 +203,7 @@ void DoConnect(MenuState& st) {
     const std::wstring waddr = Trim(buf);
     if (waddr.empty()) {
         MessageBoxW(st.hwnd, L"Enter the host machine's IP address first (e.g., 192.168.1.10).",
-                    L"Deskhub", MB_OK | MB_ICONWARNING);
+            L"Deskhub", MB_OK | MB_ICONWARNING);
         return;
     }
     // Địa chỉ ip[:port] chỉ gồm ASCII - thu hẹp từng ký tự là an toàn.
@@ -213,7 +216,7 @@ void DoConnect(MenuState& st) {
     ClientOptions co;
     if (!ParseNetAddr(addr, kDefaultPort, co.server)) {
         const std::wstring msg = L"Invalid address: \"" + waddr +
-            L"\"\n(e.g., 192.168.1.10 or 192.168.1.10:47777)";
+                                 L"\"\n(e.g., 192.168.1.10 or 192.168.1.10:47777)";
         MessageBoxW(st.hwnd, msg.c_str(), L"Deskhub", MB_OK | MB_ICONERROR);
         return;
     }
@@ -243,27 +246,27 @@ void DoConnect(MenuState& st) {
 LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
     auto* st = (MenuState*)GetWindowLongPtrW(h, GWLP_USERDATA);
     switch (msg) {
-    case WM_COMMAND: {
-        if (!st) break;
-        const int id = LOWORD(wp);
-        // Nút Copy: id nằm trong dải liên tiếp, quy về chỉ số dòng IP tương ứng.
-        if (id >= kIdCopyBase && id < kIdCopyBase + (int)st->copyIps.size()) {
-            CopyTextToClipboard(st->hwnd, st->copyIps[size_t(id - kIdCopyBase)]);
+        case WM_COMMAND: {
+            if (!st) break;
+            const int id = LOWORD(wp);
+            // Nút Copy: id nằm trong dải liên tiếp, quy về chỉ số dòng IP tương ứng.
+            if (id >= kIdCopyBase && id < kIdCopyBase + (int)st->copyIps.size()) {
+                CopyTextToClipboard(st->hwnd, st->copyIps[size_t(id - kIdCopyBase)]);
+                return 0;
+            }
+            switch (id) {
+                case kIdShare: DoShare(*st); return 0;
+                case kIdConnect: DoConnect(*st); return 0;
+                case kIdExit: st->quit = true; return 0;
+            }
+            break;
+        }
+        case WM_CLOSE:
+            if (st) st->quit = true;
             return 0;
-        }
-        switch (id) {
-        case kIdShare:   DoShare(*st);    return 0;
-        case kIdConnect: DoConnect(*st);  return 0;
-        case kIdExit:    st->quit = true; return 0;
-        }
-        break;
-    }
-    case WM_CLOSE:
-        if (st) st->quit = true;
-        return 0;
-    case WM_DESTROY:
-        PostQuitMessage(0);
-        return 0;
+        case WM_DESTROY:
+            PostQuitMessage(0);
+            return 0;
     }
     return DefWindowProcW(h, msg, wp, lp);
 }
@@ -295,30 +298,30 @@ int RunMainMenuWindow() {
 
     // --- Bố cục: hai group box xếp dọc, dưới cùng là tuỳ chọn chung + Exit ---
     constexpr int kW = 496;
-    const int gx = 12;             // lề trái của group box
-    const int gw = kW - 24;        // bề rộng group box
-    const int ix = gx + 14;        // lề trái nội dung bên trong hộp
-    const int iw = gw - 28;        // bề rộng nội dung bên trong hộp
-    const int rowH = 22;           // cao mỗi dòng IP
+    const int gx = 12;      // lề trái của group box
+    const int gw = kW - 24; // bề rộng group box
+    const int ix = gx + 14; // lề trái nội dung bên trong hộp
+    const int iw = gw - 28; // bề rộng nội dung bên trong hộp
+    const int rowH = 22;    // cao mỗi dòng IP
 
     // Chiều cao hộp host phụ thuộc số dòng IP; hộp client cố định.
     const int hostTop = 8;
-    const int settingsRel = 44 + nRows * rowH + 8;   // hàng Port/FPS/Bitrate (theo hostTop)
-    const int shareRel    = settingsRel + 34;         // nút Share
-    const int hostH       = shareRel + 32 + 12;
-    const int clientTop   = hostTop + hostH + 10;
-    const int clientH     = 118;
-    const int saveLogY    = clientTop + clientH + 12;
-    const int exitY       = saveLogY + 30;
-    const int kH          = exitY + 44;
+    const int settingsRel = 44 + nRows * rowH + 8; // hàng Port/FPS/Bitrate (theo hostTop)
+    const int shareRel = settingsRel + 34;         // nút Share
+    const int hostH = shareRel + 32 + 12;
+    const int clientTop = hostTop + hostH + 10;
+    const int clientH = 118;
+    const int saveLogY = clientTop + clientH + 12;
+    const int exitY = saveLogY + 30;
+    const int kH = exitY + 44;
 
     const DWORD style = WS_OVERLAPPEDWINDOW & ~(WS_THICKFRAME | WS_MAXIMIZEBOX);
-    RECT wr{ 0, 0, kW, kH };
+    RECT wr{0, 0, kW, kH};
     AdjustWindowRect(&wr, style, FALSE);
     HWND hwnd = CreateWindowExW(0, kWndClass, L"Deskhub - stream & remotely control an application",
-                                 style, CW_USEDEFAULT, CW_USEDEFAULT,
-                                 wr.right - wr.left, wr.bottom - wr.top,
-                                 nullptr, nullptr, wc.hInstance, nullptr);
+        style, CW_USEDEFAULT, CW_USEDEFAULT,
+        wr.right - wr.left, wr.bottom - wr.top,
+        nullptr, nullptr, wc.hInstance, nullptr);
     if (!hwnd) return 1;
 
     st.hwnd = hwnd;
@@ -327,7 +330,7 @@ int RunMainMenuWindow() {
     const HFONT font = (HFONT)GetStockObject(DEFAULT_GUI_FONT);
     auto mk = [&](const wchar_t* cls, const wchar_t* text, DWORD s, int cx, int cy, int cw, int ch, int id) {
         HWND c = CreateWindowExW(0, cls, text, s | WS_CHILD | WS_VISIBLE, cx, cy, cw, ch,
-                                  hwnd, (HMENU)(INT_PTR)id, wc.hInstance, nullptr);
+            hwnd, (HMENU)(INT_PTR)id, wc.hInstance, nullptr);
         if (c) SendMessageW(c, WM_SETFONT, (WPARAM)font, TRUE);
         return c;
     };
@@ -335,19 +338,19 @@ int RunMainMenuWindow() {
     // Group box phải tạo TRƯỚC các control con để con vẽ đè lên khung (control tạo
     // sau nằm trên trong z-order).
     mk(L"BUTTON", L"Host mode - share an application on THIS machine",
-       BS_GROUPBOX, gx, hostTop, gw, hostH, 0);
+        BS_GROUPBOX, gx, hostTop, gw, hostH, 0);
 
     // Địa chỉ máy này: đọc/copy cho người bên kia gõ vào ô Connect của họ. Nút Copy
     // lấy CẢ ip lẫn cổng (ip:port) để họ dán thẳng, không phải nhớ cổng riêng. Cổng
     // hiển thị = cổng phiên Share sắp dùng (đã dò ở trên).
     mk(L"STATIC", L"Others connect to you using one of these addresses:",
-       SS_LEFT, ix, hostTop + 22, iw, 16, 0);
+        SS_LEFT, ix, hostTop + 22, iw, 16, 0);
 
     constexpr int kCopyW = 60, kCopyH = 20;
     const int copyX = gx + gw - 14 - kCopyW;
     if (addrs.empty()) {
         mk(L"STATIC", L"(no network address found)", SS_LEFT,
-           ix, hostTop + 44, iw, 18, 0);
+            ix, hostTop + 44, iw, 18, 0);
     } else {
         st.copyIps.reserve(addrs.size());
         int i = 0;
@@ -358,9 +361,9 @@ int RunMainMenuWindow() {
             wchar_t line[192];
             swprintf(line, 192, L"%-20ls %ls", a.name.c_str(), addr.c_str());
             mk(L"STATIC", line, SS_LEFT | SS_ENDELLIPSIS,
-               ix, rowY + 2, copyX - 8 - ix, 18, 0);
+                ix, rowY + 2, copyX - 8 - ix, 18, 0);
             mk(L"BUTTON", L"Copy", BS_PUSHBUTTON,
-               copyX, rowY, kCopyW, kCopyH, kIdCopyBase + i);
+                copyX, rowY, kCopyW, kCopyH, kIdCopyBase + i);
             st.copyIps.push_back(std::move(addr));
             ++i;
         }
@@ -370,36 +373,36 @@ int RunMainMenuWindow() {
     const int sy = hostTop + settingsRel;
     mk(L"STATIC", L"Port", SS_LEFT, ix, sy + 3, 32, 18, 0);
     st.editPort = mk(L"EDIT", sharePortText.c_str(), WS_BORDER | ES_AUTOHSCROLL | ES_NUMBER,
-                      ix + 36, sy, 64, 24, kIdEditPort);
+        ix + 36, sy, 64, 24, kIdEditPort);
     mk(L"STATIC", L"FPS", SS_LEFT, ix + 116, sy + 3, 30, 18, 0);
     st.editFps = mk(L"EDIT", L"60", WS_BORDER | ES_AUTOHSCROLL | ES_NUMBER,
-                     ix + 148, sy, 48, 24, kIdEditFps);
+        ix + 148, sy, 48, 24, kIdEditFps);
     mk(L"STATIC", L"Bitrate (Mbps)", SS_LEFT, ix + 212, sy + 3, 90, 18, 0);
     st.editBitrate = mk(L"EDIT", L"20", WS_BORDER | ES_AUTOHSCROLL | ES_NUMBER,
-                         ix + 304, sy, 48, 24, kIdEditBitrate);
+        ix + 304, sy, 48, 24, kIdEditBitrate);
 
     mk(L"BUTTON", L"Share...  (pick screens/windows to share)", BS_PUSHBUTTON,
-       ix, hostTop + shareRel, iw, 32, kIdShare);
+        ix, hostTop + shareRel, iw, 32, kIdShare);
 
     // --- Hộp client: kết nối tới một máy khác ---
     mk(L"BUTTON", L"Client mode - connect to ANOTHER machine",
-       BS_GROUPBOX, gx, clientTop, gw, clientH, 0);
+        BS_GROUPBOX, gx, clientTop, gw, clientH, 0);
 
     mk(L"STATIC", L"Host machine address (ip[:port]):", SS_LEFT,
-       ix, clientTop + 24, iw, 16, 0);
+        ix, clientTop + 24, iw, 16, 0);
     st.editAddr = mk(L"EDIT", L"", WS_BORDER | ES_AUTOHSCROLL,
-                      ix, clientTop + 44, iw - 110, 26, kIdEditAddr);
+        ix, clientTop + 44, iw - 110, 26, kIdEditAddr);
     mk(L"BUTTON", L"Connect", BS_DEFPUSHBUTTON,
-       ix + iw - 100, clientTop + 44, 100, 26, kIdConnect);
+        ix + iw - 100, clientTop + 44, 100, 26, kIdConnect);
     st.chkViewOnly = mk(L"BUTTON", L"View only, don't send mouse/keyboard input",
-                         BS_AUTOCHECKBOX, ix, clientTop + 80, iw, 20, kIdChkViewOnly);
+        BS_AUTOCHECKBOX, ix, clientTop + 80, iw, 20, kIdChkViewOnly);
 
     // --- Chung cho cả hai vai + Exit ---
     // Tick rồi bấm Share ra diag-agent-*.log, bấm Connect ra diag-client-*.log. Một
     // checkbox chung vì người dùng chỉ cần nhớ một thao tác ("bật cái này rồi tái
     // hiện lỗi"), còn tên file thì chương trình tự phân biệt.
     st.chkSaveLog = mk(L"BUTTON", L"Save diagnostic log to a file next to this program",
-                        BS_AUTOCHECKBOX, gx, saveLogY, gw, 20, kIdChkSaveLog);
+        BS_AUTOCHECKBOX, gx, saveLogY, gw, 20, kIdChkSaveLog);
 
     mk(L"BUTTON", L"Exit", BS_PUSHBUTTON, gx, exitY, 100, 28, kIdExit);
 

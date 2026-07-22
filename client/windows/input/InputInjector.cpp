@@ -82,11 +82,11 @@ bool ForceForeground(HWND w) {
 
 DWORD ButtonFlag(deskhub::MouseButton b, bool down) {
     switch (b) {
-    case deskhub::MouseButton::Left:   return down ? MOUSEEVENTF_LEFTDOWN   : MOUSEEVENTF_LEFTUP;
-    case deskhub::MouseButton::Right:  return down ? MOUSEEVENTF_RIGHTDOWN  : MOUSEEVENTF_RIGHTUP;
-    case deskhub::MouseButton::Middle: return down ? MOUSEEVENTF_MIDDLEDOWN : MOUSEEVENTF_MIDDLEUP;
-    case deskhub::MouseButton::X1:
-    case deskhub::MouseButton::X2:     return down ? MOUSEEVENTF_XDOWN      : MOUSEEVENTF_XUP;
+        case deskhub::MouseButton::Left: return down ? MOUSEEVENTF_LEFTDOWN : MOUSEEVENTF_LEFTUP;
+        case deskhub::MouseButton::Right: return down ? MOUSEEVENTF_RIGHTDOWN : MOUSEEVENTF_RIGHTUP;
+        case deskhub::MouseButton::Middle: return down ? MOUSEEVENTF_MIDDLEDOWN : MOUSEEVENTF_MIDDLEUP;
+        case deskhub::MouseButton::X1:
+        case deskhub::MouseButton::X2: return down ? MOUSEEVENTF_XDOWN : MOUSEEVENTF_XUP;
     }
     return 0;
 }
@@ -101,8 +101,9 @@ bool InputInjector::Init(HWND target) {
     // thì người dùng ở máy host tự bấm vào cửa sổ một lần là xong.
     if (IsIconic(target_)) ShowWindow(target_, SW_RESTORE);
     if (!ForceForeground(target_))
-        std::printf("[Inject] Could not bring the target window to the foreground - please click "
-                    "that window once on this machine (input is only injected while it's foreground).\n");
+        std::printf(
+            "[Inject] Could not bring the target window to the foreground - please click "
+            "that window once on this machine (input is only injected while it's foreground).\n");
     return true;
 }
 
@@ -165,13 +166,13 @@ void InputInjector::SendMoveAbsolute(int32_t nx, int32_t ny) {
     POINT pt{};
     if (monitor_) {
         // Nguồn là cả màn hình: gốc tọa độ là rect của monitor trên desktop ảo.
-        MONITORINFO mi{ sizeof(MONITORINFO) };
+        MONITORINFO mi{sizeof(MONITORINFO)};
         if (!GetMonitorInfoW(monitor_, &mi)) return;
         const int w = mi.rcMonitor.right - mi.rcMonitor.left;
         const int h = mi.rcMonitor.bottom - mi.rcMonitor.top;
         if (w <= 1 || h <= 1) return;
         pt.x = mi.rcMonitor.left + LONG(int64_t(nx) * (w - 1) / 65535);
-        pt.y = mi.rcMonitor.top  + LONG(int64_t(ny) * (h - 1) / 65535);
+        pt.y = mi.rcMonitor.top + LONG(int64_t(ny) * (h - 1) / 65535);
     } else {
         RECT rc{};
         if (!GetClientRect(target_, &rc)) return;
@@ -218,8 +219,9 @@ bool InputInjector::TargetHasFocus() {
         if (ok) {
             std::printf("[Inject] Shared window regained focus - input is active again.\n");
         } else {
-            std::printf("[Inject] Shared window LOST focus - ignoring input from client for now "
-                        "(avoid injecting into another application).\n");
+            std::printf(
+                "[Inject] Shared window LOST focus - ignoring input from client for now "
+                "(avoid injecting into another application).\n");
             ReleaseAll(); // đang giữ W mà mất focus -> nhả ra, không để kẹt phím
         }
     }
@@ -229,38 +231,47 @@ bool InputInjector::TargetHasFocus() {
 void InputInjector::Apply(const deskhub::InputEvent& e) {
     if (!enabled_) return;
     if (!monitor_ && (!target_ || !IsWindow(target_))) return;
-    if (!TargetHasFocus()) { ++skipped_; return; }
+    if (!TargetHasFocus()) {
+        ++skipped_;
+        return;
+    }
     ++applied_;
 
     switch (e.type) {
-    case deskhub::InputType::Key: {
-        const bool down = e.state != 0;
-        // Nhớ theo scancode để ReleaseAll nhả đúng phím đã bơm.
-        if (down) keysDown_[e.b] = e.a;
-        else      keysDown_.erase(e.b);
-        SendKey(e.a, e.b, down);
-        break;
-    }
-    case deskhub::InputType::MouseMove:
-        if (e.absolute) SendMoveAbsolute(e.a, e.b);
-        else            SendMoveRelative(e.a, e.b);
-        break;
-    case deskhub::InputType::MouseButton: {
-        const auto btn = deskhub::MouseButton(e.a);
-        const bool down = e.state != 0;
-        if (down) buttonsDown_.insert(btn);
-        else      buttonsDown_.erase(btn);
-        SendButton(btn, down);
-        break;
-    }
-    case deskhub::InputType::MouseWheel: {
-        INPUT in{};
-        in.type = INPUT_MOUSE;
-        in.mi.dwFlags = MOUSEEVENTF_WHEEL;
-        in.mi.mouseData = DWORD(e.b);
-        SendInput(1, &in, sizeof(INPUT));
-        break;
-    }
+        case deskhub::InputType::Key: {
+            const bool down = e.state != 0;
+            // Nhớ theo scancode để ReleaseAll nhả đúng phím đã bơm.
+            if (down)
+                keysDown_[e.b] = e.a;
+            else
+                keysDown_.erase(e.b);
+            SendKey(e.a, e.b, down);
+            break;
+        }
+        case deskhub::InputType::MouseMove:
+            if (e.absolute)
+                SendMoveAbsolute(e.a, e.b);
+            else
+                SendMoveRelative(e.a, e.b);
+            break;
+        case deskhub::InputType::MouseButton: {
+            const auto btn = deskhub::MouseButton(e.a);
+            const bool down = e.state != 0;
+            if (down)
+                buttonsDown_.insert(btn);
+            else
+                buttonsDown_.erase(btn);
+            SendButton(btn, down);
+            break;
+        }
+        case deskhub::InputType::MouseWheel: {
+            INPUT in{};
+            in.type = INPUT_MOUSE;
+            in.mi.dwFlags = MOUSEEVENTF_WHEEL;
+            in.mi.mouseData = DWORD(e.b);
+            SendInput(1, &in, sizeof(INPUT));
+            break;
+        }
     }
 }
 
@@ -274,8 +285,9 @@ int InputInjector::SelfTest(HWND target, const char* text) {
     // KHÔNG bơm mù: nếu cửa sổ đích chưa ở foreground, phím sẽ rơi vào ứng dụng
     // đang foreground (terminal, trình duyệt...) - gõ bay vào đúng nơi không ngờ.
     if (!inj.TargetHasFocus()) {
-        std::printf("[InjectTest] STOP: target window is not foreground. Click that window "
-                    "then run again (input would be typed into whatever app is open).\n");
+        std::printf(
+            "[InjectTest] STOP: target window is not foreground. Click that window "
+            "then run again (input would be typed into whatever app is open).\n");
         return 1;
     }
     std::printf("[InjectTest] Target window is foreground - starting to inject \"%s\".\n", text);
@@ -298,10 +310,13 @@ int InputInjector::SelfTest(HWND target, const char* text) {
             e.state = 1;
             inj.Apply(e);
         }
-        e.a = vk; e.b = scan;
-        e.state = 1; inj.Apply(e);
+        e.a = vk;
+        e.b = scan;
+        e.state = 1;
+        inj.Apply(e);
         Sleep(40); // game đọc bàn phím theo frame - nhấn/nhả quá nhanh sẽ bị bỏ qua
-        e.state = 0; inj.Apply(e);
+        e.state = 0;
+        inj.Apply(e);
         if (needShift) {
             e.a = VK_SHIFT;
             e.b = int32_t(MapVirtualKeyW(VK_SHIFT, MAPVK_VK_TO_VSC));
@@ -311,9 +326,10 @@ int InputInjector::SelfTest(HWND target, const char* text) {
         Sleep(15);
     }
     inj.ReleaseAll();
-    std::printf("[InjectTest] Injected %llu events (skipped %llu due to lost focus). "
-                "Check the target window.\n",
-                (unsigned long long)inj.applied(), (unsigned long long)inj.skipped());
+    std::printf(
+        "[InjectTest] Injected %llu events (skipped %llu due to lost focus). "
+        "Check the target window.\n",
+        (unsigned long long)inj.applied(), (unsigned long long)inj.skipped());
     return inj.applied() ? 0 : 1;
 }
 
@@ -325,9 +341,9 @@ int InputInjector::SelfTest(HWND target, const char* text) {
 void InputInjector::ReleaseAll() {
     if (keysDown_.empty() && buttonsDown_.empty()) return;
     std::printf("[Inject] Releasing %zu keys + %zu mouse buttons still held.\n",
-                keysDown_.size(), buttonsDown_.size());
+        keysDown_.size(), buttonsDown_.size());
     for (const auto& [scan, vk] : keysDown_) SendKey(vk, scan, false);
-    for (auto btn : buttonsDown_)            SendButton(btn, false);
+    for (auto btn : buttonsDown_) SendButton(btn, false);
     keysDown_.clear();
     buttonsDown_.clear();
 }

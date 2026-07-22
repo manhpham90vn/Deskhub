@@ -53,25 +53,27 @@ using PFN_CreateInstance = NVENCSTATUS(NVENCAPI*)(NV_ENCODE_API_FUNCTION_LIST*);
 using PFN_MaxVersion = NVENCSTATUS(NVENCAPI*)(uint32_t*);
 
 struct NvencEncoder::Impl {
-    HMODULE                    dll = nullptr;
+    HMODULE dll = nullptr;
     NV_ENCODE_API_FUNCTION_LIST nv{};
-    void*                      enc = nullptr;         // encode session handle
-    NV_ENC_OUTPUT_PTR          bitstream = nullptr;   // 1 buffer (đồng bộ, không B-frame)
-    FILE*                      out = nullptr;
-    EncoderConfig              cfg{};
-    uint32_t                   width = 0, height = 0;
+    void* enc = nullptr;                   // encode session handle
+    NV_ENC_OUTPUT_PTR bitstream = nullptr; // 1 buffer (đồng bộ, không B-frame)
+    FILE* out = nullptr;
+    EncoderConfig cfg{};
+    uint32_t width = 0, height = 0;
     // Giữ lại để nvEncReconfigureEncoder (đổi bitrate) — API đòi cả bộ tham số khởi
     // tạo chứ không nhận riêng trường cần đổi. initParams.encodeConfig phải trỏ vào
     // encCfg (thành viên), không phải biến cục bộ của Init.
-    NV_ENC_CONFIG              encCfg{};
-    NV_ENC_INITIALIZE_PARAMS   initParams{};
-    uint64_t                   frameCount = 0;
-    uint64_t                   totalBytes = 0;
+    NV_ENC_CONFIG encCfg{};
+    NV_ENC_INITIALIZE_PARAMS initParams{};
+    uint64_t frameCount = 0;
+    uint64_t totalBytes = 0;
 
     // Cache đăng ký theo con trỏ texture: WGC dùng lại vài texture (pool depth 2).
     std::map<ID3D11Texture2D*, NV_ENC_REGISTERED_PTR> registered;
 
-    ~Impl() { Cleanup(); }
+    ~Impl() {
+        Cleanup();
+    }
 
     bool Fail(const char* where, NVENCSTATUS s) {
         const char* msg = (nv.nvEncGetLastErrorString && enc) ? nv.nvEncGetLastErrorString(enc) : "";
@@ -85,7 +87,10 @@ struct NvencEncoder::Impl {
         height = c.height;
 
         dll = LoadLibraryW(L"nvEncodeAPI64.dll");
-        if (!dll) { std::printf("[NVENC] Failed to load nvEncodeAPI64.dll (NVIDIA driver missing?).\n"); return false; }
+        if (!dll) {
+            std::printf("[NVENC] Failed to load nvEncodeAPI64.dll (NVIDIA driver missing?).\n");
+            return false;
+        }
 
         // Driver cũ hơn header SDK ta dịch cùng: các struct đã đổi bố cục nên gọi
         // vào sẽ hỏng theo cách khó đoán. Phát hiện sớm và trả false để factory rớt
@@ -105,12 +110,18 @@ struct NvencEncoder::Impl {
         }
 
         auto createInstance = (PFN_CreateInstance)GetProcAddress(dll, "NvEncodeAPICreateInstance");
-        if (!createInstance) { std::printf("[NVENC] Missing NvEncodeAPICreateInstance.\n"); return false; }
+        if (!createInstance) {
+            std::printf("[NVENC] Missing NvEncodeAPICreateInstance.\n");
+            return false;
+        }
 
         nv = {};
         nv.version = NV_ENCODE_API_FUNCTION_LIST_VER;
         NVENCSTATUS s = createInstance(&nv);
-        if (s != NV_ENC_SUCCESS) { std::printf("[NVENC] CreateInstance status=%d\n", (int)s); return false; }
+        if (s != NV_ENC_SUCCESS) {
+            std::printf("[NVENC] CreateInstance status=%d\n", (int)s);
+            return false;
+        }
 
         // Mở session trên chính D3D11 device dùng chung với capture.
         NV_ENC_OPEN_ENCODE_SESSION_EX_PARAMS sp{};
@@ -119,7 +130,10 @@ struct NvencEncoder::Impl {
         sp.device = device;
         sp.apiVersion = NVENCAPI_VERSION;
         s = nv.nvEncOpenEncodeSessionEx(&sp, &enc);
-        if (s != NV_ENC_SUCCESS) { enc = nullptr; return Fail("OpenEncodeSessionEx", s); }
+        if (s != NV_ENC_SUCCESS) {
+            enc = nullptr;
+            return Fail("OpenEncodeSessionEx", s);
+        }
 
         const GUID codecGuid = (cfg.codec == Codec::HEVC) ? NV_ENC_CODEC_HEVC_GUID
                                                           : NV_ENC_CODEC_H264_GUID;
@@ -137,8 +151,8 @@ struct NvencEncoder::Impl {
         if (s != NV_ENC_SUCCESS) return Fail("GetEncodePresetConfigEx", s);
 
         encCfg = preset.presetCfg;
-        encCfg.gopLength = NVENC_INFINITE_GOPLENGTH;   // IDR theo yêu cầu, không định kỳ
-        encCfg.frameIntervalP = 1;                     // không B-frame (độ trễ thấp)
+        encCfg.gopLength = NVENC_INFINITE_GOPLENGTH; // IDR theo yêu cầu, không định kỳ
+        encCfg.frameIntervalP = 1;                   // không B-frame (độ trễ thấp)
         encCfg.rcParams.rateControlMode = NV_ENC_PARAMS_RC_CBR;
         encCfg.rcParams.averageBitRate = cfg.bitrateBps;
         // VBV buffer ~ đúng một frame. Đây là "ngân sách dồn" mà encoder được phép
@@ -170,8 +184,8 @@ struct NvencEncoder::Impl {
         ip.darHeight = height;
         ip.frameRateNum = cfg.fps ? cfg.fps : 60;
         ip.frameRateDen = 1;
-        ip.enablePTD = 1;                 // NVENC tự quyết định loại picture
-        ip.enableEncodeAsync = 0;         // đồng bộ cho đơn giản
+        ip.enablePTD = 1;         // NVENC tự quyết định loại picture
+        ip.enableEncodeAsync = 0; // đồng bộ cho đơn giản
         ip.encodeConfig = &encCfg;
         s = nv.nvEncInitializeEncoder(enc, &ip);
         if (s != NV_ENC_SUCCESS) return Fail("InitializeEncoder", s);
@@ -189,7 +203,10 @@ struct NvencEncoder::Impl {
             size_t dot = path.find_last_of(L'.');
             if (dot != std::wstring::npos && path.substr(dot) == L".mp4") path = path.substr(0, dot) + L".h264";
             out = _wfopen(path.c_str(), L"wb");
-            if (!out) { std::printf("[NVENC] Failed to open output file.\n"); return false; }
+            if (!out) {
+                std::printf("[NVENC] Failed to open output file.\n");
+                return false;
+            }
         } else if (!cfg.onPacket) {
             std::printf("[NVENC] No outputPath or onPacket - no output destination.\n");
             return false;
@@ -212,7 +229,7 @@ struct NvencEncoder::Impl {
 
         NV_ENC_RECONFIGURE_PARAMS rp{};
         rp.version = NV_ENC_RECONFIGURE_PARAMS_VER;
-        rp.reInitEncodeParams = initParams;      // encodeConfig vẫn trỏ vào encCfg
+        rp.reInitEncodeParams = initParams; // encodeConfig vẫn trỏ vào encCfg
         NVENCSTATUS s = nv.nvEncReconfigureEncoder(enc, &rp);
         if (s != NV_ENC_SUCCESS) return Fail("ReconfigureEncoder", s);
         return true;
@@ -234,7 +251,10 @@ struct NvencEncoder::Impl {
         // — không cần video processor riêng.
         rr.bufferFormat = NV_ENC_BUFFER_FORMAT_ARGB;
         NVENCSTATUS s = nv.nvEncRegisterResource(enc, &rr);
-        if (s != NV_ENC_SUCCESS) { Fail("RegisterResource", s); return nullptr; }
+        if (s != NV_ENC_SUCCESS) {
+            Fail("RegisterResource", s);
+            return nullptr;
+        }
         registered[tex] = rr.registeredResource;
         return rr.registeredResource;
     }
@@ -293,7 +313,7 @@ struct NvencEncoder::Impl {
         if (out) std::fwrite(lb.bitstreamBufferPtr, 1, lb.bitstreamSizeInBytes, out);
         if (cfg.onPacket && lb.bitstreamSizeInBytes > 0) {
             cfg.onPacket((const uint8_t*)lb.bitstreamBufferPtr, lb.bitstreamSizeInBytes,
-                         lb.outputTimeStamp, keyframe);
+                lb.outputTimeStamp, keyframe);
         }
         totalBytes += lb.bitstreamSizeInBytes;
         ++frameCount;
@@ -326,12 +346,21 @@ struct NvencEncoder::Impl {
         if (enc) {
             for (auto& kv : registered) nv.nvEncUnregisterResource(enc, kv.second);
             registered.clear();
-            if (bitstream) { nv.nvEncDestroyBitstreamBuffer(enc, bitstream); bitstream = nullptr; }
+            if (bitstream) {
+                nv.nvEncDestroyBitstreamBuffer(enc, bitstream);
+                bitstream = nullptr;
+            }
             nv.nvEncDestroyEncoder(enc);
             enc = nullptr;
         }
-        if (out) { std::fclose(out); out = nullptr; }
-        if (dll) { FreeLibrary(dll); dll = nullptr; }
+        if (out) {
+            std::fclose(out);
+            out = nullptr;
+        }
+        if (dll) {
+            FreeLibrary(dll);
+            dll = nullptr;
+        }
     }
 };
 
@@ -340,7 +369,10 @@ NvencEncoder::~NvencEncoder() = default;
 
 bool NvencEncoder::Init(ID3D11Device* device, const EncoderConfig& cfg) {
     impl_ = std::make_unique<Impl>();
-    if (!impl_->Init(device, cfg)) { impl_.reset(); return false; }
+    if (!impl_->Init(device, cfg)) {
+        impl_.reset();
+        return false;
+    }
     return true;
 }
 bool NvencEncoder::Encode(ID3D11Texture2D* frame, uint64_t ts, bool forceKeyframe) {
@@ -349,4 +381,6 @@ bool NvencEncoder::Encode(ID3D11Texture2D* frame, uint64_t ts, bool forceKeyfram
 bool NvencEncoder::SetBitrate(uint32_t bitrateBps) {
     return impl_ && impl_->SetBitrate(bitrateBps);
 }
-void NvencEncoder::Finish() { if (impl_) impl_->Finish(); }
+void NvencEncoder::Finish() {
+    if (impl_) impl_->Finish();
+}

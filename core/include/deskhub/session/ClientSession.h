@@ -49,21 +49,21 @@
 
 namespace deskhub {
 
-inline constexpr uint64_t kHelloRetryUs    = 500'000;    // phát lại HELLO/START
-inline constexpr uint64_t kHelloGiveUpUs   = 10'000'000; // bỏ cuộc nếu host im lặng
-inline constexpr uint64_t kPingIntervalUs  = 1'000'000;
+inline constexpr uint64_t kHelloRetryUs = 500'000;     // phát lại HELLO/START
+inline constexpr uint64_t kHelloGiveUpUs = 10'000'000; // bỏ cuộc nếu host im lặng
+inline constexpr uint64_t kPingIntervalUs = 1'000'000;
 inline constexpr uint64_t kKeyframeRetryUs = 250'000;
 // SET_FOCUS gửi theo BIẾN CỐ (đổi cửa sổ), không gửi định kỳ: phát lại đều đặn thì
 // người ngồi ở máy host không bao giờ bấm sang được ứng dụng khác của chính mình.
 // Đổi lại phải chịu mất gói → phát kFocusRepeats lần cách kFocusRetryUs cho chắc.
 inline constexpr uint64_t kFocusRetryUs = 50'000;
-inline constexpr int      kFocusRepeats = 3;
+inline constexpr int kFocusRepeats = 3;
 
 struct NegotiatedParams {
-    Codec    codec = Codec::H264;
+    Codec codec = Codec::H264;
     uint16_t width = 0;
     uint16_t height = 0;
-    uint8_t  fps = 60;
+    uint8_t fps = 60;
     uint32_t bitrateBps = 0;
     uint64_t timebaseUs = 0; // đồng hồ host tại thời điểm HELLO_ACK
 };
@@ -81,7 +81,11 @@ struct ClientCallbacks {
 
 class ClientSession {
 public:
-    enum class State : uint8_t { Idle, Hello, Starting, Streaming, Dead };
+    enum class State : uint8_t { Idle,
+        Hello,
+        Starting,
+        Streaming,
+        Dead };
 
     explicit ClientSession(ClientCallbacks cb) : cb_(std::move(cb)) {}
 
@@ -107,8 +111,12 @@ public:
     void SetFocused(bool on);
 
     // Giữ cờ xin IDR: Tick phát REQUEST_KEYFRAME mỗi 250ms tới khi Cancel.
-    void RequestKeyframe() { keyframeWanted_ = true; }
-    void CancelKeyframeRequest() { keyframeWanted_ = false; }
+    void RequestKeyframe() {
+        keyframeWanted_ = true;
+    }
+    void CancelKeyframeRequest() {
+        keyframeWanted_ = false;
+    }
 
     // Gửi FEEDBACK cho host (GĐ5). Caller gọi ~1s/lần từ khối thống kê của mình —
     // ClientSession không tự đo được mất gói (Reassembler nằm ngoài). Bỏ qua nếu
@@ -118,10 +126,18 @@ public:
     // Báo host mình rời đi (gửi 1 lần, best-effort) và kết thúc phiên.
     void SendBye();
 
-    State    state() const { return state_; }
-    uint32_t sessionId() const { return sessionId_; }
-    uint32_t lastRttUs() const { return lastRttUs_; }
-    const NegotiatedParams& params() const { return params_; }
+    State state() const {
+        return state_;
+    }
+    uint32_t sessionId() const {
+        return sessionId_;
+    }
+    uint32_t lastRttUs() const {
+        return lastRttUs_;
+    }
+    const NegotiatedParams& params() const {
+        return params_;
+    }
 
 private:
     void SendHello();
@@ -130,23 +146,23 @@ private:
 
     ClientCallbacks cb_;
     InputSender input_;
-    State    state_ = State::Idle;
+    State state_ = State::Idle;
     uint32_t sessionId_ = 0;
-    Hello    hello_{};
+    Hello hello_{};
     NegotiatedParams params_{};
-    uint64_t startedUs_ = 0;      // lúc phát HELLO đầu — mốc bỏ cuộc
-    uint64_t lastSentUs_ = 0;     // lần phát HELLO/START gần nhất
+    uint64_t startedUs_ = 0;  // lúc phát HELLO đầu — mốc bỏ cuộc
+    uint64_t lastSentUs_ = 0; // lần phát HELLO/START gần nhất
     uint64_t lastRecvUs_ = 0;
     uint64_t lastPingUs_ = 0;
     uint64_t lastKeyframeReqUs_ = 0;
     uint64_t lastFocusUs_ = 0;
-    int      focusRepeatsLeft_ = 0;
-    bool     focusWanted_ = false;  // giá trị đang phát lại
-    bool     focusSent_ = false;    // giá trị host đã biết — khỏi phát lại thừa
+    int focusRepeatsLeft_ = 0;
+    bool focusWanted_ = false; // giá trị đang phát lại
+    bool focusSent_ = false;   // giá trị host đã biết — khỏi phát lại thừa
     uint32_t nextPingId_ = 1;
     uint32_t lastRttUs_ = 0;
-    bool     keyframeWanted_ = false;
-    uint8_t  buf_[kMaxDatagram] = {};
+    bool keyframeWanted_ = false;
+    uint8_t buf_[kMaxDatagram] = {};
 };
 
 } // namespace deskhub

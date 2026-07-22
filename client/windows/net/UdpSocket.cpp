@@ -43,7 +43,7 @@
 std::string NetAddr::ToString() const {
     char b[32];
     std::snprintf(b, sizeof(b), "%u.%u.%u.%u:%u",
-                  (ip >> 24) & 0xFF, (ip >> 16) & 0xFF, (ip >> 8) & 0xFF, ip & 0xFF, port);
+        (ip >> 24) & 0xFF, (ip >> 16) & 0xFF, (ip >> 8) & 0xFF, ip & 0xFF, port);
     return b;
 }
 
@@ -94,7 +94,9 @@ uint16_t FindFreeUdpPort(uint16_t start, int count) {
     return found;
 }
 
-UdpSocket::~UdpSocket() { Close(); }
+UdpSocket::~UdpSocket() {
+    Close();
+}
 
 // Mở socket UDP và bind. Ghi vào sock_ CHỈ KHI mọi bước đã thành công — thất bại
 // giữa chừng thì đóng handle cục bộ và để đối tượng nguyên trạng "chưa mở".
@@ -154,8 +156,10 @@ bool UdpSocket::Open(uint16_t localPort) {
         // trên báo cách xử lý thay vì phơi số lỗi 10048.
         lastBindAddrInUse_ = (err == WSAEADDRINUSE);
         if (lastBindAddrInUse_)
-            std::printf("[UDP] Port %u is already in use — another Deskhub host (or "
-                        "another program) is still listening on it.\n", localPort);
+            std::printf(
+                "[UDP] Port %u is already in use — another Deskhub host (or "
+                "another program) is still listening on it.\n",
+                localPort);
         else
             std::printf("[UDP] bind(:%u) failed: %d\n", localPort, err);
         closesocket(s);
@@ -175,7 +179,7 @@ bool UdpSocket::SetRecvTimeout(uint32_t ms) {
     if (!IsOpen()) return false;
     DWORD t = ms;
     return setsockopt(SOCKET(sock_), SOL_SOCKET, SO_RCVTIMEO,
-                      (const char*)&t, sizeof(t)) == 0;
+               (const char*)&t, sizeof(t)) == 0;
 }
 
 bool UdpSocket::SendTo(const NetAddr& to, const uint8_t* data, size_t len) {
@@ -188,7 +192,7 @@ bool UdpSocket::SendTo(const NetAddr& to, const uint8_t* data, size_t len) {
     // gửi gì, nên gửi thiếu byte nghĩa là có chuyện bất thường. Không thử gửi lại —
     // ở tầng này mất gói là bình thường, các tầng trên đã có cơ chế phát lại riêng.
     return sendto(SOCKET(sock_), (const char*)data, int(len), 0,
-                  (sockaddr*)&sa, sizeof(sa)) == int(len);
+               (sockaddr*)&sa, sizeof(sa)) == int(len);
 }
 
 // Nhận một datagram. Xem quy ước ba vùng giá trị trả về ở đầu file.

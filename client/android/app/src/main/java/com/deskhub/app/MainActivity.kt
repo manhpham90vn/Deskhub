@@ -71,7 +71,6 @@ import kotlinx.coroutines.launch
  * đi dùng lại với đúng một cái máy.
  */
 class MainActivity : ComponentActivity() {
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val prefs = getSharedPreferences("deskhub", Context.MODE_PRIVATE)
@@ -89,18 +88,21 @@ class MainActivity : ComponentActivity() {
                     MainScreen(
                         initialAddress = prefs.getString("addr", "").orEmpty(),
                         onRemember = { addr -> prefs.edit().putString("addr", addr).apply() },
-                        onOpenStream = ::openStream
+                        onOpenStream = ::openStream,
                     )
                 }
             }
         }
     }
 
-    private fun openStream(addr: String, sourceId: Int) {
+    private fun openStream(
+        addr: String,
+        sourceId: Int,
+    ) {
         startActivity(
             Intent(this, StreamActivity::class.java)
                 .putExtra("addr", addr)
-                .putExtra("source", sourceId)
+                .putExtra("source", sourceId),
         )
     }
 }
@@ -108,15 +110,19 @@ class MainActivity : ComponentActivity() {
 /** Ba bước của màn hình: gõ địa chỉ -> hỏi host có nguồn nào -> chọn nguồn. */
 private sealed interface Step {
     data object Address : Step
+
     data object Querying : Step
-    data class Picking(val sources: List<NativeClient.Source>) : Step
+
+    data class Picking(
+        val sources: List<NativeClient.Source>,
+    ) : Step
 }
 
 @Composable
 private fun MainScreen(
     initialAddress: String,
     onRemember: (String) -> Unit,
-    onOpenStream: (String, Int) -> Unit
+    onOpenStream: (String, Int) -> Unit,
 ) {
     var step by remember { mutableStateOf<Step>(Step.Address) }
     var address by remember { mutableStateOf(initialAddress) }
@@ -128,39 +134,41 @@ private fun MainScreen(
     BackHandler(enabled = step != Step.Address) { step = Step.Address }
 
     when (val s = step) {
-        is Step.Address -> AddressScreen(
-            address = address,
-            onAddressChange = { address = it },
-            onConnect = { addr ->
-                onRemember(addr)
-                step = Step.Querying
-                scope.launch {
-                    // listSources là suspend fun, tự chuyển sang Dispatchers.IO —
-                    // main thread không bị chặn suốt 3 giây (nếu chặn, Android dựng
-                    // hộp thoại ANR).
-                    val sources = NativeClient.listSources(addr)
-                    if (step !is Step.Querying) return@launch // người dùng đã bấm Back
-                    // Rỗng = host im lặng hoặc host đời cũ; một nguồn = không có gì để
-                    // chọn. Cả hai trường hợp vào thẳng, để tầng dưới báo lỗi thật nếu có.
-                    if (sources.size <= 1) {
-                        step = Step.Address
-                        onOpenStream(addr, sources.firstOrNull()?.id ?: 0)
-                    } else {
-                        step = Step.Picking(sources)
+        is Step.Address ->
+            AddressScreen(
+                address = address,
+                onAddressChange = { address = it },
+                onConnect = { addr ->
+                    onRemember(addr)
+                    step = Step.Querying
+                    scope.launch {
+                        // listSources là suspend fun, tự chuyển sang Dispatchers.IO —
+                        // main thread không bị chặn suốt 3 giây (nếu chặn, Android dựng
+                        // hộp thoại ANR).
+                        val sources = NativeClient.listSources(addr)
+                        if (step !is Step.Querying) return@launch // người dùng đã bấm Back
+                        // Rỗng = host im lặng hoặc host đời cũ; một nguồn = không có gì để
+                        // chọn. Cả hai trường hợp vào thẳng, để tầng dưới báo lỗi thật nếu có.
+                        if (sources.size <= 1) {
+                            step = Step.Address
+                            onOpenStream(addr, sources.firstOrNull()?.id ?: 0)
+                        } else {
+                            step = Step.Picking(sources)
+                        }
                     }
-                }
-            }
-        )
+                },
+            )
 
         is Step.Querying -> CenteredMessage(stringResource(R.string.looking_for_sources), busy = true)
 
-        is Step.Picking -> SourcePickerScreen(
-            sources = s.sources,
-            onPick = { source ->
-                step = Step.Address // quay lại từ StreamActivity là thấy ô địa chỉ
-                onOpenStream(address, source.id)
-            }
-        )
+        is Step.Picking ->
+            SourcePickerScreen(
+                sources = s.sources,
+                onPick = { source ->
+                    step = Step.Address // quay lại từ StreamActivity là thấy ô địa chỉ
+                    onOpenStream(address, source.id)
+                },
+            )
     }
 }
 
@@ -168,27 +176,28 @@ private fun MainScreen(
 private fun AddressScreen(
     address: String,
     onAddressChange: (String) -> Unit,
-    onConnect: (String) -> Unit
+    onConnect: (String) -> Unit,
 ) {
     val trimmed = address.trim()
 
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(32.dp),
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .padding(32.dp),
         verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally
+        horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Text(
             text = stringResource(R.string.app_name),
             fontSize = 28.sp,
-            color = MaterialTheme.colorScheme.onSurface
+            color = MaterialTheme.colorScheme.onSurface,
         )
         Text(
             text = stringResource(R.string.host_address_label),
             fontSize = 14.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(top = 8.dp, bottom = 24.dp)
+            modifier = Modifier.padding(top = 8.dp, bottom = 24.dp),
         )
 
         OutlinedTextField(
@@ -198,18 +207,20 @@ private fun AddressScreen(
             placeholder = { Text(stringResource(R.string.host_address_hint)) },
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Go),
             // Enter trên bàn phím ảo = bấm Connect, khỏi phải với tay xuống nút.
-            keyboardActions = KeyboardActions(onGo = {
-                if (trimmed.isNotEmpty()) onConnect(trimmed)
-            }),
-            modifier = Modifier.fillMaxWidth()
+            keyboardActions =
+                KeyboardActions(onGo = {
+                    if (trimmed.isNotEmpty()) onConnect(trimmed)
+                }),
+            modifier = Modifier.fillMaxWidth(),
         )
 
         Button(
             onClick = { onConnect(trimmed) },
             enabled = trimmed.isNotEmpty(), // thay cho Toast "nhập địa chỉ trước"
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 20.dp)
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(top = 20.dp),
         ) {
             Text(stringResource(R.string.connect))
         }
@@ -218,7 +229,7 @@ private fun AddressScreen(
             text = stringResource(R.string.emulator_hint),
             fontSize = 12.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(top = 28.dp)
+            modifier = Modifier.padding(top = 28.dp),
         )
     }
 }
@@ -231,34 +242,35 @@ private fun AddressScreen(
 @Composable
 private fun SourcePickerScreen(
     sources: List<NativeClient.Source>,
-    onPick: (NativeClient.Source) -> Unit
+    onPick: (NativeClient.Source) -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
         Text(
             text = stringResource(R.string.pick_source),
             fontSize = 18.sp,
             color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 32.dp, bottom = 16.dp)
+            modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 32.dp, bottom = 16.dp),
         )
 
         LazyColumn(modifier = Modifier.fillMaxWidth()) {
             items(sources, key = { it.id }) { source ->
                 Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onPick(source) }
-                        .padding(horizontal = 24.dp, vertical = 14.dp)
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable { onPick(source) }
+                            .padding(horizontal = 24.dp, vertical = 14.dp),
                 ) {
                     Text(
                         // Host cắt tên ở 64 byte và có cửa sổ không có tiêu đề.
                         text = source.name.ifBlank { stringResource(R.string.unnamed_source, source.id) },
                         fontSize = 16.sp,
-                        color = MaterialTheme.colorScheme.onSurface
+                        color = MaterialTheme.colorScheme.onSurface,
                     )
                     Text(
                         text = stringResource(R.string.source_size, source.width, source.height),
                         fontSize = 13.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
                 HorizontalDivider()
@@ -268,13 +280,17 @@ private fun SourcePickerScreen(
 }
 
 @Composable
-private fun CenteredMessage(text: String, busy: Boolean) {
+private fun CenteredMessage(
+    text: String,
+    busy: Boolean,
+) {
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(32.dp),
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .padding(32.dp),
         verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally
+        horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         if (busy) CircularProgressIndicator(modifier = Modifier.padding(bottom = 20.dp))
         Text(text = text, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)

@@ -43,16 +43,22 @@ namespace capture {
 // trước khi tạo WindowCapture.
 void InitRuntime();
 
-}  // namespace capture
+} // namespace capture
 
 // Nguồn cần bắt: đúng MỘT trong hai trường khác nullptr.
 struct CaptureTarget {
-    HWND     hwnd = nullptr;
+    HWND hwnd = nullptr;
     HMONITOR monitor = nullptr;
 
-    bool valid() const { return (hwnd != nullptr) != (monitor != nullptr); }
-    static CaptureTarget Window(HWND h) { return CaptureTarget{h, nullptr}; }
-    static CaptureTarget Monitor(HMONITOR m) { return CaptureTarget{nullptr, m}; }
+    bool valid() const {
+        return (hwnd != nullptr) != (monitor != nullptr);
+    }
+    static CaptureTarget Window(HWND h) {
+        return CaptureTarget{h, nullptr};
+    }
+    static CaptureTarget Monitor(HMONITOR m) {
+        return CaptureTarget{nullptr, m};
+    }
 };
 
 class WindowCapture {
@@ -76,7 +82,7 @@ public:
     bool Closed() const;
 
     // D3D11 device/context dùng cho capture - chia sẻ cho encoder (COM thuần).
-    ID3D11Device*        Device() const;
+    ID3D11Device* Device() const;
     ID3D11DeviceContext* Context() const;
 
 private:

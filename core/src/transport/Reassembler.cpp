@@ -34,7 +34,7 @@ namespace deskhub {
 // Cổng vào chung của Push và PushFec: mọi gói đều phải qua đây để lấy chỗ ghép.
 // Trả nullptr nghĩa là "bỏ gói này" — quá muộn, hoặc không khớp frame đang ghép.
 Reassembler::Pending* Reassembler::Slot(uint32_t id, uint16_t pktCount,
-                                        uint64_t timestampUs, uint64_t nowUs) {
+    uint64_t timestampUs, uint64_t nowUs) {
     if (haveBarrier_ && id <= barrierId_) return nullptr; // gói muộn của frame đã phát/bỏ
 
     auto it = pending_.find(id);
@@ -130,7 +130,10 @@ bool Reassembler::TryRecover(Pending& f, uint8_t group) {
     // Parity XOR chỉ gỡ được MỘT ẩn số. Không thiếu gói nào thì thôi, thiếu ≥2 thì chịu.
     size_t missing = 0, missingIdx = 0;
     for (size_t i = first; i < last; ++i)
-        if (f.pieces[i].empty()) { ++missing; missingIdx = i; }
+        if (f.pieces[i].empty()) {
+            ++missing;
+            missingIdx = i;
+        }
     if (missing != 1) return false;
 
     // XOR ngược: parity ^ (mọi mảnh đã có) = mảnh thiếu, kèm 2 byte độ dài đứng đầu.
@@ -149,7 +152,7 @@ bool Reassembler::TryRecover(Pending& f, uint8_t group) {
     if (len == 0 || len > kMaxVideoPayload || kFecLenPrefix + len > rec.size()) return false;
 
     f.pieces[missingIdx].assign(rec.begin() + kFecLenPrefix,
-                                rec.begin() + kFecLenPrefix + len);
+        rec.begin() + kFecLenPrefix + len);
     f.bytes += len;
     ++f.received;
     ++stats_.packetsRecovered;
@@ -177,15 +180,15 @@ std::optional<Reassembler::Frame> Reassembler::PopReady(uint64_t nowUs) {
             // đúng chuỗi byte mà encoder đã đẻ ra ở đầu kia. reserve trước theo
             // f.bytes để chỉ cấp phát một lần.
             Frame out;
-            out.frameId     = head->first;
+            out.frameId = head->first;
             out.timestampUs = f.timestampUs;
-            out.idr         = f.idr;
+            out.idr = f.idr;
             out.firstSeenUs = f.firstSeenUs;
             out.nal.reserve(f.bytes);
             for (const auto& p : f.pieces)
                 out.nal.insert(out.nal.end(), p.begin(), p.end());
             haveBarrier_ = true;
-            barrierId_   = head->first;
+            barrierId_ = head->first;
             waitingForIdr_ = false;
             ++stats_.framesCompleted;
             pending_.erase(head);
@@ -228,10 +231,10 @@ void Reassembler::Drop(PendingMap::iterator it, DropReason reason, uint64_t nowU
     const bool loss = reason != DropReason::PreIdr;
 
     FrameDropInfo info;
-    info.frameId  = it->first;
-    info.reason   = reason;
-    info.total    = f.pktCount;
-    info.idr      = f.idr;
+    info.frameId = it->first;
+    info.reason = reason;
+    info.total = f.pktCount;
+    info.idr = f.idr;
     info.waitedMs = uint32_t((nowUs - f.firstSeenUs) / 1000);
     info.bytesGot = uint32_t(f.bytes);
 
@@ -247,16 +250,24 @@ void Reassembler::Drop(PendingMap::iterator it, DropReason reason, uint64_t nowU
             const bool gone = i < f.pktCount && f.pieces[i].empty();
             if (gone) {
                 ++info.missing;
-                if (!anyMissing) { anyMissing = true; info.firstMissing = uint16_t(i); }
+                if (!anyMissing) {
+                    anyMissing = true;
+                    info.firstMissing = uint16_t(i);
+                }
                 info.lastMissing = uint16_t(i);
                 ++run;
             } else if (run) {
                 size_t b = 0;
-                if (run <= 3)       b = run - 1;   // 1, 2, 3 tách riêng: chùm ngắn là
-                else if (run < 8)   b = 3;         // thứ FEC hiện tại còn có cửa cứu
-                else if (run < 16)  b = 4;
-                else if (run < 32)  b = 5;
-                else                b = 6;
+                if (run <= 3)
+                    b = run - 1; // 1, 2, 3 tách riêng: chùm ngắn là
+                else if (run < 8)
+                    b = 3; // thứ FEC hiện tại còn có cửa cứu
+                else if (run < 16)
+                    b = 4;
+                else if (run < 32)
+                    b = 5;
+                else
+                    b = 6;
                 ++stats_.lossRuns[b];
                 if (run > stats_.lossRunMax) stats_.lossRunMax = run;
                 run = 0;
@@ -276,7 +287,7 @@ void Reassembler::Drop(PendingMap::iterator it, DropReason reason, uint64_t nowU
     }
     if (!haveBarrier_ || it->first > barrierId_) {
         haveBarrier_ = true;
-        barrierId_   = it->first;
+        barrierId_ = it->first;
     }
     pending_.erase(it);
 

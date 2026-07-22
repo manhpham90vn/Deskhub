@@ -27,10 +27,10 @@ namespace {
 
 constexpr wchar_t kWndClass[] = L"DeskhubSourcePicker";
 
-constexpr int kIdList   = 300;
-constexpr int kIdOk     = 301;
+constexpr int kIdList = 300;
+constexpr int kIdOk = 301;
 constexpr int kIdCancel = 302;
-constexpr int kIdHint   = 303;
+constexpr int kIdHint = 303;
 
 std::wstring FromUtf8(const std::string& s) {
     if (s.empty()) return {};
@@ -67,19 +67,22 @@ void Confirm(State& st) {
 LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
     auto* st = (State*)GetWindowLongPtrW(h, GWLP_USERDATA);
     switch (msg) {
-    case WM_COMMAND:
-        if (!st) break;
-        switch (LOWORD(wp)) {
-        case kIdOk: Confirm(*st); return 0;
-        case kIdCancel: st->done = true; return 0;
-        case kIdList:
-            if (HIWORD(wp) == LBN_DBLCLK) { Confirm(*st); return 0; }
+        case WM_COMMAND:
+            if (!st) break;
+            switch (LOWORD(wp)) {
+                case kIdOk: Confirm(*st); return 0;
+                case kIdCancel: st->done = true; return 0;
+                case kIdList:
+                    if (HIWORD(wp) == LBN_DBLCLK) {
+                        Confirm(*st);
+                        return 0;
+                    }
+                    break;
+            }
             break;
-        }
-        break;
-    case WM_CLOSE:
-        if (st) st->done = true;
-        return 0;
+        case WM_CLOSE:
+            if (st) st->done = true;
+            return 0;
     }
     return DefWindowProcW(h, msg, wp, lp);
 }
@@ -87,7 +90,7 @@ LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
 } // namespace
 
 bool ShowSourcePickerDialog(HWND owner, const std::vector<deskhub::SourceInfo>& sources,
-                            std::vector<deskhub::SourceInfo>& outSelected) {
+    std::vector<deskhub::SourceInfo>& outSelected) {
     outSelected.clear();
     if (sources.empty()) return false;
     // Host chỉ chia sẻ một thứ: không bắt người dùng bấm thêm một hộp thoại nữa.
@@ -106,17 +109,19 @@ bool ShowSourcePickerDialog(HWND owner, const std::vector<deskhub::SourceInfo>& 
 
     constexpr int kW = 460, kH = 340;
     RECT ownerRect{};
-    if (owner) GetWindowRect(owner, &ownerRect);
-    else SystemParametersInfoW(SPI_GETWORKAREA, 0, &ownerRect, 0);
+    if (owner)
+        GetWindowRect(owner, &ownerRect);
+    else
+        SystemParametersInfoW(SPI_GETWORKAREA, 0, &ownerRect, 0);
     const int x = ownerRect.left + ((ownerRect.right - ownerRect.left) - kW) / 2;
     const int y = ownerRect.top + ((ownerRect.bottom - ownerRect.top) - kH) / 2;
 
     const DWORD style = WS_POPUP | WS_CAPTION | WS_SYSMENU;
-    RECT wr{ 0, 0, kW, kH };
+    RECT wr{0, 0, kW, kH};
     AdjustWindowRect(&wr, style, FALSE);
     HWND dlg = CreateWindowExW(WS_EX_DLGMODALFRAME, kWndClass, L"What do you want to view?",
-                                style, x, y, wr.right - wr.left, wr.bottom - wr.top,
-                                owner, nullptr, wc.hInstance, nullptr);
+        style, x, y, wr.right - wr.left, wr.bottom - wr.top,
+        owner, nullptr, wc.hInstance, nullptr);
     if (!dlg) return false;
 
     State st;
@@ -127,14 +132,14 @@ bool ShowSourcePickerDialog(HWND owner, const std::vector<deskhub::SourceInfo>& 
     const HFONT font = (HFONT)GetStockObject(DEFAULT_GUI_FONT);
     auto mk = [&](const wchar_t* cls, const wchar_t* text, DWORD s, int cx, int cy, int cw, int ch, int id) {
         HWND c = CreateWindowExW(0, cls, text, s | WS_CHILD | WS_VISIBLE, cx, cy, cw, ch,
-                                  dlg, (HMENU)(INT_PTR)id, wc.hInstance, nullptr);
+            dlg, (HMENU)(INT_PTR)id, wc.hInstance, nullptr);
         if (c) SendMessageW(c, WM_SETFONT, (WPARAM)font, TRUE);
         return c;
     };
 
     st.list = mk(L"LISTBOX", nullptr,
-                 LBS_NOTIFY | LBS_HASSTRINGS | LBS_MULTIPLESEL | WS_VSCROLL | WS_BORDER,
-                 12, 12, kW - 24, kH - 92, kIdList);
+        LBS_NOTIFY | LBS_HASSTRINGS | LBS_MULTIPLESEL | WS_VSCROLL | WS_BORDER,
+        12, 12, kW - 24, kH - 92, kIdList);
     for (const auto& s : sources) {
         wchar_t line[256];
         swprintf(line, 256, L"%ls (%ux%u)", FromUtf8(s.name).c_str(), s.width, s.height);
@@ -142,7 +147,7 @@ bool ShowSourcePickerDialog(HWND owner, const std::vector<deskhub::SourceInfo>& 
     }
     SendMessageW(st.list, LB_SETSEL, TRUE, 0);
     mk(L"STATIC", L"Each one you pick opens its own window.",
-       0, 12, kH - 74, kW - 24, 18, kIdHint);
+        0, 12, kH - 74, kW - 24, 18, kIdHint);
     mk(L"BUTTON", L"View", BS_DEFPUSHBUTTON, kW - 24 - 180, kH - 46, 86, 26, kIdOk);
     mk(L"BUTTON", L"Cancel", 0, kW - 24 - 88, kH - 46, 86, 26, kIdCancel);
 
@@ -160,7 +165,10 @@ bool ShowSourcePickerDialog(HWND owner, const std::vector<deskhub::SourceInfo>& 
         }
     }
 
-    if (owner) { EnableWindow(owner, TRUE); SetForegroundWindow(owner); }
+    if (owner) {
+        EnableWindow(owner, TRUE);
+        SetForegroundWindow(owner);
+    }
     DestroyWindow(dlg);
 
     outSelected = std::move(st.result);
