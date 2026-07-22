@@ -1,7 +1,9 @@
-# GĐ3 — Client Android (view-only)
+# 08 — Client Android
 
-Client Android đầu tiên, **chỉ xem** — chưa gửi input.
-Mạng + giải mã là C++ (dùng lại `core/`), UI là Kotlin + Jetpack Compose.
+Một trong **6 nền tảng client** (xem `03-client.md` §1b, `11-platform-transport.md`).
+Android là **client-only** — không làm agent được (`11-platform-transport.md` §3). Bản đầu
+**chỉ xem** — chưa gửi input. Mạng + giải mã là C++ (dùng lại `core/` native), UI là Kotlin
++ Jetpack Compose.
 
 ## 1. Phân chia Kotlin / C++
 

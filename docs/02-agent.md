@@ -1,19 +1,41 @@
 # 02 — Thiết kế Agent (host)
 
-Agent chạy trên máy có game. Trách nhiệm: bắt hình, nén, gửi video, nhận input và bơm vào game.
-Đây là thành phần phức tạp nhất của hệ.
+Agent chạy trên máy có game — vai **host**, chỉ trên **desktop: Windows · macOS · Ubuntu**
+(mobile/web không host được, `11-platform-transport.md` §3). Trách nhiệm: bắt hình, nén,
+gửi video, nhận input và bơm vào game. Đây là thành phần phức tạp nhất của hệ.
+
+Vai trò và điều phối (§1, §4, §6, §7) **giống nhau mọi OS**; chỉ ba backend phần cứng —
+**capture · encode · inject** — đổi theo OS (§1b). Phần dưới mô tả **bản tham chiếu Windows**
+(đã hiện thực GĐ0–GĐ5); cột macOS/Ubuntu là thứ tương đương sẽ viết khi mở nền tảng, cùng
+`core/` và cùng giao thức.
 
 ## 1. Các module
 
 ```
 Agent
-├── CaptureModule      (ĐÃ CÓ — client/windows/capture/WindowCapture.h/.cpp)
-├── EncoderModule      (nén texture VRAM → NAL)
-├── TransportModule    (UDP send/recv, packetize/depacketize)
-├── InputInjector      (nhận input decode → bơm vào game)
-├── SessionManager     (handshake, state, thương lượng tham số)
-└── ControlLoop        (điều phối FrameArrived → encode → send; xử lý control msg)
+├── CaptureModule      per-OS backend  (Win ✅ client/windows/capture/WindowCapture)
+├── EncoderModule      per-OS backend  (nén texture GPU → NAL)
+├── TransportModule    core packetize + per-OS socket  (UDP; xem 11 §2)
+├── InputInjector      per-OS backend  (nhận input decode → bơm vào game)
+├── SessionManager     core/  (handshake, state, thương lượng tham số — chung mọi OS)
+└── ControlLoop        per-OS glue  (điều phối Capture → encode → send; xử lý control msg)
 ```
+
+Ba module `per-OS backend` (Capture/Encoder/InputInjector) là toàn bộ việc phải viết lại cho
+một agent OS mới; `SessionManager` + phần packetize của Transport nằm trong `core/` dùng lại.
+
+### 1b. Backend theo OS
+
+| | Windows (tham chiếu ✅) | macOS | Ubuntu |
+|--|-------------------------|-------|--------|
+| Capture | WGC (`Direct3D11CaptureFramePool`) | ScreenCaptureKit | PipeWire (Wayland) / X11 |
+| Encode | NVENC → AMF/QSV → MF | VideoToolbox | VAAPI / NVENC |
+| Inject | `SendInput` (+ ViGEm/Interception) | CGEvent (Quartz Event Services) | uinput / XTest |
+| Device/texture | D3D11 (VRAM) | Metal (IOSurface) | VA-API surface / DMA-BUF |
+
+Chi tiết ba backend Windows ở §2 (capture), §3 (encode), §5 (inject) — đọc như **bản tham
+chiếu**; mac/Ubuntu thay đúng cột tương ứng, giữ nguyên interface `IVideoEncoder` (§3) và
+ranh giới "texture GPU → NAL Annex-B".
 
 ## 2. CaptureModule ✅ (xong ở GĐ0)
 
@@ -78,6 +100,11 @@ NAL units (Annex-B hoặc length-prefixed) + metadata: `frameType (IDR/P)`, `tim
 
 ## 4. TransportModule (phía Agent)
 
+Phần **packetize/depacketize + pacing + phiên** nằm trong `core/` (chung mọi OS); chỉ lớp
+socket là per-OS (winsock/BSD), và phía host còn có binding **WebTransport/QUIC** để phục vụ
+web client — cả hai bơm vào cùng `HostSession` qua `IHostTransport` (`11-platform-transport.md`
+§2). Nội dung dưới đây mô tả hành vi chung, không phụ thuộc socket cụ thể.
+
 - **Gửi video**: nhận NAL, cắt theo MTU (~1200 byte payload để an toàn qua Internet),
   gắn header (xem protocol §video), gửi UDP. Không chờ ACK.
 - **Nhận input/control**: đọc gói UDP đến, tách theo kênh, đẩy tới InputInjector hoặc SessionManager.
@@ -85,6 +112,10 @@ NAL units (Annex-B hoặc length-prefixed) + metadata: `frameType (IDR/P)`, `tim
 - **Congestion feedback**: nhận báo cáo mất gói/RTT từ client → điều chỉnh bitrate encoder (§control).
 
 ## 5. InputInjector — phần khó ngầm
+
+> **Bản tham chiếu Windows.** macOS bơm bằng CGEvent (Quartz), Ubuntu bằng uinput/XTest
+> (§1b) — cùng bài toán (fallback dần, ánh xạ toạ độ, giành focus, nhả phím an toàn), khác
+> API. Anti-cheat kernel chặn được cả ba; đây là giới hạn chung, không riêng OS nào.
 
 ### Chiến lược nhiều tầng (fallback dần)
 

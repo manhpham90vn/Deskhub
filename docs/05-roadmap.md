@@ -1,7 +1,32 @@
 # 05 — Lộ trình triển khai
 
-Thứ tự ưu tiên theo **rủi ro giảm dần**: làm phần dễ hỏng nhất trước để xác nhận dự án
-khả thi sớm, tránh xây nhiều rồi mới phát hiện tắc.
+Lộ trình có **hai chiều**:
+
+1. **Chiều sâu (GĐ0–GĐ6)** — dựng pipeline hoàn chỉnh trên **Windows làm bản tham chiếu**,
+   thứ tự theo **rủi ro giảm dần**: làm phần dễ hỏng nhất trước (encode GĐ1, input GĐ4) để
+   xác nhận dự án khả thi sớm, tránh xây nhiều rồi mới phát hiện tắc.
+2. **Chiều rộng (rollout nền tảng)** — nhân bản tham chiếu ra **3 agent (Win/mac/Ubuntu) +
+   6 client (Win/mac/Ubuntu/iOS/Android/Web)**. Đây là **mục tiêu quan trọng nhất** của dự
+   án; `core/` chung khiến mỗi nền tảng mới chỉ tốn phần backend, không đụng giao thức.
+
+## Rollout theo nền tảng
+
+| Nền tảng | Agent | Client | Trạng thái | Doc |
+|----------|:-----:|:------:|-----------|-----|
+| Windows | ✅ | ✅ | **Chạy thật 2 máy LAN + Tailscale** (Internet/NAT); GĐ0–GĐ6 | 02 / 03 |
+| Android | — | 🔶 | Stream video chạy (emulator ~33fps); chưa gửi input | 08 |
+| Web | — | 📐 | Thiết kế xong, chưa code | 10 |
+| macOS | ⬜ | ⬜ | Chưa bắt đầu — backend ở 02 §1b / 03 §1b | — |
+| Ubuntu | ⬜ | ⬜ | Chưa bắt đầu | — |
+| iOS | — | ⬜ | Chưa bắt đầu | — |
+
+Ma trận + vì sao agent chỉ desktop: `11-platform-transport.md`. Các GĐ dưới đây là **chiều
+sâu trên Windows**; khi mở một nền tảng mới, phần `core/` (GĐ3–GĐ6) dùng lại nguyên trạng,
+chỉ viết backend capture/encode/inject (agent) hoặc decode/render/input (client).
+
+## Thứ tự ưu tiên (chiều sâu)
+
+Làm phần dễ hỏng nhất trước để xác nhận rủi ro sớm.
 
 ## Giai đoạn 0 — Nền tảng ✅ XONG
 - ✅ WGC capture cửa sổ game theo tên process.
@@ -109,8 +134,9 @@ Chạy: `client.exe game.exe --loopback [--frames N] [--save]`
   giữa chừng/timeout + mô phỏng handshake 2 session, bytes ra == vào). **M2** 2 process
   qua 127.0.0.1 PASS: handshake → hình hiển thị (cả nguồn tĩnh lẫn động ~13 fps),
   0% mất gói, RTT ~5–10 ms, trễ e2e ~4–7 ms; client thoát → agent về IDLE.
-- ⬜ **Còn lại — tiêu chí xong đầy đủ**: **M3** hai máy LAN (nhớ mở firewall UDP 47777
-  trên host), **M4** giả lập drop 2–5% (tool clumsy) tự phục hồi qua IDR ≤ vài trăm ms.
+- ✅ **M3 hai máy LAN — ĐÃ CHẠY THẬT** (2026-07-22), và hơn thế: chạy tốt **qua Tailscale**
+  (Internet/NAT), không chỉ LAN. (Host lần đầu nhớ mở firewall UDP 47777.)
+- ⬜ **Còn lại**: **M4** giả lập drop 2–5% (tool clumsy) tự phục hồi qua IDR ≤ vài trăm ms.
 
 **File thêm ở GĐ3:** core: `transport/Packetizer`, `transport/Reassembler`,
 `session/HostSession`, `session/ClientSession` (+ `wire/ByteOrder.h`, `wire/Wire` từ trước),
@@ -143,8 +169,9 @@ máy xem `client.exe` → gõ `ip[:port]` (hoặc `client.exe --connect ip[:port
   mà mọi event vẫn áp dụng đúng một lần, đúng thứ tự**, gói đảo thứ tự không tua ngược.
 - ✅ **Kiểm chứng M2** 2 process/1 máy: input đi trọn vòng client→host (`input 2 (mat 0)`),
   video không hồi quy (e2e ~2.3 ms, 0% mất gói).
-- ⬜ **Còn lại — tiêu chí xong đầy đủ**: **M3** 2 máy LAN điều khiển ứng dụng thường;
-  **M4** 2 máy LAN điều khiển **game thật** (chuột nhìn + WASD), đo trễ input.
+- ✅ **M3 — ĐÃ CHẠY THẬT** (2026-07-22): 2 máy LAN + qua Tailscale điều khiển được **ứng
+  dụng thường** (gõ phím, di chuột trọn vòng client→host).
+- ⬜ **Còn lại**: **M4** điều khiển **game thật** (chuột nhìn + WASD), đo trễ input.
   Input **không test được trên 1 máy**: agent bơm vào foreground, nếu cửa sổ preview của
   client đang foreground thì phím vừa bơm bị chính client bắt lại → vòng lặp.
 - ⬜ Nếu game bỏ qua input (anti-cheat lọc `LLMHF_INJECTED`) → ViGEm (tay cầm, tầng
@@ -229,6 +256,20 @@ Chạy self-test: `make test` (hoặc `out\build\x64-debug\core\core_tests.exe`)
   - ✅ **Kiểm chứng M1** `core_tests`: SOURCE_LIST round-trip (kể cả tên UTF-8), cắt
     tên đúng ranh giới UTF-8, HELLO mang sourceId và gói 13 byte kiểu cũ vẫn đọc được.
   - ⬜ **Còn lại**: M3 hai máy — chưa lần nào chạy thật với ≥2 nguồn.
+- 📐 **Client Web** (WebTransport + WebCodecs) — **thiết kế xong, chưa code**
+  (`10-web-client.md`). Chạy trong trình duyệt, chỉ xem + input (như Android v1). Trình
+  duyệt không mở raw UDP → transport là **WebTransport (QUIC datagram)**, ánh xạ 1-1 với
+  UDP nên `core/` biên dịch **WASM** dùng lại nguyên trạng; giải mã bằng **WebCodecs**.
+  - **Thay đổi core duy nhất**: `kMaxVideoPayload` từ hằng biên dịch → tham số runtime
+    theo `maxDatagramSize` (xem `04-protocol.md` §11).
+  - **Mảnh native mới**: WebTransport server phía host (QUIC/HTTP3, đề xuất **msquic**),
+    bơm datagram vào `HostSession` như UDP.
+  - **Phần khó nhất**: chứng chỉ tự ký qua `serverCertificateHashes` (ECDSA P-256, hạn
+    < 14 ngày, hash SHA-256) + phân phối hash cho người dùng — xem `10-web-client.md` §6.
+  - **Transport hybrid** (native giữ UDP, chỉ web QUIC) + ma trận client/host + host
+    desktop-only: `11-platform-transport.md`.
+  - Mốc: M1 WASM+loopback trong tab → M2 WebTransport echo + chứng chỉ → M3 video e2e
+    LAN → M4 input.
 - ⬜ Mã hóa (DTLS/AEAD).
 - ⬜ NAT traversal (ICE/STUN/TURN) để chạy qua Internet.
 - ⬜ Audio (Opus + WASAPI loopback).

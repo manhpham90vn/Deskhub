@@ -1,9 +1,10 @@
 # 06 — Thiết kế Giai đoạn 3: Transport + Protocol v1
 
-Thiết kế chi tiết cho GĐ3 (xem tiêu chí ở `05-roadmap.md`), với một ràng buộc mới được
-nâng lên hàng đầu: **client tương lai chạy trên macOS / Ubuntu / iOS / Android / Windows**.
-Quyết định nào ở GĐ3 cũng phải trả lời được câu hỏi *"phần này có dùng lại được trên
-nền tảng khác không, hay ít nhất có cản trở việc đó không?"*
+Thiết kế chi tiết cho GĐ3 (xem tiêu chí ở `05-roadmap.md`), với ràng buộc **hàng đầu** chính
+là mục tiêu dự án: **agent chạy Windows/macOS/Ubuntu và client chạy Windows/macOS/Ubuntu/iOS/
+Android/Web** (`11-platform-transport.md`). Quyết định nào ở GĐ3 cũng phải trả lời được câu
+hỏi *"phần này có dùng lại được trên nền tảng khác không, hay ít nhất có cản trở việc đó
+không?"* — đó là lý do `core/` tách thuần C++20 và transport trừu tượng ngay từ GĐ3.
 
 ## 0. Mục tiêu & phạm vi
 
