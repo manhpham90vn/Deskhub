@@ -53,17 +53,17 @@ struct StreamView: View {
     }
 
     private var videoContent: some View {
-        VideoLayerView { l in
-            layer = l
-            DeskhubClient.setLayer(l)
+        VideoLayerView { newLayer in
+            layer = newLayer
+            DeskhubClient.setLayer(newLayer)
         }
     }
 
     private var aspectRatio: CGFloat {
-        let w = CGFloat(model.videoWidth)
-        let h = CGFloat(model.videoHeight)
-        guard w > 0, h > 0 else { return 16.0 / 9.0 }
-        return w / h
+        let width = CGFloat(model.videoWidth)
+        let height = CGFloat(model.videoHeight)
+        guard width > 0, height > 0 else { return 16.0 / 9.0 }
+        return width / height
     }
 
     @ViewBuilder

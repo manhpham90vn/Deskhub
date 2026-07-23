@@ -11,9 +11,10 @@ import SwiftUI
 import UIKit
 
 final class VideoDisplayView: UIView {
-    override class var layerClass: AnyClass { AVSampleBufferDisplayLayer.self }
+    override static var layerClass: AnyClass { AVSampleBufferDisplayLayer.self }
 
     var displayLayer: AVSampleBufferDisplayLayer {
+        // swiftlint:disable:next force_cast
         layer as! AVSampleBufferDisplayLayer
     }
 }

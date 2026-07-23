@@ -23,11 +23,11 @@
 #include <cstdio>
 
 #define DESKHUB_TAG "[Deskhub] "
-#define LOGI(...)                        \
-    do {                                 \
+#define LOGI(...)                          \
+    do {                                   \
         std::fprintf(stderr, DESKHUB_TAG); \
         std::fprintf(stderr, __VA_ARGS__); \
-        std::fprintf(stderr, "\n");      \
+        std::fprintf(stderr, "\n");        \
     } while (0)
 #define LOGW(...) LOGI(__VA_ARGS__)
 #define LOGE(...) LOGI(__VA_ARGS__)

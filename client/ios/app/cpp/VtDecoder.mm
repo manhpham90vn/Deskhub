@@ -112,13 +112,15 @@ bool VtDecoder::Decode(const uint8_t* nal, size_t len, uint64_t ptsUs) {
     const Nal* sps = nullptr;
     const Nal* pps = nullptr;
     for (const Nal& x : nals) {
-        if (x.type == 7) sps = &x;
-        else if (x.type == 8) pps = &x;
+        if (x.type == 7)
+            sps = &x;
+        else if (x.type == 8)
+            pps = &x;
     }
     if (sps && pps && sps->len <= sizeof(sps_) && pps->len <= sizeof(pps_)) {
         const bool changed = !formatDesc_ || sps->len != spsLen_ || pps->len != ppsLen_ ||
-            std::memcmp(sps->ptr, sps_, spsLen_) != 0 ||
-            std::memcmp(pps->ptr, pps_, ppsLen_) != 0;
+                             std::memcmp(sps->ptr, sps_, spsLen_) != 0 ||
+                             std::memcmp(pps->ptr, pps_, ppsLen_) != 0;
         if (changed) {
             if (formatDesc_) {
                 CFRelease((CMFormatDescriptionRef)formatDesc_);

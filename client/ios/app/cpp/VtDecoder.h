@@ -73,7 +73,7 @@ public:
     }
 
 private:
-    void* layer_ = nullptr;    // AVSampleBufferDisplayLayer* (không sở hữu)
+    void* layer_ = nullptr;      // AVSampleBufferDisplayLayer* (không sở hữu)
     void* formatDesc_ = nullptr; // CMVideoFormatDescriptionRef (sở hữu, CFRetain)
     uint32_t rendered_ = 0;
     uint64_t lastRenderedPtsUs_ = 0;
