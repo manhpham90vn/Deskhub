@@ -2,8 +2,10 @@
 
 Một trong **6 nền tảng client** (xem `03-client.md` §1b, `11-platform-transport.md`). iOS là
 **client-only** — không làm agent được: inject input vào app khác và listen socket đều bị
-sandbox chặn tuyệt đối (`11-platform-transport.md` §3). Đây là **doc thiết kế** (chưa code,
-như `10-web-client.md`): chốt các quyết định trước khi bắt tay, để lúc port chỉ còn là chép.
+sandbox chặn tuyệt đối (`11-platform-transport.md` §3).
+
+**Trạng thái: 🔶 ĐÃ TRIỂN KHAI (M0+M1).** Stream video chạy trên thiết bị thật — xem được
+cửa sổ host Windows trên iPhone/iPad qua LAN hoặc Tailscale. Chưa gửi input (M2).
 
 iOS **làm client UDP bình thường** — rào cản host ở §3 không áp vào vai client
 (`11-platform-transport.md` §5). Transport là **UDP POSIX**, dùng lại nguyên `UdpSocket` của
@@ -238,25 +240,24 @@ tiếng Anh.
 
 Rủi ro giảm dần, đúng triết lý `05-roadmap.md` — làm phần dễ hỏng nhất trước:
 
-- **M0 — Khung build & seam** (rủi ro cao nhất: toolchain + Swift↔C++). Xcode project, thêm
-  `core/` + net glue làm sources, `DeskhubClient.mm` + bridging header. **Xong khi:** app rỗng
-  gọi `listSources()` in ra console danh sách nguồn từ host Windows thật.
-- **M1 — Stream video (view-only), mục tiêu chính.** Port `ClientLoop`; `VtDecoder`
-  (VideoToolbox → ASBDL); 3 màn SwiftUI; lifecycle nền (§4); đo e2e đúng ngay từ đầu.
-  **Xong khi:** xem được cửa sổ host trên iPhone/iPad thật qua LAN, đúng tỉ lệ, overlay chạy.
-- **M2 — Input (GĐ4 cho iOS).** Chạm/kéo → `INPUT_EVENT` qua `core/InputSender`; bàn phím ảo
+- ✅ **M0 — Khung build & seam** (rủi ro cao nhất: toolchain + Swift↔C++). Xcode project, thêm
+  `core/` + net glue làm sources, `DeskhubClient.mm` + bridging header. **Xong:** app gọi
+  `listSources()` lấy danh sách nguồn từ host Windows thật.
+- ✅ **M1 — Stream video (view-only), mục tiêu chính.** Port `ClientLoop`; `VtDecoder`
+  (VideoToolbox → ASBDL); 3 màn SwiftUI; lifecycle nền (§4). **Xong:** xem được cửa sổ host
+  trên iPhone/iPad thật qua LAN và Tailscale, đúng tỉ lệ, overlay chạy.
+- ⬜ **M2 — Input (GĐ4 cho iOS).** Chạm/kéo → `INPUT_EVENT` qua `core/InputSender`; bàn phím ảo
   (`UIKeyInput`) → vkCode + **scancode** (bắt buộc cho game DirectInput — `07-phase4-input.md`
   §5); chuột tương đối cho iPad (`GCMouse`/trackpad). iOS **đi trước Android** ở mảng này (Android
   chưa gửi input — `08` §5). **Xong khi:** điều khiển được host từ iPad.
-- **M3 — Hoàn thiện.** FEC (đã ở core, chỉ nối dây), FEEDBACK/điều tiết bitrate (đã ở core),
+- ⬜ **M3 — Hoàn thiện.** FEC (đã ở core, chỉ nối dây), FEEDBACK/điều tiết bitrate (đã ở core),
   đa nguồn cùng lúc (nếu muốn), chẩn đoán `[DIAG]` (`09`).
 
-## 8. Hạn chế đã biết (thiết kế, chưa làm)
+## 8. Hạn chế hiện tại
 
 - **Một nguồn tại một thời điểm** (view-only v1) — như Android: chọn cửa sổ nào để xem, chưa
   xem nhiều cửa sổ song song như client Windows.
-- **Chưa gửi input** ở M0–M1 (để M2).
+- **Chưa gửi input** (để M2).
 - **Cần thiết bị thật + quyền Local Network** — không test trọn trên Simulator được.
-- **Chốt nhánh render** (ASBDL vs VTDecompressionSession+Metal) có thể phải xét lại nếu ASBDL
-  không cho mốc "đã hiển thị" đủ chính xác để đo e2e (§2) — đó là tiêu chí quyết định, không
-  phải sở thích.
+- **Nhánh render ASBDL** — nếu cần đo e2e chính xác hơn có thể phải chuyển sang
+  `VTDecompressionSession` + Metal (§2).

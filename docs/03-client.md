@@ -28,7 +28,7 @@ việc phải viết cho một client mới; `JitterBuffer`/`Reassembler`/`Sessi
 
 ### 1b. Backend theo nền tảng
 
-| | Windows (tham chiếu ✅) | macOS | Ubuntu | Android (🔶) | iOS | Web (📐) |
+| | Windows (tham chiếu ✅) | macOS | Ubuntu | Android (🔶) | iOS (🔶) | Web (📐) |
 |--|-------------------------|-------|--------|-------------|-----|---------|
 | Decode | MF (D3D11VA) | VideoToolbox | VAAPI | MediaCodec | VideoToolbox | WebCodecs |
 | Render | D3D11 | Metal | OpenGL/Vulkan | Surface (Compose) | Metal | canvas/WebGL |
