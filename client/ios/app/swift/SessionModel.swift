@@ -38,11 +38,11 @@ final class SessionModel {
             let sources = DeskhubClient.listSources(address: addr)
             await MainActor.run { [weak self] in
                 guard let self else { return }
-                self.isConnecting = false
+                isConnecting = false
                 if sources.count > 1 {
-                    self.screen = .sourcePicker(sources)
+                    screen = .sourcePicker(sources)
                 } else {
-                    self.startStream(sourceId: sources.first?.id ?? 0)
+                    startStream(sourceId: sources.first?.id ?? 0)
                 }
             }
         }

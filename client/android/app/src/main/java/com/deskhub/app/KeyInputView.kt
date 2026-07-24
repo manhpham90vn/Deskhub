@@ -31,7 +31,9 @@ import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputConnection
 
 /** View 1px vô hình: giữ focus để IME gửi phím, chuyển từng phím ra [onChar]. */
-class KeyInputView(context: Context) : View(context) {
+class KeyInputView(
+    context: Context,
+) : View(context) {
     /** Nhận codepoint của phím vừa gõ ('\b' = backspace, '\n' = enter). */
     var onChar: ((Int) -> Unit)? = null
 

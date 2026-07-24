@@ -18,13 +18,13 @@ struct KeyInputView: UIViewRepresentable {
     let model: SessionModel
     @Binding var active: Bool
 
-    func makeUIView(context: Context) -> KeyCaptureUIView {
+    func makeUIView(context _: Context) -> KeyCaptureUIView {
         let view = KeyCaptureUIView()
         view.model = model
         return view
     }
 
-    func updateUIView(_ uiView: KeyCaptureUIView, context: Context) {
+    func updateUIView(_ uiView: KeyCaptureUIView, context _: Context) {
         uiView.model = model
         // Bàn phím có thể bị hạ ngoài nút Keys (nút ẩn trên iPad, app xuống nền) —
         // báo ngược để nút Keys không kẹt trạng thái "đang bật".
@@ -55,11 +55,12 @@ final class KeyCaptureUIView: UIView, UIKeyInput {
         super.init(frame: frame)
         NotificationCenter.default.addObserver(
             self, selector: #selector(keyboardWillHide),
-            name: UIResponder.keyboardWillHideNotification, object: nil)
+            name: UIResponder.keyboardWillHideNotification, object: nil
+        )
     }
 
     @available(*, unavailable)
-    required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
+    required init?(coder _: NSCoder) { fatalError("init(coder:) is not supported") }
 
     // Chỉ báo khi ta CÒN là first responder — tức bàn phím hạ không phải do mình
     // resign (bấm Keys tắt thì active đã false sẵn, khỏi báo).

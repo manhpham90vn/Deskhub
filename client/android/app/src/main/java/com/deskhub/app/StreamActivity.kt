@@ -55,9 +55,9 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
@@ -96,8 +96,8 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
-import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
+import kotlin.math.roundToInt
 
 /**
  * Màn hình xem. Compose chỉ lo phần chrome (chữ trạng thái, bố cục) — khung hình
@@ -237,7 +237,10 @@ private fun StreamScreen(
         var seen = false
         while (true) {
             val visible =
-                v.rootWindowInsets?.isVisible(android.view.WindowInsets.Type.ime()) == true
+                v.rootWindowInsets?.isVisible(
+                    android.view.WindowInsets.Type
+                        .ime(),
+                ) == true
             if (visible) {
                 seen = true
             } else if (seen) {

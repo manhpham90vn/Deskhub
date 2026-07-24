@@ -30,13 +30,13 @@ struct TouchInputView: UIViewRepresentable {
     let model: SessionModel
     let videoAspect: CGFloat
 
-    func makeUIView(context: Context) -> TouchCaptureUIView {
+    func makeUIView(context _: Context) -> TouchCaptureUIView {
         let view = TouchCaptureUIView()
         view.model = model
         return view
     }
 
-    func updateUIView(_ uiView: TouchCaptureUIView, context: Context) {
+    func updateUIView(_ uiView: TouchCaptureUIView, context _: Context) {
         uiView.model = model
         uiView.videoAspect = videoAspect
     }
@@ -80,7 +80,8 @@ final class TouchCaptureUIView: UIView {
         let pan = UIPanGestureRecognizer(target: self, action: #selector(handlePan(_:)))
         pan.maximumNumberOfTouches = 1
         let longPress = UILongPressGestureRecognizer(
-            target: self, action: #selector(handleLongPress(_:)))
+            target: self, action: #selector(handleLongPress(_:))
+        )
 
         addGestureRecognizer(doubleTap)
         addGestureRecognizer(singleTap)
@@ -89,7 +90,7 @@ final class TouchCaptureUIView: UIView {
     }
 
     @available(*, unavailable)
-    required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
+    required init?(coder _: NSCoder) { fatalError("init(coder:) is not supported") }
 
     // Khung video thật bên trong overlay: aspect-fit canh giữa — trùng công thức
     // letterbox của .aspectRatio bên StreamView.
@@ -123,7 +124,8 @@ final class TouchCaptureUIView: UIView {
         let rect = videoRect
         return CGPoint(
             x: min(max(rect.minX, p.x), rect.maxX),
-            y: min(max(rect.minY, p.y), rect.maxY))
+            y: min(max(rect.minY, p.y), rect.maxY)
+        )
     }
 
     // Đỉnh mũi tên của "cursorarrow" nằm ở góc trên-trái icon -> origin đặt đúng
@@ -140,7 +142,8 @@ final class TouchCaptureUIView: UIView {
         guard rect.width > 0, rect.height > 0 else { return }
         model?.mouseMove(
             nx: Int32(((cursor.x - rect.minX) / rect.width * 65535).rounded()),
-            ny: Int32(((cursor.y - rect.minY) / rect.height * 65535).rounded()))
+            ny: Int32(((cursor.y - rect.minY) / rect.height * 65535).rounded())
+        )
     }
 
     // Host cũng có người dùng thật di chuột được — gửi lại vị trí con trỏ ngay
@@ -163,7 +166,8 @@ final class TouchCaptureUIView: UIView {
         case .changed:
             moveCursor(by: CGPoint(
                 x: location.x - lastDragLocation.x,
-                y: location.y - lastDragLocation.y))
+                y: location.y - lastDragLocation.y
+            ))
             lastDragLocation = location
         default:
             break
@@ -180,7 +184,8 @@ final class TouchCaptureUIView: UIView {
         case .changed:
             moveCursor(by: CGPoint(
                 x: location.x - lastDragLocation.x,
-                y: location.y - lastDragLocation.y))
+                y: location.y - lastDragLocation.y
+            ))
             lastDragLocation = location
         case .ended, .cancelled, .failed:
             model?.mouseButton(.left, down: false)

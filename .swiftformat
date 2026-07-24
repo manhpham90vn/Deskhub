@@ -1,0 +1,11 @@
+# Cấu hình SwiftFormat cho tầng iOS (client/ios). Chạy qua scripts/codestyle.ps1.
+# Giữ tối thiểu: theo rule mặc định, chỉ khai báo version + vài giới hạn khớp
+# .editorconfig của Kotlin (indent 4, line 120) để hai tầng mobile đồng bộ style.
+--swiftversion 6.0
+--indent 4
+--maxwidth 120
+
+# linebreaks: tắt vì checkout Windows là CRLF (autocrlf=true), git tự chuẩn hoá LF khi commit.
+# docComments: dự án dùng comment thường (//) theo khối logic, không dùng doc-comment (///).
+# wrap*Bodies: giữ style gọn một dòng hiện có (guard/if ... { return }).
+--disable linebreaks,docComments,wrapFunctionBodies,wrapIfStatementBodies,wrapPropertyBodies

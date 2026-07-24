@@ -35,7 +35,7 @@ nonisolated enum DeskhubClient {
             dh_list_sources(address, ptr.baseAddress, Int32(ptr.count))
         }
         guard count > 0 else { return [] }
-        return (0..<Int(count)).map { idx in
+        return (0 ..< Int(count)).map { idx in
             let info = buf[idx]
             let name = withUnsafeBytes(of: info.name) { rawBuf in
                 let ptr = rawBuf.baseAddress!.assumingMemoryBound(to: CChar.self)

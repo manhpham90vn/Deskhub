@@ -2,7 +2,7 @@ name: lint
 
 # Kiểm tra style, không build sản phẩm. Bốn job độc lập chạy song song:
 #   cpp-format  — clang-format cho core/ platform/ client/ (theo .clang-format)
-#   swift       — swiftlint cho client/ios (Swift)
+#   swift       — swiftlint + swiftformat --lint cho client/ios (Swift)
 #   kotlin      — ktlint cho tầng UI Kotlin (theo .editorconfig)
 #   android     — Android Lint (gradlew lint) trên module app
 on:
@@ -55,6 +55,18 @@ jobs:
 
       - name: SwiftLint check
         run: swiftlint lint --strict client/ios/app/swift
+
+      # Ghim ĐÚNG 0.62.1 như scripts/codestyle.ps1 — swiftformat khác version có thể
+      # format khác nhau, không dùng bản brew (trôi theo latest).
+      - name: Install SwiftFormat 0.62.1
+        run: |
+          curl -sSL -o swiftformat.zip https://github.com/nicklockwood/SwiftFormat/releases/download/0.62.1/swiftformat.zip
+          unzip -o swiftformat.zip
+          chmod +x swiftformat
+          sudo mv swiftformat /usr/local/bin/
+
+      - name: SwiftFormat check
+        run: swiftformat --lint client/ios
 
   android:
     runs-on: ubuntu-latest

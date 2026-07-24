@@ -1,0 +1,5 @@
+# Script sh và Makefile phải giữ LF kể cả khi checkout trên Windows (autocrlf=true),
+# nếu không bash/make trên macOS/Linux đọc CRLF sẽ vỡ.
+*.sh     text eol=lf
+Makefile text eol=lf
+gradlew  text eol=lf

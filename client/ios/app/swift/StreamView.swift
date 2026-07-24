@@ -173,7 +173,8 @@ struct StreamView: View {
                 if hotkey.modVk != 0 {
                     model.keyChord(
                         modVk: hotkey.modVk, modScan: hotkey.modScan,
-                        vk: hotkey.vk, scan: hotkey.scan)
+                        vk: hotkey.vk, scan: hotkey.scan
+                    )
                 } else {
                     model.keyTap(vk: hotkey.vk, scan: hotkey.scan)
                 }

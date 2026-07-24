@@ -22,12 +22,12 @@ final class VideoDisplayView: UIView {
 struct VideoLayerView: UIViewRepresentable {
     let onLayerReady: @MainActor (AVSampleBufferDisplayLayer) -> Void
 
-    func makeUIView(context: Context) -> VideoDisplayView {
+    func makeUIView(context _: Context) -> VideoDisplayView {
         let view = VideoDisplayView()
         view.displayLayer.videoGravity = .resizeAspect
         onLayerReady(view.displayLayer)
         return view
     }
 
-    func updateUIView(_ uiView: VideoDisplayView, context: Context) {}
+    func updateUIView(_: VideoDisplayView, context _: Context) {}
 }

@@ -80,6 +80,11 @@ docs/            tài liệu thiết kế (bắt đầu từ docs/README.md)
 - Windows 10 1903+ x64, Visual Studio 2022+ (workload C++, kèm sẵn CMake + Ninja).
 - GPU NVIDIA khuyến nghị (NVENC); không có thì tự rơi về Media Foundation.
 
+Cài toàn bộ dependency tự động (idempotent), mọi OS: `make bootstrap` — gồm cả Android
+SDK/NDK, tool format (ktlint/swiftformat ghim version về `tools/`) và OpenCppCoverage
+(Windows). Makefile chạy được trên cả Windows/macOS/Ubuntu; trên macOS/Ubuntu hiện build
+được `core` + `make test`/`make lint` (client desktop chưa có).
+
 ## 🚀 Tải & chạy
 
 **Cách nhanh nhất — tải bản cài sẵn** (Windows):
@@ -96,6 +101,12 @@ lần đầu cần mở firewall (lệnh ở dưới). Muốn dùng **qua Intern
 git clone https://github.com/manhpham90vn/Deskhub && cd Deskhub
 make            # build debug → out\build\x64-debug\client\windows\client.exe
 make run        # chạy, mở thẳng màn hình chính (GUI)
+make build-android # build APK debug (Gradle + NDK, không cần máy/emulator)
+make run-android # build + cài + mở app Android (máy/emulator trong `adb devices`)
+make build-ios  # build app iOS cho Simulator (cần macOS + Xcode)
+make run-ios    # build + cài + mở app iOS trên Simulator (cần macOS + Xcode)
+make release-windows  # bản release theo nền tảng; tương tự: release-android (APK
+                      # chưa ký), release-ios (Simulator)
 ```
 
 Lệnh khác: `make release` · `make test` (core_tests — offline, không cần mạng/GPU). Cách

@@ -10,7 +10,7 @@ struct ContentView: View {
         switch model.screen {
         case .connect:
             ConnectView(model: model)
-        case .sourcePicker(let sources):
+        case let .sourcePicker(sources):
             SourcePickerView(sources: sources, model: model)
         case .stream:
             StreamView(model: model)
