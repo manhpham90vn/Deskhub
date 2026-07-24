@@ -73,9 +73,6 @@ public:
     // (giống SetMessageHook), giống hệt đường phím tắt F9/F10.
     static constexpr int kBtnLock = 1001;  // == F9 (khóa/thả chuột tương đối)
     static constexpr int kBtnPause = 1002; // == F10 (tạm dừng/tiếp tục gửi input)
-    // GĐ8: gửi Ctrl+Shift+Esc sang máy host. Phải là NÚT vì bấm tổ hợp đó thật thì
-    // Windows máy CLIENT chặn lấy (mở Task Manager của mình) trước khi tới ta.
-    static constexpr int kBtnHotkey = 1003;
     using CommandHook = std::function<void(int id)>;
     void SetCommandHook(CommandHook hook);
 

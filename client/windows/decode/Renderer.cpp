@@ -62,7 +62,7 @@ constexpr wchar_t kOverlayClass[] = L"LoopbackOverlayWnd";
 
 // Kích thước dải nút overlay — dùng chung giữa CreateOverlay và SyncOverlayPos.
 constexpr int kBtnW = 130, kBtnH = 24, kBtnPad = 8;
-constexpr int kOverlayW = 3 * kBtnW + 2 * kBtnPad;
+constexpr int kOverlayW = 2 * kBtnW + kBtnPad;
 
 // Thủ tục của child window chứa video. HTTRANSPARENT để mọi cú chuột "xuyên" qua
 // nó rơi về cửa sổ cha — InputCapture móc vào WndProc của cha nên không được để
@@ -75,11 +75,10 @@ LRESULT CALLBACK VideoHostProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
 
 struct Renderer::Impl {
     HWND hwnd = nullptr;
-    HWND videoHwnd = nullptr;   // child chứa swapchain — xem ghi chú ở Init
-    HWND overlayWnd = nullptr;  // popup OWNED chứa 3 nút — xem CreateOverlay
+    HWND videoHwnd = nullptr;  // child chứa swapchain — xem ghi chú ở Init
+    HWND overlayWnd = nullptr; // popup OWNED chứa 2 nút — xem CreateOverlay
     HWND btnLock = nullptr;
     HWND btnPause = nullptr;
-    HWND btnHotkey = nullptr;      // GĐ8: gửi Ctrl+Shift+Esc sang host
     std::wstring baseTitle;        // tiêu đề gốc — SetStatusText ghép số liệu vào sau
     Renderer::CommandHook cmdHook; // GD5: nút overlay -> bên ngoài
     ComPtr<ID3D11Device> device;
@@ -139,8 +138,7 @@ struct Renderer::Impl {
                 // không tự đổi trạng thái nút - bên ngoài gọi lại SetToggleState().
                 if (self && self->cmdHook && HIWORD(wp) == BN_CLICKED) {
                     const int id = LOWORD(wp);
-                    if (id == Renderer::kBtnLock || id == Renderer::kBtnPause ||
-                        id == Renderer::kBtnHotkey)
+                    if (id == Renderer::kBtnLock || id == Renderer::kBtnPause)
                         self->cmdHook(id);
                 }
                 return 0;
@@ -180,13 +178,10 @@ struct Renderer::Impl {
             if (c) SendMessageW(c, WM_SETFONT, (WPARAM)font, TRUE);
             return c;
         };
-        // GĐ8: nút gửi Ctrl+Shift+Esc — bấm tổ hợp thật thì Windows máy client
-        // nuốt mất (mở Task Manager của chính mình) nên phải đi đường nút bấm.
-        btnHotkey = mkBtn(L"⌨ Ctrl+Shift+Esc", BS_PUSHBUTTON, 0, Renderer::kBtnHotkey);
         btnLock = mkBtn(L"\U0001F512 Lock mouse (F9)", BS_AUTOCHECKBOX | BS_PUSHLIKE,
-            kBtnW + kBtnPad, Renderer::kBtnLock);
+            0, Renderer::kBtnLock);
         btnPause = mkBtn(L"⏸ Pause (F10)", BS_AUTOCHECKBOX | BS_PUSHLIKE,
-            2 * (kBtnW + kBtnPad), Renderer::kBtnPause);
+            kBtnW + kBtnPad, Renderer::kBtnPause);
         SyncOverlayPos();
     }
 

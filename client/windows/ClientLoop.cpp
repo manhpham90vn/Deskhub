@@ -147,25 +147,6 @@ struct SharedClipboardOut {
     uint64_t seq = 0; // tăng mỗi lần copy — stream so với seq đã gửi
 };
 
-// GĐ8: xếp một tổ hợp phím vào hàng input của stream — nhấn theo thứ tự, nhả ngược
-// lại — như thể người dùng bấm được nó trong cửa sổ preview. Dùng cho các tổ hợp
-// mà Windows máy CLIENT chặn mất (Ctrl+Shift+Esc mở Task Manager của chính mình).
-void QueueKeyCombo(ClientStream& s, std::initializer_list<int> vks) {
-    auto key = [](int vk, bool down) {
-        deskhub::InputEvent e;
-        e.type = deskhub::InputType::Key;
-        e.timestampUs = NowUs();
-        e.a = vk;
-        e.b = int32_t(MapVirtualKeyW(UINT(vk), MAPVK_VK_TO_VSC));
-        e.state = down ? 1 : 0;
-        return e;
-    };
-    std::lock_guard<std::mutex> lk(s.inputMutex);
-    for (const int vk : vks) s.inputQueue.push_back(key(vk, true));
-    for (auto it = std::rbegin(vks); it != std::rend(vks); ++it)
-        s.inputQueue.push_back(key(*it, false));
-}
-
 // Vòng đời mạng + giải mã của một nguồn. Chạy trên thread Recv riêng của nguồn đó.
 //
 // Hàm dài nhất file, gồm ba phần:
@@ -811,12 +792,6 @@ int RunClient(const ClientOptions& opt) {
                         input.ToggleRelativeMode();
                     else if (id == Renderer::kBtnPause)
                         input.TogglePause();
-                    else if (id == Renderer::kBtnHotkey) {
-                        // GĐ8: tổ hợp Windows máy này chặn mất — gửi hộ qua kênh
-                        // input như chuỗi phím thường (host bơm bằng scancode).
-                        QueueKeyCombo(*ps, {VK_CONTROL, VK_SHIFT, VK_ESCAPE});
-                        return;
-                    }
                     ps->renderer.SetToggleState(input.relativeMode(), !input.enabled());
                 });
                 s->rendererReady.store(true, std::memory_order_release);
