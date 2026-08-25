@@ -283,6 +283,23 @@ void TestClampWarningQuotesTheProtocolLimit() {
         "the number the user reads is the number the protocol enforces");
 }
 
+void TestOneHostIsOneAddressHoweverItIsSpelled() {
+    std::printf("[strings] the default port is implied, so both spellings name one host...\n");
+    Check(ui::NormalizedDeviceAddr("192.168.1.60") == "192.168.1.60:" +
+                                                          std::to_string(kDeskhubPort),
+        "a bare address gains the default port");
+    Check(ui::NormalizedDeviceAddr("  192.168.1.60:5000  ") == "192.168.1.60:5000",
+        "an explicit port survives, surrounding space does not");
+    Check(ui::NormalizedDeviceAddr("").empty(), "an empty address normalizes to nothing");
+
+    Check(ui::SameDeviceAddr("192.168.1.60", "192.168.1.60:" + std::to_string(kDeskhubPort)),
+        "the scanned spelling and the typed one are the same host");
+    Check(!ui::SameDeviceAddr("192.168.1.60", "192.168.1.60:5000"),
+        "another port is another host");
+    Check(!ui::SameDeviceAddr("192.168.1.60", "192.168.1.61"), "another IP is another host");
+    Check(!ui::SameDeviceAddr("", ""), "two empty addresses match nothing, not each other");
+}
+
 }
 
 void RunStringsTests() {
@@ -305,4 +322,5 @@ void RunStringsTests() {
     TestEveryAuthVerdictReadsAsItsOwnMessage();
     TestClampWarningQuotesTheProtocolLimit();
     TestBindFallbackNamesTheMissingNetwork();
+    TestOneHostIsOneAddressHoweverItIsSpelled();
 }

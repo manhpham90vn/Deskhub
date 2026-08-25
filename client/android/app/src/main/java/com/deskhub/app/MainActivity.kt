@@ -1317,7 +1317,8 @@ private fun AddressScreen(
                 }
             }
 
-            val connectedRow = deviceRows.firstOrNull { it.addr == authedAddr }
+            val connectedRow =
+                deviceRows.firstOrNull { NativeClient.sameDeviceAddr(it.addr, authedAddr) }
             val liveColor = if (connectedRow?.online == false) OfflineColor else OnlineColor
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -1347,6 +1348,15 @@ private fun AddressScreen(
                 modifier = Modifier.fillMaxWidth(),
             ) { Text(NativeClient.string(NativeClient.STR_OPEN_DESKTOP_LABEL)) }
 
+            var control by remember { mutableStateOf(NativeClient.clientControl()) }
+            SwitchRow(
+                label = NativeClient.string(NativeClient.STR_REQUEST_CONTROL_LABEL),
+                checked = control,
+            ) {
+                control = it
+                NativeClient.setClientControl(it)
+            }
+
             OutlinedButton(
                 onClick = onOpenShell,
                 enabled = authed.terminal,
@@ -1358,15 +1368,6 @@ private fun AddressScreen(
                 enabled = authed.files,
                 modifier = Modifier.fillMaxWidth(),
             ) { Text(NativeClient.string(NativeClient.STR_OPEN_FILES_LABEL)) }
-
-            var control by remember { mutableStateOf(NativeClient.clientControl()) }
-            SwitchRow(
-                label = NativeClient.string(NativeClient.STR_REQUEST_CONTROL_LABEL),
-                checked = control,
-            ) {
-                control = it
-                NativeClient.setClientControl(it)
-            }
         }
 
         if (authed == null) {

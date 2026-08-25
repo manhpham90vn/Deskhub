@@ -10,7 +10,9 @@ struct ConnectView: View {
     private var connected: Bool { model.connect.authed != nil }
 
     private var connectedRow: DeviceListRow? {
-        model.discovery.devices.first { $0.addr == model.connect.acceptedAddress }
+        model.discovery.devices.first {
+            DeskhubClient.sameDeviceAddr($0.addr, model.connect.acceptedAddress)
+        }
     }
 
     private var liveColor: Color {

@@ -22,8 +22,6 @@ struct DeviceRow {
 
 const char* DeviceOriginLabel(DeviceOrigin origin);
 
-std::string NormalizedDeviceAddr(std::string_view addr);
-
 std::vector<DeviceRow> BuildDeviceRows(const std::vector<std::string>& scanned,
     const std::vector<RecentDevice>& recent);
 

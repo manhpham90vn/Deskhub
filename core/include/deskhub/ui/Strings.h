@@ -592,6 +592,18 @@ inline uint16_t AddressPort(std::string_view address) {
     return port;
 }
 
+inline std::string NormalizedDeviceAddr(std::string_view address) {
+    const std::string trimmed = TrimAscii(address);
+    if (trimmed.empty()) return {};
+    const uint16_t port = AddressPort(trimmed);
+    return AddressHost(trimmed) + ":" + std::to_string(port != 0 ? port : kDeskhubPort);
+}
+
+inline bool SameDeviceAddr(std::string_view left, std::string_view right) {
+    const std::string wanted = NormalizedDeviceAddr(left);
+    return !wanted.empty() && wanted == NormalizedDeviceAddr(right);
+}
+
 inline std::string InvalidAddressLine(std::string_view address) {
     return "Invalid address: \"" + std::string(address) + "\".";
 }

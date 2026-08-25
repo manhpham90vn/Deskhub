@@ -1,12 +1,11 @@
 import SwiftUI
 
 struct SourcePickerView: View {
-    @Binding var route: ClientRoute
-    let connect: ConnectModel
     let sources: [Source]
+    let onCancel: () -> Void
+    let onPick: ([Source]) -> Void
 
     @State private var picked: Set<UInt8> = []
-    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -36,7 +35,7 @@ struct SourcePickerView: View {
                 Button("View") { view() }
                     .buttonStyle(.borderedProminent)
                     .disabled(picked.isEmpty)
-                Button("Cancel") { route = .connect }
+                Button("Cancel") { onCancel() }
             }
         }
         .padding(12)
@@ -52,8 +51,6 @@ struct SourcePickerView: View {
     private func view() {
         let chosen = sources.filter { picked.contains($0.id) }
         guard !chosen.isEmpty else { return }
-        route = .connect
-        openViewers(chosen, address: connect.acceptedAddress, passcode: connect.acceptedPasscode,
-                    openWindow: openWindow)
+        onPick(chosen)
     }
 }

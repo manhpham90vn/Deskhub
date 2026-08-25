@@ -76,6 +76,7 @@ void dh_status_watch_recent(void);
 int dh_scan_status_text(uint16_t port, char* out, int capacity);
 int dh_recent_note(char* out, int capacity);
 int dh_ping_text(uint32_t rttMs, char* out, int capacity);
+bool dh_same_device_addr(const char* a, const char* b);
 uint16_t dh_default_port(void);
 
 bool dh_client_control(void);

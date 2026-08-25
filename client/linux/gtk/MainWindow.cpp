@@ -45,6 +45,7 @@ constexpr int kNavH = 42;
 constexpr int kListH = 130;
 constexpr int kPad = 16;
 constexpr int kHintWrapChars = 64;
+constexpr int kConnectionWindowWidth = 460;
 constexpr int kPrimaryButtonH = 46;
 
 constexpr guint kRescanDelayMs = deskhubp::kLanRescanSecs * 1000;
@@ -354,6 +355,138 @@ bool PickSources(GtkWindow* parent, const std::vector<deskhub::SourceInfo>& sour
 
 }
 
+class ConnectionWindow {
+public:
+    ConnectionWindow(MainWindow* owner, std::string address, std::string passcode, NetAddr server,
+        deskhub::HostCaps caps, std::vector<deskhub::SourceInfo> sources, bool control)
+        : owner_(owner), address_(std::move(address)), passcode_(std::move(passcode)), server_(server), caps_(caps), sources_(std::move(sources)), control_(control) {
+        Build();
+    }
+
+    const std::string& Address() const {
+        return address_;
+    }
+
+    void Present() {
+        gtk_window_present(GTK_WINDOW(window_));
+    }
+
+    void Destroy() {
+        owner_ = nullptr;
+        gtk_widget_destroy(window_);
+    }
+
+    void ApplyProbe(const deskhubp::DeviceStatus* probe) {
+        const bool offline = probe && !probe->online;
+        const char* stateClass = offline ? "deskhub-status-offline" : "deskhub-status-online";
+        for (GtkWidget* label : {stateLabel_, pingLabel_}) {
+            RemoveClass(label, "deskhub-status-online");
+            RemoveClass(label, "deskhub-status-offline");
+            AddClass(label, stateClass);
+        }
+        gtk_label_set_text(GTK_LABEL(pingLabel_),
+            probe && probe->online ? ui::PingMs(probe->rttMs).c_str() : "");
+    }
+
+private:
+    void Build() {
+        window_ = gtk_window_new(GTK_WINDOW_TOPLEVEL);
+        gtk_window_set_title(GTK_WINDOW(window_), address_.c_str());
+        gtk_window_set_default_size(GTK_WINDOW(window_), kConnectionWindowWidth, -1);
+        g_signal_connect(window_, "destroy", G_CALLBACK(OnDestroy), this);
+
+        GtkWidget* box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
+        gtk_container_set_border_width(GTK_CONTAINER(box), 16);
+        gtk_container_add(GTK_CONTAINER(window_), box);
+
+        GtkWidget* addressRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
+        gtk_box_pack_start(GTK_BOX(addressRow), StyledLabel(address_, "deskhub-section"), TRUE,
+            TRUE, 0);
+        GtkWidget* disconnect = gtk_button_new_with_label(ui::kDisconnectButton);
+        g_signal_connect(disconnect, "clicked", G_CALLBACK(OnDisconnect), this);
+        gtk_box_pack_end(GTK_BOX(addressRow), disconnect, FALSE, FALSE, 0);
+        gtk_box_pack_start(GTK_BOX(box), addressRow, FALSE, FALSE, 0);
+
+        GtkWidget* stateRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
+        stateLabel_ = StyledLabel(ui::kConnectedPickSession, "deskhub-status-online");
+        gtk_box_pack_start(GTK_BOX(stateRow), stateLabel_, TRUE, TRUE, 0);
+        pingLabel_ = StyledLabel(std::string(), "deskhub-status-online");
+        gtk_box_pack_end(GTK_BOX(stateRow), pingLabel_, FALSE, FALSE, 0);
+        gtk_box_pack_start(GTK_BOX(box), stateRow, FALSE, FALSE, 0);
+
+        GtkWidget* desktop = gtk_button_new_with_label(ui::kOpenDesktopLabel);
+        gtk_widget_set_sensitive(desktop, !sources_.empty());
+        g_signal_connect(desktop, "clicked", G_CALLBACK(OnOpenDesktop), this);
+        gtk_box_pack_start(GTK_BOX(box), desktop, FALSE, FALSE, 0);
+
+        controlCheck_ = gtk_check_button_new_with_label(ui::kRequestControlLabel);
+        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(controlCheck_), control_);
+        gtk_widget_set_sensitive(controlCheck_, !sources_.empty());
+        gtk_widget_set_margin_start(controlCheck_, 24);
+        g_signal_connect(controlCheck_, "toggled", G_CALLBACK(OnControlToggled), this);
+        gtk_box_pack_start(GTK_BOX(box), controlCheck_, FALSE, FALSE, 0);
+
+        GtkWidget* shell = gtk_button_new_with_label(ui::kOpenShellLabel);
+        gtk_widget_set_sensitive(shell, caps_.terminal);
+        g_signal_connect(shell, "clicked", G_CALLBACK(OnOpenShell), this);
+        gtk_box_pack_start(GTK_BOX(box), shell, FALSE, FALSE, 0);
+
+        GtkWidget* files = gtk_button_new_with_label(ui::kOpenFilesLabel);
+        gtk_widget_set_sensitive(files, caps_.files);
+        g_signal_connect(files, "clicked", G_CALLBACK(OnOpenFiles), this);
+        gtk_box_pack_start(GTK_BOX(box), files, FALSE, FALSE, 0);
+
+        gtk_box_pack_start(GTK_BOX(box), Hint(ui::kMobileHostNote), FALSE, FALSE, 0);
+        gtk_widget_show_all(window_);
+    }
+
+    static void OnDestroy(GtkWidget*, gpointer user) {
+        auto* self = static_cast<ConnectionWindow*>(user);
+        if (self->owner_) self->owner_->ForgetConnection(self);
+        delete self;
+    }
+
+    static void OnDisconnect(GtkButton*, gpointer user) {
+        gtk_widget_destroy(static_cast<ConnectionWindow*>(user)->window_);
+    }
+
+    static void OnControlToggled(GtkWidget* widget, gpointer user) {
+        auto* self = static_cast<ConnectionWindow*>(user);
+        self->control_ = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(widget));
+        if (self->owner_) self->owner_->SetClientControl(self->control_);
+    }
+
+    static void OnOpenDesktop(GtkButton*, gpointer user) {
+        auto* self = static_cast<ConnectionWindow*>(user);
+        if (!self->owner_ || self->sources_.empty()) return;
+        std::vector<deskhub::SourceInfo> picked;
+        if (!PickSources(GTK_WINDOW(self->window_), self->sources_, picked)) return;
+        self->owner_->OpenViewers(self->server_, self->passcode_, picked, self->control_);
+    }
+
+    static void OnOpenShell(GtkButton*, gpointer user) {
+        auto* self = static_cast<ConnectionWindow*>(user);
+        if (self->owner_) self->owner_->OpenShell(self->server_, self->passcode_);
+    }
+
+    static void OnOpenFiles(GtkButton*, gpointer user) {
+        auto* self = static_cast<ConnectionWindow*>(user);
+        if (self->owner_) self->owner_->OpenFileSend(self->server_, self->passcode_);
+    }
+
+    MainWindow* owner_ = nullptr;
+    std::string address_;
+    std::string passcode_;
+    NetAddr server_{};
+    deskhub::HostCaps caps_{};
+    std::vector<deskhub::SourceInfo> sources_;
+    bool control_ = false;
+    GtkWidget* window_ = nullptr;
+    GtkWidget* stateLabel_ = nullptr;
+    GtkWidget* pingLabel_ = nullptr;
+    GtkWidget* controlCheck_ = nullptr;
+};
+
 void MainWindow::Open(GtkApplication* app) {
     auto* w = new MainWindow();
     w->Build(app);
@@ -423,7 +556,6 @@ void MainWindow::Build(GtkApplication* app) {
 
     ApplyTrayMode();
     gtk_widget_show_all(window_);
-    ApplyConnectedState();
     SelectPage(kPageClient);
 
     g_signal_connect(gtk_widget_get_screen(window_), "monitors-changed",
@@ -787,44 +919,6 @@ GtkWidget* MainWindow::BuildClientPage() {
     gtk_box_pack_start(GTK_BOX(addressFormBox_), connectButton_, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(box), addressFormBox_, FALSE, FALSE, 0);
 
-    connectedBox_ = gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
-
-    GtkWidget* addressRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
-    connectedAddressLabel_ = StyledLabel(std::string(), "deskhub-section");
-    gtk_box_pack_start(GTK_BOX(addressRow), connectedAddressLabel_, TRUE, TRUE, 0);
-    GtkWidget* disconnectButton = gtk_button_new_with_label(ui::kDisconnectButton);
-    g_signal_connect(disconnectButton, "clicked", G_CALLBACK(OnDisconnectClicked), this);
-    gtk_box_pack_end(GTK_BOX(addressRow), disconnectButton, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(connectedBox_), addressRow, FALSE, FALSE, 0);
-
-    GtkWidget* stateRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
-    connectedStateLabel_ = StyledLabel(ui::kConnectedPickSession, "deskhub-status-online");
-    gtk_box_pack_start(GTK_BOX(stateRow), connectedStateLabel_, TRUE, TRUE, 0);
-    connectedPingLabel_ = StyledLabel(std::string(), "deskhub-status-online");
-    gtk_box_pack_end(GTK_BOX(stateRow), connectedPingLabel_, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(connectedBox_), stateRow, FALSE, FALSE, 0);
-
-    openDesktopButton_ = gtk_button_new_with_label(ui::kOpenDesktopLabel);
-    g_signal_connect(openDesktopButton_, "clicked", G_CALLBACK(OnOpenDesktopClicked), this);
-    gtk_box_pack_start(GTK_BOX(connectedBox_), openDesktopButton_, FALSE, FALSE, 0);
-
-    controlCheck_ = gtk_check_button_new_with_label(ui::kRequestControlLabel);
-    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(controlCheck_), settings_.clientControl);
-    gtk_widget_set_margin_start(controlCheck_, 24);
-    g_signal_connect(controlCheck_, "toggled", G_CALLBACK(OnSettingChanged), this);
-    gtk_box_pack_start(GTK_BOX(connectedBox_), controlCheck_, FALSE, FALSE, 0);
-
-    openShellButton_ = gtk_button_new_with_label(ui::kOpenShellLabel);
-    g_signal_connect(openShellButton_, "clicked", G_CALLBACK(OnOpenShellClicked), this);
-    gtk_box_pack_start(GTK_BOX(connectedBox_), openShellButton_, FALSE, FALSE, 0);
-
-    openFilesButton_ = gtk_button_new_with_label(ui::kOpenFilesLabel);
-    g_signal_connect(openFilesButton_, "clicked", G_CALLBACK(OnOpenFilesClicked), this);
-    gtk_box_pack_start(GTK_BOX(connectedBox_), openFilesButton_, FALSE, FALSE, 0);
-
-    gtk_box_pack_start(GTK_BOX(connectedBox_), Hint(ui::kMobileHostNote), FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(box), connectedBox_, FALSE, FALSE, 0);
-
     clientStatusLabel_ = Hint(std::string());
     gtk_box_pack_start(GTK_BOX(box), clientStatusLabel_, FALSE, FALSE, 0);
 
@@ -1171,7 +1265,6 @@ void MainWindow::SaveSettings() {
     if (quality >= 0)
         settings_.maxDim = deskhub::media::QualityPresetMaxDim(size_t(quality), settings_.maxDim);
     settings_.allowInput = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(allowInputCheck_));
-    settings_.clientControl = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(controlCheck_));
     settings_.allowNewPairings =
         gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(allowPairingCheck_));
     settings_.clipboardSync = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(clipboardCheck_));
@@ -1240,7 +1333,6 @@ void MainWindow::ShowMainWindow() {
     gtk_widget_show_all(window_);
     gtk_window_present(GTK_WINDOW(window_));
     tray_.SetWindowVisible(true);
-    ApplyConnectedState();
     ShowHostTable(screenSharing_);
 }
 
@@ -1330,6 +1422,9 @@ void MainWindow::StartPoller() {
 void MainWindow::OnDeviceStatus(const deskhubp::DeviceStatus& status) {
     RecordProbe(status.addr, status.online, status.rttMs);
     RefreshDeviceList();
+    for (ConnectionWindow* open : connections_)
+        if (ui::SameDeviceAddr(open->Address(), status.addr))
+            open->ApplyProbe(ProbeFor(status.addr));
 }
 
 void MainWindow::RecordProbe(const std::string& addr, bool online, uint32_t rttMs) {
@@ -1346,7 +1441,6 @@ const deskhubp::DeviceStatus* MainWindow::ProbeFor(const std::string& addr) cons
 }
 
 void MainWindow::RefreshDeviceList() {
-    if (connected_) ApplyConnectedState();
     std::vector<std::string> scannedAddrs;
     scannedAddrs.reserve(scanned_.size());
     for (const deskhubp::ScanHit& hit : scanned_) scannedAddrs.push_back(hit.addr);
@@ -1476,7 +1570,6 @@ void MainWindow::StartConnect(const std::string& addr, const std::string& passco
         return;
     }
 
-    ForgetHost();
     const bool started = connectDriver_.QueryAsync(
         server, passcode, [this](const std::function<void()>& fn) { PostToUi(fn); },
         [this, addr, passcode](const deskhubp::ConnectOutcome& outcome) {
@@ -1489,18 +1582,14 @@ void MainWindow::OpenShell(const NetAddr& server, const std::string& passcode) {
     TerminalLaunch launch;
     launch.address = server.ToString();
     launch.passcode = passcode;
-    launch.clientName =
-        ui::TruncateDeviceName(gtk_entry_get_text(GTK_ENTRY(deviceNameEntry_)));
-    if (launch.clientName.empty()) launch.clientName = deskhubp::LocalDeviceName();
+    launch.clientName = ClientDeviceName();
 
     if (!OpenTerminalWindow(GTK_WINDOW(window_), launch))
         SetClientStatus(ui::kTerminalUnreachable, true);
 }
 
 void MainWindow::OpenFileSend(const NetAddr& server, const std::string& passcode) {
-    std::string clientName =
-        ui::TruncateDeviceName(gtk_entry_get_text(GTK_ENTRY(deviceNameEntry_)));
-    if (clientName.empty()) clientName = deskhubp::LocalDeviceName();
+    const std::string clientName = ClientDeviceName();
 
     const std::string address = server.ToString();
     OpenFileSendWindow(GTK_WINDOW(window_), address,
@@ -1521,63 +1610,60 @@ void MainWindow::OnSourcesReady(const std::string& addr, const std::string& pass
     poller_.SetAddresses(ui::AddressesOf(recent_));
     RefreshDeviceList();
 
+    OpenConnectionWindow(addr, passcode, outcome);
+}
+
+ConnectionWindow* MainWindow::ConnectionFor(const std::string& addr) const {
+    for (ConnectionWindow* open : connections_)
+        if (ui::SameDeviceAddr(open->Address(), addr)) return open;
+    return nullptr;
+}
+
+void MainWindow::OpenConnectionWindow(const std::string& addr, const std::string& passcode,
+    const deskhubp::ConnectOutcome& outcome) {
+    if (ConnectionWindow* open = ConnectionFor(addr)) {
+        open->Present();
+        return;
+    }
+
     NetAddr server{};
     if (!ParseNetAddr(addr, server)) return;
 
-    connected_ = true;
-    connectedCaps_ = outcome.caps;
-    connectedSources_ = outcome.sources;
-    connectedServer_ = server;
-    connectedAddress_ = addr;
-    connectedPasscode_ = passcode;
-    ApplyConnectedState();
+    auto* window = new ConnectionWindow(this, addr, passcode, server, outcome.caps,
+        outcome.sources, settings_.clientControl);
+    connections_.push_back(window);
+    window->ApplyProbe(ProbeFor(addr));
 }
 
-void MainWindow::ForgetHost() {
-    connected_ = false;
-    connectedCaps_ = deskhub::HostCaps{};
-    connectedSources_.clear();
-    connectedAddress_.clear();
-    connectedPasscode_.clear();
-    SetClientStatus(std::string(), false);
-    ApplyConnectedState();
+void MainWindow::ForgetConnection(ConnectionWindow* window) {
+    connections_.erase(std::remove(connections_.begin(), connections_.end(), window),
+        connections_.end());
 }
 
-void MainWindow::ApplyConnectedState() {
-    if (!connectedBox_) return;
-    gtk_widget_set_visible(connectedBox_, connected_);
-    gtk_widget_set_visible(addressFormBox_, !connected_);
-    gtk_widget_set_visible(devicesBox_, !connected_);
-    if (!connected_) return;
-
-    gtk_label_set_text(GTK_LABEL(connectedAddressLabel_), connectedAddress_.c_str());
-    gtk_widget_set_sensitive(openDesktopButton_, !connectedSources_.empty());
-    gtk_widget_set_sensitive(controlCheck_, !connectedSources_.empty());
-    gtk_widget_set_sensitive(openShellButton_, connectedCaps_.terminal);
-    gtk_widget_set_sensitive(openFilesButton_, connectedCaps_.files);
-
-    const deskhubp::DeviceStatus* probe = ProbeFor(connectedAddress_);
-    const bool offline = probe && !probe->online;
-    const char* stateClass = offline ? "deskhub-status-offline" : "deskhub-status-online";
-    for (GtkWidget* w : {connectedStateLabel_, connectedPingLabel_}) {
-        RemoveClass(w, "deskhub-status-online");
-        RemoveClass(w, "deskhub-status-offline");
-        AddClass(w, stateClass);
-    }
-    gtk_label_set_text(GTK_LABEL(connectedPingLabel_),
-        probe && probe->online ? ui::PingMs(probe->rttMs).c_str() : "");
+void MainWindow::CloseEveryConnection() {
+    const std::vector<ConnectionWindow*> open = connections_;
+    connections_.clear();
+    for (ConnectionWindow* window : open) window->Destroy();
 }
 
-void MainWindow::OpenDesktopSession() {
-    if (!connected_ || connectedSources_.empty()) return;
+void MainWindow::SetClientControl(bool on) {
+    if (settings_.clientControl == on) return;
+    settings_.clientControl = on;
+    deskhubp::SaveUiSettings(settings_);
+}
 
-    std::vector<deskhub::SourceInfo> picked;
-    if (!PickSources(GTK_WINDOW(window_), connectedSources_, picked)) return;
+std::string MainWindow::ClientDeviceName() const {
+    std::string name = ui::TruncateDeviceName(gtk_entry_get_text(GTK_ENTRY(deviceNameEntry_)));
+    if (name.empty()) name = deskhubp::LocalDeviceName();
+    return name;
+}
 
+void MainWindow::OpenViewers(const NetAddr& server, const std::string& passcode,
+    const std::vector<deskhub::SourceInfo>& picked, bool control) {
     int opened = 0;
-    for (const auto& s : picked) {
-        if (ViewerWindow::Open(connectedServer_, s.sourceId, s.name, connectedPasscode_,
-                settings_.clientControl, [this, alive = alive_] {
+    for (const deskhub::SourceInfo& source : picked) {
+        if (ViewerWindow::Open(server, source.sourceId, source.name, passcode, control,
+                [this, alive = alive_] {
                     if (!alive->load()) return;
                     if (openViewers_.Closed()) ShowAfterSession();
                 })) {
@@ -1589,24 +1675,6 @@ void MainWindow::OpenDesktopSession() {
         ShowAfterSession();
         ShowWarning(GTK_WINDOW(window_), "Deskhub", ui::kViewerOpenFailed);
     }
-}
-
-void MainWindow::OnDisconnectClicked(GtkButton*, gpointer user) {
-    static_cast<MainWindow*>(user)->ForgetHost();
-}
-
-void MainWindow::OnOpenDesktopClicked(GtkButton*, gpointer user) {
-    static_cast<MainWindow*>(user)->OpenDesktopSession();
-}
-
-void MainWindow::OnOpenShellClicked(GtkButton*, gpointer user) {
-    auto* self = static_cast<MainWindow*>(user);
-    if (self->connected_) self->OpenShell(self->connectedServer_, self->connectedPasscode_);
-}
-
-void MainWindow::OnOpenFilesClicked(GtkButton*, gpointer user) {
-    auto* self = static_cast<MainWindow*>(user);
-    if (self->connected_) self->OpenFileSend(self->connectedServer_, self->connectedPasscode_);
 }
 
 void MainWindow::OnCopyClicked(GtkButton* b, gpointer) {
@@ -2055,6 +2123,7 @@ gboolean MainWindow::OnDeleteEvent(GtkWidget*, GdkEvent*, gpointer user) {
 void MainWindow::OnDestroy(GtkWidget*, gpointer user) {
     auto* self = static_cast<MainWindow*>(user);
     self->alive_->store(false);
+    self->CloseEveryConnection();
     self->tray_.Detach();
     if (self->rescanTimerId_) g_source_remove(self->rescanTimerId_);
     if (self->hostTimerId_) g_source_remove(self->hostTimerId_);
