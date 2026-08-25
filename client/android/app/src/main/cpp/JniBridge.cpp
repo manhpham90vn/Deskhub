@@ -21,9 +21,9 @@ static_assert(DHPhaseIdle == 0 && DHPhaseConnecting == 1 && DHPhaseStreaming == 
               DHPhaseEnded == 3 && DHPhaseReattaching == 5);
 static_assert(DHStrClientIpPrompt == 3 && DHStrQueryingSources == 12 &&
               DHStrInvalidAddressHint == 17 && DHStrSessionEnded == 18);
-static_assert(DHStrDisconnectButton == 153 && DHStrLinkQualityGood == 154 &&
-              DHStrLinkQualityFair == 155 && DHStrLinkQualityPoor == 156 &&
-              DHStrLinkNoReading == 157 && DHStrLinkReattaching == 158);
+static_assert(DHStrDisconnectButton == 152 && DHStrLinkQualityGood == 153 &&
+              DHStrLinkQualityFair == 154 && DHStrLinkQualityPoor == 155 &&
+              DHStrLinkNoReading == 156 && DHStrLinkReattaching == 157);
 static_assert(DHLinkQualityUnknown == 0 && DHLinkQualityGood == 1 && DHLinkQualityFair == 2 &&
               DHLinkQualityPoor == 3);
 static_assert(int32_t(deskhub::MouseButton::Left) == 1 &&

@@ -109,7 +109,7 @@ object NativeClient {
     const val STR_OPEN_DESKTOP_LABEL = 105
     const val STR_OPEN_SHELL_LABEL = 106
     const val STR_CONNECT_BUTTON = 116
-    const val STR_CONNECTED_PICK_SESSION = 151
+    const val STR_CONNECTED_PICK_SESSION = 150
     const val STR_TERMINAL_EXTRA_KEYS_HINT = 108
 
     const val TRUST_CHANGED = 2
@@ -122,9 +122,9 @@ object NativeClient {
     const val STR_TRANSFER_TOO_MANY_FILES = 144
     const val STR_OPEN_FILES_LABEL = 145
     const val STR_TRANSFER_SENT_HEADING = 146
-    const val STR_TRANSFER_ARRIVED_TITLE = 149
-    const val STR_DISCONNECT_BUTTON = 153
-    const val STR_LINK_REATTACHING = 158
+    const val STR_TRANSFER_ARRIVED_TITLE = 148
+    const val STR_DISCONNECT_BUTTON = 152
+    const val STR_LINK_REATTACHING = 157
 
     private external fun nativeString(id: Int): String
 

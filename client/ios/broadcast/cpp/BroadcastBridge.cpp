@@ -38,11 +38,18 @@ std::mutex g_startMutex;
 StartState g_startState = StartState::Idle;
 std::string g_startError;
 std::string g_screenName = kFallbackScreenName;
+std::string g_containerPath;
 std::thread g_startThread;
 
 std::string ScreenName() {
     std::lock_guard<std::mutex> lk(g_startMutex);
     return g_screenName;
+}
+
+std::string GroupTransferDir() {
+    std::lock_guard<std::mutex> lk(g_startMutex);
+    if (g_containerPath.empty()) return {};
+    return g_containerPath + "/Deskhub";
 }
 
 std::string StartSharing(uint32_t width, uint32_t height) {
@@ -54,6 +61,8 @@ std::string StartSharing(uint32_t width, uint32_t height) {
 
     const DHUiSettings settings = dh_settings_load();
     const DHShareDefaults defaults = dh_share_default_options();
+    const std::string transferDir = GroupTransferDir();
+    if (!transferDir.empty()) dh_set_transfer_dir(transferDir.c_str());
 
     constexpr int kPortHandoffTries = 8;
     constexpr auto kPortHandoffPause = std::chrono::milliseconds(500);
@@ -62,7 +71,7 @@ std::string StartSharing(uint32_t width, uint32_t height) {
         ok = dh_share_start(&source, 1, settings.fps ? settings.fps : defaults.fps,
             settings.bitrateMbps ? settings.bitrateMbps : defaults.bitrateMbps,
             settings.maxDim ? settings.maxDim : defaults.maxDim, uint16_t(settings.port), false,
-            settings.passcode, false, false);
+            settings.passcode, false, !transferDir.empty());
         if (ok || attempt + 1 == kPortHandoffTries) break;
         std::this_thread::sleep_for(kPortHandoffPause);
     }
@@ -228,6 +237,7 @@ void dhb_start_broadcast(const char* containerPath, const char* screenName) {
     ScreenCapture::BeginBroadcast();
 
     std::lock_guard<std::mutex> lk(g_startMutex);
+    g_containerPath = containerPath ? containerPath : "";
     g_screenName = screenName && *screenName ? std::string(screenName)
                                              : std::string(kFallbackScreenName);
     g_startState = StartState::Idle;
