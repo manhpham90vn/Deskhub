@@ -292,6 +292,7 @@ extension MainMenuView {
     }
 }
 
+@MainActor
 func openViewers(_ picked: [Source], address: String, passcode: String, control: Bool,
                  openWindow: OpenWindowAction)
 {

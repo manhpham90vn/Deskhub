@@ -230,7 +230,6 @@ typedef enum {
     DHStrFpsLabel = 118,
     DHStrBitrateLabel = 119,
     DHStrQualityLabel = 120,
-    DHStrTerminalCloseButton = 121,
     DHStrAttachShellAction = 122,
     DHStrTerminalLocalWindowTitle = 123,
     DHStrTerminalAttachedHere = 124,

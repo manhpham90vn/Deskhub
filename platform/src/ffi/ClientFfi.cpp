@@ -198,7 +198,6 @@ const char* dh_string(DHStringId id) {
         case DHStrFpsLabel: return deskhub::ui::kFpsLabel;
         case DHStrBitrateLabel: return deskhub::ui::kBitrateLabel;
         case DHStrQualityLabel: return deskhub::ui::kQualityLabel;
-        case DHStrTerminalCloseButton: return deskhub::ui::kTerminalCloseButton;
         case DHStrAttachShellAction: return deskhub::ui::kAttachShellAction;
         case DHStrTerminalLocalWindowTitle: return deskhub::ui::kTerminalLocalWindowTitle;
         case DHStrTerminalAttachedHere: return deskhub::ui::kTerminalAttachedHere;

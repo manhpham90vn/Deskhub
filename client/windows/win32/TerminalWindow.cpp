@@ -272,11 +272,6 @@ public:
         grid_->onResize_ = [this] { ResizeToGrid(); };
         auto* sizer = new wxBoxSizer(wxVERTICAL);
         sizer->Add(grid_, wxSizerFlags(1).Expand());
-
-        auto* closeBtn = new wxButton(this, wxID_ANY, ToWx(ui::kTerminalCloseButton));
-        closeBtn->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { Close(); });
-        sizer->Add(closeBtn, wxSizerFlags().Right().Border(wxALL, FromDIP(6)));
-
         SetSizerAndFit(sizer);
         Bind(wxEVT_CLOSE_WINDOW, &TerminalFrame::OnClose, this);
         redrawTimer_.SetOwner(this, kRedrawTimerId);

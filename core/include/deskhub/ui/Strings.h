@@ -271,7 +271,6 @@ inline constexpr const char* kHostHasNoTerminal =
 inline constexpr const char* kTerminalClientHeading = "Open a terminal on another machine";
 inline constexpr const char* kTerminalClientHint =
     "This is separate from viewing a screen \xE2\x80\x94 you can do either, or both.";
-inline constexpr const char* kTerminalCloseButton = "Close shell";
 inline constexpr const char* kTerminalConnecting = "Connecting\xE2\x80\xA6";
 inline constexpr const char* kTerminalConnected = "Connected.";
 inline constexpr const char* kTerminalClosed = "The shell has ended.";

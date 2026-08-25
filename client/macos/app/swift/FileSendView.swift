@@ -3,7 +3,6 @@ import SwiftUI
 
 struct FileSendView<Driver: TransferDriver>: View {
     let model: Driver
-    let onClose: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -32,8 +31,6 @@ struct FileSendView<Driver: TransferDriver>: View {
                     Button(DeskhubClient.string(DHStrTransferCancelButton)) {
                         model.cancelTransfer()
                     }
-                } else {
-                    Button("Close") { close() }
                 }
                 Button("Send") { model.sendChosenFiles() }
                     .keyboardShortcut(.defaultAction)
@@ -132,10 +129,5 @@ struct FileSendView<Driver: TransferDriver>: View {
         if panel.urls.count > model.chosenFiles.count {
             model.transferError = DeskhubClient.string(DHStrTransferTooManyFiles)
         }
-    }
-
-    private func close() {
-        model.forgetTransfer()
-        onClose()
     }
 }

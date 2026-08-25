@@ -87,7 +87,6 @@ struct SendWindow {
     GtkWidget* chooseButton = nullptr;
     GtkWidget* sendButton = nullptr;
     GtkWidget* stopButton = nullptr;
-    GtkWidget* closeButton = nullptr;
     GtkWidget* emptyLabel = nullptr;
     GtkWidget* errorLabel = nullptr;
     GtkWidget* statusLabel = nullptr;
@@ -149,7 +148,6 @@ void Refresh(SendWindow& self) {
     gtk_widget_set_sensitive(self.chooseButton, !active);
     gtk_widget_set_sensitive(self.sendButton, !active && !self.chosen.empty());
     gtk_widget_set_visible(self.stopButton, active);
-    gtk_widget_set_visible(self.closeButton, !active);
 
     gtk_widget_set_visible(self.progressBox, !view.Idle());
     gtk_progress_bar_set_fraction(GTK_PROGRESS_BAR(self.progress), view.Fraction());
@@ -273,10 +271,6 @@ void OnStopClicked(GtkButton*, gpointer user) {
     static_cast<SendWindow*>(user)->target->Cancel();
 }
 
-void OnCloseClicked(GtkButton*, gpointer user) {
-    gtk_widget_destroy(static_cast<SendWindow*>(user)->window);
-}
-
 void OnWindowDestroy(GtkWidget*, gpointer user) {
     auto* self = static_cast<SendWindow*>(user);
     if (self->timerId) g_source_remove(self->timerId);
@@ -379,9 +373,6 @@ void OpenFileSendWindow(GtkWindow* parent, const std::string& subtitle,
     g_signal_connect(self->stopButton, "clicked", G_CALLBACK(OnStopClicked), self);
     gtk_box_pack_end(GTK_BOX(buttons), self->stopButton, FALSE, FALSE, 0);
 
-    self->closeButton = gtk_button_new_with_label("Close");
-    g_signal_connect(self->closeButton, "clicked", G_CALLBACK(OnCloseClicked), self);
-    gtk_box_pack_end(GTK_BOX(buttons), self->closeButton, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(box), buttons, FALSE, FALSE, 0);
 
     gtk_widget_show_all(self->window);
