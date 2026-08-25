@@ -33,6 +33,7 @@ ScreenClientSessionCallbacks ScreenClient::MakeSessionCallbacks() {
     };
     sc.onRtt = [this](uint32_t rttUs) {
         diag_.minRttUs.Add(rttUs);
+        if (reasm_) reasm_->SetRttUs(diag_.minRttUs.value());
     };
     sc.onClipboardText = [this](std::string_view text) {
         if (cb_.onClipboardText) cb_.onClipboardText(text);
@@ -73,6 +74,10 @@ void ScreenClient::EnsureReassembler() {
         char drop[diag::ScreenClientDiag::kFrameDropBufBytes];
         LogWarn(diag::ScreenClientDiag::FormatFrameDrop(drop, sizeof(drop), d));
     };
+    reasm_->onReferenceLost = [this](uint32_t frameId) {
+        session_.SendInvalidateRef(frameId);
+    };
+    reasm_->SetRttUs(diag_.minRttUs.value());
 }
 
 void ScreenClient::OnDatagram(std::span<const uint8_t> pkt, uint64_t nowUs) {

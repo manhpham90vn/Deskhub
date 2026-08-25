@@ -25,6 +25,8 @@ public:
 
     bool SetBitrate(uint32_t bitrateBps);
 
+    bool SetFps(uint32_t fps);
+
     void Finish();
 
     bool IsOpen() const {
@@ -59,3 +61,5 @@ private:
 
 static_assert(deskhub::media::VideoEncoderLike<MediaCodecEncoder, void*>,
     "MediaCodecEncoder must match the shared encoder signature");
+static_assert(deskhub::media::HotFpsEncoder<MediaCodecEncoder>,
+    "the virtual display feeds the input surface, so a frame-rate step must not rebuild the codec");

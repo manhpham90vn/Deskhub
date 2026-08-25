@@ -9,7 +9,7 @@ BitrateDecision BitrateController::Update(const Feedback& fb, uint64_t nowUs) {
     if (fb.lossPct >= 1) {
         cleanSeconds_ = 0;
         fec_ = true;
-    } else if (++cleanSeconds_ >= 5) {
+    } else if (++cleanSeconds_ >= kCleanSecondsBeforeDroppingFec) {
         fec_ = false;
     }
     d.fecEnabled = fec_;

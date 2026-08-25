@@ -6,6 +6,7 @@ void RunAudioJitterBufferTests();
 void RunFecTests();
 void RunRetransmitCacheTests();
 void RunPacerTests();
+void RunLossGoodputTests();
 void RunScreenSessionTests();
 void RunScreenClientTests();
 void RunClipboardSyncTests();

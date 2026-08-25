@@ -111,6 +111,13 @@ bool MediaCodecEncoder::SetBitrate(uint32_t bitrateBps) {
     return true;
 }
 
+bool MediaCodecEncoder::SetFps(uint32_t fps) {
+    if (!codec_ || !fps || fps == cfg_.fps) return codec_ != nullptr;
+    cfg_.fps = fps;
+    SetParameter("max-fps-to-encoder", int32_t(fps));
+    return SetBitrate(cfg_.bitrateBps);
+}
+
 void MediaCodecEncoder::ApplyPendingSyncRequest() {
     if (!syncRequested_.exchange(false, std::memory_order_acq_rel)) return;
     SetParameter("request-sync", 0);

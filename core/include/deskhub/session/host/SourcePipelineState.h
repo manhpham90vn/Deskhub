@@ -49,7 +49,7 @@ struct SourcePipelineState {
 
     std::atomic<bool> sizeChanged{false};
     std::atomic<bool> qualityChanged{false};
-    std::atomic<bool> wantFec{false};
+    std::atomic<bool> wantFec{true};
     std::atomic<bool> netReady{false};
     std::atomic<bool> failed{false};
     std::atomic<bool> paused{false};

@@ -21,7 +21,7 @@ void TestAFreshSourceIsReadyToStream() {
     Check(!st.failed.load(), "a new source is not failed");
     Check(!st.shutdownDone, "a new source has not been shut down");
     Check(!st.netReady.load(), "but it is not on the wire until the capture side says so");
-    Check(!st.wantFec.load(), "FEC starts off and is turned on only by measured loss");
+    Check(st.wantFec.load(), "FEC is armed up front, before any loss has been measured");
     Check(!st.forceIdr.load(), "no keyframe is owed before a client has asked for one");
     Check(!st.haveFeedback.load(), "no link numbers are claimed before the client reports any");
     Check(st.replyPacked.load() == 0, "there is no reply address until a datagram arrives");
@@ -37,7 +37,7 @@ void TestTheStartingBitrateIsTheOneThatWasAskedFor() {
         "the bitrate the UI shows is the bitrate the encoder was configured with");
     Check(st.rate.bitrateBps() == kStartBps,
         "the controller starts from the same number, so the first feedback is not a jump");
-    Check(!st.rate.fecEnabled(), "and it agrees with wantFec that FEC is off");
+    Check(st.rate.fecEnabled(), "and it agrees with wantFec that FEC is armed");
 }
 
 void TestCountersStartAtZero() {

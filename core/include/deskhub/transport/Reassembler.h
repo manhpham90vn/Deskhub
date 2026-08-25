@@ -38,6 +38,8 @@ public:
 
     std::function<void(const FrameDropInfo&)> onFrameDrop;
 
+    std::function<void(uint32_t frameId)> onReferenceLost;
+
     struct Stats {
         uint64_t packetsReceived = 0;
         uint64_t fecReceived = 0;
@@ -61,6 +63,10 @@ public:
 
     void SetFps(uint32_t fps) {
         if (fps) frameIntervalUs_ = 1'000'000ull / fps;
+    }
+
+    void SetRttUs(uint64_t rttUs) {
+        rttUs_ = rttUs;
     }
 
     void Push(const VideoPacketView& pkt, uint64_t nowUs);
@@ -115,12 +121,19 @@ private:
 
     static constexpr uint64_t kStallTimeoutMultiple = 2;
     static constexpr uint64_t kHardTimeoutMultiple = 30;
+    static constexpr uint64_t kRetransmitRttMultiple = 3;
+    static constexpr uint64_t kRetransmitRttDivisor = 2;
 
     static constexpr uint64_t kNackHoldUs = 2'000;
     static constexpr uint64_t kNackMinIntervalUs = 10'000;
 
     uint64_t StallTimeoutUs() const {
-        return kStallTimeoutMultiple * frameIntervalUs_;
+        const uint64_t paced = kStallTimeoutMultiple * frameIntervalUs_;
+        const uint64_t retransmit =
+            kNackHoldUs + rttUs_ * kRetransmitRttMultiple / kRetransmitRttDivisor;
+        const uint64_t wait = paced > retransmit ? paced : retransmit;
+        const uint64_t hard = HardTimeoutUs();
+        return wait < hard ? wait : hard;
     }
     uint64_t HardTimeoutUs() const {
         return kHardTimeoutMultiple * frameIntervalUs_;
@@ -128,6 +141,7 @@ private:
 
     PendingMap pending_;
     uint64_t frameIntervalUs_;
+    uint64_t rttUs_ = 0;
     bool waitingForIdr_ = true;
     bool lossEvent_ = false;
     bool haveBarrier_ = false;

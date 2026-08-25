@@ -124,18 +124,14 @@ void TestAcceptedBitrateIsCommittedOnce() {
 }
 
 void TestFecFollowsLoss() {
-    std::printf("[hostfb] FEC is switched on by loss and reported only on the edge...\n");
+    std::printf("[hostfb] FEC is armed up front and reported only on the edge...\n");
     SourcePipelineState st(kStartBps, kMinBps);
     Recorder r;
-    Check(!st.wantFec.load(), "off to begin with");
+    Check(st.wantFec.load(), "armed to begin with");
 
     FeedbackOutcome out = ApplyFeedback(st, LossyLink(10), kT0 + 1'000'000, r.Hooks());
-    Check(out.fecToggled && out.fecEnabled, "loss turns it on and says so");
+    Check(!out.fecToggled, "loss on an already-armed link is not an edge");
     Check(st.wantFec.load(), "and the state agrees");
-
-    out = ApplyFeedback(st, LossyLink(10), kT0 + 2'000'000, r.Hooks());
-    Check(!out.fecToggled, "more loss is not another edge");
-    Check(st.wantFec.load(), "and it stays on");
 }
 
 void TestQualityStepIsAppliedThroughTheHook() {

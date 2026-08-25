@@ -24,6 +24,7 @@ int main() {
 
     std::printf("--- transport: send pacer ---\n");
     RunPacerTests();
+    RunLossGoodputTests();
 
     std::printf("--- session ---\n");
     RunScreenSessionTests();

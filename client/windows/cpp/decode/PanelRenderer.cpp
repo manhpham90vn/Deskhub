@@ -4,6 +4,7 @@
 
 #include <d3d11_1.h>
 #include <dxgi1_2.h>
+#include <dxgi1_5.h>
 #include <wrl/client.h>
 #include <cstdio>
 #include <mutex>
@@ -29,6 +30,25 @@ struct PanelRenderer::Impl {
     std::mutex renderMutex;
     uint32_t bbW = 0, bbH = 0;
     uint32_t vpSrcW = 0, vpSrcH = 0;
+    bool tearingAllowed = false;
+
+    static bool TearingSupported(IDXGIFactory2* factory) {
+        ComPtr<IDXGIFactory5> factory5;
+        if (FAILED(factory->QueryInterface(IID_PPV_ARGS(&factory5)))) return false;
+        BOOL allowed = FALSE;
+        if (FAILED(factory5->CheckFeatureSupport(DXGI_FEATURE_PRESENT_ALLOW_TEARING, &allowed,
+                sizeof(allowed))))
+            return false;
+        return allowed != FALSE;
+    }
+
+    UINT SwapChainFlags() const {
+        return tearingAllowed ? UINT(DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING) : 0u;
+    }
+
+    UINT PresentFlags() const {
+        return tearingAllowed ? UINT(DXGI_PRESENT_ALLOW_TEARING) : 0u;
+    }
 
     bool Init(ID3D11Device* dev, HWND hwnd, uint32_t initialW, uint32_t initialH) {
         if (!hwnd) return false;
@@ -52,6 +72,8 @@ struct PanelRenderer::Impl {
             if (SUCCEEDED(dxgiDev.As(&dxgiDev1))) dxgiDev1->SetMaximumFrameLatency(1);
         }
 
+        tearingAllowed = TearingSupported(factory.Get());
+
         DXGI_SWAP_CHAIN_DESC1 sd{};
         sd.Width = bbW;
         sd.Height = bbH;
@@ -62,6 +84,7 @@ struct PanelRenderer::Impl {
         sd.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
         sd.Scaling = DXGI_SCALING_STRETCH;
         sd.AlphaMode = DXGI_ALPHA_MODE_IGNORE;
+        sd.Flags = SwapChainFlags();
         PR_CHECK(factory->CreateSwapChainForHwnd(device.Get(), hwnd, &sd, nullptr, nullptr,
                      &swapchain),
             "CreateSwapChainForHwnd");
@@ -75,7 +98,8 @@ struct PanelRenderer::Impl {
     bool Resize(uint32_t w, uint32_t h) {
         backbuffer.Reset();
         vp.Reset();
-        PR_CHECK(swapchain->ResizeBuffers(0, w, h, DXGI_FORMAT_UNKNOWN, 0), "ResizeBuffers");
+        PR_CHECK(swapchain->ResizeBuffers(0, w, h, DXGI_FORMAT_UNKNOWN, SwapChainFlags()),
+            "ResizeBuffers");
         PR_CHECK(swapchain->GetBuffer(0, IID_PPV_ARGS(&backbuffer)), "GetBuffer(resize)");
         bbW = w;
         bbH = h;
@@ -110,7 +134,7 @@ struct PanelRenderer::Impl {
 
         if (!vp.Blt(tex, subresource)) return false;
         if (outReadyUs) *outReadyUs = NowUs();
-        PR_CHECK(swapchain->Present(0, 0), "Present");
+        PR_CHECK(swapchain->Present(0, PresentFlags()), "Present");
         return true;
     }
 };

@@ -146,7 +146,9 @@ HostEngine (one per app, owns SessionTransport)
   encode feeds every viewer of that source.
 - The feedback loop: viewers send `Feedback` (loss/RTT) once a second; the host's
   `BitrateController` (AIMD) and `QualityLadder` adjust encoder bitrate, resolution
-  and fps; FEC toggles on loss. quiche's CUBIC congestion control sits underneath the
+  and fps; FEC is armed from the first frame and only stood down after a long clean run,
+  because the loss it protects against shows up before the first report does. quiche's
+  CUBIC congestion control sits underneath the
   datagram path; the two act in series — quiche bounds what leaves the machine, the
   app adapts the encoder to the loss that results.
 - Input: "host wins" — `LocalInputMonitor` pauses remote input while the person at
@@ -271,6 +273,51 @@ under-load integration numbers from the pull-request build, and the core coverag
 line.
 
 ## 9. Decisions worth remembering
+
+- **The send pacer must stay well above the encoder's own output rate**: `Pacer::Gate`
+  sleeps on whichever thread `SendEncodedFrame` runs on, and on Android that is
+  MediaCodec's drain loop — the same loop that must call `releaseOutputBuffer` before the
+  encoder can hand over the next frame. Pacing therefore sets the drain rate, not just
+  the wire rate, while the VirtualDisplay keeps pushing new frames in at screen rate.
+  Narrowing `kPacingRateMultiple` from 2 to 1.2 to smooth send bursts was measured on a
+  Pixel 4: burst per frame went from 20 ms to 63 ms median, and the encoder backlog grew
+  without bound — `enc_lat_ms` climbed past 46 s in 100 s, and the viewer sat 4.6 s
+  behind. At 2 the same run held `enc_lat_ms` at 0. The headroom is not slack to reclaim;
+  it is what keeps the encode pipeline draining faster than it fills. Attack send bursts
+  with socket buffers or by moving pacing off the drain thread, never by tightening this
+  number.
+
+- **The perf suite gates on cost, so a second gate has to watch outcome**: `core_perf`
+  measures allocations per packet and how time scales with input, and every one of its
+  reassembler workloads passed while a single lost packet was costing 22 % of the intact
+  frames on a real link. It could not have caught it: discarding good video is *cheaper*
+  than decoding it, so the broken policy scored better on every number the suite watches.
+  `LossGoodputTests` is the companion that fails when the code does less work than it
+  should — a simulated tail-loss link with a real round trip, gating on the fraction of
+  frames whose packets all arrived that actually reach the decoder, and on the longest
+  gap between two delivered frames. Both are machine-independent, so they hold on a
+  laptop, a CI runner and a phone alike. Reach for a goodput gate whenever a policy can
+  "succeed" by throwing work away.
+
+- **A lost packet costs one frame, not the whole picture until the next keyframe**: the
+  reassembler used to arm `waitingForIdr_` on every loss, so a single missing packet
+  threw away every *complete* frame that followed until a fresh IDR arrived. Measured on
+  a phone host over Wi-Fi, that turned 64 genuinely incomplete frames into 381 discarded
+  ones — 6.4 MB of decodable video binned, and a picture frozen for a median of 146 ms
+  and up to 1.4 s at a time. Now only the incomplete frame is dropped; the frames behind
+  it go straight to the decoder, which conceals the missing reference while
+  `InvalidateRef` names the bad frame to the host and the keyframe request repairs it.
+  Brief macroblock artifacts are the deliberate price of not freezing. `waitingForIdr_`
+  survives for the one case it was right about: a viewer joining mid-stream has no
+  reference at all and must wait for the first IDR.
+
+- **The stall window has to outlast a retransmit, or NACK is decoration**: a frame used
+  to be given two frame intervals (33 ms at 60 fps) before it was declared lost, while
+  the measured RTT on the same link was 24-49 ms. The NACK went out and its answer
+  arrived after the frame had already been binned — visible as `late_ms_avg=24` with 87
+  packets per second landing on frames that no longer existed. `StallTimeoutUs` now takes
+  the larger of the paced window and one-and-a-half round trips, still capped by the hard
+  timeout, so retransmission is worth asking for on exactly the links that need it.
 
 - **The performance suite gates on allocations and shape, not on milliseconds**: the
   three test suites build debug, and CI runs them again under ASan, TSan and coverage,

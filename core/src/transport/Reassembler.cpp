@@ -232,7 +232,6 @@ void Reassembler::Drop(PendingMap::iterator it, DropReason reason, uint64_t nowU
 
         lossEvent_ = true;
         ++stats_.lossEvents;
-        waitingForIdr_ = true;
     } else {
         ++stats_.framesSkipped;
     }
@@ -240,9 +239,11 @@ void Reassembler::Drop(PendingMap::iterator it, DropReason reason, uint64_t nowU
         haveBarrier_ = true;
         barrierId_ = it->first;
     }
+    const uint32_t droppedId = it->first;
     pending_.erase(it);
 
     if (onFrameDrop) onFrameDrop(info);
+    if (loss && onReferenceLost) onReferenceLost(droppedId);
 }
 
 void Reassembler::NoteLatePacket(uint32_t id, uint64_t nowUs) {
