@@ -147,6 +147,25 @@ void TestRemove() {
         "a forgotten device does not come back with its old code");
 }
 
+void TestDefaultPortSpellingsAreOneDevice() {
+    std::printf("[recent] a bare address and one with the default port are the same device...\n");
+    std::vector<ui::RecentDevice> devices;
+    ui::TouchRecentDevice(devices, "192.168.1.60:47777", 100, "0417");
+
+    Check(ui::PasscodeForDevice(devices, "192.168.1.60") == "0417",
+        "the scanned spelling finds the code saved for the typed one");
+    Check(ui::PasscodeForDevice(devices, "192.168.1.60:5000").empty(),
+        "another port is a different device");
+
+    ui::TouchRecentDevice(devices, "192.168.1.60", 200, "");
+    Check(devices.size() == 1, "touching the other spelling replaces the entry");
+    Check(ui::PasscodeForDevice(devices, "192.168.1.60:47777") == "0417",
+        "the code carries over to the entry that replaced it");
+
+    ui::RemoveRecentDevice(devices, "192.168.1.60:47777");
+    Check(devices.empty(), "removing either spelling removes the device");
+}
+
 }
 
 void RunRecentDevicesTests() {
@@ -157,4 +176,5 @@ void RunRecentDevicesTests() {
     TestTouchMovesToFront();
     TestCapKeepsNewest();
     TestRemove();
+    TestDefaultPortSpellingsAreOneDevice();
 }

@@ -102,15 +102,18 @@ void TouchRecentDevice(std::vector<RecentDevice>& devices, std::string_view addr
 }
 
 std::string PasscodeForDevice(const std::vector<RecentDevice>& devices, std::string_view addr) {
-    const std::string trimmed = TrimAscii(addr);
+    const std::string wanted = NormalizedDeviceAddr(addr);
+    if (wanted.empty()) return {};
     for (const RecentDevice& d : devices)
-        if (d.addr == trimmed) return d.passcode;
+        if (NormalizedDeviceAddr(d.addr) == wanted) return d.passcode;
     return {};
 }
 
 void RemoveRecentDevice(std::vector<RecentDevice>& devices, std::string_view addr) {
+    const std::string wanted = NormalizedDeviceAddr(addr);
+    if (wanted.empty()) return;
     devices.erase(std::remove_if(devices.begin(), devices.end(),
-                      [&](const RecentDevice& d) { return d.addr == addr; }),
+                      [&](const RecentDevice& d) { return NormalizedDeviceAddr(d.addr) == wanted; }),
         devices.end());
 }
 
