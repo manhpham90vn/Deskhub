@@ -91,6 +91,10 @@ nonisolated enum DeskhubClient {
         buffered(128) { dh_address_host(address, $0, $1) }
     }
 
+    static func sameDeviceAddr(_ left: String, _ right: String) -> Bool {
+        dh_same_device_addr(left, right)
+    }
+
     static func addressPortText(_ address: String) -> String {
         let explicit = dh_address_port(address)
         let port = explicit != 0 ? UInt16(explicit) : DeskhubDiscovery.defaultPort

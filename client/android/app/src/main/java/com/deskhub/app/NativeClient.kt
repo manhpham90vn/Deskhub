@@ -154,6 +154,16 @@ object NativeClient {
 
     fun addressPort(addr: String): Int = nativeAddressPort(addr)
 
+    private external fun nativeSameDeviceAddr(
+        left: String,
+        right: String,
+    ): Boolean
+
+    fun sameDeviceAddr(
+        left: String,
+        right: String,
+    ): Boolean = nativeSameDeviceAddr(left, right)
+
     private external fun nativeSetDataDir(dir: String)
 
     fun useAppDataDir(context: Context) {

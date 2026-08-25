@@ -392,6 +392,10 @@ int dh_ping_text(uint32_t rttMs, char* out, int capacity) {
     return FillText(out, capacity, ui::PingMs(rttMs));
 }
 
+bool dh_same_device_addr(const char* a, const char* b) {
+    return a && b && ui::SameDeviceAddr(a, b);
+}
+
 uint16_t dh_default_port(void) {
     return deskhub::kDeskhubPort;
 }

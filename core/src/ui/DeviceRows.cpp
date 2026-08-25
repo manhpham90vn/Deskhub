@@ -2,7 +2,6 @@
 
 #include <algorithm>
 
-#include "deskhub/protocol/Wire.h"
 #include "deskhub/ui/Strings.h"
 
 namespace deskhub::ui {
@@ -20,14 +19,6 @@ const RecentDevice* FindRecent(const std::vector<RecentDevice>& recent,
 
 const char* DeviceOriginLabel(DeviceOrigin origin) {
     return origin == DeviceOrigin::OnThisNetwork ? kDeviceOnThisNetwork : kDeviceRecent;
-}
-
-std::string NormalizedDeviceAddr(std::string_view addr) {
-    const std::string trimmed = TrimAscii(addr);
-    if (trimmed.empty()) return {};
-    const std::string host = AddressHost(trimmed);
-    const uint16_t port = AddressPort(trimmed);
-    return host + ":" + std::to_string(port != 0 ? port : kDeskhubPort);
 }
 
 std::vector<DeviceRow> BuildDeviceRows(const std::vector<std::string>& scanned,

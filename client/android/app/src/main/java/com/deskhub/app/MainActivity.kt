@@ -1317,7 +1317,8 @@ private fun AddressScreen(
                 }
             }
 
-            val connectedRow = deviceRows.firstOrNull { it.addr == authedAddr }
+            val connectedRow =
+                deviceRows.firstOrNull { NativeClient.sameDeviceAddr(it.addr, authedAddr) }
             val liveColor = if (connectedRow?.online == false) OfflineColor else OnlineColor
             Row(
                 modifier = Modifier.fillMaxWidth(),

@@ -502,6 +502,14 @@ Java_com_deskhub_app_NativeClient_nativeAddressPort(JNIEnv* env, jobject, jstrin
     return jint(dh_address_port(FromJString(env, addrStr).c_str()));
 }
 
+JNIEXPORT jboolean JNICALL
+Java_com_deskhub_app_NativeClient_nativeSameDeviceAddr(JNIEnv* env, jobject, jstring leftStr,
+    jstring rightStr) {
+    const std::string left = FromJString(env, leftStr);
+    const std::string right = FromJString(env, rightStr);
+    return dh_same_device_addr(left.c_str(), right.c_str()) ? JNI_TRUE : JNI_FALSE;
+}
+
 JNIEXPORT jobjectArray JNICALL
 Java_com_deskhub_app_NativeClient_nativeDeviceRows(JNIEnv* env, jobject) {
     jclass cls = env->FindClass(kDeviceRowClass);
