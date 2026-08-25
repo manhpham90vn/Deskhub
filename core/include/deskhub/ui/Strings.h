@@ -322,8 +322,6 @@ inline constexpr const char* kTransferBusyNote =
 inline constexpr const char* kTransferChooseButton = "Choose files\xE2\x80\xA6";
 inline constexpr const char* kTransferCancelButton = "Stop sending";
 inline constexpr const char* kTransferAcceptLabel = "Take files viewers send";
-inline constexpr const char* kTransferBlocksScreenNote =
-    "Stop taking files to share the screen \xE2\x80\x94 this phone hosts one or the other.";
 inline constexpr const char* kTransferArrivedTitle = "Files received";
 inline constexpr const char* kTransferStopTakingButton = "Stop taking files";
 inline constexpr const char* kTransferFolderLabel = "Store them in";

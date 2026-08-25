@@ -29,7 +29,7 @@ final class SharingModel {
         let port = UInt16(dh_settings_load().port)
         if status.sharing {
             return DeskhubClient.buffered(320) {
-                dh_sharing_status(port, acceptedPasscode, false, true, false, false, $0, $1)
+                dh_sharing_status(port, acceptedPasscode, false, true, false, true, $0, $1)
             }
         }
         if FilesHost.shared.receiving {
