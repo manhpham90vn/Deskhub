@@ -117,6 +117,7 @@ if(DESKHUB_CORE_TESTS)
         tests/transport/FecTests.cpp
         tests/transport/RetransmitCacheTests.cpp
         tests/transport/PacerTests.cpp
+        tests/transport/LossGoodputTests.cpp
 
         tests/session/ScreenSessionTests.cpp
         tests/session/ScreenClientTests.cpp

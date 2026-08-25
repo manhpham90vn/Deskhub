@@ -280,7 +280,7 @@ void TestFeedbackDrivesTheEncoder() {
     Check(st->rate.bitrateBps() < kStartBps,
         "a lossy link pulls the bitrate down instead of insisting on the original");
     Check(rec.bitrateCalls >= 1, "and the encoder is told about it");
-    Check(st->wantFec.load(), "20% loss turns FEC on");
+    Check(st->wantFec.load(), "20% loss keeps FEC on");
 }
 
 void TestAHealthyLinkIsLeftAlone() {
@@ -297,7 +297,7 @@ void TestAHealthyLinkIsLeftAlone() {
     cb.onFeedback(fb);
 
     Check(st->rate.bitrateBps() == kStartBps, "no loss, no reason to change the bitrate");
-    Check(!st->wantFec.load(), "and no reason to pay for FEC");
+    Check(st->wantFec.load(), "and one clean second is not yet proof FEC can be dropped");
     Check(st->uiRttMs.load() == 5, "the UI still learns the measured round trip");
     Check(st->haveFeedback.load(), "and knows the numbers are real, not placeholders");
 }

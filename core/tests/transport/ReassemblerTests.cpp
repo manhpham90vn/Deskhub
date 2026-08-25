@@ -62,10 +62,12 @@ void TestReorder() {
 }
 
 void TestDropPacket() {
-    std::printf("[reasm] drop 1 packet -> drop frame, loss event, swallow until IDR...\n");
+    std::printf("[reasm] drop 1 packet -> drop that frame, keep decoding, report the bad ref...\n");
     Packetizer pk;
     pk.SetSessionId(42);
     Reassembler ra(16'667);
+    std::vector<uint32_t> invalidated;
+    ra.onReferenceLost = [&](uint32_t frameId) { invalidated.push_back(frameId); };
     std::vector<TestFrame> frames;
     for (uint32_t i = 0; i < 20; ++i) {
         TestFrame f{i, (i % 10) == 0, {}};
@@ -85,12 +87,49 @@ void TestDropPacket() {
         now += 16'667;
     }
     std::vector<uint32_t> want;
-    for (uint32_t i = 0; i < 5; ++i) want.push_back(i);
-    for (uint32_t i = 10; i < 20; ++i) want.push_back(i);
-    Check(got == want, "frame sequence after packet loss matches policy");
+    for (uint32_t i = 0; i < 20; ++i)
+        if (i != 5) want.push_back(i);
+    Check(got == want, "only the incomplete frame is lost, the rest still reach the decoder");
     Check(sawLoss, "loss event occurred after dropping frame");
     Check(ra.stats().framesDropped == 1 && ra.stats().packetsLost == 1, "drop/lost stats");
-    Check(ra.stats().framesSkipped == 4, "4 non-IDR frames swallowed");
+    Check(ra.stats().framesSkipped == 0, "no complete frame is thrown away after a loss");
+    Check(invalidated == std::vector<uint32_t>{5}, "the dropped frame is reported as a bad ref");
+}
+
+void TestStallTimeoutFollowsRtt() {
+    std::printf("[reasm] stall window stretches to cover a retransmit round trip...\n");
+    const uint64_t frameInterval = 16'667;
+    const uint64_t pacedWindow = 2 * frameInterval;
+    const uint64_t rttUs = 100'000;
+
+    auto framesDroppedAfter = [&](uint64_t rtt, uint64_t waitUs) {
+        Packetizer pk;
+        pk.SetSessionId(42);
+        Reassembler ra(frameInterval);
+        ra.SetRttUs(rtt);
+        const TestFrame idr = MakeIdrFrame(0, 4);
+        uint64_t now = 1'000'000;
+        for (const auto& d : Packetize(pk, idr, now)) Feed(ra, d, now);
+        Check(ra.PopReady(now).has_value(), "IDR opens the stream");
+
+        TestFrame next{1, false, {}};
+        next.nal.resize(4 * kMaxVideoPayload - 50);
+        for (auto& b : next.nal) b = uint8_t(Rnd());
+        now += frameInterval;
+        auto pkts = Packetize(pk, next, now);
+        pkts.pop_back();
+        for (const auto& d : pkts) Feed(ra, d, now);
+
+        ra.PopReady(now + waitUs);
+        return ra.stats().framesDropped;
+    };
+
+    const uint64_t beyondPaced = pacedWindow + frameInterval;
+    Check(framesDroppedAfter(0, beyondPaced) == 1,
+        "with no RTT measured the paced window still applies");
+    Check(framesDroppedAfter(rttUs, beyondPaced) == 0,
+        "a long RTT holds the frame long enough for a retransmit");
+    Check(framesDroppedAfter(rttUs, rttUs * 2) == 1, "the stretched window is still bounded");
 }
 
 void TestDuplicates() {
@@ -136,7 +175,7 @@ void TestJoinMidStream() {
 }
 
 void TestHeadTimeout() {
-    std::printf("[reasm] frame missing a piece past 2 frame intervals -> drop on timeout...\n");
+    std::printf("[reasm] frame missing a piece past the stall window -> drop only that frame...\n");
     Packetizer pk;
     pk.SetSessionId(42);
     Reassembler ra(16'667);
@@ -159,12 +198,14 @@ void TestHeadTimeout() {
     Check(!ra.PopReady(now).has_value(), "not dropped yet while still within deadline");
 
     now += 40'000;
-    Check(!ra.PopReady(now).has_value(), "frame 2 (non-IDR after loss) not emitted");
+    out = ra.PopReady(now);
+    Check(out && out->frameId == 2, "frame 2 follows the gap straight through to the decoder");
+    Check(ra.stats().framesDropped == 1, "only the incomplete frame counts as dropped");
     Check(ra.TakeLossEvent(), "loss event after timeout");
 
     for (const auto& d : Packetize(pk, frames[3], now)) Feed(ra, d, now);
     out = ra.PopReady(now);
-    Check(out && out->frameId == 3, "recovered via IDR after loss");
+    Check(out && out->frameId == 3, "the keyframe that repairs the reference still arrives");
 }
 
 void TestNackPlanning() {
@@ -477,6 +518,7 @@ void RunReassemblerTests() {
     TestInOrder();
     TestReorder();
     TestDropPacket();
+    TestStallTimeoutFollowsRtt();
     TestDuplicates();
     TestJoinMidStream();
     TestHeadTimeout();

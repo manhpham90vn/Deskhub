@@ -76,26 +76,26 @@ void TestBitrateUncommitted() {
 }
 
 void TestFecHysteresis() {
-    std::printf("[ctrl] FEC: on immediately, off only after 5 clean seconds...\n");
+    std::printf("[ctrl] FEC: armed from the first frame, off only after a long clean run...\n");
+    const int clean = BitrateController::kCleanSecondsBeforeDroppingFec;
     BitrateController c(20'000'000, 1'000'000);
+    Check(c.fecEnabled(), "a link with no measurements yet is assumed to need FEC");
 
-    auto d = c.Update(Fb(0), 1'000'000);
-    Check(!d.fecEnabled && !d.fecToggled, "FEC starts off and stays off on a clean link");
-
-    d = c.Update(Fb(3), 2'000'000);
-    Check(d.fecEnabled && d.fecToggled, "any real loss turns FEC on at once");
-
-    uint64_t now = 3'000'000;
-    for (int i = 0; i < 4; ++i, now += 1'000'000) {
+    uint64_t now = 1'000'000;
+    BitrateDecision d{};
+    for (int i = 0; i < clean - 1; ++i, now += 1'000'000) {
         d = c.Update(Fb(0), now);
-        Check(d.fecEnabled && !d.fecToggled, "FEC stays on through 4 clean seconds");
+        Check(d.fecEnabled && !d.fecToggled, "FEC stays on through the clean run");
     }
     d = c.Update(Fb(0), now);
-    Check(!d.fecEnabled && d.fecToggled, "FEC turns off on the 5th clean second");
+    Check(!d.fecEnabled && d.fecToggled, "FEC turns off once the link has proved itself");
 
-    c.Update(Fb(4), now + 1'000'000);
-    now += 2'000'000;
-    for (int i = 0; i < 4; ++i, now += 1'000'000) c.Update(Fb(0), now);
+    now += 1'000'000;
+    d = c.Update(Fb(3), now);
+    Check(d.fecEnabled && d.fecToggled, "any real loss turns FEC back on at once");
+
+    now += 1'000'000;
+    for (int i = 0; i < clean - 1; ++i, now += 1'000'000) c.Update(Fb(0), now);
     Check(c.fecEnabled(), "clean-second counter restarts after a fresh loss");
 }
 

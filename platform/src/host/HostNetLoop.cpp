@@ -100,6 +100,8 @@ deskhub::ScreenHostCallbacks MakeScreenHostCallbacks(deskhub::SourcePipelineStat
 
     cb.onKeyframeRequest = [p] { p->forceIdr.store(true); };
 
+    cb.onInvalidateRef = [p](uint32_t) { p->forceIdr.store(true); };
+
     cb.onNack = [p, shared](uint32_t frameId, std::span<const uint16_t> indices) {
         if (!shared->sendToRequester) return;
         deskhub::RespondToNack(*p, frameId, indices, shared->sendToRequester);

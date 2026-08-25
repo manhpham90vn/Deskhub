@@ -147,7 +147,9 @@ HostEngine (một cho cả app, sở hữu SessionTransport)
   lần mã hoá nuôi mọi viewer của nguồn đó.
 - Vòng phản hồi: viewer gửi `Feedback` (loss/RTT) mỗi giây; `BitrateController`
   (AIMD) và `QualityLadder` của host chỉnh bitrate, độ phân giải, fps của encoder;
-  FEC bật theo loss. CUBIC của quiche nằm dưới đường datagram; hai bộ hoạt động nối
+  FEC bật sẵn từ frame đầu và chỉ hạ xuống sau một chuỗi dài không mất gói, vì loss mà
+  nó chống lại xuất hiện trước cả báo cáo đầu tiên. CUBIC của quiche nằm dưới đường
+  datagram; hai bộ hoạt động nối
   tiếp — quiche giới hạn thứ rời khỏi máy, app điều tốc encoder theo loss sinh ra.
 - Input: "host thắng" — `LocalInputMonitor` tạm dừng input từ xa khi người ngồi tại
   máy động vào chuột thật; mỗi lúc một viewer điều khiển.
@@ -264,6 +266,48 @@ lệch chỉ là cảnh báo, không bao giờ đánh trượt), số đo tích 
 pull request, và dòng coverage của `core/`.
 
 ## 9. Các quyết định đáng nhớ
+
+- **Bộ điều tốc gửi phải luôn cao hơn hẳn tốc độ ra của chính encoder**: `Pacer::Gate`
+  ngủ ngay trên thread mà `SendEncodedFrame` đang chạy, và trên Android đó là vòng drain
+  của MediaCodec — đúng vòng phải gọi `releaseOutputBuffer` trước khi encoder giao được
+  frame kế tiếp. Vì vậy điều tốc quyết định tốc độ drain, không chỉ tốc độ trên dây, trong
+  khi VirtualDisplay vẫn bơm frame mới vào theo nhịp màn hình. Việc siết
+  `kPacingRateMultiple` từ 2 xuống 1.2 để làm mượt burst đã được đo trên Pixel 4: thời
+  gian gửi mỗi frame tăng từ 20 ms lên 63 ms trung vị, và hàng đợi encoder phình vô hạn —
+  `enc_lat_ms` vượt 46 s chỉ sau 100 s, viewer tụt lại 4.6 s. Với giá trị 2, cùng kịch
+  bản giữ `enc_lat_ms` ở 0. Khoảng dư đó không phải phần thừa để thu hồi; nó là thứ giữ
+  cho đường mã hoá rút nhanh hơn tốc độ nạp vào. Muốn giảm burst thì dùng bộ đệm socket
+  hoặc tách điều tốc khỏi thread drain, tuyệt đối không siết con số này.
+
+- **Bộ perf gate trên chi phí, nên cần một gate thứ hai canh kết quả**: `core_perf` đo
+  số lần cấp phát trên mỗi packet và cách thời gian giãn theo input, và mọi workload
+  reassembler của nó đều pass trong khi một packet mất làm mất 22 % số frame nguyên vẹn
+  trên đường truyền thật. Nó không thể bắt được: vứt video tốt còn *rẻ hơn* giải mã nó,
+  nên chính sách hỏng lại ghi điểm cao hơn ở mọi con số bộ suite theo dõi.
+  `LossGoodputTests` là bộ đi kèm, fail khi code làm ít việc hơn mức đáng phải làm — một
+  đường truyền mất gói đuôi mô phỏng với vòng truyền thật, gate trên tỉ lệ frame nhận đủ
+  packet mà thực sự tới được decoder, và trên khoảng cách dài nhất giữa hai frame được
+  giao. Cả hai đều độc lập với máy, nên đúng như nhau trên laptop, CI runner hay điện
+  thoại. Hãy nghĩ tới goodput gate mỗi khi một chính sách có thể "thành công" bằng cách
+  vứt bớt việc.
+
+- **Mất một packet chỉ tốn một frame, không phải cả khung hình tới keyframe kế tiếp**:
+  trước đây bộ ghép lại bật `waitingForIdr_` với mọi lần mất, nên chỉ một packet thiếu
+  là vứt sạch mọi frame *nguyên vẹn* phía sau cho tới khi có IDR mới. Đo trên host điện
+  thoại qua Wi-Fi, 64 frame thực sự thiếu đã kéo theo 381 frame bị vứt — 6.4 MB video
+  giải mã được bị bỏ, hình đứng trung vị 146 ms và có lúc tới 1.4 s. Giờ chỉ frame thiếu
+  bị bỏ; các frame sau đi thẳng tới decoder, nơi che khuyết tham chiếu đã mất, trong khi
+  `InvalidateRef` báo cho host frame nào hỏng và yêu cầu keyframe sửa lại. Vài vệt
+  macroblock ngắn là cái giá cố ý trả để không đứng hình. `waitingForIdr_` giữ lại đúng
+  trường hợp nó đúng: viewer vào giữa luồng chưa có tham chiếu nào nên phải đợi IDR đầu.
+
+- **Cửa sổ chờ phải dài hơn một vòng truyền lại, nếu không NACK chỉ là trang trí**:
+  trước đây một frame chỉ được cho hai chu kỳ khung hình (33 ms ở 60 fps) trước khi bị
+  coi là mất, trong khi RTT đo được trên cùng đường là 24-49 ms. NACK gửi đi và câu trả
+  lời về sau khi frame đã bị vứt — thấy rõ qua `late_ms_avg=24` với 87 packet mỗi giây
+  rơi vào những frame không còn tồn tại. `StallTimeoutUs` giờ lấy giá trị lớn hơn giữa
+  cửa sổ theo nhịp khung hình và một vòng rưỡi RTT, vẫn bị chặn bởi hard timeout, nên
+  việc yêu cầu truyền lại chỉ đáng giá trên đúng những đường cần nó.
 
 - **`FileHost` không bao giờ gửi khi đang giữ khoá của chính nó**: vòng lặp phục vụ QUIC
   chạy `QuicEndpoint::Poll` dưới `SessionTransport::sendMutex_`, và một kết nối đóng lại ở

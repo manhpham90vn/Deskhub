@@ -14,6 +14,8 @@ struct BitrateDecision {
 
 class BitrateController {
 public:
+    static constexpr int kCleanSecondsBeforeDroppingFec = 10;
+
     BitrateController(uint32_t startBps, uint32_t minBps)
         : cur_(startBps), max_(startBps), min_(minBps) {}
 
@@ -37,7 +39,7 @@ private:
 
     uint64_t lastDecreaseUs_ = 0;
     int cleanSeconds_ = 0;
-    bool fec_ = false;
+    bool fec_ = true;
 };
 
 }

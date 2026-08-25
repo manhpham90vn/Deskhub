@@ -68,6 +68,9 @@ bool UdpSocket::Open(uint16_t localPort, const std::string& bindIp) {
     int rcvbuf = 4 * 1024 * 1024;
     setsockopt(s, SOL_SOCKET, SO_RCVBUF, (const char*)&rcvbuf, sizeof(rcvbuf));
 
+    int sndbuf = 4 * 1024 * 1024;
+    setsockopt(s, SOL_SOCKET, SO_SNDBUF, (const char*)&sndbuf, sizeof(sndbuf));
+
     sockaddr_in local{};
     local.sin_family = AF_INET;
     local.sin_addr.s_addr = htonl(INADDR_ANY);
