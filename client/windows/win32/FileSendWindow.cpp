@@ -34,7 +34,6 @@ constexpr int kIdSentHeading = 407;
 constexpr int kIdChoose = 408;
 constexpr int kIdSend = 409;
 constexpr int kIdStop = 410;
-constexpr int kIdClose = 411;
 
 constexpr UINT kTimerPoll = 7;
 constexpr UINT kPollMs = 200;
@@ -70,7 +69,6 @@ struct State {
     HWND chooseButton = nullptr;
     HWND sendButton = nullptr;
     HWND stopButton = nullptr;
-    HWND closeButton = nullptr;
     const FileSendHooks* hooks = nullptr;
     std::vector<std::filesystem::path> chosen;
     std::vector<uint64_t> sizes;
@@ -105,7 +103,6 @@ void Refresh(State& st) {
     EnableWindow(st.chooseButton, !active);
     EnableWindow(st.sendButton, !active && !st.chosen.empty());
     ShowWindow(st.stopButton, active ? SW_SHOW : SW_HIDE);
-    ShowWindow(st.closeButton, active ? SW_HIDE : SW_SHOW);
 
     const int shown = view.Idle() ? SW_HIDE : SW_SHOW;
     ShowWindow(st.progress, shown);
@@ -257,7 +254,6 @@ LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
                 case kIdStop:
                     if (st->hooks->cancel) st->hooks->cancel();
                     return 0;
-                case kIdClose: st->done = true; return 0;
             }
             break;
         case WM_TIMER:
@@ -336,7 +332,6 @@ void RunFileSendWindow(HWND owner, bool modal, const std::string& subtitle,
         kIdSend);
     st.stopButton = mk(L"BUTTON", FromUtf8(ui::kTransferCancelButton).c_str(), 0,
         kW - kPad - 210, buttonY, 114, 26, kIdStop);
-    st.closeButton = mk(L"BUTTON", L"Close", 0, kW - kPad - 210, buttonY, 114, 26, kIdClose);
 
     SendMessageW(st.progress, PBM_SETRANGE32, 0, 100);
     ShowChosen(st);

@@ -33,7 +33,9 @@ private let termCursor = termColor(0xE0, 0xE0, 0xE0)
 struct TerminalScreen: View {
     @Bindable var model: TerminalModel
     let title: String
-    let onClose: () -> Void
+    #if os(iOS)
+        let onClose: () -> Void
+    #endif
 
     var body: some View {
         VStack(spacing: 0) {
@@ -60,9 +62,6 @@ struct TerminalScreen: View {
                             .font(.caption.monospacedDigit())
                     }
                 }
-                #if os(macOS)
-                    Button(DeskhubClient.string(DHStrTerminalCloseButton)) { onClose() }
-                #endif
             }
             .padding(8)
         }

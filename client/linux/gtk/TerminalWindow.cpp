@@ -137,11 +137,6 @@ private:
         statusLabel_ = gtk_label_new(ui::kTerminalConnecting);
         gtk_label_set_xalign(GTK_LABEL(statusLabel_), 0.f);
         gtk_box_pack_start(GTK_BOX(footer), statusLabel_, TRUE, TRUE, 0);
-
-        GtkWidget* closeButton = gtk_button_new_with_label(ui::kTerminalCloseButton);
-        g_signal_connect(closeButton, "clicked", G_CALLBACK(OnCloseClicked), this);
-        gtk_box_pack_end(GTK_BOX(footer), closeButton, FALSE, FALSE, 0);
-
         gtk_box_pack_start(GTK_BOX(box), footer, FALSE, FALSE, 0);
 
         g_signal_connect(window_, "destroy", G_CALLBACK(OnDestroy), this);
@@ -448,11 +443,6 @@ private:
     static gboolean OnRedrawTimer(gpointer user) {
         static_cast<TerminalWindow*>(user)->PullSnapshot();
         return G_SOURCE_CONTINUE;
-    }
-
-    static void OnCloseClicked(GtkButton*, gpointer user) {
-        auto* self = static_cast<TerminalWindow*>(user);
-        if (self->window_) gtk_widget_destroy(self->window_);
     }
 
     static void OnDestroy(GtkWidget*, gpointer user) {
