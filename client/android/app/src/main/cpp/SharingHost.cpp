@@ -168,11 +168,14 @@ bool SharingHost::Start(const std::vector<ShareSource>& sources, const ShareOpti
         return target;
     };
 
-    policy.source.applyQualityStep = [](deskhubp::HostSource& st, const deskhub::QualityStep&,
-                                         const deskhub::QualityStep&) {
+    policy.source.applyQualityStep = [](deskhubp::HostSource& st,
+                                         const deskhub::QualityStep& prev,
+                                         const deskhub::QualityStep& next) {
         SourcePipeline& p = Pipeline(st);
         const deskhub::StreamSize target = PlanStreamSize(p);
-        RebuildLocked(p);
+        std::lock_guard<std::mutex> lk(p.encMutex);
+        if (prev.fps != next.fps && p.encoder) p.encoder->SetFps(next.fps);
+        RebuildPipeline(p);
         return target;
     };
 
