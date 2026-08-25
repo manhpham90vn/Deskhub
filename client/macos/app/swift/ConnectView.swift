@@ -23,7 +23,6 @@ struct MainMenuView: View {
     private static let portSettle = Duration.milliseconds(600)
     private static let focusSettle = Duration.milliseconds(400)
 
-    @Binding var route: ClientRoute
     @Bindable var connect: ConnectModel
     @Bindable var sharing: SharingModel
 
@@ -120,100 +119,30 @@ struct MainMenuView: View {
         }
     }
 
-    private var connectedRow: DeviceListRow? {
-        discovery.devices.first { $0.addr == connect.acceptedAddress }
-    }
-
-    private var liveColor: Color {
-        connectedRow?.online == false ? DeskhubPalette.offline : DeskhubPalette.online
-    }
-
     private var clientPage: some View {
         VStack(alignment: .leading, spacing: 10) {
             deskhubHeading(DeskhubClient.string(DHStrClientHeading))
 
-            if connect.authed != nil {
-                connectedHeader
-                sessionChoices
-            } else {
-                addressForm
+            addressForm
 
-                Button(action: beginConnect) {
-                    Text(DeskhubClient.string(DHStrConnectButton)).deskhubPrimaryLabel()
-                }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
-                .tint(DeskhubPalette.accent)
-                .disabled(connect.address.isEmpty || connect.isConnecting)
-
-                deskhubHeadingRow(DeskhubClient.string(DHStrDevicesHeading)) {
-                    discovery.refreshStatus()
-                    discovery.rescanNow()
-                }
-                DeviceTable(
-                    rows: discovery.devices,
-                    note: discovery.scanStatus,
-                    enabled: !connect.isConnecting,
-                    onPick: pick
-                )
+            Button(action: beginConnect) {
+                Text(DeskhubClient.string(DHStrConnectButton)).deskhubPrimaryLabel()
             }
-        }
-    }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+            .tint(DeskhubPalette.accent)
+            .disabled(connect.address.isEmpty || connect.isConnecting)
 
-    private var connectedHeader: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 12) {
-                Text(connect.acceptedAddress)
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(DeskhubPalette.heading)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                Spacer(minLength: 0)
-                Button(DeskhubClient.string(DHStrDisconnectButton)) { connect.forgetHost() }
-                    .buttonStyle(.borderedProminent)
-                    .tint(DeskhubPalette.accent)
+            deskhubHeadingRow(DeskhubClient.string(DHStrDevicesHeading)) {
+                discovery.refreshStatus()
+                discovery.rescanNow()
             }
-
-            HStack(spacing: 8) {
-                Circle()
-                    .fill(liveColor)
-                    .frame(width: 10, height: 10)
-                Text(DeskhubClient.string(DHStrConnectedPickSession))
-                    .fontWeight(.semibold)
-                    .foregroundStyle(liveColor)
-                Spacer(minLength: 0)
-                if let ping = connectedRow?.ping, !ping.isEmpty {
-                    Text(ping)
-                        .fontWeight(.semibold)
-                        .foregroundStyle(liveColor)
-                        .monospacedDigit()
-                }
-            }
-        }
-    }
-
-    private var sessionChoices: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Button(action: openDesktopSession) {
-                Text(DeskhubClient.string(DHStrOpenDesktopLabel))
-            }
-            .disabled(!connect.canOpenDesktop)
-            Toggle(
-                DeskhubClient.string(DHStrRequestControlLabel),
-                isOn: $sharing.clientControl
+            DeviceTable(
+                rows: discovery.devices,
+                note: discovery.scanStatus,
+                enabled: !connect.isConnecting,
+                onPick: pick
             )
-            .toggleStyle(.checkbox)
-            .padding(.leading, 24)
-            .onChange(of: sharing.clientControl) { _, _ in sharing.save() }
-            Button(action: openTerminalSession) {
-                Text(DeskhubClient.string(DHStrOpenShellLabel))
-            }
-            .disabled(!connect.canOpenShell)
-            Button(action: openFilesSession) {
-                Text(DeskhubClient.string(DHStrOpenFilesLabel))
-            }
-            .disabled(!connect.canOpenFiles)
-            deskhubHint(DeskhubClient.string(DHStrMobileHostNote))
         }
     }
 
@@ -346,45 +275,26 @@ extension MainMenuView {
         guard connect.acceptAddress() != nil else { return }
         connect.saveDeviceName()
         Task {
-            guard await connect.connectAuth() != nil else { return }
-            await discovery.remember(
-                address: connect.acceptedAddress, passcode: connect.acceptedPasscode
-            )
+            guard let found = await connect.connectAuth() else { return }
+            let address = connect.acceptedAddress
+            let passcode = connect.acceptedPasscode
+            await discovery.remember(address: address, passcode: passcode)
+            connect.forgetHost()
+            openWindow(value: ConnectionRequest(
+                address: address,
+                passcode: passcode,
+                name: connect.deviceName,
+                sources: found.sources,
+                caps: found.caps,
+                control: sharing.clientControl
+            ))
         }
-    }
-
-    private func openDesktopSession() {
-        guard let found = connect.authed else { return }
-        let decision = DeskhubClient.connectDecision(found.sources)
-        if decision.showPicker {
-            route = .sourcePicker(found.sources)
-        } else {
-            openViewers(found.sources, address: connect.acceptedAddress,
-                        passcode: connect.acceptedPasscode, openWindow: openWindow)
-        }
-    }
-
-    private func openTerminalSession() {
-        guard connect.canOpenShell else { return }
-        openWindow(value: TerminalRequest(
-            address: connect.acceptedAddress, passcode: connect.acceptedPasscode
-        ))
-    }
-
-    private func openFilesSession() {
-        guard connect.canOpenFiles else { return }
-        openWindow(value: TransferRequest(
-            address: connect.acceptedAddress, passcode: connect.acceptedPasscode,
-            name: connect.deviceName
-        ))
     }
 }
 
-@MainActor
-func openViewers(_ picked: [Source], address: String, passcode: String,
+func openViewers(_ picked: [Source], address: String, passcode: String, control: Bool,
                  openWindow: OpenWindowAction)
 {
-    let control = dh_settings_load().clientControl
     if picked.isEmpty {
         openWindow(value: ViewerRequest(
             address: address, passcode: passcode, sourceId: 0, name: "", control: control

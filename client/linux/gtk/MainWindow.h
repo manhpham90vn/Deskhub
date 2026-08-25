@@ -26,11 +26,15 @@
 #include "deskhubp/client/SourceQueryAsync.h"
 #include "deskhubp/host/ShareController.h"
 
+class ConnectionWindow;
+
 class MainWindow {
 public:
     static void Open(GtkApplication* app);
 
 private:
+    friend class ConnectionWindow;
+
     enum Page { kPageHost = 0,
         kPageClient = 1,
         kPageDevices = 2,
@@ -109,13 +113,15 @@ private:
     void StartConnect(const std::string& addr, const std::string& passcode);
     void OnSourcesReady(const std::string& addr, const std::string& passcode,
         const deskhubp::ConnectOutcome& outcome);
-    void ForgetHost();
-    void ApplyConnectedState();
-    void OpenDesktopSession();
-    static void OnDisconnectClicked(GtkButton* b, gpointer user);
-    static void OnOpenDesktopClicked(GtkButton* b, gpointer user);
-    static void OnOpenShellClicked(GtkButton* b, gpointer user);
-    static void OnOpenFilesClicked(GtkButton* b, gpointer user);
+    void OpenConnectionWindow(const std::string& addr, const std::string& passcode,
+        const deskhubp::ConnectOutcome& outcome);
+    ConnectionWindow* ConnectionFor(const std::string& addr) const;
+    void ForgetConnection(ConnectionWindow* window);
+    void CloseEveryConnection();
+    void SetClientControl(bool on);
+    std::string ClientDeviceName() const;
+    void OpenViewers(const NetAddr& server, const std::string& passcode,
+        const std::vector<deskhub::SourceInfo>& picked, bool control);
     bool ReadPasscode(GtkWidget* entry, std::string& out);
 
     void OnShare(ShareTrigger trigger = ShareTrigger::kUser);
@@ -209,16 +215,9 @@ private:
     GtkWidget* deviceNameEntry_ = nullptr;
     GtkWidget* connectButton_ = nullptr;
     GtkWidget* clientStatusLabel_ = nullptr;
-    GtkWidget* controlCheck_ = nullptr;
     GtkWidget* addressFormBox_ = nullptr;
-    GtkWidget* connectedBox_ = nullptr;
-    GtkWidget* connectedAddressLabel_ = nullptr;
-    GtkWidget* connectedStateLabel_ = nullptr;
-    GtkWidget* connectedPingLabel_ = nullptr;
-    GtkWidget* openDesktopButton_ = nullptr;
-    GtkWidget* openShellButton_ = nullptr;
-    GtkWidget* openFilesButton_ = nullptr;
     GtkWidget* devicesBox_ = nullptr;
+    std::vector<ConnectionWindow*> connections_;
 
     GtkWidget* pairedView_ = nullptr;
     GtkListStore* pairedStore_ = nullptr;
@@ -282,13 +281,6 @@ private:
 
     deskhub::OpenViewerCount openViewers_;
     deskhubp::SourceQueryAsync connectDriver_;
-
-    bool connected_ = false;
-    deskhub::HostCaps connectedCaps_{};
-    std::vector<deskhub::SourceInfo> connectedSources_;
-    NetAddr connectedServer_{};
-    std::string connectedAddress_;
-    std::string connectedPasscode_;
 
     std::shared_ptr<std::atomic<bool>> alive_ = std::make_shared<std::atomic<bool>>(true);
 };

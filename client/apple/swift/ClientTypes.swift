@@ -17,7 +17,7 @@ nonisolated enum MouseButton: Int32, Sendable {
     case x2 = 5
 }
 
-struct Source: Identifiable, Sendable, Hashable {
+struct Source: Identifiable, Sendable, Hashable, Codable {
     let id: UInt8
     let name: String
     let displayName: String
@@ -25,7 +25,7 @@ struct Source: Identifiable, Sendable, Hashable {
     let pickerLabel: String
 }
 
-struct HostCaps: Sendable {
+struct HostCaps: Sendable, Hashable, Codable {
     var acceptsInput = false
     var terminal = false
     var files = false

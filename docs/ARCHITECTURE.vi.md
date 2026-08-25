@@ -188,7 +188,8 @@ mỗi giây một datagram `Ping` mang session id 0 đi ra, beacon của host tr
 trên chính kết nối đó mà không cần phiên nào, timestamp được vọng lại trở thành
 RTT đã làm mượt, còn những id không có pong quay về trở thành phần trăm mất gói.
 `ClassifyLinkQuality` gộp hai con số thành Tốt / Khá / Kém cho danh sách thiết bị
-và trang kết nối — các cửa sổ phiên không còn chở nó nữa — `HostLink` đưa số đo ra
+và cho panel đã trả lời host — cửa sổ riêng trên desktop, trang kết nối trên Android
+và iOS — các cửa sổ phiên không còn chở nó nữa — `HostLink` đưa số đo ra
 qua `onPulse` và `Pulse()`, và vì ping là gói đòi ACK nên
 nó kiêm luôn vai keepalive; bộ đếm keepalive thường chỉ còn có việc khi link đang
 đỗ ở `Deciding`. Host quá cũ không trả lời ping session-0 thì số đo chỉ đứng ở
@@ -589,3 +590,23 @@ pull request, và dòng coverage của `core/`.
   sẵn góc bo và phần trong suốt nướng vào ảnh — nếu không, app hiện ra như một ô vuông
   xanh cứng cạnh mọi icon bo góc khác. `scripts/make-icons.py` cố ý chỉ dùng thư viện
   chuẩn: bootstrap không cài công cụ xử lý ảnh nào.
+- **Client desktop giữ nhiều host cùng lúc; điện thoại giữ một**: trang kết nối trên
+  Windows, Linux và macOS không giữ trạng thái đã-kết-nối nào của riêng nó. Host nào trả
+  lời thì được một cửa sổ kết nối — `ConnectionFrame` trong
+  `client/windows/win32/MainFrame.cpp`, `ConnectionWindow` trong
+  `client/linux/gtk/MainWindow.cpp`, `WindowGroup` tên `connection` trong
+  `client/macos/app/swift/App.swift` — nắm địa chỉ, passcode, khả năng, danh sách nguồn và
+  ô control của riêng host đó, nhờ vậy trang kết nối luôn rảnh để gọi host tiếp theo. Cửa
+  sổ chính chỉ giữ danh sách các cửa sổ đang mở, để đưa cửa sổ cũ lên trước khi cùng một
+  host được gọi lần hai, để đẩy mỗi nhịp dò trạng thái tới đúng cửa sổ có địa chỉ khớp, và
+  để đóng hết khi thoát app. Android và iOS cố ý giữ một kết nối: màn hình điện thoại
+  không đủ chỗ cho một panel thứ hai, và phiên nó mở ra vốn đã chiếm toàn màn hình.
+  `ui::SameDeviceAddr` là định nghĩa của "cùng một host" ở mọi nơi — xem mục dưới.
+- **Một host, hai cách viết, một phép so sánh**: `ScanAddressText` bỏ cổng khi cổng là mặc
+  định, nên một dòng quét được đọc là `192.168.1.60` trong khi địa chỉ người dùng gõ và
+  kết nối lại là `192.168.1.60:47777`. So sánh hai chuỗi đó thất bại trong im lặng, và mọi
+  chỗ từng làm vậy đều mất một thứ có thật: panel đã kết nối không tìm ra dòng thiết bị
+  khớp nên không hiện ping, còn `PasscodeForDevice` không tìm ra mã đã lưu cho host được
+  chọn từ danh sách quét. Vì vậy phép so sánh địa chỉ đi qua `ui::NormalizedDeviceAddr` /
+  `ui::SameDeviceAddr` (`core/ui/Strings.h`), mở ra cho client Swift và Kotlin dưới tên
+  `dh_same_device_addr`. Đừng bao giờ so sánh hai địa chỉ thiết bị bằng `==`.

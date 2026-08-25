@@ -189,7 +189,8 @@ Once admitted, the link takes its own pulse (`core/session/LinkPulse`): a
 it over the same connection with no session required, and the echoed timestamp
 becomes a smoothed RTT while the ids of pongs that never came back become a loss
 percentage. `ClassifyLinkQuality` folds the two into Good / Fair / Poor for the
-device list and the connect page — the session windows no longer carry it —
+device list and the panel that answered the host — a window of its own on desktop, the
+connect page on Android and iOS — the session windows no longer carry it —
 `HostLink` hands the reading out through `onPulse` and `Pulse()`, and
 because a ping is ack-eliciting it doubles as the keepalive; the plain keepalive
 timer only still matters while the link is parked in `Deciding`. A host too old to
@@ -603,3 +604,23 @@ line.
   corners and the transparency baked in — otherwise the app shows up as a hard blue
   square next to every other rounded icon. `scripts/make-icons.py` is pure standard
   library on purpose: bootstrap installs no image tooling.
+- **A desktop client holds many hosts at once; a phone holds one**: the connect page on
+  Windows, Linux and macOS keeps no connected state of its own. A host that answers gets
+  a connection window — `ConnectionFrame` in `client/windows/win32/MainFrame.cpp`,
+  `ConnectionWindow` in `client/linux/gtk/MainWindow.cpp`, the `connection` `WindowGroup`
+  in `client/macos/app/swift/App.swift` — owning that host's address, passcode, caps,
+  sources and control tick, so the page stays free to dial the next one. The main window
+  keeps only a list of the open ones, to raise a window when the same host is dialled
+  twice, to push each status probe at the window whose address matches, and to close them
+  all on quit. Android and iOS deliberately stay single-connection: a phone screen has no
+  room for a second panel, and the session it opens is full-screen anyway.
+  `ui::SameDeviceAddr` is what "the same host" means everywhere — see the entry below.
+- **One host, two spellings, one comparison**: `ScanAddressText` drops the port when it is
+  the default, so a scanned row reads `192.168.1.60` while the address the user typed and
+  connected with reads `192.168.1.60:47777`. Comparing those as strings silently fails,
+  and every place that did lost something real: the connected panel found no matching
+  device row and so showed no ping, and `PasscodeForDevice` did not find the code saved
+  for a host that was picked out of the scan list. Address equality therefore goes through
+  `ui::NormalizedDeviceAddr` / `ui::SameDeviceAddr` (`core/ui/Strings.h`), exposed to the
+  Swift and Kotlin clients as `dh_same_device_addr`. Never compare two device addresses
+  with `==`.

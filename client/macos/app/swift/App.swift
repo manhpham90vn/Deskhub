@@ -18,6 +18,14 @@ struct DeskhubApp: App {
         .windowResizability(.contentMinSize)
         .defaultSize(width: 1040, height: 700)
 
+        WindowGroup(id: "connection", for: ConnectionRequest.self) { $request in
+            if let request {
+                ConnectionWindow(request: request)
+            }
+        }
+        .windowResizability(.contentMinSize)
+        .defaultSize(width: 460, height: 300)
+
         WindowGroup(id: "viewer", for: ViewerRequest.self) { $request in
             if let request {
                 ViewerWindow(request: request)
