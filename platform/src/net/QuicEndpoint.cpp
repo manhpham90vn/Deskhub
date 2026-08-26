@@ -103,6 +103,30 @@ quiche_config* MakeConfig(const QuicSettings& settings, bool server) {
     return cfg;
 }
 
+struct StreamListShape {
+    const uint64_t* data = nullptr;
+    size_t size = 0;
+    size_t capacity = 0;
+    bool operator==(const StreamListShape&) const = default;
+};
+
+StreamListShape ShapeOf(const std::vector<uint64_t>& list) {
+    return {list.data(), list.size(), list.capacity()};
+}
+
+void ReportStreamListOverwritten(const char* checkpoint, const StreamListShape& was,
+    const StreamListShape& now, uint64_t stream, ssize_t got, size_t budget) {
+    LOGE(
+        "quic: the readable-stream list on the recv thread's stack changed %s (stream %llu, "
+        "got %zd, budget %zu); it was data=%p size=%zu capacity=%zu and is now data=%p "
+        "size=%zu capacity=%zu. Nothing between those two points writes to that vector, so "
+        "something reached into this thread's stack frame through a pointer it should no "
+        "longer hold - the checkpoint names which call it came from",
+        checkpoint, static_cast<unsigned long long>(stream), got, budget,
+        static_cast<const void*>(was.data), was.size, was.capacity,
+        static_cast<const void*>(now.data), now.size, now.capacity);
+}
+
 void FillRandomConnId(uint8_t* out, size_t len) {
     if (RandomBytes(out, len)) return;
     for (size_t i = 0; i < len; ++i) out[i] = uint8_t(i * 31 + 7);
@@ -445,23 +469,36 @@ struct QuicEndpoint::Impl {
 
         std::vector<uint8_t> chunk(kStreamChunk);
         size_t budget = kStreamReadBudgetPerService;
+        const StreamListShape listed = ShapeOf(ready);
+        const auto listStillIntact = [&](const char* checkpoint, uint64_t stream, ssize_t got) {
+            const StreamListShape now = ShapeOf(ready);
+            if (now == listed) return true;
+            ReportStreamListOverwritten(checkpoint, listed, now, stream, got, budget);
+            return false;
+        };
         for (uint64_t stream : ready) {
+            if (!listStillIntact("between two streams of the same connection", stream, 0)) return;
             for (;;) {
                 if (budget == 0) {
                     moreToRead_.store(true, std::memory_order_relaxed);
                     return;
                 }
-                if (cb_.pauseStream && cb_.pauseStream(stream)) break;
+                const bool paused = cb_.pauseStream && cb_.pauseStream(stream);
+                if (!listStillIntact("inside the pauseStream callback", stream, 0)) return;
+                if (paused) break;
                 bool fin = false;
                 uint64_t err = 0;
                 const size_t want = std::min(chunk.size(), budget);
                 const ssize_t got = quiche_conn_stream_recv(entry.conn, stream, chunk.data(),
                     want, &fin, &err);
+                if (!listStillIntact("inside quiche_conn_stream_recv", stream, got)) return;
                 if (got < 0) break;
                 budget -= size_t(got);
-                if (cb_.onStream)
+                if (cb_.onStream) {
                     cb_.onStream(id, stream, std::span<const uint8_t>(chunk.data(), size_t(got)),
                         fin);
+                    if (!listStillIntact("inside the onStream callback", stream, got)) return;
+                }
                 if (fin || size_t(got) < want) break;
             }
         }
