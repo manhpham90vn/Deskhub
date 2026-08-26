@@ -97,10 +97,10 @@ jobs:
           out/build/${{ matrix.preset }}/core/core_perf
           out/build/${{ matrix.preset }}/platform/platform_perf
 
-  pageheap:
-    name: windows-latest · full page heap
+  asan-windows:
+    name: windows-latest · MSVC ASan
     runs-on: windows-latest
-    timeout-minutes: 45
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -118,38 +118,37 @@ jobs:
         with:
           cache-key: host-windows-latest
 
-      - name: Configure (app off — this job only runs the integration suite)
-        run: cmake --preset x64-release -DDESKHUB_LINUX_APP=OFF
+      - name: Configure with /fsanitize=address, the only build that reports a stray write at the instruction that makes it rather than as a fastfail in whatever ran next
+        run: cmake --preset asan-msvc
 
       - name: Build the integration suite
-        run: cmake --build --preset x64-release --target integration_tests
+        run: cmake --build --preset asan-msvc --target integration_tests
 
-      - name: Give every allocation its own page, so a stray write faults on the instruction that makes it instead of surfacing later as a fastfail in whatever ran next
+      - name: Keep a dump for the fastfail path, which bypasses every in-process handler including the sanitizer
         shell: pwsh
         run: |
-          $image = 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\integration_tests.exe'
-          New-Item -Path $image -Force | Out-Null
-          Set-ItemProperty -Path $image -Name GlobalFlag -Value 0x02000000 -Type DWord
-          Set-ItemProperty -Path $image -Name PageHeapFlags -Value 0x3 -Type DWord
-          Get-ItemProperty -Path $image | Format-List GlobalFlag, PageHeapFlags
-
           $dumps = 'HKLM:\SOFTWARE\Microsoft\Windows\Windows Error Reporting\LocalDumps'
           New-Item -Path $dumps -Force | Out-Null
           Set-ItemProperty -Path $dumps -Name DumpFolder -Value "$env:RUNNER_TEMP\crash-dumps" -Type ExpandString
           Set-ItemProperty -Path $dumps -Name DumpType -Value 2 -Type DWord
           Set-ItemProperty -Path $dumps -Name DumpCount -Value 2 -Type DWord
 
-      - name: Run the under-load half repeatedly, failing only on a crash — the latency budgets it also checks mean nothing on a debugging heap
+      - name: Run the whole suite repeatedly, failing only on a sanitizer report or a crash - every crash on record came from a full run, never from the under-load half on its own, and the latency budgets it also checks mean nothing on an instrumented build
         shell: pwsh
+        env:
+          ASAN_OPTIONS: detect_stack_use_after_return=1:exitcode=86:print_stacktrace=1
         run: |
-          $exe = 'out/build/x64-release/tests/integration/integration_tests.exe'
+          $exe = 'out/build/asan-msvc/tests/integration/integration_tests.exe'
           for ($i = 1; $i -le 3; $i++) {
-            Write-Host "===== page heap run $i ====="
-            & $exe --under-load
+            Write-Host "===== asan run $i ====="
+            & $exe
             $code = $LASTEXITCODE
-            Write-Host "===== page heap run $i exit $code ====="
+            Write-Host "===== asan run $i exit $code ====="
+            if ($code -eq 86) {
+              throw "AddressSanitizer reported memory corruption. The report above names the writing instruction and the object it lands on - the write the plain x64-release job only ever sees later as a fastfail in QuicEndpoint::Impl::DrainStreams."
+            }
             if ($code -ne 0 -and $code -ne 1) {
-              throw "integration_tests died with 0x$('{0:x8}' -f $code) under full page heap. The stack above, or the uploaded dump, names the write that corrupts memory - the one the plain x64-release job only ever sees as a fastfail in an unrelated frame."
+              throw "integration_tests died with 0x$('{0:x8}' -f $code) without a sanitizer report, so the writer is code the sanitizer does not instrument - quiche, BoringSSL or the kernel. The uploaded dump is the only record."
             }
           }
 
@@ -165,11 +164,11 @@ jobs:
         if: failure() && steps.crash-dump.outputs.found == 'true'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: crash-dumps-windows-pageheap
+          name: crash-dumps-windows-asan
           path: |
             ${{ runner.temp }}/crash-dumps
-            out/build/x64-release/tests/integration/integration_tests.exe
-            out/build/x64-release/tests/integration/integration_tests.pdb
+            out/build/asan-msvc/tests/integration/integration_tests.exe
+            out/build/asan-msvc/tests/integration/integration_tests.pdb
           if-no-files-found: ignore
           retention-days: 7
 

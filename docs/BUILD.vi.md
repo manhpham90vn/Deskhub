@@ -251,9 +251,9 @@ request:
 - actionlint + shellcheck trên các workflow và `scripts/*.sh`
 - cả ba bộ kiểm thử dưới ASan/UBSan và TSan, đồng thời build chéo cho Linux arm64, một máy
   ảo Android và iOS Simulator
-- nửa dưới tải của bộ integration chạy lại trên Windows với full page heap, nơi một lần ghi
-  lạc chỗ sẽ lỗi ngay tại lệnh gây ra nó thay vì lộ ra sau đó thành một fastfail ở chỗ không
-  liên quan
+- toàn bộ bộ integration chạy lại trên Windows dưới MSVC ASan (`cmake --preset
+  asan-msvc`), nơi một lần ghi lạc chỗ được báo ngay tại lệnh gây ra nó thay vì lộ ra sau
+  đó thành một fastfail ở chỗ không liên quan
 - coverage của core ≥ 90 % dòng / 80 % nhánh
 - các mục tiêu libFuzzer, mỗi cái 30 giây (mỗi cái 15 phút trong lần chạy đêm)
 - CodeQL trên C++/Kotlin/Swift, quét gitleaks toàn bộ lịch sử, và soát xét phụ thuộc
