@@ -8,4 +8,8 @@ enum StartPage {
         guard defaults.object(forKey: key) != nil else { return nil }
         return defaults.integer(forKey: key)
     }
+
+    static var isScreenshotRun: Bool {
+        index() != nil
+    }
 }

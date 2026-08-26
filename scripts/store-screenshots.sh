@@ -14,13 +14,16 @@ ANDROID_PKG=com.manhpham.deskhub
 ANDROID_ACTIVITY=com.manhpham.deskhub/com.deskhub.app.MainActivity
 ANDROID_APK=client/android/app/build/outputs/apk/debug/app-debug.apk
 PLAY_IMAGES=client/android/fastlane/metadata/android/en-US/images
-PHONE_AVD=Resizable_Experimental
+PHONE_AVD=Deskhub_Phone
+PHONE_DEVICE=medium_phone
+PHONE_IMAGE="system-images;android-34;default;arm64-v8a"
 PHONE_SIZE=1080x2400
 TABLET_AVD=Small_Tablet
 TABLET_SIZE=1920x1200
 ANDROID_SDK="${ANDROID_HOME:-$HOME/Library/Android/sdk}"
 EMULATOR="$ANDROID_SDK/emulator/emulator"
 ADB="$ANDROID_SDK/platform-tools/adb"
+AVDMANAGER="$ANDROID_SDK/cmdline-tools/latest/bin/avdmanager"
 SERIAL=""
 
 MACOS_BUNDLE=com.deskhub.macos
@@ -118,6 +121,26 @@ demo_status_bar() {
     adb_shell "$demo" notifications -e visible false >/dev/null
 }
 
+ensure_avd() {
+    local avd=$1 device=$2 image=$3
+    if "$EMULATOR" -list-avds | grep -qx "$avd"; then
+        return 0
+    fi
+    [ -x "$AVDMANAGER" ] ||
+        die "no AVD named \"$avd\" and no avdmanager at $AVDMANAGER - install the SDK command-line tools, or create the AVD by hand in Android Studio"
+    echo "== creating $avd ($device)"
+    echo no | "$AVDMANAGER" create avd -n "$avd" -k "$image" -d "$device" >/dev/null ||
+        die "could not create \"$avd\" - install its system image first with: sdkmanager \"$image\""
+}
+
+grant_notifications() {
+    local sdk
+    sdk=$(adb_shell getprop ro.build.version.sdk | tr -d '\r')
+    if [ "$sdk" -ge 33 ]; then
+        adb_shell pm grant "$ANDROID_PKG" android.permission.POST_NOTIFICATIONS
+    fi
+}
+
 serial_for_avd() {
     local serial name
     for serial in $("$ADB" devices | awk '/^emulator-/ {print $1}'); do
@@ -146,6 +169,8 @@ shoot_emulator() {
     if SERIAL=$(serial_for_avd "$avd"); then
         echo "== $avd (reusing $SERIAL)"
     else
+        "$EMULATOR" -list-avds | grep -qx "$avd" ||
+            die "no AVD named \"$avd\" - create it in Android Studio's Device Manager with a $size display"
         SERIAL=$(free_serial) ||
             die "no free emulator port between 5554 and 5560 - close an emulator"
         echo "== $avd (booting as $SERIAL)"
@@ -160,6 +185,7 @@ shoot_emulator() {
     adb_shell settings put system user_rotation 0
     display_id=$(emulator_display_id)
     "$ADB" -s "$SERIAL" install -r "$ANDROID_APK" >/dev/null
+    grant_notifications
     rm -f "$outdir"/0*.png
     for index in 0 1 2 3; do
         section=${PAGES[$index]}
@@ -256,6 +282,7 @@ run_android() {
         die "Android SDK not found at $ANDROID_SDK - run make bootstrap or set ANDROID_HOME"
     fi
     make build-android
+    ensure_avd "$PHONE_AVD" "$PHONE_DEVICE" "$PHONE_IMAGE"
     shoot_emulator "$PHONE_AVD" "$PLAY_IMAGES/phoneScreenshots" "$PHONE_SIZE"
     shoot_emulator "$TABLET_AVD" "$PLAY_IMAGES/sevenInchScreenshots" "$TABLET_SIZE"
     rm -f "$PLAY_IMAGES"/tenInchScreenshots/0*.png
