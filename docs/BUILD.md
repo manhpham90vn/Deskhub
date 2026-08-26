@@ -245,9 +245,9 @@ A green local `make test` + `make lint` is not the whole story. On every pull re
 - actionlint + shellcheck over the workflows and `scripts/*.sh`
 - all three suites under ASan/UBSan and TSan, and cross-built for arm64 Linux, an Android
   emulator and the iOS Simulator
-- the integration suite's under-load half again on Windows under a full page heap, where a
-  stray write faults on the instruction that makes it instead of surfacing later as a
-  fastfail somewhere unrelated
+- the integration suite's under-load half again on Windows under MSVC ASan
+  (`cmake --preset asan-msvc`), where a stray write is reported at the instruction that
+  makes it instead of surfacing later as a fastfail somewhere unrelated
 - core coverage ≥ 90 % lines / 80 % branches
 - the libFuzzer targets for 30 s each (15 min each nightly)
 - CodeQL over C++/Kotlin/Swift, a gitleaks sweep of the whole history, and a dependency

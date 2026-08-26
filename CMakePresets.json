@@ -42,6 +42,18 @@
       }
     },
     {
+      "name": "asan-msvc",
+      "displayName": "ASan (MSVC, Ninja)",
+      "inherits": "x64-debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "CMAKE_CXX_FLAGS": "/DWIN32 /D_WINDOWS /EHsc /fsanitize=address /Zi",
+        "DESKHUB_LINUX_APP": "OFF",
+        "DESKHUB_WINDOWS_APP": "OFF",
+        "DESKHUB_WERROR": "OFF"
+      }
+    },
+    {
       "name": "tsan",
       "displayName": "TSan (Ninja)",
       "inherits": "x64-debug",
@@ -99,6 +111,7 @@
     { "name": "arm64-debug", "configurePreset": "arm64-debug" },
     { "name": "arm64-release", "configurePreset": "arm64-release" },
     { "name": "asan", "configurePreset": "asan" },
+    { "name": "asan-msvc", "configurePreset": "asan-msvc" },
     { "name": "tsan", "configurePreset": "tsan" },
     { "name": "coverage", "configurePreset": "coverage" },
     { "name": "fuzz", "configurePreset": "fuzz" },
