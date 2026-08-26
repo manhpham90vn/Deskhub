@@ -97,8 +97,8 @@ jobs:
           out/build/${{ matrix.preset }}/core/core_perf
           out/build/${{ matrix.preset }}/platform/platform_perf
 
-  asan-windows:
-    name: windows-latest · MSVC ASan
+  repeat-windows:
+    name: windows-latest · release, three more runs
     runs-on: windows-latest
     timeout-minutes: 90
     steps:
@@ -118,37 +118,32 @@ jobs:
         with:
           cache-key: host-windows-latest
 
-      - name: Configure with /fsanitize=address, the only build that reports a stray write at the instruction that makes it rather than as a fastfail in whatever ran next
-        run: cmake --preset asan-msvc
+      - name: Configure (app off - this job only runs the integration suite)
+        run: cmake --preset x64-release -DDESKHUB_LINUX_APP=OFF
 
       - name: Build the integration suite
-        run: cmake --build --preset asan-msvc --target integration_tests
+        run: cmake --build --preset x64-release --target integration_tests
 
-      - name: Keep a dump for the fastfail path, which bypasses every in-process handler including the sanitizer
+      - name: Keep a dump, since the fastfail this hunts runs no in-process handler and so prints no stack
         shell: pwsh
         run: |
           $dumps = 'HKLM:\SOFTWARE\Microsoft\Windows\Windows Error Reporting\LocalDumps'
           New-Item -Path $dumps -Force | Out-Null
           Set-ItemProperty -Path $dumps -Name DumpFolder -Value "$env:RUNNER_TEMP\crash-dumps" -Type ExpandString
           Set-ItemProperty -Path $dumps -Name DumpType -Value 2 -Type DWord
-          Set-ItemProperty -Path $dumps -Name DumpCount -Value 2 -Type DWord
+          Set-ItemProperty -Path $dumps -Name DumpCount -Value 4 -Type DWord
 
-      - name: Run the whole suite repeatedly, failing only on a sanitizer report or a crash - every crash on record came from a full run, never from the under-load half on its own, and the latency budgets it also checks mean nothing on an instrumented build
+      - name: Run the whole suite three more times, failing only on a crash - this is the one build that reproduces the stack corruption, and one run in three is not enough to see it
         shell: pwsh
-        env:
-          ASAN_OPTIONS: detect_stack_use_after_return=1:exitcode=86:print_stacktrace=1
         run: |
-          $exe = 'out/build/asan-msvc/tests/integration/integration_tests.exe'
+          $exe = 'out/build/x64-release/tests/integration/integration_tests.exe'
           for ($i = 1; $i -le 3; $i++) {
-            Write-Host "===== asan run $i ====="
+            Write-Host "===== repeat run $i ====="
             & $exe
             $code = $LASTEXITCODE
-            Write-Host "===== asan run $i exit $code ====="
-            if ($code -eq 86) {
-              throw "AddressSanitizer reported memory corruption. The report above names the writing instruction and the object it lands on - the write the plain x64-release job only ever sees later as a fastfail in QuicEndpoint::Impl::DrainStreams."
-            }
+            Write-Host "===== repeat run $i exit $code ====="
             if ($code -ne 0 -and $code -ne 1) {
-              throw "integration_tests died with 0x$('{0:x8}' -f $code) without a sanitizer report, so the writer is code the sanitizer does not instrument - quiche, BoringSSL or the kernel. The uploaded dump is the only record."
+              throw "integration_tests died with 0x$('{0:x8}' -f $code). Search the output above for 'the readable-stream list on the recv thread's stack changed' - the checkpoint it names is the call that overwrote it."
             }
           }
 
@@ -164,11 +159,11 @@ jobs:
         if: failure() && steps.crash-dump.outputs.found == 'true'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: crash-dumps-windows-asan
+          name: crash-dumps-windows-repeat
           path: |
             ${{ runner.temp }}/crash-dumps
-            out/build/asan-msvc/tests/integration/integration_tests.exe
-            out/build/asan-msvc/tests/integration/integration_tests.pdb
+            out/build/x64-release/tests/integration/integration_tests.exe
+            out/build/x64-release/tests/integration/integration_tests.pdb
           if-no-files-found: ignore
           retention-days: 7
 
