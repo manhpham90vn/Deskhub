@@ -276,6 +276,21 @@ line.
 
 ## 9. Decisions worth remembering
 
+- **A capability probe that returns false can switch off a whole control loop**: the
+  Media Foundation encoder answered `SetBitrate` with `false` whenever the MFT did not
+  expose `CODECAPI_AVEncCommonMeanBitRate`, and `ApplyFeedback` correctly treats a refusal
+  as "nothing committed". On an Intel Quick Sync MFT that reports `MeanBitRate: NOT
+  SUPPORTED`, the result was a host that never changed bitrate at all: measured on this
+  hardware, 30 s of sustained 29-40 % loss produced zero `Bitrate` decisions, so the
+  quality ladder never moved either. The startup log said `NOT SUPPORTED` the whole time
+  and nobody read it as "adaptation is dead". `SetFps` and `RequestKeyFrame` in the same
+  file already fell back to `ReinitTransform()`; `SetBitrate` was the one that gave up,
+  and it now falls back the same way — `ConfigureTransform` writes `MF_MT_AVG_BITRATE`
+  from `cfg`, so a rebuild applies the new rate. The rebuild costs an IDR, which is why
+  the live `codecapi` path is still tried first. When a per-device capability gates a
+  control input, make the fallback mandatory: degrading to "slower" is a choice, silently
+  degrading to "never" is not.
+
 - **A sender that cannot keep up looks exactly like a clean link**: every input
   `BitrateController` had — loss, RTT, receive rate — comes from the viewer, so nothing
   in the loop could say "I am the one falling behind". Measured on a Pixel 4 hosting for

@@ -191,7 +191,9 @@ struct MfEncoder::Impl {
         if (!activate) return false;
         activate->ShutdownObject();
         if (FAILED(activate->ActivateObject(IID_PPV_ARGS(&mft)))) {
-            LOGE("[MfEncoder] Failed to recreate encoder for keyframe request.");
+            LOGE(
+                "[MfEncoder] Failed to recreate the encoder - this MFT cannot retune "
+                "live, so bitrate, frame rate and keyframe requests all rebuild it.");
             return false;
         }
         spsPps.clear();
@@ -278,12 +280,16 @@ struct MfEncoder::Impl {
 
     bool SetBitrate(uint32_t bitrateBps) {
         if (!bitrateBps) return false;
+        if (bitrateBps == cfg.bitrateBps) return true;
         cfg.bitrateBps = bitrateBps;
-        if (!codecApi || !codecApi->IsSupported(&CODECAPI_AVEncCommonMeanBitRate)) return false;
-        VARIANT v{};
-        v.vt = VT_UI4;
-        v.ulVal = (ULONG)bitrateBps;
-        return SUCCEEDED(codecApi->SetValue(&CODECAPI_AVEncCommonMeanBitRate, &v));
+        if (codecApi && codecApi->IsSupported(&CODECAPI_AVEncCommonMeanBitRate)) {
+            VARIANT v{};
+            v.vt = VT_UI4;
+            v.ulVal = (ULONG)bitrateBps;
+            if (SUCCEEDED(codecApi->SetValue(&CODECAPI_AVEncCommonMeanBitRate, &v))) return true;
+        }
+        if (!mft) return true;
+        return ReinitTransform();
     }
 
     bool SetFps(uint32_t fps) {

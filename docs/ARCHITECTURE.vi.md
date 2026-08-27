@@ -269,6 +269,21 @@ pull request, và dòng coverage của `core/`.
 
 ## 9. Các quyết định đáng nhớ
 
+- **Một phép dò năng lực trả về false có thể tắt hẳn cả một vòng điều khiển**: encoder
+  Media Foundation trả `false` cho `SetBitrate` mỗi khi MFT không có
+  `CODECAPI_AVEncCommonMeanBitRate`, và `ApplyFeedback` hoàn toàn đúng khi coi một lần từ
+  chối là "không commit gì". Trên MFT Intel Quick Sync báo `MeanBitRate: NOT SUPPORTED`,
+  hệ quả là host không bao giờ đổi bitrate: đo trên chính phần cứng này, 30 giây loss
+  29-40 % liên tục không sinh ra một quyết định `Bitrate` nào, nên thang chất lượng cũng
+  đứng im. Log khởi động ghi `NOT SUPPORTED` suốt thời gian đó mà không ai đọc nó thành
+  "khả năng thích ứng đã chết". `SetFps` và `RequestKeyFrame` trong cùng file vốn đã lùi
+  về `ReinitTransform()`; chỉ `SetBitrate` là bỏ cuộc, và giờ nó lùi về y như vậy —
+  `ConfigureTransform` ghi `MF_MT_AVG_BITRATE` từ `cfg` nên việc dựng lại sẽ áp bitrate
+  mới. Dựng lại tốn một IDR, nên đường `codecapi` trực tiếp vẫn được thử trước. Khi một
+  năng lực tuỳ thiết bị chặn mất một đầu vào điều khiển, hãy bắt buộc phải có đường lùi:
+  xuống cấp thành "chậm hơn" là một lựa chọn, âm thầm xuống cấp thành "không bao giờ"
+  thì không.
+
 - **Máy gửi không theo kịp trông y hệt một đường truyền sạch**: mọi đầu vào mà
   `BitrateController` có — loss, RTT, tốc độ nhận — đều đến từ viewer, nên không gì
   trong vòng lặp nói được "chính tôi đang tụt lại". Đo trên Pixel 4 làm host cho hai
