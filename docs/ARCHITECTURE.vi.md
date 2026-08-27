@@ -281,6 +281,18 @@ pull request, và dòng coverage của `core/`.
   `QualityLadder` tụt bậc theo sau và mức trần fps đi theo. Vòng điều khiển nào chỉ được
   nuôi bằng số liệu từ đầu kia thì mù với đúng nửa đường ống mà nó sở hữu.
 
+- **Chặn fps chỉ có tác dụng ở nơi thật sự có thứ gì đó bỏ frame**: bậc fps của thang
+  chất lượng là một yêu cầu, và mỗi nền tảng phải thực thi nó ở chỗ frame có thể bị vứt
+  đi. Windows và Linux chặn ngay tại capture bằng `FrameGate`; Android chặn đầu vào
+  MediaCodec bằng `max-fps-to-encoder`; macOS cấu hình lại khoảng cách frame của
+  ScreenCaptureKit. iOS thì không có chỗ nào: ReplayKit giao frame theo nhịp màn hình,
+  còn `VtEncoder::SetFps` chỉ đặt `kVTCompressionPropertyKey_ExpectedFrameRate` — một
+  gợi ý cho rate control, không bỏ frame nào cả. Đổi bậc ở đó chỉ chỉnh lại encoder chứ
+  không thay đổi số frame nó phải nuốt. `OfferVtFrame` giờ chạy cùng một `FrameGate` cho
+  cả hai app Apple, đặt sau khi cache dùng cho flush lúc màn hình tĩnh đã được làm mới,
+  để màn hình đứng yên vẫn còn frame để gửi lại. Khi một núm vặn tồn tại trên mọi nền
+  tảng, hãy kiểm tra từng nơi làm gì với nó trước khi tin vào thang chất lượng.
+
 - **Bộ điều tốc gửi phải luôn cao hơn hẳn tốc độ ra của chính encoder**: `Pacer::Gate`
   ngủ ngay trên thread mà `SendEncodedFrame` đang chạy, và trên Android đó là vòng drain
   của MediaCodec — đúng vòng phải gọi `releaseOutputBuffer` trước khi encoder giao được

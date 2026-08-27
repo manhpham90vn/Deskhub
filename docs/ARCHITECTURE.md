@@ -289,6 +289,18 @@ line.
   behind it and the fps cap follows. Any control loop fed only by the far end is blind to
   the half of the pipeline it actually owns.
 
+- **Capping fps only helps where something drops the frame**: the ladder's fps rung is a
+  request, and each platform has to honour it somewhere frames can be thrown away.
+  Windows and Linux gate at capture with `FrameGate`; Android caps MediaCodec's input
+  with `max-fps-to-encoder`; macOS reconfigures ScreenCaptureKit's frame interval. iOS
+  had nowhere: ReplayKit delivers at screen rate and `VtEncoder::SetFps` only sets
+  `kVTCompressionPropertyKey_ExpectedFrameRate`, a rate-control hint that does not drop
+  anything. A rung change there re-tuned the encoder and changed nothing about how many
+  frames it had to swallow. `OfferVtFrame` now runs the same `FrameGate` for both Apple
+  apps, after the idle-flush cache is refreshed so a still screen still has a frame to
+  re-send. When a knob exists on every platform, check what each one does with it before
+  trusting the ladder.
+
 - **The send pacer must stay well above the encoder's own output rate**: `Pacer::Gate`
   sleeps on whichever thread `SendEncodedFrame` runs on, and on Android that is
   MediaCodec's drain loop — the same loop that must call `releaseOutputBuffer` before the
