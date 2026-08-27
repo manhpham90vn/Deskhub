@@ -68,6 +68,7 @@ struct SourcePipelineState {
     std::atomic<uint64_t> lastFrameUs{0};
     uint64_t lastKeepaliveUs = 0;
 
+    diag::WindowMax frameAgeMs;
     std::unique_ptr<QualityLadder> ladder;
     QualityStep step;
     BitrateController rate;

@@ -144,11 +144,13 @@ HostEngine (one per app, owns SessionTransport)
 - Each screen source is a `SourcePipelineState`: its own `ScreenHostSession` (viewer table,
   negotiation, input arbitration), encoder, quality ladder and diagnostics. One
   encode feeds every viewer of that source.
-- The feedback loop: viewers send `Feedback` (loss/RTT) once a second; the host's
-  `BitrateController` (AIMD) and `QualityLadder` adjust encoder bitrate, resolution
-  and fps; FEC is armed from the first frame and only stood down after a long clean run,
-  because the loss it protects against shows up before the first report does. quiche's
-  CUBIC congestion control sits underneath the
+- The feedback loop: viewers send `Feedback` (loss/RTT) once a second, and the host adds
+  one signal of its own — the age of a frame when it reaches the sender, the same
+  quantity `enc_lat_ms` reports. `BitrateController` (AIMD) and `QualityLadder` adjust
+  encoder bitrate, resolution and fps from all three; FEC is armed from the first frame
+  and only stood down after a long clean run, because the loss it protects against shows
+  up before the first report does — a backlog never arms it, since parity would only
+  deepen the queue. quiche's CUBIC congestion control sits underneath the
   datagram path; the two act in series — quiche bounds what leaves the machine, the
   app adapts the encoder to the loss that results.
 - Input: "host wins" — `LocalInputMonitor` pauses remote input while the person at
@@ -273,6 +275,46 @@ under-load integration numbers from the pull-request build, and the core coverag
 line.
 
 ## 9. Decisions worth remembering
+
+- **A capability probe that returns false can switch off a whole control loop**: the
+  Media Foundation encoder answered `SetBitrate` with `false` whenever the MFT did not
+  expose `CODECAPI_AVEncCommonMeanBitRate`, and `ApplyFeedback` correctly treats a refusal
+  as "nothing committed". On an Intel Quick Sync MFT that reports `MeanBitRate: NOT
+  SUPPORTED`, the result was a host that never changed bitrate at all: measured on this
+  hardware, 30 s of sustained 29-40 % loss produced zero `Bitrate` decisions, so the
+  quality ladder never moved either. The startup log said `NOT SUPPORTED` the whole time
+  and nobody read it as "adaptation is dead". `SetFps` and `RequestKeyFrame` in the same
+  file already fell back to `ReinitTransform()`; `SetBitrate` was the one that gave up,
+  and it now falls back the same way — `ConfigureTransform` writes `MF_MT_AVG_BITRATE`
+  from `cfg`, so a rebuild applies the new rate. The rebuild costs an IDR, which is why
+  the live `codecapi` path is still tried first. When a per-device capability gates a
+  control input, make the fallback mandatory: degrading to "slower" is a choice, silently
+  degrading to "never" is not.
+
+- **A sender that cannot keep up looks exactly like a clean link**: every input
+  `BitrateController` had — loss, RTT, receive rate — comes from the viewer, so nothing
+  in the loop could say "I am the one falling behind". Measured on a Pixel 4 hosting for
+  two viewers: frames left the encoder 15 s stale while the viewers reported 0 % loss and
+  15 ms RTT, and the controller read that as headroom and walked the bitrate back up to
+  its 20 Mbps ceiling — bufferbloat inside the sender, where the cleaner the link looks
+  the harder it pumps. The host now measures frame age at the send step and feeds it in
+  beside the viewer's numbers: past `kBacklogMs` it backs off like 2 % loss, past
+  `kSevereBacklogMs` like 5 % loss, and either one blocks the ramp-up for the usual two
+  seconds. Bitrate is still the only control variable, so the `QualityLadder` steps down
+  behind it and the fps cap follows. Any control loop fed only by the far end is blind to
+  the half of the pipeline it actually owns.
+
+- **Capping fps only helps where something drops the frame**: the ladder's fps rung is a
+  request, and each platform has to honour it somewhere frames can be thrown away.
+  Windows and Linux gate at capture with `FrameGate`; Android caps MediaCodec's input
+  with `max-fps-to-encoder`; macOS reconfigures ScreenCaptureKit's frame interval. iOS
+  had nowhere: ReplayKit delivers at screen rate and `VtEncoder::SetFps` only sets
+  `kVTCompressionPropertyKey_ExpectedFrameRate`, a rate-control hint that does not drop
+  anything. A rung change there re-tuned the encoder and changed nothing about how many
+  frames it had to swallow. `OfferVtFrame` now runs the same `FrameGate` for both Apple
+  apps, after the idle-flush cache is refreshed so a still screen still has a frame to
+  re-send. When a knob exists on every platform, check what each one does with it before
+  trusting the ladder.
 
 - **The send pacer must stay well above the encoder's own output rate**: `Pacer::Gate`
   sleeps on whichever thread `SendEncodedFrame` runs on, and on Android that is

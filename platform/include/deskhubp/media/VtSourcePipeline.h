@@ -1,4 +1,5 @@
 #pragma once
+#include "deskhub/control/FrameGate.h"
 #include "deskhub/diag/ShareDiag.h"
 #include "deskhub/session/host/SourcePipeline.h"
 #include "deskhubp/diag/Log.h"
@@ -27,6 +28,8 @@ struct VtSourcePipeline : HostSourceBase<Capture, Injector, VtEncoder> {
     }
 
     std::function<bool(uint32_t, uint32_t)> ensureEncoderFn;
+
+    deskhub::FrameGate frameGate;
 
     void* cachedPb = nullptr;
 
@@ -86,6 +89,7 @@ void OfferVtFrame(Pipeline* p, uint32_t maxDim, const Frame& fi) {
     p->lastFrameUs.store(fi.meta.timestampUs, std::memory_order_relaxed);
 
     if (!p->netReady.load(std::memory_order_acquire)) return;
+    if (!p->frameGate.Admit(p->curFps.load(std::memory_order_relaxed), fi.meta.timestampUs)) return;
     if (!p->ensureEncoderFn(adm.encode.width, adm.encode.height)) return;
     p->EncodeTimed(fi.handle, fi.meta.timestampUs, p->forceIdr.exchange(false));
 }

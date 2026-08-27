@@ -160,6 +160,29 @@ void TestQualityStepIsAppliedThroughTheHook() {
     Check(st.qualityChanged.load(), "the recv loop is told to re-offer");
 }
 
+void TestSenderBacklogWalksTheLadderDownOnACleanLink() {
+    std::printf("[hostfb] a clean link that the sender cannot keep up with still steps down...\n");
+    SourcePipelineState st(kStartBps, kMinBps);
+    Recorder r;
+    st.ladder = std::make_unique<QualityLadder>(uint16_t(1920), uint16_t(1080), uint8_t(60));
+    st.step = st.ladder->current();
+    Check(st.step.fps == 60, "the ladder starts at the top rung");
+
+    uint64_t now = kT0;
+    int seconds = 0;
+    for (; seconds < 30 && st.step.fps == 60; ++seconds) {
+        now += 1'000'000;
+        st.frameAgeMs.Add(4'000);
+        ApplyFeedback(st, CleanLink(), now, r.Hooks());
+    }
+
+    Check(st.step.fps < 60, "a sender backlog alone drops the frame rate the encoder is asked for");
+    Check(st.curFps.load() == st.step.fps, "curFps carries it to the capture side");
+    Check(r.qualityCalls == 1, "and the platform hook ran so the encoder can be re-capped");
+    Check(seconds <= 6, "and it gets there within a few seconds, not tens of them");
+    Check(st.uiLossPct.load() == 0, "all of that happened with the viewer reporting no loss");
+}
+
 void TestNoLadderMeansNoQualityWork() {
     std::printf("[hostfb] before a client negotiates there is no ladder to walk...\n");
     SourcePipelineState st(kStartBps, kMinBps);
@@ -232,6 +255,7 @@ void RunViewerFeedbackTests() {
     TestFecFollowsLoss();
     TestQualityStepIsAppliedThroughTheHook();
     TestNoLadderMeansNoQualityWork();
+    TestSenderBacklogWalksTheLadderDownOnACleanLink();
     TestNackRepliesOnlyForKnownPackets();
     TestForgetViewersClearsRetransmitState();
 }

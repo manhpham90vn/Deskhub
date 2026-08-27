@@ -145,11 +145,13 @@ HostEngine (một cho cả app, sở hữu SessionTransport)
 - Mỗi nguồn màn hình là một `SourcePipelineState`: `ScreenHostSession` riêng (bảng viewer,
   thương lượng, phân xử input), encoder, thang chất lượng và chẩn đoán riêng. Một
   lần mã hoá nuôi mọi viewer của nguồn đó.
-- Vòng phản hồi: viewer gửi `Feedback` (loss/RTT) mỗi giây; `BitrateController`
-  (AIMD) và `QualityLadder` của host chỉnh bitrate, độ phân giải, fps của encoder;
-  FEC bật sẵn từ frame đầu và chỉ hạ xuống sau một chuỗi dài không mất gói, vì loss mà
-  nó chống lại xuất hiện trước cả báo cáo đầu tiên. CUBIC của quiche nằm dưới đường
-  datagram; hai bộ hoạt động nối
+- Vòng phản hồi: viewer gửi `Feedback` (loss/RTT) mỗi giây, và host góp thêm một tín
+  hiệu của chính nó — tuổi của frame lúc nó tới bộ gửi, đúng đại lượng mà `enc_lat_ms`
+  báo cáo. `BitrateController` (AIMD) và `QualityLadder` chỉnh bitrate, độ phân giải,
+  fps của encoder theo cả ba; FEC bật sẵn từ frame đầu và chỉ hạ xuống sau một chuỗi dài
+  không mất gói, vì loss mà nó chống lại xuất hiện trước cả báo cáo đầu tiên — backlog
+  không bao giờ bật FEC, vì gói parity chỉ làm hàng đợi dày thêm. CUBIC của quiche nằm
+  dưới đường datagram; hai bộ hoạt động nối
   tiếp — quiche giới hạn thứ rời khỏi máy, app điều tốc encoder theo loss sinh ra.
 - Input: "host thắng" — `LocalInputMonitor` tạm dừng input từ xa khi người ngồi tại
   máy động vào chuột thật; mỗi lúc một viewer điều khiển.
@@ -266,6 +268,45 @@ lệch chỉ là cảnh báo, không bao giờ đánh trượt), số đo tích 
 pull request, và dòng coverage của `core/`.
 
 ## 9. Các quyết định đáng nhớ
+
+- **Một phép dò năng lực trả về false có thể tắt hẳn cả một vòng điều khiển**: encoder
+  Media Foundation trả `false` cho `SetBitrate` mỗi khi MFT không có
+  `CODECAPI_AVEncCommonMeanBitRate`, và `ApplyFeedback` hoàn toàn đúng khi coi một lần từ
+  chối là "không commit gì". Trên MFT Intel Quick Sync báo `MeanBitRate: NOT SUPPORTED`,
+  hệ quả là host không bao giờ đổi bitrate: đo trên chính phần cứng này, 30 giây loss
+  29-40 % liên tục không sinh ra một quyết định `Bitrate` nào, nên thang chất lượng cũng
+  đứng im. Log khởi động ghi `NOT SUPPORTED` suốt thời gian đó mà không ai đọc nó thành
+  "khả năng thích ứng đã chết". `SetFps` và `RequestKeyFrame` trong cùng file vốn đã lùi
+  về `ReinitTransform()`; chỉ `SetBitrate` là bỏ cuộc, và giờ nó lùi về y như vậy —
+  `ConfigureTransform` ghi `MF_MT_AVG_BITRATE` từ `cfg` nên việc dựng lại sẽ áp bitrate
+  mới. Dựng lại tốn một IDR, nên đường `codecapi` trực tiếp vẫn được thử trước. Khi một
+  năng lực tuỳ thiết bị chặn mất một đầu vào điều khiển, hãy bắt buộc phải có đường lùi:
+  xuống cấp thành "chậm hơn" là một lựa chọn, âm thầm xuống cấp thành "không bao giờ"
+  thì không.
+
+- **Máy gửi không theo kịp trông y hệt một đường truyền sạch**: mọi đầu vào mà
+  `BitrateController` có — loss, RTT, tốc độ nhận — đều đến từ viewer, nên không gì
+  trong vòng lặp nói được "chính tôi đang tụt lại". Đo trên Pixel 4 làm host cho hai
+  viewer: frame rời encoder khi đã cũ 15 s trong lúc viewer báo 0 % loss và RTT 15 ms,
+  còn bộ điều khiển đọc đó là dư địa và bơm bitrate ngược lên trần 20 Mbps — bufferbloat
+  nằm ngay trong máy gửi, càng thấy đường truyền sạch thì càng bơm mạnh. Host giờ đo tuổi
+  frame ngay tại bước gửi và đưa vào cạnh các số của viewer: quá `kBacklogMs` thì lùi như
+  gặp 2 % loss, quá `kSevereBacklogMs` thì lùi như gặp 5 % loss, và cả hai đều chặn nhánh
+  tăng trong hai giây như thường lệ. Bitrate vẫn là biến điều khiển duy nhất, nên
+  `QualityLadder` tụt bậc theo sau và mức trần fps đi theo. Vòng điều khiển nào chỉ được
+  nuôi bằng số liệu từ đầu kia thì mù với đúng nửa đường ống mà nó sở hữu.
+
+- **Chặn fps chỉ có tác dụng ở nơi thật sự có thứ gì đó bỏ frame**: bậc fps của thang
+  chất lượng là một yêu cầu, và mỗi nền tảng phải thực thi nó ở chỗ frame có thể bị vứt
+  đi. Windows và Linux chặn ngay tại capture bằng `FrameGate`; Android chặn đầu vào
+  MediaCodec bằng `max-fps-to-encoder`; macOS cấu hình lại khoảng cách frame của
+  ScreenCaptureKit. iOS thì không có chỗ nào: ReplayKit giao frame theo nhịp màn hình,
+  còn `VtEncoder::SetFps` chỉ đặt `kVTCompressionPropertyKey_ExpectedFrameRate` — một
+  gợi ý cho rate control, không bỏ frame nào cả. Đổi bậc ở đó chỉ chỉnh lại encoder chứ
+  không thay đổi số frame nó phải nuốt. `OfferVtFrame` giờ chạy cùng một `FrameGate` cho
+  cả hai app Apple, đặt sau khi cache dùng cho flush lúc màn hình tĩnh đã được làm mới,
+  để màn hình đứng yên vẫn còn frame để gửi lại. Khi một núm vặn tồn tại trên mọi nền
+  tảng, hãy kiểm tra từng nơi làm gì với nó trước khi tin vào thang chất lượng.
 
 - **Bộ điều tốc gửi phải luôn cao hơn hẳn tốc độ ra của chính encoder**: `Pacer::Gate`
   ngủ ngay trên thread mà `SendEncodedFrame` đang chạy, và trên Android đó là vòng drain

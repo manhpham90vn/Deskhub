@@ -111,7 +111,8 @@ CI gates a good deal more than those two:
   after `make coverage`)
 - all three suites under ASan/UBSan and TSan, and cross-built for arm64 Linux, an
   Android emulator and the iOS Simulator
-- the whole integration suite again on Windows under MSVC ASan
+- the whole integration suite three more times on Windows, hunting an intermittent stack
+  corruption that shows up in about one run in three
 - the libFuzzer targets for 30 s each on every PR, 15 min each nightly
 - CodeQL over C++/Kotlin/Swift, a gitleaks sweep of the whole history, and a
   dependency review on pull requests

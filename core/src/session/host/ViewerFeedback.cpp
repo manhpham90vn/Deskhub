@@ -10,7 +10,7 @@ FeedbackOutcome ApplyFeedback(SourcePipelineState& st, const Feedback& fb, uint6
     st.haveFeedback.store(true, std::memory_order_release);
 
     FeedbackOutcome out;
-    const BitrateDecision d = st.rate.Update(fb, nowUs);
+    const BitrateDecision d = st.rate.Update(fb, st.frameAgeMs.TakeReset(), nowUs);
 
     if (d.fecToggled) {
         st.wantFec.store(d.fecEnabled, std::memory_order_relaxed);

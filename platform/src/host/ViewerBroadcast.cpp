@@ -55,7 +55,9 @@ void SendEncodedFrame(deskhub::SourcePipelineState& st, SessionTransport& sock,
     if (!st.session || st.session->state() != deskhub::ScreenHostSession::State::Streaming) return;
 
     const uint64_t nowUs = NowUs();
-    st.diag.encLatMs.Add(nowUs > timestampUs ? uint32_t((nowUs - timestampUs) / 1000) : 0);
+    const uint32_t frameAgeMs = nowUs > timestampUs ? uint32_t((nowUs - timestampUs) / 1000) : 0;
+    st.diag.encLatMs.Add(frameAgeMs);
+    st.frameAgeMs.Add(frameAgeMs);
 
     uint64_t addrs[deskhub::kMaxViewersPerSource];
     const size_t viewers = deskhub::SnapshotViewerAddrs(st, addrs);
