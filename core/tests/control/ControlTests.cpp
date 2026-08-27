@@ -21,23 +21,23 @@ void TestBitrateBackoff() {
     std::printf("[ctrl] bitrate: back off on loss, clamp at floor...\n");
     BitrateController c(20'000'000, 1'000'000);
 
-    auto d = c.Update(Fb(5), 1'000'000);
+    auto d = c.Update(Fb(5), 0, 1'000'000);
     Check(d.changeBitrate && d.bitrateBps == 15'000'000, "loss 5% -> x0.75");
     c.CommitBitrate(d.bitrateBps);
 
-    d = c.Update(Fb(2), 2'000'000);
+    d = c.Update(Fb(2), 0, 2'000'000);
     Check(d.changeBitrate && d.bitrateBps == 13'500'000, "loss 2% -> x0.90");
     c.CommitBitrate(d.bitrateBps);
 
     uint64_t now = 3'000'000;
     for (int i = 0; i < 40; ++i, now += 1'000'000) {
-        d = c.Update(Fb(9), now);
+        d = c.Update(Fb(9), 0, now);
         if (d.changeBitrate) c.CommitBitrate(d.bitrateBps);
     }
     Check(c.bitrateBps() >= 1'000'000, "sustained loss never drops below the floor");
     Check(c.bitrateBps() < 1'020'000, "sustained loss settles at the floor (within the 2% deadband)");
 
-    const auto stable = c.Update(Fb(9), now);
+    const auto stable = c.Update(Fb(9), 0, now);
     Check(!stable.changeBitrate, "at the floor -> no further renegotiation");
 }
 
@@ -45,33 +45,33 @@ void TestBitrateRecovery() {
     std::printf("[ctrl] bitrate: ramp back up only after the link stays clean...\n");
     BitrateController c(20'000'000, 1'000'000);
 
-    auto d = c.Update(Fb(5), 1'000'000);
+    auto d = c.Update(Fb(5), 0, 1'000'000);
     c.CommitBitrate(d.bitrateBps);
 
-    d = c.Update(Fb(0), 2'500'000);
+    d = c.Update(Fb(0), 0, 2'500'000);
     Check(!d.changeBitrate, "no ramp-up within the 2s cooldown after a decrease");
 
-    d = c.Update(Fb(0), 4'000'000);
+    d = c.Update(Fb(0), 0, 4'000'000);
     Check(d.changeBitrate && d.bitrateBps == 16'000'000, "ramp-up is +5% of the ceiling");
     c.CommitBitrate(d.bitrateBps);
 
     uint64_t now = 5'000'000;
     for (int i = 0; i < 20; ++i, now += 1'000'000) {
-        d = c.Update(Fb(0), now);
+        d = c.Update(Fb(0), 0, now);
         if (d.changeBitrate) c.CommitBitrate(d.bitrateBps);
     }
     Check(c.bitrateBps() == 20'000'000, "ramp-up stops at the ceiling");
-    d = c.Update(Fb(0), now);
+    d = c.Update(Fb(0), 0, now);
     Check(!d.changeBitrate, "already at ceiling -> no renegotiation");
 }
 
 void TestBitrateUncommitted() {
     std::printf("[ctrl] bitrate: rejected change doesn't move the controller...\n");
     BitrateController c(20'000'000, 1'000'000);
-    const auto d = c.Update(Fb(5), 1'000'000);
+    const auto d = c.Update(Fb(5), 0, 1'000'000);
     Check(d.changeBitrate && d.bitrateBps == 15'000'000, "proposes the decrease");
     Check(c.bitrateBps() == 20'000'000, "but stays put until CommitBitrate");
-    const auto d2 = c.Update(Fb(5), 2'000'000);
+    const auto d2 = c.Update(Fb(5), 0, 2'000'000);
     Check(d2.bitrateBps == 15'000'000, "next round recomputes from the old rate");
 }
 
@@ -84,19 +84,56 @@ void TestFecHysteresis() {
     uint64_t now = 1'000'000;
     BitrateDecision d{};
     for (int i = 0; i < clean - 1; ++i, now += 1'000'000) {
-        d = c.Update(Fb(0), now);
+        d = c.Update(Fb(0), 0, now);
         Check(d.fecEnabled && !d.fecToggled, "FEC stays on through the clean run");
     }
-    d = c.Update(Fb(0), now);
+    d = c.Update(Fb(0), 0, now);
     Check(!d.fecEnabled && d.fecToggled, "FEC turns off once the link has proved itself");
 
     now += 1'000'000;
-    d = c.Update(Fb(3), now);
+    d = c.Update(Fb(3), 0, now);
     Check(d.fecEnabled && d.fecToggled, "any real loss turns FEC back on at once");
 
     now += 1'000'000;
-    for (int i = 0; i < clean - 1; ++i, now += 1'000'000) c.Update(Fb(0), now);
+    for (int i = 0; i < clean - 1; ++i, now += 1'000'000) c.Update(Fb(0), 0, now);
     Check(c.fecEnabled(), "clean-second counter restarts after a fresh loss");
+}
+
+void TestBitrateBacklogOnACleanLink() {
+    std::printf("[ctrl] bitrate: frames aging in the sender back off even at 0%% loss...\n");
+    BitrateController c(20'000'000, 1'000'000);
+
+    auto d = c.Update(Fb(0), BitrateController::kBacklogMs, 1'000'000);
+    Check(d.changeBitrate && d.bitrateBps == 18'000'000,
+        "a backlog on a link reporting no loss still costs 10%");
+    c.CommitBitrate(d.bitrateBps);
+
+    d = c.Update(Fb(0), BitrateController::kSevereBacklogMs, 2'000'000);
+    Check(d.changeBitrate && d.bitrateBps == 13'500'000, "a severe backlog costs 25%");
+    c.CommitBitrate(d.bitrateBps);
+
+    d = c.Update(Fb(0), 0, 2'500'000);
+    Check(!d.changeBitrate, "a backlog cut holds the ramp-up off for the same 2s a loss cut does");
+
+    d = c.Update(Fb(0), BitrateController::kBacklogMs - 1, 5'000'000);
+    Check(d.changeBitrate && d.bitrateBps > 13'500'000,
+        "an age below the mark is not a backlog, so the ramp-up resumes");
+}
+
+void TestBacklogNeverArmsFec() {
+    std::printf("[ctrl] FEC: a sender backlog is not loss, so it must not re-arm FEC...\n");
+    const int clean = BitrateController::kCleanSecondsBeforeDroppingFec;
+    BitrateController c(20'000'000, 1'000'000);
+
+    uint64_t now = 1'000'000;
+    for (int i = 0; i < clean; ++i, now += 1'000'000) c.Update(Fb(0), 0, now);
+    Check(!c.fecEnabled(), "FEC stood down after the clean run");
+
+    now += 1'000'000;
+    const auto d = c.Update(Fb(0), 4'000, now);
+    Check(!d.fecEnabled && !d.fecToggled,
+        "a four-second backlog leaves FEC off - its parity would only deepen the queue");
+    Check(d.changeBitrate && d.bitrateBps == 15'000'000, "but the bitrate still backs off");
 }
 
 void TestLinkStatsWindow() {
@@ -170,6 +207,8 @@ void RunControlTests() {
     TestBitrateRecovery();
     TestBitrateUncommitted();
     TestFecHysteresis();
+    TestBitrateBacklogOnACleanLink();
+    TestBacklogNeverArmsFec();
     TestLinkStatsWindow();
     TestLinkStatsUsesRealElapsed();
     TestFeedbackFromWindow();

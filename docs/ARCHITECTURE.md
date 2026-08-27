@@ -144,11 +144,13 @@ HostEngine (one per app, owns SessionTransport)
 - Each screen source is a `SourcePipelineState`: its own `ScreenHostSession` (viewer table,
   negotiation, input arbitration), encoder, quality ladder and diagnostics. One
   encode feeds every viewer of that source.
-- The feedback loop: viewers send `Feedback` (loss/RTT) once a second; the host's
-  `BitrateController` (AIMD) and `QualityLadder` adjust encoder bitrate, resolution
-  and fps; FEC is armed from the first frame and only stood down after a long clean run,
-  because the loss it protects against shows up before the first report does. quiche's
-  CUBIC congestion control sits underneath the
+- The feedback loop: viewers send `Feedback` (loss/RTT) once a second, and the host adds
+  one signal of its own — the age of a frame when it reaches the sender, the same
+  quantity `enc_lat_ms` reports. `BitrateController` (AIMD) and `QualityLadder` adjust
+  encoder bitrate, resolution and fps from all three; FEC is armed from the first frame
+  and only stood down after a long clean run, because the loss it protects against shows
+  up before the first report does — a backlog never arms it, since parity would only
+  deepen the queue. quiche's CUBIC congestion control sits underneath the
   datagram path; the two act in series — quiche bounds what leaves the machine, the
   app adapts the encoder to the loss that results.
 - Input: "host wins" — `LocalInputMonitor` pauses remote input while the person at
@@ -273,6 +275,19 @@ under-load integration numbers from the pull-request build, and the core coverag
 line.
 
 ## 9. Decisions worth remembering
+
+- **A sender that cannot keep up looks exactly like a clean link**: every input
+  `BitrateController` had — loss, RTT, receive rate — comes from the viewer, so nothing
+  in the loop could say "I am the one falling behind". Measured on a Pixel 4 hosting for
+  two viewers: frames left the encoder 15 s stale while the viewers reported 0 % loss and
+  15 ms RTT, and the controller read that as headroom and walked the bitrate back up to
+  its 20 Mbps ceiling — bufferbloat inside the sender, where the cleaner the link looks
+  the harder it pumps. The host now measures frame age at the send step and feeds it in
+  beside the viewer's numbers: past `kBacklogMs` it backs off like 2 % loss, past
+  `kSevereBacklogMs` like 5 % loss, and either one blocks the ramp-up for the usual two
+  seconds. Bitrate is still the only control variable, so the `QualityLadder` steps down
+  behind it and the fps cap follows. Any control loop fed only by the far end is blind to
+  the half of the pipeline it actually owns.
 
 - **The send pacer must stay well above the encoder's own output rate**: `Pacer::Gate`
   sleeps on whichever thread `SendEncodedFrame` runs on, and on Android that is

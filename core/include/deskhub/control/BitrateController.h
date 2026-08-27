@@ -15,11 +15,13 @@ struct BitrateDecision {
 class BitrateController {
 public:
     static constexpr int kCleanSecondsBeforeDroppingFec = 10;
+    static constexpr uint32_t kBacklogMs = 150;
+    static constexpr uint32_t kSevereBacklogMs = 400;
 
     BitrateController(uint32_t startBps, uint32_t minBps)
         : cur_(startBps), max_(startBps), min_(minBps) {}
 
-    BitrateDecision Update(const Feedback& fb, uint64_t nowUs);
+    BitrateDecision Update(const Feedback& fb, uint32_t frameAgeMs, uint64_t nowUs);
 
     void CommitBitrate(uint32_t bps) {
         cur_ = bps;
