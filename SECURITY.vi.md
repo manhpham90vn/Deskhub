@@ -47,7 +47,8 @@ máy của mình cho Internet.
 | Những người xem tranh chuột với nhau | Tối đa 5 người xem một host, nhưng chỉ một người điều khiển: ai vào trước thì thắng, và thao tác của người vào sau bị bỏ qua cho tới khi người vào trước ngừng thao tác một giây. Người thứ 6 bị từ chối với lý do `Busy`. |
 | Người xem mà bạn chỉ muốn cho xem màn hình | Chế độ chia sẻ chỉ xem, có trên mọi host, bỏ các gói điều khiển ngay tại host trước khi bất cứ thứ gì được đưa vào máy — nó không dựa vào việc yêu cầu client tự giác. Host Android và iOS luôn ở chế độ chỉ xem, không tắt được. |
 | Điện thoại bị bỏ quên trong lúc đang chia sẻ | Chốt chặn là hệ điều hành chứ không phải Deskhub: Android giữ một thông báo thường trực và hỏi lại quyền quay màn hình ở từng lần chia sẻ, còn iOS luôn hiện chỉ báo broadcast. Cả hai đều dừng được phiên chia sẻ mà không cần mở app. |
-| Gói tin dị dạng | Mọi trường đều được kiểm tra biên trước khi đọc. Các bộ phân tích gói được phủ bởi unit test, chạy dưới AddressSanitizer, UndefinedBehaviorSanitizer và ThreadSanitizer trong CI, và được fuzz mỗi đêm bằng libFuzzer — sáu target bao phủ định dạng gói tin, phân tích H.264, ráp gói, máy trạng thái phiên và văn bản UI. Crash do fuzz tìm ra được giữ lại trong repo làm regression test, và độ phủ mới được gộp ngược vào bộ seed corpus. |
+| Máy đã ghép đôi ghi tệp lên máy bạn | Chỉ máy đã được cho vào mới gửi tệp được, và chỉ khi máy nhận đang mở chia sẻ tệp. Thứ tới nơi không thoát ra khỏi thư mục máy đó đã chọn: tên trên đường truyền bị cắt còn phần cuối cùng của đường dẫn và được chà sạch dấu phân cách, byte điều khiển, ký tự mà hệ tệp không nhận và các tên thiết bị dành riêng, trước khi mở bất kỳ tệp nào; mỗi tệp được ghi dưới tên `.deskhub-part` và chỉ được đổi tên khi đã tới đủ và CRC-32 khớp; và tên đã có sẵn thì được thêm số chứ không ghi đè lên thứ gì. Một lô tối đa 32 tệp, 8 GiB mỗi tệp và 32 GiB tổng cộng. Việc chà sạch đó cũng chạy trên điện thoại và máy tính bảng trước khi bất cứ thứ gì tới được thư viện ảnh hay thư mục Downloads của chúng. |
+| Gói tin dị dạng | Mọi trường đều được kiểm tra biên trước khi đọc. Các bộ phân tích gói được phủ bởi unit test, chạy dưới AddressSanitizer, UndefinedBehaviorSanitizer và ThreadSanitizer trong CI, và được fuzz mỗi đêm bằng libFuzzer — bảy target bao phủ định dạng gói tin, phân tích H.264, ráp gói, luồng byte của terminal, văn bản UI, và các máy trạng thái phiên của cả host lẫn viewer. Crash do fuzz tìm ra được giữ lại trong repo làm regression test, và độ phủ mới được gộp ngược vào bộ seed corpus. |
 
 ### Deskhub **không** bảo vệ được những gì
 
@@ -178,12 +179,20 @@ bạn đã kết nối, thời điểm, và passcode dùng cho từng địa ch�
 `host_cert.pem` (khoá riêng và chứng chỉ tự ký của máy này — danh tính đứng sau dấu vân
 tay của nó; ai sao chép được tệp khoá là mạo danh được máy này), `known_hosts` (khoá của
 các host mà máy này đã tin), `paired_devices` (khoá, tên và mốc thời gian của các máy
-được phép vào host này) và `auth_salt` (salt không bí mật cho verifier của passcode). Các
+được phép vào host này), `auth_salt` (salt không bí mật cho verifier của passcode) và,
+trên Linux, `portal-restore-token.txt` (token của chính desktop cho những màn hình bạn đã
+chọn, chỉ có ý nghĩa với phiên desktop của bạn và không bao giờ được truyền đi). Các
 app di động giữ cài đặt của chúng trong vùng sandbox riêng — trên iOS là trong app group
 container. Passcode được lưu bằng cách che đi với một khoá XOR cố định, đủ để nó không
 hiện lên màn hình và không lộ ra khi mở tệp xem qua — **đó không phải mã hoá**, và ai có
 mã nguồn cùng tệp đó khôi phục lại chúng trong vài giây. Hãy coi thư mục đó là đọc được
 bởi mọi thứ chạy dưới danh nghĩa tài khoản của bạn.
+
+Tệp mà máy khác gửi tới rơi ra ngoài thư mục đó, vào đúng thư mục máy nhận đã chọn cho
+chúng (`Deskhub` trong thư mục nhà của người dùng nếu không chọn thư mục khác, lưu dưới
+khoá `transfer_dir`). Trên điện thoại và máy tính bảng, chúng vào thư viện ảnh hoặc thư
+mục Documents / Downloads của thiết bị, và còn nguyên ở đó sau khi gỡ cài đặt app. Hãy
+coi mọi thứ được giao tới đó là tệp do một máy đã ghép đôi đặt lên thiết bị của bạn.
 
 Không thứ gì trong số này được tải lên đâu cả; bạn xoá thư mục đó lúc nào cũng được.
 

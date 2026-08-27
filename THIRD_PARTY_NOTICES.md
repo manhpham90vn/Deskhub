@@ -92,7 +92,7 @@ resolved at runtime; it is not bundled.
 | Component | License | Linkage |
 | --- | --- | --- |
 | SwiftUI, AppKit, ScreenCaptureKit, VideoToolbox, AVFoundation, CoreMedia, CoreVideo, CoreGraphics, ApplicationServices, ServiceManagement | Apple SDK | OS component (macOS) |
-| SwiftUI, UIKit, ReplayKit, VideoToolbox, AVFoundation, CoreMedia, CoreVideo, Accelerate (vImage) | Apple SDK | OS component (iOS) |
+| SwiftUI, UIKit, ReplayKit, VideoToolbox, AVFoundation, CoreMedia, CoreVideo, Accelerate (vImage), Photos, UserNotifications | Apple SDK | OS component (iOS) |
 
 ## Android app (`client/android`)
 

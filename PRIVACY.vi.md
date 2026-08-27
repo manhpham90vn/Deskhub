@@ -2,7 +2,7 @@
 
 # Chính sách quyền riêng tư của Deskhub
 
-_Ngày hiệu lực: 24 tháng 8, 2026 — Phiên bản 2.3_
+_Ngày hiệu lực: 28 tháng 8, 2026 — Phiên bản 2.4_
 
 > Đây là bản dịch của [`PRIVACY.md`](PRIVACY.md). Nếu hai bản có khác biệt, **bản tiếng
 > Anh là bản có giá trị pháp lý**.
@@ -39,7 +39,6 @@ ba.
 
 | Dữ liệu | Mục đích | Nó đi đâu | Thời gian lưu |
 |---|---|---|---|
-| 2.3 | 2026-08-24 | Mọi thiết bị nay **nhận tệp ngay khi app đang mở**, thay vì chờ bật công tắc: nút *Nhận tệp người xem gửi* đã bỏ, và máy chấp nhận tệp được chào bất cứ lúc nào nó đang chạy — với điện thoại là bất cứ khi nào app đang hiện trên màn hình. Điều xảy ra với tệp đến thì không đổi: vẫn cần người gửi đã ghép đôi và được cho vào, vẫn rơi vào thư mục máy đó đã chọn, vẫn không bao giờ ghi đè tệp đã có ở đó, và vẫn được ghi vào nhật ký cục bộ kèm tên, địa chỉ và vân tay khoá của thiết bị gửi. Chia sẻ màn hình vẫn là hành động có chủ đích sau nút riêng của nó, và một máy đang chia sẻ màn hình vẫn tiếp tục nhận tệp thay vì tắt việc đó trong suốt thời gian chia sẻ. |
 | Nội dung màn hình của máy đang chia sẻ (các khung hình) | Hiển thị màn hình đó trên thiết bị còn lại của bạn | Gửi trực tiếp giữa hai thiết bị của bạn, mã hoá trên đường truyền (QUIC/TLS) | Không bao giờ lưu; chỉ tồn tại trong bộ nhớ trong lúc phiên đang chạy |
 | Tiếng mà máy đang chia sẻ phát ra (chỉ khi máy đó bật chia sẻ tiếng và có viewer xin nghe) | Để người đang xem nghe được máy đó | Gửi trực tiếp giữa hai thiết bị của bạn, mã hoá trên đường truyền (QUIC/TLS), dưới dạng âm thanh đã nén | Không bao giờ lưu; chỉ tồn tại trong bộ nhớ trong lúc phiên đang chạy |
 | Thao tác chuột, bàn phím và chạm | Điều khiển máy đang chia sẻ từ thiết bị còn lại | Gửi trực tiếp từ thiết bị đang xem tới máy đang chia sẻ, mã hoá trên đường truyền (QUIC/TLS) | Không bao giờ lưu; bỏ đi ngay sau khi được đưa vào máy |
@@ -54,7 +53,7 @@ ba.
 | Văn bản clipboard (chỉ khi công tắc đồng bộ clipboard đang bật và có phiên đang chạy) | Để văn bản copy trên một thiết bị dán được trên các thiết bị kia | Gửi trực tiếp giữa các thiết bị của bạn, mã hoá trên đường truyền (QUIC/TLS), giới hạn 32 KiB mỗi lần copy; chỉ văn bản thuần, không bao giờ là ảnh hay tệp | Deskhub không bao giờ lưu; chỉ nằm trong clipboard hệ thống bình thường của mỗi thiết bị |
 | Việc có đang phát hay không, số người xem đang kết nối, mức bộ nhớ tính bằng megabyte mà chính broadcast extension đang dùng, và nội dung lỗi khởi động gần nhất (chỉ trên iOS) | Để màn hình chia sẻ của app báo được trạng thái của broadcast extension, thứ mà iOS chạy như một tiến trình riêng và sẽ chấm dứt nếu nó dùng quá nhiều bộ nhớ | Ghi vào `broadcast-status.txt` trong cùng app group container đó | Xoá đi khi buổi phát kết thúc |
 | Tên thiết bị trong ô *Your name* — được điền sẵn tên của chính máy hoặc thiết bị này (hostname trên Windows và Linux, tên máy tính trên macOS, tên thiết bị trên iOS, model trên Android) cho tới khi bạn sửa nó | Hiển thị trên host mà bạn kết nối tới, bên cạnh địa chỉ của thiết bị này, để người đang chia sẻ phân biệt được các người xem | Lưu vào `ui-settings.txt` trong cùng thư mục, và gửi tới host khi bạn kết nối — mã hoá trên đường truyền, nhưng hiển thị trên màn hình host và ghi vào nhật ký của host — nên tên mặc định này được gửi đi trừ khi bạn thay nó bằng một tên do bạn tự chọn; xoá trắng ô chỉ khôi phục lại tên mặc định, và tên đó vẫn được lưu và gửi đi. Khi hai máy ghép đôi, host còn lưu tên này trong danh sách `paired_devices` của nó cho tới khi bạn bị quên ở đó | Mặc định là tên của máy hoặc thiết bị; giữ cho tới khi bạn đổi nó hoặc xoá tệp. Xoá trắng ô chỉ khôi phục tên mặc định chứ không bỏ được tên |
-| Tệp bạn chọn để gửi sang máy đang kết nối (chỉ khi bạn chọn và bấm Send) | Đưa một tệp từ thiết bị này của bạn sang thiết bị kia | Gửi thẳng giữa hai thiết bị của bạn, mã hoá trên đường truyền (QUIC/TLS); trên điện thoại hay máy tính bảng, một bản sao được chuẩn bị trước trong cache riêng của app để đọc trong lúc gửi | Máy nhận ghi vào thư mục nó đã chọn cho việc này — `Deskhub` trong thư mục nhà của người dùng đó nếu không chọn thư mục khác — và giữ ở đó cho đến khi người dùng đó xoá. Bản sao tạm trên điện thoại hay máy tính bảng bị xoá khi đóng cửa sổ gửi |
+| Tệp bạn chọn để gửi sang máy đang kết nối (chỉ khi bạn chọn và bấm Send) | Đưa một tệp từ thiết bị này của bạn sang thiết bị kia | Gửi thẳng giữa hai thiết bị của bạn, mã hoá trên đường truyền (QUIC/TLS); trên điện thoại hay máy tính bảng, một bản sao được chuẩn bị trước trong cache riêng của app để đọc trong lúc gửi | Tệp rơi vào đâu là tuỳ thiết bị nhận. Máy tính ghi vào thư mục nó đã chọn cho việc này — `Deskhub` trong thư mục nhà của người dùng đó nếu không chọn thư mục khác — và giữ ở đó cho đến khi người dùng đó xoá. Điện thoại hay máy tính bảng không có thư mục như vậy: ảnh và video được thêm vào thư viện ảnh của chính thiết bị (`Pictures/Deskhub` và `Movies/Deskhub` trên Android), mọi tệp khác được đặt vào nơi trình duyệt tệp của hệ thống nhìn thấy — thư mục Documents của app trên iOS, `Download/Deskhub` trên Android — và nằm đó cho tới khi bạn xoá. Trên iOS, tệp mà thư viện ảnh từ chối sẽ vào Documents. Bản sao tạm trên điện thoại hay máy tính bảng gửi đi bị xoá khi đóng cửa sổ gửi |
 | Tên, kích thước và checksum của mỗi tệp được chào, cùng tên, địa chỉ và vân tay khoá của thiết bị gửi | Để máy nhận hiện được thứ đang tới và từ chối thứ nó không lưu được, và để chủ máy thấy ai đã gửi gì | Gửi giữa hai thiết bị của bạn, mã hoá trên đường truyền; máy nhận ghi lời chào, phán quyết và kết quả vào nhật ký phiên của chính nó | Nằm trong tệp nhật ký của máy đó cho đến khi bạn xoá |
 | Thư mục một máy dùng để lưu tệp nhận được | Khôi phục lựa chọn đó lần sau bạn mở app | Ghi vào `ui-settings.txt` trong thư mục riêng của app; không bao giờ được gửi đi | Giữ đến khi bạn đổi hoặc xoá tệp |
 | Thống kê kết nối (bitrate, tỉ lệ mất gói, độ trễ) | Điều chỉnh chất lượng luồng; hiển thị trên thanh trạng thái | Chỉ trao đổi giữa hai thiết bị của bạn | Không bao giờ lưu; bỏ đi khi phiên kết thúc |
@@ -115,11 +114,17 @@ Tối đa năm người xem có thể cùng xem một PC, nhưng tại mỗi th�
 | Android | `INTERNET`, trạng thái mạng | Cần để mở kết nối UDP tới PC của bạn. Chỉ dùng cho phiên truyền hình ảnh. |
 | Android | Đồng ý thu màn hình (`MediaProjection`) | Chỉ khi bạn bắt đầu chia sẻ màn hình của thiết bị này. Android hỏi mỗi lần; câu trả lời không thể ghi nhớ. |
 | Android | `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_MEDIA_PROJECTION` | Giữ cho phiên chia sẻ tiếp tục chạy khi app xuống nền hoặc màn hình tắt. Android bắt buộc phải có để thu màn hình. |
-| Android | `POST_NOTIFICATIONS` | Hiện thông báo thường trực mà Android bắt buộc phải có khi đang chia sẻ màn hình. Không gửi thông báo nào khác. |
+| Android | `RECORD_AUDIO` | Android đặt API thu tiếng phát lại sau quyền này, mà tiếng phát lại — thứ chính thiết bị đang phát — là thứ duy nhất Deskhub thu. Được hỏi khi bạn bắt đầu chia sẻ; từ chối thì phiên chia sẻ vẫn chạy, chỉ là không có tiếng. Deskhub không bao giờ mở micro. |
+| Android | `POST_NOTIFICATIONS` | Hiện thông báo thường trực mà Android bắt buộc phải có khi đang chia sẻ màn hình, và nêu tên các tệp vừa tới khi một thiết bị khác gửi cho bạn. Không gửi thông báo nào khác. |
+| iOS | Thư viện ảnh, chỉ thêm | Được hỏi ở lần đầu một ảnh hoặc video ai đó gửi tới thiết bị này, để đưa được nó vào app Photos. Deskhub chỉ có thể thêm: nó không bao giờ đọc, sửa hay xoá thứ đã có trong thư viện của bạn. Từ chối thì tệp vào thư mục Documents của app. |
+| iOS | Thông báo | Nêu tên các tệp vừa tới khi một thiết bị khác gửi cho bạn. Không gửi thông báo nào khác. |
 
 Việc chia sẻ tiếng không cần quyền riêng nào trên các máy để bàn: nó thu đúng thứ máy
-tính đang phát ra, không phải micro. Deskhub không bao giờ thu micro và không xin quyền
-micro trên bất kỳ nền tảng nào.
+tính đang phát ra, không phải micro. Android là ngoại lệ, và chỉ là ngoại lệ về tên gọi:
+API thu tiếng phát lại của nó nằm sau `RECORD_AUDIO`, nên một thiết bị Android muốn chia
+sẻ tiếng buộc phải có quyền mà hệ thống ghi nhãn là *Micro*. Deskhub không dùng quyền đó
+vào việc gì khác. Nó không bao giờ thu micro, không có âm thanh hai chiều, và không xin
+quyền micro trên bất kỳ nền tảng nào khác.
 
 Ứng dụng không yêu cầu quyền nào khác. Nếu một phiên bản sau này cần thêm quyền mới,
 quyền đó sẽ được xin đúng ngữ cảnh và chính sách này sẽ được cập nhật.
@@ -173,6 +178,11 @@ cài đặt app. Danh sách thiết bị gần đây và các cài đặt đã l
 `~/.deskhub` trên macOS và Linux), app sẽ tạo lại thư mục rỗng ở lần khởi động kế tiếp;
 trên iOS và Android, gỡ cài đặt app là xoá hết.
 
+Tệp mà thiết bị khác gửi cho bạn là của bạn, không phải của app. Khi đã được giao, chúng
+nằm trong thư mục máy tính đó đã chọn, hoặc trong thư viện ảnh, Documents hay Downloads
+trên điện thoại và máy tính bảng, và gỡ cài đặt Deskhub không đụng tới chúng; muốn xoá thì
+xoá ở đó.
+
 ## 8. Quyền của bạn (GDPR, CCPA và các luật tương tự)
 
 Các đạo luật như Quy định bảo vệ dữ liệu chung của EU (GDPR) và Đạo luật quyền riêng tư
@@ -206,6 +216,8 @@ https://github.com/manhpham90vn/Deskhub/blob/main/PRIVACY.md
 
 | Phiên bản | Ngày | Thay đổi |
 |---|---|---|
+| 2.4 | 2026-08-28 | **Điện thoại và máy tính bảng nay nhận tệp chứ không chỉ gửi**, và chỗ tệp rơi xuống trên chúng là điều mới. Trên iOS, ảnh và video được thêm vào thư viện ảnh của bạn, việc này xin quyền Photos chỉ-thêm của hệ thống ở lần đầu — Deskhub chỉ có thể thêm, không bao giờ đọc hay sửa thứ đã có — còn mọi tệp khác vào thư mục Documents của app, nơi app Files nhìn thấy. Trên Android, ảnh vào `Pictures/Deskhub`, video vào `Movies/Deskhub`, mọi thứ còn lại vào `Download/Deskhub`, tất cả đều qua kho media của hệ thống. Cả hai đều hiện thông báo nêu tên thứ vừa tới. Không thứ nào trong đó tới chỗ chúng tôi. Bản này cũng đính chính hai điều các phiên bản trước của chính sách này nói sai: Android xưa nay vẫn cần quyền mà hệ thống ghi nhãn là *Micro* (`RECORD_AUDIO`) để thu thứ chính thiết bị đang phát, tức đúng thứ mà bản 2.1 mô tả là chia sẻ tiếng — Deskhub vẫn không bao giờ thu micro — và các app desktop chưa bao giờ mất ô tick *File transfer* mà bản 2.3 nói tới, thứ mất đi chỉ là cài đặt được lưu đằng sau nó. |
+| 2.3 | 2026-08-24 | **Việc nhận tệp thôi không còn là một cài đặt được lưu.** Tuỳ chọn *Nhận tệp người xem gửi* đã bị bỏ khỏi `ui-settings.txt`: điện thoại hay máy tính bảng nhận tệp bất cứ khi nào app đang hiện trên màn hình, còn máy tính đưa *File transfer* vào danh sách những thứ nó chia sẻ, mặc định được tick mỗi lần và không được ghi nhớ, nên nó vẫn chỉ nhận tệp trong lúc đang chia sẻ. Điều xảy ra với tệp đến thì không đổi: vẫn cần người gửi đã ghép đôi và được cho vào, vẫn rơi vào nơi máy đó để tệp nhận được, vẫn không bao giờ ghi đè tệp đã có ở đó, và vẫn được ghi vào nhật ký cục bộ kèm tên, địa chỉ và vân tay khoá của thiết bị gửi. Chia sẻ màn hình vẫn là hành động có chủ đích sau nút riêng của nó, và một máy đang chia sẻ màn hình vẫn tiếp tục nhận tệp thay vì tắt việc đó trong suốt thời gian chia sẻ. |
 | 2.2 | 2026-08-21 | Deskhub nay **gửi tệp** được giữa các thiết bị của chính bạn. Một máy đang chia sẻ màn hình có thể nhận tệp, và bất kỳ thiết bị nào đang kết nối tới nó đều có thể chọn tệp để gửi; trên Android và iOS tệp đến từ bộ chọn ảnh của hệ thống hoặc trình duyệt tệp của hệ thống, và một bản sao được chuẩn bị trong cache riêng của app trong lúc gửi rồi bị xoá. Tệp đi thẳng giữa hai thiết bị của bạn qua đúng kênh mã hoá chở hình ảnh, và không bao giờ được gửi cho chúng tôi hay qua bất kỳ máy chủ nào của chúng tôi. Máy nhận ghi tệp vào thư mục nó chọn — `Deskhub` trong thư mục nhà của người dùng đó nếu không chọn thư mục khác, được lưu cùng các tuỳ chọn khác trong `ui-settings.txt` — không bao giờ ghi đè tệp đã có ở đó, và ghi mỗi lời chào, phán quyết cùng kết quả, kèm tên, địa chỉ và vân tay khoá của thiết bị gửi, vào nhật ký phiên cục bộ của nó. Việc nhận tệp mặc định tắt cho tới khi người chia sẻ tích chọn, và điện thoại hay máy tính bảng chỉ gửi tệp: chúng không bao giờ nhận. |
 | 2.1 | 2026-08-19 | Chia sẻ màn hình nay chia sẻ được cả **tiếng** của máy đó. Thứ được thu là bản trộn mà loa của chính máy đang phát — không bao giờ là micro; Deskhub không có âm thanh hai chiều và không xin quyền micro. Âm thanh được nén, gửi thẳng tới người đang xem qua đúng kênh mã hoá chở hình ảnh, và không bao giờ được lưu. Nó chỉ đi khi máy chia sẻ bật *Chia sẻ tiếng của máy này* **và** viewer bật *Phát tiếng của máy đang xem*; tắt một trong hai là hết. Cả hai công tắc được lưu cùng các tuỳ chọn khác trong `ui-settings.txt` và mặc định đều bật. |
 | 2.0 | 2026-08-15 | Phiên làm việc nay chạy trên kênh truyền mã hoá (QUIC/TLS) — video, thao tác, clipboard lẫn terminal — và máy được cho vào bằng cơ chế ghép đôi. Dữ liệu mới lưu trên chính thiết bị của bạn, tất cả trong thư mục của app và không bao giờ gửi cho chúng tôi: cặp khoá là danh tính của máy này (`host_key.pem`, `host_cert.pem`), khoá của các host bạn đã tin (`known_hosts`), các máy được phép vào host này (`paired_devices` — dấu vân tay khoá, tên mỗi máy gửi, mốc thời gian), và một salt không bí mật (`auth_salt`). Passcode nay là tuỳ chọn và không bao giờ được truyền đi: cuộc bắt tay ghép đôi chứng minh mã mà không gửi mã. |

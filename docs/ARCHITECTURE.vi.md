@@ -227,7 +227,8 @@ thật chỉ lộ qua kết nối đã được cho vào. Câu trả lời đó 
 làm được — có nhận thao tác không, có chia sẻ terminal không — trong các cờ ở header
 `SOURCE_LIST`, nên client biết trước khi mở bất kỳ cửa sổ nào rằng một chiếc điện
 thoại chỉ có thể xem. Host bản cũ, có từ trước khi có các cờ này, không bật cờ nào. Thiết bị gần đây, trạng thái online
-(ping/pong) và kết quả quét LAN đổ vào một danh sách thiết bị gộp trên Windows.
+(ping/pong) và kết quả quét LAN đổ vào một danh sách thiết bị gộp, do
+`core/ui/DeviceRows` dựng và cả năm client đều hiển thị.
 
 ## 7. Dữ liệu trên đĩa
 
@@ -235,7 +236,8 @@ Tất cả nằm trong thư mục Deskhub của người dùng (`~/.deskhub`,
 `%USERPROFILE%\.deskhub`): `host_key.pem` + `host_cert.pem` (danh tính),
 `known_hosts` (host mà máy này tin), `paired_devices` (máy mà host này cho vào),
 `auth_salt` (salt không bí mật), `ui-settings.txt`, `recent-devices.txt` (địa chỉ +
-passcode che đi), và log theo từng lần chạy. I/O file nằm ở `platform/`; phần phân
+passcode che đi), `portal-restore-token.txt` trên Linux (token của chính desktop cho
+những màn hình đã chọn trong hộp thoại chia sẻ của nó), và log theo từng lần chạy. I/O file nằm ở `platform/`; phần phân
 tích và cấu trúc dữ liệu nằm ở `core/` và có unit test.
 
 Tệp viewer gửi tới thì nằm ở chỗ khác hẳn: một thư mục do host chọn (`transfer_dir`
@@ -260,7 +262,8 @@ CI còn ép clang-format và clang-tidy (đều ghim phiên bản), SwiftLint `-
 Android Lint, actionlint + shellcheck, chạy cả ba bộ dưới ASan/TSan, CodeQL cho
 C++/Kotlin/Swift, quét gitleaks toàn bộ lịch sử, và coverage `core/` ≥ 90% dòng / 80%
 nhánh. Ba bộ test còn được biên dịch chéo và chạy trên Linux arm64, emulator Android và
-iOS Simulator. Các job release trên Linux và macOS còn chạy `core_perf` và
+iOS Simulator, và một job Windows chạy thêm ba lần bộ integration mỗi vòng để săn lỗi
+hỏng stack chập chờn trong `DrainStreams`, thứ chỉ lộ ra khoảng một lần trong ba. Các job release trên Linux và macOS còn chạy `core_perf` và
 `platform_perf` với hai cổng chặn cấp phát và độ tuyến tính (máy CI dùng chung không có
 mốc thời gian), và mỗi pull request có thêm một báo cáo perf-và-lag đăng thành một
 comment tự cập nhật: cả hai suite perf được A/B với commit gốc trên cùng một runner (độ

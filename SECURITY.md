@@ -44,7 +44,8 @@ machine to the Internet.
 | Viewers fighting each other for the mouse | Up to 5 viewers may watch one host, but only one drives input: the earliest to have joined wins, and a later viewer's input is dropped until the earlier one has been idle for a second. A 6th viewer is rejected as `Busy`. |
 | A viewer you only want to show the screen to | View-only sharing, available on every host, drops input packets at the host before anything is injected — it is not enforced by asking the client to behave. Android and iOS hosts are view-only unconditionally. |
 | A phone left sharing by accident | The operating system, not Deskhub, is the backstop: Android keeps a permanent notification up and re-asks for recording consent on every single share, and iOS keeps its broadcast indicator visible. Either can stop the share without opening the app. |
-| Malformed packets | Every field is bounds-checked before it is read. The parsers are covered by unit tests, run under AddressSanitizer, UndefinedBehaviorSanitizer and ThreadSanitizer in CI, and fuzzed nightly with libFuzzer — six targets covering the wire format, H.264 parsing, packet reassembly, session state machines and UI text. Crashes found by fuzzing are kept in-repo as regression tests, and new coverage is folded back into the seed corpus. |
+| A paired machine writing files onto yours | Only an admitted machine can send files, and only while the receiving machine is offering file transfer. What arrives cannot escape the folder that machine chose: the name on the wire is cut to its last path element and scrubbed of separators, control bytes, characters the filesystem rejects and reserved device names before any file is opened; each file is written under a `.deskhub-part` name and renamed only once it has arrived whole with a matching CRC-32; and a name already present gets a number rather than overwriting anything. A batch is capped at 32 files, 8 GiB per file and 32 GiB in total. The same scrubbing runs on a phone or tablet before anything reaches its photo library or its Downloads folder. |
+| Malformed packets | Every field is bounds-checked before it is read. The parsers are covered by unit tests, run under AddressSanitizer, UndefinedBehaviorSanitizer and ThreadSanitizer in CI, and fuzzed nightly with libFuzzer — seven targets covering the wire format, H.264 parsing, packet reassembly, terminal byte streams, UI text, and the host and viewer session state machines. Crashes found by fuzzing are kept in-repo as regression tests, and new coverage is folded back into the seed corpus. |
 
 ### What Deskhub does **not** protect against
 
@@ -174,12 +175,20 @@ connected to, when, and the passcode used for each), `host_key.pem` + `host_cert
 (this machine's private key and self-signed certificate — the identity behind its
 fingerprint; anyone who copies the key file can impersonate this machine), `known_hosts`
 (the keys of hosts this machine has trusted), `paired_devices` (the keys, names and
-timestamps of machines allowed into this host) and `auth_salt` (a non-secret salt for the
-passcode verifier). The mobile apps keep their settings inside their own sandbox — on iOS
-in the app group container. Stored passcodes are obfuscated with a fixed XOR key, which
+timestamps of machines allowed into this host), `auth_salt` (a non-secret salt for the
+passcode verifier) and, on Linux, `portal-restore-token.txt` (the desktop's own token for
+the screens you picked, meaningful only to your desktop session and never transmitted).
+The mobile apps keep their settings inside their own sandbox — on iOS in the app group
+container. Stored passcodes are obfuscated with a fixed XOR key, which
 keeps them off the screen and out of a casual `type` of the file — **it is not
 encryption**, and anyone with the source and the file recovers them in seconds. Treat
 that folder as readable by anything running as you.
+
+Files another machine sends land outside that folder, in the directory the receiving
+machine chose for them (`Deskhub` in the user's home folder unless another is picked,
+saved as `transfer_dir`). On a phone or tablet they end up in the device's photo library
+or its Documents / Downloads folder, where they survive uninstalling the app. Treat
+anything delivered there as a file a paired machine put on your device.
 
 Nothing uploads any of this; delete the folder at any time.
 

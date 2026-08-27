@@ -230,8 +230,8 @@ source list is revealed only over an admitted connection. That answer also carri
 what the host can do — whether it takes input, whether it shares a terminal — in the
 `SOURCE_LIST` header flags, so a client knows before it opens any window that a phone
 can only be watched. A host from before the flags existed sets none of them. Recent devices, their
-online state (ping/pong probes) and the LAN scan feed one merged device list on
-Windows.
+online state (ping/pong probes) and the LAN scan feed one merged device list, built
+by `core/ui/DeviceRows` and shown by all five clients.
 
 ## 7. Data on disk
 
@@ -239,7 +239,9 @@ Everything lives in the user's Deskhub folder (`~/.deskhub`,
 `%USERPROFILE%\.deskhub`): `host_key.pem` + `host_cert.pem` (identity),
 `known_hosts` (hosts this machine trusts), `paired_devices` (machines this host
 admits), `auth_salt` (non-secret verifier salt), `ui-settings.txt`,
-`recent-devices.txt` (addresses + obscured passcodes), and per-run logs. File I/O
+`recent-devices.txt` (addresses + obscured passcodes), `portal-restore-token.txt` on
+Linux (the desktop's own token for the screens picked in its screen-sharing dialog),
+and per-run logs. File I/O
 stays in `platform/`; the parsing and the data structures live in `core/` and are
 unit-tested.
 
@@ -266,7 +268,9 @@ CI additionally enforces clang-format and clang-tidy (both pinned), SwiftLint
 `--strict`, Android Lint, actionlint + shellcheck, ASan/TSan runs of all three suites,
 CodeQL over C++/Kotlin/Swift, a gitleaks sweep of the whole history, and ≥ 90 % line /
 80 % branch coverage on `core/`. The three suites are additionally cross-built and run
-on arm64 Linux, an Android emulator and the iOS Simulator. The Linux and macOS release
+on arm64 Linux, an Android emulator and the iOS Simulator, and a Windows job runs the
+integration suite three more times per round, hunting an intermittent stack corruption
+in `DrainStreams` that shows up in about one run in three. The Linux and macOS release
 jobs also run `core_perf` and `platform_perf` with their allocation and scaling gates
 (no time baseline exists on a shared runner), and each pull request additionally gets
 a perf-and-lag report posted as one self-updating comment: both perf suites A/B'd
