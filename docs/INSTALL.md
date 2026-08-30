@@ -1,4 +1,4 @@
-**English** · [Tiếng Việt](INSTALL.vi.md)
+**English** · [Tiếng Việt](INSTALL.vi.md) · [中文](INSTALL.zh.md) · [日本語](INSTALL.ja.md)
 
 # Deskhub — Install
 

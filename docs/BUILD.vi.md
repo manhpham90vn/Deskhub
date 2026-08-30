@@ -1,4 +1,4 @@
-[English](BUILD.md) · **Tiếng Việt**
+[English](BUILD.md) · **Tiếng Việt** · [中文](BUILD.zh.md) · [日本語](BUILD.ja.md)
 
 # Deskhub — Build và phát triển
 
@@ -155,7 +155,7 @@ nối được.
 | `make test-ctest` | cùng các bài đó qua CTest | đúng cách CI gọi chúng |
 | `make test-asan` | cả ba bộ dưới ASan + UBSan | chỉ clang/gcc, không có MSVC |
 | `make test-tsan` | cả ba bộ dưới ThreadSanitizer | chỉ clang/gcc, không có MSVC |
-| `make test-perf` | bản release, offline | đo chứ không chỉ chạy các đường nóng của `core/`: đóng gói/ghép gói/FEC, hạ kích thước 1080p, CRC và lô tệp, bộ phân tích VT và màn hình, mã hoá/giải mã gói tin, bộ đệm chống giật âm thanh |
+| `make test-perf` | bản release, offline + loopback | đo chứ không chỉ chạy các đường nóng: `core_perf` lo đóng gói/ghép gói/FEC, hạ kích thước 1080p, CRC và lô tệp, bộ phân tích VT và màn hình, mã hoá/giải mã gói tin, bộ đệm chống giật âm thanh; `platform_perf` lo QUIC thật trên loopback |
 
 Không bài kiểm thử nào cần máy đối diện, GPU hay mạng.
 
@@ -169,9 +169,10 @@ ghép gói, byte terminal, chuỗi giao diện, cùng máy trạng thái phiên 
 từ bộ hạt giống và từ điển đã commit. `make fuzz-coverage` cho biết corpus thực sự chạm
 tới những dòng nào trong core. Mỗi cú crash tìm được đều trở thành một đầu vào hồi quy.
 
-**Hiệu năng.** `make test-perf` dựng `core_perf` bằng preset release rồi đo các đường
-nóng — 27 phép đo, hết vài giây. Có ba thứ làm nó fail, và không thứ nào là một con số
-mili-giây bịa ra:
+**Hiệu năng.** `make test-perf` dựng cả hai binary đo hiệu năng bằng preset release rồi
+chạy chúng: `core_perf` đo 37 phép đo trên các đường nóng thuần C++, sau đó `platform_perf`
+đo thêm 6 phép nữa trên QUIC thật qua loopback. Tổng cộng hết vài giây. Có ba thứ làm bất
+kỳ cái nào trong hai cái fail, và không thứ nào là một con số mili-giây bịa ra:
 
 - **Số lần cấp phát trên mỗi đơn vị**, đếm chính xác bằng cách thay `operator new` toàn
   cục. Một đường bắt đầu cấp phát cho từng gói hay từng khung hình sẽ fail trên mọi máy,
@@ -207,8 +208,8 @@ Quy tắc trong nhà, nói ngắn — bản đầy đủ nằm ở `CLAUDE.md`:
 - **Không viết chú thích, ở bất cứ đâu.** Thay vào đó là tên gọi rõ nghĩa, hàm nhỏ, return
   sớm và hằng số có tên. Kiến thức không được phép mất đi thì đưa vào thông báo lỗi của
   chính nhánh sẽ hỏng khi thiếu nó, hoặc vào `ARCHITECTURE.md`.
-- Mọi định danh và thông báo log đều bằng tiếng Anh; mọi tài liệu đều xuất bản theo cặp
-  Anh/Việt, bản tiếng Anh là bản chuẩn.
+- Mọi định danh và thông báo log đều bằng tiếng Anh; mọi tài liệu đều xuất bản bằng bốn
+  thứ tiếng — Anh, Việt, Trung, Nhật — bản tiếng Anh là bản chuẩn.
 
 ## 7. Đóng gói
 

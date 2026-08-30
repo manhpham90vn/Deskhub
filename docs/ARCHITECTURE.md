@@ -1,4 +1,4 @@
-**English** · [Tiếng Việt](ARCHITECTURE.vi.md)
+**English** · [Tiếng Việt](ARCHITECTURE.vi.md) · [中文](ARCHITECTURE.zh.md) · [日本語](ARCHITECTURE.ja.md)
 
 # Deskhub — Architecture
 

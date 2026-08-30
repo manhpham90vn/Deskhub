@@ -1,4 +1,4 @@
-**English** · [Tiếng Việt](BUILD.vi.md)
+**English** · [Tiếng Việt](BUILD.vi.md) · [中文](BUILD.zh.md) · [日本語](BUILD.ja.md)
 
 # Deskhub — Building and developing
 
@@ -150,7 +150,7 @@ that could never connect.
 | `make test-ctest` | the same tests through CTest | exactly how CI invokes them |
 | `make test-asan` | all three under ASan + UBSan | clang/gcc only, not MSVC |
 | `make test-tsan` | all three under ThreadSanitizer | clang/gcc only, not MSVC |
-| `make test-perf` | release build, offline | the hot paths of `core/` measured, not just exercised: packetize/reassemble/FEC, 1080p downscale, CRC and file batches, the VT parser and screen, wire encode/decode, the audio jitter buffer |
+| `make test-perf` | release build, offline + loopback | the hot paths measured, not just exercised: `core_perf` covers packetize/reassemble/FEC, 1080p downscale, CRC and file batches, the VT parser and screen, wire encode/decode, the audio jitter buffer; `platform_perf` covers real QUIC over loopback |
 
 Nothing in the test suites needs a remote peer, a GPU or a network.
 
@@ -165,9 +165,10 @@ Linux/macOS; `FUZZ_SECONDS=N` per target). Each target first replays
 committed seeds and dictionary. `make fuzz-coverage` shows which core lines the corpus
 actually reaches. Every crash found becomes a regression input.
 
-**Performance.** `make test-perf` builds `core_perf` with the release preset and measures
-the hot paths — 27 workloads, a few seconds. Three things fail it, and none of them is a
-millisecond figure picked out of the air:
+**Performance.** `make test-perf` builds both perf binaries with the release preset and
+runs them: `core_perf` measures 37 workloads across the pure-C++ hot paths, then
+`platform_perf` measures 6 more over real QUIC on loopback. A few seconds in total. Three
+things fail either one, and none of them is a millisecond figure picked out of the air:
 
 - **Allocations per unit**, counted exactly by replacing the global `operator new`. A
   path that starts allocating per packet or per frame fails on every machine, in every
@@ -202,8 +203,8 @@ House rules, in short — the full version is in `CLAUDE.md`:
 - **No comments anywhere.** Descriptive names, small functions, early returns and named
   constants instead. Knowledge that must survive goes into the error message of the path
   that fails without it, or into `ARCHITECTURE.md`.
-- All identifiers and log messages in English; every prose document ships as an
-  English/Vietnamese pair, English authoritative.
+- All identifiers and log messages in English; every prose document ships in four
+  languages — English, Vietnamese, Chinese, Japanese — English authoritative.
 
 ## 7. Packaging
 

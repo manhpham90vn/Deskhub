@@ -1,4 +1,4 @@
-**English** · [Tiếng Việt](README.vi.md)
+**English** · [Tiếng Việt](README.vi.md) · [中文](README.zh.md) · [日本語](README.ja.md)
 
 <div align="center">
 
@@ -114,18 +114,19 @@ network you trust or a VPN, and **never port-forward UDP 47777**. Full threat mo
 
 ## 📚 Docs
 
-Every document is published in English with a Vietnamese translation beside it as
-`*.vi.md`. The English text is the authoritative one.
+Every document is published in English with translations beside it — Vietnamese as
+`*.vi.md`, Chinese as `*.zh.md`, Japanese as `*.ja.md`. The English text is the
+authoritative one.
 
 | Document | Covers |
 | --- | --- |
-| [Install](docs/INSTALL.md) ([vi](docs/INSTALL.vi.md)) | Getting Deskhub onto each of the five platforms |
-| [Build](docs/BUILD.md) ([vi](docs/BUILD.vi.md)) | Compiling from source, tests, packaging, releasing |
-| [Specification](docs/SPECIFICATION.md) ([vi](docs/SPECIFICATION.vi.md)) | What Deskhub does, with no implementation detail |
-| [Architecture](docs/ARCHITECTURE.md) ([vi](docs/ARCHITECTURE.vi.md)) | Layers, threads, wire protocol, decisions |
-| [`SECURITY.md`](SECURITY.md) ([vi](SECURITY.vi.md)) | Threat model and how to report a vulnerability |
-| [`PRIVACY.md`](PRIVACY.md) ([vi](PRIVACY.vi.md)) | Privacy policy |
-| [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) ([vi](THIRD_PARTY_NOTICES.vi.md)) | Third-party components and licences |
+| [Install](docs/INSTALL.md) ([vi](docs/INSTALL.vi.md) · [zh](docs/INSTALL.zh.md) · [ja](docs/INSTALL.ja.md)) | Getting Deskhub onto each of the five platforms |
+| [Build](docs/BUILD.md) ([vi](docs/BUILD.vi.md) · [zh](docs/BUILD.zh.md) · [ja](docs/BUILD.ja.md)) | Compiling from source, tests, packaging, releasing |
+| [Specification](docs/SPECIFICATION.md) ([vi](docs/SPECIFICATION.vi.md) · [zh](docs/SPECIFICATION.zh.md) · [ja](docs/SPECIFICATION.ja.md)) | What Deskhub does, with no implementation detail |
+| [Architecture](docs/ARCHITECTURE.md) ([vi](docs/ARCHITECTURE.vi.md) · [zh](docs/ARCHITECTURE.zh.md) · [ja](docs/ARCHITECTURE.ja.md)) | Layers, threads, wire protocol, decisions |
+| [`SECURITY.md`](SECURITY.md) ([vi](SECURITY.vi.md) · [zh](SECURITY.zh.md) · [ja](SECURITY.ja.md)) | Threat model and how to report a vulnerability |
+| [`PRIVACY.md`](PRIVACY.md) ([vi](PRIVACY.vi.md) · [zh](PRIVACY.zh.md) · [ja](PRIVACY.ja.md)) | Privacy policy |
+| [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) ([vi](THIRD_PARTY_NOTICES.vi.md) · [zh](THIRD_PARTY_NOTICES.zh.md) · [ja](THIRD_PARTY_NOTICES.ja.md)) | Third-party components and licences |
 
 Bugs and feedback: [issues](https://github.com/manhpham90vn/Deskhub/issues) — include your
 device model.

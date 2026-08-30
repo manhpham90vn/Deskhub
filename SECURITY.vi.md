@@ -1,4 +1,4 @@
-[English](SECURITY.md) · **Tiếng Việt**
+[English](SECURITY.md) · **Tiếng Việt** · [中文](SECURITY.zh.md) · [日本語](SECURITY.ja.md)
 
 # Chính sách bảo mật của Deskhub
 

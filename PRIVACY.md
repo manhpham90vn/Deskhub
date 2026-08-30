@@ -1,10 +1,11 @@
-**English** · [Tiếng Việt](PRIVACY.vi.md)
+**English** · [Tiếng Việt](PRIVACY.vi.md) · [中文](PRIVACY.zh.md) · [日本語](PRIVACY.ja.md)
 
 # Deskhub Privacy Policy
 
 _Effective date: August 28, 2026 — Version 2.4_
 
-> A Vietnamese translation is available at [`PRIVACY.vi.md`](PRIVACY.vi.md). This English
+> Translations are available at [`PRIVACY.vi.md`](PRIVACY.vi.md),
+> [`PRIVACY.zh.md`](PRIVACY.zh.md) and [`PRIVACY.ja.md`](PRIVACY.ja.md). This English
 > version is the authoritative one.
 
 ## 1. Introduction

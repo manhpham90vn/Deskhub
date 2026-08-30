@@ -1,4 +1,4 @@
-[English](THIRD_PARTY_NOTICES.md) · **Tiếng Việt**
+[English](THIRD_PARTY_NOTICES.md) · **Tiếng Việt** · [中文](THIRD_PARTY_NOTICES.zh.md) · [日本語](THIRD_PARTY_NOTICES.ja.md)
 
 # Thông báo về thành phần bên thứ ba
 

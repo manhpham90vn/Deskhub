@@ -1,4 +1,4 @@
-**English** · [Tiếng Việt](SPECIFICATION.vi.md)
+**English** · [Tiếng Việt](SPECIFICATION.vi.md) · [中文](SPECIFICATION.zh.md) · [日本語](SPECIFICATION.ja.md)
 
 # Deskhub — Functional Specification
 

@@ -1,4 +1,4 @@
-[English](INSTALL.md) · **Tiếng Việt**
+[English](INSTALL.md) · **Tiếng Việt** · [中文](INSTALL.zh.md) · [日本語](INSTALL.ja.md)
 
 # Deskhub — Cài đặt
 

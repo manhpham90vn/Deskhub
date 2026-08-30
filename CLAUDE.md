@@ -14,7 +14,7 @@ Make the content self-explanatory instead: descriptive names, small functions, e
 returns, named constants instead of magic numbers. If a block seems to need a comment,
 extract it into a well-named function. Knowledge that must not be lost goes into the
 error message of the path that fails without it, or into `docs/ARCHITECTURE.md`
-§"Decisions worth remembering" (mirrored in the `.vi.md`) — never into a comment.
+§"Decisions worth remembering" (mirrored in every translation) — never into a comment.
 
 The single exception is the root `Makefile`: its header block is the one place where
 every target is documented. Keep it in sync when you add or rename a target, and
@@ -127,38 +127,39 @@ A green local `make test` + `make lint` does not cover those.
   members (`cur_`, `min_`).
 - Formatting is enforced by pinned tools — never hand-format; run `make format`.
 - All identifiers, log messages, and code comments are in **English**. Documentation is
-  bilingual — see below.
+  published in four languages — see below.
 - New logic in `core/` needs a test in the matching `core/tests/` subdirectory.
 
 ## Documentation
 
-Every prose document is published as an English/Vietnamese pair: `NAME.md` and
-`NAME.vi.md` beside it. **English is the authoritative version** — write the change there
-first, then mirror it into the `.vi.md`, in the same commit. A `.vi.md` that lags behind
-its English original is a bug.
+Every prose document is published in four languages: `NAME.md` plus `NAME.vi.md`,
+`NAME.zh.md` and `NAME.ja.md` beside it. **English is the authoritative version** — write
+the change there first, then mirror it into all three translations, in the same commit. A
+translation that lags behind its English original is a bug.
 
-| English | Vietnamese | Covers |
+| English | Translations | Covers |
 | --- | --- | --- |
-| `README.md` | `README.vi.md` | What it is, why, platforms, what's inside — short, and links out |
-| `docs/INSTALL.md` | `docs/INSTALL.vi.md` | Getting a prebuilt Deskhub onto each platform |
-| `docs/BUILD.md` | `docs/BUILD.vi.md` | Building from source, tests, packaging, releasing |
-| `docs/SPECIFICATION.md` | `docs/SPECIFICATION.vi.md` | Feature spec — behaviour only, no implementation detail |
-| `docs/ARCHITECTURE.md` | `docs/ARCHITECTURE.vi.md` | How it is built — layers, threads, wire protocol, design decisions |
-| `SECURITY.md` | `SECURITY.vi.md` | Threat model, hardening, vulnerability reports |
-| `PRIVACY.md` | `PRIVACY.vi.md` | Privacy policy — versioned, with a changelog table |
-| `THIRD_PARTY_NOTICES.md` | `THIRD_PARTY_NOTICES.vi.md` | Third-party components and licences |
+| `README.md` | `README.{vi,zh,ja}.md` | What it is, why, platforms, what's inside — short, and links out |
+| `docs/INSTALL.md` | `docs/INSTALL.{vi,zh,ja}.md` | Getting a prebuilt Deskhub onto each platform |
+| `docs/BUILD.md` | `docs/BUILD.{vi,zh,ja}.md` | Building from source, tests, packaging, releasing |
+| `docs/SPECIFICATION.md` | `docs/SPECIFICATION.{vi,zh,ja}.md` | Feature spec — behaviour only, no implementation detail |
+| `docs/ARCHITECTURE.md` | `docs/ARCHITECTURE.{vi,zh,ja}.md` | How it is built — layers, threads, wire protocol, design decisions |
+| `SECURITY.md` | `SECURITY.{vi,zh,ja}.md` | Threat model, hardening, vulnerability reports |
+| `PRIVACY.md` | `PRIVACY.{vi,zh,ja}.md` | Privacy policy — versioned, with a changelog table |
+| `THIRD_PARTY_NOTICES.md` | `THIRD_PARTY_NOTICES.{vi,zh,ja}.md` | Third-party components and licences |
 
 Rules for these files:
 
-- Every one starts with a language switcher line: the English file shows **English** in
-  bold followed by a link labelled *Tiếng Việt*, and the `.vi.md` shows the mirror of
-  that. Each `.vi.md` states that English governs.
-- Links inside a `.vi.md` point at the `.vi.md` counterpart wherever one exists.
+- Every one starts with a language switcher line naming all four in the same order —
+  English · Tiếng Việt · 中文 · 日本語 — with the file's own language in bold and the
+  other three as links. Each translation states that English governs.
+- Links inside a translation point at the counterpart in the same language wherever one
+  exists.
 - Cross-language link integrity is not enforced by CI — check relative links resolve
   before you finish.
 - `PRIVACY.md` is a published legal document: any behaviour change that touches what is
   stored or transmitted needs a new version number, a new effective date, and a changelog
-  row — in both languages.
+  row — in all four languages.
 - `CLAUDE.md` and store listings under `fastlane/metadata/*/vi/` are outside this scheme.
 
 When you change behaviour, check whether these documents still describe it. Passcode
@@ -167,5 +168,5 @@ handling, what is persisted on disk, and per-platform capability tables go stale
 ## License
 
 MIT (`LICENSE`). The Linux app statically links LGPL-2.1 FFmpeg — if you change how
-FFmpeg is built or linked, update `THIRD_PARTY_NOTICES.md` (and its `.vi.md`)
+FFmpeg is built or linked, update `THIRD_PARTY_NOTICES.md` (and its translations)
 accordingly.

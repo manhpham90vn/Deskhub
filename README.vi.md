@@ -1,4 +1,4 @@
-[English](README.md) · **Tiếng Việt**
+[English](README.md) · **Tiếng Việt** · [中文](README.zh.md) · [日本語](README.ja.md)
 
 <div align="center">
 
@@ -114,18 +114,18 @@ port-forward cho UDP 47777**. Mô hình mối đe doạ đầy đủ nằm ở [
 
 ## 📚 Tài liệu
 
-Mọi tài liệu đều được xuất bản bằng tiếng Anh kèm bản dịch tiếng Việt `*.vi.md` bên cạnh.
-Bản tiếng Anh là bản chuẩn.
+Mọi tài liệu đều được xuất bản bằng tiếng Anh kèm các bản dịch đặt bên cạnh — tiếng Việt
+`*.vi.md`, tiếng Trung `*.zh.md`, tiếng Nhật `*.ja.md`. Bản tiếng Anh là bản chuẩn.
 
 | Tài liệu | Nội dung |
 | --- | --- |
-| [Cài đặt](docs/INSTALL.vi.md) ([en](docs/INSTALL.md)) | Đưa Deskhub lên từng nền tảng trong năm nền tảng |
-| [Build](docs/BUILD.vi.md) ([en](docs/BUILD.md)) | Biên dịch từ mã nguồn, kiểm thử, đóng gói, phát hành |
-| [Đặc tả](docs/SPECIFICATION.vi.md) ([en](docs/SPECIFICATION.md)) | Deskhub làm được gì, không có chi tiết cài đặt |
-| [Kiến trúc](docs/ARCHITECTURE.vi.md) ([en](docs/ARCHITECTURE.md)) | Các tầng, luồng, giao thức trên đường truyền, các quyết định thiết kế |
-| [`SECURITY.vi.md`](SECURITY.vi.md) ([en](SECURITY.md)) | Mô hình mối đe doạ và cách báo lỗ hổng |
-| [`PRIVACY.vi.md`](PRIVACY.vi.md) ([en](PRIVACY.md)) | Chính sách quyền riêng tư |
-| [`THIRD_PARTY_NOTICES.vi.md`](THIRD_PARTY_NOTICES.vi.md) ([en](THIRD_PARTY_NOTICES.md)) | Thành phần bên thứ ba và giấy phép |
+| [Cài đặt](docs/INSTALL.vi.md) ([en](docs/INSTALL.md) · [zh](docs/INSTALL.zh.md) · [ja](docs/INSTALL.ja.md)) | Đưa Deskhub lên từng nền tảng trong năm nền tảng |
+| [Build](docs/BUILD.vi.md) ([en](docs/BUILD.md) · [zh](docs/BUILD.zh.md) · [ja](docs/BUILD.ja.md)) | Biên dịch từ mã nguồn, kiểm thử, đóng gói, phát hành |
+| [Đặc tả](docs/SPECIFICATION.vi.md) ([en](docs/SPECIFICATION.md) · [zh](docs/SPECIFICATION.zh.md) · [ja](docs/SPECIFICATION.ja.md)) | Deskhub làm được gì, không có chi tiết cài đặt |
+| [Kiến trúc](docs/ARCHITECTURE.vi.md) ([en](docs/ARCHITECTURE.md) · [zh](docs/ARCHITECTURE.zh.md) · [ja](docs/ARCHITECTURE.ja.md)) | Các tầng, luồng, giao thức trên đường truyền, các quyết định thiết kế |
+| [`SECURITY.vi.md`](SECURITY.vi.md) ([en](SECURITY.md) · [zh](SECURITY.zh.md) · [ja](SECURITY.ja.md)) | Mô hình mối đe doạ và cách báo lỗ hổng |
+| [`PRIVACY.vi.md`](PRIVACY.vi.md) ([en](PRIVACY.md) · [zh](PRIVACY.zh.md) · [ja](PRIVACY.ja.md)) | Chính sách quyền riêng tư |
+| [`THIRD_PARTY_NOTICES.vi.md`](THIRD_PARTY_NOTICES.vi.md) ([en](THIRD_PARTY_NOTICES.md) · [zh](THIRD_PARTY_NOTICES.zh.md) · [ja](THIRD_PARTY_NOTICES.ja.md)) | Thành phần bên thứ ba và giấy phép |
 
 Báo lỗi và góp ý: [issues](https://github.com/manhpham90vn/Deskhub/issues) — nhớ ghi kèm
 model thiết bị của bạn.

@@ -1,4 +1,4 @@
-**English** · [Tiếng Việt](THIRD_PARTY_NOTICES.vi.md)
+**English** · [Tiếng Việt](THIRD_PARTY_NOTICES.vi.md) · [中文](THIRD_PARTY_NOTICES.zh.md) · [日本語](THIRD_PARTY_NOTICES.ja.md)
 
 # Third-party notices
 

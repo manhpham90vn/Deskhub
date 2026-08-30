@@ -1,4 +1,4 @@
-[English](SPECIFICATION.md) · **Tiếng Việt**
+[English](SPECIFICATION.md) · **Tiếng Việt** · [中文](SPECIFICATION.zh.md) · [日本語](SPECIFICATION.ja.md)
 
 # Deskhub — Đặc tả chức năng
 
