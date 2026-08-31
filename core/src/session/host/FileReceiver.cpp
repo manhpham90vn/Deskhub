@@ -119,7 +119,12 @@ void FileReceiver::OnDone(std::span<const uint8_t> payload) {
         return;
     }
 
-    CloseCurrent(true);
+    if (!CloseCurrent(true)) {
+        Audit("write_failed", stored_[index_]);
+        Ack(TransferReason::WriteFailed);
+        Abort(TransferReason::WriteFailed, false);
+        return;
+    }
     Audit("stored", stored_[index_]);
     Ack(TransferReason::Accepted);
 
@@ -153,10 +158,10 @@ bool FileReceiver::OpenCurrent() {
     return true;
 }
 
-void FileReceiver::CloseCurrent(bool keep) {
-    if (!fileOpen_) return;
+bool FileReceiver::CloseCurrent(bool keep) {
+    if (!fileOpen_) return true;
     fileOpen_ = false;
-    if (cb_.close) cb_.close(index_, keep);
+    return cb_.close ? cb_.close(index_, keep) : true;
 }
 
 void FileReceiver::Refuse(uint32_t batchId, TransferReason reason) {

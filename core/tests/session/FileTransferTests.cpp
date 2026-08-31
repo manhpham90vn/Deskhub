@@ -99,7 +99,10 @@ struct Rig {
                   return disk.Open(index, safe);
               },
               [this](uint16_t index, std::span<const uint8_t> d) { return disk.Write(index, d); },
-              [this](uint16_t index, bool keep) { disk.Close(index, keep); },
+              [this](uint16_t index, bool keep) {
+                  disk.Close(index, keep);
+                  return true;
+              },
               [this](const TransferProgress& p) { lastStored = p; },
               [this](std::string_view line) { audit.emplace_back(line); }}) {
         receiver.SetAccepting(true);

@@ -47,7 +47,7 @@ public:
 
     std::string Open(uint16_t index, const std::string& safeName, uint64_t size);
     bool Write(uint16_t index, std::span<const uint8_t> data);
-    void Close(uint16_t index, bool keep);
+    bool Close(uint16_t index, bool keep);
     void CloseAll();
 
 private:

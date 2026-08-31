@@ -29,7 +29,7 @@ struct FileReceiverCallbacks {
     std::function<std::string(uint16_t fileIndex, const std::string& safeName, uint64_t size)>
         open;
     std::function<bool(uint16_t fileIndex, std::span<const uint8_t> data)> write;
-    std::function<void(uint16_t fileIndex, bool keep)> close;
+    std::function<bool(uint16_t fileIndex, bool keep)> close;
     std::function<void(const TransferProgress&)> onProgress;
     std::function<void(std::string_view auditLine)> onAudit;
 };
@@ -77,7 +77,7 @@ private:
 
     TransferReason Admit(const FileOffer& offer, std::vector<std::string>& safeNames) const;
     bool OpenCurrent();
-    void CloseCurrent(bool keep);
+    bool CloseCurrent(bool keep);
     void Refuse(uint32_t batchId, TransferReason reason);
     void Abort(TransferReason reason, bool tellPeer);
     void Ack(TransferReason reason);

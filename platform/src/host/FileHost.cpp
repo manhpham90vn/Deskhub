@@ -139,7 +139,7 @@ FileHost::Peer* FileHost::PeerFor(const NetAddr& from) {
     hooks.write = [raw](uint16_t index, std::span<const uint8_t> data) {
         return raw->store->Write(index, data);
     };
-    hooks.close = [raw](uint16_t index, bool keep) { raw->store->Close(index, keep); };
+    hooks.close = [raw](uint16_t index, bool keep) { return raw->store->Close(index, keep); };
     hooks.onProgress = [raw](const deskhub::TransferProgress& progress) {
         raw->progress = progress;
     };
