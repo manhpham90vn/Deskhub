@@ -498,6 +498,7 @@ struct QuicEndpoint::Impl {
                     cb_.onStream(id, stream, std::span<const uint8_t>(chunk.data(), size_t(got)),
                         fin);
                     if (!listStillIntact("inside the onStream callback", stream, got)) return;
+                    if (Lookup(id) != &entry) return;
                 }
                 if (fin || size_t(got) < want) break;
             }
@@ -509,8 +510,10 @@ struct QuicEndpoint::Impl {
         for (;;) {
             const ssize_t got = quiche_conn_dgram_recv(entry.conn, chunk.data(), chunk.size());
             if (got < 0) return;
-            if (cb_.onDatagram)
+            if (cb_.onDatagram) {
                 cb_.onDatagram(id, std::span<const uint8_t>(chunk.data(), size_t(got)));
+                if (Lookup(id) != &entry) return;
+            }
         }
     }
 
@@ -555,16 +558,24 @@ struct QuicEndpoint::Impl {
         moreToSend_.store(false, std::memory_order_relaxed);
         moreToRead_.store(false, std::memory_order_relaxed);
         const uint64_t nowUs = NowUs();
-        for (auto& [id, entry] : connections_) {
+        std::vector<QuicConnId> live;
+        live.reserve(connections_.size());
+        for (const auto& connection : connections_) live.push_back(connection.first);
+        for (const QuicConnId id : live) {
+            Connection* found = Lookup(id);
+            if (found == nullptr) continue;
+            Connection& entry = *found;
             if (quiche_conn_is_established(entry.conn) && !entry.announced) {
                 entry.announced = true;
                 if (entry.lastRecvUs == 0) entry.lastRecvUs = nowUs;
                 if (cb_.onConnected) cb_.onConnected(id, entry.peer);
+                if (Lookup(id) != &entry) continue;
             }
             if (entry.announced) ReportQuiet(entry, nowUs);
             if (entry.announced) {
                 DrainStreams(id, entry);
                 DrainDatagrams(id, entry);
+                if (Lookup(id) != &entry) continue;
             }
             DrainOutboxes(entry);
             Flush(entry);
