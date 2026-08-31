@@ -85,7 +85,7 @@ struct TransferRig {
                   Consume(data.size());
                   return true;
               },
-              [](uint16_t, bool) {}, {}, {}}) {
+              [](uint16_t, bool) { return true; }, {}, {}}) {
         FillRandom(source);
         receiver.SetAccepting(true);
     }

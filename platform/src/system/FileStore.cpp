@@ -208,10 +208,10 @@ bool FileStore::Write(uint16_t index, std::span<const uint8_t> data) {
     return true;
 }
 
-void FileStore::Close(uint16_t index, bool keep) {
+bool FileStore::Close(uint16_t index, bool keep) {
     Settle();
     const auto at = open_.find(index);
-    if (at == open_.end()) return;
+    if (at == open_.end()) return !keep;
     Slot slot = std::move(at->second);
     open_.erase(at);
 
@@ -222,7 +222,7 @@ void FileStore::Close(uint16_t index, bool keep) {
     std::error_code ec;
     if (!keep || !sound) {
         std::filesystem::remove(slot.part, ec);
-        return;
+        return !keep;
     }
 
     std::filesystem::path target = slot.target;
@@ -231,16 +231,22 @@ void FileStore::Close(uint16_t index, bool keep) {
             [this](const std::string& candidate) { return Claimed(candidate); });
         if (fresh.empty()) {
             std::filesystem::remove(slot.part, ec);
-            return;
+            return false;
         }
         target = dir_ / Utf8Path(fresh);
     }
 
     std::filesystem::rename(slot.part, target, ec);
     if (ec) {
-        LOGE("transfer: could not put %s in place", Utf8Of(target).c_str());
+        LOGE(
+            "transfer: could not put %s in place, so the part file is dropped and the batch "
+            "fails; the sender is told the write failed rather than being left to believe a "
+            "file that never landed arrived",
+            Utf8Of(target).c_str());
         std::filesystem::remove(slot.part, ec);
+        return false;
     }
+    return true;
 }
 
 void FileStore::CloseAll() {
