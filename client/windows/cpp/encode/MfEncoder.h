@@ -17,6 +17,10 @@ public:
     const char* BackendName() const override {
         return "Media Foundation (HW/SW auto)";
     }
+    std::string_view BackendId() const override {
+        return deskhub::media::kEncoderBackendMediaFoundation;
+    }
+    deskhub::media::EncoderRecoveryCaps RecoveryCaps() const override;
 
 private:
     struct Impl;

@@ -1,5 +1,7 @@
 #include "deskhub/session/host/ScreenHostSession.h"
 
+#include "deskhub/media/CodecNegotiation.h"
+
 namespace deskhub {
 
 bool ScreenHostSession::HandlePacket(std::span<const uint8_t> pkt, uint64_t nowUs, uint64_t fromPacked) {
@@ -26,10 +28,12 @@ bool ScreenHostSession::HandleHello(std::span<const uint8_t> payload, uint64_t n
     const auto m = ParseHello(payload);
     if (!m || !fromPacked) return false;
     if (!PasscodeAllows(*m, nowUs)) return false;
-    if (!(m->codecMask & kCodecMaskH264)) {
+    const Codec agreed = media::NegotiateCodec(hostCodecMask_, m->codecMask);
+    if (agreed == Codec::Rejected) {
         SendReject(RejectReason::CodecMismatch);
         return false;
     }
+    codec_ = agreed;
 
     ViewerSlot* known = viewers_.Find(fromPacked);
     if (known && known->clientId != m->clientId) {
@@ -76,20 +80,21 @@ bool ScreenHostSession::HandleFromViewer(const CommonHeader& header, std::span<c
                     state_.store(State::Streaming, std::memory_order_release);
                     if (cb_.onStart) cb_.onStart();
                 } else if (cb_.onKeyframeRequest) {
-                    cb_.onKeyframeRequest();
+                    cb_.onKeyframeRequest(KeyframeReason::ViewerJoin);
                 }
             }
             return true;
         case MsgType::Ping: {
-            const auto m = ParsePingPong(payload);
+            auto m = ParsePingPong(payload);
             if (!m) return false;
+            m->hostTimeUs = nowUs;
             const size_t n = BuildPong(buf_, sessionId(), *m);
             if (n && cb_.send) cb_.send(std::span<const uint8_t>(buf_, n));
             return true;
         }
         case MsgType::RequestKeyframe:
             if (!streaming) return false;
-            if (cb_.onKeyframeRequest) cb_.onKeyframeRequest();
+            if (cb_.onKeyframeRequest) cb_.onKeyframeRequest(ParseRequestKeyframe(payload));
             return true;
         case MsgType::InputEvent:
             if (!streaming) return false;
@@ -219,7 +224,7 @@ bool ScreenHostSession::BeginSession() {
 void ScreenHostSession::SendHelloAck(uint64_t nowUs) {
     HelloAck a;
     a.sessionId = sessionId();
-    a.codec = Codec::H264;
+    a.codec = codec_;
     a.width = offer_.width;
     a.height = offer_.height;
     a.fps = offer_.fps;

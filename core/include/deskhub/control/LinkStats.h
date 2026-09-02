@@ -15,6 +15,7 @@ struct LinkWindow {
     uint64_t packetsReceived = 0;
     uint64_t packetsLost = 0;
     uint64_t packetsRecovered = 0;
+    uint64_t fecReceived = 0;
     uint64_t framesDropped = 0;
 
     uint64_t lossRuns[7] = {};

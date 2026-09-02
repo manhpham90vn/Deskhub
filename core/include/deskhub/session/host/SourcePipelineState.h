@@ -1,5 +1,6 @@
 #pragma once
-#include "deskhub/control/BitrateController.h"
+#include "deskhub/control/CongestionControl.h"
+#include "deskhub/media/RecoveryPolicy.h"
 #include "deskhub/control/QualityLadder.h"
 #include "deskhub/diag/ShareDiag.h"
 #include "deskhub/session/ClipboardSync.h"
@@ -20,7 +21,17 @@ namespace deskhub {
 
 struct SourcePipelineState {
     SourcePipelineState(uint32_t startBps, uint32_t minBps, diag::ShareDiagCaps caps = {})
-        : curBitrateBps(startBps), rate(startBps, minBps), diag(caps) {}
+        : curBitrateBps(startBps),
+          rate(MakeCongestionControl(kDefaultCongestionControl, startBps, minBps)),
+          diag(caps) {}
+
+    bool SetCongestionControl(std::string_view control, uint32_t startBps, uint32_t minBps) {
+        std::unique_ptr<CongestionControl> made =
+            MakeCongestionControl(control, startBps, minBps);
+        if (!made) return false;
+        rate = std::move(made);
+        return true;
+    }
 
     virtual ~SourcePipelineState() = default;
 
@@ -50,6 +61,13 @@ struct SourcePipelineState {
     std::atomic<bool> sizeChanged{false};
     std::atomic<bool> qualityChanged{false};
     std::atomic<bool> wantFec{true};
+    std::atomic<uint32_t> wantFecParity{1};
+    std::atomic<uint32_t> fecParityPin{0};
+    std::atomic<bool> fecArmedAlways{false};
+    std::atomic<bool> fecArmedNever{false};
+    media::RecoveryPolicy recovery{};
+    std::atomic<uint32_t> invalidateBeforeFrame{0};
+    std::atomic<bool> wantIntraRefresh{false};
     std::atomic<bool> netReady{false};
     std::atomic<bool> failed{false};
     std::atomic<bool> paused{false};
@@ -71,7 +89,7 @@ struct SourcePipelineState {
     diag::WindowMax frameAgeMs;
     std::unique_ptr<QualityLadder> ladder;
     QualityStep step;
-    BitrateController rate;
+    std::unique_ptr<CongestionControl> rate;
 
     diag::SourceRate statRate;
     diag::SourceRate::Window statWindow;

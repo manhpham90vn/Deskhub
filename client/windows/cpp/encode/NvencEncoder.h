@@ -17,6 +17,10 @@ public:
     const char* BackendName() const override {
         return "NVENC (NVIDIA)";
     }
+    std::string_view BackendId() const override {
+        return deskhub::media::kEncoderBackendNvenc;
+    }
+    deskhub::media::EncoderRecoveryCaps RecoveryCaps() const override;
 
 private:
     struct Impl;

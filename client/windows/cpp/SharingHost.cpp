@@ -119,6 +119,7 @@ bool SharingHost::Start(const std::vector<ShareSource>& sources, const ShareOpti
         SourcePipeline* p = &Pipeline(st);
         const uint32_t fps = engine->options().fps;
         const uint32_t maxDim = engine->options().maxDim;
+        const std::string encoderBackend = engine->options().encoder;
 
         if (!CreateBestDevice({GpuVendor::Nvidia, GpuVendor::Intel, GpuVendor::Amd}, p->gpu)) {
             LOGE("[Host][%s] Failed to create a D3D11 device for this source.",
@@ -133,7 +134,7 @@ bool SharingHost::Start(const std::vector<ShareSource>& sources, const ShareOpti
 
         auto onPacket = engine->MakePacketSink(*p);
 
-        p->ensureEncoderFn = [p, fps, onPacket](uint32_t w, uint32_t h, uint32_t sw,
+        p->ensureEncoderFn = [p, fps, onPacket, encoderBackend](uint32_t w, uint32_t h, uint32_t sw,
                                  uint32_t sh) -> bool {
             if (p->encoder && p->encoder->IsOpen()) return true;
             EncoderConfig cfg;
@@ -142,11 +143,11 @@ bool SharingHost::Start(const std::vector<ShareSource>& sources, const ShareOpti
             cfg.srcWidth = sw;
             cfg.srcHeight = sh;
             cfg.onPacket = onPacket;
-            p->encoder = CreateEncoder(p->gpu.device.Get(), cfg);
+            p->encoder = CreateEncoder(p->gpu.device.Get(), cfg, encoderBackend);
             if (!p->encoder) {
                 LOGE(
-                    "[Host][%s] No usable encoder backend (NVENC + Media Foundation"
-                    " both failed).",
+                    "[Host][%s] No encoder started, so this source cannot be shared - the "
+                    "[Encoder] lines above say which backends were tried and why each stopped.",
                     p->name.c_str());
                 p->failed.store(true);
                 return false;

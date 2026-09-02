@@ -26,6 +26,8 @@ enum class VideoPath : uint8_t {
     QuicDatagram = 1,
 };
 
+VideoPath VideoPathFromName(std::string_view name, VideoPath fallback);
+
 enum class Lane : uint8_t {
     Realtime = 0,
     Interactive = 1,

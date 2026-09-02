@@ -29,7 +29,7 @@ struct ScreenHostCallbacks {
     std::function<void(uint64_t addrPacked, std::span<const uint8_t>)> sendTo;
     std::function<void(const Hello&)> onHello;
     std::function<void()> onStart;
-    std::function<void()> onKeyframeRequest;
+    std::function<void(KeyframeReason)> onKeyframeRequest;
     std::function<void(uint64_t addrPacked, size_t viewerCount, std::string_view viewerName)>
         onViewerJoin;
     std::function<void(uint64_t addrPacked, size_t viewerCount)> onViewerLeave;
@@ -65,6 +65,18 @@ public:
 
     void SetConnectionAuthenticated(bool authenticated) {
         connectionAuthenticated_ = authenticated;
+    }
+
+    void SetCodecMask(uint16_t mask) {
+        hostCodecMask_ = mask ? mask : kCodecMaskH264;
+    }
+
+    uint16_t hostCodecMask() const {
+        return hostCodecMask_;
+    }
+
+    Codec codec() const {
+        return codec_;
     }
 
     void SetClipboardEnabled(bool on) {
@@ -131,6 +143,8 @@ private:
     std::string passcode_;
     bool connectionAuthenticated_ = false;
     bool clipboardEnabled_ = false;
+    uint16_t hostCodecMask_ = kCodecMaskH264;
+    Codec codec_ = Codec::H264;
     uint32_t wrongPasscodes_ = 0;
     uint64_t passcodeLockUntilUs_ = 0;
     uint8_t buf_[kMaxDatagram] = {};

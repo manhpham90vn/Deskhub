@@ -41,6 +41,7 @@ void RunVideoPacerTests();
 void RunQualityLadderTests();
 void RunDiagTests();
 void RunMediaContractTests();
+void RunRecoveryPolicyTests();
 void RunBitWriterTests();
 void RunH264SpsTests();
 void RunAnnexBTests();

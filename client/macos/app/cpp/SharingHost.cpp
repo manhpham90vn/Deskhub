@@ -93,7 +93,7 @@ bool SharingHost::Start(const std::vector<ShareSource>& sources, const ShareOpti
 
         auto onPacket = engine->MakePacketSink(*p);
 
-        deskhubp::InstallVtEncoderFactory(p, fps, onPacket);
+        deskhubp::InstallVtEncoderFactory(p, fps, onPacket, engine->options().encoder);
 
         auto onFrame = [p, maxDim](const MacFrameInfo& fi) {
             deskhubp::OfferVtFrame(p, maxDim, fi);

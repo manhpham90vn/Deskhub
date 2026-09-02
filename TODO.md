@@ -529,12 +529,127 @@ mà là chọn cho đúng trên từng máy — đó chính là C1.
 
 *Chặn mọi thứ phía sau. Hai việc đầu là code, phần còn lại là đo.*
 
-- [ ] Cắt gói parity xuống theo gói dữ liệu lớn nhất trong group **(A1)** — không sửa thì mọi phép đo sau đều tính trên overhead sai
-- [ ] Đếm datagram bị `SendDatagram` từ chối, phơi ra dòng diag cạnh `e2e_ms` **(P1, chẩn đoán)** — `QuicSendStats` đã có sẵn chỗ
+- [x] Cắt gói parity xuống theo gói dữ liệu lớn nhất trong group **(A1)** — không sửa thì mọi phép đo sau đều tính trên overhead sai
+- [x] Đếm datagram bị `SendDatagram` từ chối, phơi ra dòng diag cạnh `e2e_ms` **(P1, chẩn đoán)** — `QuicSendStats` đã có sẵn chỗ
 - [ ] Bắt loss và jitter thật trên ba link: WiFi nhà, WiFi quán, Tailscale qua WAN
 - [ ] Đối chiếu: bao nhiêu phần "loss" là của mạng, bao nhiêu là tự mình bỏ ở hàng đợi
 - [ ] Rút ra tham số Gilbert-Elliott từ phần loss thật: tỉ lệ mất, độ dài burst trung bình, phân bố
-- [ ] Chốt hàm mục tiêu và ngưỡng đạt **trước khi** nhìn thấy bất kỳ con số nào
+- [x] Chốt hàm mục tiêu và ngưỡng đạt **trước khi** nhìn thấy bất kỳ con số nào — xem bảng dưới
+
+#### Hàm mục tiêu và ngưỡng đạt
+
+> **Kỷ luật đã bị phá một phần, phải nói rõ.** Mục này yêu cầu chốt *trước khi* thấy bất kỳ
+> con số nào, nhưng sweep Phase 2 và các phép đo trên phần cứng đã chạy trước. Các ngưỡng
+> dưới đây vì thế được đặt *sau* khi đã thấy số. Ai đọc lại cần biết điều đó để không coi
+> chúng là dự đoán độc lập.
+
+| Thành phần | Hàm mục tiêu | Ngưỡng đạt | Đo ở đâu |
+| --- | --- | --- | --- |
+| **A1** FEC | Số IDR do `KeyframeReason::Loss` trên mỗi phút | ≤ 2/phút ở điểm vận hành đo được (0,1% loss, burst 1); ≤ 20/phút ở 5% loss burst 4 | `LossGoodputTests`, cột `idr_per_min` |
+| **A1** chi phí | CPU encode mỗi frame | Bản thắng ≤ 3× bản XOR, nếu không thì phải cứu được ≥ 2× số frame | `core/perf`, `video/fec-encode-*` |
+| **A2** CC | Thời gian hồi phục sau khi băng thông tụt · bitrate trung bình giữ được | Không bản nào để bitrate leo lên khi `frameAgeMs ≥ kSevereBacklogMs` (ca Pixel 4) | `ControlTests` |
+| **A3** audio | `(underruns + framesConcealed)` mỗi phút, vẽ theo trục độ trễ trung bình | Ở cùng số gián đoạn, target thích ứng phải giữ độ trễ thấp hơn target cố định | `AudioJitterBufferTests` |
+| **A5** đồng hồ | Sai số so với offset thật trong sim có drift đã biết | Trên link có drift, bản thắng sai số ≤ 1/4 bản rolling-min | `ClockOffsetTests` |
+| **A6** nhịp hình | Số pha khác nhau mà frame rơi vào trong một chu kỳ quét | Khớp vsync phải cho đúng 1 pha | `VideoPacerTests` |
+| **P1** hai tầng CC | Tỉ lệ `dgram_refused / dgram_tx` | > 0,1% thì kết luận của A1/A2 phải đo lại | dòng `[DIAG][host] evt=sum` |
+
+**Quy tắc chấm chung, áp cho mọi bake-off:** IDR phải tách theo `KeyframeReason` trước khi
+đếm — `q_overflow`, `dec_fail`, `display_congested` đến từ pipeline client chứ không phải từ
+mạng, và trên phần cứng thật chúng chiếm phần đáng kể. Xem dòng `evt=kf_sum`.
+
+#### Bốn dụng cụ đo phải thêm mới đo được, ngoài kế hoạch ban đầu
+
+Kế hoạch không nêu ba cái này, nhưng thiếu chúng thì không mục nào ở trên chấm điểm được:
+
+| Dụng cụ | Ở đâu | Không có nó thì mù chỗ nào |
+| --- | --- | --- |
+| `dgram_tx` · `dgram_refused` | `[DIAG][host] evt=sum` | Không tách được loss của mạng khỏi gói mình tự bỏ ở `kDatagramQueue` |
+| `fec_rx` · `fec_fix` | `[DIAG] evt=sum` phía client | Không phân biệt được "FEC không cứu nổi" với "FEC **không hề bật**" — đây chính là chỗ tôi suy luận sai một lần trước khi có số |
+| `evt=kf_sum` theo `KeyframeReason` | dòng riêng phía client | Hàm mục tiêu của A1 bị `q_overflow` làm nhiễu; `RequestKeyframe` nay nhận enum có kiểu thay vì `const char*` nên thêm nguyên nhân mới là bắt buộc thêm bộ đếm |
+| `enc_us_p50` · `enc_us_p99` | `[DIAG][<source>] evt=sum` | Hàm mục tiêu của C1 là **đuôi** encode latency, mà `enc_ms_avg`/`enc_ms_max` chỉ cho trung bình và một điểm ngoại lai duy nhất — không phân biệt được một backend chậm đều với một backend thỉnh thoảng khựng |
+
+Cả ba đều cùng một hình dạng: bộ đếm **vốn đã tồn tại** trong `Reassembler::Stats`,
+`QuicSendStats` hoặc dòng log, chỉ là chưa bao giờ được phơi ra.
+
+#### Bốn lỗi mà chỉ việc vẽ đường cong mới bắt được
+
+Ghi lại vì chúng là lý lẽ mạnh nhất cho việc quét-và-vẽ, chứ không chỉ viết test điểm:
+
+| Lỗi | Ở đâu | Vì sao test điểm không bắt |
+| --- | --- | --- |
+| **Bộ lọc jitter tràn số** — `jitterUs_ += (spread - jitterUs_) >> shift` với cả hai là `uint64_t`; mẫu nào yên hơn trung bình làm phép trừ quấn về gần 2⁶⁴ nên ước lượng **phồng** thay vì suy giảm | `AudioJitterBuffer` **và** `VideoPacer` — cùng một dòng, hai chỗ | Test điểm chỉ hỏi "jitter cao có lớn hơn jitter thấp không", và điều đó vẫn đúng khi cả hai đều sai |
+| Sim FEC thiếu **chính sách bật FEC** | `LossGoodputTests` | Sim đo một hệ thống không tồn tại: FEC luôn bật, còn thật thì 30% thời gian |
+| Sim FEC thiếu **đường NACK** | `LossGoodputTests` | Ghi công cho FEC những lần vá mà retransmit vốn làm được |
+| Harness audio hút cạn buffer mỗi lần push, rồi sau khi sửa lại đẩy-một-lấy-một | `AudioJitterBufferTests::FeedLink` | Lần một cho gap ∝ frames/target ở **mọi** mức jitter; lần hai cho **0** gap ở mọi mức. Cả hai đều "pass" nếu chỉ nhìn một điểm |
+
+Điểm chung: mỗi lỗi làm một **hình dạng** sai, không làm một giá trị sai. Một điểm đơn lẻ luôn
+có thể giải thích được; cả đường cong thì không.
+
+#### Đã đo: LAN có dây và WiFi nhà (01/09/2026)
+
+Viewer là `deskhub-cli` release trên Windows 192.168.1.3 (Ethernet). Hai host: máy Mac
+192.168.1.8 và iPhone 192.168.1.5, cả hai chạy build đã cài sẵn.
+
+**Dụng cụ phải thêm trước khi đo được:** `Reassembler::Stats::fecReceived` vốn đã đếm gói
+parity nhận được nhưng chưa bao giờ phơi ra — đúng hình dạng của bộ đếm P1. Nay dòng
+`evt=sum` phía client mang `fec_rx` (parity tới) và `fec_fix` (parity vá được). Không có hai
+số này thì không phân biệt được "FEC không cứu nổi" với "FEC không hề bật".
+
+| | Mac, có chuyển động | iPhone qua WiFi |
+| --- | --- | --- |
+| Cửa sổ | 93 | 300 |
+| probe RTT | 4 ms | **67 ms** |
+| Bitrate | p50 11790 · max 15585 kbps | p50 8483 · max 16406 kbps |
+| fps | p50 37 · avg 38 | p50 38 · avg 39 |
+| RTT trong phiên | 14,8–15,1 ms (phẳng) | p50 15,9 · p90 31,2 · **max 91,7 ms** |
+| e2e | p50 23,6 · p90 32,4 · max 46,9 ms | p50 20,1 · p90 29,8 · max 47,6 ms |
+| Cửa sổ có mất gói | 0/93 | 5/196, đều 0,1% |
+| Độ dài run mất gói | — | **tất cả bằng 1**, `longest ever 1 pkts` |
+| FEC vá được | 0 | **0** |
+
+**Tham số Gilbert-Elliott đo được (WiFi nhà, sóng tốt):** ~330.832 gói video, 5 gói mất
+không cứu được ⇒ tỉ lệ **0,0015%**, độ dài burst trung bình **1,0**. Sim ở Phase 2 đang chạy
+giả định 5% / burst 4 — **lệch ba bậc**, và lệch cả về hình dạng: link này không hề bursty.
+Mọi thứ hạng scheme rút ra từ giả định đó chưa nói gì về link thật này.
+
+##### Phát hiện chính: chính sách bật FEC luôn đi sau, và mù với loss nhỏ
+
+Đo trên Mac bắt được trọn vẹn một chu kỳ bật/tắt:
+
+| Cửa sổ | loss | `fec_rx` |
+| --- | --- | --- |
+| 1–10 | 0,0% | 0 |
+| 11 | **0,5%** | 0 |
+| 12–21 | 0,0% | 88–174 gói/giây |
+| 22 | 0,0% | 4 |
+| 23+ | 0,0% | 0 |
+
+Khớp chính xác với code: `fb.lossPct = uint8_t(std::lround(w.lossPct))`
+(`LinkStats.cpp:45`) biến 0,5% thành 1, `BitrateController.cpp:10` thấy `>= 1` nên bật FEC —
+**sau** khi mất gói đã xảy ra — rồi `kCleanSecondsBeforeDroppingFec = 10` tắt lại sau đúng 10
+cửa sổ sạch. Tổng cộng 1224 gói parity phát ra, vá được **1** gói.
+
+Trên iPhone thì tệ hơn: loss thật là 0,1% mỗi lần, mà `lround(0,1) = 0`, nên host thấy y hệt
+một link hoàn hảo. `fec_rx = 0` suốt cả 118 cửa sổ đo lại — **FEC không bật một lần nào**.
+Hậu quả đo được: mỗi gói mất (≤1174 byte) tốn một frame bị bỏ và một IDR nguyên khung
+(144591 và 155642 byte) — khoảng **128 lần** lượng dữ liệu đã mất.
+
+Nói cách khác: **mọi mất gói dưới 0,5% đều vô hình với chính sách bật FEC**, và đó đúng là
+chế độ mất gói mà WiFi nhà thực sự có. Chuyện này nằm ở A1/A2 chứ không phải ở việc chọn sơ
+đồ FEC — không sơ đồ nào cứu được khi parity không được phát.
+
+##### Hai cảnh báo về chính phép đo
+
+- `stats_.packetsLost` chỉ cộng bên trong `Drop()` (`Reassembler.cpp:206`), nên `lost%` chỉ
+  đếm gói mất trên những frame **đã bị bỏ**. Mất gói mà NACK vá kịp không xuất hiện ở đâu cả.
+  Con số 0,0015% vì vậy là "loss không cứu được", không phải loss trên dây. Muốn có loss thật
+  cần thêm một bộ đếm "gói từng vắng mặt" — hiện chưa có.
+- `q_overflow` xuất hiện 20 lần trên Mac và 6 lần trên iPhone. Đó là hàng đợi decode phía
+  client, không phải transport — nhưng mỗi lần đều xin một IDR, nên nó cũng đang bơm bitrate
+  y như loss thật. Đáng tách ra khỏi số liệu của A1.
+
+**P1 vẫn chưa trả lời được:** `dgram_refused` do host in ra, mà cả hai host đều chạy build
+không có bộ đếm. Muốn đo phải đảo vai — chạy host trên máy đã instrument.
 
 ### Phase 1 — Làm rõ quan hệ hai tầng điều khiển tắc nghẽn
 
@@ -542,68 +657,475 @@ mà là chọn cho đúng trên từng máy — đó chính là C1.
 
 - [ ] Chạy A/B `RawUdp` so với `QuicDatagram` trên cùng một link — không phải viết code, và nó đo thẳng phần đóng góp của CC quiche
 - [ ] Quyết kiến trúc: quiche làm chủ, AIMD làm chủ, hay chia vai rõ ràng
-- [ ] Đặt cấu hình tường minh trong `MakeConfig` để lựa chọn đó nằm trong code chứ không nằm trong mặc định CUBIC của thư viện
+- [x] Đặt cấu hình tường minh trong `MakeConfig` để lựa chọn đó nằm trong code chứ không nằm trong mặc định CUBIC của thư viện
+  — `QuicSettings::congestionControl` mặc định `Cubic`, gọi `quiche_config_set_cc_algorithm`
+  tường minh. **Không đổi hành vi** (đã xác nhận mặc định của quiche là CUBIC tại
+  `third_party/quiche/src/quiche/src/lib.rs:654`); giá trị của nó là ghim baseline lại để một
+  lần nâng quiche không âm thầm đổi phép đo. Reno và BBR2 cũng chọn được, cho phép quét
 - [ ] Ghi quyết định vào `docs/ARCHITECTURE.md` §Decisions worth remembering kèm ba bản dịch
+
+> **"Không phải viết code" là sai.** `SetVideoPath` chỉ có caller trong
+> `platform/tests/net/SessionTransportTests.cpp` — từ một binary đã build không có cách nào
+> đưa video sang `RawUdp`. Đã thêm `deskhub-cli share|connect --video-path raw-udp|quic-datagram`,
+> nối qua `HostEngine` và `HostLink` tới `SetVideoPath`. Cả hai đầu phải đặt giống nhau vì
+> `SessionTransport::Deliver` chỉ nhận video raw khi chính nó đang ở chế độ `RawUdp`.
+
+#### Đã đo: đảo vai, host là máy đã instrument (01/09/2026)
+
+Host là `deskhub-cli share --bind 192.168.1.3` trên Windows (NVENC, RTX 5070 Ti, nguồn
+3440x1440 hạ xuống 1920x802). Viewer: MacBook Pro qua LAN có dây, rồi thêm iPhone qua WiFi.
+
+| | 1 viewer (Mac, LAN) | 2 viewer (+ iPhone, WiFi) |
+| --- | --- | --- |
+| Cửa sổ | 47 | 148 |
+| Datagram gửi | 34.981 | 111.685 |
+| **`dgram_refused`** | **0** | **0** |
+| `send_fail` · `q_drop` | 0 · 0 | 0 · 0 |
+| Viewer báo loss | 0% | 0% × 148 |
+| Bitrate gửi | max 12.475 kbps | p50 9104 · max 12.884 kbps |
+
+**Kết luận cho P1, trong biên đã đo:** CC của quiche **chưa từng từ chối một datagram nào**
+qua 146.666 gói. Nỗi lo "một phần đáng kể loss thực ra là mình tự bỏ ở `kDatagramQueue`"
+không xảy ra ở lớp link này, kể cả khi có một viewer WiFi và hai connection song song. Nghĩa
+là A1 và A2 **không** đang tối ưu cho một mô hình sai vì lý do này — ràng buộc "phải làm P1
+trước" được gỡ cho lớp link này.
+
+Biên của kết luận, phải nói kèm mỗi lần trích: LAN gigabit cộng WiFi nhà sóng tốt, ≤13 Mbps,
+≤2 viewer, RTT ≤40 ms. Trên link bị bó thật (Tailscale qua WAN, WiFi quán) kết quả có thể
+khác hẳn, và bộ đếm giờ đã sẵn sàng để đo.
+
+##### Một confounder cho hàm mục tiêu của A1
+
+Trong 148 cửa sổ hai viewer: **10 IDR (~72 KB, 62 gói mỗi cái) trong khi cả hai viewer báo
+0% loss và không có reconfig nào.** Chúng đến từ `q_overflow` phía viewer — hàng đợi decode
+tràn rồi xin keyframe — chứ không phải từ mạng.
+
+A1 lấy "số lần xin IDR trên mỗi phút" làm hàm mục tiêu. Nếu đếm gộp thì một phần đáng kể số
+đó không phải do mất gói mà do pipeline decode của chính client. Lý do đã được log sẵn phía
+client (`kf_req reason=loss|q_overflow|wait_idr|pre_idr`) nhưng **chưa được đếm ở đâu cả**.
+Phải tách theo reason trước khi dùng con số này để chấm điểm bất kỳ sơ đồ FEC nào.
+
+**Đã xong (02/09/2026).** Phía viewer thực ra đã có `KeyframeRequestLog` đếm theo reason và in
+`evt=kf_sum`; chỗ thiếu là **phía host** — bên thực sự tiêu cái IDR, và cũng là bên A1 chấm
+điểm. `RequestKeyframe` trước đây là datagram rỗng nên mọi yêu cầu giống hệt nhau khi tới host.
+Nay nó chở reason bằng **một byte payload**: `deskhub::KeyframeReason` chuyển từ `diag` sang
+`Wire.h` (nơi cả hai bên nhìn thấy), `ParseRequestKeyframe` đọc lại, `ScreenHostSession` đưa nó
+vào `onKeyframeRequest`, và `SourceDiag::FormatKeyframeRequests` in `evt=kf_req_sum total=N`
+kèm số đếm từng reason mỗi cửa sổ.
+
+Hai chi tiết phải nhớ khi đọc số:
+
+- **Peer cũ không gửi byte nào** → `ParseRequestKeyframe` trả `Unknown`, không phải `Loss` (ô 0
+  của enum). Golden vector `023300001122334402` đã cập nhật, và `WireVectorTests` giữ thêm một
+  ca dựng tay 8 byte đúng kiểu peer cũ để khoá tương thích ngược lại
+- **Đường host tự re-join giữa chừng** (viewer thứ hai gửi `Start` khi đã streaming) được gán
+  `ViewerJoin`, không mượn reason của viewer nào
+
+Nghĩa là từ giờ `idr_per_min` trong bảng bake-off **tách được** theo nguyên nhân. Chưa làm:
+nối `evt=kf_req_sum` vào chính CSV của sim để cột `idr_per_min` tự chia — sim hiện chỉ sinh
+IDR do loss nên con số của nó vốn đã sạch; việc tách chỉ cần trên máy thật.
+
+##### Nút cổ chai ở đây là encoder, không phải link
+
+`enc_ms` trung bình 19,2 ms, đỉnh 104 ms, trong khi một frame ở 60 fps chỉ có 16,7 ms. Đó là
+lý do fps thực tế 23–44 chứ không phải 60, và nó không liên quan gì tới mạng. Mọi phép đo
+video trên máy này đều bị trần bởi encoder trước khi chạm trần transport — cần nhớ khi đọc
+lại các con số ở trên.
+
 
 ### Phase 2 — Dựng harness trên một thành phần làm mẫu
 
 *A1 · FEC.*
 
-- [ ] Tách `IFecScheme` ra khỏi `Packetizer`, giữ XOR hiện tại làm impl đầu tiên — không đổi hành vi
-- [ ] Tách độ sâu interleave khỏi `numGroups` để nó thành tham số quét được, mặc định vẫn là `ceil(count/8)`
-- [ ] Chuyển `core/tests/transport/FecTests.cpp` thành tham số hoá, chạy qua mọi impl đăng ký
-- [ ] Đổi mô hình loss của `LossGoodputTests.cpp` từ "bỏ 6 gói đuôi mỗi frame thứ 50" sang Gilbert-Elliott có seed, xuất CSV
-- [ ] Thêm Workload đo CPU từng scheme vào `core/perf/VideoPerf.cpp`
-- [ ] Nối `deskhub-cli --fec=…` vào factory — điều kiện cần để giữ được các bản thua
+- [x] Tách `IFecScheme` ra khỏi `Packetizer`, giữ XOR hiện tại làm impl đầu tiên — không đổi hành vi
+  — đặt tên là **`FecScheme`** (không tiền tố `I`, theo lối đặt tên trong repo), ở
+  `core/include/deskhub/transport/FecScheme.h`. `Encode`/`Recover` làm việc ở mức một group
+  và trả span vào scratch của chính scheme, nên không cấp phát sau lần đầu
+- [x] Tách độ sâu interleave khỏi `numGroups` để nó thành tham số quét được, mặc định vẫn là `ceil(count/8)`
+- [x] Chuyển `core/tests/transport/FecTests.cpp` thành tham số hoá, chạy qua mọi impl đăng ký
+- [x] Đổi mô hình loss của `LossGoodputTests.cpp` từ "bỏ 6 gói đuôi mỗi frame thứ 50" sang Gilbert-Elliott có seed, xuất CSV
+- [x] Thêm Workload đo CPU từng scheme vào `core/perf/VideoPerf.cpp`
+- [x] Nối `deskhub-cli --fec=…` vào factory — điều kiện cần để giữ được các bản thua
 
 ### Phase 3 — Chạy đua FEC
 
 *Quét tham số trước, viết impl mới sau.*
 
-- [ ] **Quét trước khi viết:** depth × group size × tỉ lệ parity trên chính bản XOR đang có. Reed-Solomon chỉ đáng viết nếu lần quét này chạm trần dưới ngưỡng đạt
-- [ ] Viết các impl còn thiếu theo đúng thứ tự cần thiết: Reed-Solomon, RS thích ứng, NACK-only
-- [ ] Quét scheme × tỉ lệ parity × group size × độ sâu interleave × loss × độ dài burst × RTT
-- [ ] Chốt bản thắng theo tiêu chí đã đặt ở Phase 0 — không sửa tiêu chí sau khi thấy số
+> **Chặn: chính sách bật FEC phải xong trước cả phép quét.** `LossGoodputTests` nay chạy
+> `BitrateController` thật qua `MakeFeedback` thật. Tại điểm vận hành đo được trên WiFi nhà
+> (0,1% loss, burst 1):
+>
+> | | FEC luôn bật | Chính sách đang ship |
+> | --- | --- | --- |
+> | Frame hỏng cứu được | 16/16 | 6/16 |
+> | Thời gian FEC bật | 100% | 30,0% |
+> | **IDR/phút** | **0** | **20,0** |
+>
+> Hàm mục tiêu của A1 là IDR/phút. Chính sách bật FEC một mình gây ra 20 IDR/phút, còn sơ đồ
+> FEC thì 70% thời gian không chạy. Cho Reed-Solomon đua với XOR ở trạng thái này là đo một
+> cấu hình không tồn tại trên máy thật — **quét chính sách bật trước, quét sơ đồ sau**.
+>
+> Không gian tham số của chính sách: ngưỡng arm (hiện `lossPct >= 1` sau khi `lround` đã bóp
+> mọi giá trị dưới 0,5% thành 0) · tín hiệu arm (phần trăm hay số gói mất tuyệt đối) ·
+> `kCleanSecondsBeforeDroppingFec` · có nên tắt hẳn không. Cả bốn đều quét được bằng harness
+> hiện có, không cần viết impl mới nào.
+
+- [x] **Quét trước khi viết:** depth × group size × tỉ lệ parity trên chính bản XOR đang có. Reed-Solomon chỉ đáng viết nếu lần quét này chạm trần dưới ngưỡng đạt
+
+#### Kết quả quét (180 điểm, FEC luôn bật để cô lập sơ đồ khỏi chính sách bật)
+
+Ở 5% loss, burst 4, RTT 40 ms — trích các điểm đáng chú ý:
+
+| scheme | parity | depth | **overhead** | cứu được | IDR/phút |
+| --- | --- | --- | --- | --- | --- |
+| xor | 1 | dẫn xuất *(đang chạy)* | **15%** | 33,9% | 171 |
+| **rs** | **1** | **dẫn xuất** | **15%** | **33,9%** | **171** |
+| xor | 1 | 8 | **100%** | 78,7% | 81 |
+| **rs** | **1** | **8** | **100%** | **78,7%** | **81** |
+| rs | 2 | 8 | 200% | 86,7% | 45 |
+| rs | 3 | 4 | **150%** | 90,6% | **36** |
+| rs | 3 | 8 | **300%** | 89,3% | 54 |
+
+**Ba kết luận rút thẳng từ bảng:**
+
+1. **`rs` ở parity = 1 cho số liệu giống hệt `xor`, tới từng chữ số, ở cả ba mức depth.** Đúng
+   như lý thuyết — RS một hàng parity *là* XOR — nhưng nó tốn 6,3× CPU encode (143 µs so với
+   22,7 µs mỗi frame). **RS chỉ đáng dùng từ parity ≥ 2 trở lên.**
+2. **Depth không hề miễn phí, và bản viết đầu tiên của chính mục này đã gọi nó là "đòn bẩy rẻ
+   nhất trong lưới" — sai.** Nó không thêm CPU, đúng; nhưng nó đưa overhead từ 15% lên **100%**.
+   Ở một group mỗi gói thì mỗi gói tự mang parity của chính mình — đó là nhân đôi, không phải
+   mã hoá. Trên ngân sách 20 Mbps, đó là tiêu nửa bức ảnh để giảm nửa số lần xin keyframe.
+3. **Phép quét không sinh ra bản thắng nào để đưa lên.** Mọi điểm cứu được nhiều hơn đều mua
+   bằng overhead lớn hơn ngân sách video chịu nổi. Kết quả là **mặc định đứng nguyên**, các bản
+   dự thi ở lại sau `--fec=…` làm tham chiếu — đúng như §"Giữ bản thua làm tham chiếu" dự liệu.
+
+`overhead_pct` nay là một cột riêng trong CSV, và có test khẳng định depth tốn hơn ba lần
+parity, để lần sau không ai đọc tỉ lệ cứu mà quên mất cái giá của nó.
+- [x] Viết các impl còn thiếu theo đúng thứ tự cần thiết: Reed-Solomon, RS thích ứng, NACK-only
+  — **xong cả ba**: Reed-Solomon (GF(256), Cauchy, khử Gauss); RS thích ứng qua
+  `FecParityRowsFor(lossPct)` → 1/2/3 hàng parity, nối tới packetizer bằng `wantFecParity`;
+  NACK-only đã trả lời bằng đo, không cần impl
+
+> **Sáu phương án của A1 không phải sáu impl.** Đối chiếu lại với cây nguồn:
+>
+> | Phương án A1 | Thực chất | Trạng thái | Đặt từ CLI |
+> | --- | --- | --- | --- |
+> | XOR rải bước, depth dẫn xuất | baseline | xong — `xor` | `--fec=xor` |
+> | XOR depth tách khỏi group size | tham số | xong — `SetFecGroups` + byte wire | `--fec-depth N` |
+> | **Reed-Solomon (k,n)** | impl `FecScheme` | **xong — GF(256), ma trận Cauchy, khử Gauss** | `--fec=rs` |
+> | RS + parity thích ứng | chính sách trên RS | **xong và đang chạy trên đường thật** — `FecParityRowsFor(lossPct)` → 1/2/3 hàng, ghi vào `wantFecParity` mỗi giây | `--fec-parity N` để **ghim**, chặn chính sách đè |
+> | NACK-only | không phải scheme — là chế độ vá | **xong — quét 72 điểm, kết luận âm tính cũ bị lật** | `--fec-arm never` + `--nack` |
+> | Lai FEC/NACK theo RTT | chính sách trên luật giữ frame | **xong — `OvertakenLimit()` suy từ cửa sổ vá; mặc định không đổi** | `--hold N` (viewer) |
+>
+> **NACK-only đã có câu trả lời mà không cần viết impl nào.** Sim nay có đường retransmit
+> thật (`PlanNack` + `RetransmitCache`, NACK tốn trọn 1 RTT). Ở điểm đo được, host phục vụ
+> đủ 16/16 chỉ số viewer hỏi, mọi gói đều tới — và **cứu được 0 frame**. `PopReady` bỏ frame
+> non-IDR ngay khi có 2 frame mới hơn hoàn chỉnh, ở 60 fps là ~33 ms, còn gói vá về sau
+> ~57 ms. Rút RTT xuống 4 ms thì chính đường đó bắt đầu cứu được.
+>
+> Nên "NACK-only" và "lai FEC/NACK theo RTT" **không phải câu hỏi về retransmit** — chúng là
+> câu hỏi về `kStallTimeoutMultiple` và luật overtaken đặt cạnh RTT. Đó là Tier B (quét tham
+> số), không phải Tier A (dựng interface).
+>
+> Cũng đo được: khi parity đang bật thì không frame nào thiếu gói đủ lâu để bị NACK
+> (`nack_requests = 0`). FEC và NACK không tranh nhau cùng một lần vá.
+>
+> ⚠️ **Kết luận âm tính ở trên đã bị lật (02/09/2026).** Nó đo ở **đúng một điểm vận hành**
+> (0,1% loss, luật overtaken cố định ở 2) — nên nó đo *luật giữ frame*, không đo retransmit.
+> Phép quét 72 điểm mới (`out/bake-off/nack-hybrid.csv`, chế độ vá × RTT × độ dài giữ) ở
+> **5% loss, burst 4**:
+>
+> | RTT | chế độ | giữ | cứu | IDR/phút | parity gửi |
+> | --- | --- | --- | --- | --- | --- |
+> | 40 ms | `fec-only` | – | 21 | 171 | 484 |
+> | 40 ms | `nack-only` | 2 *(đang ship)* | 11 | 171 | **0** |
+> | 40 ms | **`nack-only`** | **suy ra** | **30** | **72** | **0** |
+> | 40 ms | `fec+nack` | suy ra | 38 | 90 | 484 |
+> | 80 ms | **`fec+nack`** | **suy ra** | **41** | **63** | 484 |
+> | 4 ms | `nack-only` | 2 hay suy ra | 30 | 126 | 0 |
+>
+> **`nack-only` với luật giữ suy từ RTT thắng `fec-only` ở cùng điểm — ít hơn 2,4× số keyframe
+> mà không tốn một gói parity nào.** Ở RTT 4 ms không đổi gì, vì bản vá vốn về kịp trong hai
+> frame: cái lợi là hàm của RTT so với chu kỳ frame. Vì thế `OvertakenLimit()` **suy ra** con
+> số từ cửa sổ vá (`kNackHoldUs + RTT*3/2`) chứ không nâng một hằng số.
+>
+> **Mặc định đang ship không đổi**: `overtakenLimit_` mặc định là 2, phần suy ra chỉ chạm tới
+> khi có caller nâng trần (`--hold N`). Quét trước, chốt sau — chưa chốt.
+>
+> Cái phải trả **không** phải độ trễ đều đặn: `longest_stall_ms` dịch chuyển cả hai chiều trong
+> lưới (40 ms `nack-only`: 150→133; 40 ms `fec+nack`: 100→150), vì bớt keyframe có thể trả thừa
+> cho cái chờ dài hơn. Nói "mua bằng độ trễ" là nói sai số liệu.
+- [x] Quét scheme × tỉ lệ parity × group size × độ sâu interleave × loss × độ dài burst × RTT — 180 điểm, xem bảng ở trên
+- [x] Chốt bản thắng theo tiêu chí đã đặt ở Phase 0 — không sửa tiêu chí sau khi thấy số
+  — **kết luận: không có bản thắng, mặc định đứng nguyên.** Áp đúng ngưỡng đã đặt: không cấu
+  hình nào đạt ≤20 IDR/phút ở 5% burst 4 (tốt nhất là 36, và phải trả 150% overhead). Ngưỡng
+  CPU cũng không cứu được RS: 6,3× so với trần 3×, và điều khoản thoát "cứu gấp đôi" thì đạt
+  nhưng vô nghĩa khi cái giá là băng thông chứ không phải CPU. Tiêu chí **không sửa sau khi
+  thấy số** — đây là kết quả âm tính thật, không phải thất bại của phép quét
 - [ ] Xác nhận lại trên link thật bằng bài camera 240 fps qua `netem`, kiểm tra sim không nói dối
-- [ ] Nối bản thắng vào đường chạy thật; các bản khác ở lại sau `--fec=…` và ra khỏi ma trận fuzz/sanitizer
-- [ ] Ghi kết luận **kèm số đo của từng bản** vào `docs/ARCHITECTURE.md` kèm ba bản dịch
+  — **đã gỡ chặn (02/09/2026).** Trước đây bài này không chạy được: `--fec` chỉ chọn tên sơ đồ,
+  mà theo chính bảng kết quả `rs` ở parity = 1 tái lập `xor` tới từng chữ số. Hai trục thật sự
+  — số hàng parity và độ sâu — thì `SetFecGroups` không có caller production nào (đúng lỗi
+  `SetVideoPath` của Phase 1), còn tỉ lệ parity bị `ViewerBroadcast` ghi đè mỗi frame từ
+  `FecParityRowsFor(lossPct)`. Trên link sạch chính sách trả về 1, nên `--fec=rs` trên WiFi tốt
+  cho kết quả **không phân biệt được** với mặc định — đủ để ai đó kết luận nhầm "RS chẳng khác
+  gì". Nay có `--fec-parity N` (ghim, chặn chính sách đè), `--fec-depth N`, và
+  `--fec-arm always|policy` (giữ parity trên dây để cô lập sơ đồ khỏi chính sách bật, đúng như
+  sim). Cả ba trục của phép quét giờ đặt được từ dòng lệnh; phần còn lại của mục này là **đi đo
+  thật**, cần hai máy và `netem`
+
+  **Đã chạy thử đường dây trên máy thật (02/09/2026)**, host là `deskhub-cli share --display all`
+  trên Windows (NVENC, RTX 5070 Ti, 3440x1440 → 1920x802). Mỗi source nay in cấu hình FEC nó
+  thật sự rơi vào, **đọc ngược từ packetizer** chứ không từ tuỳ chọn:
+
+  | Xin trên dòng lệnh | Dòng `FEC measurement` in ra |
+  | --- | --- |
+  | `--fec=rs --fec-parity 3 --fec-depth 8 --fec-arm always` | `scheme=rs parity=3 depth=8 arm=always` |
+  | `--fec=xor --fec-parity 3 --fec-depth 4 --fec-arm policy` | `scheme=xor parity=1 depth=4 arm=policy` + cảnh báo |
+  | `--fec=rs --fec-parity 2 --fec-depth 1 --fec-arm policy` | `scheme=rs parity=2 depth=1 arm=policy` |
+
+  Hàng giữa là hàng đáng giá nhất: `xor` chỉ chở được một hàng parity nên yêu cầu 3 bị từ chối
+  kèm lý do, **còn depth thì vẫn nhận** — depth độc lập với scheme. Nếu không có dòng log này,
+  một dòng CSV dán nhãn "xor parity=3" sẽ mô tả một cấu hình chưa từng chạy.
+- [x] Nối bản thắng vào đường chạy thật; các bản khác ở lại sau `--fec=…` và ra khỏi ma trận fuzz/sanitizer
+  — **xong cả hai nửa.** Bản thắng là mặc định đang chạy, nên "nối vào" ở đây là *khẳng định*
+  chứ không phải đi dây lại: `TestOnlyTheWinnerIsReachableWithoutTheCommandLine` chốt rằng
+  `Packetizer`/`Reassembler` khởi động bằng `kDefaultFecScheme` và `ShareOptions` /
+  `ScreenClientConfig` không gọi tên sơ đồ nào — chỉ `deskhub-cli --fec=NAME` mới gọi.
+  Ma trận: `DESKHUB_FEC_MATRIX=shipping` thu các phép quét về đúng sơ đồ đang ship
+  (`FecSchemesUnderTest()` / `SchemeIsUnderTest()` trong `core/tests/support`), job sanitizer
+  đặt biến đó trừ khi diff đụng `FecScheme` hoặc test của nó. **Đo được: 8,6 s → 2,9 s** cho
+  một lần `core_tests` debug, trước khi ASan/TSan nhân lên. Giá trị lạ thì làm hỏng lần chạy
+  chứ không lặng lẽ chọn giùm. Các libFuzzer target vốn đã không chạm `FecScheme` — chúng
+  fuzz ở mức wire — nên nửa "fuzz" không cần làm gì
+- [x] Ghi kết luận **kèm số đo của từng bản** vào `docs/ARCHITECTURE.md` kèm ba bản dịch
+  — mục "Reed-Solomon at one parity row is XOR" đã chở số của từng bản (rescue, IDR/phút,
+  overhead, CPU encode 143,9 µs so với 22,8 µs), và mục mới "A kept implementation earns its
+  place by being reachable and tested" chở cái giá của việc giữ cùng ranh giới ma trận. Cả hai
+  có đủ ở `vi`/`zh`/`ja`
 
 ### Phase 4 — Bake-off backend encoder
 
 *C1. Rẻ nhất, vì interface và factory đã tồn tại sẵn.*
 
-- [ ] Dựng kịch bản đo: cùng clip, cùng bitrate, VMAF + encode latency p99 + CPU/GPU
+- [x] **Làm cho núm vặn có thật trước đã** — `CreateEncoder` giữ cái nào init được trước, nên trên
+  máy có driver NVIDIA thì `MfEncoder` **không đo được**. Nay
+  `--encoder auto|nvenc|mf|vaapi|videotoolbox` gọi tên backend; gọi tên một backend không khởi
+  động được thì source **dừng**, không lặng lẽ đo
+  cái còn lại. Windows chọn qua bảng trong `EncoderFactory`, Linux qua `HwEncoder::Init`, Apple
+  từ chối mọi tên khác `videotoolbox`. Host in `[Encoder] measurement: backend=… requested=…`
+  đọc ngược từ chính đối tượng encoder.
+  ⚠️ **Chỉ nhánh Windows được biên dịch trên máy này.** `HwEncoder::Init` và
+  `InstallVtEncoderFactory` chưa từng qua compiler ở đây — coi là chưa kiểm chứng cho tới khi CI
+  Linux và macOS/iOS chạy
+- [x] **Bộ đếm để chấm điểm** — `enc_ms_avg`/`enc_ms_max` không thấy được cái đuôi, mà đuôi mới là
+  hàm mục tiêu của C1. `evt=sum` nay chở `enc_us_p50` và `enc_us_p99` từ histogram bước 512 µs
+- [ ] Dựng kịch bản đo: cùng clip, cùng bitrate, VMAF + CPU/GPU — **chưa**; latency p99 thì đã có
 - [ ] Chạy trên từng backend: NVENC, Media Foundation, VA-API, VideoToolbox, MediaCodec
-- [ ] Ghi lại backend nào hỗ trợ LTR — kết quả này quyết định A4 khả thi tới đâu
+  — **mới có NVENC và MF trên máy này** (bảng dưới), ba backend còn lại cần máy khác
+- [x] Ghi lại backend nào hỗ trợ LTR — kết quả này quyết định A4 khả thi tới đâu
+  — **cả hai backend Windows đều có**, đọc từ driver chứ không suy đoán: NVENC qua
+  `nvEncGetEncodeCaps` cho `max_ltr_frames=8 ref_pic_invalidation=1 intra_refresh=1` trên
+  RTX 5070 Ti; Media Foundation trả `IsSupported` = `S_OK` cho cả ba thuộc tính LTR lẫn
+  `GradualIntraRefresh`. **Caps chỉ ghi log, chưa đưa vào `RecoveryPolicy`** — chưa có gì tiêu thụ
+  `invalidateBeforeFrame` hay `wantIntraRefresh`, nên khai khả năng lúc này sẽ biến phục hồi mất
+  gói thành vô tác dụng. Đó là phần thực thi của A4, không phải của C1
 - [ ] Thay tiêu chí chọn trong `EncoderFactory` từ "init được trước" sang bảng tra dựng từ số đo
+  — chưa đổi, và số đo đầu tiên nói thứ tự hiện tại (NVENC trước) là **đúng trên máy này**
+
+#### Phát hiện chặn trước cả phép đo: `IsSupported` bị đọc ngược cực, MF chạy bằng mặc định MFT
+
+Mọi thuộc tính rate control của `MfEncoder` đi qua
+`if (!codecApi->IsSupported(&api)) { report("NOT SUPPORTED"); return; }`. `S_OK` bằng **0**, nên
+nhánh đó chạy đúng vào những thuộc tính MFT **có** hỗ trợ, còn `SetValue` chỉ được thử trên những
+thuộc tính nó **không** hỗ trợ. In thêm HRESULT thô rồi chạy trên máy này:
+
+| codecapi | trước khi sửa | HRESULT thật | sau khi sửa |
+| --- | --- | --- | --- |
+| `RateControlMode=CBR` | NOT SUPPORTED | `0x00000000` | ok |
+| `MeanBitRate` | NOT SUPPORTED | `0x00000000` | ok |
+| `GOPSize` | NOT SUPPORTED | `0x00000000` | ok |
+| `BufferSize(VBV)` | NOT SUPPORTED | `0x00000000` | ok |
+| `CommonLowLatency` | SetValue FAILED | `S_FALSE` | NOT SUPPORTED |
+| `BufferInLevel` | SetValue FAILED | `S_FALSE` | NOT SUPPORTED |
+
+Nghĩa là **backend MF suốt đời nó mã hoá bằng tham số mặc định của MFT** — không CBR, không bitrate
+đích, không GOP vô hạn, không VBV — trong khi NVENC nhận trọn `PlanRateControl`. Chạy bake-off
+C1 trước khi sửa là đem một encoder đã cấu hình so với một encoder chưa cấu hình: đúng loại lỗi
+"đo một cấu hình không tồn tại" mà A1 đã dính một lần.
+
+Nó cũng **lật bằng chứng của một mục trong `docs/ARCHITECTURE.md`**: dòng
+`MeanBitRate: NOT SUPPORTED` từng được đọc là "MFT Intel không có thuộc tính này" thật ra có nghĩa
+ngược lại. Kết luận của mục đó (fallback phải bắt buộc) vẫn đúng, lý do thì sai. `SetBitrate` và
+`RequestKeyFrame` trong cùng file dùng **cực ngược lại** — hai chỗ gọi không thể cùng đúng, và
+không test nào phân biệt nổi vì cả hai đều chỉ chạm phần cứng thật.
+
+#### Đã đo: NVENC so với Media Foundation (02/09/2026)
+
+Host là `deskhub-cli share --encoder NAME` trên Windows, nguồn 3440x1440 hạ xuống 1920x802,
+20 Mbps, 60 fps, **desktop rảnh chứ chưa phải clip cố định** — nên đọc như một lần chạy thử đường
+dây, không phải bake-off.
+
+| | NVENC | Media Foundation |
+| --- | --- | --- |
+| Số cửa sổ | 6 | 4 |
+| `enc_us_p50` | 2560–5632 | 512–13824 |
+| `enc_us_p99` | **2755–5731** | **12303–17580** |
+| `enc_ms_avg` | 2,0–4,9 | 3,5–9,0 |
+| LTR | có | có |
+| Intra-refresh | có | có |
+
+Cột MF lấy từ lần chạy **sau** khi sửa cực `IsSupported` — tức lần đầu tiên MF thật sự chạy với
+CBR, bitrate đích, GOP vô hạn và VBV như NVENC. Không trộn với lần chạy trước đó.
+
+**Cảnh báo phải nói kèm mỗi lần trích:** trên máy này `mf` rơi vào **"NVIDIA H.264 Encoder MFT"** —
+cùng một con chip. Đây **không** phải câu hỏi Intel-so-với-NVIDIA mà C1 đặt ra; đây là cái giá của
+việc đi vòng qua Media Foundation để tới cùng phần cứng. Muốn trả lời câu hỏi thật của C1 phải chạy
+trên một máy Intel, nơi Media Foundation dẫn tới MFT của Quick Sync. Và cả hai cột đều đo trên nội
+dung không kiểm soát được, nên chênh lệch p50 không mang nghĩa gì cho tới khi có clip cố định.
 
 ### Phase 5 — Lặp lại trên những thành phần dễ nhất
 
 *A2 → A3 → A5.*
 
-- [ ] A2 — thêm `virtual` vào `Update()`, viết impl delay-gradient và SCReAM
-- [ ] A2 — dùng ca overshoot đã ghi trong `docs/ARCHITECTURE.md` làm test hồi quy
-- [ ] A3 — chấm điểm bằng chính struct `Stats` đã có, vẽ đường cong đánh đổi độ trễ
-- [ ] A5 — so ba bản ước lượng offset, lấy về một con số latency công bố được
+- [x] A2 — thêm `virtual` vào `Update()`, viết impl delay-gradient và SCReAM
+  — contract `CongestionControl` + bốn bản: `aimd` (giữ nguyên), `delay-trend`, `scream`,
+  `hybrid`. `SourcePipelineState::rate` đổi sang con trỏ đa hình.
+  **Cảnh báo khi đọc tên:** `Feedback` mỗi giây chỉ mang loss%, RTT, recv rate — **không có
+  dấu thời gian tới của từng gói**, nên bộ lọc delay-gradient đúng kiểu WebRTC (trên biến
+  thiên độ trễ giữa các nhóm) không dựng được ở đây. `delay-trend` dùng độ trễ hàng đợi suy
+  từ phần RTT vượt trên mức tối thiểu; `scream` bám tốc độ nhận báo về, bị chặn bởi chính độ
+  trễ đó. Chúng là **bản thích nghi với tín hiệu dây này chở**, không phải bản cài lại các
+  bài báo — đem so với số liệu GCC hay RFC 8298 đã công bố là so hai thuật toán khác nhau
+- [x] A2 — dùng ca overshoot đã ghi trong `docs/ARCHITECTURE.md` làm test hồi quy
+- [x] A3 — chấm điểm bằng chính struct `Stats` đã có, vẽ đường cong đánh đổi độ trễ
+  — đường cong 21 điểm (target 20…200 ms × jitter 0/15/40 ms) xuất CSV.
+  **Kết quả không nghiêng về bản thích ứng tôi viết:** ở jitter 0 nó thắng rõ (giữ 20 ms thay
+  vì 60 ms, cùng số gap); nhưng ở jitter 40 ms nó giữ cùng 60 ms như target cố định mà tốn
+  4 gap thay vì 1. Chi phí nằm ở chính việc thích ứng — nâng target giữa chừng buộc buffer
+  chờ nạp lại, và cái chờ đó là underrun. **Chưa nên bật mặc định**
+- [x] A5 — so ba bản ước lượng offset, lấy về một con số latency công bố được
+  — contract `ClockOffsetEstimator` với ba bản `rolling-min`, `trendline`, `kalman`; **và**
+  con số tuyệt đối đã có: `PingPong` nay chở thêm `hostTimeUs` (payload 12 → 20 byte, peer cũ
+  đọc 12 byte đầu nên tương thích ngược), `ClockSync` giữ mẫu có RTT nhỏ nhất trong cửa sổ để
+  ước lượng offset đồng hồ, và `e2e_abs_ms` xuất hiện cạnh `e2e_ms` trên dòng `evt=sum`.
+  **Ràng buộc phải nói kèm:** offset chỉ tách được nếu giả định đường đi hai chiều đối xứng —
+  đó là giả định của NTP và là giới hạn nền tảng, không phải thiếu sót của bản cài
+
+#### Kiểm lại (02/09/2026): cả bốn núm vặn A2/A3/A5/A6 đều **không có caller production nào**
+
+Áp đúng bài kiểm tra đã dùng cho A1 ("một núm vặn không có caller ngoài chính test của nó thì
+không phải núm vặn") lên phần còn lại của Tier A. Kết quả trước khi sửa:
+
+| Núm | Caller ngoài test | Hậu quả |
+| --- | --- | --- |
+| `SourcePipelineState::SetCongestionControl` **(A2)** | **0** | 3/4 impl CC không reachable, luôn chạy `aimd` |
+| `AudioJitterBuffer::SetAdaptiveTarget` **(A3)** | **0** | bản thích ứng chỉ sống trong test |
+| `VideoPacer::SetAdaptiveLead` · `SetDisplayIntervalUs` **(A6)** | **0** | pacing thích ứng và khớp vsync không bật được |
+| `MakeClockOffsetEstimator` **(A5)** | **0** | cả 3 bản chỉ sống trong test |
+
+**Đã sửa A2 và A3:**
+
+- **A2** — `--cc aimd|delay-trend|scream|hybrid` ở `share`, nối qua `ShareOptions` tới
+  `HostEngine`. Host in `measurement: cc=… fec=… parity=… depth=… arm=…`, đọc ngược từ đối
+  tượng thật. Viewer không có tiếng nói ở đây nên `--cc` bị từ chối ở `connect`
+- **A3** — `--audio-delay MS` và `--audio-adaptive` / `--no-audio-adaptive` ở `connect`, nối qua
+  `ScreenViewerConfig` tới `AudioPlayer::Start`. Dòng `evt=player_start` nay chở
+  `target=fixed|adaptive`. Trần 500 ms thành hằng số công khai `kMaxAudioDelayMs` — trước đó
+  trần thật nằm trong một hằng số private của chính sách thích ứng
+
+**Không tách A3 ra file riêng, và đây là lý do:** phần khác nhau giữa target cố định và target
+thích ứng đúng **6 dòng** trong `Push()`. Dựng contract + hai file cho 6 dòng là nhân hạ tầng
+chứ không phải tách phương án. Việc tách file đã làm ở nơi thật sự có nhiều impl độc lập:
+`fec/` (2), `cc/` (4), `clock/` (3).
+
+**A5 và A6 còn treo, vì chúng chỉ chạm được đường Apple.** `VideoPacer` — nơi duy nhất
+`ClockOffset` được dùng — chỉ có caller trong `VtDecoder`. Windows và Linux không dùng
+`VideoPacer` chút nào. Nên nối `--clock` hay `--vsync` vào CLI trên hai OS đó sẽ tạo ra đúng
+cái núm vặn giả mà mục này vừa đi bắt. `RollingMinEstimator` đã được xác nhận là **wrapper
+thuần quanh chính `ClockOffset`**, nên thay `VideoPacer::offset_` bằng contract sẽ không đổi
+hành vi — nhưng phải làm cùng lúc với việc cho một viewer không-Apple dùng `VideoPacer`, chứ
+không phải trước
+
+**Đã làm A5 và A6 (02/09/2026), và A5 cho ra một kết quả âm tính đáng giữ.**
+
+- **A5** — `VideoPacer` nay giữ `std::unique_ptr<ClockOffsetEstimator>` thay vì `ClockOffset`
+  cụ thể, cộng `SetClockOffset(name)`. Không đổi hành vi (đã xác nhận `rolling-min` là wrapper
+  thuần). Phép quét mới 18 điểm (3 bản × wobble 0/5/20 ms × có/không bước nhảy transit 30 ms):
+  **ba bản không phân biệt được** — phase spread 6898–6937 µs ở mọi điểm, `kalman` tái lập
+  `rolling-min` tới từng micro giây.
+
+  **Lý do nằm ở interface, không ở thuật toán:** pacer gọi `AddSample` · `ready` · `Reset` ·
+  `floorUs`, **không bao giờ gọi `LatencyUs`** — mà đó mới là method duy nhất ba bản cài khác
+  nhau. `KalmanEstimator::floorUs()` trả thẳng `lowest_`, tức đúng rolling minimum. Nên **A5
+  không chấm điểm được bằng judder**; trục nó làm dịch chuyển là `e2e_abs_ms`, chỗ test riêng
+  của nó vốn đã đo.
+
+- **A6** — thêm concept `PacedDecoder` vào `VideoContract.h`; `ScreenViewer` gọi
+  `decoder.SetPacing(adaptive, displayIntervalUs)` và `SetClockOffset(...)` qua `if constexpr`,
+  nên decoder nào không hỗ trợ thì bỏ qua sạch. `VtDecoder` cài hai method đó, forward tới
+  `pacer_`. `ScreenViewerConfig` nay chở `pacingAdaptive` · `displayIntervalUs` · `clockOffset`.
+
+**Vẫn không thêm cờ CLI cho A5/A6, và lý do đã kiểm chứng:** `deskhub-cli` **không có viewer
+bản macOS** (`client/cli/` chỉ có `ViewerX11.cpp`, `ViewerWin32.cpp`, `ViewerNone.cpp`). X11
+dùng `AvDecoder`, Win32 dùng `WinVideoDecoder` qua FFI — không cái nào dùng `VideoPacer`. Nên
+pacer chỉ chạy trong app Apple, và một cờ `--pacing`/`--vsync`/`--clock` trên CLI sẽ không tới
+đâu ở mọi OS mà CLI chạy được. Đường đo A6 là app macOS/iOS, hoặc sim.
+
+⚠️ **Chưa biên dịch được `VtDecoder` trên máy này** (Apple-only). Hai method mới chỉ forward
+thẳng tới `pacer_`, nhưng coi là chưa kiểm chứng cho tới khi CI macOS/iOS chạy.
 
 ### Phase 6 — Hiệu năng đường truyền và nhịp hình
 
 *P2, A6, C2.*
 
 - [ ] P2 — `sendmmsg`/`recvmmsg`, rồi GSO/GRO trên Linux; đo ngưỡng bitrate mà CPU thành nút cổ chai
-- [ ] A6 — pacing thích ứng và khớp vsync, đo judder
+  — **một phần**: `UdpSocket::SendBatch` đã có trong API dùng chung, `QuicEndpoint::Flush` gom
+  cả burst rồi gửi một lần. Windows là vòng lặp, Linux là `sendmmsg`. **Nhánh Linux chưa từng
+  được biên dịch** — máy này chỉ build `UdpSocketWin.cpp`, nên coi nó là chưa kiểm chứng cho
+  tới khi CI Linux chạy. `recvmmsg`, GSO/GRO và RIO **chưa làm**; phép đo CPU cũng chưa
+- [x] A6 — pacing thích ứng và khớp vsync, đo judder
+  — quét 24 điểm (lead 8…66 ms × wobble 0/5/20 ms, có và không khớp vsync) xuất CSV.
+  **Phát hiện: trục "độ trễ cộng thêm" của A6 không có trade nào cả.** Không khớp vsync thì
+  phase spread ~6000 µs trên chu kỳ 6944 µs ở *mọi* mức lead — mua lead gấp tám lần không thu
+  hẹp được một micro giây. Khớp vsync đưa spread về **0** và không tốn độ trễ nào
 - [ ] C2 — đo độ trễ capture của WGC, đối chiếu với DXGI Desktop Duplication
-- [ ] Tier B — thêm jitter vào backoff của `LinkRecovery`; nhớ đây là đổi chữ ký `ReconnectDelayUs` cộng mọi caller, không phải sửa tại chỗ
+- [x] Tier B — thêm jitter vào backoff của `LinkRecovery`; nhớ đây là đổi chữ ký `ReconnectDelayUs` cộng mọi caller, không phải sửa tại chỗ
 
 ### Phase 7 — Những món trải khắp ba lớp
 
 *A4, C3. Đắt nhất, làm sau cùng.*
 
 - [ ] A4 — chính sách phục hồi ở `core/`, thực thi ở từng backend encoder mà Phase 4 xác nhận là có hỗ trợ
-- [ ] C3 — dựng bảng khả năng codec và cơ chế thương lượng khi kết nối
+  — **phần `core/` xong**: `media::RecoveryPolicy` chọn giữa IDR · invalidate long-term
+  reference · intra-refresh theo `EncoderRecoveryCaps`, có leo thang khi báo mất lần hai tới
+  trước lúc bản vá đầu kịp có tác dụng. `HostNetLoop` nay hỏi chính sách thay vì
+  `forceIdr.store(true)` vô điều kiện. Hai concept tuỳ chọn
+  `ReferenceInvalidatingEncoder` và `IntraRefreshEncoder` đã có trong `VideoContract.h`.
+  **Chưa backend nào khai báo hỗ trợ**, nên caps rỗng và hành vi vẫn đúng như cũ — phần thực
+  thi cần encoder thật, tức chờ Phase 4.
+
+  **Phase 4 đã trả lời được nửa câu hỏi (02/09/2026):** cả NVENC lẫn Media Foundation trên Windows
+  đều báo có LTR và intra-refresh, đọc thẳng từ driver. Nhưng caps **vẫn chưa** đưa vào
+  `RecoveryPolicy`, và đó là cố ý: `HostNetLoop` đặt `invalidateBeforeFrame` / `wantIntraRefresh`
+  mà **không encoder nào đọc hai biến đó**. Khai caps lúc này sẽ khiến chính sách chọn một hành
+  động không ai thực thi — tức mất gói sẽ không còn xin IDR nữa mà cũng chẳng vá gì. Việc còn lại
+  đúng bằng một mệnh đề: cho `NvencEncoder` cài `MarkLongTermReference`/`InvalidateReference`
+  (`NV_ENC_PIC_PARAMS` có sẵn trường), rồi mới gọi `SetCaps`
+- [x] C3 — dựng bảng khả năng codec và cơ chế thương lượng khi kết nối
+  — `kCodecMaskH264` / `H264High444` / `Hevc` / `Av1` trên wire, `NegotiateCodec(hostMask,
+  clientMask)` chọn theo bảng ưu tiên tường minh và luôn tụt về H264 4:2:0 khi đó là thứ duy
+  nhất chung. Host nay dùng nó thay cho phép thử một bit. Tương thích ngược: peer cũ chỉ báo
+  bit 0 nên vẫn thoả thuận ra H264 và nhận về giá trị 0 như trước.
+  **Thứ tự ưu tiên là tạm** — vị trí của 4:4:4 (chữ sắc nét) so với AV1/HEVC (ít bit hơn) là
+  câu hỏi phải giải bằng đo, chưa giải
 - [ ] C3 — thêm 4:4:4 cho use case đọc chữ, giữ 4:2:0 làm baseline phổ quát
 
 ### Phase 8 — Công bố
 
-- [ ] Đăng CSV thô, script và cách chạy lại — kèm cả những chỗ Deskhub thua
+- [x] Đăng CSV thô, script và cách chạy lại — kèm cả những chỗ Deskhub thua
+  — `scripts/bake-off-csv.sh` chạy `core_tests` rồi tách ra ba bảng: `fec-sweep.csv` (179
+  dòng), `audio-delay.csv` (21), `pacer-judder.csv` (24). Mọi dòng sinh từ sim có seed, tất
+  định, không mạng không GPU — chạy lại cho ra đúng từng byte. Phần "chỗ Deskhub thua" đã có
+  thật trong dữ liệu: A3 thích ứng thua target cố định dưới jitter
 - [ ] Viết bài từ dữ liệu bake-off: "tôi thử N sơ đồ FEC dưới burst loss, đây là số liệu"

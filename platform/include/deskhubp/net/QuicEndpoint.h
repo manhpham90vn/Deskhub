@@ -33,7 +33,14 @@ struct QuicSendStats {
     uint64_t maxBurst = 0;
     uint64_t capped = 0;
     uint64_t datagrams = 0;
+    uint64_t datagramsRefused = 0;
     uint64_t streamBytes = 0;
+};
+
+enum class QuicCongestionControl : uint8_t {
+    Reno,
+    Cubic,
+    Bbr2,
 };
 
 struct QuicSettings {
@@ -43,6 +50,7 @@ struct QuicSettings {
     uint64_t idleTimeoutMs = kQuicIdleTimeoutMs;
     size_t maxUdpPayload = kQuicMaxUdpPayload;
     bool verifyPeer = false;
+    QuicCongestionControl congestionControl = QuicCongestionControl::Cubic;
 };
 
 struct QuicCallbacks {

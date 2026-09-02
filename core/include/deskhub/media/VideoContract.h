@@ -2,6 +2,7 @@
 #include <concepts>
 #include <cstddef>
 #include <cstdint>
+#include <string_view>
 
 #include "deskhub/media/VideoTypes.h"
 
@@ -17,6 +18,17 @@ concept VideoEncoderLike = requires {
 
 template <class E>
 concept HotFpsEncoder = requires { static_cast<bool (E::*)(uint32_t)>(&E::SetFps); };
+
+template <class E>
+concept ReferenceInvalidatingEncoder = requires {
+    static_cast<bool (E::*)(uint32_t)>(&E::MarkLongTermReference);
+    static_cast<bool (E::*)(uint32_t)>(&E::InvalidateReference);
+};
+
+template <class E>
+concept IntraRefreshEncoder = requires {
+    static_cast<bool (E::*)(uint32_t)>(&E::BeginIntraRefresh);
+};
 
 template <class D>
 concept VideoDecoderLike = requires {
@@ -44,6 +56,12 @@ template <class D>
 concept PresentTimingDecoder = requires {
     static_cast<uint32_t (D::*)()>(&D::TakePresentDelayMs);
     static_cast<uint64_t (D::*)() const>(&D::lastRenderedAtUs);
+};
+
+template <class D>
+concept PacedDecoder = requires {
+    static_cast<void (D::*)(bool, uint64_t)>(&D::SetPacing);
+    static_cast<bool (D::*)(std::string_view)>(&D::SetClockOffset);
 };
 
 template <class D>

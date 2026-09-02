@@ -44,6 +44,7 @@ struct HostLinkConfig {
     uint32_t connectTimeoutMs = 10'000;
     uint32_t authTimeoutMs = 65'000;
     uint32_t recvWaitMs = 5;
+    VideoPath videoPath = VideoPath::QuicDatagram;
 };
 
 struct HostLinkCallbacks {

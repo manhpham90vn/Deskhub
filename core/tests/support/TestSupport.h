@@ -4,6 +4,8 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <span>
+#include <string_view>
 #include <vector>
 
 inline constexpr uint64_t kTestViewer = 0xC0A80001'0000ULL;
@@ -37,3 +39,7 @@ bool IsFec(const Datagram& d);
 size_t NthDataPacket(const std::vector<Datagram>& pkts, size_t n);
 
 bool SameFrame(const deskhub::Reassembler::Frame& got, const TestFrame& want);
+
+std::span<const std::string_view> FecSchemesUnderTest();
+
+bool SchemeIsUnderTest(std::string_view name);

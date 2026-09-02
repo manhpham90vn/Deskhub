@@ -2,6 +2,12 @@
 
 namespace deskhub {
 
+uint8_t FecParityRowsFor(uint8_t lossPct) {
+    if (lossPct >= 6) return 3;
+    if (lossPct >= 3) return 2;
+    return 1;
+}
+
 BitrateDecision BitrateController::Update(const Feedback& fb, uint32_t frameAgeMs,
     uint64_t nowUs) {
     BitrateDecision d;
@@ -15,6 +21,7 @@ BitrateDecision BitrateController::Update(const Feedback& fb, uint32_t frameAgeM
     }
     d.fecEnabled = fec_;
     d.fecToggled = (fec_ != fecBefore);
+    d.fecParityPerGroup = FecParityRowsFor(fb.lossPct);
 
     uint32_t next = cur_;
     if (fb.lossPct >= 5 || frameAgeMs >= kSevereBacklogMs) {

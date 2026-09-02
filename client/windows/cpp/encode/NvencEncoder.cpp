@@ -28,6 +28,7 @@ struct NvencEncoder::Impl {
     NV_ENC_OUTPUT_PTR bitstream = nullptr;
     FILE* out = nullptr;
     EncoderConfig cfg{};
+    deskhub::media::EncoderRecoveryCaps recovery{};
     uint32_t width = 0, height = 0;
     NV_ENC_CONFIG encCfg{};
     NV_ENC_INITIALIZE_PARAMS initParams{};
@@ -107,6 +108,7 @@ struct NvencEncoder::Impl {
 
         const GUID codecGuid = NV_ENC_CODEC_H264_GUID;
         const GUID presetGuid = NV_ENC_PRESET_P4_GUID;
+        recovery = QueryRecoveryCaps(codecGuid);
         const NV_ENC_TUNING_INFO tuning = cfg.lowLatency ? NV_ENC_TUNING_INFO_ULTRA_LOW_LATENCY
                                                          : NV_ENC_TUNING_INFO_HIGH_QUALITY;
 
@@ -157,6 +159,24 @@ struct NvencEncoder::Impl {
             cfg.lowLatency ? "ULTRA_LOW_LATENCY" : "HIGH_QUALITY",
             out ? "file" : "callback");
         return true;
+    }
+
+    int Cap(const GUID& codecGuid, NV_ENC_CAPS which) {
+        NV_ENC_CAPS_PARAM param{};
+        param.version = NV_ENC_CAPS_PARAM_VER;
+        param.capsToQuery = which;
+        int value = 0;
+        if (nv.nvEncGetEncodeCaps(enc, codecGuid, &param, &value) != NV_ENC_SUCCESS) return 0;
+        return value;
+    }
+
+    deskhub::media::EncoderRecoveryCaps QueryRecoveryCaps(const GUID& codecGuid) {
+        const int ltrFrames = Cap(codecGuid, NV_ENC_CAPS_NUM_MAX_LTR_FRAMES);
+        const int invalidation = Cap(codecGuid, NV_ENC_CAPS_SUPPORT_REF_PIC_INVALIDATION);
+        const int refresh = Cap(codecGuid, NV_ENC_CAPS_SUPPORT_INTRA_REFRESH);
+        LOGI("[NVENC] recovery caps: max_ltr_frames=%d ref_pic_invalidation=%d intra_refresh=%d",
+            ltrFrames, invalidation, refresh);
+        return {ltrFrames > 0 && invalidation != 0, refresh != 0};
     }
 
     void ApplyRatePlan(uint32_t fps) {
@@ -346,6 +366,9 @@ bool NvencEncoder::SetBitrate(uint32_t bitrateBps) {
 
 bool NvencEncoder::SetFps(uint32_t fps) {
     return impl_ && impl_->SetFps(fps);
+}
+deskhub::media::EncoderRecoveryCaps NvencEncoder::RecoveryCaps() const {
+    return impl_ ? impl_->recovery : deskhub::media::EncoderRecoveryCaps{};
 }
 void NvencEncoder::Finish() {
     if (impl_) impl_->Finish();

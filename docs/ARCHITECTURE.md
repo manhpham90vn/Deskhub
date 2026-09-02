@@ -717,3 +717,343 @@ line.
   `ui::NormalizedDeviceAddr` / `ui::SameDeviceAddr` (`core/ui/Strings.h`), exposed to the
   Swift and Kotlin clients as `dh_same_device_addr`. Never compare two device addresses
   with `==`.
+- **Parity sized for the longest packet in its group, not for the MTU**: every parity
+  packet went out at the full `Packetizer::kParityStride`
+  (`kFecLenPrefix + kMaxVideoPayload`, 1176 B) however short the data packets it protected
+  were, so a frame that fits in a single packet — the ordinary shape of a low-motion delta
+  frame — bought a whole full-MTU parity packet to protect a few hundred bytes, 100 %
+  overhead. Parity is now cut to `kFecLenPrefix` plus the longest data packet in its group;
+  `BuildFecPacket` already accepted a variable-length span and `Reassembler::TryRecover`
+  already needed no more than that and refuses anything shorter, so the wire format did not
+  move. Note what this does *not* fix, because the packetizer interleaves (`i % numGroups`)
+  and only the last packet of a frame is short: from two packets up, every group still holds
+  a full-MTU packet and still gets full-stride parity. Above that size the cost is set by the
+  parity *count*, `ceil(count / kFecGroupSize)` — a 9-packet frame pays 22 %, not 12.5 %. FEC
+  overhead is a curve over frame size; it is never the single 1/8 the group size suggests.
+- **A datagram the transport refuses is indistinguishable from one the network dropped**:
+  `quiche_conn_dgram_send` fails when quiche's own congestion control or its
+  `kDatagramQueue` will not take the packet, and `SendDatagram` branched on that result only
+  to return it — the signal itself was thrown away. Such a packet never leaves the machine,
+  yet the viewer's `Reassembler` sees an ordinary hole and reports it as loss, so the host
+  can spend FEC parity on, and cut its own encoder bitrate for, packets it dropped itself.
+  `QuicSendStats::datagramsRefused` counts them, and the host's `evt=sum` line carries
+  `dgram_tx` and `dgram_refused` per window beside the loss figures. Read those two before
+  believing any FEC or congestion-control measurement: quiche's congestion control sits
+  under the datagram path in series with `BitrateController`, and neither one knows the
+  other exists.
+- **The FEC group count now travels in the header byte that used to be zero**: both ends
+  derived it as `ceil(pktCount / kFecGroupSize)`, which tied two separate things together —
+  how many packets share a parity packet, and how far apart consecutive packets land in
+  different groups. Interleave depth was a consequence of frame size rather than a choice:
+  a 40-packet keyframe got depth 5, while an 8-packet delta frame, the common shape at
+  60 fps, got a single group and no interleaving at all, so the strongest burst protection
+  sat exactly where it was least needed. `FecHeader::groups` now carries the count in the
+  byte `BuildFecPacket` used to write as zero; zero still means "derive", so the header did
+  not change size and `kProtocolVersion` did not move. `FecGroupCount` is the one function
+  both ends call, and it clamps a signalled count to the packet count so the two can never
+  disagree about a group index. What it costs: a data packet can no longer be mapped to a
+  group before that frame's first parity packet arrives — harmless, because recovery needs
+  the parity anyway. Measured in `LossGoodputTests` at 5 % Gilbert-Elliott loss with a mean
+  burst of 4 packets, keyframe requests fell from 171/min at the derived depth to 81/min at
+  depth 8, and the share of damaged frames rescued rose from 34 % to 79 %.
+- **A FEC scheme is configured at both ends, never negotiated**: `FecScheme` is an
+  interface with one registered implementation, `xor`, and `Packetizer` and `Reassembler`
+  each hold one. Nothing on the wire says which scheme wrote a parity packet — the payload
+  format is the scheme's own business — so a host and a viewer given different schemes
+  recover nothing, and the mismatch surfaces only as recovery that never fires. That is
+  deliberate while there is one implementation: `--fec NAME` on `deskhub-cli share` and
+  `connect` exists to measure alternatives against each other, is refused at parse time if
+  the build has no scheme by that name, and is not a setting for anyone to pick. Signalling
+  the scheme on the wire is the job of whichever implementation wins the bake-off and
+  becomes the single production path; until then `--fec` is an instrument that must be set
+  identically at both ends of one session.
+- **A burst loss model is the only one that can rank interleave depths**: the link
+  simulator in `LossGoodputTests` drops packets from a seeded two-state Markov chain
+  parameterised by loss rate and mean burst length, and runs a uniform-random model beside
+  it as a control. The control is not decoration — it is the check that the burst model is
+  really bursting. At the same 5 % loss with one parity packet per group, uniform loss is
+  rescued 71 % of the time and clustered loss only 34 %, because scattered single losses
+  are exactly what one parity packet absorbs and a burst inside one group is exactly what
+  it cannot. If the two models ever score the same, the chain has degenerated to
+  independent loss and every depth and scheme ranking taken from it is meaningless. Each
+  sweep point prints a `[csv]` row, so the numbers behind any FEC decision can be
+  regenerated by running the test.
+- **The FEC arming policy, not the FEC scheme, decides whether FEC does anything**: the host
+  arms parity when the viewer reports loss and stands it down after
+  `kCleanSecondsBeforeDroppingFec`. Two details make that policy blind to the loss real links
+  actually show. `MakeFeedback` rounds loss to whole percent
+  (`fb.lossPct = uint8_t(std::lround(w.lossPct))`), so anything under 0.5 % arrives at
+  `BitrateController` as a flat 0 %; and the arm test is `fb.lossPct >= 1`, so a link losing
+  one packet a second — 0.1 % of a 540-packet second — never arms at all. Measured against a
+  real host over home WiFi: 5 single-packet losses in 196 s, `fec_rx` zero in every one of 118
+  windows, and each lost packet of at most 1174 B paid for a dropped frame and a full IDR of
+  ~150 KB. Against a second host the whole cycle was visible: clean for 10 windows, one window
+  at 0.5 %, parity for exactly 10 more windows, then off again — 1224 parity packets spent to
+  repair 1. `LossGoodputTests` now drives the real `BitrateController` from the real
+  `MakeFeedback`, so the sim reproduces this: at the measured operating point (0.1 % loss,
+  bursts of 1) always-on FEC rescues 16 of 16 damaged frames and requests no keyframes, while
+  the shipping policy is armed 30 % of the time, rescues 6 of 16, and requests 20 IDRs a
+  minute. Any comparison between FEC schemes that assumes parity is on the wire is measuring a
+  configuration this policy almost never produces.
+- **An objective function counted by cause, or it counts the wrong thing**: A1 scores FEC by
+  keyframe requests per minute, but only `KeyframeReason::Loss` is caused by the network. In
+  148 windows with two viewers on a link reporting 0 % loss and no reconfiguration, the host
+  still emitted 10 full IDRs of ~72 KB — every one of them requested by a viewer whose own
+  decode queue had overflowed. `q_overflow`, `dec_fail` and `display_congested` come from the
+  client's pipeline and `wait_idr` comes from startup; lumping them together inflates the
+  score of whatever transport change is being tested. The reason was already in the log line
+  and nowhere in a counter, so `KeyframeRequestLog` takes a typed `KeyframeReason` and prints
+  `evt=kf_sum` with a count per reason each window. That fixed the viewer and left the host
+  blind: the host is the side that spends the IDR, and `RequestKeyframe` was an empty
+  datagram, so every request looked alike to the machine whose bitrate the score belongs to.
+  The message now carries the reason as one payload byte, `ScreenHostSession` hands it to
+  `onKeyframeRequest`, and the host prints `evt=kf_req_sum` split the same way. Two details
+  make it usable: a peer built before the byte existed sends no payload and lands in
+  `unknown` rather than in the first enum slot, and the host's own mid-stream re-join is
+  labelled `viewer_join` rather than borrowing a viewer's reason. Split the number before
+  scoring anything with it.
+- **Whether retransmission can rescue anything is set by how long a frame is held, not by the
+  retransmit path**: `PlanNack` and `RetransmitCache` work exactly as written — in the sim the
+  host serves every index the viewer asks for, and every served packet arrives. It rescues
+  nothing. `PopReady` drops an incomplete non-IDR frame once two newer frames are complete,
+  which at 60 fps is about 33 ms, while a NACK costs a full round trip on top of the 2 ms
+  `kNackHoldUs`: at the 40 ms round trip of a home link the repair lands roughly 24 ms after
+  the frame it repairs has already been thrown away. Shorten the round trip to 4 ms in the
+  same sim and the same path starts rescuing frames. So A1's "NACK-only" option is not a
+  question about retransmission at all — it is a question about `kStallTimeoutMultiple` and
+  the overtaken rule against RTT, and any hybrid that switches between FEC and NACK by RTT is
+  really switching on whether the frame will still be there when the repair arrives. Note also
+  that with parity armed no frame stays incomplete long enough to be nacked: FEC and NACK
+  never compete for the same repair, so their contributions add rather than overlap.
+- **The hold rule was the whole answer, and reading it at one operating point hid that**: the
+  paragraph above concluded NACK-only was a dead end. It was measured at 0.1 % loss with the
+  overtaken rule fixed at two newer frames — so it measured the rule, not retransmission. A
+  72-point sweep over repair mode x round trip x hold length says something different. At 5 %
+  loss with bursts of 4 and a 40 ms round trip, NACK-only rescues 11 damaged frames and asks
+  for 171 keyframes a minute under the shipping rule; let the frame wait until its own repair
+  could plausibly have arrived and the same code rescues 30 and asks for 72 — better than
+  `fec-only` at the same point (21 rescued, 171 requests) while sending **no parity at all**.
+  At 80 ms the pattern holds, and `fec+nack` reaches 63 requests a minute, the best number in
+  the grid. At a 4 ms round trip nothing changes, because the repair already lands inside two
+  frames: the win is purely a function of RTT against the frame interval, which is why
+  `OvertakenLimit()` derives the count from the repair window rather than raising a constant.
+  What it does not buy is free delay — the longest gap between two delivered frames moves both
+  ways across the grid, up at some points and down at others, because fewer keyframe requests
+  can more than pay for a longer wait. **The shipping default is unchanged**: the derivation is
+  reachable only when a caller raises the ceiling, so the sweep can run it and production still
+  behaves as measured. A negative result taken at a single operating point is a statement about
+  that point, and this one was hiding a factor of three.
+- **Reed-Solomon needs more than one parity packet per group, and that is a wire change, not
+  an implementation detail**: `FecHeader` is exactly 16 bytes with every one spoken for
+  (frameId 4, timestampUs 8, pktCount 2, groupIndex 1, groups 1), `Packetizer` emitted one FEC
+  packet per group, and the receiver stored one parity payload per group. RS(k,n) with a single
+  parity row is XOR with more arithmetic, so none of that could carry it. The parity index now
+  rides in the common header's flags byte, which used only bit 0 (`kVideoFlagIdr`) and bit 1
+  (`kVideoFlagFrameEnd`): bits 2-7 give 64 parity packets per group without growing the header
+  or moving `kProtocolVersion`. A receiver that does not read those bits keeps the first parity
+  packet of each group and ignores the rest, degrading to XOR rather than corrupting anything.
+  Receiver-side parity is keyed by group and index packed into one `uint16_t` rather than
+  nested vectors — the nested form cost an extra allocation per group and showed up immediately
+  as `video/reassemble-fec-recovery` going from 1.30 to 1.43 allocations a packet. Measured
+  cost of the scheme itself, at two parity packets a group: encode 143 µs a frame against
+  22.7 µs for XOR, a factor of 6.3, while recovery is only 1.4x because it runs on one group
+  rather than the whole frame. That is what buying recovery of two losses per group costs.
+- **Four congestion controls behind one interface, and what each can actually see**: A2's
+  options are now `aimd` (the shipping AIMD, unchanged), `delay-trend`, `scream` and `hybrid`,
+  built by `MakeCongestionControl` and held by `SourcePipelineState` as a pointer rather than a
+  value. What matters when reading them: the protocol's `Feedback` carries loss percent, RTT
+  and receive rate once a second, and nothing else — there are no per-packet arrival timestamps,
+  so a literal WebRTC delay-gradient filter over inter-group delay variation cannot be built
+  here. `delay-trend` therefore works the queue delay implied by RTT above its running minimum,
+  and `scream` follows the reported receive rate bounded by that same queue delay. They are
+  adaptations to the signals this wire carries, not reimplementations of the papers, and
+  comparing them against published GCC or RFC 8298 numbers would be comparing different
+  algorithms. `hybrid` takes the lower of the two rates and the union of their FEC decisions.
+  All four share the same FEC arming rule, so switching control does not silently change when
+  parity goes out.
+- **Reconnect backoff without jitter brings every viewer back at the same instant**:
+  `ReconnectDelayUs` doubled from 500 ms to a 5 s cap as a pure function of the attempt count,
+  so viewers that lost the same host at the same moment retried in lockstep and hit it together
+  on every round. It now takes a caller-supplied `jitter` word and returns a delay drawn from
+  the top half of the nominal backoff, keeping the retry rate bounded while spreading arrivals.
+  `core/` cannot reach `deskhubp/system/Random.h`, so the randomness has to come in as an
+  argument — the signature change to every caller is the point, not an inconvenience.
+- **Reed-Solomon at one parity row is XOR, measured to the digit**: the Phase 3 sweep runs 180
+  points over scheme x parity rows x interleave depth x loss rate x burst length x round trip,
+  with FEC forced on so it measures the scheme rather than the arming policy. At 5 % loss with
+  bursts of 4, `rs` with one parity row and `xor` produce identical numbers at every depth —
+  33.9 % of damaged frames rescued and 171 keyframe requests a minute at the derived depth,
+  78.7 % and 81 at depth 8 — which is what the algebra says must happen, and a useful check
+  that the implementation is right. It also means RS earns nothing below two parity rows while
+  costing 6.3x the encode CPU, so one row is never the configuration to ship it in. **No point
+  in the grid beats the shipping default once overhead is counted, and reading the sweep
+  without that column is how you conclude otherwise.** Decoupling interleave depth adds no
+  CPU, and it is tempting to call that free: it takes rescue from 33.9 % to 78.7 % and keyframe
+  requests from 171 to 81 a minute. It also takes parity overhead from 15 % to **100 %** — at one
+  group per packet every packet carries its own parity, which is duplication, not coding. On a
+  20 Mbps budget that spends roughly half the picture to halve the keyframe requests. `rs` with
+  three rows at depth 4 reaches 36 requests a minute at **150 %** overhead. The sweep therefore
+  produces no winner to promote; its result is that the defaults stand and the contestants stay
+  as reference behind `--fec`. `overhead_pct` is now a column of its own in the CSV, and a test
+  asserts depth costs more than three times the parity, because the first write-up of this same
+  sweep called depth the cheapest lever in the grid and was wrong.
+- **A kept implementation earns its place by being reachable and tested, not by being swept
+  under every sanitizer**: the Phase 3 sweep promoted nobody, so `rs` stays in the tree with no
+  way for production to select it — `Packetizer` and `Reassembler` both start on
+  `kDefaultFecScheme`, `ShareOptions` and `ScreenClientConfig` name no scheme until something
+  asks, and only `deskhub-cli --fec=NAME` ever does. That reachability is the entire reason a
+  losing implementation is worth keeping, so a test now asserts it instead of leaving it to
+  habit. Keeping them is not free either: `rs` encodes a frame in 143.9 µs against XOR's
+  22.8 µs, and the sweep that exercises both dominates `core_tests` — 8.6 s for the full matrix
+  against 2.9 s for the shipping scheme alone, before ASan or TSan multiply it.
+  `DESKHUB_FEC_MATRIX=shipping` selects the smaller matrix, and the sanitizer jobs set it
+  unless the diff touched `FecScheme` or its tests, so a reference implementation is still
+  swept under a sanitizer on exactly the changes that could break it, while the eight ordinary
+  unit jobs keep covering it on every commit. An unrecognised value fails the run instead of
+  quietly choosing one, because "which implementations did this run actually cover" is not a
+  question a typo should get to answer.
+- **A knob with no caller outside its own tests is not a knob**: the Phase 3 sweep moves three
+  axes — scheme, parity rows and interleave depth — and only the first of them could be reached
+  from a built binary. `--fec` picked the scheme, which the sweep itself shows is the axis that
+  matters least: `rs` at one parity row reproduces `xor` to the digit. The two that do move the
+  numbers were unreachable. `Packetizer::SetFecGroups` had no caller outside `core/tests`, the
+  same shape of mistake Phase 1 hit with `SetVideoPath`. Worse, the parity ratio was reachable
+  but not holdable: `ViewerBroadcast` calls `SetFecParityPerGroup` on every broadcast from
+  `wantFecParity`, which `ApplyFeedback` rewrites each second from `FecParityRowsFor(lossPct)` —
+  1 row below 3 % loss, 2 below 6 %, 3 above. So on a good link the policy answers 1, and
+  `--fec=rs` there is `xor` with 6.3x the encode CPU. Anyone measuring on home Wi-Fi would have
+  concluded Reed-Solomon changes nothing, having never once run it in the configuration where
+  it differs. `--fec-parity` now pins the ratio against the policy, `--fec-depth` reaches
+  `SetFecGroups`, and `--fec-arm always` holds parity on the wire so the scheme is measured
+  rather than the arming policy — which is what the simulated sweep does, and the point of the
+  flags is that a real link can now be asked the same question. Before trusting a flag to
+  reproduce a measurement, find the line that reads it in production; a setter and a test are
+  not that line. Each source also logs the configuration it ended up with, read back from the
+  packetizer rather than from the options — `FEC measurement: scheme=xor parity=1 depth=4
+  arm=policy` after being asked for three parity rows is the honest answer, because `xor`
+  carries one, and a sweep row labelled by what was requested rather than by what ran is worse
+  than no row at all.
+- **The same missing caller was in four more places, and one of them still is**: running that
+  check across the rest of Tier A found `SetCongestionControl`, `SetAdaptiveTarget`,
+  `SetAdaptiveLead`, `SetDisplayIntervalUs` and `MakeClockOffsetEstimator` with **zero** callers
+  outside their own tests. Three of the four congestion controls could not be selected, the
+  adaptive audio target could not be switched on, and all three clock estimators existed only
+  in a sweep. `--cc` now reaches the host's control loop and `--audio-delay` / `--audio-adaptive`
+  reach the viewer's jitter buffer, both logged back from the live object. Two are deliberately
+  left alone: `VideoPacer` is the only user of `ClockOffset`, and `VtDecoder` is the only user of
+  `VideoPacer` — so on Windows and Linux there is no pacer to configure, and adding `--clock` or
+  `--vsync` there would manufacture exactly the fake knob this entry is about. `RollingMinEstimator`
+  is a pure wrapper around `ClockOffset`, so swapping `VideoPacer` onto the contract is a
+  behaviour-preserving change whenever a non-Apple viewer starts using the pacer — but not before.
+  A contract with no production caller is a sweep fixture wearing an interface, and writing more
+  implementations behind it does not change that.
+- **The pacer never consumed the method the three clock estimators disagree on**: with
+  `VideoPacer` moved onto the `ClockOffsetEstimator` contract — behaviour-preserving, since
+  `rolling-min` is a pure wrapper around the `ClockOffset` it used to embed — an 18-point sweep
+  runs all three under 0/5/20 ms of arrival wobble, with and without a 30 ms transit step.
+  They are indistinguishable: phase spread sits at 6898-6937 µs for every estimator at every
+  point, and `kalman` reproduces `rolling-min` to the microsecond. The reason is in the
+  interface, not the algorithms. The pacer calls `AddSample`, `ready`, `Reset` and `floorUs` —
+  never `LatencyUs`, and `LatencyUs` is the only method the three implement differently:
+  `KalmanEstimator::floorUs()` returns `lowest_`, which *is* the rolling minimum. So A5 cannot
+  be scored on judder at all; the axis it moves is the published `e2e_abs_ms`, which is where
+  its own tests already measure it. Before wiring a contract into a consumer to make a bake-off
+  run, check that the consumer calls the method the contestants differ on — otherwise the sweep
+  produces a tidy table of the same number.
+- **What to ask the encoder for after a lost reference is a policy, and it was a constant**:
+  the viewer's `InvalidateRef` message travelled the whole wire already, and the host answered
+  it with `forceIdr.store(true)` — so "reference invalidation" was, in every case, a full IDR.
+  `media::RecoveryPolicy` now decides between three answers from what the backend says it can
+  do: fall back to the newest long-term reference older than the lost frame, start a rolling
+  intra refresh, or send the keyframe. Two rules matter. A reference newer than the lost frame
+  is never usable, because the viewer may never have decoded it — only an older one is safe. And
+  a second loss report arriving before any frame has been encoded means the cheap answer did not
+  work, so it escalates to a keyframe rather than looping. `ReferenceInvalidatingEncoder` and
+  `IntraRefreshEncoder` join the optional concepts in `VideoContract.h`; no backend declares
+  either yet, so the capability set is empty and today's behaviour is unchanged. The word `LTR`
+  appears nowhere else in the tree — the policy is ready and the execution is not.
+- **Codec negotiation was a single bit test, and the mask was already 16 bits wide**: `Hello`
+  carried a `codecMask` and `HelloAck` a `Codec`, but the host only ever checked
+  `codecMask & kCodecMaskH264` and answered `Codec::H264`. The mask now names H264 4:2:0,
+  H264 4:4:4, HEVC and AV1, and `NegotiateCodec(hostMask, clientMask)` picks the first entry of
+  an explicit preference list present on both sides, falling back to the 4:2:0 baseline that
+  sits last in that list precisely so it is the floor and never the first choice. Old peers
+  advertise bit 0 alone and still settle on H264 receiving the value 0, so nothing on the wire
+  had to move. No encoder in the tree produces anything but H264 4:2:0, so the mechanism is
+  inert today — which is what C3 asked for, a capability table and a negotiation rather than a
+  race. The order itself is provisional: whether 4:4:4 for text sharpness should outrank AV1 for
+  bitrate is the question C3 exists to settle, and it needs measurement this order does not have.
+- **A one-way stream can never yield an absolute latency, however good the estimator**: all
+  three offset estimators — rolling minimum, trendline, Kalman — take the same input, the
+  difference between a frame's host timestamp and its local arrival, and that difference is the
+  clock offset plus the one-way delay welded together. Every one of them subtracts a floor and
+  reports the excess, so `e2e_ms` was a number about queueing, not about latency, and putting it
+  beside another tool's figure would have been meaningless. The fix is a second timestamp, not a
+  better filter: `PingPong` now carries `hostTimeUs` beside the client's `sendTimeUs`, and
+  `ClockSync` keeps the exchange with the smallest round trip in a ten-second window — the one
+  with the least queueing in it — to estimate the clock offset. Absolute end-to-end latency is
+  then `(arrival - offset) - hostPts`, reported as `e2e_abs_ms` beside the relative `e2e_ms`.
+  The payload grew from 12 to 20 bytes, which is safe because the common header carries no
+  payload length and `ParsePingPong` only ever required the first twelve: an older peer reads
+  its three original fields and ignores the rest, and a newer peer reading an older 12-byte
+  message sees `hostTimeUs == 0` and falls back to the relative number. This rests on the paths
+  being symmetric, which is NTP's assumption and a limit of the method, not of the code — an
+  asymmetric route puts half the asymmetry straight into the offset.
+- **An unsigned exponential filter walks the wrong way the first time its input drops**: both
+  the audio jitter estimate and the pacer's were written as
+  `jitterUs_ += (spread - jitterUs_) >> shift` with `spread` and `jitterUs_` both `uint64_t`. On
+  any sample quieter than the running average the subtraction wraps to something near 2^64, the
+  shift keeps almost all of it, and the estimate explodes instead of decaying. It stayed
+  invisible until the audio delay/gap curve was actually plotted and the adaptive target sat at
+  its 500 ms ceiling on a link wobbling by 15 ms. Both now do the arithmetic in `int64_t`. The
+  curve found it; neither the unit tests around it nor the shape of the code did.
+- **The delay-versus-gaps curve says the fixed audio target is still the right default**: with
+  the filter fixed and playout driven by a clock rather than by arrivals, the sweep runs six
+  target delays against three jitter levels. The adaptive target wins outright on a steady link
+  — 20 ms held instead of 60 ms for the same single startup gap — and loses under jitter: at
+  40 ms of wobble it settles on the same 60 ms the fixed target uses but pays four concealments
+  instead of one. The cost is the adaptation itself. Raising the target mid-stream means waiting
+  to refill to it, and that wait is an underrun; restricting the raise to moments when the queue
+  already holds enough removes most of it but leaves the target under-provisioned. Shipping this
+  on by default would trade a measured gap increase for a latency win the sweep only confirms on
+  links that were never the problem.
+- **Vsync matching is not a latency trade, which is what the sweep proved**: A6 framed judder as
+  something to plot against added delay, so the sweep varies the pacer lead from 8 ms to 66 ms
+  with and without snapping. Without snapping the phase a frame lands on inside a 6944 µs
+  refresh interval spans about 6000 µs at every single lead — eight times the delay narrows it
+  by nothing, because the spread comes from 60 fps content meeting a 144 Hz panel, not from
+  arrival wobble. Snapping puts it at exactly zero and costs no delay at all. There is no curve
+  here to trade along; there is a defect and a fix.
+- **An HRESULT is not a bool, and `ICodecAPI::IsSupported` returns `S_OK` for yes**: every rate
+  control property the Media Foundation encoder sets went through
+  `if (!codecApi->IsSupported(&api)) { report("NOT SUPPORTED"); return; }`. `S_OK` is 0, so that
+  branch fired on exactly the properties the MFT *did* support, and `SetValue` was attempted only
+  on the ones it did not. Measured on this machine after putting the raw HRESULT in the log:
+  `MeanBitRate`, `RateControlMode=CBR`, `GOPSize` and `BufferSize(VBV)` all answer
+  `hr=0x00000000` and had all been skipped, so the MF backend has been encoding on MFT defaults
+  for its whole life — no CBR, no target bitrate, no infinite GOP, no VBV — while NVENC got the
+  full rate plan. Any bake-off between the two before this fix compared a configured encoder
+  against an unconfigured one. It also inverts the evidence in the first entry of this section:
+  the `MeanBitRate: NOT SUPPORTED` line quoted there meant the Intel MFT *did* expose the
+  property. The mandatory fallback that entry argues for is still right; the reason given for it
+  was a log read backwards. `SetBitrate` and `RequestKeyFrame` in the same file used the opposite
+  polarity, which is what a bool-shaped read of a tri-state return buys: two call sites that
+  cannot both be right, and no test that can tell them apart.
+- **C1's knob was missing the same caller A1's was**: `CreateEncoder` tried NVENC, then Media
+  Foundation, and kept whichever started first, so on any machine with an NVIDIA driver the MF
+  path could not be measured at all. `--encoder auto|nvenc|mf|vaapi|videotoolbox` now names the
+  backend, and naming one that will not start stops the source rather than quietly measuring the
+  other — the failure a fallback would hide is the measurement. Scoring it needed a new counter
+  too: `enc_ms_avg`/`enc_ms_max` cannot see a tail, so `evt=sum` now carries `enc_us_p50` and
+  `enc_us_p99` from a 512 µs histogram. Each backend also reports recovery capabilities read from
+  the driver instead of assumed: NVENC through `nvEncGetEncodeCaps` (`max_ltr_frames=8`,
+  `ref_pic_invalidation=1`, `intra_refresh=1` on an RTX 5070 Ti), Media Foundation through
+  `IsSupported` on the three LTR properties and `GradualIntraRefresh`, all supported. That answers
+  what A4 was waiting for — both Windows backends can hold long-term references — but the caps are
+  logged, not handed to `RecoveryPolicy`: nothing consumes `invalidateBeforeFrame` or
+  `wantIntraRefresh` yet, so declaring the capability before an encoder can act on it would turn
+  loss recovery into a no-op. First numbers, on an idle desktop rather than a fixed clip: NVENC
+  encodes at p50 2.5-5.6 ms and p99 2.7-5.7 ms, Media Foundation at p50 0.5-13.8 ms and p99
+  12.3-17.6 ms. Both reach the same silicon here — `mf` resolves to "NVIDIA H.264 Encoder MFT" on
+  this machine — so this is not yet the Intel-versus-NVIDIA question C1 asks; it is what going
+  through Media Foundation costs to reach the same hardware.

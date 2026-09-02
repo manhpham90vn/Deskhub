@@ -8,7 +8,10 @@
 #include <functional>
 #include <memory>
 #include <string>
+#include <string_view>
 
+#include "deskhub/media/EncoderBackend.h"
+#include "deskhub/media/RecoveryPolicy.h"
 #include "deskhub/media/VideoContract.h"
 #include "deskhubp/diag/Log.h"
 
@@ -36,6 +39,10 @@ public:
     virtual void Finish() = 0;
 
     virtual const char* BackendName() const = 0;
+
+    virtual std::string_view BackendId() const = 0;
+
+    virtual deskhub::media::EncoderRecoveryCaps RecoveryCaps() const = 0;
 };
 
 inline bool OpenEncoderOutput(const EncoderConfig& cfg, const char* tag, FILE*& out) {
@@ -56,7 +63,8 @@ inline bool OpenEncoderOutput(const EncoderConfig& cfg, const char* tag, FILE*& 
     return true;
 }
 
-std::unique_ptr<IVideoEncoder> CreateEncoder(ID3D11Device* device, const EncoderConfig& cfg);
+std::unique_ptr<IVideoEncoder> CreateEncoder(ID3D11Device* device, const EncoderConfig& cfg,
+    std::string_view backend);
 
 static_assert(deskhub::media::VideoEncoderLike<IVideoEncoder, ID3D11Texture2D*>,
     "IVideoEncoder must match the shared encoder signature");

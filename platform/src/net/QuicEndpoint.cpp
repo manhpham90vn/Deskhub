@@ -71,6 +71,15 @@ sockaddr_in ToSockAddr(const NetAddr& addr) {
     return out;
 }
 
+quiche_cc_algorithm QuicheAlgorithmOf(QuicCongestionControl choice) {
+    switch (choice) {
+        case QuicCongestionControl::Reno: return QUICHE_CC_RENO;
+        case QuicCongestionControl::Cubic: return QUICHE_CC_CUBIC;
+        case QuicCongestionControl::Bbr2: return QUICHE_CC_BBR2_GCONGESTION;
+    }
+    return QUICHE_CC_CUBIC;
+}
+
 quiche_config* MakeConfig(const QuicSettings& settings, bool server) {
     quiche_config* cfg = quiche_config_new(QUICHE_PROTOCOL_VERSION);
     if (cfg == nullptr) return nullptr;
@@ -99,6 +108,7 @@ quiche_config* MakeConfig(const QuicSettings& settings, bool server) {
     quiche_config_set_initial_max_stream_data_uni(cfg, kInitialMaxStreamData);
     quiche_config_set_initial_max_streams_bidi(cfg, kMaxStreams);
     quiche_config_set_initial_max_streams_uni(cfg, kMaxStreams);
+    quiche_config_set_cc_algorithm(cfg, QuicheAlgorithmOf(settings.congestionControl));
     quiche_config_enable_dgram(cfg, true, kDatagramQueue, kDatagramQueue);
     return cfg;
 }
@@ -141,6 +151,7 @@ struct QuicEndpoint::Impl {
         std::atomic<uint64_t> maxBurst{0};
         std::atomic<uint64_t> capped{0};
         std::atomic<uint64_t> datagrams{0};
+        std::atomic<uint64_t> datagramsRefused{0};
         std::atomic<uint64_t> streamBytes{0};
 
         static void Bump(std::atomic<uint64_t>& counter, uint64_t by) {
@@ -317,7 +328,9 @@ struct QuicEndpoint::Impl {
     }
 
     void Flush(Connection& entry) {
-        uint8_t out[kQuicMaxUdpPayload];
+        static_assert(kMaxFlushBurst <= kMaxSendBatch);
+        uint8_t out[kMaxFlushBurst][kQuicMaxUdpPayload];
+        OutboundDatagram batch[kMaxFlushBurst];
         size_t burst = 0;
         for (;;) {
             if (burst >= kMaxFlushBurst) {
@@ -326,16 +339,19 @@ struct QuicEndpoint::Impl {
                 break;
             }
             quiche_send_info info{};
-            const ssize_t written = quiche_conn_send(entry.conn, out, sizeof(out), &info);
+            const ssize_t written =
+                quiche_conn_send(entry.conn, out[burst], kQuicMaxUdpPayload, &info);
             if (written == QUICHE_ERR_DONE) break;
             if (written < 0) {
                 LOGW("quic: send failed (%zd)", written);
                 break;
             }
-            if (!socket_.SendTo(entry.peer, out, size_t(written))) ReportSendFail(entry.peer);
+            batch[burst] = OutboundDatagram{out[burst], size_t(written)};
             ++burst;
         }
         if (burst == 0) return;
+        if (socket_.SendBatch(entry.peer, std::span<const OutboundDatagram>(batch, burst)) < burst)
+            ReportSendFail(entry.peer);
         Counters::Bump(stats_.bursts, 1);
         Counters::Bump(stats_.packets, burst);
         Counters::Raise(stats_.maxBurst, burst);
@@ -697,7 +713,10 @@ bool QuicEndpoint::SendDatagram(QuicConnId conn, std::span<const uint8_t> bytes)
     Impl::Connection* entry = impl_->Lookup(conn);
     if (entry == nullptr || !quiche_conn_is_established(entry->conn)) return false;
     const ssize_t sent = quiche_conn_dgram_send(entry->conn, bytes.data(), bytes.size());
-    if (sent > 0) Impl::Counters::Bump(impl_->stats_.datagrams, 1);
+    if (sent > 0)
+        Impl::Counters::Bump(impl_->stats_.datagrams, 1);
+    else
+        Impl::Counters::Bump(impl_->stats_.datagramsRefused, 1);
     impl_->Flush(*entry);
     return sent > 0;
 }
@@ -722,6 +741,7 @@ QuicSendStats QuicEndpoint::SendStats() const {
     out.maxBurst = c.maxBurst.load(std::memory_order_relaxed);
     out.capped = c.capped.load(std::memory_order_relaxed);
     out.datagrams = c.datagrams.load(std::memory_order_relaxed);
+    out.datagramsRefused = c.datagramsRefused.load(std::memory_order_relaxed);
     out.streamBytes = c.streamBytes.load(std::memory_order_relaxed);
     return out;
 }

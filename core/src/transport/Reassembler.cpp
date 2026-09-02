@@ -1,8 +1,23 @@
 #include "deskhub/transport/Reassembler.h"
 
+#include <algorithm>
 #include <iterator>
 
 namespace deskhub {
+namespace {
+
+uint16_t ParityKey(uint8_t group, uint8_t parityIndex) {
+    return uint16_t(uint16_t(group) << 8 | parityIndex);
+}
+
+}
+
+bool Reassembler::SetFecScheme(std::string_view name) {
+    std::unique_ptr<FecScheme> scheme = MakeFecScheme(name);
+    if (!scheme) return false;
+    scheme_ = std::move(scheme);
+    return true;
+}
 
 Reassembler::Pending* Reassembler::Slot(uint32_t id, uint16_t pktCount,
     uint64_t timestampUs, uint64_t nowUs) {
@@ -50,8 +65,7 @@ void Reassembler::Push(const VideoPacketView& pkt, uint64_t nowUs) {
     f.idr = f.idr || pkt.idr;
     ++f.received;
 
-    const size_t numGroups = (size_t(f.pktCount) + kFecGroupSize - 1) / kFecGroupSize;
-    if (numGroups) TryRecover(f, uint8_t(pkt.hdr.pktIndex % numGroups));
+    if (f.fecGroups) TryRecover(f, uint8_t(pkt.hdr.pktIndex % f.fecGroups));
 }
 
 void Reassembler::PushFec(const FecPacketView& pkt, uint64_t nowUs) {
@@ -63,47 +77,55 @@ void Reassembler::PushFec(const FecPacketView& pkt, uint64_t nowUs) {
     Pending& f = *fp;
     f.idr = f.idr || pkt.idr;
 
-    auto& slot = f.parity[pkt.hdr.groupIndex];
+    const size_t groups = FecGroupCount(f.pktCount, pkt.hdr.groups);
+    if (groups == 0 || pkt.hdr.groupIndex >= groups) return;
+    if (f.fecGroups && f.fecGroups != groups) return;
+    f.fecGroups = uint16_t(groups);
+
+    if (pkt.hdr.parityIndex >= kMaxParityPerGroup) return;
+    std::vector<uint8_t>& slot = f.parity[ParityKey(pkt.hdr.groupIndex, pkt.hdr.parityIndex)];
     if (!slot.empty()) return;
     slot.assign(pkt.parity.begin(), pkt.parity.end());
     TryRecover(f, pkt.hdr.groupIndex);
 }
 
 bool Reassembler::TryRecover(Pending& f, uint8_t group) {
-    auto pit = f.parity.find(group);
-    if (pit == f.parity.end()) return false;
-    const std::vector<uint8_t>& par = pit->second;
+    parityView_.clear();
+    for (auto it = f.parity.lower_bound(ParityKey(group, 0));
+        it != f.parity.end() && uint8_t(it->first >> 8) == group; ++it) {
+        const size_t index = it->first & 0xFF;
+        if (parityView_.size() <= index) parityView_.resize(index + 1);
+        parityView_[index] = it->second;
+    }
+    if (parityView_.empty()) return false;
 
-    const size_t numGroups = (size_t(f.pktCount) + kFecGroupSize - 1) / kFecGroupSize;
+    const size_t numGroups = f.fecGroups;
     if (numGroups == 0 || group >= numGroups) return false;
 
-    size_t missing = 0, missingIdx = 0;
+    slots_.clear();
     for (size_t i = group; i < f.pktCount; i += numGroups)
-        if (f.pieces[i].empty()) {
-            ++missing;
-            missingIdx = i;
-        }
-    if (missing != 1) return false;
+        slots_.push_back(FecSlot{f.pieces[i], !f.pieces[i].empty()});
+    if (slots_.empty()) return false;
 
-    std::vector<uint8_t> rec(par);
-    for (size_t i = group; i < f.pktCount; i += numGroups) {
-        if (i == missingIdx) continue;
-        const auto& p = f.pieces[i];
-        if (kFecLenPrefix + p.size() > rec.size()) return false;
-        rec[0] ^= uint8_t(p.size() >> 8);
-        rec[1] ^= uint8_t(p.size() & 0xFF);
-        for (size_t b = 0; b < p.size(); ++b) rec[kFecLenPrefix + b] ^= p[b];
+    FecRecovery recovered[kMaxFecRecoveryPerGroup];
+    const size_t room = std::min(kMaxFecRecoveryPerGroup, scheme_->MaxRecoverablePerGroup());
+    const size_t got = scheme_->Recover(slots_, parityView_,
+        std::span<FecRecovery>(recovered, room));
+    if (got == 0) return false;
+
+    bool filled = false;
+    for (size_t k = 0; k < got && k < room; ++k) {
+        const size_t index = group + recovered[k].slot * numGroups;
+        if (index >= f.pktCount) continue;
+        std::vector<uint8_t>& piece = f.pieces[index];
+        if (!piece.empty()) continue;
+        piece.assign(recovered[k].bytes.begin(), recovered[k].bytes.end());
+        f.bytes += piece.size();
+        ++f.received;
+        ++stats_.packetsRecovered;
+        filled = true;
     }
-
-    const size_t len = (size_t(rec[0]) << 8) | rec[1];
-    if (len == 0 || len > kMaxVideoPayload || kFecLenPrefix + len > rec.size()) return false;
-
-    f.pieces[missingIdx].assign(rec.begin() + kFecLenPrefix,
-        rec.begin() + kFecLenPrefix + len);
-    f.bytes += len;
-    ++f.received;
-    ++stats_.packetsRecovered;
-    return true;
+    return filled;
 }
 
 std::optional<Reassembler::Frame> Reassembler::PopReady(uint64_t nowUs) {
@@ -142,7 +164,7 @@ std::optional<Reassembler::Frame> Reassembler::PopReady(uint64_t nowUs) {
             size_t newerComplete = 0;
             for (auto n = std::next(head); n != pending_.end(); ++n)
                 if (n->second.Complete()) ++newerComplete;
-            if (newerComplete >= 2) {
+            if (newerComplete >= OvertakenLimit()) {
                 Drop(head, DropReason::Overtaken, nowUs);
                 continue;
             }

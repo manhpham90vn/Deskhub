@@ -275,8 +275,10 @@ template <class Fn>
 bool DiagEncode(HostSource& st, bool idr, Fn&& encode) {
     const uint64_t t0 = NowUs();
     const bool ok = std::forward<Fn>(encode)();
-    const uint32_t ms = uint32_t((NowUs() - t0) / 1000);
+    const uint32_t us = uint32_t(NowUs() - t0);
+    const uint32_t ms = us / 1000;
     st.diag.encMs.Add(ms);
+    st.diag.encUs.Add(us);
     if (!ok) LOGW("[DIAG][%s] evt=enc_fail idr=%d ms=%u", st.name.c_str(), idr ? 1 : 0, ms);
     return ok;
 }

@@ -372,6 +372,22 @@ jobs:
         run: cmake --build --preset ${{ matrix.preset }}
              --target core_tests platform_tests integration_tests
 
+      - name: Decide which FEC implementations this sanitizer run has to exercise
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if [ -z "$BASE_SHA" ]; then
+            echo "DESKHUB_FEC_MATRIX=full" >>"$GITHUB_ENV"
+            exit 0
+          fi
+          git fetch --no-tags --depth=1 origin "$BASE_SHA"
+          if git diff --name-only "$BASE_SHA" HEAD |
+              grep -qE '^core/(include/deskhub|src|tests)/transport/(FecScheme|FecTests|LossGoodputTests)'; then
+            echo "DESKHUB_FEC_MATRIX=full" >>"$GITHUB_ENV"
+          else
+            echo "DESKHUB_FEC_MATRIX=shipping" >>"$GITHUB_ENV"
+          fi
+
       - name: Run them under ${{ matrix.preset }}
         run: ctest --test-dir out/build/${{ matrix.preset }} --output-on-failure
         env:

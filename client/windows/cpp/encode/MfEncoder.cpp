@@ -44,6 +44,7 @@ struct MfEncoder::Impl {
     D3D11VideoProcessor colorConvert;
 
     EncoderConfig cfg{};
+    deskhub::media::EncoderRecoveryCaps recovery{};
     UINT resetToken = 0;
     bool mfStarted = false;
     bool streaming = false;
@@ -223,11 +224,28 @@ struct MfEncoder::Impl {
 
         if (!OpenEncoderOutput(cfg, "MfEncoder", out)) return false;
 
+        recovery = QueryRecoveryCaps();
+
         LOGI("[MfEncoder] Initialized: %ux%u @%ufps, %.1f Mbps, H264%s -> %s",
             cfg.width, cfg.height, cfg.fps, cfg.bitrateBps / 1e6,
             isAsync ? " (async MFT)" : " (sync MFT)",
             out ? "file" : "callback");
         return true;
+    }
+
+    deskhub::media::EncoderRecoveryCaps QueryRecoveryCaps() {
+        if (!codecApi) return {};
+        auto supported = [&](const GUID& api, const char* name) {
+            const HRESULT hr = codecApi->IsSupported(&api);
+            LOGI("[MfEncoder] codecapi %s: IsSupported hr=0x%08lX", name, (unsigned long)hr);
+            return hr == S_OK;
+        };
+        const bool ltrBuffers = supported(CODECAPI_AVEncVideoLTRBufferControl, "LTRBufferControl");
+        const bool ltrMark = supported(CODECAPI_AVEncVideoMarkLTRFrame, "MarkLTRFrame");
+        const bool ltrUse = supported(CODECAPI_AVEncVideoUseLTRFrame, "UseLTRFrame");
+        const bool refresh =
+            supported(CODECAPI_AVEncVideoGradualIntraRefresh, "GradualIntraRefresh");
+        return {ltrBuffers && ltrMark && ltrUse, refresh};
     }
 
     bool SetupRateControl() {
@@ -240,7 +258,7 @@ struct MfEncoder::Impl {
             if (log) LOGW("[MfEncoder] codecapi %s: %s", name, what);
         };
         auto setUI4 = [&](const GUID& api, ULONG val, const char* name) {
-            if (!codecApi->IsSupported(&api)) {
+            if (codecApi->IsSupported(&api) != S_OK) {
                 report(name, "NOT SUPPORTED");
                 return;
             }
@@ -250,7 +268,7 @@ struct MfEncoder::Impl {
             report(name, SUCCEEDED(codecApi->SetValue(&api, &v)) ? "ok" : "SetValue FAILED");
         };
         auto setBool = [&](const GUID& api, bool val, const char* name) {
-            if (!codecApi->IsSupported(&api)) {
+            if (codecApi->IsSupported(&api) != S_OK) {
                 report(name, "NOT SUPPORTED");
                 return;
             }
@@ -282,7 +300,7 @@ struct MfEncoder::Impl {
         if (!bitrateBps) return false;
         if (bitrateBps == cfg.bitrateBps) return true;
         cfg.bitrateBps = bitrateBps;
-        if (codecApi && codecApi->IsSupported(&CODECAPI_AVEncCommonMeanBitRate)) {
+        if (codecApi && codecApi->IsSupported(&CODECAPI_AVEncCommonMeanBitRate) == S_OK) {
             VARIANT v{};
             v.vt = VT_UI4;
             v.ulVal = (ULONG)bitrateBps;
@@ -300,7 +318,7 @@ struct MfEncoder::Impl {
     }
 
     bool RequestKeyFrame() {
-        if (codecApi && codecApi->IsSupported(&CODECAPI_AVEncVideoForceKeyFrame)) {
+        if (codecApi && codecApi->IsSupported(&CODECAPI_AVEncVideoForceKeyFrame) == S_OK) {
             VARIANT v{};
             v.vt = VT_UI4;
             v.ulVal = 1;
@@ -625,6 +643,10 @@ bool MfEncoder::SetBitrate(uint32_t bitrateBps) {
 
 bool MfEncoder::SetFps(uint32_t fps) {
     return impl_ && impl_->SetFps(fps);
+}
+
+deskhub::media::EncoderRecoveryCaps MfEncoder::RecoveryCaps() const {
+    return impl_ ? impl_->recovery : deskhub::media::EncoderRecoveryCaps{};
 }
 
 void MfEncoder::Finish() {

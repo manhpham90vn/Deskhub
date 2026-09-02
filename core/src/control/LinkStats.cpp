@@ -13,6 +13,7 @@ LinkWindow LinkStats::Close(const Reassembler::Stats& cur, uint64_t videoBytes,
     w.packetsReceived = cur.packetsReceived - prev_.packetsReceived;
     w.packetsLost = cur.packetsLost - prev_.packetsLost;
     w.packetsRecovered = cur.packetsRecovered - prev_.packetsRecovered;
+    w.fecReceived = cur.fecReceived - prev_.fecReceived;
     w.framesDropped = cur.framesDropped - prev_.framesDropped;
 
     for (size_t i = 0; i < 7; ++i) {

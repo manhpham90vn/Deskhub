@@ -4,6 +4,7 @@
 #include <memory>
 #include <mutex>
 #include <span>
+#include <string>
 #include <thread>
 #include <utility>
 #include <vector>
@@ -104,11 +105,12 @@ bool SharingHost::Start(const std::vector<ShareSource>& sources, const ShareOpti
         SourcePipeline* p = &Pipeline(st);
         const uint32_t fps = engine->options().fps;
         const uint32_t maxDim = engine->options().maxDim;
+        const std::string encoderBackend = engine->options().encoder;
 
         auto onPacket = engine->MakePacketSink(*p);
 
-        auto ensureEncoder = [p, fps, onPacket](uint32_t w, uint32_t h, FrameMemory frameKind,
-                                 uint32_t drmFormat) -> bool {
+        auto ensureEncoder = [p, fps, onPacket, encoderBackend](uint32_t w, uint32_t h,
+                                 FrameMemory frameKind, uint32_t drmFormat) -> bool {
             if (p->encoder && p->encoder->IsOpen() && p->encoderW == w && p->encoderH == h)
                 return true;
             p->encoder.reset();
@@ -116,7 +118,7 @@ bool SharingHost::Start(const std::vector<ShareSource>& sources, const ShareOpti
             EncoderConfig cfg = deskhub::MakeEncoderConfig(*p, {w, h}, fps);
             cfg.onPacket = onPacket;
             auto enc = std::make_unique<HwEncoder>();
-            if (!enc->Init(cfg, frameKind, drmFormat)) {
+            if (!enc->Init(cfg, frameKind, drmFormat, encoderBackend)) {
                 LOGE("[Host][%s] No hardware encoder would start (NVENC or VA-API).",
                     p->name.c_str());
                 p->failed.store(true);

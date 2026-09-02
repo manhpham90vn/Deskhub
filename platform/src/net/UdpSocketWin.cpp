@@ -124,6 +124,15 @@ bool UdpSocket::SendTo(const NetAddr& to, const uint8_t* data, size_t len) {
                (sockaddr*)&sa, sizeof(sa)) == int(len);
 }
 
+size_t UdpSocket::SendBatch(const NetAddr& to, std::span<const OutboundDatagram> packets) {
+    size_t sent = 0;
+    for (const OutboundDatagram& packet : packets) {
+        if (!SendTo(to, packet.data, packet.len)) break;
+        ++sent;
+    }
+    return sent;
+}
+
 int UdpSocket::RecvFrom(uint8_t* buf, size_t cap, NetAddr& from) {
     if (!IsOpen()) return -1;
     sockaddr_in sa{};

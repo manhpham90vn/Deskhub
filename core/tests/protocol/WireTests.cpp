@@ -101,9 +101,31 @@ void TestWireRoundtrip() {
     auto pp = ParsePingPong(PayloadOf(std::span<const uint8_t>(buf, n)));
     Check(pp && pp->pingId == p.pingId && pp->sendTimeUs == p.sendTimeUs, "PING payload");
 
-    n = BuildRequestKeyframe(buf, 0xCAFE0001);
+    n = BuildRequestKeyframe(buf, 0xCAFE0001, KeyframeReason::Loss);
     ch = ParseCommonHeader(std::span<const uint8_t>(buf, n));
     Check(ch && ch->type == MsgType::RequestKeyframe, "REQUEST_KEYFRAME");
+}
+
+void TestKeyframeReasonTravels() {
+    std::printf("[wire] REQUEST_KEYFRAME carries why the viewer asked...\n");
+    uint8_t buf[kMaxDatagram];
+
+    for (size_t i = 0; i < kKeyframeReasonCount; ++i) {
+        const KeyframeReason sent = KeyframeReason(i);
+        const size_t n = BuildRequestKeyframe(buf, 0xCAFE0001, sent);
+        Check(n != 0, "every reason builds a datagram");
+        Check(ParseRequestKeyframe(PayloadOf(std::span<const uint8_t>(buf, n))) == sent,
+            "and the host reads back the reason the viewer sent");
+    }
+
+    Check(ParseRequestKeyframe({}) == KeyframeReason::Unknown,
+        "a peer built before the reason existed sends no payload, and that has to parse as "
+        "unknown rather than as the first reason in the enum - counting its requests as loss "
+        "would put a number in the FEC objective function that no lost packet caused");
+
+    const uint8_t past[] = {uint8_t(kKeyframeReasonCount)};
+    Check(ParseRequestKeyframe(past) == KeyframeReason::Unknown,
+        "a reason this build has no name for is unknown, not an out-of-range counter slot");
 }
 
 void TestSourceListWire() {
@@ -1015,9 +1037,38 @@ void TestFileWire() {
         "a host from before file transfer decodes as taking none");
 }
 
+void TestPingPongToleratesTheOlderShorterShape() {
+    std::printf("[wire] a 12-byte ping from an older peer still parses...\n");
+
+    uint8_t buf[kMaxDatagram];
+    PingPong sent{};
+    sent.pingId = 7;
+    sent.sendTimeUs = 123'456;
+    sent.hostTimeUs = 999'000;
+    const size_t n = BuildPing(buf, 0x11223344, sent);
+    Check(n == kCommonHeaderSize + 20, "a ping now carries the host clock as well");
+
+    const auto full = ParsePingPong(PayloadOf(std::span<const uint8_t>(buf, n)));
+    Check(full && full->pingId == 7 && full->sendTimeUs == 123'456 &&
+              full->hostTimeUs == 999'000,
+        "and a peer that knows about it reads all three fields");
+
+    const auto truncated =
+        ParsePingPong(PayloadOf(std::span<const uint8_t>(buf, kCommonHeaderSize + 12)));
+    Check(truncated && truncated->pingId == 7 && truncated->sendTimeUs == 123'456,
+        "the shape an older peer sends still parses, because the payload has no length of "
+        "its own and the parser only ever needed the first twelve bytes");
+    Check(truncated && truncated->hostTimeUs == 0,
+        "and the field it does not carry reads as absent rather than as garbage");
+
+    Check(!ParsePingPong(PayloadOf(std::span<const uint8_t>(buf, kCommonHeaderSize + 11))),
+        "anything shorter than the original shape is still refused");
+}
+
 void RunWireTests() {
     TestWireRoundtrip();
     TestStateEventClassification();
+    TestKeyframeReasonTravels();
     TestSourceListWire();
     TestOversizedPacketsRejected();
     TestNackWire();
@@ -1033,5 +1084,6 @@ void RunWireTests() {
     TestTerminalWire();
     TestAuthWire();
     TestAudioWire();
+    TestPingPongToleratesTheOlderShorterShape();
     TestFileWire();
 }

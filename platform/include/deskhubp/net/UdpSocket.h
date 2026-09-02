@@ -1,7 +1,9 @@
 #pragma once
 #include "deskhub/protocol/Wire.h"
 
+#include <cstddef>
 #include <cstdint>
+#include <span>
 #include <string>
 
 struct NetAddr {
@@ -35,6 +37,13 @@ inline bool SameHost(const std::string& addr, uint64_t key) {
     return HostKeyOf(addr, other) && other == key;
 }
 
+struct OutboundDatagram {
+    const uint8_t* data = nullptr;
+    size_t len = 0;
+};
+
+inline constexpr size_t kMaxSendBatch = 16;
+
 class UdpSocket {
 public:
     UdpSocket() = default;
@@ -49,6 +58,8 @@ public:
     bool WaitReadable(uint32_t ms);
 
     bool SendTo(const NetAddr& to, const uint8_t* data, size_t len);
+
+    size_t SendBatch(const NetAddr& to, std::span<const OutboundDatagram> packets);
 
     int RecvFrom(uint8_t* buf, size_t cap, NetAddr& from);
 

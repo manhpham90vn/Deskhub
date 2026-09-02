@@ -32,7 +32,7 @@ struct Recorder {
         cb.send = [this](std::span<const uint8_t> d) { sent.emplace_back(d.begin(), d.end()); };
         cb.randomBytes = TestRandomBytes;
         cb.onStart = [this] { ++starts; };
-        cb.onKeyframeRequest = [this] { ++keyframes; };
+        cb.onKeyframeRequest = [this](deskhub::KeyframeReason) { ++keyframes; };
         cb.onDisconnect = [this] { ++disconnects; };
         cb.onInput = [this](const InputEvent& e) { input.push_back(e); };
         cb.onFeedback = [this](const Feedback& f) { feedback.push_back(f); };

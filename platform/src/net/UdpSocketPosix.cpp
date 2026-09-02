@@ -1,4 +1,8 @@
-﻿#include "deskhubp/net/UdpSocket.h"
+﻿#if defined(__linux__) && !defined(_GNU_SOURCE)
+#define _GNU_SOURCE
+#endif
+
+#include "deskhubp/net/UdpSocket.h"
 
 #include <arpa/inet.h>
 #include <netinet/in.h>
@@ -93,6 +97,48 @@ bool UdpSocket::SendTo(const NetAddr& to, const uint8_t* data, size_t len) {
     sa.sin_port = htons(to.port);
     const ssize_t n = sendto(fd_, data, len, 0, (sockaddr*)&sa, sizeof(sa));
     return n == ssize_t(len);
+}
+
+size_t UdpSocket::SendBatch(const NetAddr& to, std::span<const OutboundDatagram> packets) {
+    if (!IsOpen() || packets.empty()) return 0;
+
+    sockaddr_in sa{};
+    sa.sin_family = AF_INET;
+    sa.sin_addr.s_addr = htonl(to.ip);
+    sa.sin_port = htons(to.port);
+
+#if defined(__linux__)
+    const size_t batch = packets.size() < kMaxSendBatch ? packets.size() : kMaxSendBatch;
+    iovec iov[kMaxSendBatch]{};
+    mmsghdr msgs[kMaxSendBatch]{};
+    for (size_t i = 0; i < batch; ++i) {
+        iov[i].iov_base = const_cast<uint8_t*>(packets[i].data);
+        iov[i].iov_len = packets[i].len;
+        msgs[i].msg_hdr.msg_name = &sa;
+        msgs[i].msg_hdr.msg_namelen = sizeof(sa);
+        msgs[i].msg_hdr.msg_iov = &iov[i];
+        msgs[i].msg_hdr.msg_iovlen = 1;
+    }
+
+    size_t done = 0;
+    while (done < batch) {
+        const int n = sendmmsg(fd_, msgs + done, unsigned(batch - done), 0);
+        if (n <= 0) {
+            if (errno == EINTR) continue;
+            break;
+        }
+        done += size_t(n);
+    }
+    return done;
+#else
+    size_t sent = 0;
+    for (const OutboundDatagram& packet : packets) {
+        const ssize_t n = sendto(fd_, packet.data, packet.len, 0, (sockaddr*)&sa, sizeof(sa));
+        if (n != ssize_t(packet.len)) break;
+        ++sent;
+    }
+    return sent;
+#endif
 }
 
 int UdpSocket::RecvFrom(uint8_t* buf, size_t cap, NetAddr& from) {

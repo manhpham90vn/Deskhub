@@ -128,6 +128,9 @@ int main() {
     std::printf("--- media: encoder/decoder signature contract ---\n");
     RunMediaContractTests();
 
+    std::printf("--- media: what to ask the encoder for after a lost reference ---\n");
+    RunRecoveryPolicyTests();
+
     std::printf("--- media: H.264 bit writer (exp-golomb + emulation prevention) ---\n");
     RunBitWriterTests();
 

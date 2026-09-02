@@ -132,7 +132,7 @@ void TestBeaconIgnoresSessionTraffic() {
     size_t rn = BuildHello(req, hello);
     Check(Ask(b, std::span<const uint8_t>(req, rn)).empty(), "HELLO belongs to ScreenHostSession");
 
-    rn = BuildRequestKeyframe(req, 9);
+    rn = BuildRequestKeyframe(req, 9, KeyframeReason::Loss);
     Check(Ask(b, std::span<const uint8_t>(req, rn)).empty(), "REQUEST_KEYFRAME ignored");
 
     const uint8_t junk[3] = {0xFF, 0x00, 0x7E};
