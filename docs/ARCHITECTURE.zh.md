@@ -752,8 +752,8 @@ A/B（漂移只作为警告，绝不失败）、来自该 pull request 构建的
   值得记住。比丢失帧**更新**的参考帧永远不可用，因为观看端可能从未解码过它——只有更旧的才安全。
   而在还没有编码出任何一帧之前就到来的第二份丢失报告，说明便宜的答案没有奏效，于是它升级为
   关键帧而不是原地打转。`ReferenceInvalidatingEncoder` 和 `IntraRefreshEncoder` 加入了
-  `VideoContract.h` 里的可选 concept；**目前没有任何后端声明支持其中之一**，所以能力集为空，
-  今天的行为没有改变。`LTR` 这个词在整棵树的其他地方都不出现——策略已经就绪，执行还没有。
+  `VideoContract.h` 里的可选 concept。两个 Windows 后端现在真的执行它们；另外四个仍然什么都不
+  声明，所以它们的能力集依旧为空、行为也不变——一条策略的好坏，只等于那个能把它执行出来的编码器。
 - **编解码器协商此前只是一次比特测试，而掩码本来就有 16 位宽**：`Hello` 带着 `codecMask`，
   `HelloAck` 带着 `Codec`，但主机从来只检查 `codecMask & kCodecMaskH264` 然后回答
   `Codec::H264`。掩码现在给 H264 4:2:0、H264 4:4:4、HEVC 和 AV1 各自命名，而
@@ -813,9 +813,8 @@ A/B（漂移只作为警告，绝不失败）、来自该 pull request 构建的
   `nvEncGetEncodeCaps`（在 RTX 5070 Ti 上 `max_ltr_frames=8`、`ref_pic_invalidation=1`、
   `intra_refresh=1`），Media Foundation 通过对三个 LTR 属性和 `GradualIntraRefresh` 的
   `IsSupported`，全部支持。这回答了 A4 一直在等的问题——两个 Windows 后端都能保持长期参考帧——但
-  这些能力只被**记进日志**，没有交给 `RecoveryPolicy`：目前还没有任何代码消费
-  `invalidateBeforeFrame` 或 `wantIntraRefresh`，在编码器能真正执行之前就声明能力，只会把丢包恢复
-  变成空操作。第一批数字，跑在空闲桌面上而不是固定片段上：NVENC 编码 p50 2.5-5.6 ms、p99
+  在编码器真能执行之前，这些能力只被**记进日志**、没有交给 `RecoveryPolicy`：当时还没有任何代码
+  消费 `invalidateBeforeFrame` 或 `wantIntraRefresh`，此时就声明能力，只会把丢包恢复变成空操作。第一批数字，跑在空闲桌面上而不是固定片段上：NVENC 编码 p50 2.5-5.6 ms、p99
   2.7-5.7 ms，Media Foundation p50 0.5-13.8 ms、p99 12.3-17.6 ms。这里两者触到的是同一块硅片——
   这台机器上 `mf` 落到的是 "NVIDIA H.264 Encoder MFT"——所以这还不是 C1 要问的 Intel 对 NVIDIA
   的问题；这是绕道 Media Foundation 去够同一块硬件所付出的代价。
@@ -869,3 +868,55 @@ A/B（漂移只作为警告，绝不失败）、来自该 pull request 构建的
   丢包的方向。`evt=sum` 现在携带 `wire_loss` / `absent` / `gone` / `nack_fix` / `reorder`，并且
   一条 `wire runs` 直方图就挨着原来的 `loss runs`。两者互不取代：旧的那行是观看者实际承受的，新
   的那行是链路做了什么；bake-off 需要后者，而用户的故障报告需要前者。
+- **先让编码器有能力执行，再让策略去点名该做什么**：`RecoveryPolicy` 从 A4 起就已经完整，也从
+  A4 起就一直闲置着——能力集是**故意**留空的。一个宣称支持长期参考帧、而编码器根本不保留任何一
+  帧的主机，遇到参考帧丢失时会去设 `invalidateBeforeFrame`，没有人读它，同时又不再请求它过去会
+  请求的那个 IDR——丢包恢复就从昂贵变成了不存在。所以先落地执行，`SetCaps` 放到最后。
+  `IVideoEncoder` 增加了 `MarkLongTermReference`、`InvalidateReference` 和 `BeginIntraRefresh`，
+  并用 `static_assert` 把它绑到 `ReferenceInvalidatingEncoder` 和 `IntraRefreshEncoder` 上——这
+  正是那两个可选 concept 被写出来要做的事。NVENC 走 LTR Per Picture（`enableLTR=1`、
+  `ltrTrustMode=0`），四个槽位的环形缓冲，`maxNumRefFrames` 相应抬高：用
+  `ltrMarkFrame`/`ltrMarkFrameIdx` 打标记，用 `ltrUseFrames`/`ltrUseFrameBitmap` 修补，用
+  `forceIntraRefreshWithFrameCnt` 刷新。`nvEncInvalidateRefFrames` 是**有意**不用的——位图才是确
+  定的那条路，因为它直接说明下一张图可以参考什么，而不是点名什么坏了、剩下的留给推断。在
+  `InitializeEncoder` 处拒绝 LTR 的驱动会被无 LTR 地重试一次，而不是让整场共享垮掉。Media
+  Foundation 在 init 时走 `AVEncVideoLTRBufferControl`，之后逐帧走
+  `MarkLTRFrame`/`UseLTRFrame`/`GradualIntraRefresh`，而 `RequestKeyFrame` 现在会忘掉那个环——
+  IDR 会清空 DPB，还留着记录就是在自欺。`deskhubp/host/EncoderRecovery.h` 是那道接缝：
+  `PrepareRecovery()` 消费 `invalidateBeforeFrame` 和 `wantIntraRefresh`，在编码器执行不了时**回
+  退到 IDR**，并且恰好标记策略之后会点名的那些帧——包括 IDR，漏掉这一步就会让 `core` 相信有一个
+  编码器并不持有的长期参考帧。它按两个 concept 包在 `if constexpr` 里，所以 Linux、Apple 和
+  Android 在各自的编码器长出这三个调用之前，行为与今天完全一样。Windows 在**每一次**创建编码器
+  之后都调用 `recovery.SetCaps(encoder->RecoveryCaps())`，因为 `SetCaps` 同时会重置策略——这正是
+  一个刚重建、并且已丢掉它持有过的每一个参考帧的编码器所需要的。前置处理放在 `EncodeTimed` 里，
+  于是帧路径和 flush 路径都会经过它，而不是各抄一份。
+- **没有人调用的类，是一场在等待第一个调用者的数据竞争**：`RecoveryPolicy` 被两个线程碰
+  ——`OnReferenceLost` 在主机的 net loop 上，`NoteEncoded` 和 `ShouldMarkLongTerm` 在
+  `encMutex` 之下的编码线程上——而它没有任何锁；只要还没有后端能执行恢复、这条路从没跑过，这就
+  一分钱都不花。把 Windows 打开，TSan 在第一次丢失时就报了出来。这个类现在持有自己的互斥量，并且
+  不再可拷贝；本来也没有谁拷贝过它。一个停在空能力集背后的组件，并不会因为一次测试全绿就被证明是
+  线程安全的，它只是没被碰过而已。
+- **跨平台优化的另一半，是那个从来没拿到它的平台**：P2 说发送路径会批量发送，而它确实会——在
+  Linux 上。`UdpSocketWin::SendBatch` 是一个 `sendto` 循环，每个数据报一次系统调用，于是 Windows
+  主机付的是完整的每包代价，而上面那条笔记描述的却是一个已经批量化的发送方。它现在调用
+  `WSASendMsg` 并带上 `UDP_SEND_MSG_SIZE` 控制消息——`UDP_SEGMENT` 的 Windows 对应物——在 `Open`
+  时通过 `WSAID_WSASENDMSG` 解析一次，被协议栈拒绝时就**永久**停用（而不是按每次突发重试），回退
+  到同一个每数据报一次 `sendto` 的循环。这是 P2 列出的那些事里便宜的一半，所以它排在 RIO 前面。
+  `LeadingRunOfEqualSegments` 从 `UdpSocketPosix.cpp` 挪进了 `deskhubp/net/UdpSocket.h`，让两个
+  操作系统共用同一条规则，而不是各留一份拷贝；"短的数据报只能是一个 run 的最后一段"这条规则，现在
+  由一个单元测试守住，而不再只靠一次 loopback 往返。上面那张 loopback 表是 Linux 的数字：
+  `platform_perf` 还没有在 Windows 上就这次改动跑过前后对比，所以那些数字搬不过来。
+- **`enc_lat_ms`从来就不是采集的数字，而那个采集时钟根本没有读者**：C2 问的是，比起 DXGI Desktop
+  Duplication，Windows Graphics Capture 在时延上要付出多少；而第一个发现是那个数字**根本不存在**，
+  而不是没有被打印出来。`ScreenCapture.cpp` 用 WGC 的 `SystemRelativeTime` 填了
+  `fi.meta.timestampUs`，却没有人读它：`SharingHost` 只从帧里取 `width` 和 `height`，然后把一个
+  崭新的 `NowUs()` 交给 `Encode`——所以 `enc_lat_ms` 量的是编码器，对采集→纹理这一段什么也没说。
+  两个时钟本来就对得上——`SystemRelativeTime` 是 100 ns 单位的 QPC，Windows 上的 `NowUs()` 也是
+  QPC——所以两者之差直接可用，不需要换算 epoch，这也是整个问题只值一次调用的原因。
+  `SourceDiag::NoteCapture` 接收帧的时间戳和它到达主机的时刻，把帧龄计入 `cap_us` 百分位，并把
+  被第二次交出来的帧计成 `cap_repeat`，而不是给它重新计时——重复帧的年龄是从最初那次采集算起的，
+  会把尾部撑大。它放在 `core/` 里，好让另外四个采集后端各用一行接上；在那之前它藏在
+  `ShareDiagCaps::captureLatency` 后面，于是它们不会打印一列空的。回答"WGC 的便利要付多少钱"只
+  需要这一列，别的都不需要；只有当这个数字难看时，才值得去写一个 Duplication 后端，而真要写，它
+  就得带一个 `--capture wgc|dxgi` 开关，点名的后端起不来就**停下**——这正是 `--encoder` 已经遵循
+  的规则，理由也一模一样。

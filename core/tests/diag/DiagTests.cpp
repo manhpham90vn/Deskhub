@@ -233,6 +233,57 @@ void TestSourceDiag() {
     }
 }
 
+void TestCaptureLatency() {
+    std::printf(
+        "[diag] capture latency: the age of a frame at hand-off, and the frames handed over "
+        "twice...\n");
+    char buf[SourceDiag::kSumBufBytes];
+
+    SourceDiag off;
+    off.NoteCapture(1'000, 5'000);
+    off.FormatSum(buf, sizeof(buf), "01:02:03", "Screen 1", 0, false);
+    Check(!Has(buf, "cap_us_p50"),
+        "cap_us: a client that has not wired the capture clock prints no column");
+
+    SourceDiag win(ShareDiagCaps{false, false, false, true});
+    win.FormatSum(buf, sizeof(buf), "01:02:03", "Screen 1", 0, false);
+    Check(Has(buf, "cap_us_p50=0 cap_us_p99=0 cap_repeat=0"),
+        "cap_us: the column is there before the first frame, reading zero");
+
+    win.NoteCapture(1'000'000, 1'002'000);
+    win.NoteCapture(1'016'000, 1'020'000);
+    win.FormatSum(buf, sizeof(buf), "01:02:04", "Screen 1", 0, false);
+    Check(Has(buf, "cap_us_p50=2048 cap_us_p99=4000"),
+        "cap_us: capture -> hand-off age, not encode time");
+    Check(Has(buf, "cap_repeat=0"), "cap_us: two distinct frames repeat nothing");
+
+    win.NoteCapture(2'000'000, 2'001'000);
+    win.NoteCapture(2'000'000, 2'009'000);
+    win.NoteCapture(2'000'000, 2'017'000);
+    win.FormatSum(buf, sizeof(buf), "01:02:05", "Screen 1", 0, false);
+    Check(Has(buf, "cap_repeat=2"),
+        "cap_us: a frame handed over again is counted, never re-timed");
+    Check(Has(buf, "cap_us_p50=1000 cap_us_p99=1000"),
+        "cap_us: the repeats stay out of the latency sample, which would read 9 ms and 17 ms");
+
+    win.FormatSum(buf, sizeof(buf), "01:02:06", "Screen 1", 0, false);
+    Check(Has(buf, "cap_us_p50=0 cap_us_p99=0 cap_repeat=0"),
+        "cap_us: read-and-clear, like every other window on the line");
+
+    SourceDiag odd(ShareDiagCaps{false, false, false, true});
+    odd.NoteCapture(0, 9'000);
+    odd.NoteCapture(9'000, 8'000);
+    odd.FormatSum(buf, sizeof(buf), "01:02:07", "Screen 1", 0, false);
+    Check(Has(buf, "cap_us_p50=0 cap_us_p99=0 cap_repeat=0"),
+        "cap_us: a missing timestamp and a frame from the future are both dropped, not clamped");
+
+    SourceDiag huge(ShareDiagCaps{false, false, false, true});
+    huge.NoteCapture(1, 0x1'0000'0000ull);
+    huge.FormatSum(buf, sizeof(buf), "01:02:08", "Screen 1", 0, false);
+    Check(Has(buf, "cap_us_p99=4294967295"),
+        "cap_us: an age past 32 bits saturates instead of wrapping");
+}
+
 void TestSourceIdr() {
     std::printf("[diag] host evt=idr: latched on the Encode thread, printed on the Recv loop...\n");
     SourceDiag s;
@@ -505,6 +556,7 @@ void RunDiagTests() {
     TestClientSum();
     TestClientStatus();
     TestSourceDiag();
+    TestCaptureLatency();
     TestSourceIdr();
     TestHostKeyframeRequestSplit();
     TestAgentStatus();

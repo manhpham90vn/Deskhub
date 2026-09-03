@@ -905,9 +905,8 @@ CodeQL、履歴全体への gitleaks、そして `core/` の行 90 % / 分岐 80
   だけだ。そして、まだ一枚も符号化されないうちに二度目の損失報告が届いたなら、安い答えが
   効かなかったということなので、堂々巡りせずキーフレームへ格上げする。
   `ReferenceInvalidatingEncoder` と `IntraRefreshEncoder` は `VideoContract.h` の任意
-  concept に加わった。**どのバックエンドもまだどちらも宣言していない**ので能力集合は空で、
-  今日の挙動は変わらない。`LTR` という語はツリーの他のどこにも現れない——方針は整い、実行は
-  まだだ。
+  concept に加わった。Windows の二つのバックエンドは今それらを実行する。残る四つは何も宣言しない
+  ので能力集合は空のままで挙動も変わらない——方針の良さは、それを実行できるエンコーダの分だけだ。
 - **コーデック交渉はビット 1 本の判定でしかなく、マスクは最初から 16 ビット幅だった**：
   `Hello` は `codecMask` を、`HelloAck` は `Codec` を運んでいたのに、ホストは
   `codecMask & kCodecMaskH264` しか見ず `Codec::H264` と答えていた。マスクは今
@@ -984,9 +983,10 @@ CodeQL、履歴全体への gitleaks、そして `core/` の行 90 % / 分岐 80
   `nvEncGetEncodeCaps` 経由（RTX 5070 Ti で `max_ltr_frames=8`、`ref_pic_invalidation=1`、
   `intra_refresh=1`）、Media Foundation は三つの LTR プロパティと `GradualIntraRefresh` への
   `IsSupported` 経由で、いずれも対応。これは A4 が待っていた答えになる——Windows の両バックエンド
-  とも長期参照フレームを保持できる——が、この能力は**ログに出すだけ**で `RecoveryPolicy` には渡して
-  いない：`invalidateBeforeFrame` も `wantIntraRefresh` もまだ誰も消費していないため、エンコーダが
-  実行できるようになる前に能力を宣言すれば、損失復旧が何もしない処理に変わってしまう。最初の数字は、
+  とも長期参照フレームを保持できる——が、エンコーダが実行できるようになるまで、この能力は
+  **ログに出すだけ**で `RecoveryPolicy` には渡さなかった：`invalidateBeforeFrame` も
+  `wantIntraRefresh` もまだ誰も消費していない段階で能力を宣言すれば、損失復旧が何もしない処理に
+  変わってしまう。最初の数字は、
   固定クリップではなくアイドルのデスクトップ上のもの：NVENC は p50 2.5-5.6 ms・p99 2.7-5.7 ms、
   Media Foundation は p50 0.5-13.8 ms・p99 12.3-17.6 ms。ここでは両者とも同じシリコンに届いている
   ——このマシンでは `mf` は "NVIDIA H.264 Encoder MFT" に解決される——ので、これはまだ C1 が問う
@@ -1055,3 +1055,65 @@ CodeQL、履歴全体への gitleaks、そして `core/` の行 90 % / 分岐 80
   `absent` / `gone` / `nack_fix` / `reorder` を運び、`wire runs` ヒストグラムが従来の `loss runs`
   の隣に並ぶ。どちらも他方の代わりにはならない：古い行は視聴者が被ったもの、新しい行はリンクが
   したこと。バイクオフには後者が要り、ユーザーの不具合報告には前者が要る。
+- **方針に行為を名指しさせる前に、エンコーダへ実行する力を渡す**：`RecoveryPolicy` は A4 の時点
+  で完成していて、A4 の時点からずっと動いていなかった。能力集合を空にしてあったのは意図的だ。
+  長期参照フレームを一枚も保持しないエンコーダを抱えたまま能力を宣言したホストは、参照フレームを
+  失ったときに `invalidateBeforeFrame` を立て、誰もそれを読まず、しかもかつて要求していた IDR も
+  もう要求しない——損失復旧が「高価」から「無い」に変わる。だから実行を先に入れ、`SetCaps` を最後
+  に置いた。`IVideoEncoder` には `MarkLongTermReference`・`InvalidateReference`・
+  `BeginIntraRefresh` が加わり、`static_assert` が `ReferenceInvalidatingEncoder` と
+  `IntraRefreshEncoder` に縛り付ける——あの二つの任意 concept が書かれた目的そのものだ。NVENC は
+  LTR Per Picture（`enableLTR=1`、`ltrTrustMode=0`）を四スロットのリングで回し、
+  `maxNumRefFrames` もそれに合わせて上げる：マークは `ltrMarkFrame`/`ltrMarkFrameIdx`、修復は
+  `ltrUseFrames`/`ltrUseFrameBitmap`、リフレッシュは `forceIntraRefreshWithFrameCnt`。
+  `nvEncInvalidateRefFrames` はあえて使わない——ビットマップこそ決定的な道で、何が壊れたかを名指し
+  して残りを推論に委ねるのではなく、次のピクチャが何を参照してよいかを直接述べるからだ。
+  `InitializeEncoder` で LTR を拒むドライバには LTR 抜きで一度だけ再試行し、共有そのものを落とす
+  ことはしない。Media Foundation は init で `AVEncVideoLTRBufferControl` を通し、以降はピクチャ
+  ごとに `MarkLTRFrame`/`UseLTRFrame`/`GradualIntraRefresh` を使う。そして `RequestKeyFrame` は
+  今やリングを忘れる——IDR は DPB を空にするので、記録を残したままにするのは自分を欺くことだ。
+  `deskhubp/host/EncoderRecovery.h` がその継ぎ目になる：`PrepareRecovery()` は
+  `invalidateBeforeFrame` と `wantIntraRefresh` を消費し、エンコーダが実行できないときは IDR に
+  落ち、方針が後から名指しするフレームをちょうど過不足なくマークする——IDR も含めてだ。ここを抜か
+  すと、エンコーダが持っていない長期参照を `core` が信じたままになる。二つの concept による
+  `if constexpr` で包んであるので、Linux・Apple・Android はそれぞれのエンコーダが三つの呼び出しを
+  備えるまで今日の挙動を保つ。Windows はエンコーダを作るたびに**毎回**
+  `recovery.SetCaps(encoder->RecoveryCaps())` を呼ぶ。`SetCaps` は方針の状態もリセットするから
+  だ——作り直されて保持していた参照をすべて失ったエンコーダに、まさに必要なことだ。前処理は
+  `EncodeTimed` の中にあるので、フレーム経路も flush 経路も両方そこを通り、二か所に写す必要がない。
+- **誰も呼んでいないクラスは、最初の呼び出し元を待っているデータ競合だ**：`RecoveryPolicy` は
+  二つのスレッドから触られる——`OnReferenceLost` はホストの net loop、`NoteEncoded` と
+  `ShouldMarkLongTerm` は `encMutex` の下のエンコードスレッド——のに、ロックを持っていなかった。
+  復旧を実行できるバックエンドが無く、この経路が一度も走らないあいだは、それで何のコストもない。
+  Windows で有効にした途端、TSan が最初の損失で報告した。このクラスは今は自前のミューテックスを
+  持ち、コピーもできない。もともと誰もコピーしていなかった。空の能力集合の後ろに停めてある部品は、
+  テストが緑だからスレッド安全だと示されたわけではなく、ただ触られていないだけだ。
+- **クロスプラットフォームな最適化の半分は、それを一度も受け取らなかったプラットフォームだ**：P2
+  は送信経路がバッチ化されると言い、実際そうなっていた——Linux では。`UdpSocketWin::SendBatch` は
+  `sendto` のループで、データグラム一つにつき一システムコール。つまり上の記述がバッチ化された送信
+  側を描いているあいだ、Windows ホストはパケットごとのコストを丸ごと払っていた。いまは
+  `UDP_SEND_MSG_SIZE` 制御メッセージ付きの `WSASendMsg` を呼ぶ——`UDP_SEGMENT` の Windows 版だ。
+  `Open` で `WSAID_WSASENDMSG` から一度だけ解決し、スタックに拒まれたらバーストごとにではなく
+  **恒久的に**取り下げて、データグラムごとに一回 `sendto` する同じ経路へ落ちる。P2 が挙げたものの
+  うち安いほうの半分であり、だからこそ RIO より先に来る。`LeadingRunOfEqualSegments` は
+  `UdpSocketPosix.cpp` から `deskhubp/net/UdpSocket.h` へ移り、二つの OS が写しを二つ持つのでは
+  なく一つの規則を共有するようになった。「短いデータグラムは run の最後のセグメントにしかなれない」
+  という規則も、loopback の往復だけでなく単体テストで固定されている。上の loopback の表は Linux の
+  数字だ：`platform_perf` はこの変更の前後を Windows で走らせていないので、あの数字は持ち込めない。
+- **`enc_lat_ms` はそもそもキャプチャの数字ではなく、キャプチャ時計には読み手がいなかった**：C2
+  が問うのは、DXGI Desktop Duplication に対して Windows Graphics Capture が遅延をどれだけ払うか
+  だが、最初に分かったのはその数字が印字されていないのではなく**存在していない**ことだった。
+  `ScreenCapture.cpp` は WGC の `SystemRelativeTime` から `fi.meta.timestampUs` を埋めていたのに、
+  誰もそれを読んでいない：`SharingHost` はフレームから `width` と `height` だけを取り、`Encode`
+  には真新しい `NowUs()` を渡す。だから `enc_lat_ms` はエンコーダを測っていて、キャプチャ→
+  テクスチャについては何も言っていない。二つの時計は初めから揃っている——`SystemRelativeTime` は
+  100 ns 単位の QPC で、Windows の `NowUs()` も QPC だ——ので差はそのまま使え、エポック変換も要ら
+  ない。この問い全体が呼び出し一つで済むのはそのためだ。`SourceDiag::NoteCapture` はフレームの
+  タイムスタンプとそれがホストに届いた時刻を受け取り、フレームの齢を `cap_us` のパーセンタイルに
+  入れ、二度目に手渡されたフレームは測り直さずに `cap_repeat` として数える。繰り返しの齢は最初の
+  キャプチャからの経過であり、裾を膨らませてしまうからだ。これは `core/` にあるので、残る四つの
+  キャプチャバックエンドは一行ずつで接続できる。それまでは `ShareDiagCaps::captureLatency` の陰に
+  隠れ、空の列を印字しない。「WGC の便利さの代価は」に答えるにはこの列だけで足り、他は要らない。
+  数字が悪かったときに初めて Duplication バックエンドを書く価値が出るし、書くなら
+  `--capture wgc|dxgi` を持ち、名指しされたバックエンドが起動しなければ**止まる**——`--encoder`
+  がすでに従っている規則と、同じ理由で同じ形だ。

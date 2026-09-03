@@ -525,13 +525,26 @@ mà là chọn cho đúng trên từng máy — đó chính là C1.
 
 # Việc cần làm, theo thứ tự
 
-## Tiếp tục từ đây (đặt lại ngày 03/09/2026, cuối buổi)
+## Tiếp tục từ đây (đặt lại ngày 03/09/2026, phiên tối — trên máy macOS)
 
-Cây nguồn đang sạch: `cmake --build --preset x64-debug` dựng hết kể cả `Deskhub.exe`,
-`core_tests` và `platform_tests` xanh, `codestyle -Check -Only cpp` OK, `clang-tidy` trên hai
-file `core/src` + `platform/src` đã đổi cũng sạch. Chưa commit.
+Phiên tối chạy trên macOS, nên **không có nhánh Windows nào được biên dịch ở đây**.
+`make test`, `make test-all`, `make lint` và `make lint-tidy` đều xanh. Chưa commit.
 
-**Hai việc đã xong hôm nay, cả hai đều mới chỉ đúng ở mức "biên dịch và test đơn vị":**
+**Đã xong ở phiên tối:**
+
+- **Tài liệu cho A4 và P2** — ba bullet mới ở `docs/ARCHITECTURE.md` §Decisions worth
+  remembering (hai cho A4, một cho P2/USO) cùng ba bản dịch, cộng hai câu cũ nay đã sai
+  (bullet A4 nói "chưa backend nào khai báo", bullet C1 nói "chưa có gì tiêu thụ
+  `invalidateBeforeFrame`") được sửa lại. Bullet thứ tư là của C2 ở dưới
+- **C2 — nửa `core/` của phép đo độ trễ capture**, đã biên dịch và test tại chỗ:
+  `SourceDiag::NoteCapture(frameTimestampUs, nowUs)` cộng `capUs` (percentile) và
+  `capRepeat` (đếm), in ra `cap_us_p50` / `cap_us_p99` / `cap_repeat` sau
+  `ShareDiagCaps::captureLatency`. Khung được trao lại lần nữa **chỉ được đếm, không đo lại**
+  — tuổi của nó tính từ lần capture gốc nên sẽ thổi phồng đuôi. 9 check mới trong
+  `core/tests/diag/DiagTests.cpp`. Phía Windows đã nối (`onFrame` gọi `NoteCapture`, caps bật
+  cờ thứ tư) nhưng **chưa qua compiler ở đây** — cùng loại rủi ro như A4/P2 hôm chiều
+
+**Hai việc xong buổi chiều, cả hai vẫn mới chỉ đúng ở mức "biên dịch và test đơn vị":**
 
 - **A4 — nhánh thực thi trên Windows** (chi tiết trong Phase 7 bên dưới)
 - **P2 — gộp gói phía gửi trên Windows bằng USO** (chi tiết trong Phase 6 bên dưới)
@@ -556,11 +569,12 @@ Nếu thấy `The encoder kept no reference older than frame N` thì nhánh LTR 
 
 Sau đó, theo thứ tự:
 
-1. **Đo P2 trên Windows**: `platform_perf` trước/sau, đối chiếu với bảng loopback Linux ở
+1. **Dựng lại trên Windows trước mọi thứ khác.** Ba thay đổi đang chờ compiler ở đó:
+   A4, P2/USO và nay cả nhánh `NoteCapture` trong `client/windows/cpp/SharingHost.cpp`.
+2. **Đo P2 trên Windows**: `platform_perf` trước/sau, đối chiếu với bảng loopback Linux ở
    Phase 6. Chưa có một con số Windows nào cả.
-2. **`docs/ARCHITECTURE.md` + ba bản dịch** cho cả A4 lẫn P2 — cả hai đều đổi hành vi, nên
-   theo `CLAUDE.md` đây là phần bắt buộc của "xong", không phải việc dọn dẹp thêm.
-3. **C2** — xem ghi chú chuẩn bị ở Phase 6.
+3. **Đọc `cap_us_p50` / `cap_us_p99` / `cap_repeat` thật** — đó chính là câu trả lời của C2
+   cho "WGC tốn bao nhiêu độ trễ". Chỉ khi số đó xấu mới đáng viết backend Duplication.
 4. **Phase 4 còn dư** — bảng tra `EncoderFactory`, và kịch bản clip cố định.
 5. **C3 4:4:4** — có một phát hiện chặn, xem Phase 7.
 
@@ -1416,7 +1430,9 @@ thẳng tới `pacer_`, nhưng coi là chưa kiểm chứng cho tới khi CI mac
   không chỉ bằng bài loopback.
 
   ⚠️ **Chưa đo trên Windows.** Bảng loopback ở dưới là số Linux. Chưa chạy `platform_perf`
-  trước/sau ở đây, nên đừng trích bảng đó cho Windows.
+  trước/sau ở đây, nên đừng trích bảng đó cho Windows. Tài liệu **đã xong** (03/09, phiên
+  tối): một bullet ở `docs/ARCHITECTURE.md` §Decisions worth remembering cùng ba bản dịch,
+  và nó nói thẳng rằng bảng loopback kia là số Linux.
 
   **Vẫn chưa làm: URO** (`UDP_RECV_MAX_COALESCED_SIZE`) — chặn bởi đúng cái giao kèo
   "một slot một datagram" đã chặn GRO. Hai cái là **một** thay đổi API, làm cùng nhau
@@ -1426,8 +1442,20 @@ thẳng tới `pacer_`, nhưng coi là chưa kiểm chứng cho tới khi CI mac
   phase spread ~6000 µs trên chu kỳ 6944 µs ở *mọi* mức lead — mua lead gấp tám lần không thu
   hẹp được một micro giây. Khớp vsync đưa spread về **0** và không tốn độ trễ nào
 - [ ] C2 — đo độ trễ capture của WGC, đối chiếu với DXGI Desktop Duplication
-  — **chưa bắt đầu; đã khảo sát chỗ móc vào (03/09/2026).** Ba điều đáng ghi trước khi ngồi
-  viết, vì cả ba đều tiết kiệm được một vòng dò:
+  — **bộ đếm đã viết xong, số đo thì chưa có (03/09/2026, phiên tối).**
+  `SourceDiag::NoteCapture(frameTimestampUs, nowUs)` nằm trong `core/`: nó cộng tuổi khung vào
+  percentile `capUs` và đếm khung được trao lại lần nữa vào `capRepeat`. Một khung lặp **chỉ
+  được đếm**, không đo lại — tuổi của nó tính từ lần capture gốc nên sẽ thổi phồng đuôi. Timestamp
+  bằng 0 và khung "đến từ tương lai" đều bị bỏ, không kẹp về 0; tuổi vượt 32 bit thì bão hoà.
+  `evt=sum` in `cap_us_p50` / `cap_us_p99` / `cap_repeat` sau `ShareDiagCaps::captureLatency`,
+  nên bốn client kia không in cột rỗng và nối vào bằng đúng một dòng mỗi cái khi tới lượt. 9 check
+  ở `core/tests/diag/DiagTests.cpp`. Phía Windows: `onFrame` gọi `NoteCapture` ngay sau
+  `captured.fetch_add`, và `SourcePipeline` bật cờ thứ tư trong caps — **chưa qua compiler**.
+  **Còn lại:** chạy trên Windows và đọc ba con số đó. Chỉ khi chúng xấu mới đáng viết backend
+  Duplication, và khi đó theo đúng khuôn `--encoder`: một cờ `--capture wgc|dxgi` gọi tên, gọi tên
+  cái không khởi động được thì **dừng**.
+
+  Ba điều đã khảo sát trước khi viết, giữ lại vì vẫn là lý do của thiết kế trên:
 
   - `client/windows/cpp/capture/ScreenCapture.cpp` **không có một bộ đếm độ trễ nào** — con
     số C2 cần chưa tồn tại, không phải chưa được in
@@ -1438,12 +1466,8 @@ thẳng tới `pacer_`, nhưng coi là chưa kiểm chứng cho tới khi CI mac
   - hai đồng hồ khớp nhau sẵn: `SystemRelativeTime` là QPC (đơn vị 100 ns) và `NowUs()` trên
     Windows cũng là QPC, nên hiệu hai số là dùng được ngay, không cần quy đổi epoch
 
-  Đường đi ngắn nhất: thêm `WindowPercentile capUs` + một `WindowCount` đếm frame trùng vào
-  `SourceDiag`, giấu sau một cờ mới trong `ShareDiagCaps` (để bốn client kia không in cột
-  rỗng), điền trong `onFrame`. Riêng bước đó đã trả lời được "trả bao nhiêu độ trễ cho sự
-  tiện lợi của WGC". Chỉ khi số đó xấu mới đáng viết backend Duplication, và khi đó nên theo
-  đúng khuôn `--encoder`: một cờ `--capture wgc|dxgi` gọi tên, gọi tên cái không khởi động
-  được thì **dừng**, không lặng lẽ đo cái còn lại
+  Đó cũng là lý do bước đầu tiên chỉ là ba bộ đếm chứ không phải một backend thứ hai: riêng
+  chúng đã trả lời được "trả bao nhiêu độ trễ cho sự tiện lợi của WGC"
 - [x] Tier B — thêm jitter vào backoff của `LinkRecovery`; nhớ đây là đổi chữ ký `ReconnectDelayUs` cộng mọi caller, không phải sửa tại chỗ
 
 #### Đã đo: gộp syscall UDP, và cái nó phơi ra (03/09/2026)
@@ -1557,8 +1581,10 @@ bài đo với Phase 0 — nó thuộc về danh sách "cần link thật", khô
     cả loại có lẫn loại không có ba hàm kia
 
   **Còn lại của A4:** bốn backend kia (VA-API, NVENC-Linux, VideoToolbox, MediaCodec) vẫn
-  chưa khai gì, nên vẫn xin IDR như cũ — đúng như thiết kế, không phải thiếu sót. Và
-  `docs/ARCHITECTURE.md` cùng ba bản dịch chưa được cập nhật cho thay đổi hành vi này
+  chưa khai gì, nên vẫn xin IDR như cũ — đúng như thiết kế, không phải thiếu sót. Tài liệu
+  **đã xong** (03/09, phiên tối): hai bullet mới ở `docs/ARCHITECTURE.md` §Decisions worth
+  remembering — một cho thứ tự "cho thi hành trước, khai caps sau", một cho cuộc đua mà
+  TSan bắt — cùng ba bản dịch, và câu "chưa backend nào khai báo" ở bullet A4 cũ đã sửa
 - [x] C3 — dựng bảng khả năng codec và cơ chế thương lượng khi kết nối
   — `kCodecMaskH264` / `H264High444` / `Hevc` / `Av1` trên wire, `NegotiateCodec(hostMask,
   clientMask)` chọn theo bảng ưu tiên tường minh và luôn tụt về H264 4:2:0 khi đó là thứ duy

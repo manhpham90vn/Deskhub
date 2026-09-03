@@ -969,9 +969,9 @@ line.
   is never usable, because the viewer may never have decoded it — only an older one is safe. And
   a second loss report arriving before any frame has been encoded means the cheap answer did not
   work, so it escalates to a keyframe rather than looping. `ReferenceInvalidatingEncoder` and
-  `IntraRefreshEncoder` join the optional concepts in `VideoContract.h`; no backend declares
-  either yet, so the capability set is empty and today's behaviour is unchanged. The word `LTR`
-  appears nowhere else in the tree — the policy is ready and the execution is not.
+  `IntraRefreshEncoder` join the optional concepts in `VideoContract.h`. The two Windows backends
+  execute them; the other four declare nothing, so their capability set stays empty and their
+  behaviour is unchanged — a policy is only ever as good as the encoder that can carry it out.
 - **Codec negotiation was a single bit test, and the mask was already 16 bits wide**: `Hello`
   carried a `codecMask` and `HelloAck` a `Codec`, but the host only ever checked
   `codecMask & kCodecMaskH264` and answered `Codec::H264`. The mask now names H264 4:2:0,
@@ -1049,10 +1049,10 @@ line.
   the driver instead of assumed: NVENC through `nvEncGetEncodeCaps` (`max_ltr_frames=8`,
   `ref_pic_invalidation=1`, `intra_refresh=1` on an RTX 5070 Ti), Media Foundation through
   `IsSupported` on the three LTR properties and `GradualIntraRefresh`, all supported. That answers
-  what A4 was waiting for — both Windows backends can hold long-term references — but the caps are
-  logged, not handed to `RecoveryPolicy`: nothing consumes `invalidateBeforeFrame` or
-  `wantIntraRefresh` yet, so declaring the capability before an encoder can act on it would turn
-  loss recovery into a no-op. First numbers, on an idle desktop rather than a fixed clip: NVENC
+  what A4 was waiting for — both Windows backends can hold long-term references — but the caps were
+  logged rather than handed to `RecoveryPolicy` until an encoder could act on them: declaring the
+  capability while nothing consumed `invalidateBeforeFrame` or `wantIntraRefresh` would have
+  turned loss recovery into a no-op. First numbers, on an idle desktop rather than a fixed clip: NVENC
   encodes at p50 2.5-5.6 ms and p99 2.7-5.7 ms, Media Foundation at p50 0.5-13.8 ms and p99
   12.3-17.6 ms. Both reach the same silicon here — `mf` resolves to "NVIDIA H.264 Encoder MFT" on
   this machine — so this is not yet the Intel-versus-NVIDIA question C1 asks; it is what going
@@ -1122,3 +1122,67 @@ line.
   the old `loss runs` one. Neither replaces the other: the old line is what the viewer suffered,
   the new line is what the link did, and a bake-off needs the second while a user report needs the
   first.
+- **Give the encoder the power to act before you let the policy name the act**: `RecoveryPolicy`
+  had been complete and inert since A4, its capability set empty on purpose. A host that declares
+  long-term references without an encoder that keeps any answers a lost reference by setting
+  `invalidateBeforeFrame`, having nobody read it, and never asking for the IDR it used to ask
+  for — loss recovery would go from expensive to absent. So the execution landed first and
+  `SetCaps` last. `IVideoEncoder` grew `MarkLongTermReference`, `InvalidateReference` and
+  `BeginIntraRefresh`, with `static_assert`s binding it to `ReferenceInvalidatingEncoder` and
+  `IntraRefreshEncoder` — the use those optional concepts were written for. NVENC runs LTR Per
+  Picture (`enableLTR=1`, `ltrTrustMode=0`) over a four-slot ring with `maxNumRefFrames` raised to
+  match: marks through `ltrMarkFrame`/`ltrMarkFrameIdx`, repairs through
+  `ltrUseFrames`/`ltrUseFrameBitmap`, refreshes through `forceIntraRefreshWithFrameCnt`.
+  `nvEncInvalidateRefFrames` is deliberately unused — the bitmap is the deterministic road,
+  because it states what the next picture may reference instead of naming what broke and leaving
+  the rest to inference. A driver that refuses LTR at `InitializeEncoder` gets one retry without
+  it rather than taking the whole share down. Media Foundation takes `AVEncVideoLTRBufferControl`
+  at init and then `MarkLTRFrame`/`UseLTRFrame`/`GradualIntraRefresh` per picture, and
+  `RequestKeyFrame` now forgets the ring, because an IDR clears the DPB and keeping the record
+  would be lying to ourselves. `deskhubp/host/EncoderRecovery.h` is the seam: `PrepareRecovery()`
+  consumes `invalidateBeforeFrame` and `wantIntraRefresh`, falls back to an IDR whenever the
+  encoder will not execute, and marks exactly the frames the policy will name later — the IDR
+  included, since skipping it leaves `core` believing in a long-term reference the encoder does
+  not hold. It is wrapped in `if constexpr` on the two concepts, so Linux, Apple and Android keep
+  today's behaviour until their encoders grow the three calls. Windows calls
+  `recovery.SetCaps(encoder->RecoveryCaps())` after *every* encoder creation, because `SetCaps`
+  resets the policy as well — exactly what a rebuilt encoder needs, having lost every reference it
+  held. The preamble lives in `EncodeTimed`, so the frame path and the flush path both go through
+  it instead of carrying a copy each.
+- **A class nothing calls is a data race waiting for its first caller**: `RecoveryPolicy` is
+  touched from two threads — `OnReferenceLost` on the host net loop, `NoteEncoded` and
+  `ShouldMarkLongTerm` on the encode thread under `encMutex` — and it carried no lock, which cost
+  nothing for as long as no backend could execute a recovery and the path never ran. Switching
+  Windows on made TSan report it on the first loss. The class now holds its own mutex and is no
+  longer copyable; nothing copied it. A component parked behind an empty capability set is not
+  shown to be thread-safe by a green test run, only left unexercised.
+- **Half of a cross-platform optimisation is the platform that never got it**: P2 said the send
+  path batches, and it did — on Linux. `UdpSocketWin::SendBatch` was a `sendto` loop, one syscall
+  per datagram, so the Windows host paid the full per-packet cost while the note above described a
+  batched sender. It now calls `WSASendMsg` with a `UDP_SEND_MSG_SIZE` control message, the
+  Windows counterpart of `UDP_SEGMENT`, resolved once through `WSAID_WSASENDMSG` at `Open` and
+  stood down for good — not per burst — when the stack refuses it, falling back to the same
+  one-`sendto`-per-datagram loop. It is the cheap half of what P2 listed, which is why it comes
+  before RIO. `LeadingRunOfEqualSegments` moved out of `UdpSocketPosix.cpp` and into
+  `deskhubp/net/UdpSocket.h` so the two operating systems share one rule rather than two copies of
+  it, and the rule that a short datagram may only be the last segment of a run is now held by a
+  unit test instead of only by a loopback round trip. The loopback table above is Linux:
+  `platform_perf` has not been run either side of this change on Windows, so those numbers do not
+  transfer.
+- **`enc_lat_ms` was never a capture number, and the capture clock had no reader**: C2 asks what
+  Windows Graphics Capture costs in latency against DXGI Desktop Duplication, and the first
+  finding was that the number did not exist rather than that it was not printed.
+  `ScreenCapture.cpp` filled `fi.meta.timestampUs` from WGC's `SystemRelativeTime` and nobody
+  read it: `SharingHost` took `width` and `height` off the frame and handed `Encode` a fresh
+  `NowUs()`, so `enc_lat_ms` measures the encoder and says nothing about capture→texture. The two
+  clocks already agree — `SystemRelativeTime` is QPC in 100 ns units and `NowUs()` on Windows is
+  QPC too — so the difference was usable without an epoch conversion, which is why the whole
+  question costs one call. `SourceDiag::NoteCapture` takes the frame's timestamp and the time it
+  reached the host, adds the age to a `cap_us` percentile and counts a frame handed over a second
+  time as `cap_repeat` instead of re-timing it, since a repeat's age is measured from the original
+  capture and would inflate the tail. It lives in `core/` so the other four capture backends can
+  wire it up with one line each, behind `ShareDiagCaps::captureLatency` so they print no empty
+  column until they do. Answering "what does WGC's convenience cost" needs that column and nothing
+  else; only a bad number justifies writing a Duplication backend, and if one is written it takes
+  a `--capture wgc|dxgi` flag that stops when the named backend will not start — the same rule
+  `--encoder` already follows, for the same reason.

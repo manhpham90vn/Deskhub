@@ -64,6 +64,18 @@ const char* SourceDiag::FormatKeyframeRequests(char* buf, size_t cap, const char
     return buf;
 }
 
+void SourceDiag::NoteCapture(uint64_t frameTimestampUs, uint64_t nowUs) {
+    if (!frameTimestampUs) return;
+    const uint64_t previous = lastCaptureUs_.exchange(frameTimestampUs, std::memory_order_relaxed);
+    if (frameTimestampUs == previous) {
+        capRepeat.Add();
+        return;
+    }
+    if (nowUs <= frameTimestampUs) return;
+    const uint64_t age = nowUs - frameTimestampUs;
+    capUs.Add(age > 0xFFFFFFFFull ? 0xFFFFFFFFu : uint32_t(age));
+}
+
 const char* SourceDiag::FormatIdr(char* buf, size_t cap, const char* name) {
     const uint64_t bytes = idrBytes_.exchange(0, std::memory_order_acquire);
     if (!bytes) return nullptr;
@@ -78,6 +90,8 @@ const char* SourceDiag::FormatSum(char* buf, size_t cap, const char* hms, const 
     const WindowStat::Snapshot e = encMs.TakeReset();
     const WindowPercentile::Snapshot u = encUs.TakeReset();
     const WindowStat::Snapshot l = encLatMs.TakeReset();
+    const WindowPercentile::Snapshot c = capUs.TakeReset();
+    const uint32_t repeats = capRepeat.TakeReset();
     const uint32_t idrN = idr.TakeReset();
     const uint32_t fail = sendFail.TakeReset();
     const uint32_t queued = queueDrop.TakeReset();
@@ -92,6 +106,8 @@ const char* SourceDiag::FormatSum(char* buf, size_t cap, const char* hms, const 
         e.max);
     Append(p, end, " enc_us_p50=%u enc_us_p99=%u", u.p50Us, u.p99Us);
     Append(p, end, " enc_lat_ms=%.1f/%u", l.avg, l.max);
+    if (caps_.captureLatency)
+        Append(p, end, " cap_us_p50=%u cap_us_p99=%u cap_repeat=%u", c.p50Us, c.p99Us, repeats);
     if (caps_.capIdle) Append(p, end, " cap_idle=%u", capIdle);
     Append(p, end, " idr=%u burst_ms_max=%u send_fail=%u", idrN, burst, fail);
     if (caps_.queueDrop) Append(p, end, " q_drop=%u", queued);

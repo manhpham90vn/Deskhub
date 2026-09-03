@@ -39,7 +39,8 @@ using WinSourceBase = deskhubp::HostSourceBase<ScreenCapture, InputInjector, IVi
 
 struct SourcePipeline : WinSourceBase {
     SourcePipeline(uint32_t startBps, uint32_t minBps)
-        : WinSourceBase(startBps, minBps, deskhub::diag::ShareDiagCaps{}) {}
+        : WinSourceBase(startBps, minBps,
+              deskhub::diag::ShareDiagCaps{false, false, false, true}) {}
 
     HMONITOR monitor = nullptr;
     GpuChoice gpu;
@@ -161,6 +162,7 @@ bool SharingHost::Start(const std::vector<ShareSource>& sources, const ShareOpti
 
         auto onFrame = [p, maxDim](const FrameInfo& fi) {
             p->captured.fetch_add(1, std::memory_order_relaxed);
+            p->diag.NoteCapture(fi.meta.timestampUs, NowUs());
             if (p->failed.load()) return;
 
             std::lock_guard<std::mutex> lk(p->encMutex);

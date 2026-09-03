@@ -943,9 +943,9 @@ pull request, và dòng coverage của `core/`.
   an toàn. Và một báo cáo mất lần thứ hai tới trước khi kịp mã hoá frame nào nghĩa là câu trả
   lời rẻ đã không ăn thua, nên nó leo thang lên keyframe thay vì lặp mãi.
   `ReferenceInvalidatingEncoder` và `IntraRefreshEncoder` gia nhập nhóm concept tuỳ chọn trong
-  `VideoContract.h`; **chưa backend nào khai báo cái nào**, nên tập khả năng rỗng và hành vi hôm
-  nay không đổi. Chữ `LTR` không xuất hiện ở bất kỳ đâu khác trong cây — chính sách đã sẵn sàng,
-  phần thực thi thì chưa.
+  `VideoContract.h`. Hai backend Windows nay thi hành chúng; bốn backend còn lại chưa khai gì, nên
+  tập khả năng của chúng vẫn rỗng và hành vi không đổi — một chính sách chỉ tốt đúng bằng cái
+  encoder thi hành được nó.
 - **Thương lượng codec vốn chỉ là một phép thử bit, trong khi mask đã rộng 16 bit sẵn**: `Hello`
   mang `codecMask` và `HelloAck` mang `Codec`, nhưng host chỉ từng kiểm
   `codecMask & kCodecMaskH264` rồi trả về `Codec::H264`. Mask nay gọi tên H264 4:2:0, H264
@@ -1022,10 +1022,10 @@ pull request, và dòng coverage của `core/`.
   driver** thay vì suy đoán: NVENC qua `nvEncGetEncodeCaps` (`max_ltr_frames=8`,
   `ref_pic_invalidation=1`, `intra_refresh=1` trên RTX 5070 Ti), Media Foundation qua
   `IsSupported` trên ba thuộc tính LTR và `GradualIntraRefresh`, tất cả đều có. Đó là câu trả lời
-  A4 đang chờ — cả hai backend Windows đều giữ được long-term reference — nhưng caps chỉ được
-  **ghi log**, chưa đưa vào `RecoveryPolicy`: chưa có gì tiêu thụ `invalidateBeforeFrame` hay
-  `wantIntraRefresh`, nên khai khả năng trước khi encoder làm được sẽ biến phục hồi mất gói thành
-  vô tác dụng. Số đo đầu tiên, trên desktop rảnh chứ chưa phải một clip cố định: NVENC mã hoá ở
+  A4 đang chờ — cả hai backend Windows đều giữ được long-term reference — nhưng caps khi đó chỉ được
+  **ghi log** chứ chưa đưa vào `RecoveryPolicy`, cho tới khi có encoder thi hành được: khai khả
+  năng trong lúc chưa ai tiêu thụ `invalidateBeforeFrame` hay `wantIntraRefresh` sẽ biến phục hồi
+  mất gói thành vô tác dụng. Số đo đầu tiên, trên desktop rảnh chứ chưa phải một clip cố định: NVENC mã hoá ở
   p50 2,5-5,6 ms và p99 2,7-5,7 ms, Media Foundation ở p50 0,5-13,8 ms và p99 12,3-17,6 ms. Ở đây
   cả hai cùng chạm một phần cứng — trên máy này `mf` rơi vào "NVIDIA H.264 Encoder MFT" — nên đây
   chưa phải câu hỏi Intel-so-với-NVIDIA mà C1 đặt ra; đây là cái giá của việc đi vòng qua Media
@@ -1089,3 +1089,63 @@ pull request, và dòng coverage của `core/`.
   cạnh dòng `loss runs` cũ. Không dòng nào thay dòng nào: dòng cũ là thứ người xem phải chịu, dòng
   mới là thứ đường truyền đã làm, và một cuộc bake-off cần dòng thứ hai trong khi một báo cáo lỗi
   của người dùng cần dòng thứ nhất.
+- **Cho encoder quyền thi hành trước, rồi mới để chính sách gọi tên hành động**: `RecoveryPolicy`
+  đã hoàn chỉnh và nằm im từ A4, tập khả năng để rỗng một cách cố ý. Một host khai có long-term
+  reference trong khi encoder chẳng giữ cái nào sẽ đáp lại một reference bị mất bằng cách đặt
+  `invalidateBeforeFrame`, không ai đọc, và không còn xin cái IDR mà trước đây nó vẫn xin — phục
+  hồi mất gói đi từ đắt sang không có. Nên phần thực thi vào trước, `SetCaps` vào sau cùng.
+  `IVideoEncoder` có thêm `MarkLongTermReference`, `InvalidateReference` và `BeginIntraRefresh`,
+  với `static_assert` buộc nó vào `ReferenceInvalidatingEncoder` và `IntraRefreshEncoder` — đúng
+  công dụng mà hai concept tuỳ chọn ấy được viết ra. NVENC chạy LTR Per Picture (`enableLTR=1`,
+  `ltrTrustMode=0`) trên một ring 4 slot với `maxNumRefFrames` nâng theo: mark bằng
+  `ltrMarkFrame`/`ltrMarkFrameIdx`, vá bằng `ltrUseFrames`/`ltrUseFrameBitmap`, refresh bằng
+  `forceIntraRefreshWithFrameCnt`. `nvEncInvalidateRefFrames` cố ý không dùng — bitmap là đường
+  tất định, vì nó nói thẳng khung kế tiếp được phép tham chiếu cái gì, thay vì gọi tên cái đã hỏng
+  rồi để phần còn lại cho suy đoán. Driver nào từ chối LTR ở `InitializeEncoder` thì được thử lại
+  đúng một lần không có LTR, thay vì làm hỏng cả buổi share. Media Foundation đi qua
+  `AVEncVideoLTRBufferControl` lúc init rồi `MarkLTRFrame`/`UseLTRFrame`/`GradualIntraRefresh`
+  theo từng khung, và `RequestKeyFrame` nay quên ring, vì IDR xoá sạch DPB nên giữ lại cái record
+  ấy là tự nói dối. `deskhubp/host/EncoderRecovery.h` là chỗ nối: `PrepareRecovery()` tiêu thụ
+  `invalidateBeforeFrame` và `wantIntraRefresh`, rơi về IDR mỗi khi encoder không thi hành được,
+  và mark đúng những khung mà chính sách sẽ gọi tên về sau — kể cả IDR, vì bỏ sót chỗ đó là để
+  `core` tin vào một long-term reference mà encoder không giữ. Nó được bọc trong `if constexpr`
+  theo hai concept, nên Linux, Apple và Android giữ nguyên hành vi hôm nay cho tới khi encoder của
+  họ có ba hàm kia. Windows gọi `recovery.SetCaps(encoder->RecoveryCaps())` sau **mỗi** lần tạo
+  encoder, vì `SetCaps` reset luôn chính sách — đúng thứ cần khi encoder vừa dựng lại và đã mất
+  mọi reference nó từng giữ. Preamble nằm trong `EncodeTimed`, nên cả đường frame lẫn đường flush
+  đều đi qua nó thay vì mỗi bên chép một bản.
+- **Một lớp không ai gọi là một cuộc đua đang chờ caller đầu tiên**: `RecoveryPolicy` bị chạm từ
+  hai luồng — `OnReferenceLost` trên net loop của host, `NoteEncoded` và `ShouldMarkLongTerm` trên
+  luồng encode dưới `encMutex` — mà không có khoá nào, và điều đó không tốn gì suốt thời gian chưa
+  backend nào thi hành được phục hồi và đường này chưa bao giờ chạy. Bật Windows lên là TSan báo
+  ngay ở lần mất đầu tiên. Lớp này nay giữ mutex của riêng nó và không còn copy được nữa; không
+  chỗ nào copy cả. Một thành phần đỗ sau một tập khả năng rỗng không được chứng minh là an toàn
+  luồng bởi một lần chạy test xanh, nó chỉ chưa được động tới.
+- **Một nửa của tối ưu đa nền tảng là cái nền tảng chưa bao giờ nhận được nó**: P2 nói đường gửi
+  có gộp lô, và đúng là có — trên Linux. `UdpSocketWin::SendBatch` là một vòng `sendto`, mỗi
+  datagram một syscall, nên host Windows trả trọn chi phí mỗi gói trong khi ghi chú ở trên mô tả
+  một bên gửi đã gộp. Nay nó gọi `WSASendMsg` với control message `UDP_SEND_MSG_SIZE`, đối ứng
+  Windows của `UDP_SEGMENT`, phân giải một lần qua `WSAID_WSASENDMSG` lúc `Open` và tắt vĩnh viễn
+  — không phải theo từng burst — khi stack từ chối, rơi về đúng vòng một `sendto` mỗi datagram. Đó
+  là nửa rẻ trong những gì P2 liệt kê, nên nó đi trước RIO. `LeadingRunOfEqualSegments` chuyển từ
+  `UdpSocketPosix.cpp` lên `deskhubp/net/UdpSocket.h` để hai hệ điều hành dùng chung đúng một luật
+  thay vì hai bản chép, và luật "gói ngắn chỉ được là segment cuối của một run" nay được giữ bằng
+  một test đơn vị chứ không chỉ bằng một vòng loopback. Bảng loopback ở trên là số Linux:
+  `platform_perf` chưa chạy trước/sau thay đổi này trên Windows, nên những con số đó không chuyển
+  sang được.
+- **`enc_lat_ms` chưa bao giờ là con số của capture, và cái đồng hồ capture thì không ai đọc**: C2
+  hỏi Windows Graphics Capture trả bao nhiêu độ trễ so với DXGI Desktop Duplication, và phát hiện
+  đầu tiên là con số đó **chưa tồn tại** chứ không phải chưa được in. `ScreenCapture.cpp` điền
+  `fi.meta.timestampUs` từ `SystemRelativeTime` của WGC và không ai đọc nó: `SharingHost` chỉ lấy
+  `width` với `height` từ khung rồi truyền cho `Encode` một `NowUs()` mới tinh, nên `enc_lat_ms` đo
+  encoder và không nói gì về chặng capture→texture. Hai đồng hồ vốn đã khớp — `SystemRelativeTime`
+  là QPC đơn vị 100 ns và `NowUs()` trên Windows cũng là QPC — nên hiệu hai số dùng được ngay,
+  không cần quy đổi epoch, và đó là lý do cả câu hỏi chỉ tốn đúng một lời gọi.
+  `SourceDiag::NoteCapture` nhận timestamp của khung cùng thời điểm nó tới host, cộng tuổi khung
+  vào percentile `cap_us`, và đếm một khung được trao lại lần nữa thành `cap_repeat` thay vì đo
+  lại nó — tuổi của một khung lặp tính từ lần capture gốc nên sẽ thổi phồng cái đuôi. Nó nằm trong
+  `core/` để bốn backend capture còn lại nối vào bằng đúng một dòng mỗi cái, giấu sau
+  `ShareDiagCaps::captureLatency` để tới lúc đó chúng không in một cột rỗng. Trả lời "sự tiện lợi
+  của WGC tốn bao nhiêu" chỉ cần đúng cột ấy; chỉ khi con số xấu mới đáng viết backend Duplication,
+  và nếu viết thì nó nhận cờ `--capture wgc|dxgi` và **dừng** khi backend được gọi tên không khởi
+  động được — đúng luật `--encoder` đang theo, vì đúng lý do đó.

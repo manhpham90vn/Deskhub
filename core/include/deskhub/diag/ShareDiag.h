@@ -32,6 +32,7 @@ struct ShareDiagCaps {
     bool capIdle = false;
     bool zerocopy = false;
     bool queueDrop = false;
+    bool captureLatency = false;
 };
 
 class SourceDiag {
@@ -46,10 +47,14 @@ public:
     WindowStat encMs;
     WindowPercentile encUs;
     WindowStat encLatMs;
+    WindowPercentile capUs;
+    WindowCount capRepeat;
     WindowCount idr;
     WindowCount sendFail;
     WindowCount queueDrop;
     WindowMax burstMs;
+
+    void NoteCapture(uint64_t frameTimestampUs, uint64_t nowUs);
 
     void LatchIdr(uint64_t bytes, uint32_t pkts, uint32_t burst);
 
@@ -81,6 +86,7 @@ public:
 
 private:
     ShareDiagCaps caps_;
+    std::atomic<uint64_t> lastCaptureUs_{0};
     std::atomic<uint64_t> idrBytes_{0};
     std::atomic<uint32_t> idrPkts_{0};
     std::atomic<uint32_t> idrBurstMs_{0};
