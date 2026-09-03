@@ -56,6 +56,14 @@ public:
         uint64_t lossRuns[7] = {};
         uint64_t lossRunMax = 0;
 
+        uint64_t packetsEverAbsent = 0;
+        uint64_t packetsNeverArrived = 0;
+        uint64_t packetsRepairedByFec = 0;
+        uint64_t packetsRepairedAfterNack = 0;
+        uint64_t packetsReordered = 0;
+        uint64_t absentRuns[7] = {};
+        uint64_t absentRunMax = 0;
+
         uint64_t latePackets = 0;
         uint64_t lateMsSum = 0;
         uint64_t lateMsMax = 0;
@@ -127,10 +135,14 @@ private:
     struct Pending {
         std::vector<std::vector<uint8_t>> pieces;
         std::map<uint16_t, std::vector<uint8_t>> parity;
+        std::vector<bool> absent;
+        std::vector<bool> repairedByFec;
+        std::vector<bool> nacked;
         uint16_t pktCount = 0;
         uint16_t received = 0;
         uint16_t fecGroups = 0;
         uint16_t maxIndexSeen = 0;
+        bool anyIndexSeen = false;
         uint64_t timestampUs = 0;
         bool idr = false;
         uint64_t firstSeenUs = 0;
@@ -144,6 +156,7 @@ private:
     using PendingMap = std::map<uint32_t, Pending>;
 
     void Drop(PendingMap::iterator it, DropReason reason, uint64_t nowUs);
+    void NoteWireLoss(const Pending& f);
     Pending* Slot(uint32_t id, uint16_t pktCount, uint64_t timestampUs, uint64_t nowUs);
     bool TryRecover(Pending& f, uint8_t group);
     void NoteLatePacket(uint32_t id, uint64_t nowUs);

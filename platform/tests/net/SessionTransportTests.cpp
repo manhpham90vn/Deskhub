@@ -2,6 +2,7 @@
 #include "support/TestSupport.h"
 
 #include "deskhub/protocol/Wire.h"
+#include "deskhub/media/ShareTypes.h"
 #include "deskhubp/net/SessionTransport.h"
 #include "deskhubp/system/AppDataFile.h"
 #include "deskhubp/system/Clock.h"
@@ -164,6 +165,12 @@ void TestVideoRidesEncryptedDatagrams() {
     const int legacy = PumpFor(host, viewer, buf, sizeof(buf), from);
     Check(legacy == int(videoSize) && std::equal(video, video + videoSize, buf),
         "the legacy path still works for A/B measurements");
+
+    Check(deskhubp::VideoPathName(host.videoPath()) == deskhub::media::kVideoPathRawUdp,
+        "the transport can say which leg it is on, so a measurement log cannot lie");
+    Check(deskhubp::VideoPathFromName(deskhubp::VideoPathName(deskhubp::VideoPath::QuicDatagram),
+              deskhubp::VideoPath::RawUdp) == deskhubp::VideoPath::QuicDatagram,
+        "and the name it gives back is the one that maps to it");
 
     host.Close();
     viewer.Close();

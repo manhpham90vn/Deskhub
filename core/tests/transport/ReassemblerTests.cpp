@@ -436,6 +436,206 @@ void TestLongLossRunBuckets() {
     Check(st.lossRunMax == 38, "and becomes the longest run ever");
 }
 
+void TestWireLossSeesHolesThatRepairsHide() {
+    std::printf("[reasm] a hole a later arrival fills still counts as absent on the wire...\n");
+    Packetizer pk;
+    pk.SetSessionId(42);
+    Reassembler ra(16'667);
+
+    uint64_t now = 1'000'000;
+    for (const auto& d : Packetize(pk, MakeIdrFrame(0, 2), now)) Feed(ra, d, now);
+    ra.PopReady(now);
+
+    const auto pkts = Packetize(pk, MakePFrame(1, 12), now);
+    for (size_t i = 0; i < pkts.size(); ++i)
+        if (i != 4 && i != 5) Feed(ra, pkts[i], now);
+    Feed(ra, pkts[4], now + 1'000);
+    Feed(ra, pkts[5], now + 1'000);
+
+    now += 2'000;
+    Check(ra.PopReady(now).has_value(), "the frame completes once the hole is filled");
+
+    const auto& st = ra.stats();
+    Check(st.packetsLost == 0, "nothing is lost by the old counter - the frame was never dropped");
+    Check(st.packetsEverAbsent == 2, "but two packets were absent when the wire was watched");
+    Check(st.packetsNeverArrived == 0, "both of them did arrive in the end");
+    Check(st.packetsReordered == 2, "and with no NACK sent for them, that is reordering");
+    Check(st.absentRuns[1] == 1 && st.absentRunMax == 2,
+        "the two sit next to each other, so the wire saw one run of 2");
+    uint64_t oldRuns = 0;
+    for (uint64_t bucket : st.lossRuns) oldRuns += bucket;
+    Check(oldRuns == 0, "the old run histogram stays empty, which is the whole point");
+}
+
+void TestWireLossFilesAFecRepairAsRepaired() {
+    std::printf("[reasm] a hole FEC patches is absent on the wire, and filed under fec...\n");
+    Packetizer pk;
+    pk.SetSessionId(42);
+    pk.SetFecEnabled(true);
+    Reassembler ra(16'667);
+
+    uint64_t now = 1'000'000;
+    for (const auto& d : Packetize(pk, MakeIdrFrame(0, 2), now)) Feed(ra, d, now);
+    ra.PopReady(now);
+
+    const auto pkts = Packetize(pk, MakePFrame(1, 16), now);
+    size_t dataSeen = 0;
+    for (const auto& d : pkts) {
+        if (!IsFec(d) && dataSeen++ == 2) continue;
+        Feed(ra, d, now);
+    }
+
+    Check(ra.PopReady(now).has_value(), "FEC rebuilds the missing packet and the frame completes");
+
+    const auto& st = ra.stats();
+    Check(st.packetsLost == 0, "the old counter sees nothing, because nothing was dropped");
+    Check(st.packetsEverAbsent == 1, "the wire counter sees the one hole FEC hid");
+    Check(st.packetsRepairedByFec == 1, "and files it under fec");
+    Check(st.packetsNeverArrived == 0 && st.packetsRepairedAfterNack == 0 &&
+              st.packetsReordered == 0,
+        "the other three bins stay empty");
+}
+
+void TestWireLossFilesANackRepairSeparately() {
+    std::printf("[reasm] a packet asked for by name is filed under nack, not reorder...\n");
+    Packetizer pk;
+    pk.SetSessionId(42);
+    Reassembler ra(16'667);
+    ra.SetNackEnabled(true);
+    ra.SetRttUs(5'000);
+
+    uint64_t now = 1'000'000;
+    for (const auto& d : Packetize(pk, MakeIdrFrame(0, 2), now)) Feed(ra, d, now);
+    ra.PopReady(now);
+
+    const auto pkts = Packetize(pk, MakePFrame(1, 12), now);
+    Datagram held;
+    for (size_t i = 0; i < pkts.size(); ++i) {
+        if (i == 9) {
+            held = pkts[i];
+            continue;
+        }
+        Feed(ra, pkts[i], now);
+    }
+
+    uint32_t frameId = 0;
+    uint16_t wanted[8] = {};
+    now += 3'000;
+    const size_t asked = ra.PlanNack(now, 5'000, frameId, std::span<uint16_t>(wanted, 8));
+    Check(asked == 1 && wanted[0] == 9, "the reassembler asks for exactly the held packet");
+
+    Feed(ra, held, now + 1'000);
+    Check(ra.PopReady(now + 1'000).has_value(), "the retransmit completes the frame");
+
+    const auto& st = ra.stats();
+    Check(st.packetsEverAbsent == 1, "one packet was absent on the wire");
+    Check(st.packetsRepairedAfterNack == 1, "and it is filed under nack, since we asked for it");
+    Check(st.packetsReordered == 0, "not under reordering, which would understate the loss");
+}
+
+void TestWireLossCountsTailHolesOnce() {
+    std::printf("[reasm] a lost tail is absent exactly once, not twice...\n");
+    Packetizer pk;
+    pk.SetSessionId(42);
+    Reassembler ra(16'667);
+
+    uint64_t now = 1'000'000;
+    for (const auto& d : Packetize(pk, MakeIdrFrame(0, 2), now)) Feed(ra, d, now);
+    ra.PopReady(now);
+
+    const auto pkts = Packetize(pk, MakePFrame(1, 10), now);
+    for (size_t i = 0; i < pkts.size(); ++i)
+        if (i < 7) Feed(ra, pkts[i], now);
+
+    now += 400'000;
+    Check(!ra.PopReady(now).has_value(), "the mutilated frame times out");
+
+    const auto& st = ra.stats();
+    Check(st.packetsEverAbsent == 3, "three tail packets never showed up");
+    Check(st.packetsNeverArrived == 3, "and all three are filed as gone");
+    Check(st.packetsRepairedByFec == 0 && st.packetsRepairedAfterNack == 0 &&
+              st.packetsReordered == 0,
+        "nothing repaired them");
+    Check(st.absentRuns[2] == 1 && st.absentRunMax == 3, "the three form one run of 3");
+}
+
+size_t RunBucket(size_t run) {
+    if (run <= 3) return run - 1;
+    if (run < 8) return 3;
+    if (run < 16) return 4;
+    if (run < 32) return 5;
+    return 6;
+}
+
+void TestWireLossRecoversTheLossThatWasInjected() {
+    std::printf("[reasm] the wire counter rebuilds a known Gilbert-Elliott process...\n");
+    Packetizer pk;
+    pk.SetSessionId(42);
+    Reassembler ra(16'667);
+
+    LossSource loss(LossKind::GilbertElliott, 0.05, 4.0, 0xC0FFEE);
+
+    size_t truthAbsent = 0;
+    uint64_t truthRuns[7] = {};
+    uint64_t now = 1'000'000;
+    constexpr size_t kFrames = 400;
+
+    for (uint32_t id = 0; id < kFrames; ++id) {
+        const bool idr = id == 0;
+        const TestFrame frame = idr ? MakeIdrFrame(id, 20) : MakePFrame(id, 20);
+        const auto pkts = Packetize(pk, frame, now);
+
+        std::vector<bool> dropped(pkts.size(), false);
+        size_t survivors = 0;
+        for (size_t i = 0; i < pkts.size(); ++i) {
+            dropped[i] = !idr && loss.Drop();
+            if (dropped[i]) continue;
+            Feed(ra, pkts[i], now);
+            ++survivors;
+        }
+
+        if (survivors > 0) {
+            size_t run = 0;
+            for (size_t i = 0; i <= dropped.size(); ++i) {
+                if (i < dropped.size() && dropped[i]) {
+                    ++truthAbsent;
+                    ++run;
+                    continue;
+                }
+                if (run) ++truthRuns[RunBucket(run)];
+                run = 0;
+            }
+        }
+
+        now += 16'667;
+        while (ra.PopReady(now)) {
+        }
+    }
+
+    now += 40 * 16'667;
+    while (ra.PopReady(now)) {
+    }
+
+    const auto& st = ra.stats();
+    Check(truthAbsent > 0, "the injected process really did drop packets, or this proves nothing");
+    Check(st.packetsEverAbsent == truthAbsent,
+        "every packet the link swallowed is one the wire counter saw, and no more");
+    bool runsMatch = true;
+    for (size_t i = 0; i < 7; ++i)
+        if (st.absentRuns[i] != truthRuns[i]) runsMatch = false;
+    if (!runsMatch) {
+        std::printf("      injected:");
+        for (uint64_t v : truthRuns) std::printf(" %llu", (unsigned long long)v);
+        std::printf("\n      measured:");
+        for (uint64_t v : st.absentRuns) std::printf(" %llu", (unsigned long long)v);
+        std::printf("\n");
+    }
+    Check(runsMatch, "and the burst histogram it reports is the one that was injected");
+    Check(st.packetsLost == truthAbsent,
+        "with nothing repairing anything the old counter agrees, which is the control: the two "
+        "only part company once FEC or a NACK puts a packet back");
+}
+
 void TestSlowIdrAssembly() {
     std::printf("[reasm] large IDR trickling in past 2 frame intervals still completes...\n");
     Packetizer pk;
@@ -530,6 +730,11 @@ void RunReassemblerTests() {
     TestPktCountMismatch();
     TestLossRunBucketsAndDropInfo();
     TestLongLossRunBuckets();
+    TestWireLossSeesHolesThatRepairsHide();
+    TestWireLossFilesAFecRepairAsRepaired();
+    TestWireLossFilesANackRepairSeparately();
+    TestWireLossCountsTailHolesOnce();
+    TestWireLossRecoversTheLossThatWasInjected();
     TestSlowIdrAssembly();
     TestIdrHeadNotOvertaken();
     TestTrickleHardCap();

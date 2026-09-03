@@ -41,59 +41,9 @@ constexpr double kSweepBurstPackets = 4.0;
 constexpr double kMeasuredLossRate = 0.001;
 constexpr double kMeasuredBurstPackets = 1.0;
 
-class Rng {
-public:
-    explicit Rng(uint64_t seed) : state_(seed ? seed : 0x9E3779B97F4A7C15ull) {}
-
-    uint64_t Next() {
-        state_ ^= state_ << 13;
-        state_ ^= state_ >> 7;
-        state_ ^= state_ << 17;
-        return state_;
-    }
-
-    double Unit() {
-        return double(Next() >> 11) * (1.0 / 9007199254740992.0);
-    }
-
-private:
-    uint64_t state_;
-};
-
-enum class LossKind { Uniform,
-    GilbertElliott };
-
 const char* KindName(LossKind kind) {
     return kind == LossKind::Uniform ? "uniform" : "gilbert-elliott";
 }
-
-class LossSource {
-public:
-    LossSource(LossKind kind, double lossRate, double meanBurstPackets, uint64_t seed)
-        : kind_(kind), rng_(seed), lossRate_(lossRate) {
-        if (meanBurstPackets < 1.0) meanBurstPackets = 1.0;
-        toGood_ = 1.0 / meanBurstPackets;
-        toBad_ = lossRate < 1.0 ? lossRate * toGood_ / (1.0 - lossRate) : 1.0;
-    }
-
-    bool Drop() {
-        if (kind_ == LossKind::Uniform) return rng_.Unit() < lossRate_;
-        if (bad_) {
-            if (rng_.Unit() < toGood_) bad_ = false;
-        } else if (rng_.Unit() < toBad_) {
-            bad_ = true;
-        }
-        return bad_;
-    }
-
-private:
-    LossKind kind_;
-    Rng rng_;
-    double lossRate_;
-    double toGood_ = 1.0;
-    double toBad_ = 0.0;
-    bool bad_ = false;
-};
 
 struct LinkOutcome {
     size_t framesSent = 0;

@@ -31,6 +31,9 @@ Reassembler::Pending* Reassembler::Slot(uint32_t id, uint16_t pktCount,
         Pending& f = it->second;
         f.pktCount = pktCount;
         f.pieces.resize(pktCount);
+        f.absent.assign(pktCount, false);
+        f.repairedByFec.assign(pktCount, false);
+        f.nacked.assign(pktCount, false);
         f.timestampUs = timestampUs;
         f.firstSeenUs = nowUs;
     }
@@ -57,9 +60,14 @@ void Reassembler::Push(const VideoPacketView& pkt, uint64_t nowUs) {
     if (!fp) return;
     Pending& f = *fp;
     if (pkt.hdr.pktIndex >= f.pktCount) return;
-    if (pkt.hdr.pktIndex > f.maxIndexSeen) f.maxIndexSeen = pkt.hdr.pktIndex;
+    const bool filledHole = f.anyIndexSeen && pkt.hdr.pktIndex < f.maxIndexSeen;
+    if (!f.anyIndexSeen || pkt.hdr.pktIndex > f.maxIndexSeen) {
+        f.maxIndexSeen = pkt.hdr.pktIndex;
+        f.anyIndexSeen = true;
+    }
     auto& slot = f.pieces[pkt.hdr.pktIndex];
     if (!slot.empty()) return;
+    if (filledHole) f.absent[pkt.hdr.pktIndex] = true;
     slot.assign(pkt.payload.begin(), pkt.payload.end());
     f.bytes += slot.size();
     f.idr = f.idr || pkt.idr;
@@ -123,6 +131,8 @@ bool Reassembler::TryRecover(Pending& f, uint8_t group) {
         f.bytes += piece.size();
         ++f.received;
         ++stats_.packetsRecovered;
+        f.absent[index] = true;
+        f.repairedByFec[index] = true;
         filled = true;
     }
     return filled;
@@ -146,6 +156,7 @@ std::optional<Reassembler::Frame> Reassembler::PopReady(uint64_t nowUs) {
             out.nal.reserve(f.bytes);
             for (const auto& p : f.pieces)
                 out.nal.insert(out.nal.end(), p.begin(), p.end());
+            NoteWireLoss(f);
             haveBarrier_ = true;
             barrierId_ = head->first;
             waitingForIdr_ = false;
@@ -188,13 +199,52 @@ size_t Reassembler::PlanNack(uint64_t nowUs, uint64_t rttUs, uint32_t& frameId,
         const uint16_t scanLimit = tailStalled ? f.pktCount : f.maxIndexSeen;
         size_t n = 0;
         for (uint16_t i = 0; i < scanLimit && n < out.size(); ++i)
-            if (f.pieces[i].empty()) out[n++] = i;
+            if (f.pieces[i].empty()) {
+                out[n++] = i;
+                f.nacked[i] = true;
+            }
         if (n == 0) return 0;
         f.lastNackUs = nowUs;
         frameId = id;
         return n;
     }
     return 0;
+}
+
+void Reassembler::NoteWireLoss(const Pending& f) {
+    size_t run = 0;
+    for (size_t i = 0; i <= f.pktCount; ++i) {
+        const bool arrived = i < f.pktCount && !f.pieces[i].empty();
+        const bool gone = i < f.pktCount && (f.absent[i] || !arrived);
+        if (gone) {
+            ++stats_.packetsEverAbsent;
+            if (!arrived)
+                ++stats_.packetsNeverArrived;
+            else if (f.repairedByFec[i])
+                ++stats_.packetsRepairedByFec;
+            else if (f.nacked[i])
+                ++stats_.packetsRepairedAfterNack;
+            else
+                ++stats_.packetsReordered;
+            ++run;
+            continue;
+        }
+        if (run == 0) continue;
+        size_t bucket = 0;
+        if (run <= 3)
+            bucket = run - 1;
+        else if (run < 8)
+            bucket = 3;
+        else if (run < 16)
+            bucket = 4;
+        else if (run < 32)
+            bucket = 5;
+        else
+            bucket = 6;
+        ++stats_.absentRuns[bucket];
+        if (run > stats_.absentRunMax) stats_.absentRunMax = run;
+        run = 0;
+    }
 }
 
 bool Reassembler::TakeLossEvent() {
@@ -216,6 +266,7 @@ void Reassembler::Drop(PendingMap::iterator it, DropReason reason, uint64_t nowU
     info.bytesGot = uint32_t(f.bytes);
 
     if (loss) {
+        NoteWireLoss(f);
         ++stats_.framesDropped;
         stats_.packetsLost += uint64_t(it->second.pktCount - it->second.received);
 

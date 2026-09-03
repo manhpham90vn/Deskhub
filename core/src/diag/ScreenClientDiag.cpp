@@ -29,6 +29,9 @@ const char* ScreenClientDiag::FormatSum(char* buf, size_t cap, const char* hms, 
     if (caps_.dispDrop) Append(p, end, " disp_drop=%u", disp);
 
     Append(p, end, " fec_rx=%" PRIu64 " fec_fix=%" PRIu64, w.fecReceived, w.packetsRecovered);
+    Append(p, end, " wire_loss=%.3f%% absent=%" PRIu64 " gone=%" PRIu64 " nack_fix=%" PRIu64 " reorder=%" PRIu64,
+        w.wireLossPct, w.packetsEverAbsent, w.packetsNeverArrived, w.packetsRepairedAfterNack,
+        w.packetsReordered);
     Append(p, end, " late=%" PRIu64 " late_ms_avg=%.0f late_ms_max=%" PRIu64, w.latePackets,
         w.lateMsAvg, w.lateMsMax);
     Append(p, end, " gap_ms_max=%u loop_busy_ms_max=%u", gapMsMax, busy);

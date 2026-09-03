@@ -184,6 +184,17 @@ void ScreenClient::Report(uint64_t nowUs) {
         Log(line_);
     }
 
+    if (cfg_.logLossRuns && w.absentRunTotal) {
+        std::snprintf(line_, sizeof(line_),
+            "[Client]   wire runs: 1x%llu 2x%llu 3x%llu 4-7x%llu 8-15x%llu 16-31x%llu "
+            "32+x%llu  | longest ever %llu pkts",
+            (unsigned long long)w.absentRuns[0], (unsigned long long)w.absentRuns[1],
+            (unsigned long long)w.absentRuns[2], (unsigned long long)w.absentRuns[3],
+            (unsigned long long)w.absentRuns[4], (unsigned long long)w.absentRuns[5],
+            (unsigned long long)w.absentRuns[6], (unsigned long long)w.absentRunMax);
+        Log(line_);
+    }
+
     char compact[diag::ScreenClientDiag::kCompactBufBytes];
     diag::ScreenClientDiag::FormatCompact(compact, sizeof(compact), w, session_.lastRttUs(), e2e,
         cfg_.statusSeparator ? cfg_.statusSeparator : "  ");

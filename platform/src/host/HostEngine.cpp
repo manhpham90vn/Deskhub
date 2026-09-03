@@ -120,12 +120,15 @@ void HostEngine::AttachSession(HostSource& st) {
     }
 
     if (opt_.fecGroups || opt_.fecParityPerGroup || opt_.fecArmAlways || opt_.fecArmNever ||
-        !opt_.fecScheme.empty() || !opt_.congestionControl.empty())
-        LOGI("[Host][%s] measurement: cc=%.*s fec=%.*s parity=%zu depth=%zu arm=%s",
+        !opt_.fecScheme.empty() || !opt_.congestionControl.empty() || !opt_.videoPath.empty()) {
+        const std::string_view path = VideoPathName(sock_.videoPath());
+        LOGI("[Host][%s] measurement: cc=%.*s fec=%.*s parity=%zu depth=%zu arm=%s video=%.*s",
             st.name.c_str(), int(st.rate->Name().size()), st.rate->Name().data(),
             int(st.packetizer.fecScheme().size()), st.packetizer.fecScheme().data(),
             st.packetizer.fecParityPerGroup(), st.packetizer.fecGroups(),
-            opt_.fecArmAlways ? "always" : (opt_.fecArmNever ? "never" : "policy"));
+            opt_.fecArmAlways ? "always" : (opt_.fecArmNever ? "never" : "policy"),
+            int(path.size()), path.data());
+    }
 
     if (policy_.source.attachInput) policy_.source.attachInput(st);
 

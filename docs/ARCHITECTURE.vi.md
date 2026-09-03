@@ -1066,3 +1066,26 @@ pull request, và dòng coverage của `core/`.
   chạm buffer nếu không stream nào đọc được. `quic/poll-idle` đi từ 3,00 lần cấp phát mỗi poll về
   0,00. Hình hài chung đáng giữ: một đường chạy theo từng gói mà có ngủ thì nó giấu chính chi phí
   của mình, và cái ngân sách cấp phát đạt chuẩn bao năm nay thật ra đang đo giấc ngủ.
+- **Bộ đếm loss đang đo phần sống sót sau khi vá, không đo cái mà đường truyền thật sự làm**:
+  `packetsLost` và histogram `lossRuns` đều được cộng bên trong `Drop()`, nên chúng chỉ từng đếm
+  những gói vắng mặt trên các frame **đã bị vứt đi**. Một gói được FEC dựng lại, hay một gói NACK
+  lấy về, không để lại dấu vết ở đâu cả. Một phiên năm phút có tải qua Tailscale, trung vị 5,7 Mbps,
+  đo thẳng được vùng mù đó: **48 gói từng vắng mặt**, trong đó 41 gói không bao giờ tới và **7 gói
+  được NACK lấy về kịp** cho frame hoàn thành. Đúng 7 gói đó — cộng một run dài 2 gói không bao giờ
+  vào histogram — là thứ bộ đếm cũ không thể thấy, vì nó chỉ nhìn vào những frame đã bị vứt đi. Mọi
+  tham số Gilbert-Elliott rút từ nó vì thế là tham số của loss **không cứu được**, và càng lệch khi
+  FEC với NACK càng chạy tốt. (Bộ đếm `latePackets` là chuyện khác và không phải bằng chứng ở đây:
+  nó đếm những lần vá tới **sau** khi frame đã bị bỏ, mà phần mất đó đã được tính lúc drop.) Bản sửa không đi quét tìm gap;
+  nó đánh dấu một chỗ trống ở đúng ba thời điểm chỗ trống thật sự lộ ra — một gói lấp vào chỉ số
+  thấp hơn chỉ số cao nhất đã thấy, `TryRecover` dựng lại một mảnh, và một frame rời hàng đợi mà
+  mảnh vẫn trống (đây là lối duy nhất để nhận ra một cái đuôi bị mất, vì không có chỉ số nào cao
+  hơn tới để phơi nó ra). Mỗi gói từng vắng mặt sau đó rơi vào đúng một trong bốn thùng: không bao
+  giờ tới, FEC vá, vá sau khi hỏi bằng NACK, hoặc chỉ đơn thuần bị đảo thứ tự. Tách cái thùng cuối
+  ra là việc bắt buộc chứ không phải trang trí — đảo thứ tự không phải mất gói, gộp vào sẽ thổi
+  phồng mô hình burst — nên `wire_loss%` bằng `(everAbsent − reordered) / (received + neverArrived)`.
+  Thiên lệch đã biết: `nacked[i]` được đặt ngay khi `PlanNack` chọn chỉ số đó, nên một gói vừa bị
+  hỏi vừa chỉ tới muộn sẽ bị xếp là vá bằng NACK — tức nghiêng về phía coi là loss. `evt=sum` nay
+  chở `wire_loss` / `absent` / `gone` / `nack_fix` / `reorder`, và một histogram `wire runs` đứng
+  cạnh dòng `loss runs` cũ. Không dòng nào thay dòng nào: dòng cũ là thứ người xem phải chịu, dòng
+  mới là thứ đường truyền đã làm, và một cuộc bake-off cần dòng thứ hai trong khi một báo cáo lỗi
+  của người dùng cần dòng thứ nhất.

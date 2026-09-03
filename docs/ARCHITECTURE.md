@@ -1097,3 +1097,28 @@ line.
   went from 3.00 allocations per poll to 0.00. The general shape is worth keeping: a per-packet
   path that sleeps hides its own cost, and the allocation budget that passed for years was
   measuring the sleep.
+- **The loss counter measured what survived repair, not what the wire did**: `packetsLost` and the
+  `lossRuns` histogram are both tallied inside `Drop()`, so they only ever counted packets missing
+  from frames that were *thrown away*. A packet FEC rebuilt, or one a NACK fetched back, left no
+  trace anywhere. A loaded five-minute session over Tailscale, 5.7 Mbps median,
+  measured the blind spot directly: 48 packets went absent, 41 of them never arrived, and 7 were
+  fetched back by a NACK in time for the frame to complete. Those 7 — and one two-packet run that
+  never reached the histogram — are exactly what the old counter cannot see, because it only ever
+  looks at frames that were thrown away. Every Gilbert-Elliott parameter drawn from it would
+  therefore have been a parameter of *unrepairable* loss, biased further the better FEC and NACK
+  worked. (The `latePackets` counter is a different thing and not evidence here: it counts repairs
+  that arrived *after* their frame was already dropped, and those losses were counted at drop
+  time.) The fix does not
+  scan for gaps; it marks a hole at the three moments a hole is actually visible — a packet filling
+  an index below the highest one seen, `TryRecover` rebuilding a piece, and a frame leaving the
+  queue with a piece still empty (which is the only way a lost tail is ever noticed, since no later
+  index arrives to reveal it). Each absent packet then lands in exactly one of four bins: never
+  arrived, repaired by FEC, repaired after a NACK, or merely reordered. Splitting that last bin out
+  is load-bearing rather than decorative — reordering is not loss, and folding it in would inflate
+  the burst model — so `wire_loss%` is `(everAbsent − reordered) / (received + neverArrived)`. The
+  known bias: `nacked[i]` is set when `PlanNack` picks the index, so a packet both asked for and
+  merely late is filed as a NACK repair, which errs toward calling it loss. `evt=sum` carries
+  `wire_loss` / `absent` / `gone` / `nack_fix` / `reorder`, and a `wire runs` histogram sits beside
+  the old `loss runs` one. Neither replaces the other: the old line is what the viewer suffered,
+  the new line is what the link did, and a bake-off needs the second while a user report needs the
+  first.

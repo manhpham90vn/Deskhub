@@ -532,12 +532,36 @@ mà là chọn cho đúng trên từng máy — đó chính là C1.
 - [x] Cắt gói parity xuống theo gói dữ liệu lớn nhất trong group **(A1)** — không sửa thì mọi phép đo sau đều tính trên overhead sai
 - [x] Đếm datagram bị `SendDatagram` từ chối, phơi ra dòng diag cạnh `e2e_ms` **(P1, chẩn đoán)** — `QuicSendStats` đã có sẵn chỗ
 - [ ] Bắt loss và jitter thật trên ba link: WiFi nhà, WiFi quán, Tailscale qua WAN
-  — **2/3 xong**: LAN có dây + WiFi nhà (01/09), Tailscale qua WAN (03/09, xem dưới). Còn WiFi quán
-- [ ] Đối chiếu: bao nhiêu phần "loss" là của mạng, bao nhiêu là tự mình bỏ ở hàng đợi
-  — vẫn treo trên link WAN: host là máy Mac chạy build cũ, không có `dgram_refused`
+  — **2/3 xong**: WiFi nhà (01/09) và Tailscale qua WAN (03/09, hai phiên). **Còn link chật.**
+  Kế hoạch: đo trên **WiFi công ty** thay cho WiFi quán — cùng loại chế độ (nhiều máy, nhiễu, AP
+  chia sẻ) mà chủ động về thời gian hơn. Bố trí **bắt buộc: iPhone làm host, Ubuntu làm viewer** —
+  `wire_loss` nằm trong `Reassembler`, tức phía nhận, nên video phải đi qua chỗ chật *rồi mới* tới
+  máy có dụng cụ đo; đảo vai là mất trắng phép đo. Không cần build lại iPhone: bản cũ vẫn nói
+  chuyện được vì không có thay đổi nào trên dây, chỉ mất `dgram_refused` phía host — mà đó là câu
+  hỏi P1, đã trả lời trên các link khác
+- [x] Đối chiếu: bao nhiêu phần "loss" là của mạng, bao nhiêu là tự mình bỏ ở hàng đợi
+  — **xong trên mọi link đã đo**: LAN + WiFi nhà (01/09) và Tailscale WAN (03/09, host đã
+  instrument ở cổng 47778). `dgram_refused = 0` ở mọi cửa sổ, tới 12,7 Mbps. **Phải làm lại trên
+  WiFi công ty** — chưa link nào bị đẩy tới bão hoà, nên đó mới là link có cơ hội cho kết quả khác 0,
+  và cũng là link duy nhất còn có thể lật kết luận này
 - [ ] Rút ra tham số Gilbert-Elliott từ phần loss thật: tỉ lệ mất, độ dài burst trung bình, phân bố
-  — **chặn bởi một bộ đếm còn thiếu**, xem "Bộ đếm chặn mục Gilbert-Elliott" dưới đây
+  — **dụng cụ đã xong và đã đối chứng với đáp án biết trước (03/09)**: bơm một quá trình
+  Gilbert-Elliott có seed (5% loss, burst trung bình 4) qua 400 frame, bộ đếm dựng lại **đúng từng
+  gói** (`packetsEverAbsent` khớp chính xác số gói đã bơm) và **đúng từng thùng** của histogram
+  burst. Đây là điều kiện cần: một dụng cụ không dựng lại nổi tham số đã biết trong sim thì không
+  dựng lại nổi tham số thật ngoài đời. Xem "Bộ đếm gói từng vắng mặt" dưới đây. Còn chặn bởi
+  **số mẫu**:
+  hai phiên trên cùng một link cho hai bức tranh trái ngược, nên phải đo nhiều phiên rải theo giờ
+  rồi mới chốt tham số
 - [x] Chốt hàm mục tiêu và ngưỡng đạt **trước khi** nhìn thấy bất kỳ con số nào — xem bảng dưới
+
+**Quyết định: bỏ LAN có dây khỏi kế hoạch (03/09).** Không phải bỏ sót. LAN không nằm trong ba link
+mà mục này liệt kê; nó có trong bảng 01/09 chỉ vì đo cùng lúc cho tiện. Bảng đó cho 0/93 cửa sổ mất
+gói và RTT phẳng 14,8–15,1 ms — một link không có chế độ mất gói thì mọi sơ đồ FEC đều hoà, tức là
+một phép đo không phân biệt được gì cho A1. Thứ duy nhất LAN còn cho được là kiểm tra bộ đếm mới có
+báo nhầm ở bitrate cao không; phần đó coi như đã có từ phiên WAN tối 03/09 (`reordered = 0` trên 308
+cửa sổ ở 5,7 Mbps, `absent = 0` trên 99 cửa sổ lúc màn hình tĩnh). Nếu sau này muốn chắc thêm thì
+một phiên LAN 2 phút là đủ.
 
 #### Hàm mục tiêu và ngưỡng đạt
 
@@ -617,22 +641,138 @@ Frame bị bỏ, theo lý do: `timeout` 16 frame (264 gói vắng), `overtaken` 
   luận P1 ngày 01/09 chỉ đúng trong biên LAN + WiFi nhà, và biên đó vẫn chưa được nới.
 - **Phân bố burst ở trên là chặn dưới, không phải loss trên dây.** Xem mục kế tiếp.
 
-##### Bộ đếm chặn mục Gilbert-Elliott
+##### Phiên thứ hai, host đã instrument (03/09/2026): P1 có câu trả lời cho WAN
 
-`stats_.packetsLost` chỉ cộng bên trong `Drop()` (`core/src/transport/Reassembler.cpp:220`), và
-`lossRuns[]` cũng vậy (`:246`). Nghĩa là cả hai chỉ đếm gói mất trên những frame **đã bị bỏ**. Gói
-mất mà FEC vá (`packetsRecovered`, `:125`) hoặc NACK vá kịp thì không xuất hiện ở đâu.
+Phiên đầu chạm cổng 47777 của bản build cũ nên không có bộ đếm phía host. Dựng thêm một host
+`deskhub-cli share --port 47778 --bind <tailscale-ip> --encoder videotoolbox --no-input` từ chính
+nhánh này trên Mac, giữ nguyên host cũ ở 47777. Kiểm chứng host đúng là bản mới **từ xa**, không
+cần nhìn log bên kia: `e2e_abs_ms` xuất hiện trên dòng `evt=sum` của viewer, mà con số đó chỉ tính
+được khi host gửi kèm `hostTimeUs` trong `PingPong` — code chỉ có trên nhánh này.
 
-Phiên này cho thấy chỗ đó không phải lý thuyết: **810 gói "late"** đã tới muộn trong 5 phút — tức
-đã từng vắng mặt rồi được vá — và không gói nào trong số đó vào `lossPct` hay `lossRuns`. Vậy:
+308 cửa sổ, tách theo bitrate (không theo thời gian, nên vài cửa sổ IDR đầu phiên rơi vào nhóm có
+tải):
 
-- `lossPct` hôm nay = **loss không cứu được**, không phải loss trên dây
-- bảng phân bố burst ở trên = **phân bố của những burst mà cả FEC lẫn NACK đều không cứu nổi**
+| | màn hình tĩnh (151) | có tải, video toàn màn hình (157) |
+| --- | --- | --- |
+| bitrate | p50 123 kbps | p50 6470 · p90 8896 · **max 12 489 kbps** |
+| fps | p50 49 | p50 49 · min 35 |
+| RTT | p50 6,6 · max 29,9 ms | p50 7,0 · p90 9,4 · max 53,0 ms |
+| e2e | p50 11,2 · max 41,9 ms | p50 12,7 · p90 28,5 · max 47,4 ms |
+| cửa sổ có loss | 0/151 | 5/157, cao nhất 1,5% |
+| frame bị bỏ | 0 | 10 |
 
-Cả hai đều là chặn dưới, và càng lệch khi FEC/NACK càng hiệu quả. Muốn có tham số Gilbert-Elliott
-thật phải thêm một bộ đếm "gói từng vắng mặt" cộng phân bố run tính **tại lúc phát hiện gap**, chứ
-không tại lúc drop; và một bộ đếm riêng cho gói vá bằng NACK (hiện chỉ có `packetsRecovered` cho
-FEC). Chưa làm.
+**Phía host, 521 cửa sổ: `dgram_refused = 0` ở tất cả**, `dgram_tx` đỉnh 1328 gói/giây. Nhân với
+MTU thì 1328 × ~1200 byte ≈ 12,7 Mbps, khớp với `max 12 489 kbps` mà viewer báo — nên bộ đếm này
+đúng là đang đo đường video, không phải đo một kênh phụ.
+
+**Kết luận cho P1, và biên của nó.** Trên WAN thật, một viewer, tới 12,7 Mbps, CC của quiche không
+từ chối một datagram nào. Cộng với phép đo LAN + WiFi nhà ngày 01/09, ràng buộc *"phải làm P1
+trước A1 và A2"* được gỡ cho cả ba link đã đo. Nhưng **chưa link nào bị đẩy tới bão hoà**: trần
+thương lượng là 20 Mbps còn thực tế chỉ chạm 12,7, và đường cáp này rõ ràng còn thừa băng thông ở
+mức đó. Câu hỏi "hàng đợi datagram có tự bỏ gói khi link thật sự chật không" vẫn chưa được hỏi —
+nó cần một link bị bó (WiFi quán), không cần thêm bộ đếm nào.
+
+##### Phát hiện về chính phương pháp: một mẫu 5 phút không đặc trưng hoá được link
+
+Hai phiên trên **cùng một đường Tailscale, cách nhau hai tiếng**, cho hai bức tranh trái ngược:
+
+| | phiên 1 (47777) | phiên 2 (47778) |
+| --- | --- | --- |
+| tổng số burst | 129 | 15 |
+| burst dài nhất | **41 gói** | **4 gói** |
+| burst ≥ 4 gói | 47% | 7% |
+| IDR do loss | **2,5/phút** — trượt ngưỡng A1 | **1,9/phút** — đạt ngưỡng |
+| e2e max | 285,5 ms | 47,4 ms |
+
+Nếu chỉ có phiên 2 thì kết luận "link WAN không bursty, A1 đạt ngưỡng" — ngược hẳn phiên 1. Không
+phiên nào sai; **mẫu mới là thứ thiếu**. Mọi tham số Gilbert-Elliott rút từ một phiên đơn lẻ đều là
+tham số của giờ đó, không phải của đường đó. Trước khi chốt bất kỳ con số nào cho sim, phải đo
+nhiều phiên rải theo giờ và báo cáo cả phương sai, không chỉ trung vị.
+
+Một chi tiết nhỏ nhưng đáng nhớ khi đọc số: host báo 6 IDR do loss, viewer báo 5. Không mâu thuẫn —
+log host trải 521 cửa sổ, dài hơn phiên 308 cửa sổ của viewer, nên nó bao cả những lần kết nối
+khác. Đối chiếu hai phía phải cắt theo cùng cửa sổ thời gian.
+
+Và lần nữa, tỉ lệ FEC vẫn tệ: **3479 gói parity đổi lấy 2 gói vá.**
+
+##### Bộ đếm gói từng vắng mặt — đã làm (03/09/2026)
+
+`stats_.packetsLost` chỉ cộng bên trong `Drop()` (`core/src/transport/Reassembler.cpp`), và
+`lossRuns[]` cũng vậy. Nghĩa là cả hai chỉ đếm gói mất trên những frame **đã bị bỏ**. Gói mất mà
+FEC vá, hay NACK vá **kịp lúc** cho frame hoàn thành, thì không xuất hiện ở đâu.
+
+> **Sửa một lập luận sai của chính tài liệu này.** Bản nháp trước trích "810 gói late" của phiên WAN
+> đầu tiên làm bằng chứng cho vùng mù. Sai: `NoteLatePacket` chỉ đếm gói tới **sau khi frame đã bị
+> bỏ**, mà những gói đó đã được `packetsLost` tính lúc drop. Chúng không hề vô hình — chúng chỉ cho
+> thấy bản vá tới quá muộn. Bằng chứng đúng nằm ở phép đo bên dưới, và nó nhỏ hơn nhiều.
+
+**Cách đo mới.** Một chỗ trống chỉ lộ ra ở đúng ba thời điểm, và cả ba đều được đánh dấu:
+
+| Lộ ra khi | Chỗ đánh dấu |
+| --- | --- |
+| Một gói lấp vào chỉ số **thấp hơn** chỉ số cao nhất đã thấy | `Push` — nghĩa là ta đã đi qua chỗ đó lúc nó còn trống |
+| FEC dựng lại một mảnh | `TryRecover` — FEC chỉ lấp vào chỗ đang trống |
+| Frame rời hàng đợi mà mảnh vẫn trống | `NoteWireLoss`, gọi ở **cả hai** lối ra: hoàn thành và bị bỏ |
+
+Nhờ vậy không cần quét tìm gap: mỗi chỗ trống hoặc được lấp (và lối lấp tự khai báo), hoặc còn
+trống lúc frame rời đi. Đuôi frame bị mất — thứ mà phép quét theo chỉ số tăng dần không bao giờ
+thấy — rơi vào vế thứ ba.
+
+**Bốn thùng, cộng lại đúng bằng tổng.** Mỗi gói từng vắng mặt rơi vào đúng một thùng:
+
+| Thùng | Nghĩa | Có phải loss trên dây? |
+| --- | --- | --- |
+| `packetsNeverArrived` | không bao giờ tới | có |
+| `packetsRepairedByFec` | parity dựng lại | có |
+| `packetsRepairedAfterNack` | tới sau khi ta đi hỏi đích danh | có |
+| `packetsReordered` | tới muộn mà **không** ai hỏi | **không** — chỉ là đảo thứ tự |
+
+Tách thùng thứ tư ra là phần bắt buộc, không phải trang trí: đảo thứ tự không phải mất gói, và
+gộp nó vào sẽ thổi phồng tham số Gilbert-Elliott. Vì thế
+`wire_loss% = (everAbsent − reordered) / (received + neverArrived)`.
+
+Ranh giới phải nói kèm: `nacked[i]` được đặt lúc `PlanNack` chọn chỉ số đó, nên một gói vừa bị hỏi
+vừa chỉ đơn thuần tới muộn sẽ được tính là "vá bằng NACK". Đó là thiên lệch **về phía coi là loss**,
+tức thận trọng đúng hướng cho A1, nhưng phải nhớ khi trích.
+
+**Ra tới đâu.** Dòng `evt=sum` phía client nay chở `wire_loss=…% absent=… gone=… nack_fix=…
+reorder=…`, và có thêm dòng `[Client] wire runs: 1x… 2x… | longest ever …` đứng cạnh dòng
+`loss runs` cũ. Hai dòng cố ý để cạnh nhau: dòng cũ là **loss không cứu được** (thứ người dùng
+thấy), dòng mới là **loss trên dây** (thứ sim cần). Không dòng nào thay thế dòng nào.
+
+**Đối chứng với đáp án biết trước.** Trước khi tin bộ đếm ngoài đời, cho nó chạy lại một quá trình
+đã biết: mô hình Gilbert-Elliott có seed (5% loss, burst trung bình 4 gói) bơm qua 400 frame × 20
+gói, FEC và NACK đều tắt. Kết quả: `packetsEverAbsent` bằng **đúng** số gói harness đã nuốt, và
+`absentRuns[]` khớp **đúng từng thùng** với histogram burst mà harness đã dựng độc lập. Cùng lúc,
+`packetsLost` cũ cũng bằng đúng con số đó — đó là **nhóm chứng**: khi không có gì vá thì hai bộ đếm
+phải trùng nhau, và chúng chỉ tách ra khi FEC hoặc NACK đặt được một gói trở lại. Mô hình
+Gilbert-Elliott vì thế được nâng từ `LossGoodputTests` lên `core/tests/support/` để sim và test
+dụng cụ dùng chung một bản, không phải hai bản có thể lệch nhau.
+
+Năm test trong `core/tests/transport/ReassemblerTests.cpp` khoá năm hành vi: chỗ trống được một gói
+tới sau lấp vẫn bị đếm dù `packetsLost == 0`; chỗ trống FEC vá được xếp vào thùng fec; gói bị hỏi
+đích danh vào thùng nack chứ không vào thùng đảo thứ tự; đuôi frame mất được đếm đúng một lần và
+gộp thành một run; và bộ đếm dựng lại đúng một quá trình Gilbert-Elliott đã biết.
+
+**Đã xác nhận trên link thật (03/09).** Phiên 5 phút qua Tailscale, 308 cửa sổ, 293 cửa sổ có tải,
+bitrate trung vị 5744 kbps, đỉnh 12 294:
+
+| | |
+| --- | ---: |
+| `packetsEverAbsent` | **48** |
+| ├ `neverArrived` | 41 |
+| ├ `repairedAfterNack` | **7** |
+| └ `reordered` | 0 |
+| `fec_rx` / `fec_fix` | 3056 / **0** |
+
+Bảy gói ở dòng `repairedAfterNack` chính là phần bộ đếm cũ không thấy: chúng vắng mặt trên dây,
+NACK lấy về kịp, frame hoàn thành, nên `Drop()` không bao giờ chạy. Histogram cũng lệch đúng một
+chỗ — một cửa sổ có `wire runs … 2x1 … 8-15x1` trong khi `loss runs` cùng cửa sổ chỉ có `8-15x1`:
+một run dài 2 gói đã bị mất khỏi phân bố.
+
+Chênh lệch là **17%** (48 so với 41), không phải nhiều lần. Đó là con số thật của vùng mù trên link
+này, và nó nhỏ vì `fec_fix = 0` — FEC phát 3056 gói parity mà không vá được gói nào, nên toàn bộ
+phần vá đến từ NACK. Trên một link mà FEC thật sự làm việc thì khoảng cách sẽ rộng hơn.
 
 #### Bốn dụng cụ đo phải thêm mới đo được, ngoài kế hoạch ban đầu
 
@@ -733,7 +873,10 @@ không có bộ đếm. Muốn đo phải đảo vai — chạy host trên máy 
 *P1. Phải xong trước A1 và A2, nếu không cả hai đều tối ưu cho mô hình sai.*
 
 - [ ] Chạy A/B `RawUdp` so với `QuicDatagram` trên cùng một link — không phải viết code, và nó đo thẳng phần đóng góp của CC quiche
+  — **núm vặn đã kiểm chứng xong (03/09), phép đo thì chưa.** Xem "Kiểm núm vặn trước khi đi đo"
+  và "Vì sao A/B phải chạy trên link chật" bên dưới
 - [ ] Quyết kiến trúc: quiche làm chủ, AIMD làm chủ, hay chia vai rõ ràng
+  — chặn bởi mục trên; không có số thì mọi lựa chọn đều là suy đoán
 - [x] Đặt cấu hình tường minh trong `MakeConfig` để lựa chọn đó nằm trong code chứ không nằm trong mặc định CUBIC của thư viện
   — `QuicSettings::congestionControl` mặc định `Cubic`, gọi `quiche_config_set_cc_algorithm`
   tường minh. **Không đổi hành vi** (đã xác nhận mặc định của quiche là CUBIC tại
@@ -746,6 +889,53 @@ không có bộ đếm. Muốn đo phải đảo vai — chạy host trên máy 
 > đưa video sang `RawUdp`. Đã thêm `deskhub-cli share|connect --video-path raw-udp|quic-datagram`,
 > nối qua `HostEngine` và `HostLink` tới `SetVideoPath`. Cả hai đầu phải đặt giống nhau vì
 > `SessionTransport::Deliver` chỉ nhận video raw khi chính nó đang ở chế độ `RawUdp`.
+
+#### Kiểm núm vặn trước khi đi đo (03/09/2026)
+
+Áp lại bài kiểm tra đã dùng cho A1 và C1 — *"một núm vặn không có caller ngoài test của chính nó
+thì không phải núm vặn"* — lên `--video-path`, trước khi tiêu một buổi đo vào nó.
+
+| Kiểm | Kết quả |
+| --- | --- |
+| Có caller thật hai đầu? | **Có.** Host: `ShareCommand` → `ShareOptions::videoPath` → `HostEngine.cpp:241` `sock_.SetVideoPath(...)`. Viewer: `ConnectCommand` → `ScreenViewerConfig` → `HostLink.cpp:94` |
+| Tên gõ sai có bị bắt? | **Có**, `Command.cpp:877` qua `media::IsVideoPathName`, và `CommandTests` đã khoá cả ca tên sai lẫn hai tên đúng |
+| Đường raw có chở được video thật? | **Có**, `SessionTransportTests` đẩy một gói video qua cả hai chế độ và khoá luôn ca lệch vế: viewer còn ở `QuicDatagram` thì **từ chối** video raw |
+
+**Nhưng có một lỗ, và nó đủ để làm hỏng cả buổi đo:** host **không bao giờ in ra nó đang chạy leg
+nào.** Dòng `[Host] measurement:` chở `cc/fec/parity/depth/arm` mà không có video path, và tệ hơn,
+nó **chỉ được in khi có cờ fec hoặc cc**. Chạy A/B chỉ với `--video-path raw-udp` thì host im lặng
+hoàn toàn — không có gì trong log chứng minh leg nào đã chạy, và hai chân A/B sau này không phân
+biệt được bằng bằng chứng.
+
+Đã sửa: dòng đó nay chở thêm `video=…`, đọc **ngược từ `sock_.videoPath()`** chứ không phải từ chuỗi
+tuỳ chọn — nên nếu tên rơi về mặc định thì log nói đúng cái mặc định đó. Điều kiện in cũng mở rộng
+để `--video-path` một mình cũng đủ kích hoạt. Thêm `VideoPathName()` làm ánh xạ ngược, có test khoá
+cặp `VideoPathName`/`VideoPathFromName` khứ hồi.
+
+#### Vì sao A/B phải chạy trên link chật, không phải trên link đã có
+
+Dự đoán, viết ra **trước** khi đo để sau này không tự lừa: trên Tailscale WAN, A/B sẽ ra **kết quả
+rỗng**. Lý do không phải phỏng đoán mà là số đã đo: `dgram_refused = 0` trên 521 cửa sổ, tới
+12,7 Mbps. CC của quiche **chưa bao giờ can thiệp** trên link này. Gỡ một cơ chế chưa từng kích hoạt
+thì không thể đổi được gì, nên A/B ở đây chỉ đo được chênh lệch của **pacing** — thứ raw UDP bỏ qua
+— chứ không đo được cái mà mục này đặt ra.
+
+Nên A/B phải đi cùng chuyến đo WiFi công ty của Phase 0, và bố trí là chung: **iPhone host, Ubuntu
+viewer**. Mỗi khung giờ chạy hai chân liên tiếp, cùng nội dung màn hình, cùng 5 phút:
+
+| Chân | Host | Viewer |
+| --- | --- | --- |
+| A | `share --video-path quic-datagram` | `connect … --video-path quic-datagram` |
+| B | `share --video-path raw-udp` | `connect … --video-path raw-udp` |
+
+Hai đầu **bắt buộc** đặt giống nhau: `SessionTransport::Deliver` chỉ nhận video raw khi chính nó
+đang ở chế độ `RawUdp`, lệch vế là viewer im lặng không thấy hình. Chân A cũng chính là mẫu Phase 0
+cho khung giờ đó — một lần chạy phục vụ hai mục.
+
+Cái cần đọc ra khi so hai chân: `wire_loss` và phân bố `wire runs` (raw không có CC thì loss có tăng
+không), bitrate đạt được, e2e p50/p90/max, và `dgram_refused` phía host ở chân A. Nếu chân B đạt
+bitrate cao hơn với loss tương đương thì CC của quiche đang kìm; nếu chân B loss vọt lên thì nó đang
+bảo vệ.
 
 #### Đã đo: đảo vai, host là máy đã instrument (01/09/2026)
 
@@ -770,6 +960,10 @@ trước" được gỡ cho lớp link này.
 Biên của kết luận, phải nói kèm mỗi lần trích: LAN gigabit cộng WiFi nhà sóng tốt, ≤13 Mbps,
 ≤2 viewer, RTT ≤40 ms. Trên link bị bó thật (Tailscale qua WAN, WiFi quán) kết quả có thể
 khác hẳn, và bộ đếm giờ đã sẵn sàng để đo.
+
+**Đã nới biên (03/09):** Tailscale qua WAN cũng cho `dgram_refused = 0` trên 521 cửa sổ, tới
+12,7 Mbps — xem "Phiên thứ hai, host đã instrument". Còn WiFi quán, và chưa link nào bị đẩy tới
+bão hoà.
 
 ##### Một confounder cho hàm mục tiêu của A1
 

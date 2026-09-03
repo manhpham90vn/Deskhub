@@ -153,6 +153,11 @@ VideoPath VideoPathFromName(std::string_view name, VideoPath fallback) {
     return fallback;
 }
 
+std::string_view VideoPathName(VideoPath path) {
+    return path == VideoPath::RawUdp ? deskhub::media::kVideoPathRawUdp
+                                     : deskhub::media::kVideoPathQuicDatagram;
+}
+
 void SessionTransport::SetVideoPath(VideoPath path) {
     videoPath_ = path;
 }

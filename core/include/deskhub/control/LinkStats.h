@@ -22,6 +22,16 @@ struct LinkWindow {
     uint64_t lossRunTotal = 0;
     uint64_t lossRunMax = 0;
 
+    double wireLossPct = 0.0;
+    uint64_t packetsEverAbsent = 0;
+    uint64_t packetsNeverArrived = 0;
+    uint64_t packetsRepairedByFec = 0;
+    uint64_t packetsRepairedAfterNack = 0;
+    uint64_t packetsReordered = 0;
+    uint64_t absentRuns[7] = {};
+    uint64_t absentRunTotal = 0;
+    uint64_t absentRunMax = 0;
+
     uint64_t latePackets = 0;
     double lateMsAvg = 0.0;
     uint64_t lateMsMax = 0;

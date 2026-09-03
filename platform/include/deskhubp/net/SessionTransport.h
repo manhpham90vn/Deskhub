@@ -28,6 +28,8 @@ enum class VideoPath : uint8_t {
 
 VideoPath VideoPathFromName(std::string_view name, VideoPath fallback);
 
+std::string_view VideoPathName(VideoPath path);
+
 enum class Lane : uint8_t {
     Realtime = 0,
     Interactive = 1,
