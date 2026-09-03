@@ -525,6 +525,45 @@ mà là chọn cho đúng trên từng máy — đó chính là C1.
 
 # Việc cần làm, theo thứ tự
 
+## Tiếp tục từ đây (đặt lại ngày 03/09/2026, cuối buổi)
+
+Cây nguồn đang sạch: `cmake --build --preset x64-debug` dựng hết kể cả `Deskhub.exe`,
+`core_tests` và `platform_tests` xanh, `codestyle -Check -Only cpp` OK, `clang-tidy` trên hai
+file `core/src` + `platform/src` đã đổi cũng sạch. Chưa commit.
+
+**Hai việc đã xong hôm nay, cả hai đều mới chỉ đúng ở mức "biên dịch và test đơn vị":**
+
+- **A4 — nhánh thực thi trên Windows** (chi tiết trong Phase 7 bên dưới)
+- **P2 — gộp gói phía gửi trên Windows bằng USO** (chi tiết trong Phase 6 bên dưới)
+
+**Việc đầu tiên của ngày mai, trước khi viết thêm bất kỳ dòng nào:** chạy A4 trên một link
+thật và đọc log. Cả đường LTR lẫn đường USO **chưa từng gặp một gói mất thật hay một NIC
+thật nào** — đúng loại "cấu hình chưa ai đo" mà A1 và C1 đã dính một lần mỗi cái.
+
+    deskhub-cli share --bind 192.168.1.3 --encoder nvenc
+
+Bằng chứng phải thấy trong log host khi viewer báo mất gói:
+
+| Dòng | Nghĩa |
+| --- | --- |
+| `[NVENC] Initialized: … ltr_slots=4` | LTR bật được thật, không bị driver từ chối |
+| `[Host][…] recovery=invalidate_ref after losing frame N` | chính sách chọn vá thay vì IDR |
+| `[NVENC] recovery: next picture references long-term frame M only.` | encoder **thực sự** thi hành |
+| `evt=sum … idr=0` trong cùng cửa sổ | và cú vọt bitrate của IDR biến mất |
+
+Nếu thấy `The encoder kept no reference older than frame N` thì nhánh LTR đang rỗng — đọc
+`ltr_slots` ở dòng Initialized trước khi nghi ngờ chỗ khác.
+
+Sau đó, theo thứ tự:
+
+1. **Đo P2 trên Windows**: `platform_perf` trước/sau, đối chiếu với bảng loopback Linux ở
+   Phase 6. Chưa có một con số Windows nào cả.
+2. **`docs/ARCHITECTURE.md` + ba bản dịch** cho cả A4 lẫn P2 — cả hai đều đổi hành vi, nên
+   theo `CLAUDE.md` đây là phần bắt buộc của "xong", không phải việc dọn dẹp thêm.
+3. **C2** — xem ghi chú chuẩn bị ở Phase 6.
+4. **Phase 4 còn dư** — bảng tra `EncoderFactory`, và kịch bản clip cố định.
+5. **C3 4:4:4** — có một phát hiện chặn, xem Phase 7.
+
 ### Phase 0 — Sửa baseline, rồi đo thực tế trước khi mô phỏng
 
 *Chặn mọi thứ phía sau. Hai việc đầu là code, phần còn lại là đo.*
@@ -1202,7 +1241,10 @@ parity, để lần sau không ai đọc tỉ lệ cứu mà quên mất cái gi
   `invalidateBeforeFrame` hay `wantIntraRefresh`, nên khai khả năng lúc này sẽ biến phục hồi mất
   gói thành vô tác dụng. Đó là phần thực thi của A4, không phải của C1
 - [ ] Thay tiêu chí chọn trong `EncoderFactory` từ "init được trước" sang bảng tra dựng từ số đo
-  — chưa đổi, và số đo đầu tiên nói thứ tự hiện tại (NVENC trước) là **đúng trên máy này**
+  — chưa đổi, và số đo đầu tiên nói thứ tự hiện tại (NVENC trước) là **đúng trên máy này**.
+  Ghi thêm 03/09: bảng tra nên khoá theo `GpuChoice::vendor` (đã có sẵn, `GpuSelect.h`), vì
+  hôm nay trên máy Intel hay AMD thì `CreateEncoder` vẫn nạp `nvEncodeAPI64.dll` trước rồi
+  mới chịu thất bại — thứ tự đúng trên máy này đang phải trả giá trên mọi máy khác
 
 #### Phát hiện chặn trước cả phép đo: `IsSupported` bị đọc ngược cực, MF chạy bằng mặc định MFT
 
@@ -1359,12 +1401,49 @@ thẳng tới `pacer_`, nhưng coi là chưa kiểm chứng cho tới khi CI mac
   **Chưa làm: GRO và RIO** — GRO gộp nhiều datagram vào một buffer, tức phá vỡ giao kèo
   "một slot một datagram" mà `RecvBatch` dựng trên; đó là một thay đổi API riêng, không phải
   nửa sau của mục này. Xem kết quả đo ở dưới
+
+  **Bổ sung 03/09 (chiều): phía gửi trên Windows nay cũng gộp, bằng USO.** Ghi chú cũ nói
+  "nhánh Windows chưa qua compiler ở đây" là đúng nhưng chưa đủ — `UdpSocketWin::SendBatch`
+  hồi đó **không phải nhánh chưa đo, nó là vòng `sendto` từng gói**, tức phần gộp lô của
+  Phase 6 chỉ tồn tại trên Linux. Nay nó gọi `WSASendMsg` với control message
+  `UDP_SEND_MSG_SIZE` — đối ứng Windows của `UDP_SEGMENT`, và là thứ đáng làm trước RIO mà
+  mục P2 ở trên liệt kê, vì rẻ hơn hẳn. Cùng một luật cắt run, cùng một lần tắt vĩnh viễn khi
+  stack từ chối, cùng một đường rơi về gửi từng gói.
+
+  `LeadingRunOfEqualSegments` được nâng từ `UdpSocketPosix.cpp` lên
+  `deskhubp/net/UdpSocket.h` để hai OS dùng chung đúng một luật thay vì chép lại, và nó có
+  test riêng — luật "gói ngắn chỉ được là segment cuối" giờ khoá được bằng test đơn vị chứ
+  không chỉ bằng bài loopback.
+
+  ⚠️ **Chưa đo trên Windows.** Bảng loopback ở dưới là số Linux. Chưa chạy `platform_perf`
+  trước/sau ở đây, nên đừng trích bảng đó cho Windows.
+
+  **Vẫn chưa làm: URO** (`UDP_RECV_MAX_COALESCED_SIZE`) — chặn bởi đúng cái giao kèo
+  "một slot một datagram" đã chặn GRO. Hai cái là **một** thay đổi API, làm cùng nhau
 - [x] A6 — pacing thích ứng và khớp vsync, đo judder
   — quét 24 điểm (lead 8…66 ms × wobble 0/5/20 ms, có và không khớp vsync) xuất CSV.
   **Phát hiện: trục "độ trễ cộng thêm" của A6 không có trade nào cả.** Không khớp vsync thì
   phase spread ~6000 µs trên chu kỳ 6944 µs ở *mọi* mức lead — mua lead gấp tám lần không thu
   hẹp được một micro giây. Khớp vsync đưa spread về **0** và không tốn độ trễ nào
 - [ ] C2 — đo độ trễ capture của WGC, đối chiếu với DXGI Desktop Duplication
+  — **chưa bắt đầu; đã khảo sát chỗ móc vào (03/09/2026).** Ba điều đáng ghi trước khi ngồi
+  viết, vì cả ba đều tiết kiệm được một vòng dò:
+
+  - `client/windows/cpp/capture/ScreenCapture.cpp` **không có một bộ đếm độ trễ nào** — con
+    số C2 cần chưa tồn tại, không phải chưa được in
+  - `fi.meta.timestampUs` (chính là `SystemRelativeTime` của WGC) **chưa có ai đọc** ở phía
+    host Windows: `SharingHost` chỉ dùng `width`/`height`, còn `Encode` được truyền
+    `NowUs()` mới tinh. Nên `enc_lat_ms` hôm nay đo độ trễ **encode**, không phải
+    capture→texture — đừng đọc nhầm nó thành số của C2
+  - hai đồng hồ khớp nhau sẵn: `SystemRelativeTime` là QPC (đơn vị 100 ns) và `NowUs()` trên
+    Windows cũng là QPC, nên hiệu hai số là dùng được ngay, không cần quy đổi epoch
+
+  Đường đi ngắn nhất: thêm `WindowPercentile capUs` + một `WindowCount` đếm frame trùng vào
+  `SourceDiag`, giấu sau một cờ mới trong `ShareDiagCaps` (để bốn client kia không in cột
+  rỗng), điền trong `onFrame`. Riêng bước đó đã trả lời được "trả bao nhiêu độ trễ cho sự
+  tiện lợi của WGC". Chỉ khi số đó xấu mới đáng viết backend Duplication, và khi đó nên theo
+  đúng khuôn `--encoder`: một cờ `--capture wgc|dxgi` gọi tên, gọi tên cái không khởi động
+  được thì **dừng**, không lặng lẽ đo cái còn lại
 - [x] Tier B — thêm jitter vào backoff của `LinkRecovery`; nhớ đây là đổi chữ ký `ReconnectDelayUs` cộng mọi caller, không phải sửa tại chỗ
 
 #### Đã đo: gộp syscall UDP, và cái nó phơi ra (03/09/2026)
@@ -1441,6 +1520,45 @@ bài đo với Phase 0 — nó thuộc về danh sách "cần link thật", khô
   động không ai thực thi — tức mất gói sẽ không còn xin IDR nữa mà cũng chẳng vá gì. Việc còn lại
   đúng bằng một mệnh đề: cho `NvencEncoder` cài `MarkLongTermReference`/`InvalidateReference`
   (`NV_ENC_PIC_PARAMS` có sẵn trường), rồi mới gọi `SetCaps`
+
+  **Mệnh đề đó đã viết xong cho Windows (03/09/2026) — nhưng chưa gặp một gói mất thật nào.**
+  Thứ tự làm là bắt buộc và đã theo đúng: cho encoder **thi hành được** trước, rồi mới khai
+  caps. Khai ngược lại thì chính sách chọn một hành động không ai làm, và mất gói sẽ chẳng
+  còn được vá bằng gì cả.
+
+  - `IVideoEncoder` có thêm `MarkLongTermReference` / `InvalidateReference` /
+    `BeginIntraRefresh`, và `static_assert` buộc nó vào hai concept tuỳ chọn trong
+    `VideoContract.h` — đúng cách hai concept kia đã được đặt ra để dùng
+  - **NVENC** chạy LTR Per Picture (`enableLTR=1`, `ltrTrustMode=0`), ring 4 slot,
+    `maxNumRefFrames` nâng theo, mark bằng `ltrMarkFrame`/`ltrMarkFrameIdx`, vá bằng
+    `ltrUseFrames`/`ltrUseFrameBitmap`, refresh bằng `forceIntraRefreshWithFrameCnt`.
+    `nvEncInvalidateRefFrames` **cố ý không dùng**: bitmap là đường tất định — nó nói thẳng
+    khung kế tiếp được tham chiếu cái gì, thay vì nói cái gì đã hỏng rồi đoán phần còn lại.
+    Nếu `InitializeEncoder` từ chối LTR thì tự thử lại một lần không có LTR, để một driver
+    khó tính không làm hỏng cả buổi share
+  - **Media Foundation** đi qua `AVEncVideoLTRBufferControl` lúc init rồi
+    `MarkLTRFrame`/`UseLTRFrame`/`GradualIntraRefresh` theo từng khung. `RequestKeyFrame` nay
+    quên ring — IDR xoá sạch DPB, giữ lại record là tự nói dối
+  - `deskhubp/host/EncoderRecovery.h` mới: `PrepareRecovery()` tiêu thụ
+    `invalidateBeforeFrame`/`wantIntraRefresh`, **rơi về IDR khi encoder không thi hành
+    được**, và mark đúng những khung mà `RecoveryPolicy` sẽ gọi tên sau này (kể cả IDR — bỏ
+    sót chỗ này thì `core` tin có một LTR mà encoder không giữ). Bọc trong `if constexpr`
+    theo concept, nên Linux · Apple · Android **giữ nguyên hành vi hôm nay** cho tới khi
+    encoder của họ có ba hàm kia
+  - `SharingHost` Windows gọi `recovery.SetCaps(encoder->RecoveryCaps())` sau **mỗi** lần
+    tạo encoder — `SetCaps` reset luôn trạng thái, đúng thứ cần khi encoder dựng lại và mọi
+    LTR cũ đã mất. Preamble nằm trong `EncodeTimed` nên cả đường frame lẫn đường flush đều
+    đi qua, không phải chép hai chỗ
+  - `RecoveryPolicy` **nay có mutex**. Đây là một cuộc đua có thật chứ không phải phòng xa:
+    `OnReferenceLost` chạy trên luồng net loop, `NoteEncoded`/`ShouldMarkLongTerm` chạy trên
+    luồng encode dưới `encMutex`. Trước đây không ai thấy vì đường này chưa bao giờ chạy;
+    bật nó lên là TSan bắt ngay. Lớp này giờ không copy được nữa — không chỗ nào copy cả
+  - 8 check mới ở `platform/tests/session/EncoderRecoveryTests.cpp`, chạy trên encoder giả
+    cả loại có lẫn loại không có ba hàm kia
+
+  **Còn lại của A4:** bốn backend kia (VA-API, NVENC-Linux, VideoToolbox, MediaCodec) vẫn
+  chưa khai gì, nên vẫn xin IDR như cũ — đúng như thiết kế, không phải thiếu sót. Và
+  `docs/ARCHITECTURE.md` cùng ba bản dịch chưa được cập nhật cho thay đổi hành vi này
 - [x] C3 — dựng bảng khả năng codec và cơ chế thương lượng khi kết nối
   — `kCodecMaskH264` / `H264High444` / `Hevc` / `Av1` trên wire, `NegotiateCodec(hostMask,
   clientMask)` chọn theo bảng ưu tiên tường minh và luôn tụt về H264 4:2:0 khi đó là thứ duy
@@ -1449,6 +1567,19 @@ bài đo với Phase 0 — nó thuộc về danh sách "cần link thật", khô
   **Thứ tự ưu tiên là tạm** — vị trí của 4:4:4 (chữ sắc nét) so với AV1/HEVC (ít bit hơn) là
   câu hỏi phải giải bằng đo, chưa giải
 - [ ] C3 — thêm 4:4:4 cho use case đọc chữ, giữ 4:2:0 làm baseline phổ quát
+  — **chưa viết dòng nào, và có một phát hiện phải quyết trước khi viết (03/09/2026).**
+  Bảng khả năng ở mục trên là thật, nhưng **không đầu nào điền nó**: `SetHostCodecMask`
+  (`ScreenHostSession.h:71`) **không có caller nào trong toàn repo**, còn
+  `ScreenClient.cpp:58` gán cứng `hello.codecMask = kCodecMaskH264`. Nghĩa là thương lượng
+  hôm nay chỉ có đúng một kết quả khả dĩ, bất kể bảng ưu tiên viết gì.
+
+  Tệ hơn cho 4:4:4 nói riêng: viewer Windows giải mã qua H.264 decoder của Media Foundation,
+  vốn chỉ 4:2:0; repo **không có đường NVDEC** nào. Nên nếu chỉ làm phía encode thì được một
+  cái núm không ai gọi được — đúng bài kiểm tra mà chính tài liệu này đã dùng để loại
+  `--video-path` và `--encoder` khỏi danh sách "đã có núm vặn".
+
+  Quyết trước, code sau: hoặc (a) điền mask hai đầu từ khả năng thật rồi dừng lại ở đó, hoặc
+  (b) chấp nhận viết cả đường decode 4:4:4 trước khi phía host được phép khai bit đó
 
 ### Phase 8 — Công bố
 

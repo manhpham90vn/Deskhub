@@ -33,6 +33,13 @@ using Microsoft::WRL::ComPtr;
 #define MF_CHECKI(expr, msg) DH_HR_CHECK_VAL("MfEncoder", expr, msg, -1)
 
 struct MfEncoder::Impl {
+    static constexpr uint32_t kLtrRingSlots = 4;
+
+    struct LtrSlot {
+        uint32_t frameId = 0;
+        bool valid = false;
+    };
+
     ComPtr<IMFActivate> activate;
     ComPtr<IMFTransform> mft;
     ComPtr<IMFMediaEventGenerator> events;
@@ -59,6 +66,10 @@ struct MfEncoder::Impl {
     uint64_t totalBytes = 0;
     FILE* out = nullptr;
     std::vector<uint8_t> spsPps;
+
+    uint32_t ltrSlots = 0;
+    uint32_t nextLtrSlot = 0;
+    LtrSlot ltrSlot[kLtrRingSlots]{};
 
     ~Impl() {
         if (mft && streaming) {
@@ -225,6 +236,7 @@ struct MfEncoder::Impl {
         if (!OpenEncoderOutput(cfg, "MfEncoder", out)) return false;
 
         recovery = QueryRecoveryCaps();
+        ConfigureLongTermReferences();
 
         LOGI("[MfEncoder] Initialized: %ux%u @%ufps, %.1f Mbps, H264%s -> %s",
             cfg.width, cfg.height, cfg.fps, cfg.bitrateBps / 1e6,
@@ -246,6 +258,68 @@ struct MfEncoder::Impl {
         const bool refresh =
             supported(CODECAPI_AVEncVideoGradualIntraRefresh, "GradualIntraRefresh");
         return {ltrBuffers && ltrMark && ltrUse, refresh};
+    }
+
+    bool SetCodecUI4(const GUID& api, ULONG value) {
+        if (!codecApi || codecApi->IsSupported(&api) != S_OK) return false;
+        VARIANT v{};
+        v.vt = VT_UI4;
+        v.ulVal = value;
+        return SUCCEEDED(codecApi->SetValue(&api, &v));
+    }
+
+    void ForgetLongTermReferences() {
+        nextLtrSlot = 0;
+        for (LtrSlot& slot : ltrSlot) slot = {};
+    }
+
+    void ConfigureLongTermReferences() {
+        ForgetLongTermReferences();
+        ltrSlots = 0;
+        if (!recovery.longTermReference) return;
+        if (!SetCodecUI4(CODECAPI_AVEncVideoLTRBufferControl, kLtrRingSlots)) {
+            LOGW(
+                "[MfEncoder] The MFT would not reserve %u long-term reference buffers, so loss "
+                "recovery falls back to IDR.",
+                kLtrRingSlots);
+            recovery.longTermReference = false;
+            return;
+        }
+        ltrSlots = kLtrRingSlots;
+    }
+
+    bool MarkLongTermReference(uint32_t frameId) {
+        if (!ltrSlots) return false;
+        const uint32_t slot = nextLtrSlot;
+        if (!SetCodecUI4(CODECAPI_AVEncVideoMarkLTRFrame, slot)) return false;
+        nextLtrSlot = (nextLtrSlot + 1) % ltrSlots;
+        ltrSlot[slot] = {frameId, true};
+        return true;
+    }
+
+    bool InvalidateReference(uint32_t firstInvalidFrameId) {
+        if (!ltrSlots) return false;
+        uint32_t best = ltrSlots;
+        for (uint32_t i = 0; i < ltrSlots; ++i) {
+            if (!ltrSlot[i].valid) continue;
+            if (ltrSlot[i].frameId >= firstInvalidFrameId) {
+                ltrSlot[i].valid = false;
+                continue;
+            }
+            if (best == ltrSlots || ltrSlot[i].frameId > ltrSlot[best].frameId) best = i;
+        }
+        if (best == ltrSlots) return false;
+        if (!SetCodecUI4(CODECAPI_AVEncVideoUseLTRFrame, 1u << best)) return false;
+        LOGI("[MfEncoder] recovery: next picture references long-term frame %u only.",
+            ltrSlot[best].frameId);
+        return true;
+    }
+
+    bool BeginIntraRefresh(uint32_t frames) {
+        if (!recovery.intraRefresh || !frames) return false;
+        if (!SetCodecUI4(CODECAPI_AVEncVideoGradualIntraRefresh, frames)) return false;
+        LOGI("[MfEncoder] recovery: intra refresh over the next %u frames.", frames);
+        return true;
     }
 
     bool SetupRateControl() {
@@ -318,12 +392,8 @@ struct MfEncoder::Impl {
     }
 
     bool RequestKeyFrame() {
-        if (codecApi && codecApi->IsSupported(&CODECAPI_AVEncVideoForceKeyFrame) == S_OK) {
-            VARIANT v{};
-            v.vt = VT_UI4;
-            v.ulVal = 1;
-            if (SUCCEEDED(codecApi->SetValue(&CODECAPI_AVEncVideoForceKeyFrame, &v))) return true;
-        }
+        ForgetLongTermReferences();
+        if (SetCodecUI4(CODECAPI_AVEncVideoForceKeyFrame, 1)) return true;
         return ReinitTransform();
     }
 
@@ -647,6 +717,15 @@ bool MfEncoder::SetFps(uint32_t fps) {
 
 deskhub::media::EncoderRecoveryCaps MfEncoder::RecoveryCaps() const {
     return impl_ ? impl_->recovery : deskhub::media::EncoderRecoveryCaps{};
+}
+bool MfEncoder::MarkLongTermReference(uint32_t frameId) {
+    return impl_ && impl_->MarkLongTermReference(frameId);
+}
+bool MfEncoder::InvalidateReference(uint32_t firstInvalidFrameId) {
+    return impl_ && impl_->InvalidateReference(firstInvalidFrameId);
+}
+bool MfEncoder::BeginIntraRefresh(uint32_t frames) {
+    return impl_ && impl_->BeginIntraRefresh(frames);
 }
 
 void MfEncoder::Finish() {

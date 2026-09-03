@@ -107,6 +107,7 @@ int main() {
 
     std::printf("--- session: host callbacks wired to a source pipeline ---\n");
     RunScreenHostCallbackTests();
+    RunEncoderRecoveryTests();
 
     if (g_failures == 0) {
         std::printf("=== PASS: all checks passed ===\n");

@@ -51,6 +51,18 @@ struct InboundDatagram {
 
 inline constexpr size_t kMaxSendBatch = 16;
 inline constexpr size_t kMaxRecvBatch = 16;
+inline constexpr size_t kMaxSegmentedRunBytes = 0xFFFF;
+
+inline size_t LeadingRunOfEqualSegments(std::span<const OutboundDatagram> packets) {
+    if (packets.empty()) return 0;
+    const size_t segment = packets[0].len;
+    if (segment == 0 || segment > kMaxSegmentedRunBytes) return 0;
+    const size_t room = kMaxSegmentedRunBytes / segment;
+    size_t run = 1;
+    while (run < packets.size() && run < room && packets[run].len == segment) ++run;
+    if (run < packets.size() && run < room && packets[run].len < segment) ++run;
+    return run;
+}
 
 class UdpSocket {
 public:
@@ -96,7 +108,10 @@ private:
     int fd_ = -1;
 #endif
     bool lastBindAddrInUse_ = false;
-#if defined(__linux__)
+#if defined(__linux__) || defined(_WIN32)
     bool segmentationOffloadOff_ = false;
+#endif
+#if defined(_WIN32)
+    void* sendMsg_ = nullptr;
 #endif
 };

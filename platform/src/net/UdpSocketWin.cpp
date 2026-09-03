@@ -2,8 +2,10 @@
 
 #include <winsock2.h>
 #include <ws2tcpip.h>
+#include <mswsock.h>
 
 #include <cstdio>
+#include <cstring>
 
 #include "deskhub/ui/Strings.h"
 #include "deskhubp/diag/Log.h"
@@ -12,6 +14,10 @@
 
 #ifndef SIO_UDP_CONNRESET
 #define SIO_UDP_CONNRESET _WSAIOW(IOC_VENDOR, 12)
+#endif
+
+#ifndef UDP_SEND_MSG_SIZE
+#define UDP_SEND_MSG_SIZE 2
 #endif
 
 std::string NetAddr::ToString() const {
@@ -33,6 +39,58 @@ bool ParseNetAddr(const std::string& s, NetAddr& out) {
 }
 
 namespace {
+
+void* ResolveSendMsg(SOCKET s) {
+    GUID id = WSAID_WSASENDMSG;
+    LPFN_WSASENDMSG fn = nullptr;
+    DWORD returned = 0;
+    if (WSAIoctl(s, SIO_GET_EXTENSION_FUNCTION_POINTER, &id, sizeof(id),
+            static_cast<void*>(&fn), sizeof(fn), &returned, nullptr, nullptr) == SOCKET_ERROR)
+        return nullptr;
+    return (void*)fn;
+}
+
+bool SegmentationOffloadRefused(int code) {
+    return code == WSAEINVAL || code == WSAENOPROTOOPT || code == WSAEOPNOTSUPP ||
+           code == WSAEMSGSIZE || code == WSAEAFNOSUPPORT;
+}
+
+bool SendOneSegmentedRun(SOCKET s, LPFN_WSASENDMSG sendMsg, const sockaddr_in& sa,
+    std::span<const OutboundDatagram> run, bool& refused) {
+    if (!sendMsg) {
+        refused = true;
+        return false;
+    }
+
+    WSABUF bufs[kMaxSendBatch]{};
+    DWORD total = 0;
+    for (size_t i = 0; i < run.size(); ++i) {
+        bufs[i].buf = (CHAR*)run[i].data;
+        bufs[i].len = ULONG(run[i].len);
+        total += ULONG(run[i].len);
+    }
+
+    char control[WSA_CMSG_SPACE(sizeof(DWORD))]{};
+    WSAMSG msg{};
+    msg.name = (LPSOCKADDR)&sa;
+    msg.namelen = sizeof(sa);
+    msg.lpBuffers = bufs;
+    msg.dwBufferCount = DWORD(run.size());
+    msg.Control.buf = control;
+    msg.Control.len = sizeof(control);
+
+    WSACMSGHDR* header = WSA_CMSG_FIRSTHDR(&msg);
+    header->cmsg_level = IPPROTO_UDP;
+    header->cmsg_type = UDP_SEND_MSG_SIZE;
+    header->cmsg_len = WSA_CMSG_LEN(sizeof(DWORD));
+    const DWORD segment = DWORD(run[0].len);
+    std::memcpy(WSA_CMSG_DATA(header), &segment, sizeof(segment));
+
+    DWORD written = 0;
+    if (sendMsg(s, &msg, 0, &written, nullptr, nullptr) == 0 && written == total) return true;
+    refused = SegmentationOffloadRefused(WSAGetLastError());
+    return false;
+}
 
 bool WinsockReady() {
     static const bool ready = [] {
@@ -95,6 +153,8 @@ bool UdpSocket::Open(uint16_t localPort, const std::string& bindIp) {
     }
 
     sock_ = uint64_t(s);
+    sendMsg_ = ResolveSendMsg(s);
+    if (!sendMsg_) segmentationOffloadOff_ = true;
     return true;
 }
 
@@ -127,9 +187,33 @@ bool UdpSocket::SendTo(const NetAddr& to, const uint8_t* data, size_t len) {
 }
 
 size_t UdpSocket::SendBatch(const NetAddr& to, std::span<const OutboundDatagram> packets) {
+    if (!IsOpen() || packets.empty()) return 0;
+
+    sockaddr_in sa{};
+    sa.sin_family = AF_INET;
+    sa.sin_addr.s_addr = htonl(to.ip);
+    sa.sin_port = htons(to.port);
+
+    const size_t batch = packets.size() < kMaxSendBatch ? packets.size() : kMaxSendBatch;
     size_t sent = 0;
-    for (const OutboundDatagram& packet : packets) {
-        if (!SendTo(to, packet.data, packet.len)) break;
+    while (!segmentationOffloadOff_ && batch - sent >= 2) {
+        const size_t run = LeadingRunOfEqualSegments(packets.subspan(sent, batch - sent));
+        if (run < 2) break;
+        bool refused = false;
+        if (SendOneSegmentedRun(SOCKET(sock_), (LPFN_WSASENDMSG)sendMsg_, sa,
+                packets.subspan(sent, run), refused)) {
+            sent += run;
+            continue;
+        }
+        if (!refused) return sent;
+        LOGW(
+            "[UDP] This stack refused UDP segmentation offload, so datagrams go out one "
+            "syscall each from here on.");
+        segmentationOffloadOff_ = true;
+    }
+
+    for (size_t i = sent; i < batch; ++i) {
+        if (!SendTo(to, packets[i].data, packets[i].len)) break;
         ++sent;
     }
     return sent;

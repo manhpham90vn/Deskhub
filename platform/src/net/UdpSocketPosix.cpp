@@ -110,18 +110,6 @@ namespace {
 
 #if defined(__linux__)
 
-constexpr size_t kMaxSegmentedRunBytes = 0xFFFF;
-
-size_t LeadingRunOfEqualSegments(std::span<const OutboundDatagram> packets) {
-    const size_t segment = packets[0].len;
-    if (segment == 0 || segment > kMaxSegmentedRunBytes) return 0;
-    const size_t room = kMaxSegmentedRunBytes / segment;
-    size_t run = 1;
-    while (run < packets.size() && run < room && packets[run].len == segment) ++run;
-    if (run < packets.size() && run < room && packets[run].len < segment) ++run;
-    return run;
-}
-
 bool SegmentationOffloadRefused(int code) {
     return code == EIO || code == EINVAL || code == ENOPROTOOPT || code == EOPNOTSUPP ||
            code == EMSGSIZE;

@@ -194,6 +194,45 @@ void TestWaitReadableTellsTheLoopWhenToRead() {
         "and the read that follows gets exactly it");
 }
 
+std::vector<OutboundDatagram> Run(const std::vector<std::vector<uint8_t>>& payloads) {
+    std::vector<OutboundDatagram> out;
+    for (const std::vector<uint8_t>& payload : payloads)
+        out.push_back(OutboundDatagram{payload.data(), payload.size()});
+    return out;
+}
+
+void TestOnlyEqualSizedDatagramsRideOneSegmentedSend() {
+    std::printf("[udp] the run offered to segmentation offload is one the kernel can split...\n");
+    const std::vector<std::vector<uint8_t>> mixed{
+        std::vector<uint8_t>(1200), std::vector<uint8_t>(1200), std::vector<uint8_t>(900),
+        std::vector<uint8_t>(1200)};
+    Check(LeadingRunOfEqualSegments(Run(mixed)) == 3,
+        "a shorter datagram may only be the last segment of a run");
+
+    const std::vector<std::vector<uint8_t>> shrinking{
+        std::vector<uint8_t>(900), std::vector<uint8_t>(1200)};
+    Check(LeadingRunOfEqualSegments(Run(shrinking)) == 1,
+        "a longer one after a short one starts a new run instead of corrupting this one");
+
+    const std::vector<std::vector<uint8_t>> even{std::vector<uint8_t>(1200),
+        std::vector<uint8_t>(1200)};
+    Check(LeadingRunOfEqualSegments(Run(even)) == 2, "equal sizes ride together");
+
+    Check(LeadingRunOfEqualSegments(std::span<const OutboundDatagram>{}) == 0,
+        "an empty batch offers nothing");
+
+    const std::vector<std::vector<uint8_t>> empty{std::vector<uint8_t>(0),
+        std::vector<uint8_t>(1200)};
+    Check(LeadingRunOfEqualSegments(Run(empty)) == 0,
+        "a zero-length datagram has no segment size to offload with");
+
+    std::vector<std::vector<uint8_t>> many;
+    for (size_t i = 0; i < kMaxSendBatch; ++i) many.push_back(std::vector<uint8_t>(9000));
+    const size_t run = LeadingRunOfEqualSegments(Run(many));
+    Check(run * 9000 <= kMaxSegmentedRunBytes,
+        "and a run never asks the stack to coalesce more than one datagram can carry");
+}
+
 void TestABatchOfDatagramsArrivesWholeAndSeparate() {
     std::printf("[udp] a burst leaves in one syscall and comes back as separate datagrams...\n");
     UdpSocket receiver;
@@ -307,6 +346,7 @@ void RunUdpSocketTests() {
     TestABoundAddressStillReceives();
     TestATimedOutReceiveIsNotAnError();
     TestWaitReadableTellsTheLoopWhenToRead();
+    TestOnlyEqualSizedDatagramsRideOneSegmentedSend();
     TestABatchOfDatagramsArrivesWholeAndSeparate();
     TestReadingABatchFromAnIdleSocketIsNotAnError();
     TestLocalAddressesLookLikeAddresses();

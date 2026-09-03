@@ -31,6 +31,7 @@
 #include "deskhub/control/StreamSize.h"
 #include "deskhub/diag/ShareDiag.h"
 #include "deskhub/session/host/SourcePipeline.h"
+#include "deskhubp/host/EncoderRecovery.h"
 
 namespace {
 
@@ -58,6 +59,8 @@ struct SourcePipeline : WinSourceBase {
     }
 
     void EncodeTimed(ID3D11Texture2D* tex, bool idr) {
+        idr = deskhubp::PrepareRecovery(*this, *encoder,
+            nextFrameId.load(std::memory_order_relaxed), idr);
         const bool ok = deskhubp::DiagEncode(*this, idr,
             [this, tex, idr] { return encoder->Encode(tex, NowUs(), idr); });
         if (ok) return;
@@ -152,6 +155,7 @@ bool SharingHost::Start(const std::vector<ShareSource>& sources, const ShareOpti
                 p->failed.store(true);
                 return false;
             }
+            p->recovery.SetCaps(p->encoder->RecoveryCaps());
             return true;
         };
 

@@ -22,6 +22,13 @@ using PFN_CreateInstance = NVENCSTATUS(NVENCAPI*)(NV_ENCODE_API_FUNCTION_LIST*);
 using PFN_MaxVersion = NVENCSTATUS(NVENCAPI*)(uint32_t*);
 
 struct NvencEncoder::Impl {
+    static constexpr uint32_t kLtrRingSlots = 4;
+
+    struct LtrSlot {
+        uint32_t frameId = 0;
+        bool valid = false;
+    };
+
     HMODULE dll = nullptr;
     NV_ENCODE_API_FUNCTION_LIST nv{};
     void* enc = nullptr;
@@ -35,6 +42,17 @@ struct NvencEncoder::Impl {
     bool loggedZeroReorder = false;
     uint64_t frameCount = 0;
     uint64_t totalBytes = 0;
+
+    uint32_t maxLtrFrames = 0;
+    uint32_t ltrSlots = 0;
+    uint32_t nextLtrSlot = 0;
+    LtrSlot ltrSlot[kLtrRingSlots]{};
+    bool pendingMark = false;
+    uint32_t pendingMarkSlot = 0;
+    uint32_t pendingMarkFrameId = 0;
+    bool pendingUse = false;
+    uint32_t pendingUseBitmap = 0;
+    uint32_t pendingRefreshFrames = 0;
 
     std::map<ID3D11Texture2D*, NV_ENC_REGISTERED_PTR> registered;
 
@@ -127,6 +145,7 @@ struct NvencEncoder::Impl {
         ApplyRatePlan(cfg.fps);
         encCfg.encodeCodecConfig.h264Config.idrPeriod = NVENC_INFINITE_GOPLENGTH;
         encCfg.encodeCodecConfig.h264Config.repeatSPSPPS = 1;
+        ConfigureLongTermReferences();
 
         initParams = {};
         NV_ENC_INITIALIZE_PARAMS& ip = initParams;
@@ -144,6 +163,15 @@ struct NvencEncoder::Impl {
         ip.enableEncodeAsync = 0;
         ip.encodeConfig = &encCfg;
         s = nv.nvEncInitializeEncoder(enc, &ip);
+        if (s != NV_ENC_SUCCESS && ltrSlots) {
+            LOGW(
+                "[NVENC] InitializeEncoder refused long-term references (status=%d) - retrying "
+                "without them, so loss recovery falls back to IDR.",
+                (int)s);
+            recovery.longTermReference = false;
+            ConfigureLongTermReferences();
+            s = nv.nvEncInitializeEncoder(enc, &ip);
+        }
         if (s != NV_ENC_SUCCESS) return Fail("InitializeEncoder", s);
 
         NV_ENC_CREATE_BITSTREAM_BUFFER cb{};
@@ -154,9 +182,9 @@ struct NvencEncoder::Impl {
 
         if (!OpenEncoderOutput(cfg, "NVENC", out)) return false;
 
-        LOGI("[NVENC] Initialized: %ux%u @%ufps, %.1f Mbps, H264, %s -> %s", width, height,
-            cfg.fps, cfg.bitrateBps / 1e6,
-            cfg.lowLatency ? "ULTRA_LOW_LATENCY" : "HIGH_QUALITY",
+        LOGI("[NVENC] Initialized: %ux%u @%ufps, %.1f Mbps, H264, %s, ltr_slots=%u -> %s",
+            width, height, cfg.fps, cfg.bitrateBps / 1e6,
+            cfg.lowLatency ? "ULTRA_LOW_LATENCY" : "HIGH_QUALITY", ltrSlots,
             out ? "file" : "callback");
         return true;
     }
@@ -176,7 +204,72 @@ struct NvencEncoder::Impl {
         const int refresh = Cap(codecGuid, NV_ENC_CAPS_SUPPORT_INTRA_REFRESH);
         LOGI("[NVENC] recovery caps: max_ltr_frames=%d ref_pic_invalidation=%d intra_refresh=%d",
             ltrFrames, invalidation, refresh);
+        maxLtrFrames = ltrFrames > 0 ? uint32_t(ltrFrames) : 0;
         return {ltrFrames > 0 && invalidation != 0, refresh != 0};
+    }
+
+    void ConfigureLongTermReferences() {
+        NV_ENC_CONFIG_H264& h264 = encCfg.encodeCodecConfig.h264Config;
+        ltrSlots = 0;
+        nextLtrSlot = 0;
+        for (LtrSlot& slot : ltrSlot) slot = {};
+        if (!recovery.longTermReference) {
+            h264.enableLTR = 0;
+            h264.ltrNumFrames = 0;
+            return;
+        }
+        ltrSlots = maxLtrFrames < kLtrRingSlots ? maxLtrFrames : kLtrRingSlots;
+        h264.enableLTR = 1;
+        h264.ltrTrustMode = 0;
+        h264.ltrNumFrames = ltrSlots;
+        if (h264.maxNumRefFrames < ltrSlots + 1) h264.maxNumRefFrames = ltrSlots + 1;
+    }
+
+    bool MarkLongTermReference(uint32_t frameId) {
+        if (!enc || !ltrSlots) return false;
+        pendingMarkSlot = nextLtrSlot;
+        nextLtrSlot = (nextLtrSlot + 1) % ltrSlots;
+        pendingMarkFrameId = frameId;
+        pendingMark = true;
+        return true;
+    }
+
+    bool InvalidateReference(uint32_t firstInvalidFrameId) {
+        if (!enc || !ltrSlots) return false;
+        uint32_t best = ltrSlots;
+        for (uint32_t i = 0; i < ltrSlots; ++i) {
+            if (!ltrSlot[i].valid) continue;
+            if (ltrSlot[i].frameId >= firstInvalidFrameId) {
+                ltrSlot[i].valid = false;
+                continue;
+            }
+            if (best == ltrSlots || ltrSlot[i].frameId > ltrSlot[best].frameId) best = i;
+        }
+        if (best == ltrSlots) return false;
+        pendingUse = true;
+        pendingUseBitmap = 1u << best;
+        LOGI("[NVENC] recovery: next picture references long-term frame %u only.",
+            ltrSlot[best].frameId);
+        return true;
+    }
+
+    bool BeginIntraRefresh(uint32_t frames) {
+        if (!enc || !recovery.intraRefresh || !frames) return false;
+        pendingRefreshFrames = frames;
+        LOGI("[NVENC] recovery: intra refresh over the next %u frames.", frames);
+        return true;
+    }
+
+    void CommitPictureRecovery(bool forceKeyframe) {
+        pendingUse = false;
+        pendingUseBitmap = 0;
+        pendingRefreshFrames = 0;
+        if (forceKeyframe)
+            for (LtrSlot& slot : ltrSlot) slot.valid = false;
+        if (pendingMark) {
+            ltrSlot[pendingMarkSlot] = {pendingMarkFrameId, true};
+            pendingMark = false;
+        }
     }
 
     void ApplyRatePlan(uint32_t fps) {
@@ -262,12 +355,26 @@ struct NvencEncoder::Impl {
         pp.inputTimeStamp = timestampUs;
         if (forceKeyframe) pp.encodePicFlags |= NV_ENC_PIC_FLAG_FORCEIDR | NV_ENC_PIC_FLAG_OUTPUT_SPSPPS;
 
+        NV_ENC_PIC_PARAMS_H264& h264 = pp.codecPicParams.h264PicParams;
+        if (pendingUse) {
+            h264.ltrUseFrames = 1;
+            h264.ltrUseFrameBitmap = pendingUseBitmap;
+        }
+        if (pendingRefreshFrames) h264.forceIntraRefreshWithFrameCnt = pendingRefreshFrames;
+        if (pendingMark) {
+            h264.ltrMarkFrame = 1;
+            h264.ltrMarkFrameIdx = pendingMarkSlot;
+        }
+
         s = nv.nvEncEncodePicture(enc, &pp);
         bool ok = true;
         if (s == NV_ENC_SUCCESS) {
+            CommitPictureRecovery(forceKeyframe);
             ok = WriteOutput();
         } else if (s != NV_ENC_ERR_NEED_MORE_INPUT) {
             ok = Fail("EncodePicture", s);
+        } else {
+            CommitPictureRecovery(forceKeyframe);
         }
 
         nv.nvEncUnmapInputResource(enc, mp.mappedResource);
@@ -369,6 +476,15 @@ bool NvencEncoder::SetFps(uint32_t fps) {
 }
 deskhub::media::EncoderRecoveryCaps NvencEncoder::RecoveryCaps() const {
     return impl_ ? impl_->recovery : deskhub::media::EncoderRecoveryCaps{};
+}
+bool NvencEncoder::MarkLongTermReference(uint32_t frameId) {
+    return impl_ && impl_->MarkLongTermReference(frameId);
+}
+bool NvencEncoder::InvalidateReference(uint32_t firstInvalidFrameId) {
+    return impl_ && impl_->InvalidateReference(firstInvalidFrameId);
+}
+bool NvencEncoder::BeginIntraRefresh(uint32_t frames) {
+    return impl_ && impl_->BeginIntraRefresh(frames);
 }
 void NvencEncoder::Finish() {
     if (impl_) impl_->Finish();

@@ -1,5 +1,6 @@
 #pragma once
 #include <cstdint>
+#include <mutex>
 
 namespace deskhub::media {
 
@@ -29,14 +30,12 @@ public:
 
     explicit RecoveryPolicy(EncoderRecoveryCaps caps = {}) : caps_(caps) {}
 
-    void SetCaps(EncoderRecoveryCaps caps) {
-        caps_ = caps;
-        Reset();
-    }
+    RecoveryPolicy(const RecoveryPolicy&) = delete;
+    RecoveryPolicy& operator=(const RecoveryPolicy&) = delete;
 
-    const EncoderRecoveryCaps& caps() const {
-        return caps_;
-    }
+    void SetCaps(EncoderRecoveryCaps caps);
+
+    EncoderRecoveryCaps caps() const;
 
     bool ShouldMarkLongTerm(uint32_t frameId) const;
 
@@ -44,21 +43,18 @@ public:
 
     RecoveryDecision OnReferenceLost(uint32_t lostFrameId);
 
-    bool refreshing() const {
-        return refreshFramesLeft_ != 0;
-    }
+    bool refreshing() const;
 
-    bool haveLongTerm() const {
-        return haveLongTerm_;
-    }
+    bool haveLongTerm() const;
 
-    uint32_t newestLongTerm() const {
-        return newestLongTerm_;
-    }
+    uint32_t newestLongTerm() const;
 
     void Reset();
 
 private:
+    void ResetLocked();
+
+    mutable std::mutex mutex_;
     EncoderRecoveryCaps caps_{};
     uint32_t newestLongTerm_ = 0;
     bool haveLongTerm_ = false;

@@ -21,6 +21,9 @@ public:
         return deskhub::media::kEncoderBackendMediaFoundation;
     }
     deskhub::media::EncoderRecoveryCaps RecoveryCaps() const override;
+    bool MarkLongTermReference(uint32_t frameId) override;
+    bool InvalidateReference(uint32_t firstInvalidFrameId) override;
+    bool BeginIntraRefresh(uint32_t frames) override;
 
 private:
     struct Impl;

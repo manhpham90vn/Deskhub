@@ -12,19 +12,52 @@ const char* RecoveryActionName(RecoveryAction action) {
     return "?";
 }
 
-void RecoveryPolicy::Reset() {
+void RecoveryPolicy::ResetLocked() {
     newestLongTerm_ = 0;
     haveLongTerm_ = false;
     refreshFramesLeft_ = 0;
     recoveryPending_ = false;
 }
 
+void RecoveryPolicy::Reset() {
+    std::lock_guard<std::mutex> lk(mutex_);
+    ResetLocked();
+}
+
+void RecoveryPolicy::SetCaps(EncoderRecoveryCaps caps) {
+    std::lock_guard<std::mutex> lk(mutex_);
+    caps_ = caps;
+    ResetLocked();
+}
+
+EncoderRecoveryCaps RecoveryPolicy::caps() const {
+    std::lock_guard<std::mutex> lk(mutex_);
+    return caps_;
+}
+
+bool RecoveryPolicy::refreshing() const {
+    std::lock_guard<std::mutex> lk(mutex_);
+    return refreshFramesLeft_ != 0;
+}
+
+bool RecoveryPolicy::haveLongTerm() const {
+    std::lock_guard<std::mutex> lk(mutex_);
+    return haveLongTerm_;
+}
+
+uint32_t RecoveryPolicy::newestLongTerm() const {
+    std::lock_guard<std::mutex> lk(mutex_);
+    return newestLongTerm_;
+}
+
 bool RecoveryPolicy::ShouldMarkLongTerm(uint32_t frameId) const {
+    std::lock_guard<std::mutex> lk(mutex_);
     if (!caps_.longTermReference) return false;
     return frameId % kLongTermIntervalFrames == 0;
 }
 
 void RecoveryPolicy::NoteEncoded(uint32_t frameId, bool idr, bool markedLongTerm) {
+    std::lock_guard<std::mutex> lk(mutex_);
     if (refreshFramesLeft_) --refreshFramesLeft_;
     recoveryPending_ = false;
 
@@ -36,6 +69,7 @@ void RecoveryPolicy::NoteEncoded(uint32_t frameId, bool idr, bool markedLongTerm
 }
 
 RecoveryDecision RecoveryPolicy::OnReferenceLost(uint32_t lostFrameId) {
+    std::lock_guard<std::mutex> lk(mutex_);
     RecoveryDecision decision;
 
     if (refreshFramesLeft_ && !recoveryPending_) {
