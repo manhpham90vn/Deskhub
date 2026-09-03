@@ -25,7 +25,7 @@
 #include "deskhubp/system/HostIdentity.h"
 #include "deskhubp/system/Random.h"
 
-#ifdef _WIN32
+#if defined(_WIN32)
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #else

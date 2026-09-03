@@ -12,7 +12,7 @@ namespace deskhubp {
 namespace {
 
 std::filesystem::path HomePath() {
-#ifdef _WIN32
+#if defined(_WIN32)
     const std::string home = EnvValue("USERPROFILE");
 #else
     const std::string home = EnvValue("HOME");

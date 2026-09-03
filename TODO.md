@@ -532,8 +532,11 @@ mà là chọn cho đúng trên từng máy — đó chính là C1.
 - [x] Cắt gói parity xuống theo gói dữ liệu lớn nhất trong group **(A1)** — không sửa thì mọi phép đo sau đều tính trên overhead sai
 - [x] Đếm datagram bị `SendDatagram` từ chối, phơi ra dòng diag cạnh `e2e_ms` **(P1, chẩn đoán)** — `QuicSendStats` đã có sẵn chỗ
 - [ ] Bắt loss và jitter thật trên ba link: WiFi nhà, WiFi quán, Tailscale qua WAN
+  — **2/3 xong**: LAN có dây + WiFi nhà (01/09), Tailscale qua WAN (03/09, xem dưới). Còn WiFi quán
 - [ ] Đối chiếu: bao nhiêu phần "loss" là của mạng, bao nhiêu là tự mình bỏ ở hàng đợi
+  — vẫn treo trên link WAN: host là máy Mac chạy build cũ, không có `dgram_refused`
 - [ ] Rút ra tham số Gilbert-Elliott từ phần loss thật: tỉ lệ mất, độ dài burst trung bình, phân bố
+  — **chặn bởi một bộ đếm còn thiếu**, xem "Bộ đếm chặn mục Gilbert-Elliott" dưới đây
 - [x] Chốt hàm mục tiêu và ngưỡng đạt **trước khi** nhìn thấy bất kỳ con số nào — xem bảng dưới
 
 #### Hàm mục tiêu và ngưỡng đạt
@@ -556,6 +559,80 @@ mà là chọn cho đúng trên từng máy — đó chính là C1.
 **Quy tắc chấm chung, áp cho mọi bake-off:** IDR phải tách theo `KeyframeReason` trước khi
 đếm — `q_overflow`, `dec_fail`, `display_congested` đến từ pipeline client chứ không phải từ
 mạng, và trên phần cứng thật chúng chiếm phần đáng kể. Xem dòng `evt=kf_sum`.
+
+#### Đã đo: Tailscale qua WAN (03/09/2026) — và link này **bursty**, trái hẳn WiFi nhà
+
+Viewer là `deskhub-cli` release trên Ubuntu (`manh-pham-ubuntu`, VA-API), host là MacBook Pro qua
+Tailscale. Đường đi **direct qua IP công cộng**, không qua DERP — `tailscale status` báo
+`direct 1.54.20.207:42986`, nên đây là WAN thật chứ không phải Tailscale đi tắt qua LAN.
+5 phút, 309 cửa sổ, H264 1920x1246 thương lượng ở 60 fps / 20 Mbps.
+
+| | WiFi nhà (01/09) | **Tailscale WAN (03/09)** |
+| --- | --- | --- |
+| Cửa sổ | 300 | 309 |
+| min RTT | — | 5,9 ms (p50 6,2 · max 8,1) |
+| RTT trong phiên | p50 15,9 · max 91,7 ms | p50 8,9 · p90 12,3 · max 44,4 ms |
+| Bitrate | p50 8483 kbps | p50 11 860 · max 15 818 kbps |
+| fps | p50 38 | p50 29 · min 8 · max 37 |
+| e2e | p50 20,1 · p90 29,8 · max 47,6 ms | p50 34,9 · p90 53,1 · **max 285,5 ms** |
+| Cửa sổ có mất gói | 5/196, đều 0,1% | 12/309 |
+| **Độ dài run mất gói** | **tất cả bằng 1**, longest 1 | **TB ≥ 4,9 gói, longest 41** |
+| FEC vá được | 0 | 24 gói, đổi bằng 7350 gói parity |
+
+**Phân bố độ dài burst (129 burst):**
+
+| độ dài | 1 | 2 | 3 | 4–7 | 8–15 | 16–31 | 32+ |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| số burst | 33 | 25 | 11 | 29 | 18 | 10 | 3 |
+
+47% số burst dài từ 4 gói trở lên. Đây là chế độ loss **hoàn toàn khác** WiFi nhà, nơi mọi burst
+đều đúng 1 gói.
+
+##### Ba kết luận rút ra được ngay
+
+- **Không có một bộ tham số Gilbert-Elliott nào phục vụ được cả hai link.** WiFi nhà: 0,0015%,
+  burst 1,0, không bursty chút nào. Tailscale WAN: burst TB ≥4,9, dài nhất 41. Giả định
+  `5% / burst 4` mà sim Phase 2 đang chạy **lệch ba bậc so với WiFi nhà nhưng gần đúng về hình
+  dạng với WAN**. Nghĩa là bảng xếp hạng FEC phải có **hai điểm vận hành**, không phải một.
+- **XOR đơn parity không có cửa trên link này, và giờ có số để nói.** Group size 8, một gói parity
+  mỗi group, cứu tối đa 1 gói mất mỗi group. Với burst 41 gói thì không sơ đồ XOR nào chạm tới.
+  Con số 7350 parity đổi lấy 24 gói vá là bằng chứng thực nghiệm đầu tiên ủng hộ Reed-Solomon hoặc
+  NACK trên WAN — trước đó A1 chỉ có lập luận, chưa có số từ link thật.
+- **A1 trượt ngưỡng của chính nó trên link này.** 13 IDR do `KeyframeReason::Loss` trong 5,15 phút
+  = **2,5 IDR/phút**, trong khi ngưỡng đạt đặt ở ≤ 2/phút. Tổng 16 IDR (13 loss · 2 dec_fail ·
+  1 wait_idr), trung bình 130 KB mỗi cái, tổng 2080 KB — chỉ để vá cho lượng dữ liệu mất nhỏ hơn
+  hai bậc.
+
+Frame bị bỏ, theo lý do: `timeout` 16 frame (264 gói vắng), `overtaken` 13 frame (216), `evicted`
+6 frame (300).
+
+##### Bốn cảnh báo phải nói kèm mỗi lần trích bảng này
+
+- **Nội dung màn hình không kiểm soát được** — desktop Mac bất kỳ, không phải clip cố định. Bitrate
+  và fps vì thế chỉ đọc được như bậc độ lớn.
+- **fps p50 29 trên một phiên thương lượng 60 fps**: encoder phía Mac là trần, đúng như nhận xét đã
+  ghi cho máy Windows. Phép đo này chạm trần encoder trước khi chạm trần transport.
+- **`dgram_refused` không có**: Mac chạy build cũ (nhận ra vì `evt=sum` không có `e2e_abs_ms`). Nên
+  mục "bao nhiêu phần loss là tự mình bỏ ở hàng đợi" **vẫn chưa trả lời được cho link WAN**. Kết
+  luận P1 ngày 01/09 chỉ đúng trong biên LAN + WiFi nhà, và biên đó vẫn chưa được nới.
+- **Phân bố burst ở trên là chặn dưới, không phải loss trên dây.** Xem mục kế tiếp.
+
+##### Bộ đếm chặn mục Gilbert-Elliott
+
+`stats_.packetsLost` chỉ cộng bên trong `Drop()` (`core/src/transport/Reassembler.cpp:220`), và
+`lossRuns[]` cũng vậy (`:246`). Nghĩa là cả hai chỉ đếm gói mất trên những frame **đã bị bỏ**. Gói
+mất mà FEC vá (`packetsRecovered`, `:125`) hoặc NACK vá kịp thì không xuất hiện ở đâu.
+
+Phiên này cho thấy chỗ đó không phải lý thuyết: **810 gói "late"** đã tới muộn trong 5 phút — tức
+đã từng vắng mặt rồi được vá — và không gói nào trong số đó vào `lossPct` hay `lossRuns`. Vậy:
+
+- `lossPct` hôm nay = **loss không cứu được**, không phải loss trên dây
+- bảng phân bố burst ở trên = **phân bố của những burst mà cả FEC lẫn NACK đều không cứu nổi**
+
+Cả hai đều là chặn dưới, và càng lệch khi FEC/NACK càng hiệu quả. Muốn có tham số Gilbert-Elliott
+thật phải thêm một bộ đếm "gói từng vắng mặt" cộng phân bố run tính **tại lúc phát hiện gap**, chứ
+không tại lúc drop; và một bộ đếm riêng cho gói vá bằng NACK (hiện chỉ có `packetsRecovered` cho
+FEC). Chưa làm.
 
 #### Bốn dụng cụ đo phải thêm mới đo được, ngoài kế hoạch ban đầu
 

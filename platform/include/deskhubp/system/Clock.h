@@ -3,7 +3,7 @@
 #include <ctime>
 #include <string>
 
-#ifdef _WIN32
+#if defined(_WIN32)
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
@@ -76,7 +76,7 @@ inline std::string FormatUnixMinute(int64_t unixTime) {
     if (unixTime <= 0) return {};
     const std::time_t stamp = std::time_t(unixTime);
     std::tm parts{};
-#ifdef _WIN32
+#if defined(_WIN32)
     if (localtime_s(&parts, &stamp) != 0) return {};
 #else
     if (localtime_r(&stamp, &parts) == nullptr) return {};

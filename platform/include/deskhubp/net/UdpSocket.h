@@ -76,7 +76,7 @@ public:
     void Close();
 
     bool IsOpen() const {
-#ifdef _WIN32
+#if defined(_WIN32)
         return sock_ != ~0ull;
 #else
         return fd_ >= 0;
@@ -90,11 +90,13 @@ public:
     uint16_t LocalPort() const;
 
 private:
-#ifdef _WIN32
+#if defined(_WIN32)
     uint64_t sock_ = ~0ull;
 #else
     int fd_ = -1;
 #endif
     bool lastBindAddrInUse_ = false;
+#if defined(__linux__)
     bool segmentationOffloadOff_ = false;
+#endif
 };

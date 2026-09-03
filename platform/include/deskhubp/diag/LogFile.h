@@ -4,7 +4,7 @@
 #include <ctime>
 #include <string>
 
-#ifdef _WIN32
+#if defined(_WIN32)
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
@@ -43,7 +43,7 @@ inline void SetAppDataDir(std::string dir) {
 inline std::string LogFileName() {
     const std::time_t now = std::time(nullptr);
     std::tm tm{};
-#ifdef _WIN32
+#if defined(_WIN32)
     localtime_s(&tm, &now);
     const unsigned long pid = static_cast<unsigned long>(GetCurrentProcessId());
 #else
@@ -59,7 +59,7 @@ inline std::string LogFileName() {
 inline std::string LocalTimeHms() {
     const std::time_t now = std::time(nullptr);
     std::tm tm{};
-#ifdef _WIN32
+#if defined(_WIN32)
     localtime_s(&tm, &now);
 #else
     localtime_r(&now, &tm);
@@ -69,7 +69,7 @@ inline std::string LocalTimeHms() {
     return std::string(buf);
 }
 
-#ifdef _WIN32
+#if defined(_WIN32)
 
 inline std::wstring WidenUtf8(const std::string& s) {
     if (s.empty()) return std::wstring();
