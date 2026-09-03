@@ -1080,10 +1080,14 @@ thẳng tới `pacer_`, nhưng coi là chưa kiểm chứng cho tới khi CI mac
 *P2, A6, C2.*
 
 - [ ] P2 — `sendmmsg`/`recvmmsg`, rồi GSO/GRO trên Linux; đo ngưỡng bitrate mà CPU thành nút cổ chai
-  — **một phần**: `UdpSocket::SendBatch` đã có trong API dùng chung, `QuicEndpoint::Flush` gom
-  cả burst rồi gửi một lần. Windows là vòng lặp, Linux là `sendmmsg`. **Nhánh Linux chưa từng
-  được biên dịch** — máy này chỉ build `UdpSocketWin.cpp`, nên coi nó là chưa kiểm chứng cho
-  tới khi CI Linux chạy. `recvmmsg`, GSO/GRO và RIO **chưa làm**; phép đo CPU cũng chưa
+  — **xong phần gộp syscall; còn GRO, RIO và phép đo ngưỡng bitrate.** `UdpSocket::SendBatch` nay
+  thử `UDP_SEGMENT` (GSO) trước rồi mới rơi về `sendmmsg`; `UdpSocket::RecvBatch` là `recvmmsg`
+  với `MSG_WAITFORONE` trên Linux và vòng `RecvFrom` ở mọi OS khác; `QuicEndpoint::Poll` đọc theo
+  lô 16 gói thay vì từng gói một. **Nhánh Linux nay đã được biên dịch, chạy test và strace trên chính máy này** —
+  ngược với ghi chú cũ; nhánh Windows là nhánh chưa qua compiler ở đây.
+  **Chưa làm: GRO và RIO** — GRO gộp nhiều datagram vào một buffer, tức phá vỡ giao kèo
+  "một slot một datagram" mà `RecvBatch` dựng trên; đó là một thay đổi API riêng, không phải
+  nửa sau của mục này. Xem kết quả đo ở dưới
 - [x] A6 — pacing thích ứng và khớp vsync, đo judder
   — quét 24 điểm (lead 8…66 ms × wobble 0/5/20 ms, có và không khớp vsync) xuất CSV.
   **Phát hiện: trục "độ trễ cộng thêm" của A6 không có trade nào cả.** Không khớp vsync thì
@@ -1091,6 +1095,60 @@ thẳng tới `pacer_`, nhưng coi là chưa kiểm chứng cho tới khi CI mac
   hẹp được một micro giây. Khớp vsync đưa spread về **0** và không tốn độ trễ nào
 - [ ] C2 — đo độ trễ capture của WGC, đối chiếu với DXGI Desktop Duplication
 - [x] Tier B — thêm jitter vào backoff của `LinkRecovery`; nhớ đây là đổi chữ ký `ReconnectDelayUs` cộng mọi caller, không phải sửa tại chỗ
+
+#### Đã đo: gộp syscall UDP, và cái nó phơi ra (03/09/2026)
+
+Đo bằng `platform_perf` trên loopback, release build, so trước/sau trên cùng máy. Loopback không
+nói gì về thông lượng của một đường thật — nhưng những thứ nó gỡ đi là thời gian đồng hồ trên mọi
+đường.
+
+**Phát hiện chính, và nó lớn hơn chính phép gộp lô: mỗi lần `QuicEndpoint::Poll` đều kết thúc bằng
+một giấc ngủ 1 ms.** Vòng đọc cũ gọi `RecvFrom` cho tới khi một lần trả về rỗng, mà "rỗng" chỉ về
+sau khi `SO_RCVTIMEO` hết hạn. Nên một lần poll đã vét sạch socket vẫn trả trọn cái sàn timeout, ở
+*mọi* lần gọi. `SessionTransport::RecvFrom` vốn đã chặn chính `Poll` ấy sau `WaitReadable(10 ms)`
+của nó, nên giấc ngủ kia là phần cộng thêm thuần tuý trên mọi lần nhận.
+
+Đọc theo lô bỏ hẳn lần đọc thăm dò: lô về ngắn nghĩa là socket rỗng, không cần hỏi lại. Còn lại
+`SetRecvTimeout(0)` — POSIX hiểu là "chờ mãi mãi" nên code cũ ép thành 1 ms — nay nghĩa là
+"đừng chờ" (`O_NONBLOCK` trên POSIX, `FIONBIO` trên Windows). An toàn vì mọi caller truyền 0 đều đã
+có cái chờ của riêng mình bao quanh.
+
+| workload | trước | sau | |
+| --- | ---: | ---: | ---: |
+| `quic/poll-idle` | 1 978 692 ns | **732 ns** | 2700x |
+| `quic/terminal-record-delivery` | 4 244 632 ns | **9 201 ns** | 461x |
+| `quic/stream-throughput-64k` | 61 210 ns/KB (16,7 MB/s) | **2 045 ns/KB (500,7 MB/s)** | 30x |
+| `quic/datagram-delivery` | 248 515 ns | **3 986 ns** | 62x |
+| `quic/handshake` | 47 947 298 ns | **361 538 ns** | 133x |
+| `quic/stream-drain-scaling` | 62 469 ns/KB, 3,78x | **1 958 ns/KB, 3,84x** | vẫn tuyến tính |
+
+**Bản thân phép gộp lô mua được ít hơn giấc ngủ nó phơi ra, và phía gửi mua được nhiều hơn phía
+nhận.** `sendmmsg` vốn đã gom cả burst vào một syscall, nên GSO mua phần việc trong kernel chứ
+không mua số syscall — một lượt qua ngăn xếp UDP/IP thay vì mười sáu:
+
+| đường đi, 16 × 1200 byte trên loopback | ns/datagram |
+| --- | ---: |
+| `sendto` từng gói + `recvfrom` từng gói | 2036 |
+| GSO gửi + `recvfrom` từng gói | 636 |
+| GSO gửi + `recvmmsg` | **623** |
+
+Tức GSO đáng 3,2x; bước cuối nằm trong sai số giữa các lần chạy — hai dòng gộp lô đổi chỗ cho nhau
+giữa hai lần — vì trên loopback kernel đã giữ sẵn mọi gói và một lần nhận gần như miễn phí.
+`recvmmsg` vẫn xứng chỗ vì nó gỡ đi *lý do* khiến vòng lặp phải thăm dò. Đo trên một lần chạy
+`platform_tests` dưới `strace`: 17 317 datagram về trong 1631 lần gọi có kết quả — **10,6 gói mỗi
+syscall**; phía gửi 16 953 datagram trong 1724 lần `sendmsg` mang `UDP_SEGMENT` — 9,8 gói mỗi lần.
+
+**Cái thứ ba, chỉ lộ ra sau khi giấc ngủ biến mất: `Poll` cấp phát ~1,5 lần mỗi lần gọi.**
+`Service()` dựng một `std::vector` id kết nối mỗi lần, `DrainStreams` một buffer 16 KB mới,
+`DrainDatagrams` một buffer 1350 byte. Khi mỗi poll còn ngủ 1 ms thì không ai thấy; vừa bỏ ngủ thì
+`quic/terminal-record-delivery` nhảy từ 9 lên **27** lần cấp phát mỗi record — cùng một record nay
+tốn gấp ba số vòng poll. Sửa bằng mảng stack chặn bởi `kMaxConnections` và buffer do endpoint sở
+hữu; `quic/poll-idle` về **0,00** lần cấp phát mỗi poll. Ngân sách cấp phát của workload đó đạt
+chuẩn bao năm nay thật ra đang đo giấc ngủ, không đo đường chạy.
+
+**Chưa trả lời:** ngưỡng bitrate mà CPU thành nút cổ chai. Loopback đo được chi phí *mỗi gói*, không
+đo được chỗ mà một link thật no. Muốn con số đó phải chạy trên đường thật ở nhiều mức bitrate, cùng
+bài đo với Phase 0 — nó thuộc về danh sách "cần link thật", không phải về sim.
 
 ### Phase 7 — Những món trải khắp ba lớp
 

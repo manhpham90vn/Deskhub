@@ -5,7 +5,9 @@
 #include "deskhubp/net/UdpSocket.h"
 
 #include <arpa/inet.h>
+#include <fcntl.h>
 #include <netinet/in.h>
+#include <netinet/udp.h>
 #include <poll.h>
 #include <sys/socket.h>
 #include <sys/time.h>
@@ -13,6 +15,7 @@
 
 #include <cerrno>
 #include <cstdio>
+#include <cstring>
 
 #include "deskhub/ui/Strings.h"
 #include "deskhubp/diag/Log.h"
@@ -77,6 +80,10 @@ bool UdpSocket::Open(uint16_t localPort, const std::string& bindIp) {
 
 bool UdpSocket::SetRecvTimeout(uint32_t ms) {
     if (!IsOpen()) return false;
+    const int flags = fcntl(fd_, F_GETFL, 0);
+    if (flags < 0) return false;
+    const int wanted = ms == 0 ? (flags | O_NONBLOCK) : (flags & ~O_NONBLOCK);
+    if (wanted != flags && fcntl(fd_, F_SETFL, wanted) != 0) return false;
     timeval tv{};
     tv.tv_sec = decltype(tv.tv_sec)(ms / 1000);
     tv.tv_usec = decltype(tv.tv_usec)((ms % 1000) * 1000);
@@ -99,6 +106,90 @@ bool UdpSocket::SendTo(const NetAddr& to, const uint8_t* data, size_t len) {
     return n == ssize_t(len);
 }
 
+namespace {
+
+#if defined(__linux__)
+
+constexpr size_t kMaxSegmentedRunBytes = 0xFFFF;
+
+size_t LeadingRunOfEqualSegments(std::span<const OutboundDatagram> packets) {
+    const size_t segment = packets[0].len;
+    if (segment == 0 || segment > kMaxSegmentedRunBytes) return 0;
+    const size_t room = kMaxSegmentedRunBytes / segment;
+    size_t run = 1;
+    while (run < packets.size() && run < room && packets[run].len == segment) ++run;
+    if (run < packets.size() && run < room && packets[run].len < segment) ++run;
+    return run;
+}
+
+bool SegmentationOffloadRefused(int code) {
+    return code == EIO || code == EINVAL || code == ENOPROTOOPT || code == EOPNOTSUPP ||
+           code == EMSGSIZE;
+}
+
+bool SendOneSegmentedRun(int fd, const sockaddr_in& sa, std::span<const OutboundDatagram> run,
+    bool& refused) {
+    iovec iov[kMaxSendBatch]{};
+    size_t total = 0;
+    for (size_t i = 0; i < run.size(); ++i) {
+        iov[i].iov_base = const_cast<uint8_t*>(run[i].data);
+        iov[i].iov_len = run[i].len;
+        total += run[i].len;
+    }
+
+    alignas(cmsghdr) char control[CMSG_SPACE(sizeof(uint16_t))]{};
+    msghdr msg{};
+    msg.msg_name = const_cast<sockaddr_in*>(&sa);
+    msg.msg_namelen = sizeof(sa);
+    msg.msg_iov = iov;
+    msg.msg_iovlen = run.size();
+    msg.msg_control = control;
+    msg.msg_controllen = sizeof(control);
+
+    cmsghdr* header = CMSG_FIRSTHDR(&msg);
+    header->cmsg_level = IPPROTO_UDP;
+    header->cmsg_type = UDP_SEGMENT;
+    header->cmsg_len = CMSG_LEN(sizeof(uint16_t));
+    const uint16_t segment = uint16_t(run[0].len);
+    std::memcpy(CMSG_DATA(header), &segment, sizeof(segment));
+
+    for (;;) {
+        const ssize_t n = sendmsg(fd, &msg, 0);
+        if (n == ssize_t(total)) return true;
+        if (n < 0 && errno == EINTR) continue;
+        refused = n < 0 && SegmentationOffloadRefused(errno);
+        return false;
+    }
+}
+
+size_t SendEachSeparately(int fd, const sockaddr_in& sa, std::span<const OutboundDatagram> packets) {
+    iovec iov[kMaxSendBatch]{};
+    mmsghdr msgs[kMaxSendBatch]{};
+    for (size_t i = 0; i < packets.size(); ++i) {
+        iov[i].iov_base = const_cast<uint8_t*>(packets[i].data);
+        iov[i].iov_len = packets[i].len;
+        msgs[i].msg_hdr.msg_name = const_cast<sockaddr_in*>(&sa);
+        msgs[i].msg_hdr.msg_namelen = sizeof(sa);
+        msgs[i].msg_hdr.msg_iov = &iov[i];
+        msgs[i].msg_hdr.msg_iovlen = 1;
+    }
+
+    size_t done = 0;
+    while (done < packets.size()) {
+        const int n = sendmmsg(fd, msgs + done, unsigned(packets.size() - done), 0);
+        if (n <= 0) {
+            if (errno == EINTR) continue;
+            break;
+        }
+        done += size_t(n);
+    }
+    return done;
+}
+
+#endif
+
+}
+
 size_t UdpSocket::SendBatch(const NetAddr& to, std::span<const OutboundDatagram> packets) {
     if (!IsOpen() || packets.empty()) return 0;
 
@@ -109,27 +200,19 @@ size_t UdpSocket::SendBatch(const NetAddr& to, std::span<const OutboundDatagram>
 
 #if defined(__linux__)
     const size_t batch = packets.size() < kMaxSendBatch ? packets.size() : kMaxSendBatch;
-    iovec iov[kMaxSendBatch]{};
-    mmsghdr msgs[kMaxSendBatch]{};
-    for (size_t i = 0; i < batch; ++i) {
-        iov[i].iov_base = const_cast<uint8_t*>(packets[i].data);
-        iov[i].iov_len = packets[i].len;
-        msgs[i].msg_hdr.msg_name = &sa;
-        msgs[i].msg_hdr.msg_namelen = sizeof(sa);
-        msgs[i].msg_hdr.msg_iov = &iov[i];
-        msgs[i].msg_hdr.msg_iovlen = 1;
-    }
-
-    size_t done = 0;
-    while (done < batch) {
-        const int n = sendmmsg(fd_, msgs + done, unsigned(batch - done), 0);
-        if (n <= 0) {
-            if (errno == EINTR) continue;
-            break;
+    size_t sent = 0;
+    while (!segmentationOffloadOff_ && batch - sent >= 2) {
+        const size_t run = LeadingRunOfEqualSegments(packets.subspan(sent, batch - sent));
+        if (run < 2) break;
+        bool refused = false;
+        if (SendOneSegmentedRun(fd_, sa, packets.subspan(sent, run), refused)) {
+            sent += run;
+            continue;
         }
-        done += size_t(n);
+        if (!refused) return sent;
+        segmentationOffloadOff_ = true;
     }
-    return done;
+    return sent + SendEachSeparately(fd_, sa, packets.subspan(sent, batch - sent));
 #else
     size_t sent = 0;
     for (const OutboundDatagram& packet : packets) {
@@ -154,6 +237,55 @@ int UdpSocket::RecvFrom(uint8_t* buf, size_t cap, NetAddr& from) {
     if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR || errno == ECONNREFUSED)
         return 0;
     return -1;
+}
+
+int UdpSocket::RecvBatch(std::span<InboundDatagram> slots) {
+    if (!IsOpen()) return -1;
+    if (slots.empty()) return 0;
+
+#if defined(__linux__)
+    const size_t batch = slots.size() < kMaxRecvBatch ? slots.size() : kMaxRecvBatch;
+    iovec iov[kMaxRecvBatch]{};
+    mmsghdr msgs[kMaxRecvBatch]{};
+    sockaddr_in addrs[kMaxRecvBatch]{};
+    for (size_t i = 0; i < batch; ++i) {
+        iov[i].iov_base = slots[i].buf;
+        iov[i].iov_len = slots[i].cap;
+        msgs[i].msg_hdr.msg_name = &addrs[i];
+        msgs[i].msg_hdr.msg_namelen = sizeof(addrs[i]);
+        msgs[i].msg_hdr.msg_iov = &iov[i];
+        msgs[i].msg_hdr.msg_iovlen = 1;
+    }
+
+    int got = 0;
+    for (;;) {
+        got = recvmmsg(fd_, msgs, unsigned(batch), MSG_WAITFORONE, nullptr);
+        if (got >= 0) break;
+        if (errno == EINTR) continue;
+        if (errno == EAGAIN || errno == EWOULDBLOCK || errno == ECONNREFUSED) return 0;
+        return -1;
+    }
+
+    for (int i = 0; i < got; ++i) {
+        InboundDatagram& slot = slots[size_t(i)];
+        slot.len = msgs[i].msg_len;
+        slot.from.ip = ntohl(addrs[i].sin_addr.s_addr);
+        slot.from.port = ntohs(addrs[i].sin_port);
+    }
+    return got;
+#else
+    const size_t batch = slots.size() < kMaxRecvBatch ? slots.size() : kMaxRecvBatch;
+    int filled = 0;
+    for (size_t i = 0; i < batch; ++i) {
+        InboundDatagram& slot = slots[i];
+        const int n = RecvFrom(slot.buf, slot.cap, slot.from);
+        if (n < 0) return filled > 0 ? filled : -1;
+        if (n == 0) break;
+        slot.len = size_t(n);
+        ++filled;
+    }
+    return filled;
+#endif
 }
 
 uint16_t UdpSocket::LocalPort() const {

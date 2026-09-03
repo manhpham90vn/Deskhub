@@ -100,6 +100,8 @@ bool UdpSocket::Open(uint16_t localPort, const std::string& bindIp) {
 
 bool UdpSocket::SetRecvTimeout(uint32_t ms) {
     if (!IsOpen()) return false;
+    u_long refuseToWait = ms == 0 ? 1 : 0;
+    if (ioctlsocket(SOCKET(sock_), FIONBIO, &refuseToWait) != 0) return false;
     DWORD t = ms;
     return setsockopt(SOCKET(sock_), SOL_SOCKET, SO_RCVTIMEO,
                (const char*)&t, sizeof(t)) == 0;
@@ -144,8 +146,27 @@ int UdpSocket::RecvFrom(uint8_t* buf, size_t cap, NetAddr& from) {
         return n;
     }
     const int err = WSAGetLastError();
-    if (err == WSAETIMEDOUT || err == WSAECONNRESET || err == WSAEMSGSIZE) return 0;
+    if (err == WSAETIMEDOUT || err == WSAEWOULDBLOCK || err == WSAECONNRESET ||
+        err == WSAEMSGSIZE)
+        return 0;
     return -1;
+}
+
+int UdpSocket::RecvBatch(std::span<InboundDatagram> slots) {
+    if (!IsOpen()) return -1;
+    if (slots.empty()) return 0;
+
+    const size_t batch = slots.size() < kMaxRecvBatch ? slots.size() : kMaxRecvBatch;
+    int filled = 0;
+    for (size_t i = 0; i < batch; ++i) {
+        InboundDatagram& slot = slots[i];
+        const int n = RecvFrom(slot.buf, slot.cap, slot.from);
+        if (n < 0) return filled > 0 ? filled : -1;
+        if (n == 0) break;
+        slot.len = size_t(n);
+        ++filled;
+    }
+    return filled;
 }
 
 uint16_t UdpSocket::LocalPort() const {

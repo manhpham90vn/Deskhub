@@ -346,6 +346,7 @@ if(DESKHUB_PLATFORM_PERF)
     add_executable(platform_perf
         perf/PerfMain.cpp
         perf/QuicPerf.cpp
+        perf/UdpPerf.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/../core/perf/PerfHarness.cpp
     )
     target_link_libraries(platform_perf PRIVATE platform)

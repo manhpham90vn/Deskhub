@@ -5,8 +5,10 @@
 #include "deskhubp/net/UdpSocket.h"
 #include "deskhubp/system/Clock.h"
 
+#include <array>
 #include <cstdio>
 #include <cstring>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -192,6 +194,94 @@ void TestWaitReadableTellsTheLoopWhenToRead() {
         "and the read that follows gets exactly it");
 }
 
+void TestABatchOfDatagramsArrivesWholeAndSeparate() {
+    std::printf("[udp] a burst leaves in one syscall and comes back as separate datagrams...\n");
+    UdpSocket receiver;
+    const uint16_t port = OpenOnAFreePort(receiver);
+    if (!port) {
+        std::printf("  skipped: no free port in %u..%u\n", unsigned(kFirstTestPort),
+            unsigned(kLastTestPort));
+        return;
+    }
+    receiver.SetRecvTimeout(200);
+
+    UdpSocket sender;
+    Check(sender.Open(0), "the sender takes an ephemeral port");
+
+    constexpr size_t kBurst = 9;
+    constexpr size_t kFullBytes = 1200;
+    constexpr size_t kTailBytes = 337;
+    std::vector<std::vector<uint8_t>> payloads;
+    std::vector<OutboundDatagram> outbound;
+    for (size_t i = 0; i < kBurst; ++i) {
+        const size_t bytes = i + 1 == kBurst ? kTailBytes : kFullBytes;
+        std::vector<uint8_t> payload(bytes, uint8_t(i));
+        payloads.push_back(std::move(payload));
+    }
+    for (const std::vector<uint8_t>& payload : payloads)
+        outbound.push_back(OutboundDatagram{payload.data(), payload.size()});
+
+    const NetAddr to{kLoopbackIp, port};
+    Check(sender.SendBatch(to, outbound) == kBurst, "every datagram in the burst is sent");
+
+    std::vector<std::array<uint8_t, 2048>> buffers(kMaxRecvBatch);
+    std::vector<bool> seen(kBurst, false);
+    size_t received = 0;
+    for (int attempt = 0; attempt < 20 && received < kBurst; ++attempt) {
+        std::vector<InboundDatagram> slots(kMaxRecvBatch);
+        for (size_t i = 0; i < slots.size(); ++i)
+            slots[i] = InboundDatagram{buffers[i].data(), buffers[i].size(), 0, NetAddr{}};
+        const int got = receiver.RecvBatch(slots);
+        if (got < 0) {
+            Check(false, "reading a burst never reports an error on an open socket");
+            return;
+        }
+        for (int i = 0; i < got; ++i) {
+            const InboundDatagram& slot = slots[size_t(i)];
+            Check(slot.len == kFullBytes || slot.len == kTailBytes,
+                "each datagram keeps its own length, so segmentation offload never merges two");
+            const size_t index = slot.buf[0];
+            Check(index < kBurst, "and its payload names which of the burst it was");
+            Check(!seen[index], "no datagram arrives twice");
+            seen[index] = true;
+            Check(slot.len == payloads[index].size(),
+                "the length is the one that was sent, not the segment size");
+            Check(std::memcmp(slot.buf, payloads[index].data(), slot.len) == 0,
+                "and the bytes are unchanged");
+            Check(slot.from.ip == kLoopbackIp, "every one names the sender it came from");
+            ++received;
+        }
+    }
+
+    if (received < kBurst) {
+        std::printf("  skipped: loopback dropped %zu of %zu datagrams\n", kBurst - received,
+            kBurst);
+        return;
+    }
+    Check(received == kBurst, "the whole burst arrives");
+}
+
+void TestReadingABatchFromAnIdleSocketIsNotAnError() {
+    std::printf("[udp] an empty batch read reports nothing, not a dead socket...\n");
+    UdpSocket closed;
+    std::array<uint8_t, 64> byteBuf{};
+    InboundDatagram one{byteBuf.data(), byteBuf.size(), 0, NetAddr{}};
+    Check(closed.RecvBatch(std::span<InboundDatagram>(&one, 1)) < 0,
+        "a socket that was never opened reports the error the net loop stops on");
+
+    UdpSocket sock;
+    Check(sock.Open(0), "open");
+    Check(sock.SetRecvTimeout(10), "10 ms timeout");
+    Check(sock.RecvBatch(std::span<InboundDatagram>{}) == 0,
+        "asking for no datagrams reads none and is not an error");
+
+    const uint64_t t0 = NowUs();
+    Check(sock.RecvBatch(std::span<InboundDatagram>(&one, 1)) == 0,
+        "nothing to read reports 0, never a negative error");
+    Check(NowUs() - t0 >= 5'000,
+        "and the call waited, so batching did not turn the net loop into a spin");
+}
+
 void TestLocalAddressesLookLikeAddresses() {
     std::printf("[netinfo] the addresses shown to the user are ones they can type back...\n");
     const std::vector<AdapterAddr> addrs = ListLocalIPv4();
@@ -217,5 +307,7 @@ void RunUdpSocketTests() {
     TestABoundAddressStillReceives();
     TestATimedOutReceiveIsNotAnError();
     TestWaitReadableTellsTheLoopWhenToRead();
+    TestABatchOfDatagramsArrivesWholeAndSeparate();
+    TestReadingABatchFromAnIdleSocketIsNotAnError();
     TestLocalAddressesLookLikeAddresses();
 }

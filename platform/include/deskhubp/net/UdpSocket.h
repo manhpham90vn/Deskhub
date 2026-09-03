@@ -42,7 +42,15 @@ struct OutboundDatagram {
     size_t len = 0;
 };
 
+struct InboundDatagram {
+    uint8_t* buf = nullptr;
+    size_t cap = 0;
+    size_t len = 0;
+    NetAddr from{};
+};
+
 inline constexpr size_t kMaxSendBatch = 16;
+inline constexpr size_t kMaxRecvBatch = 16;
 
 class UdpSocket {
 public:
@@ -62,6 +70,8 @@ public:
     size_t SendBatch(const NetAddr& to, std::span<const OutboundDatagram> packets);
 
     int RecvFrom(uint8_t* buf, size_t cap, NetAddr& from);
+
+    int RecvBatch(std::span<InboundDatagram> slots);
 
     void Close();
 
@@ -86,4 +96,5 @@ private:
     int fd_ = -1;
 #endif
     bool lastBindAddrInUse_ = false;
+    bool segmentationOffloadOff_ = false;
 };

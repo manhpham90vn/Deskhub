@@ -1057,3 +1057,43 @@ line.
   12.3-17.6 ms. Both reach the same silicon here — `mf` resolves to "NVIDIA H.264 Encoder MFT" on
   this machine — so this is not yet the Intel-versus-NVIDIA question C1 asks; it is what going
   through Media Foundation costs to reach the same hardware.
+- **Every `QuicEndpoint::Poll` ended with a sleep, and batching is what made that visible**: the
+  read loop called `RecvFrom` until one returned nothing, and "nothing" only comes back once
+  `SO_RCVTIMEO` expires — so a poll that had already drained the socket still paid the timeout
+  floor, 1 ms in the common case, on every single call. `SessionTransport::RecvFrom` gates that
+  same `Poll` behind its own `WaitReadable(10 ms)`, so the sleep was pure addition on every
+  receive. Reading in batches through `recvmmsg` removes the probing read entirely: a batch that
+  comes back short means the socket is empty, so the loop stops without asking again. That left
+  `SetRecvTimeout(0)`, which POSIX reads as "wait forever" and the old code therefore coerced to
+  1 ms; it now means "do not wait" (`O_NONBLOCK` on POSIX, `FIONBIO` on Windows), which is what
+  `Poll(now, 0)` always claimed to be. Safe because every caller that passes 0 already has its own
+  wait around it — `WaitEstablished` polls then waits, `RecvFrom` waits then polls — so nothing
+  turns into a spin. Measured by `platform_perf` over loopback: an idle poll 1 978 692 ns → 732 ns,
+  a 512-byte terminal record 4 244 632 ns → 9 201 ns, 64 KB of stream 16.7 MB/s → 500.7 MB/s, a
+  QUIC datagram 248 515 ns → 3 986 ns, and the 64 KB→256 KB drain stayed linear (3.78x → 3.84x for
+  4x the work). Loopback says nothing about a real link's throughput, but the 1 ms floor it removes
+  is wall-clock time on any link.
+- **The batching bought less than the sleep it exposed, and the send side bought more than the
+  receive side**: `sendmmsg` had already collapsed a burst into one syscall, so `UDP_SEGMENT`
+  (GSO) buys kernel-side work rather than syscall count — one pass through the UDP/IP stack
+  instead of sixteen. Over loopback at 16 × 1200 bytes: one `sendto` plus one `recvfrom` per
+  datagram costs 2036 ns/datagram, batching only the send side 636 ns, batching both 623 ns. So
+  GSO is worth 3.2x here, and the last step is inside run-to-run noise — the two batched rows
+  swapped order between runs — because on loopback the kernel already holds every packet and a
+  receive is nearly free. `recvmmsg` still earns its place by removing the reason the loop had to
+  probe at all: measured across one `platform_tests` run under `strace`, 17 317 datagrams arrived
+  in 1631 productive calls, 10.6 per syscall. GSO applies only
+  to a run of equal-sized datagrams with an optionally shorter last one, which is the shape
+  `quiche_conn_send` produces, and any kernel that refuses it (`EIO`, `EINVAL`, `ENOPROTOOPT`,
+  `EOPNOTSUPP`, `EMSGSIZE`) switches the socket back to `sendmmsg` for good rather than per burst.
+- **A hot loop's allocations can hide behind its own sleep**: `Service()` built a `std::vector` of
+  connection ids on every call, `DrainStreams` a fresh 16 KB chunk buffer, `DrainDatagrams` a
+  1350-byte one — about 1.5 allocations per `Poll`, on a path that runs per packet. None of it
+  showed up while every poll also slept 1 ms; the moment the sleep went, `quic/terminal-record-
+  delivery` jumped from 9 to 27 allocations per record, because the same record now costs three
+  times as many poll rounds and each round allocated. The fix is stack arrays bounded by
+  `kMaxConnections` for the id lists and buffers owned by the endpoint for the two drains, and
+  `DrainStreams` returns before touching its buffer when no stream is readable. `quic/poll-idle`
+  went from 3.00 allocations per poll to 0.00. The general shape is worth keeping: a per-packet
+  path that sleeps hides its own cost, and the allocation budget that passed for years was
+  measuring the sleep.

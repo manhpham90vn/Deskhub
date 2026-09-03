@@ -30,8 +30,9 @@ void TestAnEncoderWithNoHelpAsksForAKeyframe() {
 }
 
 void TestLongTermReferenceIsPreferredOverAKeyframe() {
-    std::printf("[recovery] a backend with long-term references falls back instead of "
-                "re-sending everything...\n");
+    std::printf(
+        "[recovery] a backend with long-term references falls back instead of "
+        "re-sending everything...\n");
 
     RecoveryPolicy policy(EncoderRecoveryCaps{true, false});
     EncodeRun(policy, 0, 90);

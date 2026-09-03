@@ -1030,3 +1030,39 @@ pull request, và dòng coverage của `core/`.
   cả hai cùng chạm một phần cứng — trên máy này `mf` rơi vào "NVIDIA H.264 Encoder MFT" — nên đây
   chưa phải câu hỏi Intel-so-với-NVIDIA mà C1 đặt ra; đây là cái giá của việc đi vòng qua Media
   Foundation để tới cùng phần cứng đó.
+- **Mỗi lần `QuicEndpoint::Poll` đều kết thúc bằng một giấc ngủ, và chính việc gộp lô mới làm nó
+  lộ ra**: vòng đọc gọi `RecvFrom` cho tới khi một lần trả về không có gì, mà "không có gì" chỉ
+  quay lại sau khi `SO_RCVTIMEO` hết hạn — nên một lần poll đã vét sạch socket vẫn phải trả trọn
+  cái sàn timeout đó, thường là 1 ms, ở mọi lần gọi. `SessionTransport::RecvFrom` vốn đã chặn
+  chính `Poll` ấy sau `WaitReadable(10 ms)` của nó, nên giấc ngủ kia là phần cộng thêm thuần tuý
+  trên mọi lần nhận. Đọc theo lô bằng `recvmmsg` bỏ hẳn lần đọc thăm dò: một lô trả về ngắn nghĩa
+  là socket đã rỗng, nên vòng lặp dừng mà không hỏi lại. Còn lại `SetRecvTimeout(0)`, thứ mà POSIX
+  hiểu là "chờ mãi mãi" và vì thế code cũ ép thành 1 ms; nay nó nghĩa là "đừng chờ" (`O_NONBLOCK`
+  trên POSIX, `FIONBIO` trên Windows), đúng điều `Poll(now, 0)` vẫn luôn tự nhận. An toàn vì mọi
+  caller truyền 0 đều đã có cái chờ của riêng mình bao quanh — `WaitEstablished` poll rồi chờ,
+  `RecvFrom` chờ rồi poll — nên không chỗ nào biến thành vòng quay. Đo bằng `platform_perf` trên
+  loopback: một poll rảnh 1 978 692 ns → 732 ns, một record terminal 512 byte 4 244 632 ns →
+  9 201 ns, 64 KB stream 16,7 MB/s → 500,7 MB/s, một datagram QUIC 248 515 ns → 3 986 ns, và phép
+  vét 64 KB→256 KB vẫn tuyến tính (3,78x → 3,84x cho 4x công việc). Loopback không nói gì về thông
+  lượng của một đường thật, nhưng cái sàn 1 ms nó gỡ đi là thời gian đồng hồ trên mọi đường.
+- **Việc gộp lô mua được ít hơn giấc ngủ mà nó phơi ra, và phía gửi mua được nhiều hơn phía nhận**:
+  `sendmmsg` vốn đã gom cả burst vào một syscall, nên `UDP_SEGMENT` (GSO) mua phần việc trong
+  kernel chứ không mua số syscall — một lượt đi qua ngăn xếp UDP/IP thay vì mười sáu. Trên loopback
+  với 16 × 1200 byte: một `sendto` cộng một `recvfrom` cho mỗi datagram tốn 2036 ns/datagram, chỉ
+  gộp phía gửi tốn 636 ns, gộp cả hai tốn 623 ns. Nghĩa là GSO đáng 3,2x ở đây, còn bước cuối nằm
+  trong sai số giữa các lần chạy — hai dòng gộp lô đổi chỗ cho nhau giữa hai lần — vì trên loopback
+  kernel đã giữ sẵn mọi gói và một lần nhận gần như miễn phí. `recvmmsg` vẫn xứng chỗ của nó vì nó
+  gỡ đi lý do khiến vòng lặp phải thăm dò: đo trên một lần chạy `platform_tests` dưới `strace`,
+  17 317 datagram về trong 1631 lần gọi có kết quả, 10,6 gói mỗi syscall. GSO chỉ áp dụng cho một dãy datagram cùng cỡ với gói cuối được phép ngắn hơn, đúng
+  hình hài `quiche_conn_send` sinh ra, và kernel nào từ chối (`EIO`, `EINVAL`, `ENOPROTOOPT`,
+  `EOPNOTSUPP`, `EMSGSIZE`) thì socket quay về `sendmmsg` vĩnh viễn chứ không thử lại từng burst.
+- **Cấp phát của một vòng lặp nóng có thể núp sau chính giấc ngủ của nó**: `Service()` dựng một
+  `std::vector` id kết nối ở mọi lần gọi, `DrainStreams` một buffer 16 KB mới, `DrainDatagrams`
+  một buffer 1350 byte — khoảng 1,5 lần cấp phát mỗi `Poll`, trên một đường chạy theo từng gói.
+  Không cái nào lộ ra khi mỗi poll còn ngủ 1 ms; vừa bỏ giấc ngủ thì `quic/terminal-record-delivery`
+  nhảy từ 9 lên 27 lần cấp phát mỗi record, vì cùng một record nay tốn gấp ba số vòng poll và mỗi
+  vòng đều cấp phát. Bản sửa là mảng trên stack chặn bởi `kMaxConnections` cho hai danh sách id và
+  buffer do chính endpoint sở hữu cho hai chỗ vét, cộng với việc `DrainStreams` trả về trước khi
+  chạm buffer nếu không stream nào đọc được. `quic/poll-idle` đi từ 3,00 lần cấp phát mỗi poll về
+  0,00. Hình hài chung đáng giữ: một đường chạy theo từng gói mà có ngủ thì nó giấu chính chi phí
+  của mình, và cái ngân sách cấp phát đạt chuẩn bao năm nay thật ra đang đo giấc ngủ.

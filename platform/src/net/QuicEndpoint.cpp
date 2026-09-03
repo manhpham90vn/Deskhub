@@ -9,6 +9,7 @@
 #include <quiche.h>
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <cstddef>
 #include <cstring>
@@ -212,6 +213,7 @@ struct QuicEndpoint::Impl {
         bool server, QuicCallbacks callbacks) {
         Shutdown();
         settings_ = settings;
+        datagramChunk_.assign(settings_.maxUdpPayload, 0);
         cb_ = std::move(callbacks);
         server_ = server;
         config_ = MakeConfig(settings_, server);
@@ -482,8 +484,9 @@ struct QuicEndpoint::Impl {
         std::vector<uint64_t> ready;
         while (quiche_stream_iter_next(it, &streamId)) ready.push_back(streamId);
         quiche_stream_iter_free(it);
+        if (ready.empty()) return;
 
-        std::vector<uint8_t> chunk(kStreamChunk);
+        std::vector<uint8_t>& chunk = streamChunk_;
         size_t budget = kStreamReadBudgetPerService;
         const StreamListShape listed = ShapeOf(ready);
         const auto listStillIntact = [&](const char* checkpoint, uint64_t stream, ssize_t got) {
@@ -522,7 +525,7 @@ struct QuicEndpoint::Impl {
     }
 
     void DrainDatagrams(QuicConnId id, Connection& entry) {
-        std::vector<uint8_t> chunk(settings_.maxUdpPayload);
+        std::vector<uint8_t>& chunk = datagramChunk_;
         for (;;) {
             const ssize_t got = quiche_conn_dgram_recv(entry.conn, chunk.data(), chunk.size());
             if (got < 0) return;
@@ -570,14 +573,19 @@ struct QuicEndpoint::Impl {
     }
 
     void Service() {
-        std::vector<QuicConnId> dead;
         moreToSend_.store(false, std::memory_order_relaxed);
         moreToRead_.store(false, std::memory_order_relaxed);
         const uint64_t nowUs = NowUs();
-        std::vector<QuicConnId> live;
-        live.reserve(connections_.size());
-        for (const auto& connection : connections_) live.push_back(connection.first);
-        for (const QuicConnId id : live) {
+        std::array<QuicConnId, kMaxConnections> live{};
+        std::array<QuicConnId, kMaxConnections> dead{};
+        size_t liveCount = 0;
+        size_t deadCount = 0;
+        for (const auto& connection : connections_) {
+            if (liveCount == live.size()) break;
+            live[liveCount++] = connection.first;
+        }
+        for (size_t at = 0; at < liveCount; ++at) {
+            const QuicConnId id = live[at];
             Connection* found = Lookup(id);
             if (found == nullptr) continue;
             Connection& entry = *found;
@@ -595,9 +603,11 @@ struct QuicEndpoint::Impl {
             }
             DrainOutboxes(entry);
             Flush(entry);
-            if (quiche_conn_is_closed(entry.conn)) dead.push_back(id);
+            if (quiche_conn_is_closed(entry.conn) && deadCount < dead.size())
+                dead[deadCount++] = id;
         }
-        for (QuicConnId id : dead) {
+        for (size_t gone = 0; gone < deadCount; ++gone) {
+            const QuicConnId id = dead[gone];
             const auto at = connections_.find(id);
             if (at == connections_.end()) continue;
             const NetAddr peer = at->second.peer;
@@ -634,13 +644,19 @@ struct QuicEndpoint::Impl {
     void Poll(uint32_t waitMs) {
         if (!open_) return;
         ReportPollGap();
-        socket_.SetRecvTimeout(Backlogged() || waitMs == 0 ? 1 : waitMs);
-        uint8_t buf[kQuicMaxUdpPayload];
-        for (int i = 0; i < kPacketsPerPoll; ++i) {
-            NetAddr from{};
-            const int got = socket_.RecvFrom(buf, sizeof(buf), from);
+        socket_.SetRecvTimeout(Backlogged() ? 0 : waitMs);
+        static_assert(kReadBurst <= kMaxRecvBatch);
+        uint8_t buf[kReadBurst][kQuicMaxUdpPayload];
+        InboundDatagram slots[kReadBurst];
+        for (int round = 0; round < kReadRoundsPerPoll; ++round) {
+            for (size_t i = 0; i < kReadBurst; ++i)
+                slots[i] = InboundDatagram{buf[i], kQuicMaxUdpPayload, 0, NetAddr{}};
+            const int got = socket_.RecvBatch(std::span<InboundDatagram>(slots, kReadBurst));
             if (got <= 0) break;
-            Receive(from, std::span<const uint8_t>(buf, size_t(got)));
+            for (int i = 0; i < got; ++i)
+                Receive(slots[size_t(i)].from,
+                    std::span<const uint8_t>(slots[size_t(i)].buf, slots[size_t(i)].len));
+            if (size_t(got) < kReadBurst) break;
         }
         for (auto& [id, entry] : connections_) {
             if (quiche_conn_timeout_as_millis(entry.conn) == 0) quiche_conn_on_timeout(entry.conn);
@@ -649,7 +665,8 @@ struct QuicEndpoint::Impl {
     }
 
     static constexpr size_t kMaxConnections = 32;
-    static constexpr int kPacketsPerPoll = 256;
+    static constexpr size_t kReadBurst = kMaxRecvBatch;
+    static constexpr int kReadRoundsPerPoll = 16;
 
     UdpSocket socket_{};
     quiche_config* config_ = nullptr;
@@ -667,6 +684,8 @@ struct QuicEndpoint::Impl {
     uint64_t lastSendFailLogUs_ = 0;
     uint64_t lastStrangerLogUs_ = 0;
     uint64_t lastPollUs_ = 0;
+    std::vector<uint8_t> streamChunk_ = std::vector<uint8_t>(kStreamChunk);
+    std::vector<uint8_t> datagramChunk_ = std::vector<uint8_t>(kQuicMaxUdpPayload);
     std::atomic<bool> moreToSend_{false};
     std::atomic<bool> moreToRead_{false};
     Counters stats_{};

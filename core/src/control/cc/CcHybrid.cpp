@@ -12,8 +12,7 @@ namespace {
 class HybridControl final : public CongestionControl {
 public:
     HybridControl(uint32_t startBps, uint32_t minBps)
-        : loss_(MakeAimd(startBps, minBps)), delay_(MakeDelayTrend(startBps, minBps)),
-          cur_(startBps) {}
+        : loss_(MakeAimd(startBps, minBps)), delay_(MakeDelayTrend(startBps, minBps)), cur_(startBps) {}
 
     std::string_view Name() const override {
         return "hybrid";

@@ -819,3 +819,36 @@ A/B（漂移只作为警告，绝不失败）、来自该 pull request 构建的
   2.7-5.7 ms，Media Foundation p50 0.5-13.8 ms、p99 12.3-17.6 ms。这里两者触到的是同一块硅片——
   这台机器上 `mf` 落到的是 "NVIDIA H.264 Encoder MFT"——所以这还不是 C1 要问的 Intel 对 NVIDIA
   的问题；这是绕道 Media Foundation 去够同一块硬件所付出的代价。
+- **每一次 `QuicEndpoint::Poll` 最后都在睡觉，是批量读把它照了出来**：读循环反复调用 `RecvFrom`
+  直到某一次什么都没读到，而"什么都没有"只有在 `SO_RCVTIMEO` 到期之后才会回来——所以一次已经把
+  socket 抽干的 poll，仍然要付那个超时下限，常见情况下是 1 ms，而且每次调用都付。
+  `SessionTransport::RecvFrom` 本来就把同一个 `Poll` 挡在自己的 `WaitReadable(10 ms)` 后面，所以
+  这段睡眠在每次接收上都是纯粹的额外开销。用 `recvmmsg` 按批读取彻底去掉了那次探测性读取：一批
+  返回得不满，就说明 socket 已经空了，循环不必再问一次。剩下的是 `SetRecvTimeout(0)`，POSIX 把它
+  读作"永远等待"，所以旧代码把它强行改成 1 ms；现在它的意思是"不要等"（POSIX 上用 `O_NONBLOCK`，
+  Windows 上用 `FIONBIO`），也正是 `Poll(now, 0)` 一直以来自称的语义。这样做是安全的，因为每个传
+  0 的调用方外面本来就有自己的等待——`WaitEstablished` 先 poll 再等，`RecvFrom` 先等再 poll——所以
+  没有哪里会变成空转。`platform_perf` 在 loopback 上测得：空闲 poll 1 978 692 ns → 732 ns，一条
+  512 字节的终端记录 4 244 632 ns → 9 201 ns，64 KB 流 16.7 MB/s → 500.7 MB/s，一个 QUIC 数据报
+  248 515 ns → 3 986 ns，而 64 KB→256 KB 的抽干依然线性（4 倍工作量对应 3.78x → 3.84x 时间）。
+  loopback 说明不了真实链路的吞吐，但它去掉的那个 1 ms 下限，在任何链路上都是实打实的墙钟时间。
+- **批量本身买到的比它照出来的睡眠要少，而发送侧买到的又比接收侧多**：`sendmmsg` 早就把一整串
+  合并成了一次系统调用，所以 `UDP_SEGMENT`（GSO）买的是内核里的工作量而不是系统调用次数——走一遍
+  UDP/IP 栈，而不是十六遍。loopback 上按 16 × 1200 字节测：每个数据报一次 `sendto` 加一次
+  `recvfrom` 要 2036 ns/数据报，只批量发送是 636 ns，两边都批量是 623 ns。也就是说 GSO 在这里值
+  3.2 倍，而最后一步落在多次运行之间的噪声里——两行批量结果在不同运行之间换过位置——因为在
+  loopback 上内核本来就握着每个包，一次接收几乎不要钱。`recvmmsg` 仍然值得留下，因为它去掉了循环
+  必须探测的理由：在 `strace` 下跑一遍 `platform_tests` 测得，17 317 个数据报由 1631 次有结果的
+  调用取回，每次系统调用 10.6 个。GSO 只适用于一串等长的
+  数据报、最后一个可以更短，而这正是 `quiche_conn_send` 产生的形状；任何拒绝它的内核（`EIO`、
+  `EINVAL`、`ENOPROTOOPT`、`EOPNOTSUPP`、`EMSGSIZE`）都会让这个 socket 永久退回 `sendmmsg`，而
+  不是每一串重试一次。
+- **热循环的内存分配可以躲在它自己的睡眠背后**：`Service()` 每次调用都建一个连接 id 的
+  `std::vector`，`DrainStreams` 每次新建一个 16 KB 的缓冲区，`DrainDatagrams` 新建一个 1350 字节
+  的——每次 `Poll` 大约 1.5 次分配，而这是一条按包运行的路径。在每次 poll 还睡 1 ms 的时候，这些
+  都看不出来；睡眠一去掉，`quic/terminal-record-delivery` 就从每条记录 9 次分配跳到 27 次，因为
+  同一条记录现在要花三倍的 poll 轮次，而每一轮都在分配。修法是：两个 id 列表改用以
+  `kMaxConnections` 为界的栈数组，两处抽取改用 endpoint 自己持有的缓冲区，并且在没有可读流时让
+  `DrainStreams` 在碰缓冲区之前就返回。`quic/poll-idle` 从每次 poll 3.00 次分配降到 0.00。这个
+  形状值得记住：一条按包运行又会睡觉的路径会藏起自己的开销，而那个多年来一直合格的分配预算，量
+  的其实是睡眠。
