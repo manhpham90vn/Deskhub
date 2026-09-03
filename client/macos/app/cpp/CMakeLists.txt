@@ -15,5 +15,6 @@ target_link_libraries(deskhub_mac_core PUBLIC
     "-framework CoreVideo"
     "-framework ScreenCaptureKit"
 )
+target_compile_options(deskhub_mac_core PRIVATE $<$<COMPILE_LANGUAGE:OBJCXX>:-fobjc-arc>)
 target_compile_features(deskhub_mac_core PUBLIC cxx_std_20)
 deskhub_target_warnings(deskhub_mac_core)
