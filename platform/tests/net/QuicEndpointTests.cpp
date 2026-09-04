@@ -64,8 +64,7 @@ void TestHandshakeStreamAndDatagram() {
         return;
     }
 
-    const std::string savedCert = deskhubp::ReadAppDataFile(deskhubp::kHostCertFileName);
-    const std::string savedKey = deskhubp::ReadAppDataFile(deskhubp::kHostKeyFileName);
+    const SavedIdentity guard;
     deskhubp::ForgetHostIdentity();
     const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity("deskhub-test");
     Check(identity.Valid(), "the host has an identity to present");
@@ -135,9 +134,6 @@ void TestHandshakeStreamAndDatagram() {
     client.endpoint.Close();
     server.endpoint.Close();
     Check(!client.endpoint.IsOpen() && !server.endpoint.IsOpen(), "both endpoints close cleanly");
-
-    if (!savedCert.empty()) deskhubp::WriteAppDataFile(deskhubp::kHostCertFileName, savedCert);
-    if (!savedKey.empty()) deskhubp::WriteAppDataFile(deskhubp::kHostKeyFileName, savedKey);
 }
 
 void TestARefusedStreamIsResetNotTruncated() {
@@ -147,8 +143,7 @@ void TestARefusedStreamIsResetNotTruncated() {
         return;
     }
 
-    const std::string savedCert = deskhubp::ReadAppDataFile(deskhubp::kHostCertFileName);
-    const std::string savedKey = deskhubp::ReadAppDataFile(deskhubp::kHostKeyFileName);
+    const SavedIdentity guard;
     deskhubp::ForgetHostIdentity();
     const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity("deskhub-test");
     if (!identity.Valid()) return;
@@ -200,9 +195,6 @@ void TestARefusedStreamIsResetNotTruncated() {
 
     client.endpoint.Close();
     server.endpoint.Close();
-
-    if (!savedCert.empty()) deskhubp::WriteAppDataFile(deskhubp::kHostCertFileName, savedCert);
-    if (!savedKey.empty()) deskhubp::WriteAppDataFile(deskhubp::kHostKeyFileName, savedKey);
 }
 
 void TestAFloodedStreamIsDrainedInBoundedSlices() {
@@ -212,8 +204,7 @@ void TestAFloodedStreamIsDrainedInBoundedSlices() {
         return;
     }
 
-    const std::string savedCert = deskhubp::ReadAppDataFile(deskhubp::kHostCertFileName);
-    const std::string savedKey = deskhubp::ReadAppDataFile(deskhubp::kHostKeyFileName);
+    const SavedIdentity guard;
     deskhubp::ForgetHostIdentity();
     const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity("deskhub-test");
     if (!identity.Valid()) return;
@@ -267,9 +258,6 @@ void TestAFloodedStreamIsDrainedInBoundedSlices() {
 
     client.endpoint.Close();
     server.endpoint.Close();
-
-    if (!savedCert.empty()) deskhubp::WriteAppDataFile(deskhubp::kHostCertFileName, savedCert);
-    if (!savedKey.empty()) deskhubp::WriteAppDataFile(deskhubp::kHostKeyFileName, savedKey);
 }
 
 void TestUnstartedEndpointIsHarmless() {

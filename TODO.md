@@ -36,16 +36,16 @@ Phần còn lại của tài liệu này là **sổ đo**: bảng số, kết lu
 | [#57](https://github.com/manhpham90vn/Deskhub/issues/57) | Quyết kiến trúc hai tầng CC | chờ #56 |
 | [#58](https://github.com/manhpham90vn/Deskhub/issues/58) | Ghi quyết định CC vào ARCHITECTURE ×4 | chờ #57 |
 | [#59](https://github.com/manhpham90vn/Deskhub/issues/59) | netem + camera 240 fps: sim có nói dối không | bộ đo glass-to-glass |
-| [#60](https://github.com/manhpham90vn/Deskhub/issues/60) | Kịch bản đo encoder chung (VMAF) | **không chặn** |
+| ~~[#60](https://github.com/manhpham90vn/Deskhub/issues/60)~~ | Kịch bản đo encoder chung (VMAF) | **xong** — `make encoder-bake-off` |
 | [#61](https://github.com/manhpham90vn/Deskhub/issues/61) | Bake-off encoder trên 3 backend còn lại | macOS · Android · Linux-GPU |
 | [#62](https://github.com/manhpham90vn/Deskhub/issues/62) | Bảng tra `EncoderFactory` theo vendor | thiếu máy AMD |
 | [#63](https://github.com/manhpham90vn/Deskhub/issues/63) | A4 thi hành trên từng backend | máy NVIDIA + các OS khác |
 | [#64](https://github.com/manhpham90vn/Deskhub/issues/64) | C3 4:4:4 — điền mask hay viết decode | chờ quyết định |
-| [#65](https://github.com/manhpham90vn/Deskhub/issues/65) | Viết bài từ dữ liệu bake-off | **không chặn** |
-| [#66](https://github.com/manhpham90vn/Deskhub/issues/66) | `platform_tests` fail 8 check ~20% trên Windows | **không chặn** |
+| ~~[#65](https://github.com/manhpham90vn/Deskhub/issues/65)~~ | Viết bài từ dữ liệu bake-off | **xong** — `docs/posts/fec-under-burst-loss.md` |
+| ~~[#66](https://github.com/manhpham90vn/Deskhub/issues/66)~~ | `platform_tests` fail 8 check ~20% trên Windows | **xong** — link đỗ ở `Deciding`, không phải bắt tay kẹt |
 | [#67](https://github.com/manhpham90vn/Deskhub/issues/67) | Kiểm chứng `overtakenLimit=8` trên link thật | cần netem |
 
-**Ba việc làm được ngay, không chờ gì:** [#60](https://github.com/manhpham90vn/Deskhub/issues/60) ·
+**Ba việc không chặn đã làm xong (04/09):** [#60](https://github.com/manhpham90vn/Deskhub/issues/60) ·
 [#65](https://github.com/manhpham90vn/Deskhub/issues/65) ·
 [#66](https://github.com/manhpham90vn/Deskhub/issues/66). Nửa `netem` của
 [#59](https://github.com/manhpham90vn/Deskhub/issues/59) và
@@ -781,7 +781,17 @@ parity, để lần sau không ai đọc tỉ lệ cứu mà quên mất cái gi
   Linux và macOS/iOS chạy
 - [x] **Bộ đếm để chấm điểm** — `enc_ms_avg`/`enc_ms_max` không thấy được cái đuôi, mà đuôi mới là
   hàm mục tiêu của C1. `evt=sum` nay chở `enc_us_p50` và `enc_us_p99` từ histogram bước 512 µs
-- ⏳ [#60](https://github.com/manhpham90vn/Deskhub/issues/60) — Dựng kịch bản đo: cùng clip, cùng bitrate, VMAF + CPU/GPU — **chưa**; latency p99 thì đã có
+- [x] [#60](https://github.com/manhpham90vn/Deskhub/issues/60) — Dựng kịch bản đo: cùng clip, cùng bitrate, VMAF + CPU/GPU
+  — **xong**: `make encoder-bake-off` (`scripts/encoder-bake-off.sh` + `deskhub_encbench`) nạp
+  cùng một chuỗi frame BGRA thô vào **chính** encoder của Deskhub, đưa frame vào **đúng nhịp
+  `--fps`** như một phiên share thật, rồi in `backend,enc_us_p50,enc_us_p99,cpu_pct,gpu_pct,vmaf,
+  kbps` kèm SHA-256 của clip. Đo thử trên máy Intel UHD 750, 1920x1080/60, 20 Mbps, 240 frame:
+  `mf` → p50 **1297 µs**, p99 14 789 µs, CPU 19,5%, GPU 26,1%, VMAF **100,00**, 20 004 kbps.
+  Hai điều phải đọc kèm: (1) p50 khớp với dải 1,5-2,6 ms đã đo trên đường thật, tức harness không
+  nói dối — nhưng chỉ sau khi **thêm pacing**; không pacing thì p50 là 15 ms vì đó là đo throughput
+  chứ không phải đo độ trễ. (2) **VMAF 100,00 nghĩa là cột chất lượng không xếp hạng được gì** ở
+  điểm vận hành này: 20 Mbps là quá thừa cho 1080p60, script nay tự cảnh báo khi mọi VMAF ≥ 99,5.
+  Hạ xuống 2 Mbps thì cột này phân biệt được ngay: VMAF **90,71**, 2150 kbps
 - ⏳ [#61](https://github.com/manhpham90vn/Deskhub/issues/61) — Chạy trên từng backend: NVENC, Media Foundation, VA-API, VideoToolbox, MediaCodec
   — **đã có ba cột: NVENC, MF-qua-NVIDIA (02/09), MF-qua-Quick-Sync (04/09)** — xem hai bảng dưới.
   VA-API · VideoToolbox · MediaCodec vẫn cần máy khác. Nhắc lại: ba cột hiện có **đo trên hai máy
@@ -1317,4 +1327,12 @@ bài đo với Phase 0 — nó thuộc về danh sách "cần link thật", khô
   dòng), `audio-delay.csv` (21), `pacer-judder.csv` (24). Mọi dòng sinh từ sim có seed, tất
   định, không mạng không GPU — chạy lại cho ra đúng từng byte. Phần "chỗ Deskhub thua" đã có
   thật trong dữ liệu: A3 thích ứng thua target cố định dưới jitter
-- ⏳ [#65](https://github.com/manhpham90vn/Deskhub/issues/65) — Viết bài từ dữ liệu bake-off: "tôi thử N sơ đồ FEC dưới burst loss, đây là số liệu"
+- [x] [#65](https://github.com/manhpham90vn/Deskhub/issues/65) — Viết bài từ dữ liệu bake-off: "tôi thử N sơ đồ FEC dưới burst loss, đây là số liệu"
+  — **xong**: `docs/posts/fec-under-burst-loss.md` (tiếng Anh trước, ba bản dịch còn nợ). CSV thô
+  check thẳng vào `docs/data/bake-off/{fec-sweep,nack-hybrid}.csv`, mỗi bảng trong bài kèm một lệnh
+  `awk` lọc đúng những dòng đã trích, và mọi cảnh báo phương pháp nằm **cạnh** bảng chứ không ở
+  cuối bài. Bài nói thẳng bốn chỗ Deskhub thua: RS ở 1 hàng parity ra số liệu **giống hệt** XOR
+  trên cả 40 cặp mà tốn 6,3× CPU; depth đưa overhead 12,5% → 90,9%; **chính sách bật FEC đang ship
+  gây 20 IDR/phút** ở điểm vận hành đo được, còn FEC luôn bật thì 0; và cấu hình **duy nhất** đạt
+  ngưỡng ở điểm ấy là NACK-only trên link ngắn, tức bản không có FEC. Kỷ luật "chốt ngưỡng trước
+  khi nhìn số" bị phá được ghi ngay ở đầu bài, không giấu

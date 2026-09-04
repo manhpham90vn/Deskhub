@@ -362,6 +362,7 @@ void TestABatchCrossesARealConnection() {
     const std::filesystem::path source = Scratch("send");
     const std::filesystem::path landing = Scratch("land");
 
+    const ForgottenHost fresh(std::string("127.0.0.1:") + std::to_string(kFileTestPort));
     const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity("file-test-host");
     HostRig host;
     Check(host.Start(identity, landing), "the host takes files in");
@@ -398,6 +399,7 @@ void TestAHostThatTakesNoFilesRefuses() {
     const std::filesystem::path source = Scratch("send-refused");
     const std::filesystem::path landing = Scratch("land-refused");
 
+    const ForgottenHost fresh(std::string("127.0.0.1:") + std::to_string(kFileTestPort));
     const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity("file-test-host");
     HostRig host;
     Check(host.Start(identity, landing), "the host starts");
@@ -427,6 +429,7 @@ void TestAHostThatStopsMidBatchSaysWhy() {
     const std::filesystem::path source = Scratch("send-stopped");
     const std::filesystem::path landing = Scratch("land-stopped");
 
+    const ForgottenHost fresh(std::string("127.0.0.1:") + std::to_string(kFileTestPort));
     const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity("file-test-host");
     HostRig host;
     Check(host.Start(identity, landing), "the host takes files in");
@@ -460,6 +463,7 @@ void TestTheSendSurfaceTheClientPageDrives() {
     const std::filesystem::path source = Scratch("ffi-send");
     const std::filesystem::path landing = Scratch("ffi-land");
 
+    const ForgottenHost fresh(std::string("127.0.0.1:") + std::to_string(kFileTestPort));
     const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity("file-test-host");
     HostRig host;
     Check(host.Start(identity, landing), "a host takes files in");

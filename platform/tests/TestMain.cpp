@@ -14,19 +14,43 @@ namespace {
 
 constexpr const char* kTestHome = "/tmp/deskhub-platform-tests";
 
-void KeepTestLogsOutOfTheDeveloperHome() {
+void KeepTestStateOutOfTheDeveloperHome() {
     if (mkdir(kTestHome, 0700) == 0 || errno == EEXIST) setenv("HOME", kTestHome, 1);
 }
 
 }
 #else
+#include <filesystem>
+#include <system_error>
+
+#include "deskhubp/diag/LogFile.h"
+
 namespace {
-void KeepTestLogsOutOfTheDeveloperHome() {}
+
+bool PointAppDataAt(const char* leaf) {
+    std::error_code ec;
+    const std::filesystem::path dir = std::filesystem::temp_directory_path(ec) / leaf;
+    if (ec) return false;
+    std::filesystem::create_directories(dir, ec);
+    if (ec) return false;
+    deskhubp::SetAppDataDir(dir.string());
+    return true;
+}
+
+void KeepTestStateOutOfTheDeveloperHome() {
+    if (PointAppDataAt("deskhub-platform-tests")) return;
+    std::printf(
+        "=== no private app data directory, so this run shares %%USERPROFILE%%\\.deskhub with "
+        "every other Deskhub on this machine: the host key and the trusted-host list are one "
+        "file each, and a running app or a second test binary can change what a link test "
+        "expects halfway through ===\n");
+}
+
 }
 #endif
 
 int main() {
-    KeepTestLogsOutOfTheDeveloperHome();
+    KeepTestStateOutOfTheDeveloperHome();
 
     std::printf("=== platform self-test (local only: loopback sockets, no remote peer) ===\n");
 

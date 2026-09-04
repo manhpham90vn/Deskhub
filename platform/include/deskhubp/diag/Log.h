@@ -11,14 +11,35 @@
 
 #elif defined(_WIN32)
 
+#include <cstdarg>
+#include <cstddef>
 #include <cstdio>
+#include <cstring>
 
-#define LOGI(...)                  \
-    do {                           \
-        std::printf("[Deskhub] "); \
-        std::printf(__VA_ARGS__);  \
-        std::printf("\n");         \
-    } while (0)
+namespace deskhubp {
+
+inline void LogEmit(const char* fmt, ...) {
+    constexpr const char* kTag = "[Deskhub] ";
+    constexpr size_t kTagLen = 10;
+    char line[1024];
+    std::memcpy(line, kTag, kTagLen);
+
+    va_list args;
+    va_start(args, fmt);
+    const int written = std::vsnprintf(line + kTagLen, sizeof(line) - kTagLen - 2, fmt, args);
+    va_end(args);
+    if (written < 0) return;
+
+    size_t end = kTagLen + size_t(written);
+    if (end > sizeof(line) - 2) end = sizeof(line) - 2;
+    line[end] = '\n';
+    line[end + 1] = '\0';
+    std::fputs(line, stdout);
+}
+
+}
+
+#define LOGI(...) deskhubp::LogEmit(__VA_ARGS__)
 #define LOGW(...) LOGI(__VA_ARGS__)
 #define LOGE(...) LOGI(__VA_ARGS__)
 

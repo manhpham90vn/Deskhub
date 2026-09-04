@@ -227,6 +227,10 @@ Unknown —— 什么都不会倒退。在正在恢复的链路上，脉搏同�
 | fuzz 目标 | 每个 PR 每目标 30 秒，每晚每目标 15 分钟 | 线格式、H.264、重组、终端字节和界面文本的解析器，加上主机端和观看端的会话状态机 |
 | `make test-perf` | release 构建，离线 + 回环 | 真正测量而不只是跑一遍热路径：`core_perf` 覆盖纯 C++ 路径，`platform_perf` 覆盖回环上的真实 QUIC；两者都会因每单位的分配、4 倍输入下的代价，以及相对该机器上记录的基线的漂移而失败 |
 
+`platform_tests` 和 `integration_tests` 在每个操作系统上都各自持有自己的 app data 目录——主机
+密钥、受信任主机列表和配对文件都是单一的共享文件，所以一套去读开发者主目录的测试，等于在和
+已安装的应用以及这台机器上其他每一个 Deskhub 进程赛跑。
+
 CI 另外还强制 clang-format 和 clang-tidy（两者都锁定版本）、SwiftLint `--strict`、
 Android Lint、actionlint + shellcheck、三个套件的 ASan/TSan 运行、对 C++/Kotlin/Swift 的
 CodeQL、对整个历史的 gitleaks 扫描，以及 `core/` 上行 ≥ 90 % / 分支 ≥ 80 % 的覆盖率。三个
@@ -968,3 +972,45 @@ A/B（漂移只作为警告，绝不失败）、来自该 pull request 构建的
   的中位数），而接收侧的批量读取和 URO 都落在 45-60% 的噪声底线之内——比 Linux 机器的 5% 宽了一
   个数量级，宽到在那里任何低于约 1.5x 的差异都根本测不出来。URO 究竟会不会真正触发，需要一块真
   实的网卡才知道；loopback 回答不了。
+- **一场 bake-off 需要的第一样东西是片源，而不是第二个后端**：C1 已经有三列编码器数据，却没有一
+  列能和另一列相比，因为每一列都来自不同的机器、不同的采集分辨率、不同的桌面内容，而且没有一列
+  跑在固定片源上。更糟的是，所有数字都是延迟：没有任何一个数字回答编码器为了快付出了什么。
+  `scripts/encoder-bake-off.sh` 用一条命令补上这两个缺口。它先造出片源（确定性的 `testsrc2`，或
+  用 `--clip FILE` 指定真实片源），把**同一份**原始帧、同样的分辨率、帧率和码率交给每一个后端，
+  然后把 VMAF、`enc_us_p50`、`enc_us_p99`、CPU% 和 GPU% 打进同一张表，并在旁边附上片源的
+  SHA-256，好让两台机器能证明自己测的是同一批像素。编码器接收的是 `ID3D11Texture2D` 而不是文
+  件，所以片源由 `client/windows/cpp/bench/EncoderBench.cpp` 喂进去——这个 bench 程序通过四张纹
+  理的环形缓冲上传 BGRA 帧，并且只对 `Encode` 这一次调用计时。改去测 ffmpeg 的 `h264_qsv` 和
+  `h264_nvenc` 只要一行脚本，但那回答的是另一个问题：那不是 Deskhub 发布的代码。两条限制被印在表
+  格旁边而不是藏起来：`cpu_pct` 和 `gpu_pct` 是整个进程的数字，包含 harness 自己的帧上传；而
+  `testsrc2` 不是桌面内容——合成片源让各次运行之间可比，并不让它们贴近真实。启动不了的后端会从表
+  里去掉，而不是顶着别的后端的名字被测量，这正是 `--encoder` 一直遵循的规则。
+- **loopback 上那十秒沉默，是一条在等一个没人给出的答复的链路**：`platform_tests` 在 Windows 上大约
+  每五次运行就有一次恰好挂掉八个检查，分布在 `HostLinkTests` 和 `FileTransferTests` 里，日志说一条
+  QUIC 链路在 loopback 上安静了十秒以上——这是 CPU 争抢解释不了的，所以该改的并不是超时值。链路既
+  没有卡住也没有变慢：它被**停住了**。`HostLink::SettleTrust` 会把主机出示的密钥和 `known_hosts` 对
+  比，遇到 `TrustVerdict::Changed` 就进入 `Deciding`，等一个人来接受或拒绝。停住的链路什么都不发，
+  于是两端都报告对方沉默；而测试没有装 `onTrustAsked` 回调，也永远不会接受，于是它一直等到自己的超
+  时。事故里其余的一切都由此推出："a terminal record goes out" 仍然通过，因为 QUIC 连接是活的；回
+  显确实回来了，却被 `Deciding` 的读循环吞掉而没有到达任何 channel，于是又挂掉两个检查；`File
+  TransferTests` 在它自己的端口上因为同样的原因再挂三个。给 `127.0.0.1:47845` 和 `127.0.0.1:47836`
+  各种上一个合法但不同的指纹，就能按名字复现全部八个失败，连沉默都一样，随时可以复现。
+  **密钥之所以不同，是因为这些测试在 Windows 上没有自己的状态。**
+  `KeepTestLogsOutOfTheDeveloperHome()` 在 POSIX 上会把 `HOME` 挪开，在 Windows 上却是一个空函数，
+  所以两个测试程序都直接读写 `%USERPROFILE%\.deskhub`——和已安装的应用、以及这台机器上其他每一个
+  Deskhub 进程共用同一份 `host_cert.pem`、`known_hosts` 和 `paired_devices`。更进一步，那份共享的身
+  份就是各套测试的草稿纸：一次运行会造出大约五十份，每一份都先把上一对快照下来、之后再还原，而做这
+  件事的四个文件里有三个是在函数末尾还原的，中间夹着四到六条提前 `return`。任何一次提前退出、任何
+  一次 kill、任何一次来自运行中应用的写入，都会让下一次 `HostLinkTests` 拿这次的密钥去和上次的记录
+  相比。修复由四部分组成，没有一部分是放宽超时：两个测试主程序现在在 Windows 上也把 `SetAppDataDir`
+  指向一个私有目录；`SessionTransportTests` 早就有的 RAII 守卫 `SavedIdentity` 被搬进
+  `TestSupport.h` 并替换掉所有手写的还原；拨号到固定端点的测试加上 `ForgottenHost` 守卫，使它们的判
+  定不再取决于上一次运行留下了什么；而 `SettleTrust` 现在会在停住的那一刻打日志，写明它看到的密钥，
+  让下一次沉默在日志里自己解释自己，而不是看起来像一次死掉的握手。
+- **用三次 `printf` 拼出来的日志行不是一行**：同一份日志里出现了
+  `[Deskhub] [Deskhub] quic: …silencequic: …silence`——两个线程在行中间交错，而这在排查时实实在在浪
+  费了时间，因为真正要看的那个检查名就埋在这段被破坏的输出里。Windows 上的 `LOGI` 是
+  `printf("[Deskhub] ")`，然后是调用方的格式串，然后是 `printf("\n")`：给了别的线程三次插进来的机
+  会，而 CRT 只在一次调用的持续时间内锁住 `stdout`。现在它把标签、正文和换行拼进一个缓冲区，用一次
+  `fputs` 发出去，也就是 POSIX 那条路径早就有的形状。这也是 Android 和 Apple 分支不动的原因：
+  `__android_log_print` 和那一次 `fprintf` 本来就各是一次调用。

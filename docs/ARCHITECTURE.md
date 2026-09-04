@@ -264,6 +264,11 @@ control bytes, characters Windows rejects and reserved device names all go — b
 | fuzz targets | 30 s per target on every PR, 15 min per target nightly | parsers for wire, H.264, reassembly, terminal bytes and UI text, plus the host and viewer session state machines |
 | `make test-perf` | release build, offline + loopback | the hot paths measured rather than only exercised: `core_perf` covers the pure-C++ paths, `platform_perf` covers real QUIC over loopback; both fail on allocations per unit, on the cost at 4× the input, and on drift against a baseline recorded on that machine |
 
+`platform_tests` and `integration_tests` each keep their own app data directory on every
+operating system — the host key, the trusted-host list and the pairing file are single
+shared files, so a suite that read the developer's home would be racing the installed app
+and every other Deskhub process on the machine.
+
 CI additionally enforces clang-format and clang-tidy (both pinned), SwiftLint
 `--strict`, Android Lint, actionlint + shellcheck, ASan/TSan runs of all three suites,
 CodeQL over C++/Kotlin/Swift, a gitleaks sweep of the whole history, and ≥ 90 % line /
@@ -1250,3 +1255,58 @@ line.
   batching and URO both land inside a noise floor of 45-60% — an order of magnitude wider than the
   Linux machine's 5%, and wide enough that nothing under roughly 1.5x can be measured there at all.
   Whether URO ever fires needs a real NIC; loopback cannot answer that.
+- **A bake-off needs a clip before it needs a second backend**: C1 had three encoder columns and
+  no comparison, because each one was measured on a different machine, at a different capture
+  size, against whatever happened to be on that desktop, and none of them on a fixed clip. Worse,
+  every number was latency: nothing measured what an encoder gave up to be fast.
+  `scripts/encoder-bake-off.sh` closes both gaps with one command. It builds a clip (deterministic
+  `testsrc2`, or `--clip FILE` for a real one), hands the *same* raw frames, size, fps and bitrate
+  to every backend, and prints VMAF, `enc_us_p50`, `enc_us_p99`, CPU% and GPU% in one table with
+  the clip's SHA-256 beside it so two machines can prove they measured the same pixels. The
+  encoders take an `ID3D11Texture2D`, not a file, so the clip is fed by
+  `client/windows/cpp/bench/EncoderBench.cpp` — a bench binary that uploads BGRA frames through a
+  four-texture ring and times only the `Encode` call. Measuring ffmpeg's `h264_qsv` and
+  `h264_nvenc` instead would have been a one-line script and would have answered a different
+  question: those are not the code Deskhub ships. Two limits are printed with the table rather
+  than buried: `cpu_pct` and `gpu_pct` are whole-process numbers that include the harness's own
+  frame upload, and `testsrc2` is not desktop content — the synthetic clip makes runs comparable,
+  not representative. A backend that will not start is left out of the table rather than measured
+  under another backend's name, the same rule `--encoder` already follows.
+- **Ten seconds of silence on loopback was a link waiting for an answer nobody gave**:
+  `platform_tests` failed exactly eight checks in about one Windows run in five, across
+  `HostLinkTests` and `FileTransferTests`, with a log that said a QUIC link had gone quiet on
+  loopback for over ten seconds — which scheduling pressure does not explain, so the deadlines
+  were not the thing to widen. The link was neither stalled nor slow: it was **parked**.
+  `HostLink::SettleTrust` compares the key the host presents against `known_hosts`, and on
+  `TrustVerdict::Changed` it moves to `Deciding` and waits for a person to accept or reject. A
+  parked link sends nothing, so both ends report the other silent; the test supplies no
+  `onTrustAsked` handler and never accepts, so it waits out its own deadline. Everything else in
+  the incident follows: "a terminal record goes out" still passes, because the QUIC connection is
+  up; the echo comes back and is swallowed by the `Deciding` read loop instead of reaching a
+  channel, which fails two more checks; and `FileTransferTests` fails three more on its own port
+  for the same reason. Planting one valid but different fingerprint for `127.0.0.1:47845` and
+  `127.0.0.1:47836` reproduces all eight failures by name, with the same silence, on demand.
+  **The key differed because the tests had no state of their own on Windows.**
+  `KeepTestLogsOutOfTheDeveloperHome()` moved `HOME` aside on POSIX and was an empty function on
+  Windows, so both test binaries read and wrote `%USERPROFILE%\.deskhub` — the same single
+  `host_cert.pem`, `known_hosts` and `paired_devices` used by the installed app and by every other
+  Deskhub process on the machine. On top of that, the one shared identity is scratch space for the
+  suites: a run creates about fifty of them, each snapshotting the previous pair and restoring it
+  afterwards, and three of the four files that did this restored at the end of a function with
+  four to six early `return`s in between. Any early exit, any kill, or any write from a live app
+  leaves the next `HostLinkTests` run comparing this run's key against last run's record. The fix
+  is in four parts, none of them a wider deadline: both test mains now point `SetAppDataDir` at a
+  private directory on Windows too; the RAII `SavedIdentity` guard that `SessionTransportTests`
+  already had moved into `TestSupport.h` and replaced every manual restore; the tests that dial a
+  fixed endpoint take a `ForgottenHost` guard so their verdict does not depend on what an earlier
+  run left behind; and `SettleTrust` now logs the moment it parks, naming the key it saw, so the
+  next silence explains itself in the log instead of looking like a dead handshake.
+- **A log line assembled in three `printf`s is not one line**: the same capture showed
+  `[Deskhub] [Deskhub] quic: …silencequic: …silence` — two threads interleaved mid-line, which
+  cost real time during the hunt because the check name that mattered was inside the corruption.
+  The Windows `LOGI` was `printf("[Deskhub] ")`, then the caller's format, then `printf("\n")`:
+  three chances for another thread to land between them, and the CRT only locks `stdout` for the
+  duration of one call. It now formats tag, body and newline into one buffer and emits it with a
+  single `fputs`, which is the shape the POSIX path already had. This is why the Android and Apple
+  branches are left alone: `__android_log_print` and the single `fprintf` are already one call
+  each.

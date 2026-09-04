@@ -307,6 +307,11 @@ bool HostLink::SettleTrust() {
 
     trustDecision_.store(int(TrustDecision::Pending), std::memory_order_release);
     SetState(HostLinkState::Deciding, deskhub::ui::kTrustChangedBody);
+    LOGW(
+        "link: %s answered with %s, which is not the key on record, so this link is parked "
+        "until someone accepts or rejects it - it sends nothing while it waits, and the peer "
+        "reads that as a silent link rather than as a question",
+        endpoint.c_str(), FormatFingerprint(*peer).c_str());
     if (cb_.onTrustAsked) cb_.onTrustAsked(verdict, FormatFingerprint(*peer));
 
     uint8_t buf[deskhub::kMaxRecordSize];

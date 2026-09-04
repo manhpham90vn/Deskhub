@@ -173,8 +173,7 @@ void RunTerminalFfiTests() {
         return;
     }
 
-    const std::string savedCert = deskhubp::ReadAppDataFile(deskhubp::kHostCertFileName);
-    const std::string savedKey = deskhubp::ReadAppDataFile(deskhubp::kHostKeyFileName);
+    const SavedIdentity guard;
     const std::string savedTrust = deskhubp::ReadAppDataFile(deskhubp::kTrustStoreFileName);
     const std::string savedPaired = deskhubp::ReadAppDataFile(deskhubp::kPairedDevicesFileName);
     deskhubp::ForgetHostIdentity();
@@ -273,8 +272,6 @@ void RunTerminalFfiTests() {
         "closing the session ends the shell on the host");
 
     rig.Stop();
-    if (!savedCert.empty()) deskhubp::WriteAppDataFile(deskhubp::kHostCertFileName, savedCert);
-    if (!savedKey.empty()) deskhubp::WriteAppDataFile(deskhubp::kHostKeyFileName, savedKey);
     if (savedTrust.empty())
         deskhubp::RemoveAppDataFile(deskhubp::kTrustStoreFileName);
     else

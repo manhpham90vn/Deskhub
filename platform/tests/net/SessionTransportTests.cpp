@@ -17,21 +17,6 @@ namespace {
 constexpr uint16_t kTestPort = 47793;
 constexpr int kMaxRounds = 600;
 
-struct SavedIdentity {
-    std::string cert{};
-    std::string key{};
-
-    SavedIdentity() {
-        cert = deskhubp::ReadAppDataFile(deskhubp::kHostCertFileName);
-        key = deskhubp::ReadAppDataFile(deskhubp::kHostKeyFileName);
-    }
-
-    ~SavedIdentity() {
-        if (!cert.empty()) deskhubp::WriteAppDataFile(deskhubp::kHostCertFileName, cert);
-        if (!key.empty()) deskhubp::WriteAppDataFile(deskhubp::kHostKeyFileName, key);
-    }
-};
-
 int PumpFor(deskhubp::SessionTransport& reader, deskhubp::SessionTransport& other, uint8_t* buf,
     size_t cap, NetAddr& from) {
     for (int i = 0; i < kMaxRounds; ++i) {

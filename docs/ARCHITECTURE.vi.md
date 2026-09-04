@@ -258,6 +258,11 @@ nhận và tên thiết bị dành riêng đều bị loại — trước khi `p
 | các target fuzz | 30 giây mỗi target ở mọi PR, 15 phút mỗi target hằng đêm | parser cho wire, H.264, ráp gói, byte terminal và chuỗi UI, cộng máy trạng thái phiên phía host và viewer |
 | `make test-perf` | bản release, offline + loopback | đo các đường nóng chứ không chỉ chạy chúng: `core_perf` cho phần C++ thuần, `platform_perf` cho QUIC thật qua loopback; cả hai fail theo số lần cấp phát trên mỗi đơn vị, chi phí khi đầu vào gấp 4, và độ lệch so với mốc ghi ngay trên máy đó |
 
+`platform_tests` và `integration_tests` mỗi bộ giữ thư mục app data riêng trên mọi hệ điều
+hành — khoá host, danh sách host tin cậy và file ghép đôi đều là file dùng chung duy nhất,
+nên một bộ test đọc thư mục nhà của lập trình viên là đang chạy đua với app đã cài và mọi
+tiến trình Deskhub khác trên máy.
+
 CI còn ép clang-format và clang-tidy (đều ghim phiên bản), SwiftLint `--strict`,
 Android Lint, actionlint + shellcheck, chạy cả ba bộ dưới ASan/TSan, CodeQL cho
 C++/Kotlin/Swift, quét gitleaks toàn bộ lịch sử, và coverage `core/` ≥ 90% dòng / 80%
@@ -1209,3 +1214,55 @@ pull request, và dòng coverage của `core/`.
   lần chạy), còn gộp phía nhận và URO đều rơi vào sàn nhiễu 45-60% — rộng gấp một bậc so với 5% của
   máy Linux, và rộng tới mức mọi thứ dưới khoảng 1,5x đều không đo nổi ở đó. URO có bao giờ nổ hay
   không thì phải có NIC thật mới biết; loopback không trả lời được.
+- **Một cuộc bake-off cần một clip trước khi cần cột thứ hai**: C1 đã có ba cột encoder mà không so
+  được cột nào, vì mỗi cột đo trên một máy khác, cỡ capture khác, nội dung desktop khác, và không
+  cột nào chạy trên clip cố định. Tệ hơn: mọi con số đều là độ trễ, không có gì đo xem encoder đã
+  đánh đổi cái gì để nhanh. `scripts/encoder-bake-off.sh` bịt cả hai lỗ hổng bằng một lệnh. Nó dựng
+  clip (`testsrc2` xác định, hoặc `--clip FILE` cho clip thật), đưa **đúng cùng** một chuỗi frame
+  thô, cùng cỡ, cùng fps, cùng bitrate cho mọi backend, rồi in VMAF, `enc_us_p50`, `enc_us_p99`,
+  CPU% và GPU% trong một bảng, kèm SHA-256 của clip để hai máy chứng minh được là đã đo cùng một
+  đống pixel. Encoder nhận `ID3D11Texture2D` chứ không nhận file, nên clip được nạp bởi
+  `client/windows/cpp/bench/EncoderBench.cpp` — một binary bench upload frame BGRA qua vòng bốn
+  texture và chỉ bấm giờ đúng lời gọi `Encode`. Đo `h264_qsv` và `h264_nvenc` của ffmpeg thay vào
+  đó thì chỉ tốn một dòng script, nhưng trả lời một câu hỏi khác: đó không phải code Deskhub ship.
+  Hai giới hạn được in ngay cạnh bảng chứ không giấu đi: `cpu_pct` và `gpu_pct` là số của cả tiến
+  trình nên tính cả phần upload frame của chính harness, và `testsrc2` không phải nội dung desktop
+  — clip tổng hợp làm các lần chạy so được với nhau, không làm chúng đại diện cho thực tế. Backend
+  nào không khởi động được thì bị bỏ khỏi bảng chứ không bị đo dưới tên backend khác, đúng luật mà
+  `--encoder` đã theo.
+- **Mười giây im lặng trên loopback là một link đang chờ câu trả lời không ai đưa**: `platform_tests`
+  hỏng đúng tám check, khoảng một trong năm lần chạy trên Windows, trải trên `HostLinkTests` và
+  `FileTransferTests`, với log nói rằng một link QUIC đã im tiếng trên loopback hơn mười giây — mà
+  tranh chấp CPU thì không giải thích nổi, nên deadline không phải thứ cần nới. Link không kẹt cũng
+  không chậm: nó **bị đỗ lại**. `HostLink::SettleTrust` so khoá host đưa ra với `known_hosts`, và khi
+  gặp `TrustVerdict::Changed` thì chuyển sang `Deciding` và chờ một con người chấp nhận hay từ chối.
+  Link đang đỗ thì không gửi gì, nên cả hai đầu đều báo bên kia im lặng; test không cài
+  `onTrustAsked` và không bao giờ chấp nhận, nên nó chờ hết deadline của chính mình. Mọi thứ còn lại
+  trong sự cố suy ra từ đó: "a terminal record goes out" vẫn qua, vì kết nối QUIC vẫn sống; tiếng
+  vọng quay về và bị vòng đọc của `Deciding` nuốt mất thay vì tới được channel, làm hỏng thêm hai
+  check; và `FileTransferTests` hỏng thêm ba check trên cổng của nó vì đúng lý do ấy. Cắm một
+  fingerprint hợp lệ nhưng khác cho `127.0.0.1:47845` và `127.0.0.1:47836` là dựng lại được cả tám
+  lỗi đúng tên, đúng kiểu im lặng, gọi ra lúc nào cũng được.
+  **Khoá khác nhau là vì trên Windows các test không có trạng thái riêng.**
+  `KeepTestLogsOutOfTheDeveloperHome()` dời `HOME` sang chỗ khác trên POSIX và là một hàm rỗng trên
+  Windows, nên cả hai binary test đọc ghi thẳng vào `%USERPROFILE%\.deskhub` — cùng một
+  `host_cert.pem`, `known_hosts`, `paired_devices` mà app đã cài và mọi tiến trình Deskhub khác trên
+  máy đang dùng. Thêm nữa, cái identity dùng chung ấy là giấy nháp của các bộ test: một lần chạy tạo
+  ra khoảng năm mươi cái, mỗi cái chụp lại cặp trước rồi khôi phục sau, và ba trong bốn file làm việc
+  này khôi phục ở cuối hàm với bốn tới sáu lệnh `return` sớm nằm giữa. Bất kỳ lối ra sớm nào, bất kỳ
+  lần kill nào, hay bất kỳ lượt ghi nào từ một app đang chạy, đều để lại cho lần `HostLinkTests` kế
+  tiếp một phép so khoá của lần này với bản ghi của lần trước. Bản sửa gồm bốn phần, không phần nào
+  là nới deadline: cả hai test main nay trỏ `SetAppDataDir` vào một thư mục riêng trên Windows; guard
+  RAII `SavedIdentity` mà `SessionTransportTests` đã có được dời vào `TestSupport.h` và thay cho mọi
+  đoạn khôi phục thủ công; các test quay số tới một endpoint cố định nhận thêm guard `ForgottenHost`
+  để phán quyết của chúng không phụ thuộc vào thứ lần chạy trước để lại; và `SettleTrust` nay ghi log
+  đúng lúc nó đỗ lại, nêu rõ khoá nó thấy, để lần im lặng sau tự giải thích trong log thay vì trông
+  như một cái bắt tay đã chết.
+- **Một dòng log ghép từ ba lệnh `printf` không phải là một dòng**: chính bản log đó cho thấy
+  `[Deskhub] [Deskhub] quic: …silencequic: …silence` — hai luồng lồng vào nhau giữa dòng, và nó tốn
+  thời gian thật trong lúc truy vết vì cái tên check quan trọng nằm ngay trong chỗ hỏng. `LOGI` trên
+  Windows là `printf("[Deskhub] ")`, rồi format của người gọi, rồi `printf("\n")`: ba cơ hội cho một
+  luồng khác chen vào giữa, và CRT chỉ khoá `stdout` trong đúng một lời gọi. Nay nó format tag, thân
+  và ký tự xuống dòng vào một buffer rồi phát ra bằng một `fputs` duy nhất, đúng hình dạng mà đường
+  POSIX đã có sẵn. Đó cũng là lý do nhánh Android và Apple được để yên: `__android_log_print` và một
+  `fprintf` vốn đã là một lời gọi.

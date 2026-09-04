@@ -111,6 +111,7 @@ deskhubp::HostLinkConfig LinkConfig(const char* passcode) {
 
 void TestALinkAdmitsOnceAndRoutesByChannel() {
     std::printf("[hostlink] one handshake carries every channel to its own queue...\n");
+    const ForgottenHost fresh(std::string("127.0.0.1:") + std::to_string(kLinkTestPort));
     const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity("link-test-host");
     LinkHostRig host;
     Check(host.Start(identity), "the host rig listens");

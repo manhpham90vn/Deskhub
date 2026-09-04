@@ -10,4 +10,7 @@ opus-smoke:
 screenshots:
 	@$(RUNSH) scripts/store-screenshots.sh $(ARGS)
 
-.PHONY: icons quic-smoke opus-smoke screenshots
+encoder-bake-off:
+	@$(RUNSH) scripts/encoder-bake-off.sh $(ARGS)
+
+.PHONY: icons quic-smoke opus-smoke screenshots encoder-bake-off
