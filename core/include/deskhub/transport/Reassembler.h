@@ -12,6 +12,8 @@
 
 namespace deskhub {
 
+inline constexpr uint32_t kDefaultOvertakenLimit = 8;
+
 class Reassembler {
 public:
     struct Frame {

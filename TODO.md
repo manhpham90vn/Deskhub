@@ -16,677 +16,102 @@ cộng `client/apple` (Swift dùng chung) và `client/cli`. Tính từ nhánh
 `windows-transfer-and-asan` ngày 01/09/2026. Mọi hằng số và số đếm trích dẫn dưới đây đã được
 đối chiếu lại với cây nguồn hiện hành.
 
-## Ba lớp, ba vai trò
-
-Việc chia lớp của repo đã quyết sẵn mỗi phần của một cuộc bake-off nằm ở đâu. Đừng chống lại
-nó:
-
-| Lớp | Vai trò trong bake-off |
-| --- | --- |
-| `core/` | Giữ **contract** (concept hoặc interface), **chính sách** quyết định, và **simulator**. Không mạng, không GPU, chạy được trong CI |
-| `platform/` | Giữ các seam một-API-cho-mọi-OS: socket, QUIC, audio, đồng hồ. Đây là nơi các quyết định của `core/` gặp hệ điều hành thật |
-| `client/` | Giữ **bản triển khai per-OS**: capture, encode, decode, render. Nhiều impl cho cùng một contract là chuyện bình thường ở đây |
-
-**Điều đáng chú ý nhất trong cả bản kiểm kê: pattern bake-off đã tồn tại sẵn trong dự án.**
-`core/include/deskhub/media/VideoContract.h` định nghĩa các concept `VideoEncoderLike`,
-`VideoDecoderLike`, `CongestionAwareDecoder`, `PresentTimingDecoder`; còn
-`client/windows/cpp/encode/IVideoEncoder.h` có `static_assert` ràng buộc mình vào các concept
-đó, với `NvencEncoder` và `MfEncoder` là hai impl đứng sau một `EncoderFactory`. Linux cũng
-vậy với `HwEncoder.h`, `NvEncoder` và `VaEncoder`.
-
-Contract nằm ở `core/`, impl nằm ở `client/`, `static_assert` nối hai đầu. Đúng hình hài cần
-có. Thứ duy nhất thiếu là **phép đo giữa các impl** — hiện tại chưa có cái nào từng được so
-với cái nào.
-
-## Quy tắc: không phải cái gì cũng cần interface
-
-Cám dỗ lớn nhất của kế hoạch này là bọc interface quanh mọi thứ. Đừng. Mỗi interface là một
-lớp gián tiếp, một nhánh test, và — với repo này — thêm một bề mặt cho ASan, TSan và fuzz
-phải quét. Mười một thành phần mỗi cái ba bản triển khai là con số tổ hợp mà CI không bao giờ
-chạy hết.
-
-Chỉ dựng interface khi thoả **cả hai**: có không gian thiết kế thật (nhiều thuật toán đúng
-khác nhau), và lựa chọn đó **đo được** bằng một con số người dùng cảm nhận được. Còn lại thì
-để yên.
-
-Quy tắc này là hàng phòng thủ chính, và nó càng quan trọng vì các impl **ở lại sau bake-off**
-chứ không bị xoá (§"Giữ bản thua làm tham chiếu"). Kỷ luật nằm ở chỗ không dựng interface bừa,
-chứ không nằm ở chỗ dọn dẹp về sau.
-
-| Tầng | Nghĩa là gì | Việc cần làm | Số thành phần |
-| --- | --- | --- | :--: |
-| **Tier A** | Nhiều thuật toán đúng, khác biệt đo được, ảnh hưởng trực tiếp cái người dùng thấy | Contract + nhiều impl + bake-off | 11 |
-| **Tier B** | Có không gian thiết kế nhưng tác động nhỏ, hoặc chỉ là chuyện chỉnh tham số | Quét tham số, không dựng interface | 10 |
-| **Tier C** | Chỉ có đúng và sai, không có lựa chọn thuật toán | Để yên — đã có test và fuzz | ~60 |
-
----
-
-# Tier A — `core/`
-
-## A1. Sơ đồ FEC
-
-**File:** `core/include/deskhub/transport/Packetizer.h` · `transport/Reassembler.h` ·
-`protocol/Wire.h:21`
-
-**Hiện tại:** XOR, `kFecGroupSize = 8`, đúng **một** gói parity cho mỗi group — cứu được tối
-đa 1 gói mất trên mỗi group. Bật/tắt bằng một `bool` trong `SetFecEnabled()`.
-
-**Group đã rải bước sẵn, không liền khối.** `Packetizer.cpp:31` gán gói `i` vào group
-`i % numGroups`, còn `Reassembler.cpp:75` phục hồi bằng
-`for (i = group; i < pktCount; i += numGroups)`. Nghĩa là **interleaving đã có trong bản đang
-chạy** — nó không phải một phương án để thêm vào.
-
-Nhưng độ sâu interleave là **dẫn xuất, không phải lựa chọn**: depth = `numGroups` =
-`ceil(count/8)`. Keyframe 40 gói được depth 5. Delta frame 8 gói cho `numGroups == 1` — một
-group duy nhất, **interleave bằng không** — và đó chính là loại frame chiếm đa số ở 60 fps
-(`LossGoodputTests.cpp:21` đang mô hình delta frame đúng bằng 8 gói). Chống burst mạnh nhất ở
-chỗ ít cần nhất, và biến mất ở chỗ cần nhất. Đây mới là phát hiện của A1, và nó là một tham
-số cần tách ra chứ không phải một thuật toán cần viết.
-
-**Overhead cũng không phải 1/8, và đổi theo từng frame.** Số gói parity là `ceil(count/8)`,
-nên overhead là `ceil(count/8)/count` — chỉ xấp xỉ 12,5% khi `count` là bội số lớn của 8.
-Frame 9 gói trả 22%. Frame 1 gói trả 100%. Tệ hơn: mọi gói parity đều phát ở nguyên
-`kParityStride` (`kFecLenPrefix + kMaxVideoPayload` = 1176 byte) bất kể gói dữ liệu trong
-group nhỏ đến đâu (`Packetizer.cpp:44-50`), nên một delta frame nhỏ vẫn mua trọn một gói
-parity full-MTU.
-
-**Phải sửa trước khi đo:** cắt gói parity xuống theo gói dữ liệu lớn nhất trong group.
-`TryRecover` chỉ cần parity ≥ `2 + độ dài gói lớn nhất`, nên việc này an toàn và ngắn. Không
-sửa thì mọi lần quét tỉ lệ parity ở Phase 3 đều đo trên một baseline bị thổi phồng, và số
-liệu áp lực hàng đợi mà P1 cần cũng bị thổi theo.
-
-Ở 1% loss ngẫu nhiên, khoảng 0,27% group không cứu được; ở 5% thì lên khoảng 5,7%. Hai con số
-đó là P(mất ≥2 trên 8), bỏ qua trường hợp mất chính gói parity — cộng thêm khoảng 0,07 điểm
-phần trăm ở mức 1% và 1,5 điểm ở mức 5%. Và vì loss WiFi đi theo cụm nên thực tế còn tệ hơn.
-
-**Phương án:**
-
-- **XOR rải bước, depth dẫn xuất** *(đang dùng)* — rẻ nhất về CPU, nhưng mù ở frame nhỏ.
-- **XOR với depth tách rời khỏi group size** — cùng overhead, cùng CPU, chỉ khác cách chọn
-  tham số. Đây là phép quét phải chạy đầu tiên, không phải một impl mới.
-- **Reed-Solomon (k,n)** — cứu k gói bất kỳ, CPU trung bình, GF(256) có SIMD.
-- **RS + tỉ lệ parity thích ứng** theo loss đo được.
-- **NACK-only** — miễn phí khi mạng sạch, tốn thêm 1 RTT mỗi lần mất.
-- **Lai FEC/NACK chuyển theo RTT** — nhiều khả năng là đáp án đúng.
-
-**Thị trường:** Moonlight dùng Reed-Solomon. WebRTC dùng FlexFEC kết hợp NACK, chọn theo
-RTT. RustDesk nghiêng hẳn về retransmit. Không ai dừng ở XOR đơn parity.
-
-**Hàm mục tiêu:** số lần phải xin IDR trên mỗi phút, ở mỗi tổ hợp (loss rate × độ dài burst
-× RTT). Không phải "tỉ lệ cứu được gói" — người dùng không thấy gói, họ thấy ảnh khựng.
-
-> **Phụ thuộc:** phải làm **P1 trước**. Nếu một phần đáng kể "loss" thực ra là do hàng đợi
-> datagram của mình tự bỏ gói, thì cuộc bake-off này đang tối ưu cho một mô hình sai.
-
-## A2. Điều khiển tắc nghẽn
-
-**File:** `core/include/deskhub/control/BitrateController.h`
-
-**Hiện tại:** AIMD theo mất gói, cộng tín hiệu backlog (`kBacklogMs = 150`,
-`kSevereBacklogMs = 400`) và `kCleanSecondsBeforeDroppingFec = 10`.
-
-Đây là thành phần **dễ A/B nhất trong toàn repo**: `Update(Feedback, frameAgeMs, nowUs)`
-trả về `BitrateDecision` đã là một interface hoàn hảo sẵn rồi. Một hàm thuần, vào là
-feedback, ra là quyết định. Chỉ cần thêm `virtual`.
-
-**Phương án:**
-
-- **AIMD theo loss + backlog** *(đang dùng)* — đơn giản, an toàn, phản ứng sau khi hàng đợi
-  đã đầy.
-- **Delay-gradient / trendline filter** (kiểu GCC) — thấy nghẽn trước khi mất gói.
-- **SCReAM (RFC 8298)** — viết riêng cho video real-time, đọc RFC thay vì đọc code nên sạch
-  về giấy phép.
-- **Lai loss + delay**, lấy giá trị bảo thủ hơn trong hai.
-
-**Thị trường:** WebRTC dùng GCC (delay-gradient) — chuẩn công nghiệp cho video real-time.
-Moonlight gần như không tự thích ứng, để người dùng đặt bitrate cố định. Sunshine đẩy quyết
-định về phía client.
-
-**Hàm mục tiêu:** thời gian hồi phục sau khi băng thông tụt · bitrate trung bình giữ được ·
-số lần overshoot tự gây loss.
-
-`docs/ARCHITECTURE.md` đã ghi lại đúng ca overshoot này: controller đọc 15 ms RTT thành
-headroom rồi kéo bitrate lên lại. Dùng chính ca đó làm test hồi quy đầu tiên.
-
-> **Phụ thuộc:** đọc P1 trước khi đụng vào. Có một controller thứ hai bên dưới mà thành phần
-> này không biết là có tồn tại.
-
-## A3. Jitter buffer âm thanh
-
-**File:** `core/include/deskhub/transport/AudioJitterBuffer.h`
-
-**Hiện tại:** target delay cố định `kDefaultAudioDelayMs = 60`, che bằng conceal khi thiếu
-frame.
-
-Thành phần này **đã có sẵn hàm mục tiêu**: struct `Stats` đang đếm `framesConcealed`,
-`framesLate`, `underruns`, `resyncs`. Không cần chế thêm gì để chấm điểm.
-
-**Phương án:**
-
-- **Delay cố định 60 ms** *(đang dùng)* — đơn giản, phí độ trễ khi mạng tốt, thiếu khi mạng
-  xấu.
-- **Target thích ứng** theo jitter đo được.
-- **NetEQ-style** — co giãn thời gian bằng WSOLA thay vì drop hoặc chèn im lặng.
-
-**Thị trường:** NetEQ của WebRTC là chuẩn vàng, và khác biệt nghe thấy rõ khi mạng phập
-phù — tai người nhạy với gián đoạn âm thanh hơn nhiều so với một frame hình bị rớt.
-
-**Hàm mục tiêu:** `(underruns + framesConcealed)` trên mỗi phút, vẽ theo trục độ trễ audio
-trung bình. Đây là đánh đổi trực tiếp, nên kết quả phải là một đường cong chứ không phải
-một con số.
-
-## A4. Phục hồi sau mất gói
-
-**File:** `core/include/deskhub/session/host/ViewerFeedback.h` ·
-`session/host/SourcePipeline.h` · impl encoder ở `client/*/encode`
-
-**Hiện tại:** xin IDR nguyên khung — 37 chỗ trong `core/` nhắc tới `IDR`, **không có chỗ nào
-dùng long-term reference** (đã grep lại cả `core/`, `platform/` và `client/`: không có gì).
-Ở 20 Mbps, một IDR là cú vọt bitrate đột ngột, mà cú vọt đó lại gây thêm loss.
-
-**Phương án:**
-
-- **IDR** *(đang dùng)* — đơn giản, encoder nào cũng có, spike bitrate.
-- **LTR + reference invalidation** — rẻ hơn IDR cả chục lần.
-- **Intra-refresh cuộn** — không bao giờ có spike, đổi lại chất lượng thấp hơn chút.
-
-**Thị trường:** Moonlight và Sunshine đều dùng reference invalidation trên NVENC. Đây là
-chênh lệch rõ nhất giữa Deskhub và nhóm dẫn đầu.
-
-**Cảnh báo:** đây là món **đắt nhất trong Tier A và trải khắp ba lớp**. Chính sách quyết định
-khi nào xin cái gì nằm ở `core/`; khả năng thực thi thì nằm ở bốn code path encoder khác
-nhau — NVENC và Media Foundation trên Windows, VA-API và NVENC trên Linux, VideoToolbox trên
-Apple, MediaCodec trên Android. Mỗi cái hỗ trợ LTR một kiểu, có cái không hỗ trợ. Để sau
-cùng, và làm sau khi C1 đã cho biết backend nào thực sự đáng đầu tư.
-
-**Hàm mục tiêu:** độ lớn spike bitrate sau mất gói · thời gian tới khi ảnh sạch trở lại.
-
-## A5. Ước lượng lệch đồng hồ
-
-**File:** `core/include/deskhub/control/ClockOffset.h`
-
-**Hiện tại:** rolling-min trên cửa sổ `kWindowUs = 10 s` — lấy min quan sát được làm mốc 0,
-rồi `LatencyUs()` trả về phần vượt trên mốc đó.
-
-**Hệ quả cần biết:** `e2e_ms` mà app hiển thị là số *tương đối*, không phải latency tuyệt
-đối — baseline một chiều bị triệt tiêu. Tốt để bắt bufferbloat, nhưng không đem so với tool
-khác được.
-
-**Phương án:**
-
-- **Rolling-min 10 s** *(đang dùng)* — bền với nhiễu, mù với drift chậm.
-- **Hồi quy tuyến tính / trendline** — tách được drift khỏi jitter.
-- **Kalman** — chính xác nhất, khó chỉnh nhất.
-
-**Vì sao đáng làm:** cải thiện chỗ này là điều kiện cần để có một con số latency *công bố
-được*, mà đó lại chính là con số cần cho bảng so sánh và bài viết.
-
-**Hàm mục tiêu:** sai số ước lượng so với offset thật, trong sim có drift và jitter đã biết
-trước.
-
-## A6. Nhịp phát hình
-
-**File:** `core/include/deskhub/control/VideoPacer.h` · `control/FrameGate.h` ·
-`transport/Pacer.h`
-
-**Hiện tại:** lead cố định `kDefaultLeadUs = 33 ms`, resync khi lệch quá
-`kResyncThresholdUs = 250 ms`. `FrameGate` nhận frame với dung sai
-`kJitterToleranceUs = 500 µs`.
-
-**Phương án:**
-
-- **Lead cố định 33 ms** *(đang dùng)* — một frame ở 30 fps, hai frame ở 60 fps.
-- **Lead thích ứng** theo jitter đo được — trả lại độ trễ khi mạng tốt.
-- **Khớp vsync màn hình client** — bỏ judder do lệch pha.
-
-**Thị trường:** Moonlight có tuỳ chọn frame pacing khớp vsync, và người dùng cảm nhận được
-rõ.
-
-**Hàm mục tiêu:** phương sai khoảng cách giữa hai lần hiển thị (judder), vẽ theo trục độ trễ
-cộng thêm.
-
----
-
-# Tier A — `platform/`
-
-## P1. Hai tầng điều khiển tắc nghẽn chồng lên nhau
-
-**File:** `platform/src/net/QuicEndpoint.cpp:74` (`MakeConfig`)
-
-**Đây là phát hiện quan trọng nhất của cả bản kiểm kê, và là lý do bản chỉ có `core/` là
-chưa đủ.**
-
-`MakeConfig` đặt idle timeout, kích thước payload, cửa sổ flow control, số stream, và bật
-datagram với `kDatagramQueue`. Nhưng nó **không bao giờ gọi
-`quiche_config_set_cc_algorithm`** — nghĩa là quiche đang chạy thuật toán mặc định của nó.
-
-Trong QUIC, DATAGRAM frame **có** chịu điều khiển tắc nghẽn. Vậy nên video của bạn đang đi
-qua CC của quiche, trong khi `BitrateController` (A2) ngồi bên trên quyết định bitrate
-encoder mà không hề biết tầng dưới tồn tại. Hai bộ điều khiển chồng nhau, không cái nào biết
-cái nào.
-
-Hệ quả cụ thể: khi CC của quiche không cho datagram ra, chúng dồn vào `kDatagramQueue`; hàng
-đợi đầy thì gói bị bỏ **ngay trong máy mình**. Với `Reassembler` thì cái đó trông y hệt mất
-gói trên mạng — và FEC ở A1 sẽ tốn parity để cứu thứ mà chính mình vứt đi.
-
-**Thuật toán mặc định đó là CUBIC** — không cần thí nghiệm để biết, chỉ cần thấy rằng
-`quiche_config_set_cc_algorithm` không xuất hiện ở bất kỳ đâu trong cây nguồn.
-
-**Phương án:**
-
-- **Mặc định, không cấu hình** *(đang dùng)* — chạy CUBIC của quiche, nhưng lựa chọn đó nằm
-  trong thư viện chứ không nằm trong code mình.
-- **Chọn tường minh thuật toán CC** cho quiche và chỉnh AIMD cho khớp.
-- **Để quiche làm CC duy nhất**, bỏ vòng điều khiển bitrate của mình.
-- **Để AIMD làm chủ**, cấu hình quiche thoáng nhất có thể để nó không can thiệp.
-- **Đưa video sang `VideoPath::RawUdp`**, bỏ hẳn CC của quiche khỏi đường video.
-  `SessionTransport.cpp:480` đã có sẵn nhánh này; mặc định là `QuicDatagram`
-  (`SessionTransport.h:129`) và ngoài test không ai gọi `SetVideoPath`.
-
-**Phép đo rẻ nhất, chạy trước tiên:** cùng link, cùng tải, video trên `RawUdp` so với
-`QuicDatagram`. Không phải viết dòng code nào, và nó cô lập đúng phần đóng góp của CC quiche.
-
-**Hàm mục tiêu:** tỉ lệ datagram bị bỏ ở `kDatagramQueue` so với loss thật đo được trên dây.
-Nếu tỉ lệ này đáng kể thì mọi kết luận của A1 và A2 đều lệch.
-
-**Bộ đếm cần thêm đã có sẵn chỗ để ở:** `QuicSendStats` và `Impl::Counters`
-(`QuicEndpoint.cpp:717-725`) đang đếm `datagrams` và `capped`, còn `SendDatagram` (dòng 699)
-đã rẽ nhánh trên `sent > 0` — chỉ là đang vứt tín hiệu thất bại đó đi. Đếm nó rồi phơi ra
-dòng diag cạnh `e2e_ms`: khoảng mười dòng, không phải một buổi.
-
-## P2. Gộp syscall cho UDP
-
-**File:** `platform/src/net/UdpSocketPosix.cpp:48` · `UdpSocketWin.cpp:69`
-
-**Hiện tại:** chỉ đặt `SO_RCVBUF` và `SO_SNDBUF`. Không có `sendmmsg`/`recvmmsg`, không UDP
-GSO (`UDP_SEGMENT`), không GRO, không RIO trên Windows. Mỗi datagram là một syscall.
-
-Ở 1080p60 tại 20 Mbps, đó là hàng nghìn syscall mỗi giây cho mỗi chiều, nhân với số viewer.
-
-**Phương án:**
-
-- **Một syscall một gói** *(đang dùng)* — đơn giản, di động, tốn CPU.
-- **`sendmmsg` / `recvmmsg`** — gộp nhiều gói mỗi lần gọi, chỉ POSIX.
-- **UDP GSO + GRO** trên Linux — kernel tự cắt và gộp, giảm syscall mạnh nhất.
-- **RIO (Registered I/O)** trên Windows.
-
-**Thị trường:** đây là bài tối ưu chuẩn của mọi stack QUIC hiệu năng cao; quiche có sẵn
-đường đi cho GSO.
-
-**Hàm mục tiêu:** CPU% ở host và client tại 1080p60 20 Mbps · số syscall mỗi giây · và quan
-trọng nhất, ngưỡng bitrate mà tại đó CPU trở thành nút cổ chai.
-
----
-
-# Tier A — `client/`
-
-## C1. Chọn backend encoder
-
-**File:** `client/windows/cpp/encode/EncoderFactory.cpp` · `encode/IVideoEncoder.h` ·
-`client/linux/cpp/encode/HwEncoder.h` · contract ở `core/media/VideoContract.h`
-
-**Hiện tại:** `CreateEncoder()` thử `NvencEncoder` trước, hỏng thì rơi xuống `MfEncoder`,
-hỏng nữa thì trả `nullptr`. Linux có `NvEncoder` và `VaEncoder`. Apple có `VtEncoderApple`,
-Android có `MediaCodecEncoder`.
-
-**Vấn đề không nằm ở cấu trúc mà nằm ở tiêu chí chọn:** factory chọn theo *cái nào khởi tạo
-được trước*, không theo *cái nào tốt hơn*. Trên một máy có NVIDIA, `MfEncoder` không bao giờ
-được thử — dù trên một số cấu hình Intel, MFT mà Media Foundation dẫn tới lại cho latency
-thấp hơn. (Repo không có backend QSV riêng; Media Foundation chính là đường tới MFT của
-Intel.)
-
-Linux thì không thuần "init được trước": `HwEncoder.h:20` chặn NVENC sau
-`frameKind == FrameMemory::Mapped && NvEncoder::DriverPresent()`. Tiêu chí đã có sẵn ở đó,
-chỉ là chưa ai đo xem nó chọn có đúng không.
-
-**Đây là chỗ bake-off rẻ nhất trong toàn dự án**, vì interface, factory và `static_assert`
-ràng buộc vào concept của `core/` đều đã tồn tại. Chỉ thiếu phép đo.
-
-**Phương án:**
-
-- **Cái nào init được trước** *(đang dùng)* — không tốn gì, có thể chọn nhầm.
-- **Xếp hạng theo bảng tra sẵn** dựng từ kết quả bake-off, theo vendor và thế hệ GPU.
-- **Đo một lần lúc chạy đầu tiên** rồi nhớ lựa chọn.
-- **Đo định kỳ** — nhiều khả năng là thừa.
-
-**Hàm mục tiêu:** VMAF ở cùng bitrate · encode latency p99 · CPU/GPU chiếm dụng · **có hỗ
-trợ LTR hay không** (kết quả này quyết định A4 có khả thi trên backend nào).
-
-## C2. Backend capture
-
-**File:** `client/windows/cpp/capture/ScreenCapture.cpp` ·
-`client/linux/cpp/capture/ScreenCapture.cpp` · `platform/src/media/PortalScreenCast.cpp`
-
-**Hiện tại:** Windows dùng **Windows.Graphics.Capture**. Linux đi qua `xdg-desktop-portal` và
-PipeWire. macOS dùng ScreenCaptureKit, iOS dùng ReplayKit qua Broadcast Extension, Android
-dùng MediaProjection.
-
-**Phương án trên Windows:**
-
-- **Windows.Graphics.Capture** *(đang dùng)* — bắt được từng cửa sổ riêng, sống sót khi đổi
-  độ phân giải, hỗ trợ HDR tốt hơn.
-- **DXGI Desktop Duplication** — độ trễ thấp hơn ở chế độ toàn màn hình, nhưng chỉ toàn màn
-  hình và đứt khi đổi chế độ hiển thị.
-
-**Hàm mục tiêu:** độ trễ capture→texture p50/p99 · số frame trùng lặp bị trả về · hành vi khi
-đổi độ phân giải giữa phiên.
-
-Ưu tiên thấp hơn C1: WGC nhiều khả năng vẫn là lựa chọn đúng, nhưng cần một con số để biết
-mình đang trả bao nhiêu độ trễ cho sự tiện lợi đó.
-
-## C3. Codec và chroma
-
-**File:** toàn bộ đường encode/decode ở cả năm client
-
-**Hiện tại:** chỉ H.264, chỉ 4:2:0. Grep ra 158 tham chiếu `H264`, chỉ có `NV12` và
-`YUV420`, không có HEVC, AV1 hay VP9 ở bất kỳ đâu.
-
-**Phương án:**
-
-- **H.264 4:2:0** *(đang dùng)* — HW decode ở mọi nơi kể cả iPhone và Android đời cũ.
-- **H.264 4:4:4** — chữ sắc nét, đúng use case "chạy VS Code từ quán café" mà README bán
-  ngay ở dòng đầu. Hỗ trợ phần cứng hẹp hơn nhiều.
-- **HEVC** — khoảng 30% tốt hơn ở cùng chất lượng, vướng patent, decode trên Android không
-  đều.
-- **AV1** — tốt nhất ở bitrate thấp, không patent, chỉ GPU rất mới.
-
-**Đây là câu hỏi ma trận phần cứng, không giải bằng simulator.** Đáp án gần như chắc chắn:
-giữ H.264 4:2:0 làm baseline phổ quát, **thương lượng nâng cấp** khi cả hai đầu cùng hỗ trợ.
-Việc cần làm là dựng bảng khả năng và cơ chế thương lượng, không phải chạy đua.
-
----
-
-# Tier B — chỉnh tham số, đừng dựng interface
-
-| Lớp | Thành phần | Hiện tại | Việc cần làm |
+# Việc cần làm — đã chuyển sang GitHub Issues
+
+**Từ 04/09/2026, mọi việc còn mở được theo dõi bằng GitHub Issue, không phải bằng file này.**
+Mỗi issue ghi rõ *Bối cảnh · Yêu cầu · Tiêu chí Done · Đang chặn bởi*.
+
+👉 https://github.com/manhpham90vn/Deskhub/issues
+
+Phần còn lại của tài liệu này là **sổ đo**: bảng số, kết luận, và những cảnh báo phương pháp phải
+đọc kèm mỗi lần trích số. Nó không còn là danh sách việc — đừng thêm checkbox mới vào đây.
+
+## Bảng tra: việc mở, theo nhóm chặn
+
+| Issue | Việc | Chặn bởi |
+| --- | --- | --- |
+| [#54](https://github.com/manhpham90vn/Deskhub/issues/54) | Bắt loss và jitter thật trên link thứ ba | link chật |
+| [#55](https://github.com/manhpham90vn/Deskhub/issues/55) | Rút tham số Gilbert-Elliott từ loss thật | link chật |
+| [#56](https://github.com/manhpham90vn/Deskhub/issues/56) | A/B `RawUdp` vs `QuicDatagram` | link chật |
+| [#57](https://github.com/manhpham90vn/Deskhub/issues/57) | Quyết kiến trúc hai tầng CC | chờ #56 |
+| [#58](https://github.com/manhpham90vn/Deskhub/issues/58) | Ghi quyết định CC vào ARCHITECTURE ×4 | chờ #57 |
+| [#59](https://github.com/manhpham90vn/Deskhub/issues/59) | netem + camera 240 fps: sim có nói dối không | bộ đo glass-to-glass |
+| [#60](https://github.com/manhpham90vn/Deskhub/issues/60) | Kịch bản đo encoder chung (VMAF) | **không chặn** |
+| [#61](https://github.com/manhpham90vn/Deskhub/issues/61) | Bake-off encoder trên 3 backend còn lại | macOS · Android · Linux-GPU |
+| [#62](https://github.com/manhpham90vn/Deskhub/issues/62) | Bảng tra `EncoderFactory` theo vendor | thiếu máy AMD |
+| [#63](https://github.com/manhpham90vn/Deskhub/issues/63) | A4 thi hành trên từng backend | máy NVIDIA + các OS khác |
+| [#64](https://github.com/manhpham90vn/Deskhub/issues/64) | C3 4:4:4 — điền mask hay viết decode | chờ quyết định |
+| [#65](https://github.com/manhpham90vn/Deskhub/issues/65) | Viết bài từ dữ liệu bake-off | **không chặn** |
+| [#66](https://github.com/manhpham90vn/Deskhub/issues/66) | `platform_tests` fail 8 check ~20% trên Windows | **không chặn** |
+| [#67](https://github.com/manhpham90vn/Deskhub/issues/67) | Kiểm chứng `overtakenLimit=8` trên link thật | cần netem |
+
+**Ba việc làm được ngay, không chờ gì:** [#60](https://github.com/manhpham90vn/Deskhub/issues/60) ·
+[#65](https://github.com/manhpham90vn/Deskhub/issues/65) ·
+[#66](https://github.com/manhpham90vn/Deskhub/issues/66). Nửa `netem` của
+[#59](https://github.com/manhpham90vn/Deskhub/issues/59) và
+[#67](https://github.com/manhpham90vn/Deskhub/issues/67) cũng chạy được ngay trên máy Ubuntu.
+
+## Trạng thái phần cứng đã dùng để đo
+
+| Máy | Dùng cho | Ghi chú |
+| --- | --- | --- |
+| Ubuntu | viewer trong mọi bài đo mạng | `--fec` `--nack` `--hold` `--video-path` **chỉ chạy trên viewer Linux** |
+| Windows + NVIDIA RTX 5070 Ti | NVENC, MF-qua-NVIDIA (02/09) | |
+| Windows + Intel UHD 750 | MF-qua-Quick-Sync, USO/URO, C2 (04/09) | **không có driver NVIDIA** |
+| iPhone | host trong bài đo link chật | |
+| máy AMD | — | **chưa có** |
+
+⚠️ `make test-asan` và `make test-tsan` **fail ngay trên HEAD chưa sửa gì** ở máy Ubuntu: ASan báo
+leak trong `libpipewire`, TSan báo đua trong `libglib`. Cả hai là thư viện của desktop session,
+không phải code mình — CI chạy headless nên hai đường ấy không bao giờ chạy ở đó. Muốn đọc kết quả
+ASan/TSan thật thì đọc job của CI.
+
+# Kiểm kê: thành phần nào có không gian thuật toán, và nó đã ngã ngũ chưa
+
+Ba lớp, ba vai trò: `core/` là logic thuần không OS header · `platform/` là một API duy nhất
+che khác biệt OS · `client/*` là thứ chỉ OS đó mới làm được. Luật chọn chỗ đặt code nằm ở
+`CLAUDE.md`, không nhắc lại ở đây.
+
+**Không phải cái gì cũng cần interface.** Tier A là chỗ đáng dựng `virtual` để chạy đua; Tier B
+chỉ cần quét tham số; Tier C để yên. Dựng interface cho Tier B/C là trả giá trừu tượng cho một
+cuộc đua không có ai chạy.
+
+### Tier A — đã dựng interface và đã chạy đua
+
+| | Thành phần | Hiện trạng | Kết luận |
 | --- | --- | --- | --- |
-| `core/` | `transport/RetransmitCache.h` | `kCacheFrames = 8` | Quét kích thước cache và chính sách NACK trong cùng cái sim của A1 — nó vốn là mặt kia của bài toán FEC |
-| `core/` | `session/LinkRecovery.h` | Backoff 0,5 s → 5 s | **Lỗi nhỏ:** backoff không có jitter. Nhiều viewer mất kết nối cùng lúc sẽ reconnect đồng pha. Không cần bake-off, nhưng là **đổi API chứ không phải sửa tại chỗ**: `ReconnectDelayUs(attempt)` là hàm thuần theo `attempt`, mà `core/` không được include `deskhubp/system/Random.h`, nên caller phải truyền vào seed hoặc một tỉ lệ 0..1 |
-| `core/` | `media/RgbDownscale.h` | Đường fallback khi không có HW scaler | Box vs bilinear vs Lanczos, chấm bằng SSIM và ns/frame. Chỉ chạm đường fallback nên ưu tiên thấp |
-| `core/` | `media/RatePlan.h` · `control/QualityLadder.h` · `media/QualityPreset.h` | Thang chất lượng cố định | Quét tham số cùng lúc với A2 — ladder và controller là một hệ, chỉnh riêng lẻ sẽ ra kết luận sai |
-| `core/` | `net/LanScan.h` | Quét subnet | mDNS hay broadcast beacon là câu hỏi UX và bảo mật, không phải câu hỏi thuật toán. Quyết bằng tranh luận, không bằng đo |
-| `core/` | `control/LinkStats.h` · `control/StreamSize.h` | Cửa sổ thống kê | Là *đầu vào* của A2. Chỉnh sau khi A2 đã chốt, không chỉnh trước |
-| `platform/` | `audio/AudioSink*.cpp` (5 impl) | WASAPI · PipeWire · CoreAudio · AAudio · None | Đã là pattern nhiều impl sau một API. Không cần đua — nhưng nên quét kích thước buffer và chế độ shared/exclusive của WASAPI |
-| `platform/` | `media/OpusCodec.cpp`, hằng số ở `core/media/AudioTypes.h:10` | Opus 64 kbps (`kAudioBitrateBps`), frame 20 ms | Quét bitrate và kích thước frame theo chất lượng cảm nhận. `OpusCodec.cpp` nhận bitrate làm tham số, nên chỗ cần sửa là hằng số ở `core/`. Ưu tiên thấp, 64 kbps đã đủ tốt |
-| `platform/` | `net/UdpSocket*.cpp` | `SO_RCVBUF` / `SO_SNDBUF` cố định | Quét kích thước buffer cùng lúc với P2 — hai thứ tương tác với nhau |
-| `client/` | `client/windows/cpp/gpu/GpuSelect.cpp` | Chọn GPU | Trên máy hai GPU, chọn sai là cả pipeline zero-copy sụp. Kiểm tra tiêu chí chọn hiện tại, không cần đua |
-
-# Tier C — để yên
-
-Những thành phần này chỉ có đúng và sai, không có "phương án triển khai" để so. Chúng đã
-được test và được bảy target libFuzzer quét hằng đêm. Bọc interface vào đây là thêm gián
-tiếp mà không đổi lấy gì.
-
-| Nhóm | Vì sao không có gì để so |
-| --- | --- |
-| `core/protocol/` — Wire, RecordStream, ByteOrder | Định dạng trên dây. Chỉ có phân tích đúng hoặc sai |
-| `core/terminal/` — VtParser, Screen, Palette, Snapshot, Repaint, KeyEncoder, ScrollAnchor | Bám chuẩn VT. Lệch chuẩn là bug, không phải lựa chọn |
-| `core/input/` — KeyMap, ScancodeTable, Set1Scancodes, VirtualKeys, PointerMap, Hotkeys | Bảng ánh xạ. Đúng hoặc sai, không có thuật toán |
-| `core/transfer/` — Crc32, SafeName | CRC32 là CRC32. SafeName là bề mặt bảo mật, đã có fuzz |
-| `core/media/` — AnnexB, H264Sps, BitWriter | Phân tích bitstream theo chuẩn |
-| `core/net/` — Ipv4, BindAddress, PairedDevices, TrustStore | Phân tích địa chỉ và lưu trạng thái tin cậy |
-| `core/ui/` · `core/cli/` · `core/diag/` | Định dạng chuỗi hiển thị |
-| `platform/auth/` · `system/AuthProof` · `system/HostIdentity` | Mật mã và bắt tay. Ở đây "phương án thay thế" là rủi ro bảo mật, không phải cơ hội tối ưu |
-| `platform/system/` — Clock, Random, FileStore, Pty, KeepAwake, Autostart… | Bọc mỏng quanh lời gọi OS. Một cách đúng cho mỗi OS |
-| `platform/ffi/` | Lớp đệm sang Kotlin và Swift. Chỉ là chuyển đổi kiểu dữ liệu |
-
----
-
-# Hình hài của harness
-
-Điểm mấu chốt của việc dựng contract không phải là để hoán đổi lúc chạy, mà là để **mọi bản
-triển khai đi qua đúng một bộ test hành vi**. Một contract, một bộ test tham số hoá, N bản
-impl. Bản nào sai hành vi thì trượt trước khi kịp được đo tốc độ.
-
-Dự án đã có sẵn tiền lệ để bắt chước: `core/media/VideoContract.h` dùng concept C++20 thay
-cho lớp cơ sở ảo, và `IVideoEncoder.h` tự ràng buộc bằng `static_assert`. Với thứ nằm hoàn
-toàn trong `core/` như FEC thì lớp cơ sở ảo tiện hơn vì cần chọn lúc chạy; với thứ trải sang
-`client/` thì theo lối concept sẵn có.
-
-```cpp
-class IFecScheme {
-public:
-    virtual ~IFecScheme() = default;
-    virtual void Encode(std::span<const PacketView> group, ParitySink& out) = 0;
-    virtual RecoverResult Recover(PacketGroup& group) = 0;
-    virtual double OverheadRatio() const = 0;
-    virtual const char* Name() const = 0;
-};
-
-std::unique_ptr<IFecScheme> MakeFecScheme(std::string_view name);
-```
-
-| Việc | Ở đâu | Vì sao ở đó |
-| --- | --- | --- |
-| Test hành vi, chạy mọi impl | `core/tests/transport/FecTests.cpp` | File đã tồn tại — chuyển thành tham số hoá theo tên scheme, mỗi impl phải pass hết |
-| Chi phí CPU từng impl | `core/perf/VideoPerf.cpp` | Harness sẵn có đo ns/op, đếm allocation và có so baseline trong CI — nhưng job `perf-compare` (`test.yml:216`) chỉ phát `::warning::`, **không chặn hồi quy**. Đừng dựa vào nó để bảo vệ bản thắng. File này còn sẵn `kDroppedPacketIndex = 3` |
-| Chất lượng phục hồi | `core/tests/transport/LossGoodputTests.cpp` *(tổng quát hoá)* | Đã là một link sim tất định: hàng đợi in-flight `multimap<uint64_t, Datagram>`, độ trễ một chiều, nhịp frame 16'667 µs, độ trễ xin keyframe — và nó chấm đúng hàm mục tiêu của A1 (`longestStallUs`, goodput, số lần mất). Chỉ cần thay mô hình loss. Dựng `core/bench/` riêng chỉ khi phần quét xuất CSV không nhét vừa một test binary |
-| Đo ở tầng `platform/` (P1, P2) | `platform/perf/` | Đã có `QuicPerf.cpp` và `PerfMain.cpp`. Đây là chỗ đo QUIC và socket, vì `core/` không được đụng OS |
-| Đo backend encoder (C1) | Kịch bản chạy tay trên máy thật | Cần GPU thật, không tự động hoá trong CI được. Ghi kết quả thành bảng tra trong repo |
-| Kết luận sau mỗi bake-off | `docs/ARCHITECTURE.md` §Decisions worth remembering | Đúng chỗ mà `CLAUDE.md` quy định cho tri thức không được phép mất. Ghi cả khi kết luận là "giữ nguyên" — kèm ba bản dịch |
-
-**Mô hình mất gói phải là Gilbert-Elliott**, không phải uniform random. Markov hai trạng thái
-good/bad là thứ duy nhất tách được các độ sâu interleave khỏi nhau và tách chúng khỏi
-Reed-Solomon. Chạy uniform random song song làm đối chứng — nếu hai mô hình cho cùng thứ hạng
-thì burst đã bị mô phỏng sai.
-
-Sim phải **seeded và tất định**: không mạng, không GPU, chạy được trong CI như một cổng chống
-hồi quy — đúng ràng buộc mà `CLAUDE.md` đặt ra cho `core/`.
-
-# Có nên cho người dùng chọn thuật toán?
-
-Phần lớn là **không**, và đây là chỗ đáng tiết kiệm công nhất.
-
-Người dùng không có cách nào đánh giá giữa XOR và Reed-Solomon; đưa lựa chọn đó vào Settings
-là đẩy một quyết định kỹ thuật cho người không có dữ liệu để quyết. Tệ hơn, mỗi dropdown nhân
-ma trận test lên, mà ASan, TSan và fuzz thì phải quét từng nhánh.
-
-Quan trọng hơn cả: **lựa chọn đúng phụ thuộc vào RTT và loss đo được — thứ code nhìn thấy còn
-người dùng thì không.** Nên hình hài đúng là tự thích ứng, không phải một menu.
-
-| Hình thức | Dùng cho | Kết luận |
-| --- | --- | --- |
-| Tự thích ứng theo số đo | FEC, congestion control, jitter buffer, pacing | **Mặc định.** Code biết RTT và loss, người dùng thì không |
-| Dò khả năng rồi thương lượng | Codec, chroma, backend encoder | **Mặc định.** Máy biết mình có phần cứng gì, người dùng không cần biết |
-| Cờ CLI / biến môi trường | `deskhub-cli --fec=rs` khi đo và khi gỡ lỗi (`client/cli`) | **Bắt buộc có.** Không tài liệu hoá cho người dùng cuối, nhưng đây là đường duy nhất chạm tới các bản giữ lại, nên nó là điều kiện cần để việc giữ chúng có nghĩa |
-| Dropdown trong Settings | Chọn thuật toán | **Tránh.** Đẩy quyết định kỹ thuật sang người không đủ dữ liệu để quyết |
-| Dropdown trong Settings | Sở thích thật: thiên về độ trễ hay chất lượng, mức delay audio | **Đã đúng.** Đây là khẩu vị người dùng, không phải thuật toán. Giữ nguyên chỗ đang có |
-
-# Giữ bản thua làm tham chiếu, chỉ chạy bản thắng
-
-Cuộc đua sinh ra dữ liệu, mà dữ liệu đó mất giá trị nếu code sinh ra nó không còn chạy lại
-được. Một bảng số trong `docs/ARCHITECTURE.md` mà không có cách tái lập chỉ là một lời khẳng
-định. Nên **mọi impl đều ở lại trong cây nguồn sau bake-off** — nhưng chỉ bản thắng được nối
-vào đường chạy thật.
-
-Cái giá của việc giữ là có thật, và phải trả bằng cách khoanh vùng chứ không phải bằng cách
-phớt lờ: mỗi impl là thêm một nhánh cho ASan, TSan và fuzz phải quét, cộng một thứ phải sửa
-mỗi lần contract đổi. Ranh giới dưới đây giữ cho cái giá đó không nhân lên:
-
-| | Bản thắng | Bản thua giữ lại |
-| --- | --- | --- |
-| Chọn lúc chạy trong app | Có, và là đường duy nhất | Không — không reachable từ production |
-| Chọn qua `deskhub-cli --fec=…` | Có | **Có. Đây là lý do giữ chúng** |
-| Test hành vi tham số hoá | Bắt buộc pass | Bắt buộc pass — đây là thứ giữ chúng khỏi mục |
-| Workload trong `core/perf` | Có | Có |
-| Ma trận fuzz và sanitizer của CI | Đầy đủ | Không. Chỉ chạy khi chính file của nó đổi |
-
-Đổi lại, mỗi bản giữ lại phải **kèm số đo của chính nó** trong `docs/ARCHITECTURE.md` — giữ
-code mà không giữ lý do nó thua thì lần sau vẫn phải đua lại từ đầu.
-
-Chỉ xoá khi một bản không còn pass test hành vi và không ai chịu sửa: lúc đó nó đã hết là
-tham chiếu, chỉ còn là nợ.
-
-`client/` vốn đã theo đúng luật này vì một lý do khác: nhiều backend encoder **phải** cùng tồn
-tại vì phần cứng người dùng khác nhau. Ở đó việc cần làm không phải chọn một lần cho tất cả,
-mà là chọn cho đúng trên từng máy — đó chính là C1.
-
----
-
-# Việc cần làm, theo thứ tự
-
-## Tiếp tục từ đây (đặt lại ngày 04/09/2026 — trên máy Ubuntu)
-
-**Phiên 04/09 (Ubuntu):** làm xong nửa còn lại của P2 — **gộp gói phía nhận**, GRO trên Linux và
-URO trên Windows, trong đúng một thay đổi API như ghi chú cũ đã dự đoán. Chi tiết, phép đo và cái
-phát hiện chặn (buffer nhỏ **mất dữ liệu**, không phải chậm hơn) nằm ở Phase 6, mục "Đã làm: gộp
-gói phía nhận". Nhánh Linux đã biên dịch, test và đo trên chính máy này; **nhánh Windows chưa qua
-compiler** — xếp cùng hàng chờ với A4, USO và `NoteCapture`. `make test-all`, `make lint`,
-`make lint-tidy` xanh.
-
-**Phiên kế tiếp chạy trên máy Windows.** Nó gỡ được đúng một mẻ, và mẻ đó đang là phần rủi ro lớn
-nhất của cả kế hoạch — bốn nhánh code đã viết mà chưa ai biết có build nổi không. Danh sách đầy đủ
-những gì đang bị chặn, và bị chặn bởi cái gì, nằm ở mục "Đang bị chặn" ngay dưới.
-
-**Việc của phiên Windows, theo thứ tự:**
-
-1. **Build trước mọi thứ khác.** Bốn nhánh chờ compiler ở đó: A4 (`NvencEncoder` + `MfEncoder`),
-   P2/USO (`WSASendMsg`), C2 (`NoteCapture` trong `client/windows/cpp/SharingHost.cpp`), và
-   P2/URO (`RecvCoalesced` trong `UdpSocketWin.cpp`). Ba cái đầu viết 03/09, cái cuối 04/09 —
-   **chưa cái nào qua compiler**.
-2. **Kiểm chứng A4 thi hành được — không cần chờ link chật.** Bật `netem` drop trên máy Ubuntu
-   làm viewer là viewer báo mất gói thật, và log host nói ngay `recovery=invalidate_ref` có nổ
-   hay không. Bảng bằng chứng ở ngay dưới. netem **không** thay được phép đo Phase 0 (nó không
-   nói một link chật thật trông ra sao), nhưng nó trả lời được "code A4 có chạy không" ngay trong
-   buổi ngồi máy, thay vì phải đúng lúc mạng xấu.
-
-   Bằng chứng phải thấy trong log host khi viewer báo mất gói:
-
-   | Dòng | Nghĩa |
-   | --- | --- |
-   | `[NVENC] Initialized: … ltr_slots=4` | LTR bật được thật, không bị driver từ chối |
-   | `[Host][…] recovery=invalidate_ref after losing frame N` | chính sách chọn vá thay vì IDR |
-   | `[NVENC] recovery: next picture references long-term frame M only.` | encoder **thực sự** thi hành |
-   | `evt=sum … idr=0` trong cùng cửa sổ | và cú vọt bitrate của IDR biến mất |
-
-   Nếu thấy `The encoder kept no reference older than frame N` thì nhánh LTR đang rỗng — đọc
-   `ltr_slots` ở dòng Initialized trước khi nghi ngờ chỗ khác.
-
-       deskhub-cli share --bind 192.168.1.3 --encoder nvenc
-
-3. **`platform_perf` trước/sau cho USO và URO.** Chưa có **một con số Windows nào**; hai bảng
-   loopback ở Phase 6 đều là số Linux.
-4. **Đọc `cap_us_p50` / `cap_us_p99` / `cap_repeat` thật** — câu trả lời của C2.
-5. **Bảng tra `EncoderFactory` theo `GpuChoice::vendor`** (Phase 4).
-
-**Cạm bẫy của chính máy Ubuntu này: `make test-asan` và `make test-tsan` fail ngay cả trên HEAD
-chưa sửa gì.** ASan báo leak trong `libpipewire` (`pw_context_load_module`, tới từ
-`AudioSink::Open` trong bài `TestSinkPlaysOrDeclines`), TSan báo đua trong `libglib`
-(`g_main_context_unref`, tới từ `KeepAwakeLinux.cpp`). Cả hai đều là **thư viện của desktop
-session**, không phải code mình: runner CI chạy headless nên `AudioSink::Open` từ chối và
-`KeepAwake` không có D-Bus để gọi, nên hai đường ấy không bao giờ chạy ở đó. Đã kiểm chứng bằng
-cách stash rồi chạy lại trên HEAD — fail y hệt. Đừng mất thời gian truy hai bài này ở đây; muốn
-đọc kết quả ASan/TSan thật thì đọc job của CI.
-
-## Đang bị chặn — và bị chặn bởi cái gì
-
-Một máy Windows **không** đóng được kế hoạch. Nó đóng nhóm 1 dưới đây; năm nhóm còn lại cần thứ
-khác. Viết ra đây để không lần nào cũng phải lần lại cả tài liệu mới biết cái gì đang chờ cái gì.
-
-### 1. Chặn bởi: chưa có máy Windows — phiên tới gỡ
-
-| Việc | Ở đâu |
-| --- | --- |
-| A4 · P2/USO · C2/`NoteCapture` · P2/URO chưa qua compiler | Phase 6, Phase 7 |
-| `platform_perf` trước/sau cho USO và URO trên Windows | Phase 6 |
-| `cap_us_p50` / `cap_us_p99` / `cap_repeat` — số của C2 | Phase 6 |
-| Bảng tra `EncoderFactory` theo `GpuChoice::vendor` | Phase 4 |
-| RIO (`UDP_RECV_MAX_COALESCED_SIZE` đã có, RIO thì chưa) | Phase 6 |
-
-### 2. Chặn bởi: chưa có link thật bị chật
-
-Bố trí **bắt buộc: iPhone làm host, Ubuntu làm viewer** — `wire_loss` nằm trong `Reassembler`,
-tức phía nhận, nên video phải đi qua chỗ chật *rồi mới* tới máy có dụng cụ đo. Máy Windows không
-nằm trong bài đo này. Kế hoạch: WiFi công ty.
-
-| Việc | Ở đâu |
-| --- | --- |
-| Bắt loss và jitter trên link thứ ba (2/3 đã xong) | Phase 0 |
-| Rút tham số Gilbert-Elliott từ loss thật | Phase 0 |
-| Làm lại `dgram_refused` trên một link **bão hoà** — mọi link đã đo đều ra 0 | Phase 0 |
-| A/B `RawUdp` so với `QuicDatagram` trên cùng link | Phase 1 |
-| Ngưỡng bitrate mà CPU thành nút cổ chai | Phase 6 |
-
-Kéo theo (chặn gián tiếp, chờ số đo A/B ở trên): **quyết kiến trúc quiche-làm-chủ hay
-AIMD-làm-chủ**, và bullet `docs/ARCHITECTURE.md` ghi lại quyết định đó — Phase 1.
-
-### 3. Chặn bởi: chưa có máy Intel hoặc AMD
-
-Trên máy Windows hiện tại `--encoder mf` rơi vào **"NVIDIA H.264 Encoder MFT"** — cùng con chip
-với NVENC. Nên bảng đo 02/09 đang trả lời "đi vòng qua Media Foundation tốn gì", **không** phải
-câu hỏi Intel-so-với-NVIDIA mà C1 đặt ra. Thêm một máy NVIDIA nữa không gỡ được cái này.
-
-| Việc | Ở đâu |
-| --- | --- |
-| Câu hỏi thật của C1: Quick Sync so với NVENC | Phase 4 |
-| Bảng tra `EncoderFactory` chỉ đúng cho vendor đã đo | Phase 4 |
-
-### 4. Chặn bởi: chưa chạy trên macOS / Android / Linux-có-GPU
-
-| Việc | Ở đâu |
-| --- | --- |
-| Cột VA-API · VideoToolbox · MediaCodec trong bake-off C1 | Phase 4 |
-| A4: bốn backend ngoài Windows vẫn chưa khai caps nào | Phase 7 |
-
-### 5. Chặn bởi: chưa có bộ đo glass-to-glass
-
-| Việc | Ở đâu |
-| --- | --- |
-| Xác nhận sơ đồ FEC không nói dối — bài camera 240 fps qua `netem` | Phase 3 |
-
-Nửa `netem` của bài này **làm được ngay trên máy Ubuntu**: ba cờ cần thiết (`--fec-parity`,
-`--fec-depth`, `--fec-arm`) đã có từ 02/09. Cái còn thiếu chỉ là camera 240 fps để đọc độ trễ
-glass-to-glass.
-
-### 6. Chặn bởi: chưa quyết — không cần máy nào
-
-| Việc | Ở đâu |
-| --- | --- |
-| **C3 4:4:4**: chọn (a) chỉ điền codec mask hai đầu từ khả năng thật rồi dừng, hay (b) viết cả đường decode 4:4:4 trước khi host được khai bit đó | Phase 7 |
-
-Nhắc lại vì sao nó là câu hỏi chứ không phải việc: `SetHostCodecMask` **không có caller nào** trong
-toàn repo, `ScreenClient.cpp:58` gán cứng `hello.codecMask = kCodecMaskH264` — bảng thương lượng
-dựng ở mục trên đang là code chết. Và viewer Windows giải mã qua H.264 decoder của Media
-Foundation, vốn chỉ 4:2:0; repo không có đường NVDEC nào.
-
-### Không bị chặn — làm được ngay trên máy Ubuntu này
-
-| Việc | Ở đâu |
-| --- | --- |
-| Quét lại sơ đồ FEC dưới `netem` tại chỗ — nửa không cần camera của mục Phase 3 | Phase 3 |
-| Dựng kịch bản đo: cùng clip, cùng bitrate, VMAF + CPU/GPU — cần cho **mọi** cột của C1 | Phase 4 |
-| Viết bài từ dữ liệu bake-off | Phase 8 |
-
----
-
-## Ghi chú phiên 03/09/2026 (phiên tối — trên máy macOS)
-
-Phiên tối chạy trên macOS, nên **không có nhánh Windows nào được biên dịch ở đây**.
-`make test`, `make test-all`, `make lint` và `make lint-tidy` đều xanh. Chưa commit.
-
-**Đã xong ở phiên tối:**
-
-- **Tài liệu cho A4 và P2** — ba bullet mới ở `docs/ARCHITECTURE.md` §Decisions worth
-  remembering (hai cho A4, một cho P2/USO) cùng ba bản dịch, cộng hai câu cũ nay đã sai
-  (bullet A4 nói "chưa backend nào khai báo", bullet C1 nói "chưa có gì tiêu thụ
-  `invalidateBeforeFrame`") được sửa lại. Bullet thứ tư là của C2 ở dưới
-- **C2 — nửa `core/` của phép đo độ trễ capture**, đã biên dịch và test tại chỗ:
-  `SourceDiag::NoteCapture(frameTimestampUs, nowUs)` cộng `capUs` (percentile) và
-  `capRepeat` (đếm), in ra `cap_us_p50` / `cap_us_p99` / `cap_repeat` sau
-  `ShareDiagCaps::captureLatency`. Khung được trao lại lần nữa **chỉ được đếm, không đo lại**
-  — tuổi của nó tính từ lần capture gốc nên sẽ thổi phồng đuôi. 9 check mới trong
-  `core/tests/diag/DiagTests.cpp`. Phía Windows đã nối (`onFrame` gọi `NoteCapture`, caps bật
-  cờ thứ tư) nhưng **chưa qua compiler ở đây** — cùng loại rủi ro như A4/P2 hôm chiều
-
-**Hai việc xong buổi chiều, cả hai vẫn mới chỉ đúng ở mức "biên dịch và test đơn vị":**
-
-- **A4 — nhánh thực thi trên Windows** (chi tiết trong Phase 7 bên dưới)
-- **P2 — gộp gói phía gửi trên Windows bằng USO** (chi tiết trong Phase 6 bên dưới)
-
-**Việc đầu tiên khi ngồi được máy Windows:** chạy A4 trên một link có mất gói và đọc log. Cả
-đường LTR lẫn đường USO **chưa từng gặp một gói mất thật hay một NIC thật nào** — đúng loại "cấu
-hình chưa ai đo" mà A1 và C1 đã dính một lần mỗi cái. Danh sách việc và bảng bằng chứng đã dời
-lên mục "Việc của phiên Windows" ở đầu chương này.
+| **A1** | Sơ đồ FEC | `xor` + `rs` sau `IFecScheme`, depth tách khỏi `numGroups` | **không có bản thắng** — xem Phase 3 |
+| **A2** | Điều khiển tắc nghẽn | AIMD + delay-gradient + SCReAM sau `Update()` | quét xong, chưa có caller production |
+| **A3** | Jitter buffer âm thanh | target cố định vs thích ứng | quét xong, đường cong ở Phase 5 |
+| **A4** | Phục hồi sau mất gói | `RecoveryPolicy` ở `core/`, thi hành ở encoder | Windows xong, [#63](https://github.com/manhpham90vn/Deskhub/issues/63) |
+| **A5** | Ước lượng lệch đồng hồ | ba bản, so trong sim có drift | quét xong |
+| **A6** | Nhịp phát hình | pacing thích ứng + khớp vsync | **khớp vsync thắng tuyệt đối** — spread về 0, không tốn độ trễ |
+| **P1** | Hai tầng CC chồng nhau | quiche CUBIC + AIMD của mình | **chưa quyết** — [#56](https://github.com/manhpham90vn/Deskhub/issues/56) → [#57](https://github.com/manhpham90vn/Deskhub/issues/57) |
+| **P2** | Gộp syscall UDP | GSO/GRO (Linux) · USO/URO (Windows) | xong trừ RIO — số ở Phase 6 |
+| **C1** | Chọn backend encoder | `--encoder auto\|nvenc\|mf\|vaapi\|videotoolbox` | 3/6 cột, [#60](https://github.com/manhpham90vn/Deskhub/issues/60) [#61](https://github.com/manhpham90vn/Deskhub/issues/61) [#62](https://github.com/manhpham90vn/Deskhub/issues/62) |
+| **C2** | Backend capture | WGC, có `cap_us` đo được | **xong** — WGC rẻ, không cần DXGI |
+| **C3** | Codec và chroma | `NegotiateCodec` có, nhưng **không đầu nào điền mask** | [#64](https://github.com/manhpham90vn/Deskhub/issues/64) |
+
+### Tier B — quét tham số, đừng dựng interface
+
+`LinkRecovery` backoff (đã thêm jitter) · `kStallTimeoutMultiple` · luật overtaken cạnh RTT ·
+ngưỡng bật FEC · kích thước ring NACK. Những thứ này chỉ có **một** cách làm đúng, khác nhau ở
+con số — quét bằng test tham số hoá, không bằng `virtual`.
+
+### Tier C — để yên
+
+Packetizer wire format · SPAKE2 handshake · cấu trúc `Reassembler` · logging · discovery. Không
+có không gian thuật toán, hoặc chi phí đổi lớn hơn mọi phần thắng có thể có.
+
+### Ba luật của harness, vẫn áp dụng
+
+1. **Chốt hàm mục tiêu và ngưỡng đạt trước khi nhìn số.** Bảng ngưỡng ở Phase 0. ⚠️ Kỷ luật này
+   **đã bị phá một phần** — ngưỡng được đặt sau khi sweep Phase 2 đã chạy, ghi rõ ở đó.
+2. **Giữ bản thua làm tham chiếu, chỉ chạy bản thắng.** Bản thua ở lại sau cờ `--fec=` /
+   `--cc=` / `--encoder=` và **ra khỏi** ma trận fuzz/sanitizer, để CI không trả giá cho code
+   không ai chạy.
+3. **Không cho người dùng cuối chọn thuật toán.** Các cờ trên là để **đo**, không phải để cấu
+   hình. Người dùng không có dữ liệu để chọn, và mỗi lựa chọn phơi ra là một tổ hợp CI phải gác.
 
 ## Kế hoạch theo phase
 
@@ -696,7 +121,7 @@ lên mục "Việc của phiên Windows" ở đầu chương này.
 
 - [x] Cắt gói parity xuống theo gói dữ liệu lớn nhất trong group **(A1)** — không sửa thì mọi phép đo sau đều tính trên overhead sai
 - [x] Đếm datagram bị `SendDatagram` từ chối, phơi ra dòng diag cạnh `e2e_ms` **(P1, chẩn đoán)** — `QuicSendStats` đã có sẵn chỗ
-- [ ] Bắt loss và jitter thật trên ba link: WiFi nhà, WiFi quán, Tailscale qua WAN
+- ⏳ [#54](https://github.com/manhpham90vn/Deskhub/issues/54) — Bắt loss và jitter thật trên ba link: WiFi nhà, WiFi quán, Tailscale qua WAN
   — **2/3 xong**: WiFi nhà (01/09) và Tailscale qua WAN (03/09, hai phiên). **Còn link chật.**
   Kế hoạch: đo trên **WiFi công ty** thay cho WiFi quán — cùng loại chế độ (nhiều máy, nhiễu, AP
   chia sẻ) mà chủ động về thời gian hơn. Bố trí **bắt buộc: iPhone làm host, Ubuntu làm viewer** —
@@ -709,7 +134,7 @@ lên mục "Việc của phiên Windows" ở đầu chương này.
   instrument ở cổng 47778). `dgram_refused = 0` ở mọi cửa sổ, tới 12,7 Mbps. **Phải làm lại trên
   WiFi công ty** — chưa link nào bị đẩy tới bão hoà, nên đó mới là link có cơ hội cho kết quả khác 0,
   và cũng là link duy nhất còn có thể lật kết luận này
-- [ ] Rút ra tham số Gilbert-Elliott từ phần loss thật: tỉ lệ mất, độ dài burst trung bình, phân bố
+- ⏳ [#55](https://github.com/manhpham90vn/Deskhub/issues/55) — Rút ra tham số Gilbert-Elliott từ phần loss thật: tỉ lệ mất, độ dài burst trung bình, phân bố
   — **dụng cụ đã xong và đã đối chứng với đáp án biết trước (03/09)**: bơm một quá trình
   Gilbert-Elliott có seed (5% loss, burst trung bình 4) qua 400 frame, bộ đếm dựng lại **đúng từng
   gói** (`packetsEverAbsent` khớp chính xác số gói đã bơm) và **đúng từng thùng** của histogram
@@ -1037,17 +462,17 @@ không có bộ đếm. Muốn đo phải đảo vai — chạy host trên máy 
 
 *P1. Phải xong trước A1 và A2, nếu không cả hai đều tối ưu cho mô hình sai.*
 
-- [ ] Chạy A/B `RawUdp` so với `QuicDatagram` trên cùng một link — không phải viết code, và nó đo thẳng phần đóng góp của CC quiche
+- ⏳ [#56](https://github.com/manhpham90vn/Deskhub/issues/56) — Chạy A/B `RawUdp` so với `QuicDatagram` trên cùng một link — không phải viết code, và nó đo thẳng phần đóng góp của CC quiche
   — **núm vặn đã kiểm chứng xong (03/09), phép đo thì chưa.** Xem "Kiểm núm vặn trước khi đi đo"
   và "Vì sao A/B phải chạy trên link chật" bên dưới
-- [ ] Quyết kiến trúc: quiche làm chủ, AIMD làm chủ, hay chia vai rõ ràng
+- ⏳ [#57](https://github.com/manhpham90vn/Deskhub/issues/57) — Quyết kiến trúc: quiche làm chủ, AIMD làm chủ, hay chia vai rõ ràng
   — chặn bởi mục trên; không có số thì mọi lựa chọn đều là suy đoán
 - [x] Đặt cấu hình tường minh trong `MakeConfig` để lựa chọn đó nằm trong code chứ không nằm trong mặc định CUBIC của thư viện
   — `QuicSettings::congestionControl` mặc định `Cubic`, gọi `quiche_config_set_cc_algorithm`
   tường minh. **Không đổi hành vi** (đã xác nhận mặc định của quiche là CUBIC tại
   `third_party/quiche/src/quiche/src/lib.rs:654`); giá trị của nó là ghim baseline lại để một
   lần nâng quiche không âm thầm đổi phép đo. Reno và BBR2 cũng chọn được, cho phép quét
-- [ ] Ghi quyết định vào `docs/ARCHITECTURE.md` §Decisions worth remembering kèm ba bản dịch
+- ⏳ [#58](https://github.com/manhpham90vn/Deskhub/issues/58) — Ghi quyết định vào `docs/ARCHITECTURE.md` §Decisions worth remembering kèm ba bản dịch
 
 > **"Không phải viết code" là sai.** `SetVideoPath` chỉ có caller trong
 > `platform/tests/net/SessionTransportTests.cpp` — từ một binary đã build không có cách nào
@@ -1298,7 +723,7 @@ parity, để lần sau không ai đọc tỉ lệ cứu mà quên mất cái gi
   CPU cũng không cứu được RS: 6,3× so với trần 3×, và điều khoản thoát "cứu gấp đôi" thì đạt
   nhưng vô nghĩa khi cái giá là băng thông chứ không phải CPU. Tiêu chí **không sửa sau khi
   thấy số** — đây là kết quả âm tính thật, không phải thất bại của phép quét
-- [ ] Xác nhận lại trên link thật bằng bài camera 240 fps qua `netem`, kiểm tra sim không nói dối
+- ⏳ [#59](https://github.com/manhpham90vn/Deskhub/issues/59) — Xác nhận lại trên link thật bằng bài camera 240 fps qua `netem`, kiểm tra sim không nói dối
   — **đã gỡ chặn (02/09/2026).** Trước đây bài này không chạy được: `--fec` chỉ chọn tên sơ đồ,
   mà theo chính bảng kết quả `rs` ở parity = 1 tái lập `xor` tới từng chữ số. Hai trục thật sự
   — số hàng parity và độ sâu — thì `SetFecGroups` không có caller production nào (đúng lỗi
@@ -1356,9 +781,11 @@ parity, để lần sau không ai đọc tỉ lệ cứu mà quên mất cái gi
   Linux và macOS/iOS chạy
 - [x] **Bộ đếm để chấm điểm** — `enc_ms_avg`/`enc_ms_max` không thấy được cái đuôi, mà đuôi mới là
   hàm mục tiêu của C1. `evt=sum` nay chở `enc_us_p50` và `enc_us_p99` từ histogram bước 512 µs
-- [ ] Dựng kịch bản đo: cùng clip, cùng bitrate, VMAF + CPU/GPU — **chưa**; latency p99 thì đã có
-- [ ] Chạy trên từng backend: NVENC, Media Foundation, VA-API, VideoToolbox, MediaCodec
-  — **mới có NVENC và MF trên máy này** (bảng dưới), ba backend còn lại cần máy khác
+- ⏳ [#60](https://github.com/manhpham90vn/Deskhub/issues/60) — Dựng kịch bản đo: cùng clip, cùng bitrate, VMAF + CPU/GPU — **chưa**; latency p99 thì đã có
+- ⏳ [#61](https://github.com/manhpham90vn/Deskhub/issues/61) — Chạy trên từng backend: NVENC, Media Foundation, VA-API, VideoToolbox, MediaCodec
+  — **đã có ba cột: NVENC, MF-qua-NVIDIA (02/09), MF-qua-Quick-Sync (04/09)** — xem hai bảng dưới.
+  VA-API · VideoToolbox · MediaCodec vẫn cần máy khác. Nhắc lại: ba cột hiện có **đo trên hai máy
+  khác nhau và không cùng kịch bản**, nên chưa cột nào so được với cột nào
 - [x] Ghi lại backend nào hỗ trợ LTR — kết quả này quyết định A4 khả thi tới đâu
   — **cả hai backend Windows đều có**, đọc từ driver chứ không suy đoán: NVENC qua
   `nvEncGetEncodeCaps` cho `max_ltr_frames=8 ref_pic_invalidation=1 intra_refresh=1` trên
@@ -1366,11 +793,18 @@ parity, để lần sau không ai đọc tỉ lệ cứu mà quên mất cái gi
   `GradualIntraRefresh`. **Caps chỉ ghi log, chưa đưa vào `RecoveryPolicy`** — chưa có gì tiêu thụ
   `invalidateBeforeFrame` hay `wantIntraRefresh`, nên khai khả năng lúc này sẽ biến phục hồi mất
   gói thành vô tác dụng. Đó là phần thực thi của A4, không phải của C1
-- [ ] Thay tiêu chí chọn trong `EncoderFactory` từ "init được trước" sang bảng tra dựng từ số đo
-  — chưa đổi, và số đo đầu tiên nói thứ tự hiện tại (NVENC trước) là **đúng trên máy này**.
+- ⏳ [#62](https://github.com/manhpham90vn/Deskhub/issues/62) — Thay tiêu chí chọn trong `EncoderFactory` từ "init được trước" sang bảng tra dựng từ số đo
+  — chưa đổi, và số đo đầu tiên nói thứ tự hiện tại (NVENC trước) là **đúng trên máy NVIDIA**.
   Ghi thêm 03/09: bảng tra nên khoá theo `GpuChoice::vendor` (đã có sẵn, `GpuSelect.h`), vì
   hôm nay trên máy Intel hay AMD thì `CreateEncoder` vẫn nạp `nvEncodeAPI64.dll` trước rồi
-  mới chịu thất bại — thứ tự đúng trên máy này đang phải trả giá trên mọi máy khác
+  mới chịu thất bại — thứ tự đúng trên máy này đang phải trả giá trên mọi máy khác.
+  **Đo được cái giá đó ngày 04/09:** trên máy Intel, `--encoder auto` in
+  `[NVENC] Failed to load nvEncodeAPI64.dll` rồi mới rơi xuống MF. Tức mỗi lần tạo encoder trên
+  máy không-NVIDIA đều trả tiền cho một lần `LoadLibrary` hỏng. Nó **không** làm hỏng gì — đường
+  rơi chạy đúng và có in lý do — nên đây là việc dọn dẹp, không phải sửa lỗi.
+  **Dữ liệu để dựng bảng tra nay đã có hai vendor:** `Nvidia` → nvenc trước, `Intel` → mf trước
+  (Quick Sync khai đủ LTR + intra-refresh). Còn thiếu `Amd`, và `Unknown`/`Microsoft` (WARP) thì
+  nên giữ nguyên thứ tự thử-lần-lượt như hôm nay
 
 #### Phát hiện chặn trước cả phép đo: `IsSupported` bị đọc ngược cực, MF chạy bằng mặc định MFT
 
@@ -1422,6 +856,51 @@ cùng một con chip. Đây **không** phải câu hỏi Intel-so-với-NVIDIA m
 việc đi vòng qua Media Foundation để tới cùng phần cứng. Muốn trả lời câu hỏi thật của C1 phải chạy
 trên một máy Intel, nơi Media Foundation dẫn tới MFT của Quick Sync. Và cả hai cột đều đo trên nội
 dung không kiểm soát được, nên chênh lệch p50 không mang nghĩa gì cho tới khi có clip cố định.
+
+#### Đã đo: Quick Sync trên một máy Windows thứ hai (04/09/2026) — cột Intel của C1
+
+Máy này là **Intel UHD 750, không có driver NVIDIA** (`nvEncodeAPI64.dll` không tồn tại), nên
+`--encoder mf` rơi vào **"Intel Quick Sync Video H.264 Encoder MFT"** — đúng con đường mà bảng
+02/09 không chạm tới được. Cùng một lệnh `deskhub-cli share`, nguồn 3440x1440 hạ xuống 1920x802,
+20 Mbps, 60 fps, desktop rảnh.
+
+| | Quick Sync qua MF (04/09) |
+| --- | --- |
+| Số cửa sổ | 16 |
+| `enc_us_p50` | **1536–2560** |
+| `enc_us_p99` | **2480–8371** (một cửa sổ vọt 26944) |
+| `enc_ms_avg` | 1,1–2,0 (một cửa sổ 5,5) |
+| LTR | **có** — `LTRBufferControl` / `MarkLTRFrame` / `UseLTRFrame` đều `hr=0` |
+| Intra-refresh | **có** — `GradualIntraRefresh` `hr=0` |
+| `BufferInLevel` | **NOT SUPPORTED** (khác NVENC) |
+
+**Ý nghĩa cho A4:** Quick Sync khai đủ cả LTR lẫn intra-refresh, nên `PrepareRecovery` có chỗ thi
+hành trên máy Intel y như trên máy NVIDIA. Nghĩa là A4 không phụ thuộc riêng NVENC.
+
+⚠️ **Bốn cảnh báo phải nói kèm bảng này:**
+
+1. **Đây không phải bake-off.** So nó với bảng 02/09 là so **hai máy khác nhau** — khác CPU, khác
+   GPU, khác cỡ và nội dung desktop. Con số Quick Sync trông đẹp hơn cột MF của 02/09, nhưng điều
+   đó **không** kết luận được gì về Quick Sync so với NVENC
+2. Vẫn là **desktop rảnh, không phải clip cố định** — đúng cái thiếu mà bảng 02/09 đã tự nhận
+3. Chưa có **VMAF**: đây là số độ trễ, không nói gì về chất lượng ảnh ở cùng bitrate
+4. Sàn nhiễu của chính máy này rất rộng (xem Phase 6) — đừng đọc chênh lệch nhỏ
+
+**Việc còn lại để bảng này thành bake-off thật:** dựng kịch bản đo chung (cùng clip, cùng bitrate,
+VMAF + CPU/GPU) rồi chạy lại **cả hai máy** qua nó. Việc ấy không bị chặn bởi phần cứng nào.
+
+#### Luật gọi tên backend: đã xác nhận chạy thật (04/09/2026)
+
+Trên máy không có NVIDIA, ba đường đều đúng như thiết kế:
+
+| Lệnh | Kết quả |
+| --- | --- |
+| `--encoder nvenc` | `[NVENC] Failed to load nvEncodeAPI64.dll` → `[Encoder] nvenc was named on the command line and would not start, so this source stops rather than measuring a different backend under its name.` → **nguồn dừng** |
+| `--encoder auto` | `nvenc unavailable, trying the next backend...` → MF/Quick Sync, có in lý do |
+| `--encoder mf` | vào thẳng Quick Sync |
+
+Đây là lần đầu luật "gọi tên cái không khởi động được thì **dừng**, không lặng lẽ đo cái khác dưới
+tên nó" được chạy thật thay vì chỉ có trong test.
 
 ### Phase 5 — Lặp lại trên những thành phần dễ nhất
 
@@ -1542,14 +1021,14 @@ thẳng tới `pacer_`, nhưng coi là chưa kiểm chứng cho tới khi CI mac
   test riêng — luật "gói ngắn chỉ được là segment cuối" giờ khoá được bằng test đơn vị chứ
   không chỉ bằng bài loopback.
 
-  ⚠️ **Chưa đo trên Windows.** Bảng loopback ở dưới là số Linux. Chưa chạy `platform_perf`
-  trước/sau ở đây, nên đừng trích bảng đó cho Windows. Tài liệu **đã xong** (03/09, phiên
-  tối): một bullet ở `docs/ARCHITECTURE.md` §Decisions worth remembering cùng ba bản dịch,
-  và nó nói thẳng rằng bảng loopback kia là số Linux.
+  ✅ **Đã đo trên Windows (04/09, phiên chiều).** Bảng riêng ở mục "Đã đo: USO và URO trên
+  Windows" bên dưới. Bảng loopback Linux vẫn là bảng Linux — hai bảng nói hai chuyện khác nhau,
+  đừng trộn.
 
   **URO** (`UDP_RECV_MAX_COALESCED_SIZE`) đã viết cùng GRO trong đúng một thay đổi API, như ghi
-  chú cũ đã dự đoán. ⚠️ Nhánh Windows **chưa qua compiler và chưa gặp NIC nào** — cùng loại rủi ro
-  như A4 và USO
+  chú cũ đã dự đoán. ✅ Nhánh Windows **đã qua compiler và đã chạy trên loopback** — nhưng
+  loopback Windows **không gộp một lần nào**, nên câu "URO có nổ trên NIC thật không" vẫn chưa có
+  câu trả lời
 
 #### Đã làm: gộp gói phía nhận, và cái phải trả để có nó (04/09/2026)
 
@@ -1595,6 +1074,61 @@ message **không tốn gì** cho đường một-gói-một-lần.
 Bằng chứng GRO thật sự nổ, không phải suy từ số: test loopback in
 `the stack coalesced up to 8 datagrams into one read`.
 
+#### Đã đo: USO và URO trên Windows (04/09/2026) — và URO **không gộp gì cả**
+
+Máy Intel UHD 750, build `x64-release`, loopback, **11 lần chạy**, lấy trung vị. Bốn workload nằm
+trong **cùng một binary**, nên không cần dựng bản "trước" để so — chúng tự so với nhau:
+
+| workload | gửi | nhận | trung vị | dải (min…max) |
+| --- | --- | --- | ---: | --- |
+| `udp/loopback-one-syscall-each` | từng gói | từng gói | 7183 ns/datagram | 5809…8399 |
+| `udp/loopback-send-batched-recv-each` | **USO** | từng gói | **3942 ns/datagram** | 3528…5311 |
+| `udp/loopback-batched` | **USO** | `RecvBatch` | 4028 ns/datagram | 3407…5449 |
+| `udp/loopback-coalesced-recv` | **USO** | **URO** | 3797 ns/datagram | 3291…4934 |
+
+**USO là toàn bộ phần thắng, và nó tách khỏi nhiễu rất sạch:** 7183 → 3942 ns/datagram (**−45%**),
+và hai phân bố **không chồng lên nhau một điểm nào** — `min` của hàng một-syscall (5809) vẫn lớn
+hơn `max` của hàng USO (5311). Đây là kết quả chắc chắn nhất của cả phiên.
+
+**Ba hàng phía nhận thì không tách được khỏi nhau:** trung vị lệch nhau 6%, còn ba dải thì chồng
+lên nhau gần như trọn vẹn (3291…5449). Nói "URO nhanh hơn `RecvBatch`" trên số này là nói quá.
+
+**Vì sao: URO trên loopback Windows không gộp một lần nào.** Đây không phải suy từ số, mà đo thẳng
+bằng một probe nhỏ dựng trên `platform.lib`:
+
+- `EnableReceiveCoalescing()` trả về **true** — stack **nhận** `UDP_RECV_MAX_COALESCED_SIZE`
+- gửi một run USO 16 × 1200 byte, rồi đọc bằng slot **2048 byte** (nhỏ hơn `kMaxCoalescedBytes`
+  rất nhiều)
+- nhận về **đúng 16 datagram qua 16 lần đọc riêng lẻ**, mỗi lần `segment == 0`, **không mất một
+  byte nào**
+
+Tức cái bẫy đã chặn nhánh Linux — buffer nhỏ **mất dữ liệu** — **không bắn trên loopback Windows**,
+đơn giản vì không có run gộp nào để mà cắt. Bài test cũng nói đúng điều đó bằng lời:
+`note: the stack coalesced nothing this time, so only the split was tested`.
+
+⚠️ **Cho nên đừng kết luận "URO vô dụng trên Windows".** Kết luận đúng là: **loopback không trả lời
+được câu hỏi này** — cần một NIC thật, và tốt nhất là một NIC có bật URO ở driver. Con đường
+`WSAEMSGSIZE` trong `RecvCoalesced` (nuốt lỗi, trả 0) vẫn **chưa từng chạy**, vì muốn chạm vào nó
+thì stack phải gộp trước đã.
+
+#### Sàn nhiễu của máy Windows này rộng gấp một bậc so với máy Linux
+
+Dải của **từng** workload ở trên là **45-60%** quanh giá trị nhỏ nhất, trong khi máy Linux đo được
+sàn nhiễu ~5% (bằng chính những hàng có mã giống hệt nhau). Hệ quả thực dụng: **trên máy này mọi
+khác biệt dưới khoảng 1,5x là không đo nổi.** Các hàng QUIC còn tệ hơn:
+
+| workload | trung vị | dải |
+| --- | ---: | --- |
+| `quic/handshake` | 5 347 675 ns | 45% |
+| `quic/datagram-delivery` | 11 245 ns | 80% |
+| `quic/stream-throughput-64k` | 5686 ns/KB | 28% |
+| `quic/poll-idle` | 1658 ns | 32% |
+| `quic/terminal-record-delivery` | 28 027 ns | 23% |
+
+⚠️ **Đừng so bảng này với bảng Linux để kết luận về hệ điều hành.** Hai máy khác CPU, khác đời,
+khác cả nhiệt độ. Cái bảng này nói được đúng một điều: **muốn đo hiệu năng vi mô thì đừng đo trên
+máy này** — hoặc phải chạy đủ nhiều lần và chỉ tin những khác biệt to như USO.
+
 **Chưa làm: RIO**, và **ngưỡng bitrate mà CPU thành nút cổ chai** vẫn thuộc danh sách "cần link
 thật" — loopback đo chi phí mỗi gói, không đo chỗ một link thật no
 - [x] A6 — pacing thích ứng và khớp vsync, đo judder
@@ -1602,33 +1136,29 @@ thật" — loopback đo chi phí mỗi gói, không đo chỗ một link thật
   **Phát hiện: trục "độ trễ cộng thêm" của A6 không có trade nào cả.** Không khớp vsync thì
   phase spread ~6000 µs trên chu kỳ 6944 µs ở *mọi* mức lead — mua lead gấp tám lần không thu
   hẹp được một micro giây. Khớp vsync đưa spread về **0** và không tốn độ trễ nào
-- [ ] C2 — đo độ trễ capture của WGC, đối chiếu với DXGI Desktop Duplication
-  — **bộ đếm đã viết xong, số đo thì chưa có (03/09/2026, phiên tối).**
-  `SourceDiag::NoteCapture(frameTimestampUs, nowUs)` nằm trong `core/`: nó cộng tuổi khung vào
-  percentile `capUs` và đếm khung được trao lại lần nữa vào `capRepeat`. Một khung lặp **chỉ
-  được đếm**, không đo lại — tuổi của nó tính từ lần capture gốc nên sẽ thổi phồng đuôi. Timestamp
-  bằng 0 và khung "đến từ tương lai" đều bị bỏ, không kẹp về 0; tuổi vượt 32 bit thì bão hoà.
-  `evt=sum` in `cap_us_p50` / `cap_us_p99` / `cap_repeat` sau `ShareDiagCaps::captureLatency`,
-  nên bốn client kia không in cột rỗng và nối vào bằng đúng một dòng mỗi cái khi tới lượt. 9 check
-  ở `core/tests/diag/DiagTests.cpp`. Phía Windows: `onFrame` gọi `NoteCapture` ngay sau
-  `captured.fetch_add`, và `SourcePipeline` bật cờ thứ tư trong caps — **chưa qua compiler**.
-  **Còn lại:** chạy trên Windows và đọc ba con số đó. Chỉ khi chúng xấu mới đáng viết backend
-  Duplication, và khi đó theo đúng khuôn `--encoder`: một cờ `--capture wgc|dxgi` gọi tên, gọi tên
-  cái không khởi động được thì **dừng**.
+- [x] C2 — đo độ trễ capture của WGC, đối chiếu với DXGI Desktop Duplication
+  — **đã có số (04/09/2026, phiên chiều trên máy Windows): WGC rẻ, không đáng viết backend
+  Duplication.** Intel UHD 750, capture 3440 × 1440 rồi hạ xuống 1920 × 802 @60fps, 20 Mbps,
+  qua 16 cửa sổ một giây:
 
-  Ba điều đã khảo sát trước khi viết, giữ lại vì vẫn là lý do của thiết kế trên:
+  | | dải qua 16 cửa sổ |
+  | --- | --- |
+  | `cap_us_p50` | **0,5-2 ms** (một vài cửa sổ lên 7-8 ms) |
+  | `cap_us_p99` | **2-20 ms** |
+  | `cap_repeat` | **0** suốt cả bài |
 
-  - `client/windows/cpp/capture/ScreenCapture.cpp` **không có một bộ đếm độ trễ nào** — con
-    số C2 cần chưa tồn tại, không phải chưa được in
-  - `fi.meta.timestampUs` (chính là `SystemRelativeTime` của WGC) **chưa có ai đọc** ở phía
-    host Windows: `SharingHost` chỉ dùng `width`/`height`, còn `Encode` được truyền
-    `NowUs()` mới tinh. Nên `enc_lat_ms` hôm nay đo độ trễ **encode**, không phải
-    capture→texture — đừng đọc nhầm nó thành số của C2
-  - hai đồng hồ khớp nhau sẵn: `SystemRelativeTime` là QPC (đơn vị 100 ns) và `NowUs()` trên
-    Windows cũng là QPC, nên hiệu hai số là dùng được ngay, không cần quy đổi epoch
+  Để so: `enc_us_p50` của chính lần chạy đó là 1,5-2,6 ms. Tức **WGC trao một khung hết đúng
+  khoảng thời gian encoder sau đó bỏ ra để nén nó** — sự tiện lợi ấy không đắt, và **không có
+  con số xấu nào để biện minh cho một backend Duplication**. Câu hỏi C2 đặt ra coi như đã trả lời;
+  cờ `--capture wgc|dxgi` chỉ viết nếu sau này có lý do khác.
 
-  Đó cũng là lý do bước đầu tiên chỉ là ba bộ đếm chứ không phải một backend thứ hai: riêng
-  chúng đã trả lời được "trả bao nhiêu độ trễ cho sự tiện lợi của WGC"
+  ⚠️ Một ngoại lệ phải nói kèm: **cửa sổ đầu tiên sau `Start` cho `cap_us_p99=242 ms`.** Đó là
+  tuổi của chính khung đầu tiên, không phải cái đuôi ở trạng thái ổn định — đừng trích con số đó
+  ra khỏi ngữ cảnh này.
+
+  Cơ chế: `SourceDiag::NoteCapture(frameTimestampUs, nowUs)` ở `core/`, 9 check ở
+  `core/tests/diag/DiagTests.cpp`. Lý do thiết kế đã chuyển vào `docs/ARCHITECTURE.md`
+  §Decisions (cùng ba bản dịch).
 - [x] Tier B — thêm jitter vào backoff của `LinkRecovery`; nhớ đây là đổi chữ ký `ReconnectDelayUs` cộng mọi caller, không phải sửa tại chỗ
 
 #### Đã đo: gộp syscall UDP, và cái nó phơi ra (03/09/2026)
@@ -1689,7 +1219,7 @@ bài đo với Phase 0 — nó thuộc về danh sách "cần link thật", khô
 
 *A4, C3. Đắt nhất, làm sau cùng.*
 
-- [ ] A4 — chính sách phục hồi ở `core/`, thực thi ở từng backend encoder mà Phase 4 xác nhận là có hỗ trợ
+- ⏳ [#63](https://github.com/manhpham90vn/Deskhub/issues/63) — A4 — chính sách phục hồi ở `core/`, thực thi ở từng backend encoder mà Phase 4 xác nhận là có hỗ trợ
   — **phần `core/` xong**: `media::RecoveryPolicy` chọn giữa IDR · invalidate long-term
   reference · intra-refresh theo `EncoderRecoveryCaps`, có leo thang khi báo mất lần hai tới
   trước lúc bản vá đầu kịp có tác dụng. `HostNetLoop` nay hỏi chính sách thay vì
@@ -1741,6 +1271,18 @@ bài đo với Phase 0 — nó thuộc về danh sách "cần link thật", khô
   - 8 check mới ở `platform/tests/session/EncoderRecoveryTests.cpp`, chạy trên encoder giả
     cả loại có lẫn loại không có ba hàm kia
 
+  **Trạng thái sau phiên Windows 04/09:** cả `NvencEncoder` lẫn `MfEncoder` **đã qua compiler**,
+  build sạch với `DESKHUB_WERROR=ON`, và 8 check ở `EncoderRecoveryTests.cpp` xanh. Trên máy
+  Intel dùng hôm đó, `MfEncoder` khai `ltr=1 intra_refresh=1` đọc từ chính Quick Sync — nghĩa là
+  **A4 có chỗ thi hành trên cả Intel, không riêng NVIDIA**.
+
+  ⚠️ **Nhưng vẫn chưa gặp một gói mất thật nào.** Máy 04/09 không có NVENC, nên bảng bằng chứng
+  của NVENC (`ltr_slots=4`, `recovery=invalidate_ref`, `[NVENC] recovery: next picture
+  references long-term frame M only.`, `idr=0`) **chưa đọc được**. Muốn đóng việc này cần một máy
+  Windows **có NVIDIA** cộng một viewer báo mất gói (netem trên Ubuntu là đủ, xem đầu chương).
+  Đường Quick Sync thì về nguyên tắc kiểm được ngay trên máy Intel bằng đúng bài netem ấy —
+  chưa làm.
+
   **Còn lại của A4:** bốn backend kia (VA-API, NVENC-Linux, VideoToolbox, MediaCodec) vẫn
   chưa khai gì, nên vẫn xin IDR như cũ — đúng như thiết kế, không phải thiếu sót. Tài liệu
   **đã xong** (03/09, phiên tối): hai bullet mới ở `docs/ARCHITECTURE.md` §Decisions worth
@@ -1753,7 +1295,7 @@ bài đo với Phase 0 — nó thuộc về danh sách "cần link thật", khô
   bit 0 nên vẫn thoả thuận ra H264 và nhận về giá trị 0 như trước.
   **Thứ tự ưu tiên là tạm** — vị trí của 4:4:4 (chữ sắc nét) so với AV1/HEVC (ít bit hơn) là
   câu hỏi phải giải bằng đo, chưa giải
-- [ ] C3 — thêm 4:4:4 cho use case đọc chữ, giữ 4:2:0 làm baseline phổ quát
+- ⏳ [#64](https://github.com/manhpham90vn/Deskhub/issues/64) — C3 — thêm 4:4:4 cho use case đọc chữ, giữ 4:2:0 làm baseline phổ quát
   — **chưa viết dòng nào, và có một phát hiện phải quyết trước khi viết (03/09/2026).**
   Bảng khả năng ở mục trên là thật, nhưng **không đầu nào điền nó**: `SetHostCodecMask`
   (`ScreenHostSession.h:71`) **không có caller nào trong toàn repo**, còn
@@ -1775,4 +1317,4 @@ bài đo với Phase 0 — nó thuộc về danh sách "cần link thật", khô
   dòng), `audio-delay.csv` (21), `pacer-judder.csv` (24). Mọi dòng sinh từ sim có seed, tất
   định, không mạng không GPU — chạy lại cho ra đúng từng byte. Phần "chỗ Deskhub thua" đã có
   thật trong dữ liệu: A3 thích ứng thua target cố định dưới jitter
-- [ ] Viết bài từ dữ liệu bake-off: "tôi thử N sơ đồ FEC dưới burst loss, đây là số liệu"
+- ⏳ [#65](https://github.com/manhpham90vn/Deskhub/issues/65) — Viết bài từ dữ liệu bake-off: "tôi thử N sơ đồ FEC dưới burst loss, đây là số liệu"

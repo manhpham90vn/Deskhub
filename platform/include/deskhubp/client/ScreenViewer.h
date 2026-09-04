@@ -51,7 +51,7 @@ struct ScreenViewerConfig {
     uint32_t screenH = 0;
     uint8_t desiredFps = 60;
     bool sendNacks = true;
-    uint32_t overtakenLimit = 0;
+    uint32_t overtakenLimit = deskhub::kDefaultOvertakenLimit;
     uint32_t audioDelayMs = deskhub::kDefaultAudioDelayMs;
     bool audioAdaptive = false;
     bool pacingAdaptive = false;

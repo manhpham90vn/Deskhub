@@ -839,10 +839,25 @@ line.
   `OvertakenLimit()` derives the count from the repair window rather than raising a constant.
   What it does not buy is free delay — the longest gap between two delivered frames moves both
   ways across the grid, up at some points and down at others, because fewer keyframe requests
-  can more than pay for a longer wait. **The shipping default is unchanged**: the derivation is
-  reachable only when a caller raises the ceiling, so the sweep can run it and production still
-  behaves as measured. A negative result taken at a single operating point is a statement about
+  can more than pay for a longer wait. A negative result taken at a single operating point is a statement about
   that point, and this one was hiding a factor of three.
+- **That derivation is now the shipping default, on the strength of the sweep alone**: for a
+  while the gate stayed shut — `OvertakenLimit()` returns the old two-frame hold unless a caller
+  raises the ceiling above it, so the sweep could exercise the derivation while production kept
+  the measured behaviour. `ScreenViewer::Config::overtakenLimit` now defaults to
+  `kDefaultOvertakenLimit` (8 frames, 133 ms at 60 fps), which opens it. Eight is not tuning: the
+  sweep found 8 and 30 indistinguishable at every point, because the derived value is what binds
+  below roughly a 130 ms round trip and the ceiling only caps the tail — without one, a 300 ms
+  link would hold 29 frames, close to half a second of latency, to save a keyframe. The gain is
+  conditional and worth stating in full: at 40 ms and above it halves to quarters the keyframe
+  rate, and at high loss it *shortens* the longest stall too, because not spending an IDR saves
+  the 120 ms that keyframe would have cost. At a 20 ms round trip and 1 % loss it is a small win;
+  at 20 ms and 5 % loss it buys nothing and adds about 34 ms to the longest stall. LAN viewers
+  therefore pay a little for what WAN viewers gain. ⚠️ **This rests on simulation only.** Every
+  number above comes from the seeded model in `core/tests`, which has a fixed one-way delay and
+  no jitter, no reordering and no congestion, and carries random bytes rather than video. It has
+  never met a NIC. The `netem` half of the Phase 3 validation is the thing that would confirm or
+  refute it, and it has not been run.
 - **Reed-Solomon needs more than one parity packet per group, and that is a wire change, not
   an implementation detail**: `FecHeader` is exactly 16 bytes with every one spoken for
   (frameId 4, timestampUs 8, pktCount 2, groupIndex 1, groups 1), `Packetizer` emitted one FEC
@@ -1056,7 +1071,17 @@ line.
   encodes at p50 2.5-5.6 ms and p99 2.7-5.7 ms, Media Foundation at p50 0.5-13.8 ms and p99
   12.3-17.6 ms. Both reach the same silicon here — `mf` resolves to "NVIDIA H.264 Encoder MFT" on
   this machine — so this is not yet the Intel-versus-NVIDIA question C1 asks; it is what going
-  through Media Foundation costs to reach the same hardware.
+  through Media Foundation costs to reach the same hardware. A second Windows machine separates
+  them: an Intel UHD 750 with no NVIDIA driver installed at all, where `mf` resolves to "Intel
+  Quick Sync Video H.264 Encoder MFT", reports the same three LTR properties and
+  `GradualIntraRefresh` as supported, and encodes 1920 × 802 at p50 1.5-2.6 ms and p99 2.5-8.4 ms,
+  with occasional windows reaching 27 ms. That is the Intel column C1 asked for, and it says Quick
+  Sync also holds long-term references — but it is **not** yet a fair race against the NVENC row
+  above: different machine, different capture size, different desktop content, and neither side is
+  a fixed clip. The same run confirms the naming rule end to end: `--encoder nvenc` there logs
+  "Failed to load nvEncodeAPI64.dll" and stops the source rather than quietly encoding through
+  Quick Sync under NVENC's name, while `--encoder auto` falls through to Media Foundation and logs
+  why it moved on.
 - **Every `QuicEndpoint::Poll` ended with a sleep, and batching is what made that visible**: the
   read loop called `RecvFrom` until one returned nothing, and "nothing" only comes back once
   `SO_RCVTIMEO` expires — so a poll that had already drained the socket still paid the timeout
@@ -1185,7 +1210,13 @@ line.
   column until they do. Answering "what does WGC's convenience cost" needs that column and nothing
   else; only a bad number justifies writing a Duplication backend, and if one is written it takes
   a `--capture wgc|dxgi` flag that stops when the named backend will not start — the same rule
-  `--encoder` already follows, for the same reason.
+  `--encoder` already follows, for the same reason. The column has now been read, on an Intel UHD
+  750 capturing 3440 × 1440 and downscaling to 1920 × 802: across sixteen one-second windows
+  `cap_us_p50` sits at 0.5-2 ms and `cap_us_p99` at 2-20 ms, with `cap_repeat=0` throughout — WGC
+  hands a frame over in about the time the encoder then spends compressing it (`enc_us_p50`
+  1.5-2.6 ms), so its convenience is cheap and **no Duplication backend is justified**. The one
+  outlier is the first window after `Start`, where `cap_us_p99` reads 242 ms: that is the age of
+  the very first frame, not a steady-state tail.
 - **Receive coalescing mirrors the send side, and it costs one field in the read contract**: the
   remaining half of P2 was GRO on Linux and URO on Windows, and one thing blocked both — `RecvBatch`
   promised one datagram per slot. With `UDP_GRO` (Linux) or `UDP_RECV_MAX_COALESCED_SIZE` (Windows)
@@ -1210,5 +1241,12 @@ line.
   allocations, one of them the 256 KB read buffer) is not separable from it, and
   `quic/datagram-delivery` at +0.6% says reading the control message costs the uncoalesced path
   nothing. The Windows half is written to the same shape through `WSARecvMsg` and
-  `UDP_COALESCED_INFO` but **has been through no compiler and no NIC** — the loopback numbers above
-  are Linux and do not transfer.
+  `UDP_COALESCED_INFO`, and it has now been compiled and run: the stack accepts
+  `UDP_RECV_MAX_COALESCED_SIZE`, but over loopback it **coalesces nothing** — a 16 × 1200 byte USO
+  run comes back as sixteen separate reads, each carrying `segment == 0`, and an undersized
+  2048-byte slot therefore loses nothing, because there is no run to truncate. The 2.8x above stays
+  a Linux result. On Windows the whole measurable win sits on the send side, where USO takes a
+  16-datagram burst from 7183 to 3942 ns/datagram (−45%, medians of eleven runs), while receive
+  batching and URO both land inside a noise floor of 45-60% — an order of magnitude wider than the
+  Linux machine's 5%, and wide enough that nothing under roughly 1.5x can be measured there at all.
+  Whether URO ever fires needs a real NIC; loopback cannot answer that.

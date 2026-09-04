@@ -28,7 +28,11 @@ split_table() {
     awk -v want="$header_match" '
         /^\[csv\] / {
             row = substr($0, 7)
-            if (index(row, want) == 1) { printing = 1; print row; next }
+            if (index(row, want) == 1) {
+                printing = 1
+                if (!seen) { print row; seen = 1 }
+                next
+            }
             if (printing) {
                 if (row ~ /^[a-z_]+,[a-z_]+/) { printing = 0; next }
                 print row

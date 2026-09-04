@@ -814,10 +814,25 @@ pull request, và dòng coverage của `core/`.
   kỳ frame, và đó là lý do `OvertakenLimit()` **suy ra** con số từ cửa sổ vá chứ không nâng một
   hằng số. Thứ nó không mua được là độ trễ miễn phí — khoảng cách dài nhất giữa hai frame được
   giao dịch chuyển cả hai chiều trong lưới, chỗ tăng chỗ giảm, vì bớt được keyframe có thể trả
-  thừa cho cái chờ dài hơn. **Mặc định đang ship không đổi**: phần suy ra chỉ chạm tới được khi
-  có caller nâng trần, nên phép quét chạy được nó mà production vẫn hành xử đúng như đã đo. Một
+  thừa cho cái chờ dài hơn. Một
   kết quả âm tính đo ở đúng một điểm vận hành chỉ là phát biểu về điểm đó, và lần này nó đã che
   mất một hệ số ba.
+- **Phần suy ra đó nay đã là mặc định đang ship, và chỉ dựa trên phép quét**: một thời gian dài
+  cái cổng vẫn đóng — `OvertakenLimit()` trả về mức giữ hai frame cũ trừ khi có caller nâng trần
+  lên trên nó, nên phép quét chạy được phần suy ra trong khi production giữ nguyên hành vi đã đo.
+  `ScreenViewer::Config::overtakenLimit` nay mặc định bằng `kDefaultOvertakenLimit` (8 frame,
+  133 ms ở 60 fps), và thế là cổng mở. Số 8 không phải tinh chỉnh: phép quét thấy 8 và 30 không
+  phân biệt được ở mọi điểm, vì dưới khoảng RTT 130 ms thì chính giá trị suy ra mới là cái chặn,
+  còn trần chỉ cắt cái đuôi — không có trần thì một link 300 ms sẽ giữ 29 frame, gần nửa giây độ
+  trễ, chỉ để tiết kiệm một keyframe. Phần lợi có điều kiện và phải nói đủ: từ 40 ms trở lên nó
+  giảm số keyframe đi 2–4 lần, và ở loss cao nó còn **rút ngắn** cả cái stall dài nhất, vì không
+  tiêu một IDR là tiết kiệm luôn 120 ms mà keyframe ấy phải trả. Ở RTT 20 ms với loss 1% nó thắng
+  nhẹ; ở 20 ms với loss 5% nó **không mua được gì** mà cộng thêm khoảng 34 ms vào stall dài nhất.
+  Nghĩa là viewer trên LAN trả một chút cho cái mà viewer qua WAN được hưởng. ⚠️ **Toàn bộ chuyện
+  này chỉ dựa trên mô phỏng.** Mọi con số trên đến từ mô hình có seed trong `core/tests`, vốn có
+  độ trễ một chiều cố định, **không jitter, không reorder, không tắc nghẽn**, và chở byte ngẫu
+  nhiên chứ không phải video. Nó chưa từng gặp một NIC nào. Nửa `netem` của phần xác nhận Phase 3
+  mới là thứ khẳng định hay bác bỏ được điều này, và nó **chưa được chạy**.
 - **Reed-Solomon cần nhiều hơn một gói parity mỗi group, và đó là đổi wire chứ không phải chi
   tiết cài đặt**: `FecHeader` đúng 16 byte và dùng hết (frameId 4, timestampUs 8, pktCount 2,
   groupIndex 1, groups 1), `Packetizer` phát đúng một gói FEC mỗi group, còn bên nhận lưu đúng
@@ -1029,7 +1044,16 @@ pull request, và dòng coverage của `core/`.
   p50 2,5-5,6 ms và p99 2,7-5,7 ms, Media Foundation ở p50 0,5-13,8 ms và p99 12,3-17,6 ms. Ở đây
   cả hai cùng chạm một phần cứng — trên máy này `mf` rơi vào "NVIDIA H.264 Encoder MFT" — nên đây
   chưa phải câu hỏi Intel-so-với-NVIDIA mà C1 đặt ra; đây là cái giá của việc đi vòng qua Media
-  Foundation để tới cùng phần cứng đó.
+  Foundation để tới cùng phần cứng đó. Một máy Windows thứ hai tách được hai vế ấy ra: một Intel
+  UHD 750 hoàn toàn không có driver NVIDIA, nơi `mf` rơi vào "Intel Quick Sync Video H.264 Encoder
+  MFT", báo đủ ba thuộc tính LTR cùng `GradualIntraRefresh` là có hỗ trợ, và mã hoá 1920 × 802 ở
+  p50 1,5-2,6 ms và p99 2,5-8,4 ms, thỉnh thoảng có cửa sổ chạm 27 ms. Đó là cột Intel mà C1 đòi,
+  và nó nói rằng Quick Sync cũng giữ được long-term reference — nhưng đây **chưa** phải một cuộc
+  đua công bằng với dòng NVENC ở trên: khác máy, khác cỡ capture, khác nội dung màn hình, và không
+  bên nào chạy trên một clip cố định. Cũng chính lần chạy đó xác nhận luật gọi tên từ đầu đến cuối:
+  `--encoder nvenc` ở đấy in "Failed to load nvEncodeAPI64.dll" rồi dừng nguồn, thay vì lặng lẽ mã
+  hoá bằng Quick Sync dưới tên NVENC, còn `--encoder auto` thì rơi tiếp xuống Media Foundation và
+  nói rõ vì sao nó đi tiếp.
 - **Mỗi lần `QuicEndpoint::Poll` đều kết thúc bằng một giấc ngủ, và chính việc gộp lô mới làm nó
   lộ ra**: vòng đọc gọi `RecvFrom` cho tới khi một lần trả về không có gì, mà "không có gì" chỉ
   quay lại sau khi `SO_RCVTIMEO` hết hạn — nên một lần poll đã vét sạch socket vẫn phải trả trọn
@@ -1148,7 +1172,13 @@ pull request, và dòng coverage của `core/`.
   `ShareDiagCaps::captureLatency` để tới lúc đó chúng không in một cột rỗng. Trả lời "sự tiện lợi
   của WGC tốn bao nhiêu" chỉ cần đúng cột ấy; chỉ khi con số xấu mới đáng viết backend Duplication,
   và nếu viết thì nó nhận cờ `--capture wgc|dxgi` và **dừng** khi backend được gọi tên không khởi
-  động được — đúng luật `--encoder` đang theo, vì đúng lý do đó.
+  động được — đúng luật `--encoder` đang theo, vì đúng lý do đó. Cột ấy nay đã đọc được, trên một
+  Intel UHD 750 capture 3440 × 1440 rồi hạ xuống 1920 × 802: qua mười sáu cửa sổ một giây,
+  `cap_us_p50` nằm ở 0,5-2 ms và `cap_us_p99` ở 2-20 ms, `cap_repeat=0` suốt — WGC trao một khung
+  hết đúng khoảng thời gian encoder sau đó bỏ ra để nén nó (`enc_us_p50` 1,5-2,6 ms), nên sự tiện
+  lợi ấy rẻ và **không đáng viết backend Duplication**. Ngoại lệ duy nhất là cửa sổ đầu tiên sau
+  `Start`, nơi `cap_us_p99` đọc ra 242 ms: đó là tuổi của chính khung đầu tiên, không phải cái đuôi
+  ở trạng thái ổn định.
 - **Gộp gói phía nhận là tấm gương của phía gửi, và nó tốn đúng một trường trong giao kèo đọc**:
   nửa còn lại của P2 là GRO trên Linux và URO trên Windows, và cùng một thứ chặn cả hai — `RecvBatch`
   hứa mỗi slot một datagram. Với `UDP_GRO` (Linux) hay `UDP_RECV_MAX_COALESCED_SIZE` (Windows), một
@@ -1170,6 +1200,12 @@ pull request, và dòng coverage của `core/`.
   Những dòng mà mã hai binary giống hệt nhau vẫn xê dịch 3,3-5,1% — đó là sàn nhiễu của máy này —
   nên `quic/handshake` +4,9% (13 → 15 lần cấp phát, một trong số đó là buffer đọc 256 KB) không tách
   khỏi nhiễu được, còn `quic/datagram-delivery` +0,6% nói rằng đọc control message không tốn gì cho
-  đường không gộp. Nửa Windows viết theo đúng hình hài ấy bằng `WSARecvMsg` và `UDP_COALESCED_INFO`
-  nhưng **chưa qua một compiler nào và chưa gặp một NIC nào** — bảng loopback trên là số Linux,
-  không chuyển sang được.
+  đường không gộp. Nửa Windows viết theo đúng hình hài ấy bằng `WSARecvMsg` và `UDP_COALESCED_INFO`,
+  và nay đã được biên dịch và chạy: stack nhận `UDP_RECV_MAX_COALESCED_SIZE`, nhưng trên loopback
+  nó **không gộp gì cả** — một run USO 16 × 1200 byte về thành đúng mười sáu lần đọc riêng lẻ, mỗi
+  lần mang `segment == 0`, nên một slot 2048 byte quá nhỏ cũng chẳng mất gì, vì không có run nào để
+  mà cắt. Con số 2,8x ở trên vẫn là kết quả Linux. Trên Windows toàn bộ phần thắng đo được nằm ở
+  phía gửi: USO kéo một burst 16 gói từ 7183 xuống 3942 ns/datagram (−45%, trung vị của mười một
+  lần chạy), còn gộp phía nhận và URO đều rơi vào sàn nhiễu 45-60% — rộng gấp một bậc so với 5% của
+  máy Linux, và rộng tới mức mọi thứ dưới khoảng 1,5x đều không đo nổi ở đó. URO có bao giờ nổ hay
+  không thì phải có NIC thật mới biết; loopback không trả lời được.

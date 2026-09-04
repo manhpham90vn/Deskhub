@@ -172,7 +172,7 @@ bool UdpSocket::Open(uint16_t localPort, const std::string& bindIp) {
         lastBindAddrInUse_ = (err == WSAEADDRINUSE);
         if (lastBindAddrInUse_)
             LOGE(
-                "[UDP] Port %u is already in use — another Deskhub host (or another "
+                "[UDP] Port %u is already in use - another Deskhub host (or another "
                 "program) is still listening on it.",
                 localPort);
         else

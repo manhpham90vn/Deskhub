@@ -297,6 +297,37 @@ void TestOvertakenDrop() {
         "incomplete head dropped as Overtaken");
 }
 
+void TestOvertakenLimitFollowsRttOnceItIsAllowedTo() {
+    std::printf("[reasm] the hold before giving up on a frame grows with RTT, and is capped...\n");
+    Reassembler shipped(16'667);
+    shipped.SetNackEnabled(true);
+    shipped.SetRttUs(80'000);
+    Check(shipped.overtakenLimit() == 2,
+        "a viewer that never raises the limit keeps the two-frame hold, whatever the RTT");
+
+    Reassembler derived(16'667);
+    derived.SetNackEnabled(true);
+    derived.SetOvertakenLimit(kDefaultOvertakenLimit);
+
+    derived.SetRttUs(4'000);
+    const size_t nearHold = derived.overtakenLimit();
+    derived.SetRttUs(80'000);
+    const size_t farHold = derived.overtakenLimit();
+    Check(farHold > nearHold,
+        "a link with a longer round trip waits longer before it gives up and asks for an IDR");
+    Check(nearHold >= 2, "and never drops below the two frames the old default held");
+
+    derived.SetRttUs(2'000'000);
+    Check(derived.overtakenLimit() == kDefaultOvertakenLimit,
+        "an absurd round trip is capped by the default rather than holding frames forever");
+
+    Reassembler withoutNack(16'667);
+    withoutNack.SetOvertakenLimit(kDefaultOvertakenLimit);
+    withoutNack.SetRttUs(80'000);
+    Check(withoutNack.overtakenLimit() == 2,
+        "with no NACK to wait for there is nothing to hold a frame open for");
+}
+
 void TestEvictedDrop() {
     std::printf("[reasm] pending queue full -> oldest Evicted...\n");
     Packetizer pk;
@@ -724,6 +755,7 @@ void RunReassemblerTests() {
     TestHeadTimeout();
     TestNackPlanning();
     TestOvertakenDrop();
+    TestOvertakenLimitFollowsRttOnceItIsAllowedTo();
     TestEvictedDrop();
     TestLatePacketAccounting();
     TestMaxGap();
