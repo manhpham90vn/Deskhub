@@ -46,12 +46,29 @@ struct InboundDatagram {
     uint8_t* buf = nullptr;
     size_t cap = 0;
     size_t len = 0;
+    size_t segment = 0;
     NetAddr from{};
 };
 
 inline constexpr size_t kMaxSendBatch = 16;
 inline constexpr size_t kMaxRecvBatch = 16;
 inline constexpr size_t kMaxSegmentedRunBytes = 0xFFFF;
+inline constexpr size_t kMaxCoalescedBytes = 0xFFFF;
+
+inline size_t DatagramsIn(const InboundDatagram& slot) {
+    if (slot.len == 0) return 0;
+    if (slot.segment == 0 || slot.segment >= slot.len) return 1;
+    return (slot.len + slot.segment - 1) / slot.segment;
+}
+
+inline std::span<const uint8_t> DatagramAt(const InboundDatagram& slot, size_t index) {
+    if (index >= DatagramsIn(slot)) return {};
+    if (slot.segment == 0 || slot.segment >= slot.len)
+        return std::span<const uint8_t>(slot.buf, slot.len);
+    const size_t offset = index * slot.segment;
+    const size_t left = slot.len - offset;
+    return std::span<const uint8_t>(slot.buf + offset, left < slot.segment ? left : slot.segment);
+}
 
 inline size_t LeadingRunOfEqualSegments(std::span<const OutboundDatagram> packets) {
     if (packets.empty()) return 0;
@@ -74,6 +91,8 @@ public:
     bool Open(uint16_t localPort, const std::string& bindIp = {});
 
     bool SetRecvTimeout(uint32_t ms);
+
+    bool EnableReceiveCoalescing();
 
     bool WaitReadable(uint32_t ms);
 
@@ -103,6 +122,8 @@ public:
 
 private:
 #if defined(_WIN32)
+    int RecvCoalesced(InboundDatagram& slot);
+
     uint64_t sock_ = ~0ull;
 #else
     int fd_ = -1;
@@ -110,8 +131,10 @@ private:
     bool lastBindAddrInUse_ = false;
 #if defined(__linux__) || defined(_WIN32)
     bool segmentationOffloadOff_ = false;
+    bool receiveCoalescingOn_ = false;
 #endif
 #if defined(_WIN32)
     void* sendMsg_ = nullptr;
+    void* recvMsg_ = nullptr;
 #endif
 };

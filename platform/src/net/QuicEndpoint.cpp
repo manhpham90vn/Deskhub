@@ -227,6 +227,7 @@ struct QuicEndpoint::Impl {
             return false;
         }
         socket_.SetRecvTimeout(1);
+        SizeReadBuffers(socket_.EnableReceiveCoalescing());
         localPort_ = socket_.LocalPort();
         localIp_ = bindIp;
         open_ = true;
@@ -641,22 +642,31 @@ struct QuicEndpoint::Impl {
         return socket_.WaitReadable(Backlogged() ? 0 : waitMs);
     }
 
+    void SizeReadBuffers(bool coalescing) {
+        readStride_ = coalescing ? kMaxCoalescedBytes : kQuicMaxUdpPayload;
+        const size_t slots = coalescing ? kCoalescedReadBurst : kReadBurst;
+        readBuf_.assign(slots * readStride_, 0);
+        readSlots_.assign(slots, InboundDatagram{});
+    }
+
     void Poll(uint32_t waitMs) {
         if (!open_) return;
         ReportPollGap();
         socket_.SetRecvTimeout(Backlogged() ? 0 : waitMs);
-        static_assert(kReadBurst <= kMaxRecvBatch);
-        uint8_t buf[kReadBurst][kQuicMaxUdpPayload];
-        InboundDatagram slots[kReadBurst];
+        const size_t burst = readSlots_.size();
         for (int round = 0; round < kReadRoundsPerPoll; ++round) {
-            for (size_t i = 0; i < kReadBurst; ++i)
-                slots[i] = InboundDatagram{buf[i], kQuicMaxUdpPayload, 0, NetAddr{}};
-            const int got = socket_.RecvBatch(std::span<InboundDatagram>(slots, kReadBurst));
+            for (size_t i = 0; i < burst; ++i)
+                readSlots_[i] = InboundDatagram{readBuf_.data() + i * readStride_, readStride_, 0,
+                    0, NetAddr{}};
+            const int got = socket_.RecvBatch(std::span<InboundDatagram>(readSlots_));
             if (got <= 0) break;
-            for (int i = 0; i < got; ++i)
-                Receive(slots[size_t(i)].from,
-                    std::span<const uint8_t>(slots[size_t(i)].buf, slots[size_t(i)].len));
-            if (size_t(got) < kReadBurst) break;
+            for (int i = 0; i < got; ++i) {
+                const InboundDatagram& slot = readSlots_[size_t(i)];
+                const size_t count = DatagramsIn(slot);
+                for (size_t part = 0; part < count; ++part)
+                    Receive(slot.from, DatagramAt(slot, part));
+            }
+            if (size_t(got) < burst) break;
         }
         for (auto& [id, entry] : connections_) {
             if (quiche_conn_timeout_as_millis(entry.conn) == 0) quiche_conn_on_timeout(entry.conn);
@@ -666,7 +676,9 @@ struct QuicEndpoint::Impl {
 
     static constexpr size_t kMaxConnections = 32;
     static constexpr size_t kReadBurst = kMaxRecvBatch;
+    static constexpr size_t kCoalescedReadBurst = 4;
     static constexpr int kReadRoundsPerPoll = 16;
+    static_assert(kReadBurst <= kMaxRecvBatch && kCoalescedReadBurst <= kMaxRecvBatch);
 
     UdpSocket socket_{};
     quiche_config* config_ = nullptr;
@@ -684,6 +696,9 @@ struct QuicEndpoint::Impl {
     uint64_t lastSendFailLogUs_ = 0;
     uint64_t lastStrangerLogUs_ = 0;
     uint64_t lastPollUs_ = 0;
+    size_t readStride_ = kQuicMaxUdpPayload;
+    std::vector<uint8_t> readBuf_{};
+    std::vector<InboundDatagram> readSlots_{};
     std::vector<uint8_t> streamChunk_ = std::vector<uint8_t>(kStreamChunk);
     std::vector<uint8_t> datagramChunk_ = std::vector<uint8_t>(kQuicMaxUdpPayload);
     std::atomic<bool> moreToSend_{false};

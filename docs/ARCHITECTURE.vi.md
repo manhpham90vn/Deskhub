@@ -1149,3 +1149,27 @@ pull request, và dòng coverage của `core/`.
   của WGC tốn bao nhiêu" chỉ cần đúng cột ấy; chỉ khi con số xấu mới đáng viết backend Duplication,
   và nếu viết thì nó nhận cờ `--capture wgc|dxgi` và **dừng** khi backend được gọi tên không khởi
   động được — đúng luật `--encoder` đang theo, vì đúng lý do đó.
+- **Gộp gói phía nhận là tấm gương của phía gửi, và nó tốn đúng một trường trong giao kèo đọc**:
+  nửa còn lại của P2 là GRO trên Linux và URO trên Windows, và cùng một thứ chặn cả hai — `RecvBatch`
+  hứa mỗi slot một datagram. Với `UDP_GRO` (Linux) hay `UDP_RECV_MAX_COALESCED_SIZE` (Windows), một
+  lần đọc trả về cả một dãy datagram cùng cỡ nằm trong một buffer, kèm cỡ segment trong control
+  message; nên `InboundDatagram` có thêm trường `segment`, còn `DatagramsIn` / `DatagramAt` tách một
+  slot trở lại thành đúng những datagram đã được gửi. `segment == 0` nghĩa là slot chứa đúng một
+  datagram — tức mọi caller không xin gộp — nên giao kèo cũ là mặc định chứ không phải ngoại lệ.
+  Gộp phải **xin mới có**, qua `EnableReceiveCoalescing()`, và không bao giờ tự bật, vì một slot quá
+  nhỏ là mất dữ liệu: đo tại chỗ, một run GSO 16 × 1200 byte về thành một skb gộp 19 200 byte, đọc
+  nó vào buffer 2048 byte thì trả về 2048 byte kèm cờ `MSG_TRUNC` và **vứt mất 17 152 byte còn
+  lại** — lần đọc kế tiếp không thấy gì nữa. Kernel gộp được tới trọn payload IP 64 KB, nên chỉ
+  caller nào có slot chứa nổi `kMaxCoalescedBytes` mới được bật gộp, và `RecvBatch` ghi ca
+  `MSG_TRUNC` thành một lỗi nói thẳng đòi hỏi ấy thay vì để một burst biến mất lặng lẽ. Vì thế
+  `QuicEndpoint` đổi số slot lấy cỡ slot — 16 × 1350 byte trên stack thành 4 × 65 535 byte do chính
+  endpoint sở hữu — và hoá ra số slot không quan trọng: 4, 8 và 16 đều nằm trong nhiễu giữa các lần
+  chạy của nhau, nên bản tốn ít bộ nhớ nhất thắng. Đo trên loopback, chạy xen kẽ hai binary để triệt
+  cái trôi của máy, trung vị của bốn cặp: đọc một burst 16 datagram 573 → 203 ns/datagram (2,8x),
+  `quic/stream-drain-scaling` 2095 → 1629 ns/KB, `quic/stream-throughput-64k` 2114 → 1785 ns/KB.
+  Những dòng mà mã hai binary giống hệt nhau vẫn xê dịch 3,3-5,1% — đó là sàn nhiễu của máy này —
+  nên `quic/handshake` +4,9% (13 → 15 lần cấp phát, một trong số đó là buffer đọc 256 KB) không tách
+  khỏi nhiễu được, còn `quic/datagram-delivery` +0,6% nói rằng đọc control message không tốn gì cho
+  đường không gộp. Nửa Windows viết theo đúng hình hài ấy bằng `WSARecvMsg` và `UDP_COALESCED_INFO`
+  nhưng **chưa qua một compiler nào và chưa gặp một NIC nào** — bảng loopback trên là số Linux,
+  không chuyển sang được.

@@ -269,7 +269,7 @@ void TestABatchOfDatagramsArrivesWholeAndSeparate() {
     for (int attempt = 0; attempt < 20 && received < kBurst; ++attempt) {
         std::vector<InboundDatagram> slots(kMaxRecvBatch);
         for (size_t i = 0; i < slots.size(); ++i)
-            slots[i] = InboundDatagram{buffers[i].data(), buffers[i].size(), 0, NetAddr{}};
+            slots[i] = InboundDatagram{buffers[i].data(), buffers[i].size(), 0, 0, NetAddr{}};
         const int got = receiver.RecvBatch(slots);
         if (got < 0) {
             Check(false, "reading a burst never reports an error on an open socket");
@@ -300,11 +300,115 @@ void TestABatchOfDatagramsArrivesWholeAndSeparate() {
     Check(received == kBurst, "the whole burst arrives");
 }
 
+void TestACoalescedSlotSplitsBackIntoDatagrams() {
+    std::printf("[udp] a slot holding a coalesced burst hands back the datagrams that made it...\n");
+    std::vector<uint8_t> bytes(3 * 1200 + 400);
+    for (size_t i = 0; i < bytes.size(); ++i) bytes[i] = uint8_t(i / 1200);
+
+    InboundDatagram whole{bytes.data(), bytes.size(), 1200, 0, NetAddr{}};
+    Check(DatagramsIn(whole) == 1, "a slot with no segment size is one datagram, as it always was");
+    Check(DatagramAt(whole, 0).size() == 1200, "and the whole read is that datagram");
+    Check(DatagramAt(whole, 1).empty(), "there is no second one to ask for");
+
+    InboundDatagram empty{bytes.data(), bytes.size(), 0, 0, NetAddr{}};
+    Check(DatagramsIn(empty) == 0, "a read of nothing holds no datagrams");
+
+    InboundDatagram single{bytes.data(), bytes.size(), 900, 1200, NetAddr{}};
+    Check(DatagramsIn(single) == 1,
+        "a segment size at or above the read means the stack coalesced nothing");
+
+    InboundDatagram burst{bytes.data(), bytes.size(), bytes.size(), 1200, NetAddr{}};
+    Check(DatagramsIn(burst) == 4, "three full segments and a short tail are four datagrams");
+    for (size_t i = 0; i < 3; ++i) {
+        Check(DatagramAt(burst, i).size() == 1200, "every full segment keeps the sent length");
+        Check(DatagramAt(burst, i).data() == bytes.data() + i * 1200,
+            "and each one points at its own bytes, never a copy of the first");
+    }
+    Check(DatagramAt(burst, 3).size() == 400, "the tail keeps the short length it was sent with");
+    Check(DatagramAt(burst, 4).empty(), "asking past the end yields nothing, not the tail again");
+}
+
+void TestACoalescedReadReturnsTheDatagramsThatWereSent() {
+    std::printf("[udp] a burst read back through receive coalescing arrives whole...\n");
+    UdpSocket receiver;
+    const uint16_t port = OpenOnAFreePort(receiver);
+    if (!port) {
+        std::printf("  skipped: no free port in %u..%u\n", unsigned(kFirstTestPort),
+            unsigned(kLastTestPort));
+        return;
+    }
+    receiver.SetRecvTimeout(200);
+    if (!receiver.EnableReceiveCoalescing()) {
+        std::printf("  skipped: this stack has no UDP receive coalescing\n");
+        return;
+    }
+
+    UdpSocket sender;
+    Check(sender.Open(0), "the sender takes an ephemeral port");
+
+    constexpr size_t kBurst = 8;
+    constexpr size_t kFullBytes = 1200;
+    constexpr size_t kTailBytes = 517;
+    std::vector<std::vector<uint8_t>> payloads;
+    std::vector<OutboundDatagram> outbound;
+    for (size_t i = 0; i < kBurst; ++i)
+        payloads.push_back(
+            std::vector<uint8_t>(i + 1 == kBurst ? kTailBytes : kFullBytes, uint8_t(i)));
+    for (const std::vector<uint8_t>& payload : payloads)
+        outbound.push_back(OutboundDatagram{payload.data(), payload.size()});
+
+    const NetAddr to{kLoopbackIp, port};
+    Check(sender.SendBatch(to, outbound) == kBurst, "every datagram in the burst is sent");
+
+    std::vector<uint8_t> slotBytes(kMaxCoalescedBytes);
+    std::vector<bool> seen(kBurst, false);
+    size_t received = 0;
+    size_t mostInOneRead = 0;
+    for (int attempt = 0; attempt < 20 && received < kBurst; ++attempt) {
+        InboundDatagram slot{slotBytes.data(), slotBytes.size(), 0, 0, NetAddr{}};
+        const int got = receiver.RecvBatch(std::span<InboundDatagram>(&slot, 1));
+        if (got < 0) {
+            Check(false, "reading a coalesced burst never reports an error on an open socket");
+            return;
+        }
+        if (got == 0) continue;
+        Check(slot.len <= slot.cap, "a coalesced read never overruns the slot it was given");
+        const size_t parts = DatagramsIn(slot);
+        if (parts > mostInOneRead) mostInOneRead = parts;
+        for (size_t part = 0; part < parts; ++part) {
+            const std::span<const uint8_t> one = DatagramAt(slot, part);
+            Check(one.size() == kFullBytes || one.size() == kTailBytes,
+                "each datagram comes back with the length it was sent with");
+            const size_t index = one[0];
+            Check(index < kBurst, "and its payload names which of the burst it was");
+            Check(!seen[index], "no datagram arrives twice");
+            seen[index] = true;
+            Check(one.size() == payloads[index].size(),
+                "the tail is not padded up to the segment size");
+            Check(std::memcmp(one.data(), payloads[index].data(), one.size()) == 0,
+                "and the bytes are unchanged");
+            Check(slot.from.ip == kLoopbackIp, "the whole slot names the sender it came from");
+            ++received;
+        }
+    }
+
+    if (received < kBurst) {
+        std::printf("  skipped: loopback dropped %zu of %zu datagrams\n", kBurst - received,
+            kBurst);
+        return;
+    }
+    Check(received == kBurst, "the whole burst arrives");
+    if (mostInOneRead > 1)
+        std::printf("  the stack coalesced up to %zu datagrams into one read\n", mostInOneRead);
+    else
+        std::printf("  note: the stack coalesced nothing this time, so only the split was tested\n");
+}
+
 void TestReadingABatchFromAnIdleSocketIsNotAnError() {
     std::printf("[udp] an empty batch read reports nothing, not a dead socket...\n");
     UdpSocket closed;
     std::array<uint8_t, 64> byteBuf{};
-    InboundDatagram one{byteBuf.data(), byteBuf.size(), 0, NetAddr{}};
+    InboundDatagram one{byteBuf.data(), byteBuf.size(), 0, 0, NetAddr{}};
     Check(closed.RecvBatch(std::span<InboundDatagram>(&one, 1)) < 0,
         "a socket that was never opened reports the error the net loop stops on");
 
@@ -348,6 +452,8 @@ void RunUdpSocketTests() {
     TestWaitReadableTellsTheLoopWhenToRead();
     TestOnlyEqualSizedDatagramsRideOneSegmentedSend();
     TestABatchOfDatagramsArrivesWholeAndSeparate();
+    TestACoalescedSlotSplitsBackIntoDatagrams();
+    TestACoalescedReadReturnsTheDatagramsThatWereSent();
     TestReadingABatchFromAnIdleSocketIsNotAnError();
     TestLocalAddressesLookLikeAddresses();
 }

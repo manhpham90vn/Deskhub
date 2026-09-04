@@ -2,7 +2,6 @@
 
 #include "deskhubp/net/UdpSocket.h"
 
-#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
@@ -20,19 +19,21 @@ constexpr size_t kBurst = kMaxRecvBatch;
 constexpr size_t kDatagramBytes = 1200;
 constexpr uint32_t kDrainTimeoutMs = 50;
 constexpr int kDrainRoundsCap = 64;
+constexpr size_t kUncoalescedSlotBytes = 2048;
 
 struct LoopbackUdp {
     UdpSocket sender{};
     UdpSocket receiver{};
     NetAddr to{};
+    bool coalescing = false;
     std::vector<uint8_t> payload = std::vector<uint8_t>(kDatagramBytes);
     std::vector<OutboundDatagram> outbound{};
-    std::vector<std::array<uint8_t, 2048>> buffers = std::vector<std::array<uint8_t, 2048>>(kBurst);
+    std::vector<std::vector<uint8_t>> buffers{};
     std::vector<InboundDatagram> slots = std::vector<InboundDatagram>(kBurst);
     uint64_t sent = 0;
     uint64_t delivered = 0;
 
-    bool Start() {
+    bool Start(bool wantCoalescing = false) {
         for (uint16_t port = kFirstPerfPort; port <= kLastPerfPort; ++port)
             if (receiver.Open(port)) {
                 to = NetAddr{kLoopbackIp, port};
@@ -40,6 +41,9 @@ struct LoopbackUdp {
             }
         if (to.port == 0 || !sender.Open(0)) return false;
         receiver.SetRecvTimeout(kDrainTimeoutMs);
+        coalescing = wantCoalescing && receiver.EnableReceiveCoalescing();
+        const size_t slotBytes = coalescing ? kMaxCoalescedBytes : kUncoalescedSlotBytes;
+        buffers = std::vector<std::vector<uint8_t>>(kBurst, std::vector<uint8_t>(slotBytes));
         FillRandom(payload);
         for (size_t i = 0; i < kBurst; ++i)
             outbound.push_back(OutboundDatagram{payload.data(), payload.size()});
@@ -48,7 +52,7 @@ struct LoopbackUdp {
 
     void ResetSlots() {
         for (size_t i = 0; i < kBurst; ++i)
-            slots[i] = InboundDatagram{buffers[i].data(), buffers[i].size(), 0, NetAddr{}};
+            slots[i] = InboundDatagram{buffers[i].data(), buffers[i].size(), 0, 0, NetAddr{}};
     }
 
     void SendOneAtATime() {
@@ -79,8 +83,12 @@ struct LoopbackUdp {
             ResetSlots();
             const int n = receiver.RecvBatch(slots);
             if (n <= 0) break;
-            for (int i = 0; i < n; ++i) Consume(slots[size_t(i)].len);
-            got += size_t(n);
+            for (int i = 0; i < n; ++i) {
+                const InboundDatagram& slot = slots[size_t(i)];
+                const size_t parts = DatagramsIn(slot);
+                Consume(slot.len);
+                got += parts;
+            }
         }
         delivered += got;
     }
@@ -115,6 +123,25 @@ void RunUdpPerf() {
             link.SendAsOneBurst();
             link.ReceiveOneAtATime();
         }});
+
+    LoopbackUdp coalesced;
+    if (!coalesced.Start(true)) {
+        std::printf("skipped: no second loopback port pair for the coalesced read\n");
+    } else if (!coalesced.coalescing) {
+        std::printf("skipped udp/loopback-coalesced-recv: this stack has no receive coalescing\n");
+    } else {
+        Measure(Workload{"udp/loopback-coalesced-recv", "datagram", kBurst,
+            kBurst * kDatagramBytes, 1.0, [&] {
+                coalesced.SendAsOneBurst();
+                coalesced.ReceiveAsBatches();
+            }});
+        if (coalesced.delivered < coalesced.sent)
+            std::printf("coalesced rig dropped %llu of %llu datagrams\n",
+                static_cast<unsigned long long>(coalesced.sent - coalesced.delivered),
+                static_cast<unsigned long long>(coalesced.sent));
+        coalesced.sender.Close();
+        coalesced.receiver.Close();
+    }
 
     if (link.delivered < link.sent)
         std::printf("loopback dropped %llu of %llu datagrams - read the rows above as a floor\n",

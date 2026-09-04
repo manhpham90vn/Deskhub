@@ -90,6 +90,18 @@ bool UdpSocket::SetRecvTimeout(uint32_t ms) {
     return setsockopt(fd_, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)) == 0;
 }
 
+bool UdpSocket::EnableReceiveCoalescing() {
+#if defined(__linux__)
+    if (!IsOpen()) return false;
+    const int on = 1;
+    if (setsockopt(fd_, IPPROTO_UDP, UDP_GRO, &on, sizeof(on)) != 0) return false;
+    receiveCoalescingOn_ = true;
+    return true;
+#else
+    return false;
+#endif
+}
+
 bool UdpSocket::WaitReadable(uint32_t ms) {
     if (!IsOpen()) return false;
     pollfd entry{fd_, POLLIN, 0};
@@ -148,6 +160,17 @@ bool SendOneSegmentedRun(int fd, const sockaddr_in& sa, std::span<const Outbound
         refused = n < 0 && SegmentationOffloadRefused(errno);
         return false;
     }
+}
+
+size_t CoalescedSegmentSize(const msghdr& msg) {
+    for (const cmsghdr* header = CMSG_FIRSTHDR(&msg); header != nullptr;
+        header = CMSG_NXTHDR(const_cast<msghdr*>(&msg), const_cast<cmsghdr*>(header))) {
+        if (header->cmsg_level != IPPROTO_UDP || header->cmsg_type != UDP_GRO) continue;
+        int segment = 0;
+        std::memcpy(&segment, CMSG_DATA(header), sizeof(segment));
+        return segment > 0 ? size_t(segment) : 0;
+    }
+    return 0;
 }
 
 size_t SendEachSeparately(int fd, const sockaddr_in& sa, std::span<const OutboundDatagram> packets) {
@@ -236,6 +259,7 @@ int UdpSocket::RecvBatch(std::span<InboundDatagram> slots) {
     iovec iov[kMaxRecvBatch]{};
     mmsghdr msgs[kMaxRecvBatch]{};
     sockaddr_in addrs[kMaxRecvBatch]{};
+    alignas(cmsghdr) char control[kMaxRecvBatch][CMSG_SPACE(sizeof(int))]{};
     for (size_t i = 0; i < batch; ++i) {
         iov[i].iov_base = slots[i].buf;
         iov[i].iov_len = slots[i].cap;
@@ -243,6 +267,9 @@ int UdpSocket::RecvBatch(std::span<InboundDatagram> slots) {
         msgs[i].msg_hdr.msg_namelen = sizeof(addrs[i]);
         msgs[i].msg_hdr.msg_iov = &iov[i];
         msgs[i].msg_hdr.msg_iovlen = 1;
+        if (!receiveCoalescingOn_) continue;
+        msgs[i].msg_hdr.msg_control = control[i];
+        msgs[i].msg_hdr.msg_controllen = sizeof(control[i]);
     }
 
     int got = 0;
@@ -257,8 +284,16 @@ int UdpSocket::RecvBatch(std::span<InboundDatagram> slots) {
     for (int i = 0; i < got; ++i) {
         InboundDatagram& slot = slots[size_t(i)];
         slot.len = msgs[i].msg_len;
+        slot.segment = receiveCoalescingOn_ ? CoalescedSegmentSize(msgs[i].msg_hdr) : 0;
+        if (slot.segment >= slot.len) slot.segment = 0;
         slot.from.ip = ntohl(addrs[i].sin_addr.s_addr);
         slot.from.port = ntohs(addrs[i].sin_port);
+        if ((msgs[i].msg_hdr.msg_flags & MSG_TRUNC) == 0) continue;
+        LOGE(
+            "[UDP] A coalesced read of %zu bytes did not fit the %zu-byte slot, so the tail of "
+            "that burst was dropped - a slot offered to receive coalescing must hold "
+            "%zu bytes.",
+            slot.len, slot.cap, kMaxCoalescedBytes);
     }
     return got;
 #else

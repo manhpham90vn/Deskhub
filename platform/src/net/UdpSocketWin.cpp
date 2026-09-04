@@ -20,6 +20,14 @@
 #define UDP_SEND_MSG_SIZE 2
 #endif
 
+#ifndef UDP_RECV_MAX_COALESCED_SIZE
+#define UDP_RECV_MAX_COALESCED_SIZE 3
+#endif
+
+#ifndef UDP_COALESCED_INFO
+#define UDP_COALESCED_INFO 3
+#endif
+
 std::string NetAddr::ToString() const {
     char b[32];
     std::snprintf(b, sizeof(b), "%u.%u.%u.%u:%u",
@@ -48,6 +56,27 @@ void* ResolveSendMsg(SOCKET s) {
             static_cast<void*>(&fn), sizeof(fn), &returned, nullptr, nullptr) == SOCKET_ERROR)
         return nullptr;
     return (void*)fn;
+}
+
+void* ResolveRecvMsg(SOCKET s) {
+    GUID id = WSAID_WSARECVMSG;
+    LPFN_WSARECVMSG fn = nullptr;
+    DWORD returned = 0;
+    if (WSAIoctl(s, SIO_GET_EXTENSION_FUNCTION_POINTER, &id, sizeof(id),
+            static_cast<void*>(&fn), sizeof(fn), &returned, nullptr, nullptr) == SOCKET_ERROR)
+        return nullptr;
+    return (void*)fn;
+}
+
+size_t CoalescedSegmentSize(const WSAMSG& msg) {
+    for (WSACMSGHDR* header = WSA_CMSG_FIRSTHDR(const_cast<WSAMSG*>(&msg)); header != nullptr;
+        header = WSA_CMSG_NXTHDR(const_cast<WSAMSG*>(&msg), header)) {
+        if (header->cmsg_level != IPPROTO_UDP || header->cmsg_type != UDP_COALESCED_INFO) continue;
+        DWORD segment = 0;
+        std::memcpy(&segment, WSA_CMSG_DATA(header), sizeof(segment));
+        return size_t(segment);
+    }
+    return 0;
 }
 
 bool SegmentationOffloadRefused(int code) {
@@ -155,6 +184,7 @@ bool UdpSocket::Open(uint16_t localPort, const std::string& bindIp) {
     sock_ = uint64_t(s);
     sendMsg_ = ResolveSendMsg(s);
     if (!sendMsg_) segmentationOffloadOff_ = true;
+    recvMsg_ = ResolveRecvMsg(s);
     return true;
 }
 
@@ -165,6 +195,16 @@ bool UdpSocket::SetRecvTimeout(uint32_t ms) {
     DWORD t = ms;
     return setsockopt(SOCKET(sock_), SOL_SOCKET, SO_RCVTIMEO,
                (const char*)&t, sizeof(t)) == 0;
+}
+
+bool UdpSocket::EnableReceiveCoalescing() {
+    if (!IsOpen() || recvMsg_ == nullptr) return false;
+    DWORD most = DWORD(kMaxCoalescedBytes);
+    if (setsockopt(SOCKET(sock_), IPPROTO_UDP, UDP_RECV_MAX_COALESCED_SIZE,
+            (const char*)&most, sizeof(most)) != 0)
+        return false;
+    receiveCoalescingOn_ = true;
+    return true;
 }
 
 bool UdpSocket::WaitReadable(uint32_t ms) {
@@ -236,6 +276,41 @@ int UdpSocket::RecvFrom(uint8_t* buf, size_t cap, NetAddr& from) {
     return -1;
 }
 
+int UdpSocket::RecvCoalesced(InboundDatagram& slot) {
+    sockaddr_in sa{};
+    WSABUF buf{ULONG(slot.cap), (CHAR*)slot.buf};
+    char control[WSA_CMSG_SPACE(sizeof(DWORD))]{};
+    WSAMSG msg{};
+    msg.name = (LPSOCKADDR)&sa;
+    msg.namelen = sizeof(sa);
+    msg.lpBuffers = &buf;
+    msg.dwBufferCount = 1;
+    msg.Control.buf = control;
+    msg.Control.len = sizeof(control);
+
+    DWORD read = 0;
+    if (((LPFN_WSARECVMSG)recvMsg_)(SOCKET(sock_), &msg, &read, nullptr, nullptr) != 0) {
+        const int err = WSAGetLastError();
+        if (err == WSAETIMEDOUT || err == WSAEWOULDBLOCK || err == WSAECONNRESET ||
+            err == WSAEMSGSIZE)
+            return 0;
+        return -1;
+    }
+
+    slot.len = size_t(read);
+    slot.segment = CoalescedSegmentSize(msg);
+    if (slot.segment >= slot.len) slot.segment = 0;
+    slot.from.ip = ntohl(sa.sin_addr.s_addr);
+    slot.from.port = ntohs(sa.sin_port);
+    if ((msg.dwFlags & MSG_TRUNC) != 0)
+        LOGE(
+            "[UDP] A coalesced read of %zu bytes did not fit the %zu-byte slot, so the tail of "
+            "that burst was dropped - a slot offered to receive coalescing must hold "
+            "%zu bytes.",
+            slot.len, slot.cap, kMaxCoalescedBytes);
+    return int(read);
+}
+
 int UdpSocket::RecvBatch(std::span<InboundDatagram> slots) {
     if (!IsOpen()) return -1;
     if (slots.empty()) return 0;
@@ -244,10 +319,11 @@ int UdpSocket::RecvBatch(std::span<InboundDatagram> slots) {
     int filled = 0;
     for (size_t i = 0; i < batch; ++i) {
         InboundDatagram& slot = slots[i];
-        const int n = RecvFrom(slot.buf, slot.cap, slot.from);
+        const int n = receiveCoalescingOn_ ? RecvCoalesced(slot)
+                                           : RecvFrom(slot.buf, slot.cap, slot.from);
         if (n < 0) return filled > 0 ? filled : -1;
         if (n == 0) break;
-        slot.len = size_t(n);
+        if (!receiveCoalescingOn_) slot.len = size_t(n);
         ++filled;
     }
     return filled;

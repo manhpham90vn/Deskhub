@@ -525,7 +525,141 @@ mà là chọn cho đúng trên từng máy — đó chính là C1.
 
 # Việc cần làm, theo thứ tự
 
-## Tiếp tục từ đây (đặt lại ngày 03/09/2026, phiên tối — trên máy macOS)
+## Tiếp tục từ đây (đặt lại ngày 04/09/2026 — trên máy Ubuntu)
+
+**Phiên 04/09 (Ubuntu):** làm xong nửa còn lại của P2 — **gộp gói phía nhận**, GRO trên Linux và
+URO trên Windows, trong đúng một thay đổi API như ghi chú cũ đã dự đoán. Chi tiết, phép đo và cái
+phát hiện chặn (buffer nhỏ **mất dữ liệu**, không phải chậm hơn) nằm ở Phase 6, mục "Đã làm: gộp
+gói phía nhận". Nhánh Linux đã biên dịch, test và đo trên chính máy này; **nhánh Windows chưa qua
+compiler** — xếp cùng hàng chờ với A4, USO và `NoteCapture`. `make test-all`, `make lint`,
+`make lint-tidy` xanh.
+
+**Phiên kế tiếp chạy trên máy Windows.** Nó gỡ được đúng một mẻ, và mẻ đó đang là phần rủi ro lớn
+nhất của cả kế hoạch — bốn nhánh code đã viết mà chưa ai biết có build nổi không. Danh sách đầy đủ
+những gì đang bị chặn, và bị chặn bởi cái gì, nằm ở mục "Đang bị chặn" ngay dưới.
+
+**Việc của phiên Windows, theo thứ tự:**
+
+1. **Build trước mọi thứ khác.** Bốn nhánh chờ compiler ở đó: A4 (`NvencEncoder` + `MfEncoder`),
+   P2/USO (`WSASendMsg`), C2 (`NoteCapture` trong `client/windows/cpp/SharingHost.cpp`), và
+   P2/URO (`RecvCoalesced` trong `UdpSocketWin.cpp`). Ba cái đầu viết 03/09, cái cuối 04/09 —
+   **chưa cái nào qua compiler**.
+2. **Kiểm chứng A4 thi hành được — không cần chờ link chật.** Bật `netem` drop trên máy Ubuntu
+   làm viewer là viewer báo mất gói thật, và log host nói ngay `recovery=invalidate_ref` có nổ
+   hay không. Bảng bằng chứng ở ngay dưới. netem **không** thay được phép đo Phase 0 (nó không
+   nói một link chật thật trông ra sao), nhưng nó trả lời được "code A4 có chạy không" ngay trong
+   buổi ngồi máy, thay vì phải đúng lúc mạng xấu.
+
+   Bằng chứng phải thấy trong log host khi viewer báo mất gói:
+
+   | Dòng | Nghĩa |
+   | --- | --- |
+   | `[NVENC] Initialized: … ltr_slots=4` | LTR bật được thật, không bị driver từ chối |
+   | `[Host][…] recovery=invalidate_ref after losing frame N` | chính sách chọn vá thay vì IDR |
+   | `[NVENC] recovery: next picture references long-term frame M only.` | encoder **thực sự** thi hành |
+   | `evt=sum … idr=0` trong cùng cửa sổ | và cú vọt bitrate của IDR biến mất |
+
+   Nếu thấy `The encoder kept no reference older than frame N` thì nhánh LTR đang rỗng — đọc
+   `ltr_slots` ở dòng Initialized trước khi nghi ngờ chỗ khác.
+
+       deskhub-cli share --bind 192.168.1.3 --encoder nvenc
+
+3. **`platform_perf` trước/sau cho USO và URO.** Chưa có **một con số Windows nào**; hai bảng
+   loopback ở Phase 6 đều là số Linux.
+4. **Đọc `cap_us_p50` / `cap_us_p99` / `cap_repeat` thật** — câu trả lời của C2.
+5. **Bảng tra `EncoderFactory` theo `GpuChoice::vendor`** (Phase 4).
+
+**Cạm bẫy của chính máy Ubuntu này: `make test-asan` và `make test-tsan` fail ngay cả trên HEAD
+chưa sửa gì.** ASan báo leak trong `libpipewire` (`pw_context_load_module`, tới từ
+`AudioSink::Open` trong bài `TestSinkPlaysOrDeclines`), TSan báo đua trong `libglib`
+(`g_main_context_unref`, tới từ `KeepAwakeLinux.cpp`). Cả hai đều là **thư viện của desktop
+session**, không phải code mình: runner CI chạy headless nên `AudioSink::Open` từ chối và
+`KeepAwake` không có D-Bus để gọi, nên hai đường ấy không bao giờ chạy ở đó. Đã kiểm chứng bằng
+cách stash rồi chạy lại trên HEAD — fail y hệt. Đừng mất thời gian truy hai bài này ở đây; muốn
+đọc kết quả ASan/TSan thật thì đọc job của CI.
+
+## Đang bị chặn — và bị chặn bởi cái gì
+
+Một máy Windows **không** đóng được kế hoạch. Nó đóng nhóm 1 dưới đây; năm nhóm còn lại cần thứ
+khác. Viết ra đây để không lần nào cũng phải lần lại cả tài liệu mới biết cái gì đang chờ cái gì.
+
+### 1. Chặn bởi: chưa có máy Windows — phiên tới gỡ
+
+| Việc | Ở đâu |
+| --- | --- |
+| A4 · P2/USO · C2/`NoteCapture` · P2/URO chưa qua compiler | Phase 6, Phase 7 |
+| `platform_perf` trước/sau cho USO và URO trên Windows | Phase 6 |
+| `cap_us_p50` / `cap_us_p99` / `cap_repeat` — số của C2 | Phase 6 |
+| Bảng tra `EncoderFactory` theo `GpuChoice::vendor` | Phase 4 |
+| RIO (`UDP_RECV_MAX_COALESCED_SIZE` đã có, RIO thì chưa) | Phase 6 |
+
+### 2. Chặn bởi: chưa có link thật bị chật
+
+Bố trí **bắt buộc: iPhone làm host, Ubuntu làm viewer** — `wire_loss` nằm trong `Reassembler`,
+tức phía nhận, nên video phải đi qua chỗ chật *rồi mới* tới máy có dụng cụ đo. Máy Windows không
+nằm trong bài đo này. Kế hoạch: WiFi công ty.
+
+| Việc | Ở đâu |
+| --- | --- |
+| Bắt loss và jitter trên link thứ ba (2/3 đã xong) | Phase 0 |
+| Rút tham số Gilbert-Elliott từ loss thật | Phase 0 |
+| Làm lại `dgram_refused` trên một link **bão hoà** — mọi link đã đo đều ra 0 | Phase 0 |
+| A/B `RawUdp` so với `QuicDatagram` trên cùng link | Phase 1 |
+| Ngưỡng bitrate mà CPU thành nút cổ chai | Phase 6 |
+
+Kéo theo (chặn gián tiếp, chờ số đo A/B ở trên): **quyết kiến trúc quiche-làm-chủ hay
+AIMD-làm-chủ**, và bullet `docs/ARCHITECTURE.md` ghi lại quyết định đó — Phase 1.
+
+### 3. Chặn bởi: chưa có máy Intel hoặc AMD
+
+Trên máy Windows hiện tại `--encoder mf` rơi vào **"NVIDIA H.264 Encoder MFT"** — cùng con chip
+với NVENC. Nên bảng đo 02/09 đang trả lời "đi vòng qua Media Foundation tốn gì", **không** phải
+câu hỏi Intel-so-với-NVIDIA mà C1 đặt ra. Thêm một máy NVIDIA nữa không gỡ được cái này.
+
+| Việc | Ở đâu |
+| --- | --- |
+| Câu hỏi thật của C1: Quick Sync so với NVENC | Phase 4 |
+| Bảng tra `EncoderFactory` chỉ đúng cho vendor đã đo | Phase 4 |
+
+### 4. Chặn bởi: chưa chạy trên macOS / Android / Linux-có-GPU
+
+| Việc | Ở đâu |
+| --- | --- |
+| Cột VA-API · VideoToolbox · MediaCodec trong bake-off C1 | Phase 4 |
+| A4: bốn backend ngoài Windows vẫn chưa khai caps nào | Phase 7 |
+
+### 5. Chặn bởi: chưa có bộ đo glass-to-glass
+
+| Việc | Ở đâu |
+| --- | --- |
+| Xác nhận sơ đồ FEC không nói dối — bài camera 240 fps qua `netem` | Phase 3 |
+
+Nửa `netem` của bài này **làm được ngay trên máy Ubuntu**: ba cờ cần thiết (`--fec-parity`,
+`--fec-depth`, `--fec-arm`) đã có từ 02/09. Cái còn thiếu chỉ là camera 240 fps để đọc độ trễ
+glass-to-glass.
+
+### 6. Chặn bởi: chưa quyết — không cần máy nào
+
+| Việc | Ở đâu |
+| --- | --- |
+| **C3 4:4:4**: chọn (a) chỉ điền codec mask hai đầu từ khả năng thật rồi dừng, hay (b) viết cả đường decode 4:4:4 trước khi host được khai bit đó | Phase 7 |
+
+Nhắc lại vì sao nó là câu hỏi chứ không phải việc: `SetHostCodecMask` **không có caller nào** trong
+toàn repo, `ScreenClient.cpp:58` gán cứng `hello.codecMask = kCodecMaskH264` — bảng thương lượng
+dựng ở mục trên đang là code chết. Và viewer Windows giải mã qua H.264 decoder của Media
+Foundation, vốn chỉ 4:2:0; repo không có đường NVDEC nào.
+
+### Không bị chặn — làm được ngay trên máy Ubuntu này
+
+| Việc | Ở đâu |
+| --- | --- |
+| Quét lại sơ đồ FEC dưới `netem` tại chỗ — nửa không cần camera của mục Phase 3 | Phase 3 |
+| Dựng kịch bản đo: cùng clip, cùng bitrate, VMAF + CPU/GPU — cần cho **mọi** cột của C1 | Phase 4 |
+| Viết bài từ dữ liệu bake-off | Phase 8 |
+
+---
+
+## Ghi chú phiên 03/09/2026 (phiên tối — trên máy macOS)
 
 Phiên tối chạy trên macOS, nên **không có nhánh Windows nào được biên dịch ở đây**.
 `make test`, `make test-all`, `make lint` và `make lint-tidy` đều xanh. Chưa commit.
@@ -549,34 +683,12 @@ Phiên tối chạy trên macOS, nên **không có nhánh Windows nào được 
 - **A4 — nhánh thực thi trên Windows** (chi tiết trong Phase 7 bên dưới)
 - **P2 — gộp gói phía gửi trên Windows bằng USO** (chi tiết trong Phase 6 bên dưới)
 
-**Việc đầu tiên của ngày mai, trước khi viết thêm bất kỳ dòng nào:** chạy A4 trên một link
-thật và đọc log. Cả đường LTR lẫn đường USO **chưa từng gặp một gói mất thật hay một NIC
-thật nào** — đúng loại "cấu hình chưa ai đo" mà A1 và C1 đã dính một lần mỗi cái.
+**Việc đầu tiên khi ngồi được máy Windows:** chạy A4 trên một link có mất gói và đọc log. Cả
+đường LTR lẫn đường USO **chưa từng gặp một gói mất thật hay một NIC thật nào** — đúng loại "cấu
+hình chưa ai đo" mà A1 và C1 đã dính một lần mỗi cái. Danh sách việc và bảng bằng chứng đã dời
+lên mục "Việc của phiên Windows" ở đầu chương này.
 
-    deskhub-cli share --bind 192.168.1.3 --encoder nvenc
-
-Bằng chứng phải thấy trong log host khi viewer báo mất gói:
-
-| Dòng | Nghĩa |
-| --- | --- |
-| `[NVENC] Initialized: … ltr_slots=4` | LTR bật được thật, không bị driver từ chối |
-| `[Host][…] recovery=invalidate_ref after losing frame N` | chính sách chọn vá thay vì IDR |
-| `[NVENC] recovery: next picture references long-term frame M only.` | encoder **thực sự** thi hành |
-| `evt=sum … idr=0` trong cùng cửa sổ | và cú vọt bitrate của IDR biến mất |
-
-Nếu thấy `The encoder kept no reference older than frame N` thì nhánh LTR đang rỗng — đọc
-`ltr_slots` ở dòng Initialized trước khi nghi ngờ chỗ khác.
-
-Sau đó, theo thứ tự:
-
-1. **Dựng lại trên Windows trước mọi thứ khác.** Ba thay đổi đang chờ compiler ở đó:
-   A4, P2/USO và nay cả nhánh `NoteCapture` trong `client/windows/cpp/SharingHost.cpp`.
-2. **Đo P2 trên Windows**: `platform_perf` trước/sau, đối chiếu với bảng loopback Linux ở
-   Phase 6. Chưa có một con số Windows nào cả.
-3. **Đọc `cap_us_p50` / `cap_us_p99` / `cap_repeat` thật** — đó chính là câu trả lời của C2
-   cho "WGC tốn bao nhiêu độ trễ". Chỉ khi số đó xấu mới đáng viết backend Duplication.
-4. **Phase 4 còn dư** — bảng tra `EncoderFactory`, và kịch bản clip cố định.
-5. **C3 4:4:4** — có một phát hiện chặn, xem Phase 7.
+## Kế hoạch theo phase
 
 ### Phase 0 — Sửa baseline, rồi đo thực tế trước khi mô phỏng
 
@@ -1406,15 +1518,16 @@ thẳng tới `pacer_`, nhưng coi là chưa kiểm chứng cho tới khi CI mac
 
 *P2, A6, C2.*
 
-- [ ] P2 — `sendmmsg`/`recvmmsg`, rồi GSO/GRO trên Linux; đo ngưỡng bitrate mà CPU thành nút cổ chai
-  — **xong phần gộp syscall; còn GRO, RIO và phép đo ngưỡng bitrate.** `UdpSocket::SendBatch` nay
+- [x] P2 — `sendmmsg`/`recvmmsg`, rồi GSO/GRO trên Linux; **còn RIO và phép đo ngưỡng bitrate**
+  — **xong phần gộp syscall và phần gộp phía nhận (GRO/URO, 04/09).** `UdpSocket::SendBatch` nay
   thử `UDP_SEGMENT` (GSO) trước rồi mới rơi về `sendmmsg`; `UdpSocket::RecvBatch` là `recvmmsg`
   với `MSG_WAITFORONE` trên Linux và vòng `RecvFrom` ở mọi OS khác; `QuicEndpoint::Poll` đọc theo
   lô 16 gói thay vì từng gói một. **Nhánh Linux nay đã được biên dịch, chạy test và strace trên chính máy này** —
   ngược với ghi chú cũ; nhánh Windows là nhánh chưa qua compiler ở đây.
-  **Chưa làm: GRO và RIO** — GRO gộp nhiều datagram vào một buffer, tức phá vỡ giao kèo
-  "một slot một datagram" mà `RecvBatch` dựng trên; đó là một thay đổi API riêng, không phải
-  nửa sau của mục này. Xem kết quả đo ở dưới
+  **GRO và URO đã xong (04/09/2026), RIO thì chưa.** GRO gộp nhiều datagram vào một buffer, tức
+  phá vỡ giao kèo "một slot một datagram" mà `RecvBatch` dựng trên — đúng như ghi chú cũ nói, đó
+  là một thay đổi API riêng, và nó đã được làm như một thay đổi API: chi tiết ở mục "Đã làm" bên
+  dưới. Xem kết quả đo ở dưới
 
   **Bổ sung 03/09 (chiều): phía gửi trên Windows nay cũng gộp, bằng USO.** Ghi chú cũ nói
   "nhánh Windows chưa qua compiler ở đây" là đúng nhưng chưa đủ — `UdpSocketWin::SendBatch`
@@ -1434,8 +1547,56 @@ thẳng tới `pacer_`, nhưng coi là chưa kiểm chứng cho tới khi CI mac
   tối): một bullet ở `docs/ARCHITECTURE.md` §Decisions worth remembering cùng ba bản dịch,
   và nó nói thẳng rằng bảng loopback kia là số Linux.
 
-  **Vẫn chưa làm: URO** (`UDP_RECV_MAX_COALESCED_SIZE`) — chặn bởi đúng cái giao kèo
-  "một slot một datagram" đã chặn GRO. Hai cái là **một** thay đổi API, làm cùng nhau
+  **URO** (`UDP_RECV_MAX_COALESCED_SIZE`) đã viết cùng GRO trong đúng một thay đổi API, như ghi
+  chú cũ đã dự đoán. ⚠️ Nhánh Windows **chưa qua compiler và chưa gặp NIC nào** — cùng loại rủi ro
+  như A4 và USO
+
+#### Đã làm: gộp gói phía nhận, và cái phải trả để có nó (04/09/2026)
+
+`RecvBatch` từng hứa **một slot một datagram**. GRO (`UDP_GRO`, Linux) và URO
+(`UDP_RECV_MAX_COALESCED_SIZE`, Windows) phá đúng lời hứa đó: một lần đọc trả về cả một dãy
+datagram cùng cỡ trong một buffer, cỡ segment nằm trong control message. Nên giao kèo đổi, chứ
+không phải cài thêm một đường vòng:
+
+- `InboundDatagram` có thêm trường `segment`; `DatagramsIn(slot)` và `DatagramAt(slot, i)` trong
+  `deskhubp/net/UdpSocket.h` tách một slot trở lại thành đúng những datagram đã gửi. Hai hàm này
+  test được không cần socket, giống `LeadingRunOfEqualSegments`
+- `segment == 0` là "slot chứa đúng một datagram" — tức **mọi caller không xin gộp**. Giao kèo cũ
+  là mặc định, không phải ngoại lệ
+- Gộp phải xin mới có: `EnableReceiveCoalescing()`. Không tự bật
+
+**Lý do phải xin, đo tại chỗ chứ không đoán:** một run GSO 16 × 1200 byte về thành **một** skb gộp
+19 200 byte. Đọc nó vào buffer 2048 byte thì `recvmsg` trả 2048 byte, bật `MSG_TRUNC`, và **vứt
+mất 17 152 byte còn lại** — lần đọc kế tiếp không còn gì. Kernel gộp tới trọn payload IP 64 KB,
+nên slot nhỏ hơn `kMaxCoalescedBytes` là mất dữ liệu, không phải là chậm hơn. `RecvBatch` ghi ca
+`MSG_TRUNC` thành lỗi nói thẳng đòi hỏi đó.
+
+Vì thế `QuicEndpoint` **đổi số slot lấy cỡ slot**: 16 × 1350 byte trên stack → 4 × 65 535 byte do
+endpoint sở hữu. Quét 4 · 8 · 16 slot: cả ba nằm trong nhiễu giữa các lần chạy của nhau, nên chọn
+bản tốn ít bộ nhớ nhất — số slot không phải là núm đáng vặn.
+
+Đo trên loopback, release build, **chạy xen kẽ hai binary** để triệt cái trôi nhiệt của máy (bốn
+cặp, lấy trung vị):
+
+| workload | trước | sau | |
+| --- | ---: | ---: | ---: |
+| đọc burst 16 gói (`udp/loopback-batched` → `udp/loopback-coalesced-recv`) | 573 ns/datagram | **203 ns/datagram** | 2,8x |
+| `quic/stream-drain-scaling` | 2095 ns/KB | **1629 ns/KB** | −22% |
+| `quic/stream-throughput-64k` | 2114 ns/KB | **1785 ns/KB** | −16% |
+| `quic/datagram-delivery` | 4115 ns | 4139 ns | không đổi |
+| `quic/handshake` | 374 227 ns, 13 alloc | 392 611 ns, 15 alloc | +5%, ở sàn nhiễu |
+
+**Sàn nhiễu của máy này là ~5%, và bảng trên tự đo lấy nó:** những dòng mà mã hai binary **giống
+hệt nhau** vẫn xê dịch 3,3-5,1%. Nên +4,9% của `quic/handshake` không tách khỏi nhiễu được, dù nó
+có nguyên nhân thật (13 → 15 lần cấp phát, một trong số đó là buffer đọc 256 KB cấp lúc `Start`).
+Còn +0,6% của `quic/datagram-delivery` là câu trả lời cho lo ngại đáng lo nhất: đọc thêm control
+message **không tốn gì** cho đường một-gói-một-lần.
+
+Bằng chứng GRO thật sự nổ, không phải suy từ số: test loopback in
+`the stack coalesced up to 8 datagrams into one read`.
+
+**Chưa làm: RIO**, và **ngưỡng bitrate mà CPU thành nút cổ chai** vẫn thuộc danh sách "cần link
+thật" — loopback đo chi phí mỗi gói, không đo chỗ một link thật no
 - [x] A6 — pacing thích ứng và khớp vsync, đo judder
   — quét 24 điểm (lead 8…66 ms × wobble 0/5/20 ms, có và không khớp vsync) xuất CSV.
   **Phát hiện: trục "độ trễ cộng thêm" của A6 không có trade nào cả.** Không khớp vsync thì

@@ -1186,3 +1186,29 @@ line.
   else; only a bad number justifies writing a Duplication backend, and if one is written it takes
   a `--capture wgc|dxgi` flag that stops when the named backend will not start — the same rule
   `--encoder` already follows, for the same reason.
+- **Receive coalescing mirrors the send side, and it costs one field in the read contract**: the
+  remaining half of P2 was GRO on Linux and URO on Windows, and one thing blocked both — `RecvBatch`
+  promised one datagram per slot. With `UDP_GRO` (Linux) or `UDP_RECV_MAX_COALESCED_SIZE` (Windows)
+  a single read hands back a run of equal-sized datagrams in one buffer, with the segment size in a
+  control message, so `InboundDatagram` gained a `segment` field and `DatagramsIn` / `DatagramAt`
+  split a slot back into the datagrams that were sent. `segment == 0` means a slot holding exactly
+  one datagram, which is every caller that does not ask for coalescing, so the old contract is the
+  default rather than a special case. Coalescing is opt-in through `EnableReceiveCoalescing()` and
+  never automatic, because a slot that is too small loses data: measured here, a 16 × 1200 byte GSO
+  run arrives as one 19 200-byte coalesced skb, and reading it into a 2048-byte buffer returns 2048
+  bytes with `MSG_TRUNC` set and **discards the other 17 152** — the next read finds nothing. The
+  kernel will coalesce up to a full 64 KB IP payload, so only a caller whose slots hold
+  `kMaxCoalescedBytes` may turn coalescing on, and `RecvBatch` logs the `MSG_TRUNC` case as an error
+  naming that requirement rather than letting a burst vanish quietly. `QuicEndpoint` therefore
+  trades slot count for slot size — 16 × 1350 bytes on the stack becomes 4 × 65 535 bytes owned by
+  the endpoint — and the count turned out not to matter: 4, 8 and 16 slots all landed within
+  run-to-run noise of each other, so the cheapest footprint won. Measured over loopback with the two
+  binaries interleaved to cancel the machine's drift, medians of four pairs: a 16-datagram burst
+  read 573 → 203 ns/datagram (2.8x), `quic/stream-drain-scaling` 2095 → 1629 ns/KB,
+  `quic/stream-throughput-64k` 2114 → 1785 ns/KB. Rows whose code is identical in both binaries
+  moved 3.3-5.1%, which is this machine's noise floor, so `quic/handshake` at +4.9% (13 → 15
+  allocations, one of them the 256 KB read buffer) is not separable from it, and
+  `quic/datagram-delivery` at +0.6% says reading the control message costs the uncoalesced path
+  nothing. The Windows half is written to the same shape through `WSARecvMsg` and
+  `UDP_COALESCED_INFO` but **has been through no compiler and no NIC** — the loopback numbers above
+  are Linux and do not transfer.
