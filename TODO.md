@@ -38,7 +38,7 @@ Phần còn lại của tài liệu này là **sổ đo**: bảng số, kết lu
 | [#59](https://github.com/manhpham90vn/Deskhub/issues/59) | netem + camera 240 fps: sim có nói dối không | bộ đo glass-to-glass |
 | ~~[#60](https://github.com/manhpham90vn/Deskhub/issues/60)~~ | Kịch bản đo encoder chung (VMAF) | **xong** — 3 lần chạy, bitstream y hệt từng byte |
 | [#61](https://github.com/manhpham90vn/Deskhub/issues/61) | Bake-off encoder trên 3 backend còn lại | macOS · Android · Linux-GPU |
-| [#62](https://github.com/manhpham90vn/Deskhub/issues/62) | Bảng tra `EncoderFactory` theo vendor | thiếu máy AMD |
+| [#62](https://github.com/manhpham90vn/Deskhub/issues/62) | Bảng tra `EncoderFactory` theo vendor | bảng tra đã vào — còn máy AMD + `lint-tidy` trên Windows |
 | [#63](https://github.com/manhpham90vn/Deskhub/issues/63) | A4 thi hành trên từng backend | máy NVIDIA + các OS khác |
 | [#64](https://github.com/manhpham90vn/Deskhub/issues/64) | C3 4:4:4 — điền mask hay viết decode | chờ quyết định |
 | ~~[#65](https://github.com/manhpham90vn/Deskhub/issues/65)~~ | Viết bài từ dữ liệu bake-off | **xong** — `docs/posts/fec-under-burst-loss.md` ×4 ngôn ngữ |
@@ -846,6 +846,32 @@ parity, để lần sau không ai đọc tỉ lệ cứu mà quên mất cái gi
   `[NVENC] Failed to load nvEncodeAPI64.dll` rồi mới rơi xuống MF. Tức mỗi lần tạo encoder trên
   máy không-NVIDIA đều trả tiền cho một lần `LoadLibrary` hỏng. Nó **không** làm hỏng gì — đường
   rơi chạy đúng và có in lý do — nên đây là việc dọn dẹp, không phải sửa lỗi.
+  **Đã làm 05/09:** bảng tra vào `core/media/EncoderBackend.h` (`EncoderBackendOrderFor`) chứ
+  không nằm ở `client/windows`, vì nó là logic thuần và unit-test được không cần GPU — Nvidia →
+  `{nvenc, mf}` đã đo, Intel → `{mf, nvenc}` đã đo, Amd → `{mf, nvenc}` **suy đoán**,
+  `Microsoft`/`Unknown` giữ đúng luật thử-lần-lượt cũ. `EncoderBackendOrder::measured` chở luôn
+  câu "vendor này đã đo hay chưa" nên bảng không nói dối, và một test khoá lại rằng **không
+  vendor nào bị mất backend dự phòng** — đoán sai chỉ được phép tốn một lần khởi động chậm, không
+  được phép làm nguồn không encode được. `GpuVendor` trùng lặp ở `GpuSelect.h` đã bỏ, nay alias
+  sang enum của core. Thêm `DESKHUB_GPU_VENDOR=nvidia|intel|amd` ghim adapter, có log `LOGW` to
+  mỗi lần có hiệu lực và **dừng hẳn** nếu máy không có adapter đó, để không bao giờ có phép đo bị
+  gán nhầm tên. Kiểm trên i9-14900K (RTX 5070 Ti + UHD 770), máy đầu tiên có cả hai vendor:
+  mặc định in `NVIDIA adapter: trying nvenc first (measured on this vendor)`, ghim Intel in
+  `Intel adapter: trying mf first` — tiêu chí "máy Intel không còn nạp `nvEncodeAPI64.dll` trước"
+  đã thoả. **Còn nợ:** số đo AMD, và `make lint-tidy` chưa xanh trên Windows (7 lỗi có sẵn ở
+  `platform/` Windows-only, không cái nào ở code này — xem mục dưới).
+
+- **`make lint-tidy` lần đầu chạy được trên Windows, và nó đang đỏ.** Hai lỗi chặn đã sửa:
+  `scripts/clang-tidy.sh` và `scripts/check-coverage.sh` gọi thẳng `python3`, vốn là stub
+  Microsoft Store trên Windows (exit 49) — cùng đúng lỗi đã sửa ở `encoder-bake-off.sh`; và
+  `print()` của Python trên Windows đổi `\n` thành `\r\n` nên mọi
+  đường dẫn trong danh sách file dính `\r`, clang-tidy báo `no such file or directory`
+  cho cả 20 file. Sau khi sửa, nó quét đủ
+  123 file và tìm ra **7 lỗi, tất cả ở code Windows-only của `platform/`** mà CI Linux không bao
+  giờ biên dịch: `LogFile.h` (`_wfreopen` deprecated), `DiscoveryFfi.cpp`
+  (`bugprone-throwing-static-initialization`), `LocalInputWin.cpp` ×2 và `DisplayEnumWin.cpp`
+  (`performance-no-int-to-ptr`), `PtyWin.cpp` ×2 (`performance-no-automatic-move`). Đây là việc
+  dọn dẹp riêng, chưa làm.
   **Dữ liệu để dựng bảng tra nay đã có hai vendor:** `Nvidia` → nvenc trước, `Intel` → mf trước
   (Quick Sync khai đủ LTR + intra-refresh). Còn thiếu `Amd`, và `Unknown`/`Microsoft` (WARP) thì
   nên giữ nguyên thứ tự thử-lần-lượt như hôm nay
