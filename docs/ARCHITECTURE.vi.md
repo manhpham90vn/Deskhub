@@ -1270,3 +1270,17 @@ bài trích dẫn nằm ngay cạnh trong [`docs/data/bake-off/`](data/bake-off/
   và ký tự xuống dòng vào một buffer rồi phát ra bằng một `fputs` duy nhất, đúng hình dạng mà đường
   POSIX đã có sẵn. Đó cũng là lý do nhánh Android và Apple được để yên: `__android_log_print` và một
   `fprintf` vốn đã là một lời gọi.
+- **Encoder được chọn theo vendor của adapter, và bảng tự khai hàng nào đã đo**:
+  `CreateEncoder` trước đây thử NVENC rồi Media Foundation trên mọi máy, nên adapter Intel hay AMD
+  phải trả tiền cho một lần nạp `nvEncodeAPI64` hỏng trước khi rơi xuống. Thứ tự nay đến từ
+  `EncoderBackendOrderFor` trong `core/media/EncoderBackend.h` chứ không phải `client/windows`, vì
+  nó là một bảng chứ không phải lời gọi OS: chỗ của nó là nơi một bài test đọc được mà không cần
+  GPU. NVIDIA dẫn đầu bằng `nvenc`, Intel bằng `mf`, cả hai đều từ số đo bake-off trên đúng loại
+  silicon đó. **Hàng AMD là suy đoán, và được ghi rõ là suy đoán.** Dự án chưa bao giờ có máy AMD,
+  nên hàng đó mang `measured = false` và log in "no measurement on this vendor yet" thay vì trích
+  một con số không ai đo; khi nào có máy AMD thì hàng đó cùng cờ này là thứ phải sửa. Hai luật giữ
+  cho một lần đoán sai vẫn rẻ: không vendor nào được mất backend dự phòng, nên thứ tự sai chỉ tốn
+  một lần khởi động chậm chứ không bao giờ tạo ra một nguồn không encode được, và có test khoá
+  điều đó cho mọi vendor kể cả hàng suy đoán. `DESKHUB_GPU_VENDOR` ghim adapter để đo được cả hai
+  nhánh trên một máy; nó in log mỗi lần có hiệu lực và từ chối chạy khi máy không có adapter đó,
+  nên không phép đo nào bị gán nhầm tên vendor.

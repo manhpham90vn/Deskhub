@@ -1314,3 +1314,18 @@ raw CSVs it quotes checked in beside it under [`docs/data/bake-off/`](data/bake-
   single `fputs`, which is the shape the POSIX path already had. This is why the Android and Apple
   branches are left alone: `__android_log_print` and the single `fprintf` are already one call
   each.
+- **The encoder is chosen from the adapter vendor, and the table admits which rows were measured**:
+  `CreateEncoder` used to try NVENC then Media Foundation on every machine, so an Intel or AMD
+  adapter paid for a failing `nvEncodeAPI64` load before falling back. The order now comes from
+  `EncoderBackendOrderFor` in `core/media/EncoderBackend.h` rather than from `client/windows`,
+  because it is a table and not an OS call: it belongs where a test can read it with no GPU
+  present. NVIDIA leads with `nvenc` and Intel with `mf`, both from bake-off runs on that silicon.
+  **The AMD row is a guess and is labelled as one.** No AMD machine has ever been available to
+  this project, so that row carries `measured = false` and the log says "no measurement on this
+  vendor yet" instead of quoting a number nobody took; when an AMD machine appears, the row and
+  that flag are what to change. Two rules keep a wrong guess cheap: no vendor may lose a fallback,
+  so a bad order costs a slower start and never a source that cannot encode at all, and a test
+  holds that line for every vendor including the guessed one. `DESKHUB_GPU_VENDOR` pins the
+  adapter so both branches can be measured on one machine; it logs whenever it takes effect and
+  refuses to run when the machine has no such adapter, so no measurement is ever filed under the
+  wrong vendor's name.

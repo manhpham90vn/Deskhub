@@ -38,7 +38,7 @@ Phần còn lại của tài liệu này là **sổ đo**: bảng số, kết lu
 | [#59](https://github.com/manhpham90vn/Deskhub/issues/59) | netem + camera 240 fps: sim có nói dối không | bộ đo glass-to-glass |
 | ~~[#60](https://github.com/manhpham90vn/Deskhub/issues/60)~~ | Kịch bản đo encoder chung (VMAF) | **xong** — 3 lần chạy, bitstream y hệt từng byte |
 | [#61](https://github.com/manhpham90vn/Deskhub/issues/61) | Bake-off encoder trên 3 backend còn lại | macOS · Android · Linux-GPU |
-| [#62](https://github.com/manhpham90vn/Deskhub/issues/62) | Bảng tra `EncoderFactory` theo vendor | bảng tra đã vào — còn máy AMD + `lint-tidy` trên Windows |
+| ~~[#62](https://github.com/manhpham90vn/Deskhub/issues/62)~~ | Bảng tra `EncoderFactory` theo vendor | **xong** — AMD để `measured=false` vì chưa có máy |
 | [#63](https://github.com/manhpham90vn/Deskhub/issues/63) | A4 thi hành trên từng backend | máy NVIDIA + các OS khác |
 | [#64](https://github.com/manhpham90vn/Deskhub/issues/64) | C3 4:4:4 — điền mask hay viết decode | chờ quyết định |
 | ~~[#65](https://github.com/manhpham90vn/Deskhub/issues/65)~~ | Viết bài từ dữ liệu bake-off | **xong** — `docs/posts/fec-under-burst-loss.md` ×4 ngôn ngữ |
@@ -46,7 +46,7 @@ Phần còn lại của tài liệu này là **sổ đo**: bảng số, kết lu
 | [#67](https://github.com/manhpham90vn/Deskhub/issues/67) | Kiểm chứng `overtakenLimit=8` trên link thật | cần netem |
 | [#70](https://github.com/manhpham90vn/Deskhub/issues/70) | `MfEncoder` chọn MFT lệch adapter trên máy nhiều GPU | không bị chặn — dựng lại được ở đây |
 
-**Đã đóng:** [#60](https://github.com/manhpham90vn/Deskhub/issues/60),
+**Đã đóng:** [#60](https://github.com/manhpham90vn/Deskhub/issues/60), [#62](https://github.com/manhpham90vn/Deskhub/issues/62),
 [#65](https://github.com/manhpham90vn/Deskhub/issues/65) và
 [#66](https://github.com/manhpham90vn/Deskhub/issues/66) — tiêu chí Done cuối cùng của #60 và #66
 chỉ chạy được trên máy Windows, và ngày 05/09 đã chạy trên đúng máy đó. Nửa `netem` của
@@ -859,15 +859,16 @@ parity, để lần sau không ai đọc tỉ lệ cứu mà quên mất cái gi
   gán nhầm tên. Kiểm trên i9-14900K (RTX 5070 Ti + UHD 770), máy đầu tiên có cả hai vendor:
   mặc định in `NVIDIA adapter: trying nvenc first (measured on this vendor)`, ghim Intel in
   `Intel adapter: trying mf first` — tiêu chí "máy Intel không còn nạp `nvEncodeAPI64.dll` trước"
-  đã thoả. **Còn nợ:** số đo AMD, và `make lint-tidy` chưa xanh trên Windows (7 lỗi có sẵn ở
-  `platform/` Windows-only, không cái nào ở code này — xem mục dưới).
+  đã thoả. `make test` · `make lint` · `make lint-tidy` **xanh cả ba**. **Đóng 05/09.** Hàng AMD
+  ở lại `measured = false` — dự án chưa bao giờ có máy AMD, và đó là điều kiện duy nhất còn thiếu;
+  ghi lại ở `docs/ARCHITECTURE.md` §9 và ba bản dịch, không chỉ trong issue.
   Việc ghim vendor cũng phơi ra một lỗi có sẵn khác, nay là
   [#70](https://github.com/manhpham90vn/Deskhub/issues/70): `MfEncoder::FindActivate` lấy MFT
   phần cứng đầu tiên mà không kiểm cùng adapter với device, nên ghim Intel trên máy hai GPU thì
   MF trả MFT của NVIDIA và chết bằng `MF_E_UNSUPPORTED_D3D_TYPE`. Không phải regression: thứ tự
   cũ cũng chết ở đúng chỗ đó, chỉ là chưa có cách nào ghim adapter để nhìn thấy.
 
-- **`make lint-tidy` lần đầu chạy được trên Windows, và nó đang đỏ.** Hai lỗi chặn đã sửa:
+- **`make lint-tidy` lần đầu chạy được trên Windows — và nay đã xanh.** Hai lỗi chặn đã sửa:
   `scripts/clang-tidy.sh` và `scripts/check-coverage.sh` gọi thẳng `python3`, vốn là stub
   Microsoft Store trên Windows (exit 49) — cùng đúng lỗi đã sửa ở `encoder-bake-off.sh`; và
   `print()` của Python trên Windows đổi `\n` thành `\r\n` nên mọi
@@ -876,8 +877,14 @@ parity, để lần sau không ai đọc tỉ lệ cứu mà quên mất cái gi
   123 file và tìm ra **7 lỗi, tất cả ở code Windows-only của `platform/`** mà CI Linux không bao
   giờ biên dịch: `LogFile.h` (`_wfreopen` deprecated), `DiscoveryFfi.cpp`
   (`bugprone-throwing-static-initialization`), `LocalInputWin.cpp` ×2 và `DisplayEnumWin.cpp`
-  (`performance-no-int-to-ptr`), `PtyWin.cpp` ×2 (`performance-no-automatic-move`). Đây là việc
-  dọn dẹp riêng, chưa làm.
+  (`performance-no-int-to-ptr`), `PtyWin.cpp` ×2 (`performance-no-automatic-move`). **Đã dọn**
+  cả bảy: `_wfreopen` → `_wfreopen_s`; `g_status` từ biến static namespace-scope thành
+  static trong hàm `Status()` theo đúng idiom `Recent()` sẵn có cùng file; bỏ `const` trên hai
+  local được `return` trong `DefaultShell` để chúng move được. Ba lỗi `no-int-to-ptr` thì
+  **không sửa được ở code**: chữ ký callback của Win32 (`SetWindowsHookEx`,
+  `EnumDisplayMonitors`) chở con trỏ qua `LPARAM`, tức một số nguyên, nên phép ép kiểu là bắt
+  buộc chứ không phải lỗi. Check đó nay tắt ở `.clang-tidy`, cùng chỗ repo đã tắt ba check
+  khác không áp dụng được. `make lint-tidy` xanh trên Windows.
   **Dữ liệu để dựng bảng tra nay đã có hai vendor:** `Nvidia` → nvenc trước, `Intel` → mf trước
   (Quick Sync khai đủ LTR + intra-refresh). Còn thiếu `Amd`, và `Unknown`/`Microsoft` (WARP) thì
   nên giữ nguyên thứ tự thử-lần-lượt như hôm nay

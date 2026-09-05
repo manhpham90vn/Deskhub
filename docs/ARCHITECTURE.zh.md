@@ -1018,3 +1018,15 @@ A/B（漂移只作为警告，绝不失败）、来自该 pull request 构建的
   会，而 CRT 只在一次调用的持续时间内锁住 `stdout`。现在它把标签、正文和换行拼进一个缓冲区，用一次
   `fputs` 发出去，也就是 POSIX 那条路径早就有的形状。这也是 Android 和 Apple 分支不动的原因：
   `__android_log_print` 和那一次 `fprintf` 本来就各是一次调用。
+- **编码器按适配器厂商选择，并且表格会说明哪几行是实测的**：
+  `CreateEncoder` 过去在每台机器上都先试 NVENC 再试 Media Foundation，因此 Intel 或 AMD 适配器
+  必须先付出一次失败的 `nvEncodeAPI64` 加载才会回退。这个顺序现在来自
+  `core/media/EncoderBackend.h` 中的 `EncoderBackendOrderFor`，而不是 `client/windows`，因为它是
+  一张表而不是一次操作系统调用：它应当放在测试无需 GPU 就能读取的地方。NVIDIA 以 `nvenc` 领先，
+  Intel 以 `mf` 领先，两者都来自在对应硅片上跑出的 bake-off 数据。**AMD 那一行是猜测，并且被标注
+  为猜测。** 本项目从未有过 AMD 机器，因此该行带有 `measured = false`，日志会打印
+  "no measurement on this vendor yet"，而不是引用一个无人测量过的数字；等到有了 AMD 机器，要改的
+  就是这一行和这个标志。两条规则让猜错的代价保持低廉：任何厂商都不能失去回退后备，因此错误的顺序
+  只会让启动变慢，绝不会造成一个根本无法编码的源，并且有测试为每个厂商——包括猜测的那一行——守住这
+  条线。`DESKHUB_GPU_VENDOR` 可以把适配器钉死，使两个分支能在同一台机器上测量；它每次生效都会写
+  日志，并且当机器没有该适配器时拒绝运行，因此任何测量都不会被记在错误的厂商名下。
