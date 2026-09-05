@@ -58,7 +58,7 @@ void TestNoVendorLosesAFallback() {
              GpuVendor::Microsoft, GpuVendor::Unknown}) {
         const EncoderBackendOrder order = EncoderBackendOrderFor(vendor);
         Check(Contains(order.backends, kEncoderBackendNvenc) &&
-                Contains(order.backends, kEncoderBackendMediaFoundation),
+                  Contains(order.backends, kEncoderBackendMediaFoundation),
             "reordering may not drop a backend: a wrong guess must still cost a slower start, "
             "never a source that cannot encode at all");
         for (std::string_view id : order.backends)
