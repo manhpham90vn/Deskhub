@@ -11,9 +11,11 @@
 #include <icodecapi.h>
 #include <d3d11.h>
 #include <d3d11_1.h>
+#include <dxgi.h>
 #include <wrl/client.h>
 #include <cstdio>
 #include <span>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -88,33 +90,48 @@ struct MfEncoder::Impl {
         if (mfStarted) MFShutdown();
     }
 
-    bool FindActivate() {
-        MFT_REGISTER_TYPE_INFO outInfo{MFMediaType_Video, MFVideoFormat_H264};
-        IMFActivate** activates = nullptr;
-        UINT32 count = 0;
-        MF_CHECK(MFTEnumEx(MFT_CATEGORY_VIDEO_ENCODER,
-                     MFT_ENUM_FLAG_HARDWARE | MFT_ENUM_FLAG_SORTANDFILTER,
-                     nullptr, &outInfo, &activates, &count),
-            "MFTEnumEx");
-        if (count == 0) {
-            LOGE("[MfEncoder] No encoder MFT found.");
-            return false;
-        }
+    struct AdapterId {
+        LUID luid{};
+        std::wstring description;
+        bool known = false;
+    };
+
+    AdapterId DeviceAdapter() {
+        AdapterId id;
+        ComPtr<IDXGIDevice> dxgi;
+        if (FAILED(device.As(&dxgi))) return id;
+        ComPtr<IDXGIAdapter> adapter;
+        if (FAILED(dxgi->GetAdapter(&adapter))) return id;
+        DXGI_ADAPTER_DESC desc{};
+        if (FAILED(adapter->GetDesc(&desc))) return id;
+        id.luid = desc.AdapterLuid;
+        id.description = desc.Description;
+        id.known = true;
+        return id;
+    }
+
+    static std::wstring MftName(IMFActivate* act) {
+        wchar_t name[256] = L"?";
+        UINT32 nameLen = 0;
+        act->GetString(MFT_FRIENDLY_NAME_Attribute, name, 256, &nameLen);
+        return std::wstring(name);
+    }
+
+    bool TakeFirstD3D11Aware(IMFActivate** activates, UINT32 count, const wchar_t* scope) {
         for (UINT32 i = 0; i < count && !activate; ++i) {
-            wchar_t name[256] = L"?";
-            UINT32 nameLen = 0;
-            activates[i]->GetString(MFT_FRIENDLY_NAME_Attribute, name, 256, &nameLen);
+            const std::wstring name = MftName(activates[i]);
 
             ComPtr<IMFTransform> candidate;
             ComPtr<IMFAttributes> candidateAttrs;
             if (FAILED(activates[i]->ActivateObject(IID_PPV_ARGS(&candidate))) ||
                 FAILED(candidate->GetAttributes(&candidateAttrs))) {
-                std::wprintf(L"[MfEncoder] Found MFT: %ls (activate failed)\n", name);
+                std::wprintf(L"[MfEncoder] Found MFT: %ls (activate failed)\n", name.c_str());
                 continue;
             }
             UINT32 aware = 0;
             candidateAttrs->GetUINT32(MF_SA_D3D11_AWARE, &aware);
-            std::wprintf(L"[MfEncoder] Found MFT: %ls (D3D11-aware=%u)\n", name, aware);
+            std::wprintf(L"[MfEncoder] Found MFT: %ls (%ls, D3D11-aware=%u)\n", name.c_str(),
+                scope, aware);
             if (!aware) {
                 activates[i]->ShutdownObject();
                 continue;
@@ -122,12 +139,71 @@ struct MfEncoder::Impl {
             activate = activates[i];
             mft = candidate;
         }
+        return activate != nullptr;
+    }
+
+    bool TakeFromAdapter(const AdapterId& want, const MFT_REGISTER_TYPE_INFO& outInfo,
+        UINT32 flags) {
+        ComPtr<IMFAttributes> scoped;
+        if (FAILED(MFCreateAttributes(&scoped, 1))) return false;
+        if (FAILED(scoped->SetBlob(MFT_ENUM_ADAPTER_LUID,
+                reinterpret_cast<const UINT8*>(&want.luid), sizeof(want.luid))))
+            return false;
+
+        IMFActivate** activates = nullptr;
+        UINT32 count = 0;
+        if (FAILED(MFTEnum2(MFT_CATEGORY_VIDEO_ENCODER, flags, nullptr, &outInfo, scoped.Get(),
+                &activates, &count)))
+            return false;
+
+        const bool took =
+            count > 0 && TakeFirstD3D11Aware(activates, count, want.description.c_str());
         for (UINT32 i = 0; i < count; ++i) activates[i]->Release();
         CoTaskMemFree(activates);
-        if (!activate) {
+        return took;
+    }
+
+    bool FindActivate() {
+        MFT_REGISTER_TYPE_INFO outInfo{MFMediaType_Video, MFVideoFormat_H264};
+        const UINT32 flags = MFT_ENUM_FLAG_HARDWARE | MFT_ENUM_FLAG_SORTANDFILTER;
+
+        const AdapterId want = DeviceAdapter();
+        if (want.known && TakeFromAdapter(want, outInfo, flags)) return true;
+
+        if (want.known)
+            std::wprintf(
+                L"[MfEncoder] No hardware encoder MFT is registered for %ls; falling "
+                L"back to every hardware encoder this machine has.\n",
+                want.description.c_str());
+        else
+            LOGW(
+                "[MfEncoder] Could not read the adapter behind this device, so encoders cannot "
+                "be scoped to it; falling back to every hardware encoder this machine has.");
+
+        IMFActivate** activates = nullptr;
+        UINT32 count = 0;
+        MF_CHECK(MFTEnumEx(MFT_CATEGORY_VIDEO_ENCODER, flags, nullptr, &outInfo, &activates,
+                     &count),
+            "MFTEnumEx");
+        if (count == 0) {
+            CoTaskMemFree(activates);
+            LOGE("[MfEncoder] No encoder MFT found.");
+            return false;
+        }
+
+        const bool took = TakeFirstD3D11Aware(activates, count, L"adapter not checked");
+        for (UINT32 i = 0; i < count; ++i) activates[i]->Release();
+        CoTaskMemFree(activates);
+
+        if (!took) {
             LOGE("[MfEncoder] No D3D11-aware encoder MFT available.");
             return false;
         }
+        if (want.known)
+            LOGW(
+                "[MfEncoder] This MFT was not scoped to the device's adapter. If it was built "
+                "for a different one it will reject this device's textures, which is what "
+                "MF_E_UNSUPPORTED_D3D_TYPE means when SetOutputType reports it.");
         return true;
     }
 
