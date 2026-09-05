@@ -44,6 +44,7 @@ Phần còn lại của tài liệu này là **sổ đo**: bảng số, kết lu
 | ~~[#65](https://github.com/manhpham90vn/Deskhub/issues/65)~~ | Viết bài từ dữ liệu bake-off | **xong** — `docs/posts/fec-under-burst-loss.md` ×4 ngôn ngữ |
 | ~~[#66](https://github.com/manhpham90vn/Deskhub/issues/66)~~ | `platform_tests` fail 8 check ~20% trên Windows | **xong** — 20/20 xanh trên Windows sau bản vá rò trạng thái |
 | [#67](https://github.com/manhpham90vn/Deskhub/issues/67) | Kiểm chứng `overtakenLimit=8` trên link thật | cần netem |
+| [#70](https://github.com/manhpham90vn/Deskhub/issues/70) | `MfEncoder` chọn MFT lệch adapter trên máy nhiều GPU | không bị chặn — dựng lại được ở đây |
 
 **Đã đóng:** [#60](https://github.com/manhpham90vn/Deskhub/issues/60),
 [#65](https://github.com/manhpham90vn/Deskhub/issues/65) và
@@ -860,6 +861,11 @@ parity, để lần sau không ai đọc tỉ lệ cứu mà quên mất cái gi
   `Intel adapter: trying mf first` — tiêu chí "máy Intel không còn nạp `nvEncodeAPI64.dll` trước"
   đã thoả. **Còn nợ:** số đo AMD, và `make lint-tidy` chưa xanh trên Windows (7 lỗi có sẵn ở
   `platform/` Windows-only, không cái nào ở code này — xem mục dưới).
+  Việc ghim vendor cũng phơi ra một lỗi có sẵn khác, nay là
+  [#70](https://github.com/manhpham90vn/Deskhub/issues/70): `MfEncoder::FindActivate` lấy MFT
+  phần cứng đầu tiên mà không kiểm cùng adapter với device, nên ghim Intel trên máy hai GPU thì
+  MF trả MFT của NVIDIA và chết bằng `MF_E_UNSUPPORTED_D3D_TYPE`. Không phải regression: thứ tự
+  cũ cũng chết ở đúng chỗ đó, chỉ là chưa có cách nào ghim adapter để nhìn thấy.
 
 - **`make lint-tidy` lần đầu chạy được trên Windows, và nó đang đỏ.** Hai lỗi chặn đã sửa:
   `scripts/clang-tidy.sh` và `scripts/check-coverage.sh` gọi thẳng `python3`, vốn là stub
