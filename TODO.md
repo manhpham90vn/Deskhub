@@ -44,11 +44,11 @@ Phần còn lại của tài liệu này là **sổ đo**: bảng số, kết lu
 | ~~[#65](https://github.com/manhpham90vn/Deskhub/issues/65)~~ | Viết bài từ dữ liệu bake-off | **xong** — `docs/posts/fec-under-burst-loss.md` ×4 ngôn ngữ |
 | ~~[#66](https://github.com/manhpham90vn/Deskhub/issues/66)~~ | `platform_tests` fail 8 check ~20% trên Windows | **xong** — 20/20 xanh trên Windows sau bản vá rò trạng thái |
 | [#67](https://github.com/manhpham90vn/Deskhub/issues/67) | Kiểm chứng `overtakenLimit=8` trên link thật | cần netem |
-| [#70](https://github.com/manhpham90vn/Deskhub/issues/70) | `MfEncoder` chọn MFT lệch adapter trên máy nhiều GPU | không bị chặn — dựng lại được ở đây |
+| ~~[#70](https://github.com/manhpham90vn/Deskhub/issues/70)~~ | `MfEncoder` chọn MFT lệch adapter trên máy nhiều GPU | **xong** — lọc qua `MFTEnum2` + `MFT_ENUM_ADAPTER_LUID` |
 
 **Đã đóng:** [#60](https://github.com/manhpham90vn/Deskhub/issues/60), [#62](https://github.com/manhpham90vn/Deskhub/issues/62),
-[#65](https://github.com/manhpham90vn/Deskhub/issues/65) và
-[#66](https://github.com/manhpham90vn/Deskhub/issues/66) — tiêu chí Done cuối cùng của #60 và #66
+[#65](https://github.com/manhpham90vn/Deskhub/issues/65), [#66](https://github.com/manhpham90vn/Deskhub/issues/66) và
+[#70](https://github.com/manhpham90vn/Deskhub/issues/70) — tiêu chí Done cuối cùng của #60 và #66
 chỉ chạy được trên máy Windows, và ngày 05/09 đã chạy trên đúng máy đó. Nửa `netem` của
 [#59](https://github.com/manhpham90vn/Deskhub/issues/59) và
 [#67](https://github.com/manhpham90vn/Deskhub/issues/67) vẫn chạy được ngay trên máy Ubuntu.
@@ -866,7 +866,12 @@ parity, để lần sau không ai đọc tỉ lệ cứu mà quên mất cái gi
   [#70](https://github.com/manhpham90vn/Deskhub/issues/70): `MfEncoder::FindActivate` lấy MFT
   phần cứng đầu tiên mà không kiểm cùng adapter với device, nên ghim Intel trên máy hai GPU thì
   MF trả MFT của NVIDIA và chết bằng `MF_E_UNSUPPORTED_D3D_TYPE`. Không phải regression: thứ tự
-  cũ cũng chết ở đúng chỗ đó, chỉ là chưa có cách nào ghim adapter để nhìn thấy.
+  cũ cũng chết ở đúng chỗ đó, chỉ là chưa có cách nào ghim adapter để nhìn thấy. **Đã sửa và đóng:**
+  chẩn đoán ban đầu sai một nửa — `MFT_ENUM_ADAPTER_LUID` không phải thuộc tính đọc ra từ
+  `IMFActivate` mà là attribute **đầu vào** của `MFTEnum2`, nên bản vá không lọc sau khi liệt
+  kê mà bảo thẳng MF chỉ liệt kê MFT của đúng adapter đó; `MFTEnumEx` cũ ở lại làm đường lùi
+  cho máy/driver không trả gì theo LUID. Trên máy hai GPU, ghim Intel nay lấy đúng
+  `Intel Quick Sync Video H.264 Encoder MFT` và encode được
 
 - **`make lint-tidy` lần đầu chạy được trên Windows — và nay đã xanh.** Hai lỗi chặn đã sửa:
   `scripts/clang-tidy.sh` và `scripts/check-coverage.sh` gọi thẳng `python3`, vốn là stub
