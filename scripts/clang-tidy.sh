@@ -16,7 +16,26 @@ if [ ! -f "$DB" ]; then
     exit 1
 fi
 
-FILES=$(python3 - "$DB" <<'EOF'
+find_python() {
+    local candidate
+    for candidate in python3 python py; do
+        command -v "$candidate" >/dev/null 2>&1 || continue
+        "$candidate" -c "" >/dev/null 2>&1 || continue
+        echo "$candidate"
+        return 0
+    done
+    return 1
+}
+
+if ! PYTHON=$(find_python); then
+    echo "clang-tidy.sh: no working python on PATH. It reads $DB to pick which core and" >&2
+    echo "clang-tidy.sh: platform sources to check. On Windows 'python3' is usually the" >&2
+    echo "clang-tidy.sh: Microsoft Store alias, which exits 49 without running anything, so" >&2
+    echo "clang-tidy.sh: install a real python and expose it as python3, python or py." >&2
+    exit 1
+fi
+
+FILES=$("$PYTHON" - "$DB" <<'EOF'
 import json, sys
 
 with open(sys.argv[1]) as db:
@@ -26,6 +45,7 @@ wanted = [e["file"] for e in entries if "/core/src/" in e["file"] or "/platform/
 print("\n".join(sorted(set(wanted))))
 EOF
 )
+FILES=$(printf '%s' "$FILES" | tr -d '\r')
 
 if [ -z "$FILES" ]; then
     echo "clang-tidy.sh: no core/platform sources in $DB." >&2
