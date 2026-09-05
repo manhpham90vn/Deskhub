@@ -3,7 +3,9 @@
 #include "gpu/GpuSelect.h"
 
 #include <dxgi1_2.h>
+#include <cctype>
 #include <cstdio>
+#include <string>
 
 #include "deskhubp/diag/Log.h"
 
@@ -32,6 +34,55 @@ static GpuVendor VendorFromId(UINT vendorId) {
     }
 }
 
+static const char* kPinnedVendorVar = "DESKHUB_GPU_VENDOR";
+
+static bool PinnedVendorName(std::string& out) {
+    char buf[32];
+    const DWORD n = GetEnvironmentVariableA(kPinnedVendorVar, buf, DWORD(sizeof(buf)));
+    if (n == 0 || n >= sizeof(buf)) return false;
+    out.clear();
+    for (DWORD i = 0; i < n; ++i)
+        out.push_back(char(std::tolower(static_cast<unsigned char>(buf[i]))));
+    return true;
+}
+
+static bool VendorFromName(const std::string& name, GpuVendor& out) {
+    if (name == "nvidia") {
+        out = GpuVendor::Nvidia;
+        return true;
+    }
+    if (name == "intel") {
+        out = GpuVendor::Intel;
+        return true;
+    }
+    if (name == "amd") {
+        out = GpuVendor::Amd;
+        return true;
+    }
+    return false;
+}
+
+static std::vector<GpuVendor> PreferenceAfterPinning(
+    const std::vector<GpuVendor>& requested, bool& pinned) {
+    std::string name;
+    pinned = PinnedVendorName(name);
+    if (!pinned) return requested;
+
+    GpuVendor only = GpuVendor::Unknown;
+    if (!VendorFromName(name, only)) {
+        LOGE("[GPU] %s=%s names no adapter vendor; it takes nvidia, intel or amd.",
+            kPinnedVendorVar, name.c_str());
+        pinned = false;
+        return requested;
+    }
+
+    LOGW(
+        "[GPU] %s=%s pins this process to a %s adapter, so anything measured here describes "
+        "that adapter and not the one this machine would have chosen.",
+        kPinnedVendorVar, name.c_str(), GpuVendorName(only));
+    return {only};
+}
+
 static bool TryCreateOnAdapter(IDXGIAdapter1* adapter, D3D_DRIVER_TYPE driverType,
     GpuChoice& out) {
     const UINT flags = D3D11_CREATE_DEVICE_BGRA_SUPPORT | D3D11_CREATE_DEVICE_VIDEO_SUPPORT;
@@ -46,7 +97,10 @@ static bool TryCreateOnAdapter(IDXGIAdapter1* adapter, D3D_DRIVER_TYPE driverTyp
     return SUCCEEDED(hr);
 }
 
-bool CreateBestDevice(const std::vector<GpuVendor>& preference, GpuChoice& out) {
+bool CreateBestDevice(const std::vector<GpuVendor>& requested, GpuChoice& out) {
+    bool pinned = false;
+    const std::vector<GpuVendor> preference = PreferenceAfterPinning(requested, pinned);
+
     ComPtr<IDXGIFactory1> factory;
     if (FAILED(CreateDXGIFactory1(IID_PPV_ARGS(&factory)))) {
         LOGE("CreateDXGIFactory1 failed.");
@@ -68,6 +122,14 @@ bool CreateBestDevice(const std::vector<GpuVendor>& preference, GpuChoice& out) 
                 return true;
             }
         }
+    }
+
+    if (pinned) {
+        LOGE(
+            "[GPU] %s pinned a vendor this machine has no working adapter for, so this process "
+            "stops rather than measuring a different adapter under that name.",
+            kPinnedVendorVar);
+        return false;
     }
 
     LOGW("No preferred hardware GPU found; falling back to WARP (software).");

@@ -264,7 +264,7 @@ int main(int argc, char** argv) {
     };
 
     std::unique_ptr<IVideoEncoder> encoder =
-        CreateEncoder(gpu.device.Get(), config, options.backend);
+        CreateEncoder(gpu.device.Get(), config, options.backend, gpu.vendor);
     if (!encoder) {
         if (bitstream != nullptr) std::fclose(bitstream);
         std::fprintf(stderr,

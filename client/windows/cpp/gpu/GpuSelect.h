@@ -7,11 +7,9 @@
 #include <string>
 #include <vector>
 
-enum class GpuVendor { Nvidia,
-    Intel,
-    Amd,
-    Microsoft,
-    Unknown };
+#include "deskhub/media/EncoderBackend.h"
+
+using GpuVendor = deskhub::media::GpuVendor;
 
 const char* GpuVendorName(GpuVendor v);
 

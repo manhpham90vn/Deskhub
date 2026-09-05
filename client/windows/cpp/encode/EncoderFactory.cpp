@@ -3,6 +3,7 @@
 #include "encode/IVideoEncoder.h"
 #include "encode/NvencEncoder.h"
 #include "encode/MfEncoder.h"
+#include "gpu/GpuSelect.h"
 
 #include <cstdio>
 #include <span>
@@ -34,6 +35,12 @@ constexpr Backend kBackends[] = {
     {deskhub::media::kEncoderBackendMediaFoundation, MakeMediaFoundation},
 };
 
+const Backend* FindBackend(std::string_view id) {
+    for (const Backend& backend : kBackends)
+        if (backend.id == id) return &backend;
+    return nullptr;
+}
+
 std::string BuiltInBackends() {
     std::string list;
     for (std::string_view id : BuiltInEncoderBackends()) {
@@ -63,13 +70,12 @@ std::span<const std::string_view> BuiltInEncoderBackends() {
 }
 
 std::unique_ptr<IVideoEncoder> CreateEncoder(ID3D11Device* device, const EncoderConfig& cfg,
-    std::string_view backend) {
+    std::string_view backend, deskhub::media::GpuVendor vendor) {
     if (backend.empty()) backend = deskhub::media::kEncoderBackendAuto;
 
     if (backend != deskhub::media::kEncoderBackendAuto) {
-        for (const Backend& b : kBackends) {
-            if (b.id != backend) continue;
-            auto enc = b.make();
+        if (const Backend* b = FindBackend(backend)) {
+            auto enc = b->make();
             if (enc->Init(device, cfg)) {
                 ReportChoice(*enc, backend);
                 return enc;
@@ -85,14 +91,21 @@ std::unique_ptr<IVideoEncoder> CreateEncoder(ID3D11Device* device, const Encoder
         return nullptr;
     }
 
-    for (const Backend& b : kBackends) {
-        auto enc = b.make();
+    const deskhub::media::EncoderBackendOrder order =
+        deskhub::media::EncoderBackendOrderFor(vendor);
+    LOGI("[Encoder] %s adapter: trying %s first (%s)", GpuVendorName(vendor),
+        std::string(order.backends.front()).c_str(),
+        order.measured ? "measured on this vendor" : "no measurement on this vendor yet");
+
+    for (std::string_view id : order.backends) {
+        const Backend* b = FindBackend(id);
+        if (b == nullptr) continue;
+        auto enc = b->make();
         if (enc->Init(device, cfg)) {
             ReportChoice(*enc, backend);
             return enc;
         }
-        LOGW("[Encoder] %.*s unavailable, trying the next backend...", int(b.id.size()),
-            b.id.data());
+        LOGW("[Encoder] %.*s unavailable, trying the next backend...", int(id.size()), id.data());
     }
     LOGE("[Encoder] Failed to initialize any backend.");
     return nullptr;

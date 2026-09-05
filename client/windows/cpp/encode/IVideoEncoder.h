@@ -71,7 +71,7 @@ inline bool OpenEncoderOutput(const EncoderConfig& cfg, const char* tag, FILE*& 
 }
 
 std::unique_ptr<IVideoEncoder> CreateEncoder(ID3D11Device* device, const EncoderConfig& cfg,
-    std::string_view backend);
+    std::string_view backend, deskhub::media::GpuVendor vendor);
 
 std::span<const std::string_view> BuiltInEncoderBackends();
 

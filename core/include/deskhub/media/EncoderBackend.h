@@ -14,4 +14,17 @@ std::span<const std::string_view> EncoderBackendNames();
 
 bool IsEncoderBackendName(std::string_view name);
 
+enum class GpuVendor { Nvidia,
+    Intel,
+    Amd,
+    Microsoft,
+    Unknown };
+
+struct EncoderBackendOrder {
+    std::span<const std::string_view> backends;
+    bool measured = false;
+};
+
+EncoderBackendOrder EncoderBackendOrderFor(GpuVendor vendor);
+
 }

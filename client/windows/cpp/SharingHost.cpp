@@ -147,7 +147,7 @@ bool SharingHost::Start(const std::vector<ShareSource>& sources, const ShareOpti
             cfg.srcWidth = sw;
             cfg.srcHeight = sh;
             cfg.onPacket = onPacket;
-            p->encoder = CreateEncoder(p->gpu.device.Get(), cfg, encoderBackend);
+            p->encoder = CreateEncoder(p->gpu.device.Get(), cfg, encoderBackend, p->gpu.vendor);
             if (!p->encoder) {
                 LOGE(
                     "[Host][%s] No encoder started, so this source cannot be shared - the "

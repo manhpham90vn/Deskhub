@@ -175,6 +175,7 @@ if(DESKHUB_CORE_TESTS)
 
         tests/media/ContractTests.cpp
         tests/media/RecoveryPolicyTests.cpp
+        tests/media/EncoderBackendTests.cpp
         tests/media/BitWriterTests.cpp
         tests/media/H264SpsTests.cpp
         tests/media/AnnexBTests.cpp
