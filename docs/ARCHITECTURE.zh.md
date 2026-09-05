@@ -244,6 +244,10 @@ A/B（漂移只作为警告，绝不失败）、来自该 pull request 构建的
 
 ## 9. 值得记住的决策
 
+下面几条 FEC 决策背后的 A1 bake-off，面向项目之外的读者写在
+[`docs/posts/fec-under-burst-loss.zh.md`](posts/fec-under-burst-loss.zh.md) 里，它引用的原始 CSV
+就放在旁边的 [`docs/data/bake-off/`](data/bake-off/) 中。
+
 - **一个返回 false 的能力探测可以关掉整条控制回路**：只要 MFT 不暴露
   `CODECAPI_AVEncCommonMeanBitRate`，Media Foundation 编码器就用 `false` 回答 `SetBitrate`，
   而 `ApplyFeedback` 正确地把拒绝当成"什么都没提交"。在一块报告

@@ -13,18 +13,28 @@ void Check(bool ok, const char* what);
 struct SavedIdentity {
     std::string cert{};
     std::string key{};
+    std::string trust{};
 
-    SavedIdentity() {
-        cert = deskhubp::ReadAppDataFile(deskhubp::kHostCertFileName);
-        key = deskhubp::ReadAppDataFile(deskhubp::kHostKeyFileName);
-    }
+    SavedIdentity()
+        : cert(deskhubp::ReadAppDataFile(deskhubp::kHostCertFileName)),
+          key(deskhubp::ReadAppDataFile(deskhubp::kHostKeyFileName)),
+          trust(deskhubp::ReadAppDataFile(deskhubp::kTrustStoreFileName)) {}
 
     SavedIdentity(const SavedIdentity&) = delete;
     SavedIdentity& operator=(const SavedIdentity&) = delete;
 
     ~SavedIdentity() {
-        if (!cert.empty()) deskhubp::WriteAppDataFile(deskhubp::kHostCertFileName, cert);
-        if (!key.empty()) deskhubp::WriteAppDataFile(deskhubp::kHostKeyFileName, key);
+        Restore(deskhubp::kHostCertFileName, cert);
+        Restore(deskhubp::kHostKeyFileName, key);
+        Restore(deskhubp::kTrustStoreFileName, trust);
+    }
+
+private:
+    static void Restore(const char* fileName, const std::string& saved) {
+        if (saved.empty())
+            deskhubp::RemoveAppDataFile(fileName);
+        else
+            deskhubp::WriteAppDataFile(fileName, saved);
     }
 };
 

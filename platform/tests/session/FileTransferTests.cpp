@@ -33,6 +33,10 @@ constexpr uint16_t kFileTestPort = 47836;
 constexpr const char* kFilePasscode = "0417";
 constexpr uint32_t kAuthTimeoutMs = 4000;
 
+std::string FileEndpoint() {
+    return std::string("127.0.0.1:") + std::to_string(kFileTestPort);
+}
+
 std::filesystem::path Scratch(const std::string& leaf) {
     const std::filesystem::path root =
         std::filesystem::temp_directory_path() / "deskhub-file-tests";
@@ -136,7 +140,7 @@ struct ViewerRig {
     }
 
     bool Start(const deskhub::Fingerprint& hostKey) {
-        if (!ParseNetAddr(std::string("127.0.0.1:") + std::to_string(kFileTestPort), host))
+        if (!ParseNetAddr(FileEndpoint(), host))
             return false;
         sock.SetRecvTimeout(1);
         if (!sock.Connect(deskhubp::QuicSettings{}, host, "127.0.0.1")) return false;
@@ -362,7 +366,7 @@ void TestABatchCrossesARealConnection() {
     const std::filesystem::path source = Scratch("send");
     const std::filesystem::path landing = Scratch("land");
 
-    const ForgottenHost fresh(std::string("127.0.0.1:") + std::to_string(kFileTestPort));
+    const ForgottenHost fresh(FileEndpoint());
     const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity("file-test-host");
     HostRig host;
     Check(host.Start(identity, landing), "the host takes files in");
@@ -399,7 +403,7 @@ void TestAHostThatTakesNoFilesRefuses() {
     const std::filesystem::path source = Scratch("send-refused");
     const std::filesystem::path landing = Scratch("land-refused");
 
-    const ForgottenHost fresh(std::string("127.0.0.1:") + std::to_string(kFileTestPort));
+    const ForgottenHost fresh(FileEndpoint());
     const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity("file-test-host");
     HostRig host;
     Check(host.Start(identity, landing), "the host starts");
@@ -429,7 +433,7 @@ void TestAHostThatStopsMidBatchSaysWhy() {
     const std::filesystem::path source = Scratch("send-stopped");
     const std::filesystem::path landing = Scratch("land-stopped");
 
-    const ForgottenHost fresh(std::string("127.0.0.1:") + std::to_string(kFileTestPort));
+    const ForgottenHost fresh(FileEndpoint());
     const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity("file-test-host");
     HostRig host;
     Check(host.Start(identity, landing), "the host takes files in");
@@ -463,7 +467,7 @@ void TestTheSendSurfaceTheClientPageDrives() {
     const std::filesystem::path source = Scratch("ffi-send");
     const std::filesystem::path landing = Scratch("ffi-land");
 
-    const ForgottenHost fresh(std::string("127.0.0.1:") + std::to_string(kFileTestPort));
+    const ForgottenHost fresh(FileEndpoint());
     const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity("file-test-host");
     HostRig host;
     Check(host.Start(identity, landing), "a host takes files in");
@@ -482,7 +486,7 @@ void TestTheSendSurfaceTheClientPageDrives() {
     const char* paths[] = {path.c_str()};
     Check(dh_send_check(paths, 1, problem, int(sizeof(problem))) == 1, "a real file passes");
 
-    const std::string address = std::string("127.0.0.1:") + std::to_string(kFileTestPort);
+    const std::string address = FileEndpoint();
     Check(dh_send_start("nonsense", kFilePasscode, "page", paths, 1) == nullptr,
         "an address that cannot be read starts nothing");
     Check(dh_send_start(address.c_str(), kFilePasscode, "page", nullptr, 0) == nullptr,
@@ -527,6 +531,7 @@ void TestTheSendSurfaceTheClientPageDrives() {
 
 void TestASenderAcceptsAChangedHostKey() {
     std::printf("[files] a changed host key stops the send until it is accepted...\n");
+    const ForgottenHost fresh(FileEndpoint());
     const std::filesystem::path source = Scratch("send-key-change");
     const std::filesystem::path landing = Scratch("land-key-change");
 
@@ -534,7 +539,7 @@ void TestASenderAcceptsAChangedHostKey() {
     HostRig host;
     Check(host.Start(identity, landing), "the host takes files in");
 
-    const std::string endpoint = std::string("127.0.0.1:") + std::to_string(kFileTestPort);
+    const std::string endpoint = FileEndpoint();
     deskhub::Fingerprint stale;
     stale.bytes.fill(0x5A);
     Check(deskhubp::RememberTrustedHost(endpoint, "127.0.0.1", stale, NowUnixSeconds()),
@@ -584,6 +589,7 @@ void TestASenderAcceptsAChangedHostKey() {
 
 void TestTheDesktopSendSurfaceSeesTheChangedKey() {
     std::printf("[files] the desktop send window is told about the key and can retry...\n");
+    const ForgottenHost fresh(FileEndpoint());
     const std::filesystem::path source = Scratch("send-key-view");
     const std::filesystem::path landing = Scratch("land-key-view");
 
@@ -591,7 +597,7 @@ void TestTheDesktopSendSurfaceSeesTheChangedKey() {
     HostRig host;
     Check(host.Start(identity, landing), "the host takes files in");
 
-    const std::string endpoint = std::string("127.0.0.1:") + std::to_string(kFileTestPort);
+    const std::string endpoint = FileEndpoint();
     deskhub::Fingerprint stale;
     stale.bytes.fill(0x3C);
     Check(deskhubp::RememberTrustedHost(endpoint, "127.0.0.1", stale, NowUnixSeconds()),

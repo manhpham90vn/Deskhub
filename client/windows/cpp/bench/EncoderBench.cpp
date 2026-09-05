@@ -37,7 +37,18 @@ struct BenchOptions {
     uint32_t loops = 1;
 };
 
+std::string BackendList(const char* separator, bool withAuto) {
+    std::string list;
+    if (withAuto) list = std::string(deskhub::media::kEncoderBackendAuto);
+    for (std::string_view id : BuiltInEncoderBackends()) {
+        if (!list.empty()) list += separator;
+        list += std::string(id);
+    }
+    return list;
+}
+
 void PrintUsage() {
+    const std::string choices = BackendList("|", true);
     std::fprintf(stderr,
         "deskhub-encbench --clip FILE --width W --height H [options]\n"
         "\n"
@@ -50,12 +61,13 @@ void PrintUsage() {
         "  --encoder NAME     %s (default auto)\n"
         "  --bitstream FILE   where to write the elementary stream\n"
         "  --fields           print the CSV header this tool emits, then exit\n"
+        "  --backends         print the backends this build can start, then exit\n"
         "\n"
         "Frames go in at --fps, the way a live share submits them, so enc_us means the same\n"
         "thing here as it does on a host. Prints one CSV row on stdout. Feed every backend\n"
         "the same clip, the same size, the same fps and the same bitrate, or the rows do not\n"
         "belong in one table.\n",
-        "auto|nvenc|mf");
+        choices.c_str());
 }
 
 bool ParseU32(const char* text, uint32_t& out) {
@@ -191,11 +203,17 @@ uint64_t ProcessCpuUs() {
 }
 
 int main(int argc, char** argv) {
-    for (int at = 1; at < argc; ++at)
-        if (std::string(argv[at]) == "--fields") {
+    for (int at = 1; at < argc; ++at) {
+        const std::string arg(argv[at]);
+        if (arg == "--fields") {
             std::printf("%s\n", kFieldNames);
             return 0;
         }
+        if (arg == "--backends") {
+            std::printf("%s\n", BackendList(" ", false).c_str());
+            return 0;
+        }
+    }
 
     BenchOptions options;
     if (!ParseOptions(argc, argv, options)) {

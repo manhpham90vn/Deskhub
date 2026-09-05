@@ -23,7 +23,7 @@ encoder-bake-off.sh - run every encoder backend on this machine over one fixed c
   --bitrate BPS      target bitrate (default 20000000)
   --seconds N        length of the generated clip (default 1)
   --loops N          how many times each backend replays the clip (default 4)
-  --backends "a b"   backends to try (default: every one this build knows)
+  --backends "a b"   backends to try (default: what the bench answers to --backends)
   --out DIR          where the table, the CSV and the bitstreams go
 
 Every backend gets the same clip, the same size, the same fps and the same bitrate.
@@ -93,7 +93,12 @@ if ! BENCH=$(find_bench); then
 fi
 
 if [ -z "$BACKENDS" ]; then
-    BACKENDS="nvenc mf vaapi videotoolbox"
+    BACKENDS=$("$BENCH" --backends)
+    if [ -z "$BACKENDS" ]; then
+        echo "encoder-bake-off: $BENCH did not answer --backends, so there is nothing to race." >&2
+        echo "encoder-bake-off: name them with --backends \"a b\" if this bench predates the flag." >&2
+        exit 1
+    fi
 fi
 
 mkdir -p "$OUT_DIR"

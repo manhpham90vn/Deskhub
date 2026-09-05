@@ -285,6 +285,10 @@ line.
 
 ## 9. Decisions worth remembering
 
+The A1 bake-off behind several of the FEC decisions below is written up for readers outside
+the project in [`docs/posts/fec-under-burst-loss.md`](posts/fec-under-burst-loss.md), with the
+raw CSVs it quotes checked in beside it under [`docs/data/bake-off/`](data/bake-off/).
+
 - **A capability probe that returns false can switch off a whole control loop**: the
   Media Foundation encoder answered `SetBitrate` with `false` whenever the MFT did not
   expose `CODECAPI_AVEncCommonMeanBitRate`, and `ApplyFeedback` correctly treats a refusal

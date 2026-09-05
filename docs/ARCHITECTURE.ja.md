@@ -272,6 +272,10 @@ CodeQL、履歴全体への gitleaks、そして `core/` の行 90 % / 分岐 80
 
 ## 9. 覚えておく価値のある判断
 
+以下の FEC に関するいくつかの判断の背後にある A1 bake-off は、プロジェクト外の読者向けに
+[`docs/posts/fec-under-burst-loss.ja.md`](posts/fec-under-burst-loss.ja.md) にまとめてある。引用元の
+生の CSV は隣の [`docs/data/bake-off/`](data/bake-off/) に置いてある。
+
 - **false を返す機能問い合わせひとつで、制御ループ全体が切れることがある**：Media Foundation
   のエンコーダは、MFT が `CODECAPI_AVEncCommonMeanBitRate` を出さないときに `SetBitrate` へ
   `false` を返し、`ApplyFeedback` は拒否を「何もコミットされなかった」として正しく扱う。

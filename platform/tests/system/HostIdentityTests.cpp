@@ -10,34 +10,6 @@
 
 namespace {
 
-struct SavedIdentity {
-    std::string cert{};
-    std::string key{};
-    std::string trust{};
-
-    SavedIdentity()
-        : cert(deskhubp::ReadAppDataFile(deskhubp::kHostCertFileName)),
-          key(deskhubp::ReadAppDataFile(deskhubp::kHostKeyFileName)),
-          trust(deskhubp::ReadAppDataFile(deskhubp::kTrustStoreFileName)) {
-        deskhubp::ForgetHostIdentity();
-    }
-
-    ~SavedIdentity() {
-        if (cert.empty())
-            deskhubp::RemoveAppDataFile(deskhubp::kHostCertFileName);
-        else
-            deskhubp::WriteAppDataFile(deskhubp::kHostCertFileName, cert);
-        if (key.empty())
-            deskhubp::RemoveAppDataFile(deskhubp::kHostKeyFileName);
-        else
-            deskhubp::WriteAppDataFile(deskhubp::kHostKeyFileName, key);
-        if (trust.empty())
-            deskhubp::RemoveAppDataFile(deskhubp::kTrustStoreFileName);
-        else
-            deskhubp::WriteAppDataFile(deskhubp::kTrustStoreFileName, trust);
-    }
-};
-
 void TestIdentityIsCreatedOnceAndKept() {
     std::printf("[identity] a host makes one key pair and never changes it...\n");
     if (!deskhubp::QuicAvailable()) {
@@ -45,6 +17,7 @@ void TestIdentityIsCreatedOnceAndKept() {
         return;
     }
     const SavedIdentity guard;
+    deskhubp::ForgetHostIdentity();
 
     Check(!deskhubp::LoadHostIdentity().Valid(), "a machine that never shared has no identity");
 
@@ -96,6 +69,7 @@ void TestUnusableStoredKeyIsReplaced() {
     std::printf("[identity] a stored key this build cannot sign with is thrown away...\n");
     if (!deskhubp::QuicAvailable()) return;
     const SavedIdentity guard;
+    deskhubp::ForgetHostIdentity();
 
     deskhubp::WriteAppDataFile(deskhubp::kHostCertFileName, kEd25519Cert);
     deskhubp::WriteAppDataFile(deskhubp::kHostKeyFileName, "-----BEGIN PRIVATE KEY-----\n");

@@ -36,20 +36,30 @@ Phần còn lại của tài liệu này là **sổ đo**: bảng số, kết lu
 | [#57](https://github.com/manhpham90vn/Deskhub/issues/57) | Quyết kiến trúc hai tầng CC | chờ #56 |
 | [#58](https://github.com/manhpham90vn/Deskhub/issues/58) | Ghi quyết định CC vào ARCHITECTURE ×4 | chờ #57 |
 | [#59](https://github.com/manhpham90vn/Deskhub/issues/59) | netem + camera 240 fps: sim có nói dối không | bộ đo glass-to-glass |
-| ~~[#60](https://github.com/manhpham90vn/Deskhub/issues/60)~~ | Kịch bản đo encoder chung (VMAF) | **xong** — `make encoder-bake-off` |
+| [#60](https://github.com/manhpham90vn/Deskhub/issues/60) | Kịch bản đo encoder chung (VMAF) | dựng xong — còn lần chạy thứ hai trên cùng máy Windows |
 | [#61](https://github.com/manhpham90vn/Deskhub/issues/61) | Bake-off encoder trên 3 backend còn lại | macOS · Android · Linux-GPU |
 | [#62](https://github.com/manhpham90vn/Deskhub/issues/62) | Bảng tra `EncoderFactory` theo vendor | thiếu máy AMD |
 | [#63](https://github.com/manhpham90vn/Deskhub/issues/63) | A4 thi hành trên từng backend | máy NVIDIA + các OS khác |
 | [#64](https://github.com/manhpham90vn/Deskhub/issues/64) | C3 4:4:4 — điền mask hay viết decode | chờ quyết định |
-| ~~[#65](https://github.com/manhpham90vn/Deskhub/issues/65)~~ | Viết bài từ dữ liệu bake-off | **xong** — `docs/posts/fec-under-burst-loss.md` |
-| ~~[#66](https://github.com/manhpham90vn/Deskhub/issues/66)~~ | `platform_tests` fail 8 check ~20% trên Windows | **xong** — link đỗ ở `Deciding`, không phải bắt tay kẹt |
+| ~~[#65](https://github.com/manhpham90vn/Deskhub/issues/65)~~ | Viết bài từ dữ liệu bake-off | **xong** — `docs/posts/fec-under-burst-loss.md` ×4 ngôn ngữ |
+| [#66](https://github.com/manhpham90vn/Deskhub/issues/66) | `platform_tests` fail 8 check ~20% trên Windows | gốc đã rõ + đã vá — còn 20 lần chạy liên tiếp trên Windows |
 | [#67](https://github.com/manhpham90vn/Deskhub/issues/67) | Kiểm chứng `overtakenLimit=8` trên link thật | cần netem |
 
-**Ba việc không chặn đã làm xong (04/09):** [#60](https://github.com/manhpham90vn/Deskhub/issues/60) ·
-[#65](https://github.com/manhpham90vn/Deskhub/issues/65) ·
-[#66](https://github.com/manhpham90vn/Deskhub/issues/66). Nửa `netem` của
+**Đã đóng:** chỉ [#65](https://github.com/manhpham90vn/Deskhub/issues/65).
+[#60](https://github.com/manhpham90vn/Deskhub/issues/60) và
+[#66](https://github.com/manhpham90vn/Deskhub/issues/66) đã dựng và đã vá xong phần viết được ở
+đây, nhưng tiêu chí Done cuối cùng của cả hai chỉ chạy được trên máy Windows: một lần đo encoder
+thứ hai để chứng minh tái lập, và 20 lần `platform_tests` liên tiếp. Nửa `netem` của
 [#59](https://github.com/manhpham90vn/Deskhub/issues/59) và
 [#67](https://github.com/manhpham90vn/Deskhub/issues/67) cũng chạy được ngay trên máy Ubuntu.
+
+Rà lại 05/09 tìm thấy lỗ cùng loại với [#66](https://github.com/manhpham90vn/Deskhub/issues/66)
+vẫn còn mở: chỉ 1 trong 7 bài `HostLinkTests` có `ForgottenHost`, còn bài cắm khoá rác thì khôi
+phục bằng lệnh tay ở cuối hàm, và `TestASenderAcceptsAChangedHostKey` có `return` sớm ngay sau khi
+cắm. Nay mọi bài quay số tới một cổng cố định đều cầm guard RAII, `SavedIdentity` dùng chung giữ
+luôn cả `known_hosts` và xoá lại đúng thứ nó thấy lúc vào, và hai bản `SavedIdentity` chép tay
+trong `HostIdentityTests`/`AuthProofTests` đã bỏ. 10 lần chạy liên tiếp trên macOS xanh — nhưng
+macOS **không** biên dịch nhánh Windows của phần vá, nên nó không thay 20 lần trên Windows được.
 
 ## Trạng thái phần cứng đã dùng để đo
 
@@ -791,7 +801,11 @@ parity, để lần sau không ai đọc tỉ lệ cứu mà quên mất cái gi
   nói dối — nhưng chỉ sau khi **thêm pacing**; không pacing thì p50 là 15 ms vì đó là đo throughput
   chứ không phải đo độ trễ. (2) **VMAF 100,00 nghĩa là cột chất lượng không xếp hạng được gì** ở
   điểm vận hành này: 20 Mbps là quá thừa cho 1080p60, script nay tự cảnh báo khi mọi VMAF ≥ 99,5.
-  Hạ xuống 2 Mbps thì cột này phân biệt được ngay: VMAF **90,71**, 2150 kbps
+  Hạ xuống 2 Mbps thì cột này phân biệt được ngay: VMAF **90,71**, 2150 kbps. Rà lại 05/09 sửa hai
+  chỗ: script bị commit ở mode 100644 nên `make encoder-bake-off` chết bằng `Permission denied`
+  trên macOS/Linux, và danh sách backend mặc định kê cả `vaapi`/`videotoolbox` mà bench không dựng
+  được — nay `EncoderFactory` phơi ra `BuiltInEncoderBackends()`, bench có `--backends`, script
+  lấy mặc định từ chính bench. **Còn nợ:** lần chạy thứ hai trên cùng máy để chứng minh tái lập
 - ⏳ [#61](https://github.com/manhpham90vn/Deskhub/issues/61) — Chạy trên từng backend: NVENC, Media Foundation, VA-API, VideoToolbox, MediaCodec
   — **đã có ba cột: NVENC, MF-qua-NVIDIA (02/09), MF-qua-Quick-Sync (04/09)** — xem hai bảng dưới.
   VA-API · VideoToolbox · MediaCodec vẫn cần máy khác. Nhắc lại: ba cột hiện có **đo trên hai máy
@@ -1323,12 +1337,13 @@ bài đo với Phase 0 — nó thuộc về danh sách "cần link thật", khô
 ### Phase 8 — Công bố
 
 - [x] Đăng CSV thô, script và cách chạy lại — kèm cả những chỗ Deskhub thua
-  — `scripts/bake-off-csv.sh` chạy `core_tests` rồi tách ra ba bảng: `fec-sweep.csv` (179
-  dòng), `audio-delay.csv` (21), `pacer-judder.csv` (24). Mọi dòng sinh từ sim có seed, tất
+  — `scripts/bake-off-csv.sh` chạy `core_tests` rồi tách ra bốn bảng: `fec-sweep.csv` (180
+  dòng), `nack-hybrid.csv` (72), `audio-delay.csv` (21), `pacer-judder.csv` (24). Mọi dòng sinh từ sim có seed, tất
   định, không mạng không GPU — chạy lại cho ra đúng từng byte. Phần "chỗ Deskhub thua" đã có
   thật trong dữ liệu: A3 thích ứng thua target cố định dưới jitter
 - [x] [#65](https://github.com/manhpham90vn/Deskhub/issues/65) — Viết bài từ dữ liệu bake-off: "tôi thử N sơ đồ FEC dưới burst loss, đây là số liệu"
-  — **xong**: `docs/posts/fec-under-burst-loss.md` (tiếng Anh trước, ba bản dịch còn nợ). CSV thô
+  — **xong**: `docs/posts/fec-under-burst-loss.md` kèm đủ ba bản dịch `.vi`/`.zh`/`.ja`, và
+  `docs/ARCHITECTURE*.md` §9 trỏ sang bài bằng đúng ngôn ngữ của nó. CSV thô
   check thẳng vào `docs/data/bake-off/{fec-sweep,nack-hybrid}.csv`, mỗi bảng trong bài kèm một lệnh
   `awk` lọc đúng những dòng đã trích, và mọi cảnh báo phương pháp nằm **cạnh** bảng chứ không ở
   cuối bài. Bài nói thẳng bốn chỗ Deskhub thua: RS ở 1 hàng parity ra số liệu **giống hệt** XOR

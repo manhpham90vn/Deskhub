@@ -1,12 +1,10 @@
+**English** · [Tiếng Việt](fec-under-burst-loss.vi.md) · [中文](fec-under-burst-loss.zh.md) · [日本語](fec-under-burst-loss.ja.md)
+
 # I raced five ways of surviving packet loss. None of them passed.
 
 *Deskhub is a remote-desktop tool. This is the write-up of its A1 bake-off: forward error
 correction under burst loss. The headline is a negative result, so the numbers below are mostly
 the numbers where my own defaults lost.*
-
-**Translations of this post are not written yet.** Every other prose document in this repository
-is published in English, Tiếng Việt, 中文 and 日本語, with English governing. This one is English
-only until the other three land.
 
 ---
 

@@ -7,6 +7,7 @@
 #include <cstdio>
 #include <functional>
 #include <memory>
+#include <span>
 #include <string>
 #include <string_view>
 
@@ -71,6 +72,8 @@ inline bool OpenEncoderOutput(const EncoderConfig& cfg, const char* tag, FILE*& 
 
 std::unique_ptr<IVideoEncoder> CreateEncoder(ID3D11Device* device, const EncoderConfig& cfg,
     std::string_view backend);
+
+std::span<const std::string_view> BuiltInEncoderBackends();
 
 static_assert(deskhub::media::VideoEncoderLike<IVideoEncoder, ID3D11Texture2D*>,
     "IVideoEncoder must match the shared encoder signature");

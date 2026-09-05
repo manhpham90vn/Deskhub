@@ -277,6 +277,10 @@ pull request, và dòng coverage của `core/`.
 
 ## 9. Các quyết định đáng nhớ
 
+Cuộc bake-off A1 đứng sau vài quyết định FEC bên dưới được viết lại cho người đọc ngoài dự án
+trong [`docs/posts/fec-under-burst-loss.vi.md`](posts/fec-under-burst-loss.vi.md), với CSV thô mà
+bài trích dẫn nằm ngay cạnh trong [`docs/data/bake-off/`](data/bake-off/).
+
 - **Một phép dò năng lực trả về false có thể tắt hẳn cả một vòng điều khiển**: encoder
   Media Foundation trả `false` cho `SetBitrate` mỗi khi MFT không có
   `CODECAPI_AVEncCommonMeanBitRate`, và `ApplyFeedback` hoàn toàn đúng khi coi một lần từ

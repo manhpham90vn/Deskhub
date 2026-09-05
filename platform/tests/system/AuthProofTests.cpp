@@ -10,21 +10,6 @@
 
 namespace {
 
-struct SavedIdentity {
-    std::string cert{};
-    std::string key{};
-
-    SavedIdentity() {
-        cert = deskhubp::ReadAppDataFile(deskhubp::kHostCertFileName);
-        key = deskhubp::ReadAppDataFile(deskhubp::kHostKeyFileName);
-    }
-
-    ~SavedIdentity() {
-        if (!cert.empty()) deskhubp::WriteAppDataFile(deskhubp::kHostCertFileName, cert);
-        if (!key.empty()) deskhubp::WriteAppDataFile(deskhubp::kHostKeyFileName, key);
-    }
-};
-
 void TestAKeyProvesTheMachineItBelongsTo() {
     std::printf("[auth] a machine signs with the key its fingerprint is taken over...\n");
     if (!deskhubp::QuicAvailable()) {

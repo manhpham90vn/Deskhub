@@ -5,7 +5,10 @@
 #include "encode/MfEncoder.h"
 
 #include <cstdio>
+#include <span>
 #include <string>
+#include <string_view>
+#include <vector>
 
 #include "deskhubp/diag/Log.h"
 
@@ -33,9 +36,9 @@ constexpr Backend kBackends[] = {
 
 std::string BuiltInBackends() {
     std::string list;
-    for (const Backend& b : kBackends) {
+    for (std::string_view id : BuiltInEncoderBackends()) {
         if (!list.empty()) list += ", ";
-        list += std::string(b.id);
+        list += std::string(id);
     }
     return list;
 }
@@ -48,6 +51,15 @@ void ReportChoice(const IVideoEncoder& encoder, std::string_view requested) {
         caps.longTermReference ? 1 : 0, caps.intraRefresh ? 1 : 0, encoder.BackendName());
 }
 
+}
+
+std::span<const std::string_view> BuiltInEncoderBackends() {
+    static const std::vector<std::string_view> ids = [] {
+        std::vector<std::string_view> names;
+        for (const Backend& backend : kBackends) names.push_back(backend.id);
+        return names;
+    }();
+    return ids;
 }
 
 std::unique_ptr<IVideoEncoder> CreateEncoder(ID3D11Device* device, const EncoderConfig& cfg,
