@@ -53,7 +53,10 @@ bool g_scanning = false;
 bool g_scanFinished = false;
 
 deskhubp::DeviceStatusPoller g_poller;
-std::map<uint32_t, deskhubp::DeviceStatus> g_status;
+std::map<uint32_t, deskhubp::DeviceStatus>& Status() {
+    static std::map<uint32_t, deskhubp::DeviceStatus> statusByIp;
+    return statusByIp;
+}
 bool g_pollerStarted = false;
 
 std::vector<ui::RecentDevice> g_recent;
@@ -114,14 +117,14 @@ std::vector<std::string> PolledAddressesLocked() {
 std::optional<deskhubp::DeviceStatus> StatusForLocked(const std::string& addr) {
     const uint32_t ip = IpOf(addr);
     if (!ip) return std::nullopt;
-    const auto found = g_status.find(ip);
-    if (found == g_status.end()) return std::nullopt;
+    const auto found = Status().find(ip);
+    if (found == Status().end()) return std::nullopt;
     return found->second;
 }
 
 void RememberStatusLocked(const deskhubp::DeviceStatus& status) {
     const uint32_t ip = IpOf(status.addr);
-    if (ip) g_status[ip] = status;
+    if (ip) Status()[ip] = status;
 }
 
 }
@@ -283,7 +286,7 @@ void dh_status_stop(void) {
 void dh_status_refresh_now(void) {
     {
         std::lock_guard<std::mutex> lk(g_mutex);
-        g_status.clear();
+        Status().clear();
     }
     g_poller.RefreshNow();
 }
