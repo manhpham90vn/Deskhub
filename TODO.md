@@ -36,30 +36,32 @@ Phần còn lại của tài liệu này là **sổ đo**: bảng số, kết lu
 | [#57](https://github.com/manhpham90vn/Deskhub/issues/57) | Quyết kiến trúc hai tầng CC | chờ #56 |
 | [#58](https://github.com/manhpham90vn/Deskhub/issues/58) | Ghi quyết định CC vào ARCHITECTURE ×4 | chờ #57 |
 | [#59](https://github.com/manhpham90vn/Deskhub/issues/59) | netem + camera 240 fps: sim có nói dối không | bộ đo glass-to-glass |
-| [#60](https://github.com/manhpham90vn/Deskhub/issues/60) | Kịch bản đo encoder chung (VMAF) | dựng xong — còn lần chạy thứ hai trên cùng máy Windows |
+| ~~[#60](https://github.com/manhpham90vn/Deskhub/issues/60)~~ | Kịch bản đo encoder chung (VMAF) | **xong** — 3 lần chạy, bitstream y hệt từng byte |
 | [#61](https://github.com/manhpham90vn/Deskhub/issues/61) | Bake-off encoder trên 3 backend còn lại | macOS · Android · Linux-GPU |
 | [#62](https://github.com/manhpham90vn/Deskhub/issues/62) | Bảng tra `EncoderFactory` theo vendor | thiếu máy AMD |
 | [#63](https://github.com/manhpham90vn/Deskhub/issues/63) | A4 thi hành trên từng backend | máy NVIDIA + các OS khác |
 | [#64](https://github.com/manhpham90vn/Deskhub/issues/64) | C3 4:4:4 — điền mask hay viết decode | chờ quyết định |
 | ~~[#65](https://github.com/manhpham90vn/Deskhub/issues/65)~~ | Viết bài từ dữ liệu bake-off | **xong** — `docs/posts/fec-under-burst-loss.md` ×4 ngôn ngữ |
-| [#66](https://github.com/manhpham90vn/Deskhub/issues/66) | `platform_tests` fail 8 check ~20% trên Windows | gốc đã rõ + đã vá — còn 20 lần chạy liên tiếp trên Windows |
+| ~~[#66](https://github.com/manhpham90vn/Deskhub/issues/66)~~ | `platform_tests` fail 8 check ~20% trên Windows | **xong** — 20/20 xanh trên Windows sau bản vá rò trạng thái |
 | [#67](https://github.com/manhpham90vn/Deskhub/issues/67) | Kiểm chứng `overtakenLimit=8` trên link thật | cần netem |
 
-**Đã đóng:** chỉ [#65](https://github.com/manhpham90vn/Deskhub/issues/65).
-[#60](https://github.com/manhpham90vn/Deskhub/issues/60) và
-[#66](https://github.com/manhpham90vn/Deskhub/issues/66) đã dựng và đã vá xong phần viết được ở
-đây, nhưng tiêu chí Done cuối cùng của cả hai chỉ chạy được trên máy Windows: một lần đo encoder
-thứ hai để chứng minh tái lập, và 20 lần `platform_tests` liên tiếp. Nửa `netem` của
+**Đã đóng:** [#60](https://github.com/manhpham90vn/Deskhub/issues/60),
+[#65](https://github.com/manhpham90vn/Deskhub/issues/65) và
+[#66](https://github.com/manhpham90vn/Deskhub/issues/66) — tiêu chí Done cuối cùng của #60 và #66
+chỉ chạy được trên máy Windows, và ngày 05/09 đã chạy trên đúng máy đó. Nửa `netem` của
 [#59](https://github.com/manhpham90vn/Deskhub/issues/59) và
-[#67](https://github.com/manhpham90vn/Deskhub/issues/67) cũng chạy được ngay trên máy Ubuntu.
+[#67](https://github.com/manhpham90vn/Deskhub/issues/67) vẫn chạy được ngay trên máy Ubuntu.
 
 Rà lại 05/09 tìm thấy lỗ cùng loại với [#66](https://github.com/manhpham90vn/Deskhub/issues/66)
 vẫn còn mở: chỉ 1 trong 7 bài `HostLinkTests` có `ForgottenHost`, còn bài cắm khoá rác thì khôi
 phục bằng lệnh tay ở cuối hàm, và `TestASenderAcceptsAChangedHostKey` có `return` sớm ngay sau khi
 cắm. Nay mọi bài quay số tới một cổng cố định đều cầm guard RAII, `SavedIdentity` dùng chung giữ
 luôn cả `known_hosts` và xoá lại đúng thứ nó thấy lúc vào, và hai bản `SavedIdentity` chép tay
-trong `HostIdentityTests`/`AuthProofTests` đã bỏ. 10 lần chạy liên tiếp trên macOS xanh — nhưng
-macOS **không** biên dịch nhánh Windows của phần vá, nên nó không thay 20 lần trên Windows được.
+trong `HostIdentityTests`/`AuthProofTests` đã bỏ. **20/20 xanh trên Windows ngày 05/09**, log đầy
+đủ ra file chứ không `| tail`: 0 check hỏng, không một dòng log lồng nào, thời lượng 335-337 s đều
+tăm tắp. Đính chính một tiền đề của issue: cảnh báo "im lặng 5/10/15 s trên loopback" vẫn xuất
+hiện ~78 lần **trong mỗi lần chạy xanh** — nó là tiếng ồn bình thường của link rảnh, không phải
+dấu hiệu của lỗi; thứ phân biệt lần hỏng là link không bao giờ hồi lại.
 
 ## Trạng thái phần cứng đã dùng để đo
 
@@ -68,6 +70,7 @@ macOS **không** biên dịch nhánh Windows của phần vá, nên nó không t
 | Ubuntu | viewer trong mọi bài đo mạng | `--fec` `--nack` `--hold` `--video-path` **chỉ chạy trên viewer Linux** |
 | Windows + NVIDIA RTX 5070 Ti | NVENC, MF-qua-NVIDIA (02/09) | |
 | Windows + Intel UHD 750 | MF-qua-Quick-Sync, USO/URO, C2 (04/09) | **không có driver NVIDIA** |
+| Windows + RTX 5070 Ti + Intel UHD 770 (i9-14900K) | bake-off encoder #60, 20 lần `platform_tests` #66 (05/09) | **máy duy nhất có cả hai backend**, nên là cột so đầu tiên trên một clip |
 | iPhone | host trong bài đo link chật | |
 | máy AMD | — | **chưa có** |
 
@@ -805,11 +808,28 @@ parity, để lần sau không ai đọc tỉ lệ cứu mà quên mất cái gi
   chỗ: script bị commit ở mode 100644 nên `make encoder-bake-off` chết bằng `Permission denied`
   trên macOS/Linux, và danh sách backend mặc định kê cả `vaapi`/`videotoolbox` mà bench không dựng
   được — nay `EncoderFactory` phơi ra `BuiltInEncoderBackends()`, bench có `--backends`, script
-  lấy mặc định từ chính bench. **Còn nợ:** lần chạy thứ hai trên cùng máy để chứng minh tái lập
+  lấy mặc định từ chính bench. **Đóng 05/09** trên i9-14900K + RTX 5070 Ti + Intel UHD 770 — máy
+  đầu tiên chạy được **cả hai** backend trên cùng một clip, nên đây cũng là cột so đầu tiên của
+  #61 không phải ghép từ hai máy. Ba lần chạy ở mỗi điểm vận hành, `docs/data/bake-off/encoder-repeat.csv`:
+  `nvenc` p50 2584-2766 µs / p99 4019-4252 µs, `mf` p50 498-549 µs / p99 1110-1508 µs ở 20 Mbps.
+  **Kết quả tái lập, đọc kỹ:** bitstream ra **y hệt từng byte** cả 3 lần, cả hai backend, cả hai
+  bitrate (sha256 trùng, `bytes_out` trùng), nên `vmaf` và `bytes_out` lặp lại chính xác và `kbps`
+  lệch <0,02% do chia cho `wall_ms`. Nhưng **`enc_us_p99` lệch tới 36% và `cpu_pct` tới 76%** giữa
+  các lần trên máy rảnh — mà p99 chính là hàm mục tiêu của C1, nên **một lần chạy không xếp hạng
+  được đuôi**; script nay tự in cảnh báo đó. Ở 2 Mbps cột chất lượng mới hé phân biệt: `nvenc`
+  VMAF 98,82 (giống hệt cả 3 lần) so với `mf` 100,00 — `mf` **vẫn bão hoà**, tức testsrc2 quá dễ
+  nén và clip tổng hợp chưa đủ khó để chấm chất lượng. Vòng rà này còn sửa lỗi thứ ba cùng họ
+  "một lệnh nhưng lệnh chết": `command -v python3` nhận nhầm stub Microsoft Store của Windows
+  (`command -v` xanh, chạy thì exit 49), làm script chết ngay trước bảng; nay dò `python3`/`python`/`py`
+  và chỉ nhận cái thực sự chạy được
 - ⏳ [#61](https://github.com/manhpham90vn/Deskhub/issues/61) — Chạy trên từng backend: NVENC, Media Foundation, VA-API, VideoToolbox, MediaCodec
   — **đã có ba cột: NVENC, MF-qua-NVIDIA (02/09), MF-qua-Quick-Sync (04/09)** — xem hai bảng dưới.
   VA-API · VideoToolbox · MediaCodec vẫn cần máy khác. Nhắc lại: ba cột hiện có **đo trên hai máy
-  khác nhau và không cùng kịch bản**, nên chưa cột nào so được với cột nào
+  khác nhau và không cùng kịch bản**, nên ba cột đó chưa so được với nhau. **Đã đổi từ 05/09:**
+  bake-off #60 trên máy i9-14900K cho `nvenc` và `mf` chạy cùng một clip, cùng bitrate, cùng fps
+  trên **một** máy — cặp cột đầu tiên của C1 thật sự so được. `nvenc` p50 ~2,7 ms so với `mf`
+  ~0,5 ms, tức `mf` nhanh hơn ~5× ở p50; nhưng ở cùng target 20 Mbps `nvenc` ra 18,8 Mbps (hụt
+  target) còn `mf` ra 20,3 Mbps (vượt), nên hai cột này chưa cùng một điểm vận hành về rate
 - [x] Ghi lại backend nào hỗ trợ LTR — kết quả này quyết định A4 khả thi tới đâu
   — **cả hai backend Windows đều có**, đọc từ driver chứ không suy đoán: NVENC qua
   `nvEncGetEncodeCaps` cho `max_ltr_frames=8 ref_pic_invalidation=1 intra_refresh=1` trên
