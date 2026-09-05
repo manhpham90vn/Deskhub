@@ -64,6 +64,19 @@ if ! ffmpeg -hide_banner -filters 2>/dev/null | grep -q ' libvmaf '; then
     exit 1
 fi
 
+find_python() {
+    local candidate
+    for candidate in python3 python py; do
+        command -v "$candidate" >/dev/null 2>&1 || continue
+        "$candidate" -c "" >/dev/null 2>&1 || continue
+        echo "$candidate"
+        return 0
+    done
+    return 1
+}
+
+PYTHON=$(find_python || true)
+
 find_bench() {
     if [ -n "${DESKHUB_ENCBENCH:-}" ]; then
         echo "$DESKHUB_ENCBENCH"
@@ -183,10 +196,12 @@ vmaf_mean() {
         echo "failed"
         return
     fi
-    if command -v python3 >/dev/null 2>&1; then
-        python3 -c "import json,sys; print('%.2f' % json.load(open(sys.argv[1]))['pooled_metrics']['vmaf']['mean'])" "$log"
+    if [ -n "$PYTHON" ]; then
+        "$PYTHON" -c "import json,sys; print('%.2f' % json.load(open(sys.argv[1]))['pooled_metrics']['vmaf']['mean'])" "$log"
     else
-        grep -o '"mean"[^,]*' "$log" | head -1 | grep -o '[0-9.]*'
+        awk '/"pooled_metrics"/ { pooled = 1 }
+             pooled && /"vmaf": *\{/ { block = 1; next }
+             block && /"mean"/ { gsub(/[^0-9.]/, "", $2); printf "%.2f\n", $2; exit }' "$log"
     fi
 }
 
@@ -276,3 +291,6 @@ echo "gpu_pct is every GPU engine this process touched, so it counts the upload 
 echo "Frames go in paced at ${FPS} fps, so cpu_pct and gpu_pct are shares of real time and"
 echo "another process on the same encode engine lands in enc_us as if it were the encoder."
 echo "The clip is synthetic unless --clip named a real one: testsrc2 is not desktop content."
+echo "Re-running this on one machine reproduces each bitstream byte for byte, so vmaf and"
+echo "bytes_out repeat exactly and kbps to within wall-clock rounding; enc_us_p99 and cpu_pct"
+echo "do not, and have moved by tens of percent between runs. Rank a tail over repeats, not one."
