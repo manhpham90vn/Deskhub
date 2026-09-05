@@ -79,6 +79,18 @@ ExitCode RunConnect(const Command& command) {
         command.deviceName ? *command.deviceName : deskhubp::SessionDeviceName();
     request.control = command.connect.control && caps.acceptsInput;
     request.audio = command.connect.audio.value_or(settings.playAudio) && caps.audio;
+    if (command.fecScheme) request.fecScheme = *command.fecScheme;
+    if (command.nack) {
+        request.nackGiven = true;
+        request.nack = *command.nack;
+    }
+    if (command.holdFrames) request.holdFrames = *command.holdFrames;
+    if (command.audioDelayMs) request.audioDelayMs = *command.audioDelayMs;
+    if (command.audioAdaptive) {
+        request.audioAdaptiveGiven = true;
+        request.audioAdaptive = *command.audioAdaptive;
+    }
+    if (command.videoPath) request.videoPath = *command.videoPath;
     for (size_t index : pick.indices) request.sources.push_back(offered[index]);
 
     if (command.connect.control && !caps.acceptsInput && !command.quiet)

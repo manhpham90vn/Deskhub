@@ -24,11 +24,14 @@ struct ScreenClientConfig {
     uint8_t sourceId = 0;
     uint8_t desiredFps = kDefaultClientFps;
     bool sendNacks = false;
+    uint32_t overtakenLimit = 0;
+    uint32_t stallTimeoutFrames = 0;
     bool wantsAudio = false;
     bool logLossRuns = false;
     const char* statusSeparator = "  ";
     std::string passcode{};
     std::string displayName{};
+    std::string fecScheme{};
 };
 
 struct ScreenClientCallbacks {
@@ -55,7 +58,7 @@ public:
 
     void PollFrames(uint64_t nowUs);
 
-    void RequestKeyframe(const char* reason, uint64_t nowUs);
+    void RequestKeyframe(diag::KeyframeReason reason, uint64_t nowUs);
 
     void PlanNacks(uint64_t nowUs);
 
@@ -100,6 +103,7 @@ private:
     ScreenClientConfig cfg_{};
     ScreenClientSession session_;
     std::unique_ptr<Reassembler> reasm_;
+    int64_t lastAbsoluteE2eUs_ = -1;
     LinkStats linkStats_;
     diag::KeyframeRequestLog kfLog_;
     uint64_t windowBytes_ = 0;

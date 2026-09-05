@@ -2,9 +2,12 @@
 #include "support/TestSupport.h"
 
 #include "deskhub/control/BitrateController.h"
+#include "deskhub/control/CongestionControl.h"
 #include "deskhub/control/LinkStats.h"
 
 #include <cstdio>
+#include <memory>
+#include <string_view>
 
 using namespace deskhub;
 
@@ -136,6 +139,87 @@ void TestBacklogNeverArmsFec() {
     Check(d.changeBitrate && d.bitrateBps == 15'000'000, "but the bitrate still backs off");
 }
 
+void TestEveryControlKeepsTheContract(std::string_view name) {
+    std::printf("[ctrl] contract: '%.*s' answers every input the loop can hand it...\n",
+        int(name.size()), name.data());
+
+    const std::unique_ptr<CongestionControl> c =
+        MakeCongestionControl(name, 20'000'000, 1'000'000);
+    Check(c != nullptr, "every listed control builds");
+    if (!c) return;
+    Check(c->Name() == name, "and answers with the name it was asked for");
+    Check(c->bitrateBps() == 20'000'000, "starting at the budget it was given");
+    Check(c->fecEnabled(), "with FEC armed up front, like the shipping policy");
+
+    uint64_t nowUs = 1'000'000;
+    for (int second = 0; second < 30; ++second, nowUs += 1'000'000) {
+        const BitrateDecision d = c->Update(Fb(uint8_t(second % 7), 20), second % 200, nowUs);
+        Check(d.bitrateBps >= 1'000'000 && d.bitrateBps <= 20'000'000,
+            "no input drives the rate outside the window it was built with");
+        if (d.changeBitrate) c->CommitBitrate(d.bitrateBps);
+    }
+
+    const BitrateDecision floored = c->Update(Fb(90, 4000), 5000, nowUs);
+    Check(floored.bitrateBps >= 1'000'000,
+        "even a link reporting 90% loss cannot push the rate under the floor");
+}
+
+void TestControlContract() {
+    for (std::string_view name : CongestionControlNames()) TestEveryControlKeepsTheContract(name);
+    Check(MakeCongestionControl("no-such-control", 1, 1) == nullptr,
+        "an unknown control name builds nothing");
+    Check(IsCongestionControlName(kDefaultCongestionControl),
+        "the default is one of the registered names");
+}
+
+void TestNoControlReadsStaleFramesAsHeadroom() {
+    std::printf("[ctrl] the Pixel 4 overshoot: a stalled sender must not read as headroom...\n");
+
+    for (std::string_view name : CongestionControlNames()) {
+        const std::unique_ptr<CongestionControl> c =
+            MakeCongestionControl(name, 20'000'000, 1'000'000);
+        if (!c) continue;
+
+        BitrateDecision d = c->Update(Fb(0, 15), 0, 1'000'000);
+        if (d.changeBitrate) c->CommitBitrate(d.bitrateBps);
+        const uint32_t before = c->bitrateBps();
+
+        uint64_t nowUs = 2'000'000;
+        for (int second = 0; second < 8; ++second, nowUs += 1'000'000) {
+            d = c->Update(Fb(0, 15), BitrateController::kSevereBacklogMs, nowUs);
+            if (d.changeBitrate) c->CommitBitrate(d.bitrateBps);
+        }
+
+        Check(c->bitrateBps() < before,
+            "a viewer reporting 0% loss and 15 ms RTT while frames rot in the sender must "
+            "still cost bitrate - the half of the pipeline the host owns is not headroom");
+    }
+}
+
+void TestDelayControlsBackOffBeforeLossAppears() {
+    std::printf("[ctrl] delay-driven controls act on rising RTT, before any loss...\n");
+
+    const std::unique_ptr<CongestionControl> aimd =
+        MakeCongestionControl("aimd", 20'000'000, 1'000'000);
+    const std::unique_ptr<CongestionControl> delay =
+        MakeCongestionControl("delay-trend", 20'000'000, 1'000'000);
+    Check(aimd && delay, "both controls build");
+    if (!aimd || !delay) return;
+
+    uint64_t nowUs = 1'000'000;
+    for (int second = 0; second < 6; ++second, nowUs += 1'000'000) {
+        const uint16_t rttMs = uint16_t(15 + second * 12);
+        BitrateDecision d = aimd->Update(Fb(0, rttMs), 0, nowUs);
+        if (d.changeBitrate) aimd->CommitBitrate(d.bitrateBps);
+        d = delay->Update(Fb(0, rttMs), 0, nowUs);
+        if (d.changeBitrate) delay->CommitBitrate(d.bitrateBps);
+    }
+
+    Check(delay->bitrateBps() < aimd->bitrateBps(),
+        "with RTT climbing and loss still zero, the delay control has already backed off "
+        "while AIMD is still ramping up - that is the whole point of the option");
+}
+
 void TestLinkStatsWindow() {
     std::printf("[ctrl] LinkStats: per-window deltas and rates...\n");
     LinkStats ls(0);
@@ -209,6 +293,9 @@ void RunControlTests() {
     TestFecHysteresis();
     TestBitrateBacklogOnACleanLink();
     TestBacklogNeverArmsFec();
+    TestControlContract();
+    TestNoControlReadsStaleFramesAsHeadroom();
+    TestDelayControlsBackOffBeforeLossAppears();
     TestLinkStatsWindow();
     TestLinkStatsUsesRealElapsed();
     TestFeedbackFromWindow();

@@ -5,12 +5,15 @@
 #include "deskhub/media/RgbDownscale.h"
 #include "deskhub/protocol/ByteOrder.h"
 #include "deskhub/protocol/Wire.h"
+#include "deskhub/transport/FecScheme.h"
 #include "deskhub/transport/Packetizer.h"
 #include "deskhub/transport/Reassembler.h"
 
 #include <cstddef>
 #include <cstdint>
 #include <span>
+#include <string>
+#include <string_view>
 #include <vector>
 
 using namespace deskhub;
@@ -29,9 +32,11 @@ constexpr uint32_t kScaledHeight = 720;
 
 using Datagram = std::vector<uint8_t>;
 
-std::vector<Datagram> PacketizeOnce(std::span<const uint8_t> nal, bool fec) {
+std::vector<Datagram> PacketizeOnce(std::span<const uint8_t> nal, bool fec,
+    std::string_view scheme = kDefaultFecScheme) {
     Packetizer packetizer;
     packetizer.SetFecEnabled(fec);
+    packetizer.SetFecScheme(scheme);
     std::vector<Datagram> packets;
     const Packetizer::SendFn collect = [&packets](std::span<const uint8_t> datagram) {
         packets.emplace_back(datagram.begin(), datagram.end());
@@ -160,6 +165,33 @@ void RunVideoPerf() {
                              recoveredFrameId * kFrameIntervalUs));
                          ++recoveredFrameId;
                      }});
+
+    for (std::string_view scheme : FecSchemeNames()) {
+        const std::string encodeName = "video/fec-encode-" + std::string(scheme);
+        Packetizer schemePacketizer;
+        schemePacketizer.SetSessionId(1);
+        schemePacketizer.SetFecEnabled(true);
+        schemePacketizer.SetFecScheme(scheme);
+        uint32_t schemeFrameId = 0;
+        Measure(Workload{encodeName.c_str(), "frame", 1, nal.size(), 0.0, [&] {
+                             schemePacketizer.SendFrame(nal, schemeFrameId,
+                                 schemeFrameId * kFrameIntervalUs, true, sink);
+                             ++schemeFrameId;
+                         }});
+
+        const std::string recoverName = "video/fec-recover-" + std::string(scheme);
+        std::vector<Datagram> schemePackets = PacketizeOnce(nal, true, scheme);
+        const std::vector<size_t> schemeLossy = OrderMissingOnePacket(schemePackets);
+        const size_t schemeFedPackets = schemePackets.size();
+        Reassembler schemeReassembler(kFrameIntervalUs);
+        schemeReassembler.SetFecScheme(scheme);
+        uint32_t schemeRecoverId = 0;
+        Measure(Workload{recoverName.c_str(), "packet", schemeFedPackets, nal.size(), 1.3, [&] {
+                             Consume(FeedFrame(schemeReassembler, schemePackets, schemeLossy,
+                                 schemeRecoverId, schemeRecoverId * kFrameIntervalUs));
+                             ++schemeRecoverId;
+                         }});
+    }
 
     Reassembler nackReassembler(kFrameIntervalUs);
     std::vector<uint16_t> nackIndices(kMaxNackIndices);

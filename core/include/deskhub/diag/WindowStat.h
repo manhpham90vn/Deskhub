@@ -1,5 +1,6 @@
 #pragma once
 #include <atomic>
+#include <cstddef>
 #include <cstdint>
 
 namespace deskhub::diag {
@@ -30,6 +31,55 @@ private:
     std::atomic<uint32_t> sum_{0};
     std::atomic<uint32_t> max_{0};
     std::atomic<uint32_t> count_{0};
+};
+
+class WindowPercentile {
+public:
+    static constexpr uint32_t kBucketUs = 512;
+    static constexpr size_t kBuckets = 256;
+    static constexpr uint32_t kCeilingUs = kBucketUs * kBuckets;
+
+    struct Snapshot {
+        uint32_t p50Us = 0;
+        uint32_t p99Us = 0;
+        uint32_t maxUs = 0;
+        uint32_t count = 0;
+    };
+
+    void Add(uint32_t us) {
+        const size_t slot = us / kBucketUs < kBuckets - 1 ? us / kBucketUs : kBuckets - 1;
+        bucket_[slot].fetch_add(1, std::memory_order_relaxed);
+        count_.fetch_add(1, std::memory_order_relaxed);
+        uint32_t cur = max_.load(std::memory_order_relaxed);
+        while (us > cur && !max_.compare_exchange_weak(cur, us, std::memory_order_relaxed)) {}
+    }
+
+    Snapshot TakeReset() {
+        Snapshot out;
+        out.maxUs = max_.exchange(0, std::memory_order_relaxed);
+        out.count = count_.exchange(0, std::memory_order_relaxed);
+        if (!out.count) {
+            for (std::atomic<uint32_t>& b : bucket_) b.store(0, std::memory_order_relaxed);
+            return out;
+        }
+        const uint32_t rank50 = (out.count + 1) / 2;
+        const uint32_t rank99 = uint32_t((uint64_t(out.count) * 99 + 99) / 100);
+        uint32_t seen = 0;
+        for (size_t slot = 0; slot < kBuckets; ++slot) {
+            seen += bucket_[slot].exchange(0, std::memory_order_relaxed);
+            const uint32_t edge = uint32_t(slot + 1) * kBucketUs;
+            const uint32_t value =
+                slot + 1 < kBuckets && edge < out.maxUs ? edge : out.maxUs;
+            if (!out.p50Us && seen >= rank50) out.p50Us = value;
+            if (!out.p99Us && seen >= rank99) out.p99Us = value;
+        }
+        return out;
+    }
+
+private:
+    std::atomic<uint32_t> bucket_[kBuckets] = {};
+    std::atomic<uint32_t> count_{0};
+    std::atomic<uint32_t> max_{0};
 };
 
 class WindowCount {

@@ -98,9 +98,26 @@ deskhub::ScreenHostCallbacks MakeScreenHostCallbacks(deskhub::SourcePipelineStat
         LOGI("[Host][%s] Client START — beginning video push.", p->name.c_str());
     };
 
-    cb.onKeyframeRequest = [p] { p->forceIdr.store(true); };
+    cb.onKeyframeRequest = [p](deskhub::KeyframeReason reason) {
+        p->diag.CountKeyframeRequest(reason);
+        p->forceIdr.store(true);
+    };
 
-    cb.onInvalidateRef = [p](uint32_t) { p->forceIdr.store(true); };
+    cb.onInvalidateRef = [p](uint32_t lostFrameId) {
+        const deskhub::media::RecoveryDecision d = p->recovery.OnReferenceLost(lostFrameId);
+        switch (d.action) {
+            case deskhub::media::RecoveryAction::None: break;
+            case deskhub::media::RecoveryAction::InvalidateReference:
+                p->invalidateBeforeFrame.store(d.referenceFrameId + 1);
+                break;
+            case deskhub::media::RecoveryAction::IntraRefresh:
+                p->wantIntraRefresh.store(true);
+                break;
+            case deskhub::media::RecoveryAction::Keyframe: p->forceIdr.store(true); break;
+        }
+        LOGI("[Host][%s] recovery=%s after losing frame %u", p->name.c_str(),
+            deskhub::media::RecoveryActionName(d.action), lostFrameId);
+    };
 
     cb.onNack = [p, shared](uint32_t frameId, std::span<const uint16_t> indices) {
         if (!shared->sendToRequester) return;
@@ -164,7 +181,7 @@ deskhub::ScreenHostCallbacks MakeScreenHostCallbacks(deskhub::SourcePipelineStat
             LOGI("[Host][%s] Quality %u%%@%ufps -> %u%%@%ufps (%ux%u, budget %.1f Mbps)",
                 p->name.c_str(), out.previousStep.scalePct, out.previousStep.fps,
                 out.step.scalePct, out.step.fps, out.size.width, out.size.height,
-                p->rate.bitrateBps() / 1e6);
+                p->rate->bitrateBps() / 1e6);
     };
 
     return cb;
@@ -237,6 +254,10 @@ void RunHostNetLoop(SessionTransport& sock, deskhub::Beacon& beacon,
             if (const char* idrLine = st->diag.FormatIdr(line, sizeof(line), st->name.c_str()))
                 LOGI("%s", idrLine);
 
+            if (const char* kfLine =
+                    st->diag.FormatKeyframeRequests(line, sizeof(line), st->name.c_str()))
+                LOGI("%s", kfLine);
+
             const deskhub::OfferUpdate update =
                 deskhub::RefreshOffer(*st, uint8_t(hooks.fallbackFps));
             if (update.sendReconfig) {
@@ -255,7 +276,9 @@ void RunHostNetLoop(SessionTransport& sock, deskhub::Beacon& beacon,
                 if (st->failed.load()) continue;
                 ReportWindow(*st, hooks.source, hms, now, line, sizeof(line));
             }
-            LOGI("%s", loopDiag.FormatSum(line, sizeof(line), hms.c_str()));
+            const QuicSendStats send = sock.SendStats();
+            LOGI("%s", loopDiag.FormatSum(line, sizeof(line), hms.c_str(), send.datagrams,
+                           send.datagramsRefused));
             if (hooks.publishStatus) hooks.publishStatus();
             lastStatUs = now;
         }

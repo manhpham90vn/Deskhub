@@ -58,7 +58,7 @@ std::string UnixDate(int64_t unixSeconds) {
     if (unixSeconds <= 0) return "-";
     const std::time_t stamp = std::time_t(unixSeconds);
     std::tm broken{};
-#ifdef _WIN32
+#if defined(_WIN32)
     if (localtime_s(&broken, &stamp) != 0) return "-";
 #else
     if (!localtime_r(&stamp, &broken)) return "-";

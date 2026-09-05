@@ -10,7 +10,10 @@ struct BitrateDecision {
     bool changeBitrate = false;
     bool fecEnabled = false;
     bool fecToggled = false;
+    uint8_t fecParityPerGroup = 1;
 };
+
+uint8_t FecParityRowsFor(uint8_t lossPct);
 
 class BitrateController {
 public:

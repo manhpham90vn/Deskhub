@@ -32,12 +32,13 @@ size_t Utf8TruncLen(const std::string& s, size_t limit) {
 
 size_t BuildPingPongImpl(std::span<uint8_t> out, MsgType type, uint32_t sessionId,
     const PingPong& m) {
-    constexpr size_t kPayload = 12;
+    constexpr size_t kPayload = 20;
     const size_t total = WriteCommon(out, type, 0, Chan::Control, sessionId, kPayload);
     if (!total) return 0;
     uint8_t* p = out.data() + kCommonHeaderSize;
     PutU32(p, m.pingId);
     PutU64(p + 4, m.sendTimeUs);
+    PutU64(p + 12, m.hostTimeUs);
     return total;
 }
 
@@ -206,8 +207,17 @@ size_t BuildFeedback(std::span<uint8_t> out, uint32_t sessionId, const Feedback&
     return total;
 }
 
-size_t BuildRequestKeyframe(std::span<uint8_t> out, uint32_t sessionId) {
-    return BuildEmpty(out, MsgType::RequestKeyframe, sessionId);
+size_t BuildRequestKeyframe(std::span<uint8_t> out, uint32_t sessionId, KeyframeReason reason) {
+    const size_t total = WriteCommon(out, MsgType::RequestKeyframe, 0, Chan::Control, sessionId, 1);
+    if (!total) return 0;
+    out[kCommonHeaderSize] = uint8_t(reason);
+    return total;
+}
+
+KeyframeReason ParseRequestKeyframe(std::span<const uint8_t> payload) {
+    if (payload.empty()) return KeyframeReason::Unknown;
+    if (payload[0] >= kKeyframeReasonCount) return KeyframeReason::Unknown;
+    return KeyframeReason(payload[0]);
 }
 
 size_t BuildSetFocus(std::span<uint8_t> out, uint32_t sessionId, bool focused) {
@@ -274,7 +284,9 @@ size_t BuildFecPacket(std::span<uint8_t> out, uint32_t sessionId, const FecHeade
     bool idr, std::span<const uint8_t> parity) {
     if (parity.size() < kFecLenPrefix ||
         parity.size() > kFecLenPrefix + kMaxVideoPayload) return 0;
-    const uint8_t flags = idr ? kVideoFlagIdr : 0;
+    if (fh.parityIndex >= kMaxParityPerGroup) return 0;
+    const uint8_t flags = uint8_t((idr ? kVideoFlagIdr : 0) |
+                                  (fh.parityIndex << kFecParityIndexShift));
     const size_t total = WriteCommon(out, MsgType::FecPacket, flags, Chan::Video, sessionId,
         kFecHeaderSize + parity.size());
     if (!total) return 0;
@@ -283,7 +295,7 @@ size_t BuildFecPacket(std::span<uint8_t> out, uint32_t sessionId, const FecHeade
     PutU64(p + 4, fh.timestampUs);
     PutU16(p + 12, fh.pktCount);
     p[14] = fh.groupIndex;
-    p[15] = 0;
+    p[15] = fh.groups;
     std::memcpy(p + kFecHeaderSize, parity.data(), parity.size());
     return total;
 }
@@ -503,7 +515,9 @@ std::optional<HelloAck> ParseHelloAck(std::span<const uint8_t> payload) {
 std::optional<PingPong> ParsePingPong(std::span<const uint8_t> payload) {
     if (payload.size() < 12) return std::nullopt;
     const uint8_t* p = payload.data();
-    return PingPong{GetU32(p), GetU64(p + 4)};
+    PingPong m{GetU32(p), GetU64(p + 4)};
+    if (payload.size() >= 20) m.hostTimeUs = GetU64(p + 12);
+    return m;
 }
 
 std::optional<Feedback> ParseFeedback(std::span<const uint8_t> payload) {
@@ -587,11 +601,12 @@ std::optional<FecPacketView> ParseFecPacket(const CommonHeader& h,
     v.hdr.timestampUs = GetU64(p + 4);
     v.hdr.pktCount = GetU16(p + 12);
     v.hdr.groupIndex = p[14];
+    v.hdr.groups = p[15];
+    v.hdr.parityIndex = uint8_t(h.flags >> kFecParityIndexShift);
     v.idr = (h.flags & kVideoFlagIdr) != 0;
     v.parity = payload.subspan(kFecHeaderSize);
     if (v.hdr.pktCount == 0) return std::nullopt;
-    const size_t numGroups = (size_t(v.hdr.pktCount) + kFecGroupSize - 1) / kFecGroupSize;
-    if (v.hdr.groupIndex >= numGroups) return std::nullopt;
+    if (v.hdr.groupIndex >= FecGroupCount(v.hdr.pktCount, v.hdr.groups)) return std::nullopt;
     return v;
 }
 

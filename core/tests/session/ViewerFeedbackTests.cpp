@@ -101,7 +101,7 @@ void TestEncoderRefusalLeavesTheBudgetAlone() {
     }
     Check(!r.bitratesOffered.empty(), "sustained loss did ask the encoder to slow down");
     Check(!out.bitrateChanged, "but the refusal is reported as no change");
-    Check(st.rate.bitrateBps() == kStartBps, "the controller keeps its old budget");
+    Check(st.rate->bitrateBps() == kStartBps, "the controller keeps its old budget");
     Check(st.curBitrateBps.load() == kStartBps, "and so does the state the UI reads");
 }
 
@@ -118,7 +118,7 @@ void TestAcceptedBitrateIsCommittedOnce() {
     }
     Check(out.bitrateChanged, "the drop went through");
     Check(out.bitrateBps < out.previousBitrateBps, "and it really was a reduction");
-    Check(st.rate.bitrateBps() == out.bitrateBps, "the controller committed it");
+    Check(st.rate->bitrateBps() == out.bitrateBps, "the controller committed it");
     Check(st.curBitrateBps.load() == out.bitrateBps, "the state carries the same number");
     Check(out.previousBitrateBps == kStartBps, "the outcome reports what it was before");
 }
@@ -132,6 +132,64 @@ void TestFecFollowsLoss() {
     FeedbackOutcome out = ApplyFeedback(st, LossyLink(10), kT0 + 1'000'000, r.Hooks());
     Check(!out.fecToggled, "loss on an already-armed link is not an edge");
     Check(st.wantFec.load(), "and the state agrees");
+}
+
+void TestPinnedFecSurvivesThePolicy() {
+    std::printf("[hostfb] a pinned parity ratio outlives the loss that would have moved it...\n");
+    SourcePipelineState st(kStartBps, kMinBps);
+    Recorder r;
+
+    Check(FecParityRowsFor(8) == 3,
+        "the policy really would raise the ratio at this loss, or the test proves nothing");
+
+    st.wantFecParity.store(1, std::memory_order_relaxed);
+    st.fecParityPin.store(1, std::memory_order_relaxed);
+
+    uint64_t now = kT0;
+    for (int i = 0; i < 5; ++i) {
+        now += 1'000'000;
+        ApplyFeedback(st, LossyLink(8), now, r.Hooks());
+    }
+    Check(st.wantFecParity.load() == 1,
+        "the ratio a measurement pinned stays where it was put - without this, --fec-parity "
+        "silently becomes whatever the link happened to be doing");
+
+    SourcePipelineState loose(kStartBps, kMinBps);
+    now = kT0;
+    for (int i = 0; i < 5; ++i) {
+        now += 1'000'000;
+        ApplyFeedback(loose, LossyLink(8), now, r.Hooks());
+    }
+    Check(loose.wantFecParity.load() == 3,
+        "and with nothing pinned the same feedback does move it, so the pin is what changed");
+}
+
+void TestArmedAlwaysIgnoresTheDisarmEdge() {
+    std::printf("[hostfb] parity held on for a measurement is not disarmed by a clean link...\n");
+    SourcePipelineState st(kStartBps, kMinBps);
+    Recorder r;
+    st.fecArmedAlways.store(true, std::memory_order_relaxed);
+    st.wantFec.store(true, std::memory_order_relaxed);
+
+    uint64_t now = kT0;
+    for (int i = 0; i < 40; ++i) {
+        now += 1'000'000;
+        const FeedbackOutcome out = ApplyFeedback(st, CleanLink(), now, r.Hooks());
+        Check(!out.fecToggled, "a held measurement never reports an arming edge");
+    }
+    Check(st.wantFec.load(),
+        "parity is still on the wire after the clean seconds that would normally drop it - a "
+        "scheme cannot be measured over a window where the policy switched it off");
+
+    SourcePipelineState loose(kStartBps, kMinBps);
+    bool sawDisarm = false;
+    now = kT0;
+    for (int i = 0; i < 40 && !sawDisarm; ++i) {
+        now += 1'000'000;
+        sawDisarm = ApplyFeedback(loose, CleanLink(), now, r.Hooks()).fecToggled;
+    }
+    Check(sawDisarm && !loose.wantFec.load(),
+        "and the same clean link does disarm an unheld source, so the hold is what changed");
 }
 
 void TestQualityStepIsAppliedThroughTheHook() {
@@ -253,6 +311,8 @@ void RunViewerFeedbackTests() {
     TestEncoderRefusalLeavesTheBudgetAlone();
     TestAcceptedBitrateIsCommittedOnce();
     TestFecFollowsLoss();
+    TestPinnedFecSurvivesThePolicy();
+    TestArmedAlwaysIgnoresTheDisarmEdge();
     TestQualityStepIsAppliedThroughTheHook();
     TestNoLadderMeansNoQualityWork();
     TestSenderBacklogWalksTheLadderDownOnACleanLink();

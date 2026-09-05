@@ -15,6 +15,9 @@ add_library(core STATIC
     src/protocol/Wire.cpp
     src/protocol/RecordStream.cpp
 
+    src/transport/FecScheme.cpp
+    src/transport/fec/FecXor.cpp
+    src/transport/fec/FecReedSolomon.cpp
     src/transport/Packetizer.cpp
     src/transport/Reassembler.cpp
     src/transport/AudioJitterBuffer.cpp
@@ -44,6 +47,16 @@ add_library(core STATIC
     src/input/TrackpadCursor.cpp
 
     src/control/BitrateController.cpp
+    src/control/ClockOffsetEstimator.cpp
+    src/control/clock/ClockRollingMin.cpp
+    src/control/clock/ClockTrendline.cpp
+    src/control/clock/ClockKalman.cpp
+    src/control/ClockSync.cpp
+    src/control/CongestionControl.cpp
+    src/control/cc/CcAimd.cpp
+    src/control/cc/CcDelayTrend.cpp
+    src/control/cc/CcScream.cpp
+    src/control/cc/CcHybrid.cpp
     src/control/LinkStats.cpp
     src/control/StreamSize.cpp
     src/control/FrameGate.cpp
@@ -54,6 +67,9 @@ add_library(core STATIC
     src/media/ViewFit.cpp
     src/media/H264Sps.cpp
     src/media/AnnexB.cpp
+    src/media/CodecNegotiation.cpp
+    src/media/EncoderBackend.cpp
+    src/media/RecoveryPolicy.cpp
     src/media/RgbDownscale.cpp
     src/media/RatePlan.cpp
     src/media/H264Encode.cpp
@@ -158,6 +174,8 @@ if(DESKHUB_CORE_TESTS)
         tests/diag/DiagTests.cpp
 
         tests/media/ContractTests.cpp
+        tests/media/RecoveryPolicyTests.cpp
+        tests/media/EncoderBackendTests.cpp
         tests/media/BitWriterTests.cpp
         tests/media/H264SpsTests.cpp
         tests/media/AnnexBTests.cpp
@@ -205,6 +223,9 @@ if(DESKHUB_CORE_TESTS)
     target_link_libraries(core_tests PRIVATE core)
     target_include_directories(core_tests PRIVATE tests)
     deskhub_target_warnings(core_tests)
+    if(MSVC)
+        target_compile_definitions(core_tests PRIVATE _CRT_SECURE_NO_WARNINGS)
+    endif()
 
     include(CTest)
     add_test(NAME core_tests COMMAND core_tests)

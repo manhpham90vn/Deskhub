@@ -4,7 +4,7 @@
 #include <ctime>
 #include <string>
 
-#ifdef _WIN32
+#if defined(_WIN32)
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
@@ -43,7 +43,7 @@ inline void SetAppDataDir(std::string dir) {
 inline std::string LogFileName() {
     const std::time_t now = std::time(nullptr);
     std::tm tm{};
-#ifdef _WIN32
+#if defined(_WIN32)
     localtime_s(&tm, &now);
     const unsigned long pid = static_cast<unsigned long>(GetCurrentProcessId());
 #else
@@ -59,7 +59,7 @@ inline std::string LogFileName() {
 inline std::string LocalTimeHms() {
     const std::time_t now = std::time(nullptr);
     std::tm tm{};
-#ifdef _WIN32
+#if defined(_WIN32)
     localtime_s(&tm, &now);
 #else
     localtime_r(&now, &tm);
@@ -69,7 +69,7 @@ inline std::string LocalTimeHms() {
     return std::string(buf);
 }
 
-#ifdef _WIN32
+#if defined(_WIN32)
 
 inline std::wstring WidenUtf8(const std::string& s) {
     if (s.empty()) return std::wstring();
@@ -117,9 +117,9 @@ inline bool StartProcessLog(std::wstring* outPath = nullptr) {
 
     const std::wstring full = dir + L"\\" + name;
 
-#pragma warning(suppress : 4996)
-    std::FILE* redirected = _wfreopen(full.c_str(), L"w", stdout);
-    if (!redirected) return false;
+    std::FILE* redirected = nullptr;
+    if (_wfreopen_s(&redirected, full.c_str(), L"w", stdout) != 0 || redirected == nullptr)
+        return false;
     std::setvbuf(stdout, buffer, _IOFBF, sizeof(buffer));
 
     _dup2(_fileno(stdout), _fileno(stderr));

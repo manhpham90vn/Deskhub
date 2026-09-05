@@ -11,7 +11,8 @@ AudioPlayer::~AudioPlayer() {
     Stop();
 }
 
-bool AudioPlayer::Start(const deskhub::media::AudioFormat& format, uint32_t targetDelayMs) {
+bool AudioPlayer::Start(const deskhub::media::AudioFormat& format, uint32_t targetDelayMs,
+    bool adaptiveTarget) {
     Stop();
     if (!deskhub::media::IsSupportedAudioFormat(format)) return false;
     if (!decoder_.Open(format)) return false;
@@ -24,12 +25,14 @@ bool AudioPlayer::Start(const deskhub::media::AudioFormat& format, uint32_t targ
     {
         std::lock_guard<std::mutex> lock(bufferMutex_);
         buffer_ = deskhub::AudioJitterBuffer(targetDelayMs);
+        buffer_.SetAdaptiveTarget(adaptiveTarget);
     }
     decodeFailures_.store(0, std::memory_order_relaxed);
     quit_.store(false, std::memory_order_release);
     running_.store(true, std::memory_order_release);
     thread_ = std::thread([this] { Run(); });
-    LOGI("[audio] evt=player_start delay=%ums sink=%s", targetDelayMs, AudioSink::BackendName());
+    LOGI("[audio] evt=player_start delay=%ums target=%s sink=%s", targetDelayMs,
+        adaptiveTarget ? "adaptive" : "fixed", AudioSink::BackendName());
     return true;
 }
 
@@ -44,7 +47,7 @@ void AudioPlayer::Stop() {
 void AudioPlayer::Push(const deskhub::AudioPacketView& packet) {
     if (!running_.load(std::memory_order_acquire)) return;
     std::lock_guard<std::mutex> lock(bufferMutex_);
-    buffer_.Push(packet);
+    buffer_.Push(packet, NowUs());
 }
 
 void AudioPlayer::Run() {

@@ -58,6 +58,8 @@ void SendEncodedFrame(deskhub::SourcePipelineState& st, SessionTransport& sock,
     const uint32_t frameAgeMs = nowUs > timestampUs ? uint32_t((nowUs - timestampUs) / 1000) : 0;
     st.diag.encLatMs.Add(frameAgeMs);
     st.frameAgeMs.Add(frameAgeMs);
+    st.recovery.NoteEncoded(st.nextFrameId, keyframe,
+        st.recovery.ShouldMarkLongTerm(st.nextFrameId));
 
     uint64_t addrs[deskhub::kMaxViewersPerSource];
     const size_t viewers = deskhub::SnapshotViewerAddrs(st, addrs);
@@ -65,6 +67,7 @@ void SendEncodedFrame(deskhub::SourcePipelineState& st, SessionTransport& sock,
 
     st.packetizer.SetSessionId(st.session->sessionId());
     st.packetizer.SetFecEnabled(st.wantFec.load(std::memory_order_relaxed));
+    st.packetizer.SetFecParityPerGroup(st.wantFecParity.load(std::memory_order_relaxed));
     st.pacer.SetRateBps(uint64_t(st.curBitrateBps.load(std::memory_order_relaxed)) *
                         deskhub::kPacingRateMultiple);
 

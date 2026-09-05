@@ -59,6 +59,9 @@ Deskhub - no platform is built by default, name the one you want:
     make icons           regenerate every client icon from assets/icon_1024.png
     make quic-smoke      standalone QUIC client+server against the quiche static library
     make opus-smoke      standalone encode/decode round-trip against the opus static library
+    make encoder-bake-off  every encoder backend on this machine over one fixed clip:
+                         VMAF, enc_us_p50/p99, CPU% and GPU% in one table (needs ffmpeg
+                         with libvmaf; ARGS="--clip FILE" measures a real clip)
     make screenshots     macOS: recapture the store screenshots on the iPhone/iPad
                          simulators, the Android emulators and the macOS app, then
                          refresh docs/imgs (ARGS="ios android macos readme" for a subset)

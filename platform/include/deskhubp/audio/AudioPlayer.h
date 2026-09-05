@@ -28,7 +28,7 @@ public:
     AudioPlayer& operator=(const AudioPlayer&) = delete;
 
     bool Start(const deskhub::media::AudioFormat& format = {},
-        uint32_t targetDelayMs = deskhub::kDefaultAudioDelayMs);
+        uint32_t targetDelayMs = deskhub::kDefaultAudioDelayMs, bool adaptiveTarget = false);
     void Stop();
 
     void Push(const deskhub::AudioPacketView& packet);

@@ -47,6 +47,7 @@ local.properties
 Thumbs.db
 Desktop.ini
 .DS_Store
+Microsoft/Windows/PowerShell/
 
 __pycache__/
 *.pyc

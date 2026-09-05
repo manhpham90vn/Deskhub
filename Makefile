@@ -138,6 +138,11 @@
 #   make opus-smoke     build and run a standalone encode/decode round-trip against the opus
 #                       static library — proves it links, that a 20 ms frame fits one
 #                       datagram, and reports the real bitrate and DTX behaviour
+#   make encoder-bake-off  run every encoder backend on this machine over one fixed clip
+#                       and print VMAF, enc_us_p50/p99, CPU% and GPU% side by side. Needs
+#                       an ffmpeg built with libvmaf and the bench binary from
+#                       `make build-windows`. ARGS="--clip FILE --width W --height H"
+#                       measures a real clip instead of the generated one
 #   make screenshots    macOS only — build the iOS, Android and macOS apps, boot the
 #                       iPhone/iPad simulators and the phone/tablet emulators, open every
 #                       page and recapture the store screenshots straight off the device

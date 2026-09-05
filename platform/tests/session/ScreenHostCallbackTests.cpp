@@ -7,6 +7,7 @@
 #include "deskhubp/host/HostNetLoop.h"
 
 #include <cstdio>
+#include <cstring>
 #include <memory>
 #include <vector>
 
@@ -127,7 +128,7 @@ void TestAMissingHookIsNotACrash() {
     cb.onInput(InputEvent{});
     cb.onFocus(false);
     cb.onStart();
-    cb.onKeyframeRequest();
+    cb.onKeyframeRequest(deskhub::KeyframeReason::Unknown);
     cb.onNack(1, std::span<const uint16_t>{});
     cb.onHello(ClientHello(1280, 720));
     cb.onFeedback(Feedback{});
@@ -193,8 +194,14 @@ void TestStartAndKeyframeRequestsBothOweAnIdr() {
     Check(st->forceIdr.load(), "START owes a keyframe, or the client decodes nothing");
 
     st->forceIdr.store(false);
-    cb.onKeyframeRequest();
+    cb.onKeyframeRequest(deskhub::KeyframeReason::Loss);
     Check(st->forceIdr.load(), "an explicit request owes one too");
+
+    char line[deskhub::diag::SourceDiag::kKeyframeReqBufBytes];
+    const char* summary = st->diag.FormatKeyframeRequests(line, sizeof(line), "Display 1");
+    Check(summary != nullptr && std::strstr(summary, "loss=1") != nullptr,
+        "and the host records why it was asked, because a keyframe the viewer's decode queue "
+        "wanted and one a lost packet forced score differently against any FEC scheme");
 }
 
 void TestInputIsHandedToTheInjector() {
@@ -277,7 +284,7 @@ void TestFeedbackDrivesTheEncoder() {
     fb.recvBitrateKbps = 3'000;
     cb.onFeedback(fb);
 
-    Check(st->rate.bitrateBps() < kStartBps,
+    Check(st->rate->bitrateBps() < kStartBps,
         "a lossy link pulls the bitrate down instead of insisting on the original");
     Check(rec.bitrateCalls >= 1, "and the encoder is told about it");
     Check(st->wantFec.load(), "20% loss keeps FEC on");
@@ -296,7 +303,7 @@ void TestAHealthyLinkIsLeftAlone() {
     fb.recvBitrateKbps = 19'000;
     cb.onFeedback(fb);
 
-    Check(st->rate.bitrateBps() == kStartBps, "no loss, no reason to change the bitrate");
+    Check(st->rate->bitrateBps() == kStartBps, "no loss, no reason to change the bitrate");
     Check(st->wantFec.load(), "and one clean second is not yet proof FEC can be dropped");
     Check(st->uiRttMs.load() == 5, "the UI still learns the measured round trip");
     Check(st->haveFeedback.load(), "and knows the numbers are real, not placeholders");

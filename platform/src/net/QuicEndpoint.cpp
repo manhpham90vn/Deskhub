@@ -9,6 +9,7 @@
 #include <quiche.h>
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <cstddef>
 #include <cstring>
@@ -24,7 +25,7 @@
 #include "deskhubp/system/HostIdentity.h"
 #include "deskhubp/system/Random.h"
 
-#ifdef _WIN32
+#if defined(_WIN32)
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #else
@@ -71,6 +72,15 @@ sockaddr_in ToSockAddr(const NetAddr& addr) {
     return out;
 }
 
+quiche_cc_algorithm QuicheAlgorithmOf(QuicCongestionControl choice) {
+    switch (choice) {
+        case QuicCongestionControl::Reno: return QUICHE_CC_RENO;
+        case QuicCongestionControl::Cubic: return QUICHE_CC_CUBIC;
+        case QuicCongestionControl::Bbr2: return QUICHE_CC_BBR2_GCONGESTION;
+    }
+    return QUICHE_CC_CUBIC;
+}
+
 quiche_config* MakeConfig(const QuicSettings& settings, bool server) {
     quiche_config* cfg = quiche_config_new(QUICHE_PROTOCOL_VERSION);
     if (cfg == nullptr) return nullptr;
@@ -99,6 +109,7 @@ quiche_config* MakeConfig(const QuicSettings& settings, bool server) {
     quiche_config_set_initial_max_stream_data_uni(cfg, kInitialMaxStreamData);
     quiche_config_set_initial_max_streams_bidi(cfg, kMaxStreams);
     quiche_config_set_initial_max_streams_uni(cfg, kMaxStreams);
+    quiche_config_set_cc_algorithm(cfg, QuicheAlgorithmOf(settings.congestionControl));
     quiche_config_enable_dgram(cfg, true, kDatagramQueue, kDatagramQueue);
     return cfg;
 }
@@ -141,6 +152,7 @@ struct QuicEndpoint::Impl {
         std::atomic<uint64_t> maxBurst{0};
         std::atomic<uint64_t> capped{0};
         std::atomic<uint64_t> datagrams{0};
+        std::atomic<uint64_t> datagramsRefused{0};
         std::atomic<uint64_t> streamBytes{0};
 
         static void Bump(std::atomic<uint64_t>& counter, uint64_t by) {
@@ -201,6 +213,7 @@ struct QuicEndpoint::Impl {
         bool server, QuicCallbacks callbacks) {
         Shutdown();
         settings_ = settings;
+        datagramChunk_.assign(settings_.maxUdpPayload, 0);
         cb_ = std::move(callbacks);
         server_ = server;
         config_ = MakeConfig(settings_, server);
@@ -214,6 +227,7 @@ struct QuicEndpoint::Impl {
             return false;
         }
         socket_.SetRecvTimeout(1);
+        SizeReadBuffers(socket_.EnableReceiveCoalescing());
         localPort_ = socket_.LocalPort();
         localIp_ = bindIp;
         open_ = true;
@@ -317,7 +331,9 @@ struct QuicEndpoint::Impl {
     }
 
     void Flush(Connection& entry) {
-        uint8_t out[kQuicMaxUdpPayload];
+        static_assert(kMaxFlushBurst <= kMaxSendBatch);
+        uint8_t out[kMaxFlushBurst][kQuicMaxUdpPayload];
+        OutboundDatagram batch[kMaxFlushBurst];
         size_t burst = 0;
         for (;;) {
             if (burst >= kMaxFlushBurst) {
@@ -326,16 +342,19 @@ struct QuicEndpoint::Impl {
                 break;
             }
             quiche_send_info info{};
-            const ssize_t written = quiche_conn_send(entry.conn, out, sizeof(out), &info);
+            const ssize_t written =
+                quiche_conn_send(entry.conn, out[burst], kQuicMaxUdpPayload, &info);
             if (written == QUICHE_ERR_DONE) break;
             if (written < 0) {
                 LOGW("quic: send failed (%zd)", written);
                 break;
             }
-            if (!socket_.SendTo(entry.peer, out, size_t(written))) ReportSendFail(entry.peer);
+            batch[burst] = OutboundDatagram{out[burst], size_t(written)};
             ++burst;
         }
         if (burst == 0) return;
+        if (socket_.SendBatch(entry.peer, std::span<const OutboundDatagram>(batch, burst)) < burst)
+            ReportSendFail(entry.peer);
         Counters::Bump(stats_.bursts, 1);
         Counters::Bump(stats_.packets, burst);
         Counters::Raise(stats_.maxBurst, burst);
@@ -466,8 +485,9 @@ struct QuicEndpoint::Impl {
         std::vector<uint64_t> ready;
         while (quiche_stream_iter_next(it, &streamId)) ready.push_back(streamId);
         quiche_stream_iter_free(it);
+        if (ready.empty()) return;
 
-        std::vector<uint8_t> chunk(kStreamChunk);
+        std::vector<uint8_t>& chunk = streamChunk_;
         size_t budget = kStreamReadBudgetPerService;
         const StreamListShape listed = ShapeOf(ready);
         const auto listStillIntact = [&](const char* checkpoint, uint64_t stream, ssize_t got) {
@@ -506,7 +526,7 @@ struct QuicEndpoint::Impl {
     }
 
     void DrainDatagrams(QuicConnId id, Connection& entry) {
-        std::vector<uint8_t> chunk(settings_.maxUdpPayload);
+        std::vector<uint8_t>& chunk = datagramChunk_;
         for (;;) {
             const ssize_t got = quiche_conn_dgram_recv(entry.conn, chunk.data(), chunk.size());
             if (got < 0) return;
@@ -554,14 +574,19 @@ struct QuicEndpoint::Impl {
     }
 
     void Service() {
-        std::vector<QuicConnId> dead;
         moreToSend_.store(false, std::memory_order_relaxed);
         moreToRead_.store(false, std::memory_order_relaxed);
         const uint64_t nowUs = NowUs();
-        std::vector<QuicConnId> live;
-        live.reserve(connections_.size());
-        for (const auto& connection : connections_) live.push_back(connection.first);
-        for (const QuicConnId id : live) {
+        std::array<QuicConnId, kMaxConnections> live{};
+        std::array<QuicConnId, kMaxConnections> dead{};
+        size_t liveCount = 0;
+        size_t deadCount = 0;
+        for (const auto& connection : connections_) {
+            if (liveCount == live.size()) break;
+            live[liveCount++] = connection.first;
+        }
+        for (size_t at = 0; at < liveCount; ++at) {
+            const QuicConnId id = live[at];
             Connection* found = Lookup(id);
             if (found == nullptr) continue;
             Connection& entry = *found;
@@ -579,9 +604,11 @@ struct QuicEndpoint::Impl {
             }
             DrainOutboxes(entry);
             Flush(entry);
-            if (quiche_conn_is_closed(entry.conn)) dead.push_back(id);
+            if (quiche_conn_is_closed(entry.conn) && deadCount < dead.size())
+                dead[deadCount++] = id;
         }
-        for (QuicConnId id : dead) {
+        for (size_t gone = 0; gone < deadCount; ++gone) {
+            const QuicConnId id = dead[gone];
             const auto at = connections_.find(id);
             if (at == connections_.end()) continue;
             const NetAddr peer = at->second.peer;
@@ -615,16 +642,31 @@ struct QuicEndpoint::Impl {
         return socket_.WaitReadable(Backlogged() ? 0 : waitMs);
     }
 
+    void SizeReadBuffers(bool coalescing) {
+        readStride_ = coalescing ? kMaxCoalescedBytes : kQuicMaxUdpPayload;
+        const size_t slots = coalescing ? kCoalescedReadBurst : kReadBurst;
+        readBuf_.assign(slots * readStride_, 0);
+        readSlots_.assign(slots, InboundDatagram{});
+    }
+
     void Poll(uint32_t waitMs) {
         if (!open_) return;
         ReportPollGap();
-        socket_.SetRecvTimeout(Backlogged() || waitMs == 0 ? 1 : waitMs);
-        uint8_t buf[kQuicMaxUdpPayload];
-        for (int i = 0; i < kPacketsPerPoll; ++i) {
-            NetAddr from{};
-            const int got = socket_.RecvFrom(buf, sizeof(buf), from);
+        socket_.SetRecvTimeout(Backlogged() ? 0 : waitMs);
+        const size_t burst = readSlots_.size();
+        for (int round = 0; round < kReadRoundsPerPoll; ++round) {
+            for (size_t i = 0; i < burst; ++i)
+                readSlots_[i] = InboundDatagram{readBuf_.data() + i * readStride_, readStride_, 0,
+                    0, NetAddr{}};
+            const int got = socket_.RecvBatch(std::span<InboundDatagram>(readSlots_));
             if (got <= 0) break;
-            Receive(from, std::span<const uint8_t>(buf, size_t(got)));
+            for (int i = 0; i < got; ++i) {
+                const InboundDatagram& slot = readSlots_[size_t(i)];
+                const size_t count = DatagramsIn(slot);
+                for (size_t part = 0; part < count; ++part)
+                    Receive(slot.from, DatagramAt(slot, part));
+            }
+            if (size_t(got) < burst) break;
         }
         for (auto& [id, entry] : connections_) {
             if (quiche_conn_timeout_as_millis(entry.conn) == 0) quiche_conn_on_timeout(entry.conn);
@@ -633,7 +675,10 @@ struct QuicEndpoint::Impl {
     }
 
     static constexpr size_t kMaxConnections = 32;
-    static constexpr int kPacketsPerPoll = 256;
+    static constexpr size_t kReadBurst = kMaxRecvBatch;
+    static constexpr size_t kCoalescedReadBurst = 4;
+    static constexpr int kReadRoundsPerPoll = 16;
+    static_assert(kReadBurst <= kMaxRecvBatch && kCoalescedReadBurst <= kMaxRecvBatch);
 
     UdpSocket socket_{};
     quiche_config* config_ = nullptr;
@@ -651,6 +696,11 @@ struct QuicEndpoint::Impl {
     uint64_t lastSendFailLogUs_ = 0;
     uint64_t lastStrangerLogUs_ = 0;
     uint64_t lastPollUs_ = 0;
+    size_t readStride_ = kQuicMaxUdpPayload;
+    std::vector<uint8_t> readBuf_{};
+    std::vector<InboundDatagram> readSlots_{};
+    std::vector<uint8_t> streamChunk_ = std::vector<uint8_t>(kStreamChunk);
+    std::vector<uint8_t> datagramChunk_ = std::vector<uint8_t>(kQuicMaxUdpPayload);
     std::atomic<bool> moreToSend_{false};
     std::atomic<bool> moreToRead_{false};
     Counters stats_{};
@@ -697,7 +747,10 @@ bool QuicEndpoint::SendDatagram(QuicConnId conn, std::span<const uint8_t> bytes)
     Impl::Connection* entry = impl_->Lookup(conn);
     if (entry == nullptr || !quiche_conn_is_established(entry->conn)) return false;
     const ssize_t sent = quiche_conn_dgram_send(entry->conn, bytes.data(), bytes.size());
-    if (sent > 0) Impl::Counters::Bump(impl_->stats_.datagrams, 1);
+    if (sent > 0)
+        Impl::Counters::Bump(impl_->stats_.datagrams, 1);
+    else
+        Impl::Counters::Bump(impl_->stats_.datagramsRefused, 1);
     impl_->Flush(*entry);
     return sent > 0;
 }
@@ -722,6 +775,7 @@ QuicSendStats QuicEndpoint::SendStats() const {
     out.maxBurst = c.maxBurst.load(std::memory_order_relaxed);
     out.capped = c.capped.load(std::memory_order_relaxed);
     out.datagrams = c.datagrams.load(std::memory_order_relaxed);
+    out.datagramsRefused = c.datagramsRefused.load(std::memory_order_relaxed);
     out.streamBytes = c.streamBytes.load(std::memory_order_relaxed);
     return out;
 }

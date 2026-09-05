@@ -42,6 +42,43 @@ void TestWindowStat() {
     Check(e.max == 50, "WindowStat: a smaller sample cannot lower max");
 }
 
+void TestWindowPercentile() {
+    std::printf("[diag] WindowPercentile: the tail C1 scores encoders on, in microseconds...\n");
+    WindowPercentile p;
+    WindowPercentile::Snapshot s = p.TakeReset();
+    Check(s.count == 0 && s.p50Us == 0 && s.p99Us == 0 && s.maxUs == 0,
+        "WindowPercentile: an empty window yields all zeros");
+
+    p.Add(4000);
+    s = p.TakeReset();
+    Check(s.count == 1 && s.p50Us == 4000 && s.p99Us == 4000 && s.maxUs == 4000,
+        "WindowPercentile: one sample is its own p50, p99 and max, to the microsecond");
+
+    for (uint32_t i = 0; i < 99; ++i) p.Add(2000);
+    p.Add(90000);
+    s = p.TakeReset();
+    Check(s.count == 100 && s.maxUs == 90000, "WindowPercentile: counts and keeps the peak");
+    Check(s.p50Us <= 2048 && s.p50Us >= 2000,
+        "WindowPercentile: p50 lands in the bucket the bulk sits in, not on the outlier");
+    Check(s.p99Us <= 2048,
+        "WindowPercentile: one sample in a hundred does not move p99 - it takes the 100th");
+
+    for (uint32_t i = 0; i < 98; ++i) p.Add(2000);
+    p.Add(90000);
+    p.Add(90000);
+    s = p.TakeReset();
+    Check(s.p99Us == 90000, "WindowPercentile: two in a hundred do move it, and p99 is the tail");
+
+    s = p.TakeReset();
+    Check(s.count == 0 && s.maxUs == 0 && s.p99Us == 0,
+        "WindowPercentile: TakeReset empties the histogram, so no window inherits the last tail");
+
+    p.Add(WindowPercentile::kCeilingUs * 4);
+    s = p.TakeReset();
+    Check(s.maxUs == WindowPercentile::kCeilingUs * 4 && s.p99Us == s.maxUs,
+        "WindowPercentile: a sample past the last bucket is reported at its real size");
+}
+
 void TestCountMaxMin() {
     std::printf("[diag] WindowCount / WindowMax / RunningMin...\n");
     WindowCount c;
@@ -110,6 +147,8 @@ void TestClientSum() {
         Check(Has(buf, "loop_busy_ms_max=31"), "client evt=sum: Net loop health");
         Check(Has(buf, "min_rtt_ms=1.5"), "client evt=sum: RTT floor in ms");
         Check(Has(buf, "e2e_ms=17.0"), "client evt=sum: e2e in ms");
+        Check(Has(buf, "fec_rx="), "client evt=sum: parity seen on the wire is reported");
+        Check(Has(buf, "fec_fix="), "client evt=sum: and what that parity actually repaired");
 
         d.FormatSum(buf, sizeof(buf), "01:02:04", w, 0, -1);
         Check(Has(buf, "asm_ms=0.0/0") && Has(buf, "dq_drop=0") && Has(buf, "loop_busy_ms_max=0"),
@@ -160,6 +199,8 @@ void TestSourceDiag() {
         SourceDiag s;
         s.encMs.Add(2);
         s.encMs.Add(4);
+        s.encUs.Add(2500);
+        s.encUs.Add(4100);
         s.encLatMs.Add(30);
         s.idr.Add();
         s.sendFail.Add(2);
@@ -167,6 +208,8 @@ void TestSourceDiag() {
         s.FormatSum(buf, sizeof(buf), "01:02:03", "Screen 1", 5, true);
         Check(Has(buf, "[DIAG][Screen 1] evt=sum t=01:02:03"), "source evt=sum: prefix + timestamp");
         Check(Has(buf, "enc_ms_avg=3.0 enc_ms_max=4"), "source evt=sum: enc_ms");
+        Check(Has(buf, "enc_us_p50=2560 enc_us_p99=4100"),
+            "source evt=sum: the microsecond tail, which is what a backend bake-off is scored on");
         Check(Has(buf, "enc_lat_ms=30.0/30"), "source evt=sum: the real encoder latency");
         Check(!Has(buf, "cap_idle"), "source evt=sum: Windows has NO cap_idle");
         Check(!Has(buf, "zerocopy"), "source evt=sum: Windows has NO zerocopy");
@@ -190,6 +233,57 @@ void TestSourceDiag() {
     }
 }
 
+void TestCaptureLatency() {
+    std::printf(
+        "[diag] capture latency: the age of a frame at hand-off, and the frames handed over "
+        "twice...\n");
+    char buf[SourceDiag::kSumBufBytes];
+
+    SourceDiag off;
+    off.NoteCapture(1'000, 5'000);
+    off.FormatSum(buf, sizeof(buf), "01:02:03", "Screen 1", 0, false);
+    Check(!Has(buf, "cap_us_p50"),
+        "cap_us: a client that has not wired the capture clock prints no column");
+
+    SourceDiag win(ShareDiagCaps{false, false, false, true});
+    win.FormatSum(buf, sizeof(buf), "01:02:03", "Screen 1", 0, false);
+    Check(Has(buf, "cap_us_p50=0 cap_us_p99=0 cap_repeat=0"),
+        "cap_us: the column is there before the first frame, reading zero");
+
+    win.NoteCapture(1'000'000, 1'002'000);
+    win.NoteCapture(1'016'000, 1'020'000);
+    win.FormatSum(buf, sizeof(buf), "01:02:04", "Screen 1", 0, false);
+    Check(Has(buf, "cap_us_p50=2048 cap_us_p99=4000"),
+        "cap_us: capture -> hand-off age, not encode time");
+    Check(Has(buf, "cap_repeat=0"), "cap_us: two distinct frames repeat nothing");
+
+    win.NoteCapture(2'000'000, 2'001'000);
+    win.NoteCapture(2'000'000, 2'009'000);
+    win.NoteCapture(2'000'000, 2'017'000);
+    win.FormatSum(buf, sizeof(buf), "01:02:05", "Screen 1", 0, false);
+    Check(Has(buf, "cap_repeat=2"),
+        "cap_us: a frame handed over again is counted, never re-timed");
+    Check(Has(buf, "cap_us_p50=1000 cap_us_p99=1000"),
+        "cap_us: the repeats stay out of the latency sample, which would read 9 ms and 17 ms");
+
+    win.FormatSum(buf, sizeof(buf), "01:02:06", "Screen 1", 0, false);
+    Check(Has(buf, "cap_us_p50=0 cap_us_p99=0 cap_repeat=0"),
+        "cap_us: read-and-clear, like every other window on the line");
+
+    SourceDiag odd(ShareDiagCaps{false, false, false, true});
+    odd.NoteCapture(0, 9'000);
+    odd.NoteCapture(9'000, 8'000);
+    odd.FormatSum(buf, sizeof(buf), "01:02:07", "Screen 1", 0, false);
+    Check(Has(buf, "cap_us_p50=0 cap_us_p99=0 cap_repeat=0"),
+        "cap_us: a missing timestamp and a frame from the future are both dropped, not clamped");
+
+    SourceDiag huge(ShareDiagCaps{false, false, false, true});
+    huge.NoteCapture(1, 0x1'0000'0000ull);
+    huge.FormatSum(buf, sizeof(buf), "01:02:08", "Screen 1", 0, false);
+    Check(Has(buf, "cap_us_p99=4294967295"),
+        "cap_us: an age past 32 bits saturates instead of wrapping");
+}
+
 void TestSourceIdr() {
     std::printf("[diag] host evt=idr: latched on the Encode thread, printed on the Recv loop...\n");
     SourceDiag s;
@@ -207,6 +301,32 @@ void TestSourceIdr() {
     s.LatchIdr(222, 2, 3);
     line = s.FormatIdr(buf, sizeof(buf), "Screen 1");
     Check(line && Has(line, "bytes=222"), "evt=idr: a new IDR overwrites the old one");
+}
+
+void TestHostKeyframeRequestSplit() {
+    std::printf("[diag] host evt=kf_req_sum: A1 cannot score IDRs it cannot attribute...\n");
+    SourceDiag s;
+    char buf[SourceDiag::kKeyframeReqBufBytes];
+
+    Check(s.FormatKeyframeRequests(buf, sizeof(buf), "Screen 1") == nullptr,
+        "evt=kf_req_sum: a window nobody asked in prints no line");
+
+    s.CountKeyframeRequest(KeyframeReason::Loss);
+    s.CountKeyframeRequest(KeyframeReason::QOverflow);
+    s.CountKeyframeRequest(KeyframeReason::QOverflow);
+    s.CountKeyframeRequest(KeyframeReason::ViewerJoin);
+
+    const char* line = s.FormatKeyframeRequests(buf, sizeof(buf), "Screen 1");
+    Check(line && Has(line, "evt=kf_req_sum total=4"), "evt=kf_req_sum: the window total is there");
+    Check(line && Has(line, "loss=1") && Has(line, "q_overflow=2") && Has(line, "viewer_join=1"),
+        "and every reason that fired is broken out - a keyframe the viewer's own decode queue "
+        "asked for is not evidence about any FEC scheme, so a total that cannot be split is "
+        "the wrong objective function to score A1 on");
+    Check(line && !Has(line, "wait_idr="),
+        "a reason nobody used stays off the line rather than printing a zero");
+
+    Check(s.FormatKeyframeRequests(buf, sizeof(buf), "Screen 1") == nullptr,
+        "evt=kf_req_sum: read-and-clear, so windows do not accumulate into each other");
 }
 
 void TestAgentStatus() {
@@ -243,11 +363,15 @@ void TestSharingHostSum() {
     ShareDiag a;
     char buf[ShareDiag::kSumBufBytes];
     a.loopBusyMs.Add(180);
-    a.FormatSum(buf, sizeof(buf), "01:02:03");
+    a.FormatSum(buf, sizeof(buf), "01:02:03", 900, 12);
     Check(Has(buf, "[DIAG][host] evt=sum t=01:02:03 loop_busy_ms_max=180"),
         "host evt=sum: Recv loop health");
-    a.FormatSum(buf, sizeof(buf), "01:02:04");
+    Check(Has(buf, "dgram_tx=900 dgram_refused=12"),
+        "host evt=sum: the first window reports the whole counter");
+    a.FormatSum(buf, sizeof(buf), "01:02:04", 1500, 12);
     Check(Has(buf, "loop_busy_ms_max=0"), "host evt=sum: read-and-clear");
+    Check(Has(buf, "dgram_tx=600 dgram_refused=0"),
+        "host evt=sum: later windows report the delta, not the running total");
 }
 
 void TestClientCompact() {
@@ -330,10 +454,10 @@ void TestKeyframeRequestLog() {
     Check(log.Arrived(buf, sizeof(buf), 5'000'000, 100) == nullptr,
         "kf log: an IDR nobody asked for logs nothing");
 
-    const char* line = log.Request(buf, sizeof(buf), 5'000'000, "dec_fail");
+    const char* line = log.Request(buf, sizeof(buf), 5'000'000, KeyframeReason::DecFail);
     Check(line && Has(line, "evt=kf_req reason=dec_fail"), "kf log: the first request is a line");
     Check(log.pending(), "kf log: and marks a request pending");
-    Check(log.Request(buf, sizeof(buf), 5'100'000, "loss") == nullptr,
+    Check(log.Request(buf, sizeof(buf), 5'100'000, KeyframeReason::Loss) == nullptr,
         "kf log: repeats while pending stay quiet");
 
     line = log.Arrived(buf, sizeof(buf), 5'250'000, 4096);
@@ -341,10 +465,20 @@ void TestKeyframeRequestLog() {
         "kf log: the arrival names the wait");
     Check(!log.pending(), "kf log: the arrival clears the pending mark");
 
-    log.Request(buf, sizeof(buf), 0, "at_zero");
+    log.Request(buf, sizeof(buf), 0, KeyframeReason::WaitIdr);
     Check(log.pending(), "kf log: a request at t=0 is still remembered");
     line = log.Arrived(buf, sizeof(buf), 0, 10);
     Check(line && Has(line, "after_ms=0"), "kf log: a same-instant arrival waited 0 ms");
+
+    char counts[KeyframeRequestLog::kCountsBufBytes];
+    const char* summary = log.FormatCounts(counts, sizeof(counts));
+    Check(summary && Has(summary, "evt=kf_sum"), "kf log: the window summary is its own line");
+    Check(Has(summary, "dec_fail=1") && Has(summary, "wait_idr=1"),
+        "kf log: every reason that fired is counted separately");
+    Check(Has(summary, "loss=0"),
+        "kf log: a repeat swallowed while a request was pending is not counted twice");
+    Check(log.FormatCounts(counts, sizeof(counts)) == nullptr,
+        "kf log: the summary reads and clears, so a quiet window prints nothing");
 }
 
 void TestStateNameAndSourceRate() {
@@ -417,11 +551,14 @@ void TestTruncation() {
 
 void RunDiagTests() {
     TestWindowStat();
+    TestWindowPercentile();
     TestCountMaxMin();
     TestClientSum();
     TestClientStatus();
     TestSourceDiag();
+    TestCaptureLatency();
     TestSourceIdr();
+    TestHostKeyframeRequestSplit();
     TestAgentStatus();
     TestSharingHostSum();
     TestClientCompact();

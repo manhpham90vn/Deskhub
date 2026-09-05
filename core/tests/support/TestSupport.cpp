@@ -1,6 +1,10 @@
 #include "support/TestSupport.h"
 
+#include "deskhub/transport/FecScheme.h"
+
+#include <algorithm>
 #include <cstdio>
+#include <cstdlib>
 
 using namespace deskhub;
 
@@ -101,4 +105,45 @@ size_t NthDataPacket(const std::vector<Datagram>& pkts, size_t n) {
 
 bool SameFrame(const Reassembler::Frame& got, const TestFrame& want) {
     return got.frameId == want.id && got.idr == want.idr && got.nal == want.nal;
+}
+
+namespace {
+
+constexpr const char* kFecMatrixEnv = "DESKHUB_FEC_MATRIX";
+constexpr std::string_view kFullMatrix = "full";
+constexpr std::string_view kShippingMatrix = "shipping";
+
+std::vector<std::string_view> ResolveFecMatrix() {
+    const char* requested = std::getenv(kFecMatrixEnv);
+    const std::string_view want = (requested != nullptr && requested[0] != '\0')
+                                      ? std::string_view(requested)
+                                      : kFullMatrix;
+
+    if (want != kFullMatrix && want != kShippingMatrix) {
+        Check(false,
+            "DESKHUB_FEC_MATRIX takes 'full' or 'shipping' - any other value would silently "
+            "decide which FEC implementations this run exercises");
+        return {};
+    }
+
+    const std::span<const std::string_view> registered = FecSchemeNames();
+    if (want == kFullMatrix) return {registered.begin(), registered.end()};
+
+    std::printf(
+        "[fec] matrix reduced to the shipping scheme '%.*s' - the reference implementations "
+        "are exercised on the runs that touch their own sources\n",
+        int(kDefaultFecScheme.size()), kDefaultFecScheme.data());
+    return {kDefaultFecScheme};
+}
+
+}
+
+std::span<const std::string_view> FecSchemesUnderTest() {
+    static const std::vector<std::string_view> matrix = ResolveFecMatrix();
+    return matrix;
+}
+
+bool SchemeIsUnderTest(std::string_view name) {
+    const std::span<const std::string_view> matrix = FecSchemesUnderTest();
+    return std::find(matrix.begin(), matrix.end(), name) != matrix.end();
 }

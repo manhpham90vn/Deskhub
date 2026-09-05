@@ -2,6 +2,25 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+find_python() {
+    local candidate
+    for candidate in python3 python py; do
+        command -v "$candidate" >/dev/null 2>&1 || continue
+        "$candidate" -c "" >/dev/null 2>&1 || continue
+        echo "$candidate"
+        return 0
+    done
+    return 1
+}
+
+if ! PYTHON=$(find_python); then
+    echo "check-coverage.sh: no working python on PATH. It parses the llvm-cov report to" >&2
+    echo "check-coverage.sh: compare it against the thresholds. On Windows 'python3' is" >&2
+    echo "check-coverage.sh: usually the Microsoft Store alias, which exits 49 without" >&2
+    echo "check-coverage.sh: running anything, so expose a real python as python3, python or py." >&2
+    exit 1
+fi
+
 MIN_LINES=${1:-90}
 MIN_BRANCHES=${2:-80}
 
@@ -20,7 +39,7 @@ command -v "$LLVM_COV" >/dev/null 2>&1 || {
 }
 
 "$LLVM_COV" export "$BIN" -instr-profile="$PROFDATA" -summary-only core/src core/include |
-    MIN_LINES="$MIN_LINES" MIN_BRANCHES="$MIN_BRANCHES" python3 -c '
+    MIN_LINES="$MIN_LINES" MIN_BRANCHES="$MIN_BRANCHES" "$PYTHON" -c '
 import json, os, sys
 
 totals = json.load(sys.stdin)["data"][0]["totals"]

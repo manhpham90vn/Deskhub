@@ -3,7 +3,9 @@
 
 #include "deskhub/transport/AudioJitterBuffer.h"
 
+#include <algorithm>
 #include <cstdio>
+#include <utility>
 #include <vector>
 
 using namespace deskhub;
@@ -160,6 +162,159 @@ void TestEmptyPayloadIgnored() {
         "an empty audio packet is not a frame");
 }
 
+void PushAt(AudioJitterBuffer& buf, uint32_t seq, uint64_t arrivedUs) {
+    const std::vector<uint8_t> payload(8, uint8_t(seq));
+    AudioPacketView v;
+    v.hdr.seq = seq;
+    v.hdr.timestampUs = uint64_t(seq) * kAudioFrameUs;
+    v.payload = payload;
+    buf.Push(v, arrivedUs);
+}
+
+uint64_t FeedLink(AudioJitterBuffer& buf, uint32_t frames, uint64_t jitterUs, uint32_t seed) {
+    std::vector<std::pair<uint64_t, uint32_t>> arrivals;
+    arrivals.reserve(frames);
+    uint32_t state = seed;
+    for (uint32_t seq = 0; seq < frames; ++seq) {
+        state = state * 1664525u + 1013904223u;
+        const uint64_t wobble = jitterUs ? (state >> 16) % (jitterUs * 2) : 0;
+        arrivals.emplace_back(1'000'000 + uint64_t(seq) * kAudioFrameUs + wobble, seq);
+    }
+    std::sort(arrivals.begin(), arrivals.end());
+
+    size_t next = 0;
+    uint64_t nowUs = 1'000'000;
+    for (uint32_t step = 0; step < frames + 20; ++step, nowUs += kAudioFrameUs) {
+        while (next < arrivals.size() && arrivals[next].first <= nowUs) {
+            PushAt(buf, arrivals[next].second, arrivals[next].first);
+            ++next;
+        }
+        buf.Pop();
+    }
+    return nowUs;
+}
+
+void TestFixedDelayIgnoresTheLinkItIsOn() {
+    std::printf("[audio] a fixed target delay costs the same on any link...\n");
+
+    AudioJitterBuffer quiet(kDefaultAudioDelayMs);
+    AudioJitterBuffer rough(kDefaultAudioDelayMs);
+    FeedLink(quiet, 400, 0, 1);
+    FeedLink(rough, 400, 30'000, 2);
+
+    Check(quiet.targetDelayMs() == rough.targetDelayMs(),
+        "without adaptation the buffer holds the same delay whether the link wobbles or not");
+    Check(rough.jitterMs() > quiet.jitterMs(),
+        "even though it has measured that one of them wobbles far more");
+}
+
+void TestAdaptiveTargetFollowsMeasuredJitter() {
+    std::printf("[audio] an adaptive target buys delay only where the link needs it...\n");
+
+    AudioJitterBuffer quiet(kDefaultAudioDelayMs);
+    AudioJitterBuffer rough(kDefaultAudioDelayMs);
+    quiet.SetAdaptiveTarget(true);
+    rough.SetAdaptiveTarget(true);
+    Check(quiet.adaptiveTarget(), "the switch is readable");
+
+    FeedLink(quiet, 400, 0, 1);
+    FeedLink(rough, 400, 30'000, 2);
+
+    if (quiet.targetDelayMs() >= rough.targetDelayMs())
+        std::printf("[audio]   quiet held %u ms, rough held %u ms\n", quiet.targetDelayMs(),
+            rough.targetDelayMs());
+    Check(quiet.targetDelayMs() < rough.targetDelayMs(),
+        "a steady link is given back the delay a wobbly one has to keep");
+    Check(quiet.targetDelayMs() < kDefaultAudioDelayMs,
+        "and a link with no jitter at all holds less than the fixed default");
+
+    const AudioJitterBuffer::Stats& roughStats = rough.stats();
+    Check(roughStats.underruns + roughStats.framesConcealed <= 400 / 4,
+        "while the wobbly link still plays out without falling apart - the trade is delay "
+        "against gaps, so both halves have to be reported together");
+}
+
+struct AudioPoint {
+    uint32_t targetMs = 0;
+    uint32_t heldMs = 0;
+    uint64_t gaps = 0;
+    double gapsPerMinute = 0.0;
+};
+
+AudioPoint RunAudioPoint(uint32_t targetMs, bool adaptive, uint64_t jitterUs, uint32_t frames) {
+    AudioJitterBuffer buf(targetMs);
+    buf.SetAdaptiveTarget(adaptive);
+    FeedLink(buf, frames, jitterUs, 11);
+
+    const AudioJitterBuffer::Stats& s = buf.stats();
+    AudioPoint point;
+    point.targetMs = targetMs;
+    point.heldMs = buf.targetDelayMs();
+    point.gaps = s.underruns + s.framesConcealed;
+    const double minutes = double(frames) * double(kAudioFrameMs) / 60'000.0;
+    point.gapsPerMinute = minutes > 0.0 ? double(point.gaps) / minutes : 0.0;
+    return point;
+}
+
+void TestDelayAgainstGapsIsACurve() {
+    std::printf("[audio] the delay/gap trade is a curve, so the sweep prints one...\n");
+    std::printf("[csv] target_ms,adaptive,jitter_ms,held_ms,gaps,gaps_per_min\n");
+
+    constexpr uint32_t kFrames = 1500;
+    const uint32_t targets[] = {20, 40, 60, 80, 120, 200};
+    const uint64_t jitters[] = {0, 15'000, 40'000};
+
+    uint64_t worstQuiet = 0;
+    uint64_t worstRough = 0;
+    for (uint64_t jitterUs : jitters) {
+        uint64_t previousGaps = ~uint64_t(0);
+        for (uint32_t targetMs : targets) {
+            const AudioPoint p = RunAudioPoint(targetMs, false, jitterUs, kFrames);
+            std::printf("[csv] %u,0,%llu,%u,%llu,%.1f\n", p.targetMs,
+                (unsigned long long)(jitterUs / 1000), p.heldMs,
+                (unsigned long long)p.gaps, p.gapsPerMinute);
+            Check(p.gaps <= previousGaps || previousGaps == ~uint64_t(0),
+                "buying more delay never costs more gaps - if it did, the curve would not be "
+                "a trade at all");
+            previousGaps = p.gaps;
+            if (targetMs == kDefaultAudioDelayMs) {
+                if (jitterUs == 0) worstQuiet = p.gaps;
+                if (jitterUs == 40'000) worstRough = p.gaps;
+            }
+        }
+
+        const AudioPoint adaptive = RunAudioPoint(kDefaultAudioDelayMs, true, jitterUs, kFrames);
+        std::printf("[csv] %u,1,%llu,%u,%llu,%.1f\n", adaptive.targetMs,
+            (unsigned long long)(jitterUs / 1000), adaptive.heldMs,
+            (unsigned long long)adaptive.gaps, adaptive.gapsPerMinute);
+    }
+
+    Check(worstRough >= worstQuiet,
+        "at the shipping 60 ms target a wobbly link costs at least as many gaps as a steady "
+        "one, which is what makes the fixed target the wrong answer on both");
+
+    const AudioPoint fixedOnQuiet = RunAudioPoint(kDefaultAudioDelayMs, false, 0, kFrames);
+    const AudioPoint adaptiveOnQuiet = RunAudioPoint(kDefaultAudioDelayMs, true, 0, kFrames);
+    Check(adaptiveOnQuiet.heldMs < fixedOnQuiet.heldMs &&
+              adaptiveOnQuiet.gaps <= fixedOnQuiet.gaps,
+        "on a steady link the adaptive target sits strictly below the fixed one on the curve: "
+        "less delay for no more gaps, which is the only kind of win worth taking");
+
+    const AudioPoint fixedUnderJitter = RunAudioPoint(kDefaultAudioDelayMs, false, 40'000,
+        kFrames);
+    const AudioPoint adaptiveUnderJitter = RunAudioPoint(kDefaultAudioDelayMs, true, 40'000,
+        kFrames);
+    std::printf(
+        "[audio]   at 40 ms jitter: fixed held %u ms for %llu gaps, adaptive held "
+        "%u ms for %llu gaps\n",
+        fixedUnderJitter.heldMs, (unsigned long long)fixedUnderJitter.gaps,
+        adaptiveUnderJitter.heldMs, (unsigned long long)adaptiveUnderJitter.gaps);
+    Check(adaptiveUnderJitter.heldMs <= fixedUnderJitter.heldMs,
+        "under jitter the adaptive target still does not ask for more delay than the fixed "
+        "one - the measured cost of adaptation shows up as gaps, not as latency, and the "
+        "curve above is what says whether that trade is worth taking");
+}
+
 }
 
 void RunAudioJitterBufferTests() {
@@ -172,4 +327,7 @@ void RunAudioJitterBufferTests() {
     TestResyncOnSequenceJump();
     TestDelayIsClamped();
     TestEmptyPayloadIgnored();
+    TestFixedDelayIgnoresTheLinkItIsOn();
+    TestAdaptiveTargetFollowsMeasuredJitter();
+    TestDelayAgainstGapsIsACurve();
 }

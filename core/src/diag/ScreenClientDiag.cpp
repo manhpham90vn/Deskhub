@@ -8,7 +8,7 @@
 namespace deskhub::diag {
 
 const char* ScreenClientDiag::FormatSum(char* buf, size_t cap, const char* hms, const LinkWindow& w,
-    uint32_t gapMsMax, int64_t e2eUs) {
+    uint32_t gapMsMax, int64_t e2eUs, int64_t absoluteE2eUs) {
     const WindowStat::Snapshot a = asmMs.TakeReset();
     const WindowStat::Snapshot d = decMs.TakeReset();
     const WindowStat::Snapshot pr = presentMs.TakeReset();
@@ -28,11 +28,16 @@ const char* ScreenClientDiag::FormatSum(char* buf, size_t cap, const char* hms, 
     Append(p, end, " dq_drop=%u", dq);
     if (caps_.dispDrop) Append(p, end, " disp_drop=%u", disp);
 
+    Append(p, end, " fec_rx=%" PRIu64 " fec_fix=%" PRIu64, w.fecReceived, w.packetsRecovered);
+    Append(p, end, " wire_loss=%.3f%% absent=%" PRIu64 " gone=%" PRIu64 " nack_fix=%" PRIu64 " reorder=%" PRIu64,
+        w.wireLossPct, w.packetsEverAbsent, w.packetsNeverArrived, w.packetsRepairedAfterNack,
+        w.packetsReordered);
     Append(p, end, " late=%" PRIu64 " late_ms_avg=%.0f late_ms_max=%" PRIu64, w.latePackets,
         w.lateMsAvg, w.lateMsMax);
     Append(p, end, " gap_ms_max=%u loop_busy_ms_max=%u", gapMsMax, busy);
     Append(p, end, " min_rtt_ms=%.1f e2e_ms=%.1f", minRttUs.value() / 1000.0,
         e2eUs >= 0 ? e2eUs / 1000.0 : 0.0);
+    if (absoluteE2eUs >= 0) Append(p, end, " e2e_abs_ms=%.1f", absoluteE2eUs / 1000.0);
     return buf;
 }
 
@@ -77,11 +82,42 @@ const char* ScreenClientDiag::FormatFrameDrop(char* buf, size_t cap,
     return buf;
 }
 
+const char* KeyframeReasonName(KeyframeReason reason) {
+    switch (reason) {
+        case KeyframeReason::Loss: return "loss";
+        case KeyframeReason::WaitIdr: return "wait_idr";
+        case KeyframeReason::QOverflow: return "q_overflow";
+        case KeyframeReason::DecFail: return "dec_fail";
+        case KeyframeReason::DisplayCongested: return "display_congested";
+        case KeyframeReason::ViewerJoin: return "viewer_join";
+        case KeyframeReason::Unknown: return "unknown";
+    }
+    return "?";
+}
+
 const char* KeyframeRequestLog::Request(char* buf, size_t cap, uint64_t nowUs,
-    const char* reason) {
+    KeyframeReason reason) {
     if (reqUs_) return nullptr;
     reqUs_ = nowUs ? nowUs : 1;
-    std::snprintf(buf, cap, "[DIAG] evt=kf_req reason=%s", reason);
+    ++counts_[size_t(reason)];
+    std::snprintf(buf, cap, "[DIAG] evt=kf_req reason=%s", KeyframeReasonName(reason));
+    return buf;
+}
+
+const char* KeyframeRequestLog::FormatCounts(char* buf, size_t cap) {
+    if (!cap) return nullptr;
+    uint32_t total = 0;
+    for (uint32_t n : counts_) total += n;
+    if (!total) return nullptr;
+
+    char* p = buf;
+    char* const end = buf + cap;
+    *p = '\0';
+    Append(p, end, "[DIAG] evt=kf_sum");
+    for (size_t i = 0; i < kKeyframeReasonCount; ++i) {
+        Append(p, end, " %s=%u", KeyframeReasonName(KeyframeReason(i)), counts_[i]);
+        counts_[i] = 0;
+    }
     return buf;
 }
 

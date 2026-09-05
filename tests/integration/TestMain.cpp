@@ -15,7 +15,7 @@ namespace {
 
 constexpr const char* kTestHome = "/tmp/deskhub-integration-tests";
 
-void KeepTestLogsOutOfTheDeveloperHome() {
+void KeepTestStateOutOfTheDeveloperHome() {
     if (mkdir(kTestHome, 0700) == 0 || errno == EEXIST) setenv("HOME", kTestHome, 1);
 }
 
@@ -33,10 +33,31 @@ void ReportCrashesWithAStack() {}
 #include <cstdint>
 #include <cstdlib>
 #include <exception>
+#include <filesystem>
+#include <system_error>
+
+#include "deskhubp/diag/LogFile.h"
 
 namespace {
 
-void KeepTestLogsOutOfTheDeveloperHome() {}
+bool PointAppDataAt(const char* leaf) {
+    std::error_code ec;
+    const std::filesystem::path dir = std::filesystem::temp_directory_path(ec) / leaf;
+    if (ec) return false;
+    std::filesystem::create_directories(dir, ec);
+    if (ec) return false;
+    deskhubp::SetAppDataDir(dir.string());
+    return true;
+}
+
+void KeepTestStateOutOfTheDeveloperHome() {
+    if (PointAppDataAt("deskhub-integration-tests")) return;
+    std::printf(
+        "=== no private app data directory, so this run shares %%USERPROFILE%%\\.deskhub with "
+        "every other Deskhub on this machine: the host key and the trusted-host list are one "
+        "file each, and a running app or a second test binary can change what a session test "
+        "expects halfway through ===\n");
+}
 
 #if defined(_M_X64)
 
@@ -157,7 +178,7 @@ void ReportCrashesWithAStack() {}
 int main(int argc, char** argv) {
     std::setvbuf(stdout, nullptr, _IONBF, 0);
     ReportCrashesWithAStack();
-    KeepTestLogsOutOfTheDeveloperHome();
+    KeepTestStateOutOfTheDeveloperHome();
 
     const bool onlyUnderLoad = argc > 1 && std::string_view(argv[1]) == "--under-load";
 

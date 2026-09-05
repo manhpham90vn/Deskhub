@@ -1,5 +1,7 @@
 #include "deskhubp/net/SessionTransport.h"
 
+#include "deskhub/media/ShareTypes.h"
+
 #include <algorithm>
 #include <utility>
 
@@ -143,6 +145,17 @@ void SessionTransport::Close() {
 bool SessionTransport::SetRecvTimeout(uint32_t ms) {
     recvWaitMs_ = ms;
     return true;
+}
+
+VideoPath VideoPathFromName(std::string_view name, VideoPath fallback) {
+    if (name == deskhub::media::kVideoPathRawUdp) return VideoPath::RawUdp;
+    if (name == deskhub::media::kVideoPathQuicDatagram) return VideoPath::QuicDatagram;
+    return fallback;
+}
+
+std::string_view VideoPathName(VideoPath path) {
+    return path == VideoPath::RawUdp ? deskhub::media::kVideoPathRawUdp
+                                     : deskhub::media::kVideoPathQuicDatagram;
 }
 
 void SessionTransport::SetVideoPath(VideoPath path) {

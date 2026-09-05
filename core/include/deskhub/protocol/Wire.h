@@ -22,6 +22,15 @@ inline constexpr uint16_t kFecGroupSize = 8;
 
 inline constexpr size_t kMaxFecGroups = 256;
 
+inline constexpr size_t kMaxSignalledFecGroups = 255;
+
+inline constexpr size_t FecGroupCount(uint16_t pktCount, uint8_t signalled) {
+    if (pktCount == 0) return 0;
+    const size_t derived = (size_t(pktCount) + kFecGroupSize - 1) / kFecGroupSize;
+    const size_t want = signalled ? size_t(signalled) : derived;
+    return want < size_t(pktCount) ? want : size_t(pktCount);
+}
+
 inline constexpr size_t kFecLenPrefix = 2;
 inline constexpr size_t kMaxVideoPayload =
     kMaxDatagram - kCommonHeaderSize - kFecHeaderSize - kFecLenPrefix;
@@ -96,8 +105,18 @@ enum class MsgType : uint8_t {
 inline constexpr uint8_t kVideoFlagIdr = 1u << 0;
 inline constexpr uint8_t kVideoFlagFrameEnd = 1u << 1;
 
+inline constexpr uint8_t kFecParityIndexShift = 2;
+inline constexpr size_t kMaxParityPerGroup = 64;
+
 inline constexpr uint16_t kCodecMaskH264 = 1u << 0;
+inline constexpr uint16_t kCodecMaskH264High444 = 1u << 1;
+inline constexpr uint16_t kCodecMaskHevc = 1u << 2;
+inline constexpr uint16_t kCodecMaskAv1 = 1u << 3;
+
 enum class Codec : uint8_t { H264 = 0,
+    H264High444 = 1,
+    Hevc = 2,
+    Av1 = 3,
     Rejected = 0xFF };
 
 struct CommonHeader {
@@ -187,6 +206,18 @@ enum class RejectReason : uint8_t {
     WrongPasscode = 3,
 };
 
+enum class KeyframeReason : uint8_t {
+    Loss = 0,
+    WaitIdr = 1,
+    QOverflow = 2,
+    DecFail = 3,
+    DisplayCongested = 4,
+    ViewerJoin = 5,
+    Unknown = 6,
+};
+
+inline constexpr size_t kKeyframeReasonCount = 7;
+
 struct HelloAck {
     uint32_t sessionId;
     Codec codec;
@@ -246,6 +277,7 @@ struct AuthResult {
 struct PingPong {
     uint32_t pingId;
     uint64_t sendTimeUs;
+    uint64_t hostTimeUs = 0;
 };
 
 struct Feedback {
@@ -309,6 +341,8 @@ struct FecHeader {
     uint64_t timestampUs;
     uint16_t pktCount;
     uint8_t groupIndex;
+    uint8_t groups = 0;
+    uint8_t parityIndex = 0;
 };
 
 struct FecPacketView {
@@ -348,7 +382,7 @@ size_t BuildBye(std::span<uint8_t> out, uint32_t sessionId);
 size_t BuildPing(std::span<uint8_t> out, uint32_t sessionId, const PingPong& m);
 size_t BuildPong(std::span<uint8_t> out, uint32_t sessionId, const PingPong& m);
 size_t BuildFeedback(std::span<uint8_t> out, uint32_t sessionId, const Feedback& m);
-size_t BuildRequestKeyframe(std::span<uint8_t> out, uint32_t sessionId);
+size_t BuildRequestKeyframe(std::span<uint8_t> out, uint32_t sessionId, KeyframeReason reason);
 size_t BuildReconfig(std::span<uint8_t> out, uint32_t sessionId, const Reconfig& m);
 size_t BuildSetFocus(std::span<uint8_t> out, uint32_t sessionId, bool focused);
 size_t BuildNack(std::span<uint8_t> out, uint32_t sessionId, uint32_t frameId,
@@ -379,6 +413,8 @@ std::optional<AuthResult> ParseAuthResult(std::span<const uint8_t> payload);
 std::optional<PingPong> ParsePingPong(std::span<const uint8_t> payload);
 std::optional<Feedback> ParseFeedback(std::span<const uint8_t> payload);
 std::optional<Reconfig> ParseReconfig(std::span<const uint8_t> payload);
+KeyframeReason ParseRequestKeyframe(std::span<const uint8_t> payload);
+
 std::optional<bool> ParseSetFocus(std::span<const uint8_t> payload);
 size_t ParseNack(std::span<const uint8_t> payload, uint32_t& frameId,
     std::span<uint16_t> out);

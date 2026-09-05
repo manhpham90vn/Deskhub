@@ -2,6 +2,7 @@
 #include "support/TestSupport.h"
 
 #include "deskhub/protocol/Wire.h"
+#include "deskhub/media/ShareTypes.h"
 #include "deskhubp/net/SessionTransport.h"
 #include "deskhubp/system/AppDataFile.h"
 #include "deskhubp/system/Clock.h"
@@ -15,21 +16,6 @@ namespace {
 
 constexpr uint16_t kTestPort = 47793;
 constexpr int kMaxRounds = 600;
-
-struct SavedIdentity {
-    std::string cert{};
-    std::string key{};
-
-    SavedIdentity() {
-        cert = deskhubp::ReadAppDataFile(deskhubp::kHostCertFileName);
-        key = deskhubp::ReadAppDataFile(deskhubp::kHostKeyFileName);
-    }
-
-    ~SavedIdentity() {
-        if (!cert.empty()) deskhubp::WriteAppDataFile(deskhubp::kHostCertFileName, cert);
-        if (!key.empty()) deskhubp::WriteAppDataFile(deskhubp::kHostKeyFileName, key);
-    }
-};
 
 int PumpFor(deskhubp::SessionTransport& reader, deskhubp::SessionTransport& other, uint8_t* buf,
     size_t cap, NetAddr& from) {
@@ -164,6 +150,12 @@ void TestVideoRidesEncryptedDatagrams() {
     const int legacy = PumpFor(host, viewer, buf, sizeof(buf), from);
     Check(legacy == int(videoSize) && std::equal(video, video + videoSize, buf),
         "the legacy path still works for A/B measurements");
+
+    Check(deskhubp::VideoPathName(host.videoPath()) == deskhub::media::kVideoPathRawUdp,
+        "the transport can say which leg it is on, so a measurement log cannot lie");
+    Check(deskhubp::VideoPathFromName(deskhubp::VideoPathName(deskhubp::VideoPath::QuicDatagram),
+              deskhubp::VideoPath::RawUdp) == deskhubp::VideoPath::QuicDatagram,
+        "and the name it gives back is the one that maps to it");
 
     host.Close();
     viewer.Close();

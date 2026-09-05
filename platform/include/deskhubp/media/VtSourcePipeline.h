@@ -1,6 +1,7 @@
 #pragma once
 #include "deskhub/control/FrameGate.h"
 #include "deskhub/diag/ShareDiag.h"
+#include "deskhub/media/EncoderBackend.h"
 #include "deskhub/session/host/SourcePipeline.h"
 #include "deskhubp/diag/Log.h"
 #include "deskhubp/media/VtEncoder.h"
@@ -12,6 +13,7 @@
 #include <functional>
 #include <memory>
 #include <mutex>
+#include <string>
 #include <utility>
 
 namespace deskhubp {
@@ -50,9 +52,18 @@ struct VtSourcePipeline : HostSourceBase<Capture, Injector, VtEncoder> {
 };
 
 template <class Pipeline>
-void InstallVtEncoderFactory(Pipeline* p, uint32_t fps, deskhub::media::PacketHandler onPacket) {
-    p->ensureEncoderFn = [p, fps, onPacket = std::move(onPacket)](uint32_t w, uint32_t h) {
+void InstallVtEncoderFactory(Pipeline* p, uint32_t fps, deskhub::media::PacketHandler onPacket,
+    std::string backend = {}) {
+    p->ensureEncoderFn = [p, fps, backend = std::move(backend),
+                             onPacket = std::move(onPacket)](uint32_t w, uint32_t h) {
         if (p->encoder && p->encoder->IsOpen()) return true;
+        if (!backend.empty() && backend != deskhub::media::kEncoderBackendAuto &&
+            backend != deskhub::media::kEncoderBackendVideoToolbox) {
+            LOGE("[Host][%s] This build has no backend called \"%s\" - it has videotoolbox.",
+                p->name.c_str(), backend.c_str());
+            p->failed.store(true);
+            return false;
+        }
         EncoderConfig cfg = deskhub::MakeEncoderConfig(*p, {w, h}, fps);
         cfg.onPacket = onPacket;
         auto enc = std::make_unique<VtEncoder>();

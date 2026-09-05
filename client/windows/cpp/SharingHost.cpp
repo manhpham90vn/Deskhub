@@ -31,6 +31,7 @@
 #include "deskhub/control/StreamSize.h"
 #include "deskhub/diag/ShareDiag.h"
 #include "deskhub/session/host/SourcePipeline.h"
+#include "deskhubp/host/EncoderRecovery.h"
 
 namespace {
 
@@ -38,7 +39,8 @@ using WinSourceBase = deskhubp::HostSourceBase<ScreenCapture, InputInjector, IVi
 
 struct SourcePipeline : WinSourceBase {
     SourcePipeline(uint32_t startBps, uint32_t minBps)
-        : WinSourceBase(startBps, minBps, deskhub::diag::ShareDiagCaps{}) {}
+        : WinSourceBase(startBps, minBps,
+              deskhub::diag::ShareDiagCaps{false, false, false, true}) {}
 
     HMONITOR monitor = nullptr;
     GpuChoice gpu;
@@ -58,6 +60,8 @@ struct SourcePipeline : WinSourceBase {
     }
 
     void EncodeTimed(ID3D11Texture2D* tex, bool idr) {
+        idr = deskhubp::PrepareRecovery(*this, *encoder,
+            nextFrameId.load(std::memory_order_relaxed), idr);
         const bool ok = deskhubp::DiagEncode(*this, idr,
             [this, tex, idr] { return encoder->Encode(tex, NowUs(), idr); });
         if (ok) return;
@@ -119,6 +123,7 @@ bool SharingHost::Start(const std::vector<ShareSource>& sources, const ShareOpti
         SourcePipeline* p = &Pipeline(st);
         const uint32_t fps = engine->options().fps;
         const uint32_t maxDim = engine->options().maxDim;
+        const std::string encoderBackend = engine->options().encoder;
 
         if (!CreateBestDevice({GpuVendor::Nvidia, GpuVendor::Intel, GpuVendor::Amd}, p->gpu)) {
             LOGE("[Host][%s] Failed to create a D3D11 device for this source.",
@@ -133,7 +138,7 @@ bool SharingHost::Start(const std::vector<ShareSource>& sources, const ShareOpti
 
         auto onPacket = engine->MakePacketSink(*p);
 
-        p->ensureEncoderFn = [p, fps, onPacket](uint32_t w, uint32_t h, uint32_t sw,
+        p->ensureEncoderFn = [p, fps, onPacket, encoderBackend](uint32_t w, uint32_t h, uint32_t sw,
                                  uint32_t sh) -> bool {
             if (p->encoder && p->encoder->IsOpen()) return true;
             EncoderConfig cfg;
@@ -142,20 +147,22 @@ bool SharingHost::Start(const std::vector<ShareSource>& sources, const ShareOpti
             cfg.srcWidth = sw;
             cfg.srcHeight = sh;
             cfg.onPacket = onPacket;
-            p->encoder = CreateEncoder(p->gpu.device.Get(), cfg);
+            p->encoder = CreateEncoder(p->gpu.device.Get(), cfg, encoderBackend, p->gpu.vendor);
             if (!p->encoder) {
                 LOGE(
-                    "[Host][%s] No usable encoder backend (NVENC + Media Foundation"
-                    " both failed).",
+                    "[Host][%s] No encoder started, so this source cannot be shared - the "
+                    "[Encoder] lines above say which backends were tried and why each stopped.",
                     p->name.c_str());
                 p->failed.store(true);
                 return false;
             }
+            p->recovery.SetCaps(p->encoder->RecoveryCaps());
             return true;
         };
 
         auto onFrame = [p, maxDim](const FrameInfo& fi) {
             p->captured.fetch_add(1, std::memory_order_relaxed);
+            p->diag.NoteCapture(fi.meta.timestampUs, NowUs());
             if (p->failed.load()) return;
 
             std::lock_guard<std::mutex> lk(p->encMutex);

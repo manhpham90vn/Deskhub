@@ -10,18 +10,23 @@ FeedbackOutcome ApplyFeedback(SourcePipelineState& st, const Feedback& fb, uint6
     st.haveFeedback.store(true, std::memory_order_release);
 
     FeedbackOutcome out;
-    const BitrateDecision d = st.rate.Update(fb, st.frameAgeMs.TakeReset(), nowUs);
+    const BitrateDecision d = st.rate->Update(fb, st.frameAgeMs.TakeReset(), nowUs);
 
-    if (d.fecToggled) {
+    if (st.fecParityPin.load(std::memory_order_relaxed) == 0)
+        st.wantFecParity.store(d.fecParityPerGroup, std::memory_order_relaxed);
+
+    const bool fecPinned = st.fecArmedAlways.load(std::memory_order_relaxed) ||
+                           st.fecArmedNever.load(std::memory_order_relaxed);
+    if (d.fecToggled && !fecPinned) {
         st.wantFec.store(d.fecEnabled, std::memory_order_relaxed);
         out.fecToggled = true;
         out.fecEnabled = d.fecEnabled;
     }
 
     if (d.changeBitrate) {
-        const uint32_t previous = st.rate.bitrateBps();
+        const uint32_t previous = st.rate->bitrateBps();
         if (hooks.setEncoderBitrate && hooks.setEncoderBitrate(d.bitrateBps)) {
-            st.rate.CommitBitrate(d.bitrateBps);
+            st.rate->CommitBitrate(d.bitrateBps);
             st.curBitrateBps.store(d.bitrateBps, std::memory_order_relaxed);
             out.bitrateChanged = true;
             out.previousBitrateBps = previous;
@@ -30,7 +35,7 @@ FeedbackOutcome ApplyFeedback(SourcePipelineState& st, const Feedback& fb, uint6
     }
 
     if (!st.ladder) return out;
-    if (!st.ladder->Update(st.rate.bitrateBps(), nowUs)) return out;
+    if (!st.ladder->Update(st.rate->bitrateBps(), nowUs)) return out;
 
     out.previousStep = st.step;
     st.step = st.ladder->current();

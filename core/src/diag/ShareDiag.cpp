@@ -1,5 +1,6 @@
 #include "deskhub/diag/ShareDiag.h"
 
+#include "deskhub/diag/ScreenClientDiag.h"
 #include "deskhub/diag/TextAppend.h"
 
 #include <cinttypes>
@@ -40,6 +41,41 @@ void SourceDiag::LatchIdr(uint64_t bytes, uint32_t pkts, uint32_t burst) {
     idrBytes_.store(bytes, std::memory_order_release);
 }
 
+void SourceDiag::CountKeyframeRequest(KeyframeReason reason) {
+    const size_t slot = size_t(reason);
+    if (slot < kKeyframeReasonCount) kfReq_[slot].fetch_add(1, std::memory_order_relaxed);
+}
+
+const char* SourceDiag::FormatKeyframeRequests(char* buf, size_t cap, const char* name) {
+    uint32_t taken[kKeyframeReasonCount] = {};
+    uint32_t total = 0;
+    for (size_t i = 0; i < kKeyframeReasonCount; ++i) {
+        taken[i] = kfReq_[i].exchange(0, std::memory_order_relaxed);
+        total += taken[i];
+    }
+    if (!total || !cap) return nullptr;
+
+    char* p = buf;
+    char* const end = buf + cap;
+    Append(p, end, "[DIAG][%s] evt=kf_req_sum total=%u", name, total);
+    for (size_t i = 0; i < kKeyframeReasonCount; ++i)
+        if (taken[i])
+            Append(p, end, " %s=%u", KeyframeReasonName(KeyframeReason(i)), taken[i]);
+    return buf;
+}
+
+void SourceDiag::NoteCapture(uint64_t frameTimestampUs, uint64_t nowUs) {
+    if (!frameTimestampUs) return;
+    const uint64_t previous = lastCaptureUs_.exchange(frameTimestampUs, std::memory_order_relaxed);
+    if (frameTimestampUs == previous) {
+        capRepeat.Add();
+        return;
+    }
+    if (nowUs <= frameTimestampUs) return;
+    const uint64_t age = nowUs - frameTimestampUs;
+    capUs.Add(age > 0xFFFFFFFFull ? 0xFFFFFFFFu : uint32_t(age));
+}
+
 const char* SourceDiag::FormatIdr(char* buf, size_t cap, const char* name) {
     const uint64_t bytes = idrBytes_.exchange(0, std::memory_order_acquire);
     if (!bytes) return nullptr;
@@ -52,7 +88,10 @@ const char* SourceDiag::FormatIdr(char* buf, size_t cap, const char* name) {
 const char* SourceDiag::FormatSum(char* buf, size_t cap, const char* hms, const char* name,
     uint32_t capIdle, bool zerocopy) {
     const WindowStat::Snapshot e = encMs.TakeReset();
+    const WindowPercentile::Snapshot u = encUs.TakeReset();
     const WindowStat::Snapshot l = encLatMs.TakeReset();
+    const WindowPercentile::Snapshot c = capUs.TakeReset();
+    const uint32_t repeats = capRepeat.TakeReset();
     const uint32_t idrN = idr.TakeReset();
     const uint32_t fail = sendFail.TakeReset();
     const uint32_t queued = queueDrop.TakeReset();
@@ -65,7 +104,10 @@ const char* SourceDiag::FormatSum(char* buf, size_t cap, const char* hms, const 
 
     Append(p, end, "[DIAG][%s] evt=sum t=%s enc_ms_avg=%.1f enc_ms_max=%u", name, hms, e.avg,
         e.max);
+    Append(p, end, " enc_us_p50=%u enc_us_p99=%u", u.p50Us, u.p99Us);
     Append(p, end, " enc_lat_ms=%.1f/%u", l.avg, l.max);
+    if (caps_.captureLatency)
+        Append(p, end, " cap_us_p50=%u cap_us_p99=%u cap_repeat=%u", c.p50Us, c.p99Us, repeats);
     if (caps_.capIdle) Append(p, end, " cap_idle=%u", capIdle);
     Append(p, end, " idr=%u burst_ms_max=%u send_fail=%u", idrN, burst, fail);
     if (caps_.queueDrop) Append(p, end, " q_drop=%u", queued);
@@ -93,9 +135,16 @@ const char* SourceDiag::FormatStatus(char* buf, size_t cap, const char* hms, con
     return buf;
 }
 
-const char* ShareDiag::FormatSum(char* buf, size_t cap, const char* hms) {
-    std::snprintf(buf, cap, "[DIAG][host] evt=sum t=%s loop_busy_ms_max=%u", hms,
-        loopBusyMs.TakeReset());
+const char* ShareDiag::FormatSum(char* buf, size_t cap, const char* hms, uint64_t datagramsSent,
+    uint64_t datagramsRefused) {
+    const uint64_t sent = datagramsSent - lastDatagramsSent_;
+    const uint64_t refused = datagramsRefused - lastDatagramsRefused_;
+    lastDatagramsSent_ = datagramsSent;
+    lastDatagramsRefused_ = datagramsRefused;
+    std::snprintf(buf, cap,
+        "[DIAG][host] evt=sum t=%s loop_busy_ms_max=%u dgram_tx=%" PRIu64
+        " dgram_refused=%" PRIu64,
+        hms, loopBusyMs.TakeReset(), sent, refused);
     return buf;
 }
 

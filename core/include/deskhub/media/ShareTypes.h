@@ -4,9 +4,17 @@
 
 #include <cstdint>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace deskhub::media {
+
+inline constexpr std::string_view kVideoPathRawUdp = "raw-udp";
+inline constexpr std::string_view kVideoPathQuicDatagram = "quic-datagram";
+
+inline bool IsVideoPathName(std::string_view name) {
+    return name == kVideoPathRawUdp || name == kVideoPathQuicDatagram;
+}
 
 struct ShareOptions {
     uint32_t fps = 60;
@@ -26,6 +34,14 @@ struct ShareOptions {
     bool terminal = false;
     bool files = false;
     bool audio = false;
+    std::string fecScheme{};
+    uint32_t fecParityPerGroup = 0;
+    uint32_t fecGroups = 0;
+    bool fecArmAlways = false;
+    bool fecArmNever = false;
+    std::string congestionControl{};
+    std::string videoPath{};
+    std::string encoder{};
 };
 
 struct ShareSourceStatus {

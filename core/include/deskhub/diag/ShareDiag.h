@@ -32,6 +32,7 @@ struct ShareDiagCaps {
     bool capIdle = false;
     bool zerocopy = false;
     bool queueDrop = false;
+    bool captureLatency = false;
 };
 
 class SourceDiag {
@@ -39,19 +40,29 @@ public:
     static constexpr size_t kSumBufBytes = 384;
     static constexpr size_t kStatusBufBytes = 384;
     static constexpr size_t kIdrBufBytes = 160;
+    static constexpr size_t kKeyframeReqBufBytes = 320;
 
     explicit SourceDiag(ShareDiagCaps caps = {}) : caps_(caps) {}
 
     WindowStat encMs;
+    WindowPercentile encUs;
     WindowStat encLatMs;
+    WindowPercentile capUs;
+    WindowCount capRepeat;
     WindowCount idr;
     WindowCount sendFail;
     WindowCount queueDrop;
     WindowMax burstMs;
 
+    void NoteCapture(uint64_t frameTimestampUs, uint64_t nowUs);
+
     void LatchIdr(uint64_t bytes, uint32_t pkts, uint32_t burst);
 
+    void CountKeyframeRequest(KeyframeReason reason);
+
     const char* FormatIdr(char* buf, size_t cap, const char* name);
+
+    const char* FormatKeyframeRequests(char* buf, size_t cap, const char* name);
 
     const char* FormatSum(char* buf, size_t cap, const char* hms, const char* name,
         uint32_t capIdle, bool zerocopy);
@@ -75,18 +86,25 @@ public:
 
 private:
     ShareDiagCaps caps_;
+    std::atomic<uint64_t> lastCaptureUs_{0};
     std::atomic<uint64_t> idrBytes_{0};
     std::atomic<uint32_t> idrPkts_{0};
     std::atomic<uint32_t> idrBurstMs_{0};
+    std::atomic<uint32_t> kfReq_[kKeyframeReasonCount] = {};
 };
 
 class ShareDiag {
 public:
-    static constexpr size_t kSumBufBytes = 96;
+    static constexpr size_t kSumBufBytes = 160;
 
     WindowMax loopBusyMs;
 
-    const char* FormatSum(char* buf, size_t cap, const char* hms);
+    const char* FormatSum(char* buf, size_t cap, const char* hms, uint64_t datagramsSent,
+        uint64_t datagramsRefused);
+
+private:
+    uint64_t lastDatagramsSent_ = 0;
+    uint64_t lastDatagramsRefused_ = 0;
 };
 
 }

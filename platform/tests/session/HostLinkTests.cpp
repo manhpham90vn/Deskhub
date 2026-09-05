@@ -98,9 +98,13 @@ struct LinkHostRig {
     }
 };
 
+std::string LinkEndpoint() {
+    return std::string("127.0.0.1:") + std::to_string(kLinkTestPort);
+}
+
 deskhubp::HostLinkConfig LinkConfig(const char* passcode) {
     deskhubp::HostLinkConfig config;
-    const std::string endpoint = std::string("127.0.0.1:") + std::to_string(kLinkTestPort);
+    const std::string endpoint = LinkEndpoint();
     ParseNetAddr(endpoint, config.host);
     config.hostLabel = endpoint;
     config.passcode = passcode;
@@ -111,6 +115,7 @@ deskhubp::HostLinkConfig LinkConfig(const char* passcode) {
 
 void TestALinkAdmitsOnceAndRoutesByChannel() {
     std::printf("[hostlink] one handshake carries every channel to its own queue...\n");
+    const ForgottenHost fresh(LinkEndpoint());
     const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity("link-test-host");
     LinkHostRig host;
     Check(host.Start(identity), "the host rig listens");
@@ -149,6 +154,7 @@ void TestALinkAdmitsOnceAndRoutesByChannel() {
 
 void TestALinkStopsOnAChangedKeyUntilAccepted() {
     std::printf("[hostlink] a changed host key parks the link until someone decides...\n");
+    const ForgottenHost fresh(LinkEndpoint());
     const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity("link-test-host");
     LinkHostRig host;
     Check(host.Start(identity), "the host rig listens");
@@ -205,14 +211,12 @@ void TestALinkStopsOnAChangedKeyUntilAccepted() {
     Check(refuser.Message() == deskhub::ui::kTrustReject, "with the shared rejection text");
     refuser.Stop();
 
-    Check(deskhubp::RememberTrustedHost(config.hostLabel, "127.0.0.1", identity.fingerprint,
-              NowUnixSeconds()),
-        "the true key is restored for the tests that follow");
     host.Shutdown();
 }
 
 void TestALinkReportsARefusal() {
     std::printf("[hostlink] a wrong passcode comes back as a refusal, not a hang...\n");
+    const ForgottenHost fresh(LinkEndpoint());
     const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity("link-test-host");
     LinkHostRig host;
     Check(host.Start(identity), "the host rig listens");
@@ -230,6 +234,7 @@ void TestALinkReportsARefusal() {
 
 void TestALinkRecoversAndSaysItResumed() {
     std::printf("[hostlink] a dropped link redials on its own and says it resumed...\n");
+    const ForgottenHost fresh(LinkEndpoint());
     const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity("link-test-host");
     auto host = std::make_unique<LinkHostRig>();
     Check(host->Start(identity), "the host rig listens");
@@ -266,6 +271,7 @@ void TestALinkRecoversAndSaysItResumed() {
 
 void TestTheLinkTakesItsOwnPulse() {
     std::printf("[hostlink] the link pings on its own and reads out rtt and quality...\n");
+    const ForgottenHost fresh(LinkEndpoint());
     const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity("link-test-host");
     LinkHostRig host;
     Check(host.Start(identity), "the host rig listens");
@@ -291,6 +297,7 @@ void TestTheLinkTakesItsOwnPulse() {
 
 void TestARequestedRedialResumes() {
     std::printf("[hostlink] asking for a redial drops the link and brings it back...\n");
+    const ForgottenHost fresh(LinkEndpoint());
     const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity("link-test-host");
     LinkHostRig host;
     Check(host.Start(identity), "the host rig listens");
@@ -325,6 +332,7 @@ void TestARequestedRedialResumes() {
 
 void TestAHostThatStopsAnsweringPingsReadsAsLost() {
     std::printf("[hostlink] a host that goes silent on pings is treated as lost...\n");
+    const ForgottenHost fresh(LinkEndpoint());
     const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity("link-test-host");
     LinkHostRig host;
     Check(host.Start(identity), "the host rig listens");

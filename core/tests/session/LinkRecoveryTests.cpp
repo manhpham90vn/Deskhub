@@ -40,19 +40,40 @@ void TestKeepaliveOnlyFiresOnceItIsDue() {
 
 void TestReconnectBacksOffAndStops() {
     std::printf("[link] reconnect backs off, then gives up before the shell is gone...\n");
-    Check(ReconnectDelayUs(0) == kReconnectFirstDelayUs, "the first retry is quick");
-    Check(ReconnectDelayUs(1) > ReconnectDelayUs(0), "each retry waits longer than the last");
-    Check(ReconnectDelayUs(2) > ReconnectDelayUs(1), "and keeps growing while it is small");
+    constexpr uint32_t kNoJitter = 0;
+    constexpr uint32_t kFullJitter = 0xFFFFFFFF;
+
+    Check(ReconnectDelayUs(0, kFullJitter) == kReconnectFirstDelayUs,
+        "the first retry is quick");
+    Check(ReconnectDelayUs(1, kFullJitter) > ReconnectDelayUs(0, kFullJitter),
+        "each retry waits longer than the last");
+    Check(ReconnectDelayUs(2, kFullJitter) > ReconnectDelayUs(1, kFullJitter),
+        "and keeps growing while it is small");
 
     uint64_t previous = 0;
     for (uint32_t attempt = 0; attempt < 64; ++attempt) {
-        const uint64_t delay = ReconnectDelayUs(attempt);
+        const uint64_t delay = ReconnectDelayUs(attempt, kFullJitter);
         Check(delay >= previous, "the backoff never shrinks");
         Check(delay <= kReconnectMaxDelayUs, "and never grows past the cap");
         previous = delay;
     }
-    Check(ReconnectDelayUs(63) == kReconnectMaxDelayUs,
+    Check(ReconnectDelayUs(63, kFullJitter) == kReconnectMaxDelayUs,
         "a long outage settles at the cap instead of overflowing");
+
+    Check(ReconnectDelayUs(4, kNoJitter) * 2 == ReconnectDelayUs(4, kFullJitter),
+        "the jitter spreads a retry over the top half of its own backoff window");
+    Check(ReconnectDelayUs(63, kNoJitter) >= kReconnectMaxDelayUs / 2,
+        "and never lets a retry come sooner than half the nominal wait");
+
+    uint64_t spread = 0;
+    uint64_t seen[8] = {};
+    for (uint32_t slice = 0; slice < 8; ++slice) {
+        seen[slice] = ReconnectDelayUs(10, uint32_t((uint64_t(slice) << 29)));
+        if (slice && seen[slice] != seen[slice - 1]) ++spread;
+    }
+    Check(spread == 7,
+        "viewers that lost the same host at the same moment draw different waits, so they "
+        "do not come back in lockstep");
 }
 
 void TestReconnectGivesUpWithTheHostsGrace() {
@@ -67,7 +88,7 @@ void TestReconnectGivesUpWithTheHostsGrace() {
     uint64_t elapsed = 0;
     uint32_t attempts = 0;
     while (ReconnectStillWorthTrying(elapsed, grace)) {
-        elapsed += ReconnectDelayUs(attempts);
+        elapsed += ReconnectDelayUs(attempts, 0xFFFFFFFF);
         ++attempts;
         Check(attempts < 1000, "the retry loop terminates rather than spinning");
     }

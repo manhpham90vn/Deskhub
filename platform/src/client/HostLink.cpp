@@ -4,6 +4,7 @@
 #include "deskhub/ui/Strings.h"
 #include "deskhubp/diag/Log.h"
 #include "deskhubp/system/Clock.h"
+#include "deskhubp/system/Random.h"
 #include "deskhubp/system/HostIdentity.h"
 #include "deskhubp/system/TrustStoreFile.h"
 
@@ -90,6 +91,7 @@ bool HostLink::Start(const HostLinkConfig& config, HostLinkCallbacks callbacks) 
     redialAttempts_ = 0;
 
     sock_.SetRecvTimeout(config_.recvWaitMs);
+    sock_.SetVideoPath(config_.videoPath);
     sock_.SetOnPeerGone([this](const NetAddr& peer) {
         if (peer == config_.host) peerGone_.store(true, std::memory_order_release);
     });
@@ -244,7 +246,7 @@ bool HostLink::DialAndAdmit() {
                 Fail(HostLinkState::Failed, deskhub::ui::kTerminalUnreachable);
                 return false;
             }
-            const uint64_t waitUntil = NowUs() + deskhub::ReconnectDelayUs(redialAttempts_);
+            const uint64_t waitUntil = NowUs() + deskhub::ReconnectDelayUs(redialAttempts_, RandomU32());
             while (!stop_.load(std::memory_order_acquire) && NowUs() < waitUntil)
                 SleepUs(kDecisionPollUs);
             if (stop_.load(std::memory_order_acquire)) return false;
@@ -305,6 +307,11 @@ bool HostLink::SettleTrust() {
 
     trustDecision_.store(int(TrustDecision::Pending), std::memory_order_release);
     SetState(HostLinkState::Deciding, deskhub::ui::kTrustChangedBody);
+    LOGW(
+        "link: %s answered with %s, which is not the key on record, so this link is parked "
+        "until someone accepts or rejects it - it sends nothing while it waits, and the peer "
+        "reads that as a silent link rather than as a question",
+        endpoint.c_str(), FormatFingerprint(*peer).c_str());
     if (cb_.onTrustAsked) cb_.onTrustAsked(verdict, FormatFingerprint(*peer));
 
     uint8_t buf[deskhub::kMaxRecordSize];

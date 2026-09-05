@@ -7,6 +7,7 @@
 
 #include <cstdio>
 #include <deque>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -167,8 +168,8 @@ void TestKeyframeRequestsAreLoggedOnce() {
     ScreenHostCallbacks hcb;
     hcb.send = [&](std::span<const uint8_t> d) { r.toClient.emplace_back(d.begin(), d.end()); };
     hcb.randomBytes = TestRandomBytes;
-    bool hostSawRequest = false;
-    hcb.onKeyframeRequest = [&] { hostSawRequest = true; };
+    std::optional<deskhub::KeyframeReason> hostSawReason;
+    hcb.onKeyframeRequest = [&](deskhub::KeyframeReason reason) { hostSawReason = reason; };
     ScreenHostSession host(hcb, StreamParams{1920, 1080, 60, 20'000'000});
     host.SetPasscode(kTestPasscode);
 
@@ -182,19 +183,23 @@ void TestKeyframeRequestsAreLoggedOnce() {
     Check(pump.streaming(), "video traffic is what makes a keyframe request sendable");
     r.logs.clear();
 
-    pump.RequestKeyframe("dec_fail", now);
+    pump.RequestKeyframe(diag::KeyframeReason::DecFail, now);
     const size_t afterFirst = r.logs.size();
     Check(afterFirst == 1, "the first request is logged");
     Check(r.LoggedContaining("dec_fail"), "with its reason");
 
-    pump.RequestKeyframe("q_overflow", now + 1000);
+    pump.RequestKeyframe(diag::KeyframeReason::QOverflow, now + 1000);
     Check(r.logs.size() == afterFirst, "a second request while one is pending stays quiet");
 
     r.toHost.clear();
     now += 300'000;
     pump.Tick(now);
     Exchange(r, pump, host, now);
-    Check(hostSawRequest, "the host did receive the request");
+    Check(hostSawReason.has_value(), "the host did receive the request");
+    Check(hostSawReason == deskhub::KeyframeReason::DecFail,
+        "and it arrives labelled with what armed it, not with the reason that came second "
+        "while the first was still pending - the host counts these to tell a keyframe the "
+        "link cost from one the viewer's own decode queue asked for");
 }
 
 void TestReportRunsOncePerWindow() {

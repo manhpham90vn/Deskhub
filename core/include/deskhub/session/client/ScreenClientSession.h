@@ -1,5 +1,6 @@
 #pragma once
 #include "deskhub/input/InputSender.h"
+#include "deskhub/control/ClockSync.h"
 #include "deskhub/protocol/Wire.h"
 #include "deskhub/session/ClipboardSync.h"
 
@@ -68,7 +69,8 @@ public:
 
     void SetFocused(bool on);
 
-    void RequestKeyframe() {
+    void RequestKeyframe(KeyframeReason reason) {
+        if (!keyframeWanted_) keyframeReason_ = reason;
         keyframeWanted_ = true;
     }
     void CancelKeyframeRequest() {
@@ -89,6 +91,10 @@ public:
     uint32_t sessionId() const {
         return sessionId_;
     }
+    const ClockSync& clockSync() const {
+        return clockSync_;
+    }
+
     uint32_t lastRttUs() const {
         return lastRttUs_;
     }
@@ -119,7 +125,9 @@ private:
     bool focusSent_ = false;
     uint32_t nextPingId_ = 1;
     uint32_t lastRttUs_ = 0;
+    ClockSync clockSync_{};
     bool keyframeWanted_ = false;
+    KeyframeReason keyframeReason_ = KeyframeReason::Unknown;
     RejectReason rejectReason_ = RejectReason::None;
 
     uint8_t buf_[kMaxDatagram] = {};

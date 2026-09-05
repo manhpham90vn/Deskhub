@@ -13,6 +13,7 @@ void RunLocalInputGateTests();
 void RunOpusCodecTests();
 void RunAudioBroadcasterTests();
 void RunScreenHostCallbackTests();
+void RunEncoderRecoveryTests();
 void RunHostProbeTests();
 void RunLanScannerTests();
 void RunAppDataFileTests();

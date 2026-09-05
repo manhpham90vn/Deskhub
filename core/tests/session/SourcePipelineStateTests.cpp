@@ -35,9 +35,9 @@ void TestTheStartingBitrateIsTheOneThatWasAskedFor() {
     SourcePipelineState st(kStartBps, kMinBps);
     Check(st.curBitrateBps.load() == kStartBps,
         "the bitrate the UI shows is the bitrate the encoder was configured with");
-    Check(st.rate.bitrateBps() == kStartBps,
+    Check(st.rate->bitrateBps() == kStartBps,
         "the controller starts from the same number, so the first feedback is not a jump");
-    Check(st.rate.fecEnabled(), "and it agrees with wantFec that FEC is armed");
+    Check(st.rate->fecEnabled(), "and it agrees with wantFec that FEC is armed");
 }
 
 void TestCountersStartAtZero() {

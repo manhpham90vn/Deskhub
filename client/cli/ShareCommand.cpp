@@ -147,6 +147,17 @@ ExitCode RunShare(const Command& command) {
     ShareOptions options =
         deskhub::ShareOptionsOf(settings, command.share.terminal, command.share.files);
     options.clipboardSync = false;
+    if (command.fecScheme) options.fecScheme = *command.fecScheme;
+    if (command.share.fecParity) options.fecParityPerGroup = *command.share.fecParity;
+    if (command.share.fecDepth) options.fecGroups = *command.share.fecDepth;
+    if (command.share.congestionControl)
+        options.congestionControl = *command.share.congestionControl;
+    if (command.share.encoder) options.encoder = *command.share.encoder;
+    if (command.share.fecArm) {
+        options.fecArmAlways = *command.share.fecArm == "always";
+        options.fecArmNever = *command.share.fecArm == "never";
+    }
+    if (command.videoPath) options.videoPath = *command.videoPath;
 
     const bool sharesTenant = command.share.terminal || command.share.files;
     std::vector<ShareSource> sources;

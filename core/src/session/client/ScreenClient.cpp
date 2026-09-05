@@ -70,6 +70,13 @@ void ScreenClient::EnsureReassembler() {
     if (reasm_) return;
     const uint32_t fps = session_.params().fps ? session_.params().fps : kDefaultClientFps;
     reasm_ = std::make_unique<Reassembler>(1'000'000 / fps);
+    reasm_->SetNackEnabled(cfg_.sendNacks);
+    if (cfg_.overtakenLimit) reasm_->SetOvertakenLimit(cfg_.overtakenLimit);
+    if (cfg_.stallTimeoutFrames) reasm_->SetStallTimeoutMultiple(cfg_.stallTimeoutFrames);
+    if (!cfg_.fecScheme.empty() && !reasm_->SetFecScheme(cfg_.fecScheme))
+        LogWarn(
+            "[Client] No FEC scheme by that name is built in, so parity from a host "
+            "running a different one will not be understood; staying on the default");
     reasm_->onFrameDrop = [this](const Reassembler::FrameDropInfo& d) {
         char drop[diag::ScreenClientDiag::kFrameDropBufBytes];
         LogWarn(diag::ScreenClientDiag::FormatFrameDrop(drop, sizeof(drop), d));
@@ -118,10 +125,10 @@ void ScreenClient::OnDatagram(std::span<const uint8_t> pkt, uint64_t nowUs) {
     }
 }
 
-void ScreenClient::RequestKeyframe(const char* reason, uint64_t nowUs) {
+void ScreenClient::RequestKeyframe(diag::KeyframeReason reason, uint64_t nowUs) {
     char kf[diag::KeyframeRequestLog::kBufBytes];
     if (const char* l = kfLog_.Request(kf, sizeof(kf), nowUs, reason)) Log(l);
-    session_.RequestKeyframe();
+    session_.RequestKeyframe(reason);
 }
 
 void ScreenClient::PlanNacks(uint64_t nowUs) {
@@ -142,13 +149,17 @@ void ScreenClient::PollFrames(uint64_t nowUs) {
             if (const char* l = kfLog_.Arrived(kf, sizeof(kf), nowUs, f->nal.size())) Log(l);
         }
         if (f->firstSeenUs) diag_.asmMs.Add(uint32_t((nowUs - f->firstSeenUs) / 1000));
+        lastAbsoluteE2eUs_ =
+            session_.clockSync().AbsoluteLatencyUs(f->timestampUs, f->firstSeenUs
+                                                                       ? f->firstSeenUs
+                                                                       : nowUs);
         if (cb_.onFrame) cb_.onFrame(std::move(*f));
     }
 
     if (reasm_->TakeLossEvent())
-        RequestKeyframe("loss", nowUs);
+        RequestKeyframe(diag::KeyframeReason::Loss, nowUs);
     else if (reasm_->WaitingForIdr())
-        RequestKeyframe("wait_idr", nowUs);
+        RequestKeyframe(diag::KeyframeReason::WaitIdr, nowUs);
 }
 
 void ScreenClient::Report(uint64_t nowUs) {
@@ -173,6 +184,17 @@ void ScreenClient::Report(uint64_t nowUs) {
         Log(line_);
     }
 
+    if (cfg_.logLossRuns && w.absentRunTotal) {
+        std::snprintf(line_, sizeof(line_),
+            "[Client]   wire runs: 1x%llu 2x%llu 3x%llu 4-7x%llu 8-15x%llu 16-31x%llu "
+            "32+x%llu  | longest ever %llu pkts",
+            (unsigned long long)w.absentRuns[0], (unsigned long long)w.absentRuns[1],
+            (unsigned long long)w.absentRuns[2], (unsigned long long)w.absentRuns[3],
+            (unsigned long long)w.absentRuns[4], (unsigned long long)w.absentRuns[5],
+            (unsigned long long)w.absentRuns[6], (unsigned long long)w.absentRunMax);
+        Log(line_);
+    }
+
     char compact[diag::ScreenClientDiag::kCompactBufBytes];
     diag::ScreenClientDiag::FormatCompact(compact, sizeof(compact), w, session_.lastRttUs(), e2e,
         cfg_.statusSeparator ? cfg_.statusSeparator : "  ");
@@ -181,7 +203,10 @@ void ScreenClient::Report(uint64_t nowUs) {
     session_.SendFeedback(MakeFeedback(w, session_.lastRttUs()));
 
     Log(diag_.FormatSum(line_, sizeof(line_), hms.c_str(), w,
-        reasm_ ? reasm_->TakeMaxGapMs() : 0, e2e));
+        reasm_ ? reasm_->TakeMaxGapMs() : 0, e2e, lastAbsoluteE2eUs_));
+
+    char kfCounts[diag::KeyframeRequestLog::kCountsBufBytes];
+    if (const char* l = kfLog_.FormatCounts(kfCounts, sizeof(kfCounts))) Log(l);
 
     windowBytes_ = 0;
 }

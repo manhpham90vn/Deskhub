@@ -7,8 +7,12 @@
 #include <cstdio>
 #include <functional>
 #include <memory>
+#include <span>
 #include <string>
+#include <string_view>
 
+#include "deskhub/media/EncoderBackend.h"
+#include "deskhub/media/RecoveryPolicy.h"
 #include "deskhub/media/VideoContract.h"
 #include "deskhubp/diag/Log.h"
 
@@ -36,6 +40,16 @@ public:
     virtual void Finish() = 0;
 
     virtual const char* BackendName() const = 0;
+
+    virtual std::string_view BackendId() const = 0;
+
+    virtual deskhub::media::EncoderRecoveryCaps RecoveryCaps() const = 0;
+
+    virtual bool MarkLongTermReference(uint32_t frameId) = 0;
+
+    virtual bool InvalidateReference(uint32_t firstInvalidFrameId) = 0;
+
+    virtual bool BeginIntraRefresh(uint32_t frames) = 0;
 };
 
 inline bool OpenEncoderOutput(const EncoderConfig& cfg, const char* tag, FILE*& out) {
@@ -56,9 +70,16 @@ inline bool OpenEncoderOutput(const EncoderConfig& cfg, const char* tag, FILE*& 
     return true;
 }
 
-std::unique_ptr<IVideoEncoder> CreateEncoder(ID3D11Device* device, const EncoderConfig& cfg);
+std::unique_ptr<IVideoEncoder> CreateEncoder(ID3D11Device* device, const EncoderConfig& cfg,
+    std::string_view backend, deskhub::media::GpuVendor vendor);
+
+std::span<const std::string_view> BuiltInEncoderBackends();
 
 static_assert(deskhub::media::VideoEncoderLike<IVideoEncoder, ID3D11Texture2D*>,
     "IVideoEncoder must match the shared encoder signature");
 static_assert(deskhub::media::HotFpsEncoder<IVideoEncoder>,
     "IVideoEncoder can change fps on the fly (NVENC reconfigure; MF rebuilds the transform)");
+static_assert(deskhub::media::ReferenceInvalidatingEncoder<IVideoEncoder>,
+    "IVideoEncoder carries the long-term reference half of media::RecoveryPolicy");
+static_assert(deskhub::media::IntraRefreshEncoder<IVideoEncoder>,
+    "IVideoEncoder carries the intra-refresh half of media::RecoveryPolicy");

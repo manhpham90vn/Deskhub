@@ -3,11 +3,13 @@
 
 #include "deskhub/media/CaptureContract.h"
 #include "deskhub/media/PresentCounters.h"
+#include "deskhub/media/CodecNegotiation.h"
 #include "deskhub/media/VideoContract.h"
 
 #include <cstdio>
 #include <cstring>
 
+using namespace deskhub;
 using namespace deskhub::media;
 
 namespace {
@@ -167,10 +169,54 @@ static_assert(!VideoEncoderLike<WideBackendName, void*>);
 static_assert(!VideoEncoderLike<MissingFinish, void*>);
 static_assert(!VideoDecoderLike<DecoderTakingIntPts>);
 
+void TestNegotiationPicksTheBestBothSidesHave() {
+    std::printf("[codec] negotiation picks the best both ends have, never one only one has...\n");
+
+    Check(NegotiateCodec(kCodecMaskH264, kCodecMaskH264) == Codec::H264,
+        "two ends that only speak the baseline agree on the baseline");
+    Check(NegotiateCodec(kCodecMaskH264 | kCodecMaskAv1, kCodecMaskH264) == Codec::H264,
+        "a host that can do more than the viewer still drops to what the viewer has");
+    Check(NegotiateCodec(kCodecMaskH264, kCodecMaskH264 | kCodecMaskHevc) == Codec::H264,
+        "and the same the other way round");
+    Check(NegotiateCodec(kCodecMaskH264 | kCodecMaskHevc, kCodecMaskH264 | kCodecMaskHevc) ==
+              Codec::Hevc,
+        "when both have something better than the baseline, they take it");
+    Check(NegotiateCodec(0xFFFF, 0xFFFF) == Codec::Av1,
+        "and with everything on both sides the head of the preference list wins");
+    Check(NegotiateCodec(kCodecMaskHevc, kCodecMaskAv1) == Codec::Rejected,
+        "two ends with nothing in common are rejected rather than guessed at");
+    Check(NegotiateCodec(0, 0) == Codec::Rejected, "a side that offers nothing is rejected");
+}
+
+void TestBaselineIsAlwaysReachable() {
+    std::printf("[codec] the universal baseline is reachable from every capability set...\n");
+
+    for (Codec codec : CodecPreference()) {
+        Check(CodecMaskOf(codec) != 0, "every codec in the preference list has a mask bit");
+        Check(NegotiateCodec(CodecMaskOf(codec) | kCodecMaskH264,
+                  CodecMaskOf(codec) | kCodecMaskH264) == codec,
+            "a pair that shares a codec agrees on it rather than falling back");
+        Check(NegotiateCodec(CodecMaskOf(codec) | kCodecMaskH264, kCodecMaskH264) == Codec::H264,
+            "and any pair still meets on the baseline when that is all they share");
+    }
+
+    Check(CodecIsUniversal(Codec::H264), "H264 4:2:0 is the one every platform must decode");
+    for (Codec codec : CodecPreference())
+        if (codec != Codec::H264)
+            Check(!CodecIsUniversal(codec), "nothing else may be assumed present");
+
+    Check(CodecPreference().back() == Codec::H264,
+        "the baseline sits last in the preference list, so it is the fallback and never the "
+        "first choice when something better is shared");
+}
+
 }
 
 void RunMediaContractTests() {
     std::printf("[media] encoder/decoder signature contract for all five platforms (checked at compile time)...\n");
+
+    TestNegotiationPicksTheBestBothSidesHave();
+    TestBaselineIsAlwaysReachable();
 
     std::printf("[media] capture contract: the concepts reject a type that does not fit...\n");
     Check(!ScreenCaptureLike<NotACapture>, "a capture with no Closed() is not a capture");

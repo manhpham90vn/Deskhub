@@ -91,9 +91,7 @@ bool ExerciseWireParsers(std::span<const uint8_t> d) {
             ok = ok && f->parity.size() >= kFecLenPrefix;
             ok = ok && f->parity.size() <= kFecLenPrefix + kMaxVideoPayload;
             ok = ok && f->hdr.pktCount > 0;
-            const size_t numGroups =
-                (size_t(f->hdr.pktCount) + kFecGroupSize - 1) / kFecGroupSize;
-            ok = ok && f->hdr.groupIndex < numGroups;
+            ok = ok && f->hdr.groupIndex < FecGroupCount(f->hdr.pktCount, f->hdr.groups);
         }
     }
     return ok;
@@ -157,7 +155,7 @@ Datagram BuildRandomValidDatagram() {
                 Feedback{uint16_t(Rnd()), uint8_t(Rnd()), uint16_t(Rnd()), Rnd()});
             break;
         case 9:
-            n = BuildRequestKeyframe(buf, Rnd());
+            n = BuildRequestKeyframe(buf, Rnd(), KeyframeReason(Rnd() % (kKeyframeReasonCount + 2)));
             break;
         case 10:
             n = BuildReconfig(buf, Rnd(),

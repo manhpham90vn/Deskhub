@@ -258,6 +258,11 @@ nhận và tên thiết bị dành riêng đều bị loại — trước khi `p
 | các target fuzz | 30 giây mỗi target ở mọi PR, 15 phút mỗi target hằng đêm | parser cho wire, H.264, ráp gói, byte terminal và chuỗi UI, cộng máy trạng thái phiên phía host và viewer |
 | `make test-perf` | bản release, offline + loopback | đo các đường nóng chứ không chỉ chạy chúng: `core_perf` cho phần C++ thuần, `platform_perf` cho QUIC thật qua loopback; cả hai fail theo số lần cấp phát trên mỗi đơn vị, chi phí khi đầu vào gấp 4, và độ lệch so với mốc ghi ngay trên máy đó |
 
+`platform_tests` và `integration_tests` mỗi bộ giữ thư mục app data riêng trên mọi hệ điều
+hành — khoá host, danh sách host tin cậy và file ghép đôi đều là file dùng chung duy nhất,
+nên một bộ test đọc thư mục nhà của lập trình viên là đang chạy đua với app đã cài và mọi
+tiến trình Deskhub khác trên máy.
+
 CI còn ép clang-format và clang-tidy (đều ghim phiên bản), SwiftLint `--strict`,
 Android Lint, actionlint + shellcheck, chạy cả ba bộ dưới ASan/TSan, CodeQL cho
 C++/Kotlin/Swift, quét gitleaks toàn bộ lịch sử, và coverage `core/` ≥ 90% dòng / 80%
@@ -271,6 +276,10 @@ lệch chỉ là cảnh báo, không bao giờ đánh trượt), số đo tích 
 pull request, và dòng coverage của `core/`.
 
 ## 9. Các quyết định đáng nhớ
+
+Cuộc bake-off A1 đứng sau vài quyết định FEC bên dưới được viết lại cho người đọc ngoài dự án
+trong [`docs/posts/fec-under-burst-loss.vi.md`](posts/fec-under-burst-loss.vi.md), với CSV thô mà
+bài trích dẫn nằm ngay cạnh trong [`docs/data/bake-off/`](data/bake-off/).
 
 - **Một phép dò năng lực trả về false có thể tắt hẳn cả một vòng điều khiển**: encoder
   Media Foundation trả `false` cho `SetBitrate` mỗi khi MFT không có
@@ -698,3 +707,580 @@ pull request, và dòng coverage của `core/`.
   chọn từ danh sách quét. Vì vậy phép so sánh địa chỉ đi qua `ui::NormalizedDeviceAddr` /
   `ui::SameDeviceAddr` (`core/ui/Strings.h`), mở ra cho client Swift và Kotlin dưới tên
   `dh_same_device_addr`. Đừng bao giờ so sánh hai địa chỉ thiết bị bằng `==`.
+- **Parity đo theo gói dài nhất trong group, không đo theo MTU**: mọi gói parity đều phát ở
+  nguyên `Packetizer::kParityStride` (`kFecLenPrefix + kMaxVideoPayload`, 1176 B) bất kể các
+  gói dữ liệu nó bảo vệ ngắn tới đâu, nên một frame vừa đúng một gói — hình hài thường thấy
+  của delta frame ít chuyển động — vẫn mua trọn một gói parity full-MTU để bảo vệ vài trăm
+  byte, tức overhead 100 %. Nay parity được cắt xuống `kFecLenPrefix` cộng gói dữ liệu dài
+  nhất trong group; `BuildFecPacket` vốn đã nhận span độ dài thay đổi còn
+  `Reassembler::TryRecover` vốn cũng chỉ cần đúng chừng đó và từ chối bất kỳ parity nào ngắn
+  hơn, nên định dạng trên dây không phải đổi. Cần biết việc này **không** sửa được gì: vì
+  packetizer rải bước (`i % numGroups`) và chỉ gói cuối của một frame mới ngắn, nên từ hai
+  gói trở lên mọi group vẫn chứa một gói full-MTU và vẫn nhận parity nguyên stride. Trên kích
+  thước đó, cái quyết định chi phí là **số** gói parity, `ceil(count / kFecGroupSize)` — frame
+  9 gói trả 22 %, không phải 12,5 %. Overhead của FEC là một đường cong theo kích thước
+  frame; nó không bao giờ là con số 1/8 duy nhất mà group size gợi ra.
+- **Một datagram bị transport từ chối trông không khác gì một datagram mạng làm rớt**:
+  `quiche_conn_dgram_send` thất bại khi congestion control của chính quiche hoặc
+  `kDatagramQueue` của nó không nhận gói, còn `SendDatagram` rẽ nhánh trên kết quả đó chỉ để
+  trả nó về — bản thân tín hiệu thì bị vứt đi. Gói như vậy không bao giờ rời khỏi máy, nhưng
+  `Reassembler` bên viewer chỉ thấy một lỗ hổng bình thường và báo lên là mất gói, nên host
+  có thể tốn parity FEC cho, và tự hạ bitrate encoder vì, chính những gói mình đã vứt.
+  `QuicSendStats::datagramsRefused` đếm chúng, và dòng `evt=sum` của host mang `dgram_tx` và
+  `dgram_refused` theo từng cửa sổ, ngay cạnh các con số mất gói. Hãy đọc hai số đó trước khi
+  tin bất kỳ phép đo FEC hay điều khiển tắc nghẽn nào: congestion control của quiche nằm dưới
+  đường datagram, nối tiếp với `BitrateController`, và không cái nào biết cái kia tồn tại.
+- **Số group FEC nay đi trong chính byte header vốn luôn bằng không**: trước đây hai đầu đều
+  tự suy ra `ceil(pktCount / kFecGroupSize)`, và điều đó buộc chặt hai thứ vốn tách rời: bao
+  nhiêu gói dùng chung một gói parity, và hai gói liên tiếp cách nhau bao xa về group.
+  Độ sâu interleave vì thế là hệ quả của kích thước frame chứ không phải một lựa chọn:
+  keyframe 40 gói được depth 5, còn delta frame 8 gói — hình hài thường thấy ở 60 fps — chỉ
+  có đúng một group và interleave bằng không, nên khả năng chống burst mạnh nhất lại nằm
+  đúng chỗ ít cần nhất. `FecHeader::groups` nay mang con số đó trong byte mà
+  `BuildFecPacket` trước kia luôn ghi 0; giá trị 0 vẫn có nghĩa "tự suy ra", nên header
+  không đổi kích thước và `kProtocolVersion` không phải tăng. `FecGroupCount` là hàm duy
+  nhất cả hai đầu gọi, và nó kẹp số group đã báo xuống theo số gói để hai bên không bao giờ
+  bất đồng về chỉ số group. Cái giá phải trả: một gói dữ liệu không còn ánh xạ được vào
+  group trước khi gói parity đầu tiên của frame đó tới — vô hại, vì muốn phục hồi thì đằng
+  nào cũng cần parity. Đo trong `LossGoodputTests` ở mức 5% loss Gilbert-Elliott với burst
+  trung bình 4 gói: số lần xin keyframe giảm từ 171/phút ở depth suy ra xuống 81/phút ở
+  depth 8, và tỉ lệ frame hỏng được cứu tăng từ 34% lên 79%.
+- **Sơ đồ FEC được cấu hình ở cả hai đầu, không bao giờ được thương lượng**: `FecScheme` là
+  một interface với đúng một bản đăng ký, `xor`, và `Packetizer` cùng `Reassembler` mỗi bên
+  giữ một cái. Trên dây không có gì nói gói parity do sơ đồ nào viết ra — định dạng payload
+  là việc riêng của sơ đồ — nên một host và một viewer được đặt hai sơ đồ khác nhau sẽ không
+  cứu được gì, và sự lệch đó chỉ lộ ra dưới dạng phục hồi không bao giờ chạy. Điều này là cố
+  ý khi mới có một bản triển khai: `--fec NAME` trên `deskhub-cli share` và `connect` tồn
+  tại để đo các phương án với nhau, bị từ chối ngay lúc phân tích tham số nếu bản build
+  không có sơ đồ mang tên đó, và không phải một tuỳ chọn cho người dùng chọn. Việc báo sơ đồ
+  trên dây là phần việc của bản nào thắng bake-off và trở thành đường chạy thật duy nhất;
+  cho tới lúc đó `--fec` là một dụng cụ đo, phải đặt giống hệt nhau ở hai đầu cùng một phiên.
+- **Chỉ mô hình mất gói theo cụm mới xếp hạng được các độ sâu interleave**: link sim trong
+  `LossGoodputTests` bỏ gói theo một chuỗi Markov hai trạng thái có seed, tham số hoá bằng
+  tỉ lệ mất và độ dài burst trung bình, và chạy song song một mô hình uniform random làm đối
+  chứng. Đối chứng đó không phải để trang trí — nó là phép kiểm tra rằng mô hình burst thật
+  sự đang tạo ra cụm. Ở cùng mức 5% loss với một gói parity mỗi group, mất gói rải đều được
+  cứu 71%, còn mất gói theo cụm chỉ 34%, bởi vì mất lẻ rải rác đúng là thứ một gói parity
+  hấp thụ được, còn một burst nằm gọn trong một group đúng là thứ nó không thể. Nếu hai mô
+  hình cho cùng kết quả thì chuỗi Markov đã suy biến thành mất gói độc lập, và mọi thứ hạng
+  về depth hay sơ đồ rút ra từ nó đều vô nghĩa. Mỗi điểm quét in ra một dòng `[csv]`, nên
+  các con số đứng sau bất kỳ quyết định FEC nào cũng tái lập được bằng cách chạy lại test.
+- **Thứ quyết định FEC có làm được gì hay không là chính sách bật nó, không phải sơ đồ FEC**:
+  host bật parity khi viewer báo có mất gói và tắt lại sau `kCleanSecondsBeforeDroppingFec`.
+  Hai chi tiết làm chính sách đó mù với đúng loại mất gói mà link thật có.
+  `MakeFeedback` làm tròn loss về số nguyên phần trăm
+  (`fb.lossPct = uint8_t(std::lround(w.lossPct))`), nên mọi giá trị dưới 0,5% tới
+  `BitrateController` đều thành 0%; còn điều kiện bật là `fb.lossPct >= 1`, nên một link mất
+  một gói mỗi giây — 0,1% của một giây 540 gói — không bao giờ bật FEC. Đo với host thật qua
+  WiFi nhà: 5 lần mất gói đơn lẻ trong 196 giây, `fec_rx` bằng 0 ở cả 118 cửa sổ, và mỗi gói
+  mất tối đa 1174 byte phải trả bằng một frame bị bỏ cộng một IDR nguyên khung ~150 KB. Với
+  host thứ hai thì bắt được trọn chu kỳ: sạch 10 cửa sổ, một cửa sổ 0,5%, có parity đúng 10
+  cửa sổ tiếp theo, rồi tắt — 1224 gói parity đổi lấy 1 gói vá được. `LossGoodputTests` nay
+  chạy chính `BitrateController` thật qua chính `MakeFeedback` thật, nên sim tái hiện được
+  điều này: tại điểm vận hành đo được (0,1% loss, burst 1), FEC luôn bật cứu 16/16 frame hỏng
+  và không phải xin keyframe lần nào, còn chính sách đang ship chỉ bật 30% thời gian, cứu
+  6/16, và xin 20 IDR mỗi phút. Mọi phép so sánh giữa các sơ đồ FEC giả định parity có trên
+  dây đều đang đo một cấu hình mà chính sách này hầu như không bao giờ tạo ra.
+- **Hàm mục tiêu phải đếm theo nguyên nhân, nếu không nó đếm nhầm thứ**: A1 chấm điểm FEC
+  bằng số lần xin keyframe mỗi phút, nhưng chỉ `KeyframeReason::Loss` là do mạng gây ra.
+  Trong 148 cửa sổ với hai viewer trên một link báo 0% loss và không có reconfig nào, host vẫn
+  phát ra 10 IDR nguyên khung ~72 KB — tất cả đều do viewer xin sau khi hàng đợi decode của
+  chính nó bị tràn. `q_overflow`, `dec_fail` và `display_congested` đến từ pipeline của
+  client, còn `wait_idr` đến từ lúc khởi động; gộp chung lại sẽ thổi phồng điểm số của bất kỳ
+  thay đổi transport nào đang được thử. Nguyên nhân vốn đã có trong dòng log mà không có
+  trong bộ đếm nào, nên `KeyframeRequestLog` nhận một `KeyframeReason` có kiểu và in
+  `evt=kf_sum` kèm số đếm từng nguyên nhân mỗi cửa sổ. Việc đó sửa được phía viewer nhưng để
+  host mù: host mới là bên tiêu tốn cái IDR, mà `RequestKeyframe` lại là một datagram rỗng,
+  nên mọi yêu cầu trông giống hệt nhau đối với chính cái máy mà điểm số đang nói về bitrate
+  của nó. Bản tin nay chở nguyên nhân bằng một byte payload, `ScreenHostSession` chuyển nó cho
+  `onKeyframeRequest`, và host in `evt=kf_req_sum` tách theo đúng cách đó. Hai chi tiết khiến
+  nó dùng được: một peer dựng từ trước khi có byte này không gửi payload nào và rơi vào
+  `unknown` chứ không rơi vào ô đầu tiên của enum, và đường tự nối lại giữa chừng của chính
+  host được gán nhãn `viewer_join` chứ không mượn nguyên nhân của một viewer. Tách con số đó
+  ra trước khi dùng nó chấm điểm bất cứ thứ gì.
+- **Việc retransmit có cứu được gì hay không do thời gian giữ frame quyết định, không phải do
+  đường retransmit**: `PlanNack` và `RetransmitCache` chạy đúng như viết — trong sim, host
+  phục vụ đủ mọi chỉ số viewer hỏi, và mọi gói phục vụ đều tới nơi. Nó cứu được **không** frame
+  nào. `PopReady` bỏ một frame non-IDR chưa đủ gói ngay khi có hai frame mới hơn đã hoàn
+  chỉnh, ở 60 fps là khoảng 33 ms, trong khi một NACK tốn trọn một round trip cộng thêm 2 ms
+  `kNackHoldUs`: ở round trip 40 ms của một link gia đình, gói vá về sau thời điểm frame nó
+  định vá đã bị vứt khoảng 24 ms. Rút round trip xuống 4 ms trong cùng sim thì chính đường đó
+  bắt đầu cứu được frame. Vậy phương án "NACK-only" của A1 hoàn toàn không phải câu hỏi về
+  retransmit — nó là câu hỏi về `kStallTimeoutMultiple` và luật overtaken đặt cạnh RTT, và mọi
+  phương án lai chuyển giữa FEC và NACK theo RTT thực chất đang chuyển theo việc frame có còn
+  đó lúc gói vá tới hay không. Cũng cần biết: khi parity đang bật thì không frame nào thiếu gói
+  đủ lâu để bị NACK — FEC và NACK không bao giờ tranh nhau cùng một lần vá, nên đóng góp của
+  chúng cộng vào nhau chứ không chồng lên nhau.
+- **Luật giữ frame mới là toàn bộ câu trả lời, và đọc nó ở đúng một điểm vận hành đã che mất
+  điều đó**: đoạn ngay trên kết luận NACK-only là ngõ cụt. Nó được đo ở 0,1% loss với luật
+  overtaken cố định ở hai frame mới hơn — nên nó đo *luật*, không đo retransmit. Một phép quét
+  72 điểm trên chế độ vá × RTT × độ dài giữ nói khác hẳn. Ở 5% loss, burst 4, RTT 40 ms:
+  NACK-only cứu 11 frame hỏng và xin 171 keyframe/phút dưới luật đang ship; để frame chờ đủ lâu
+  cho chính bản vá của nó kịp về thì cùng đoạn code đó cứu **30** và chỉ xin **72** — tốt hơn
+  `fec-only` ở cùng điểm (cứu 21, xin 171) mà **không gửi một gói parity nào**. Ở 80 ms quy luật
+  vẫn giữ, và `fec+nack` đạt 63 lần/phút, con số tốt nhất trong cả lưới. Ở RTT 4 ms thì không
+  đổi gì, vì bản vá vốn đã về kịp trong hai frame: cái lợi thuần tuý là hàm của RTT so với chu
+  kỳ frame, và đó là lý do `OvertakenLimit()` **suy ra** con số từ cửa sổ vá chứ không nâng một
+  hằng số. Thứ nó không mua được là độ trễ miễn phí — khoảng cách dài nhất giữa hai frame được
+  giao dịch chuyển cả hai chiều trong lưới, chỗ tăng chỗ giảm, vì bớt được keyframe có thể trả
+  thừa cho cái chờ dài hơn. Một
+  kết quả âm tính đo ở đúng một điểm vận hành chỉ là phát biểu về điểm đó, và lần này nó đã che
+  mất một hệ số ba.
+- **Phần suy ra đó nay đã là mặc định đang ship, và chỉ dựa trên phép quét**: một thời gian dài
+  cái cổng vẫn đóng — `OvertakenLimit()` trả về mức giữ hai frame cũ trừ khi có caller nâng trần
+  lên trên nó, nên phép quét chạy được phần suy ra trong khi production giữ nguyên hành vi đã đo.
+  `ScreenViewer::Config::overtakenLimit` nay mặc định bằng `kDefaultOvertakenLimit` (8 frame,
+  133 ms ở 60 fps), và thế là cổng mở. Số 8 không phải tinh chỉnh: phép quét thấy 8 và 30 không
+  phân biệt được ở mọi điểm, vì dưới khoảng RTT 130 ms thì chính giá trị suy ra mới là cái chặn,
+  còn trần chỉ cắt cái đuôi — không có trần thì một link 300 ms sẽ giữ 29 frame, gần nửa giây độ
+  trễ, chỉ để tiết kiệm một keyframe. Phần lợi có điều kiện và phải nói đủ: từ 40 ms trở lên nó
+  giảm số keyframe đi 2–4 lần, và ở loss cao nó còn **rút ngắn** cả cái stall dài nhất, vì không
+  tiêu một IDR là tiết kiệm luôn 120 ms mà keyframe ấy phải trả. Ở RTT 20 ms với loss 1% nó thắng
+  nhẹ; ở 20 ms với loss 5% nó **không mua được gì** mà cộng thêm khoảng 34 ms vào stall dài nhất.
+  Nghĩa là viewer trên LAN trả một chút cho cái mà viewer qua WAN được hưởng. ⚠️ **Toàn bộ chuyện
+  này chỉ dựa trên mô phỏng.** Mọi con số trên đến từ mô hình có seed trong `core/tests`, vốn có
+  độ trễ một chiều cố định, **không jitter, không reorder, không tắc nghẽn**, và chở byte ngẫu
+  nhiên chứ không phải video. Nó chưa từng gặp một NIC nào. Nửa `netem` của phần xác nhận Phase 3
+  mới là thứ khẳng định hay bác bỏ được điều này, và nó **chưa được chạy**.
+- **Reed-Solomon cần nhiều hơn một gói parity mỗi group, và đó là đổi wire chứ không phải chi
+  tiết cài đặt**: `FecHeader` đúng 16 byte và dùng hết (frameId 4, timestampUs 8, pktCount 2,
+  groupIndex 1, groups 1), `Packetizer` phát đúng một gói FEC mỗi group, còn bên nhận lưu đúng
+  một payload parity mỗi group. RS(k,n) với một hàng parity thì chỉ là XOR đắt tiền hơn, nên
+  không tầng nào trong ba tầng đó chở nổi nó. Chỉ số parity nay đi trong flags byte của common
+  header, nơi mới dùng bit 0 (`kVideoFlagIdr`) và bit 1 (`kVideoFlagFrameEnd`): sáu bit còn lại
+  cho 64 gói parity mỗi group mà không phải tăng kích thước header hay `kProtocolVersion`. Một
+  receiver không đọc các bit đó sẽ giữ gói parity đầu tiên của mỗi group và bỏ phần còn lại,
+  tức suy về XOR chứ không làm hỏng dữ liệu. Parity phía nhận được khoá bằng group và index gộp
+  vào một `uint16_t` thay vì vector lồng nhau — dạng lồng tốn thêm một cấp phát mỗi group và lộ
+  ra ngay: `video/reassemble-fec-recovery` nhảy từ 1.30 lên 1.43 cấp phát mỗi gói. Chi phí đo
+  được của chính sơ đồ, ở hai gói parity mỗi group: encode 143 µs mỗi frame so với 22,7 µs của
+  XOR, tức 6,3 lần, còn phục hồi chỉ đắt hơn 1,4 lần vì nó chạy trên một group chứ không phải
+  cả frame. Đó là cái giá của việc mua khả năng cứu hai gói mất mỗi group.
+- **Bốn bộ điều khiển tắc nghẽn sau một interface, và mỗi cái thật sự nhìn thấy gì**: các
+  phương án của A2 nay là `aimd` (bản AIMD đang chạy, không đổi), `delay-trend`, `scream` và
+  `hybrid`, dựng bằng `MakeCongestionControl` và được `SourcePipelineState` giữ bằng con trỏ
+  thay vì giá trị. Điều cần biết khi đọc chúng: `Feedback` của giao thức mỗi giây chỉ mang tỉ
+  lệ mất gói, RTT và tốc độ nhận — không có dấu thời gian tới của từng gói, nên **không thể**
+  dựng một bộ lọc delay-gradient đúng kiểu WebRTC trên biến thiên độ trễ giữa các nhóm ở đây.
+  Vì vậy `delay-trend` làm việc trên độ trễ hàng đợi suy ra từ phần RTT vượt trên mức tối
+  thiểu quan sát được, còn `scream` bám theo tốc độ nhận được báo về, bị chặn bởi chính độ trễ
+  hàng đợi đó. Chúng là bản thích nghi với những tín hiệu mà dây này chở, không phải bản cài
+  lại của các bài báo, nên đem so với số liệu GCC hay RFC 8298 đã công bố là so hai thuật toán
+  khác nhau. `hybrid` lấy tốc độ thấp hơn trong hai và hợp của hai quyết định FEC. Cả bốn dùng
+  chung một luật bật FEC, nên đổi bộ điều khiển không âm thầm đổi thời điểm parity được phát.
+- **Backoff kết nối lại không có jitter đưa mọi viewer quay lại cùng một khoảnh khắc**:
+  `ReconnectDelayUs` nhân đôi từ 500 ms tới trần 5 s như một hàm thuần theo số lần thử, nên
+  các viewer mất cùng một host tại cùng một thời điểm sẽ thử lại đồng pha và đập vào nó cùng
+  lúc ở mọi vòng. Nay nó nhận thêm một từ `jitter` do caller cấp và trả về độ trễ rút từ nửa
+  trên của khoảng backoff danh nghĩa, vừa giữ tần suất thử lại có chặn vừa rải thời điểm quay
+  lại. `core/` không được với tới `deskhubp/system/Random.h`, nên tính ngẫu nhiên buộc phải đi
+  vào qua tham số — việc phải đổi chữ ký ở mọi caller chính là điểm mấu chốt, không phải phiền
+  toái.
+- **Reed-Solomon với một hàng parity chính là XOR, đo ra tới từng chữ số**: phép quét Phase 3
+  chạy 180 điểm trên sơ đồ × số hàng parity × độ sâu interleave × tỉ lệ mất × độ dài burst ×
+  round trip, với FEC ép bật để nó đo sơ đồ chứ không đo chính sách bật. Ở 5% loss với burst 4,
+  `rs` một hàng parity và `xor` cho số liệu giống hệt nhau ở mọi mức depth — 33,9% frame hỏng
+  được cứu và 171 lần xin keyframe mỗi phút ở depth dẫn xuất, 78,7% và 81 ở depth 8 — đúng như
+  đại số bắt buộc phải vậy, và là một phép kiểm tra hữu ích rằng bản cài đặt đúng. Nó cũng có
+  nghĩa RS không mang lại gì khi dưới hai hàng parity trong khi tốn 6,3× CPU encode, nên một
+  hàng không bao giờ là cấu hình để đưa nó ra chạy thật. **Khi đã tính overhead thì không điểm nào trong lưới thắng được mặc định đang chạy, và đọc
+  sweep mà bỏ qua cột đó chính là cách người ta kết luận ngược lại.** Tách độ sâu interleave
+  không thêm CPU, và rất dễ gọi đó là miễn phí: nó đưa tỉ lệ cứu từ 33,9% lên 78,7% và số lần
+  xin keyframe từ 171 xuống 81 mỗi phút. Nó cũng đưa overhead parity từ 15% lên **100%** — ở
+  một group mỗi gói thì mỗi gói tự mang parity của chính mình, đó là nhân đôi chứ không phải mã
+  hoá. Trên ngân sách 20 Mbps, việc đó tiêu khoảng một nửa bức ảnh để giảm một nửa số lần xin
+  keyframe. `rs` ba hàng ở depth 4 đạt 36 lần mỗi phút với overhead **150%**. Vậy nên phép quét
+  **không sinh ra bản thắng nào để đưa lên**; kết quả của nó là các mặc định đứng nguyên còn
+  các bản dự thi ở lại làm tham chiếu sau `--fec`. `overhead_pct` nay là một cột riêng trong
+  CSV, và có test khẳng định depth tốn hơn ba lần parity — bởi vì bản viết đầu tiên về đúng
+  phép quét này đã gọi depth là đòn bẩy rẻ nhất trong lưới, và đã sai.
+- **Một bản giữ lại xứng đáng có chỗ nhờ việc còn với tới được và còn được test, không phải nhờ
+  được quét dưới mọi sanitizer**: phép quét Phase 3 không đưa ai lên, nên `rs` ở lại trong cây
+  nguồn mà production không có đường nào chọn nó — `Packetizer` và `Reassembler` đều khởi động
+  bằng `kDefaultFecScheme`, `ShareOptions` và `ScreenClientConfig` không gọi tên sơ đồ nào cho
+  tới khi có thứ hỏi, và chỉ `deskhub-cli --fec=NAME` mới hỏi. Chính khả năng với tới đó là toàn
+  bộ lý do một bản thua đáng được giữ, nên nay đã có test khẳng định nó thay vì phó mặc cho thói
+  quen. Việc giữ cũng không miễn phí: `rs` mã hoá một frame mất 143,9 µs so với 22,8 µs của XOR,
+  và phép quét chạy cả hai chiếm phần lớn thời gian của `core_tests` — 8,6 s cho ma trận đầy đủ
+  so với 2,9 s khi chỉ có sơ đồ đang ship, trước khi ASan hay TSan nhân nó lên.
+  `DESKHUB_FEC_MATRIX=shipping` chọn ma trận nhỏ hơn, và các job sanitizer đặt biến đó trừ khi
+  diff có đụng vào `FecScheme` hoặc test của nó — nên một bản tham chiếu vẫn được quét dưới
+  sanitizer đúng vào những thay đổi có thể làm nó hỏng, còn tám job unit thông thường vẫn phủ nó
+  ở mọi commit. Một giá trị không nhận ra thì làm hỏng cả lần chạy chứ không lặng lẽ chọn giùm,
+  bởi "lần chạy này thực sự đã phủ những bản nào" không phải câu hỏi mà một lỗi gõ được quyền
+  trả lời.
+- **Một núm vặn không có caller nào ngoài chính test của nó thì không phải núm vặn**: phép quét
+  Phase 3 xoay ba trục — sơ đồ, số hàng parity và độ sâu interleave — mà từ một binary đã build
+  chỉ chạm được đúng trục đầu. `--fec` chọn sơ đồ, và chính phép quét cho thấy đó là trục ít
+  quan trọng nhất: `rs` ở một hàng parity tái lập `xor` tới từng chữ số. Hai trục thật sự làm
+  con số dịch chuyển thì không với tới được. `Packetizer::SetFecGroups` không có caller nào
+  ngoài `core/tests` — đúng hình dạng lỗi mà Phase 1 đã vấp với `SetVideoPath`. Tệ hơn, tỉ lệ
+  parity thì với tới được nhưng **giữ** không được: `ViewerBroadcast` gọi `SetFecParityPerGroup`
+  ở mỗi lần broadcast, lấy từ `wantFecParity`, mà `ApplyFeedback` lại ghi đè mỗi giây bằng
+  `FecParityRowsFor(lossPct)` — 1 hàng khi dưới 3% loss, 2 khi dưới 6%, 3 khi trên. Nên trên
+  link tốt chính sách trả về 1, và `--fec=rs` ở đó **chính là** `xor` cộng thêm 6,3× CPU encode.
+  Ai đo trên WiFi nhà sẽ kết luận Reed-Solomon chẳng thay đổi gì, trong khi chưa một lần chạy nó
+  ở cấu hình mà nó khác. Nay `--fec-parity` ghim tỉ lệ để chính sách không đè, `--fec-depth`
+  chạm tới `SetFecGroups`, còn `--fec-arm always` giữ parity trên dây để cái được đo là sơ đồ
+  chứ không phải chính sách bật — đúng như sim vẫn làm, và ý nghĩa của mấy cờ này là giờ có thể
+  hỏi một link thật cùng câu hỏi đó. Trước khi tin một cờ tái lập được phép đo, hãy tìm dòng
+  code đọc nó trong production; một hàm setter cộng một cái test không phải dòng đó. Mỗi source
+  còn log lại chính cấu hình nó rơi vào, đọc ngược từ packetizer chứ không từ tuỳ chọn —
+  `FEC measurement: scheme=xor parity=1 depth=4 arm=policy` sau khi bị xin ba hàng parity mới là
+  câu trả lời trung thực, vì `xor` chỉ chở được một; và một dòng trong bảng quét dán nhãn theo
+  cái đã xin thay vì cái đã chạy thì còn tệ hơn là không có dòng nào.
+- **Đúng cái caller thiếu đó còn ở bốn chỗ nữa, và một chỗ tới giờ vẫn thiếu**: chạy lại bài
+  kiểm tra ấy lên phần còn lại của Tier A thì thấy `SetCongestionControl`, `SetAdaptiveTarget`,
+  `SetAdaptiveLead`, `SetDisplayIntervalUs` và `MakeClockOffsetEstimator` đều có **0** caller
+  ngoài chính test của chúng. Ba trong bốn bộ điều khiển tắc nghẽn không chọn được, target âm
+  thanh thích ứng không bật được, và cả ba bản ước lượng đồng hồ chỉ tồn tại trong một phép
+  quét. Nay `--cc` chạm tới vòng điều khiển của host, còn `--audio-delay` / `--audio-adaptive`
+  chạm tới jitter buffer của viewer, cả hai đều được log lại từ chính đối tượng đang chạy. Hai
+  cái còn lại **cố ý để yên**: `VideoPacer` là nơi duy nhất dùng `ClockOffset`, mà `VtDecoder`
+  lại là nơi duy nhất dùng `VideoPacer` — nên trên Windows và Linux không có pacer nào để cấu
+  hình, và thêm `--clock` hay `--vsync` ở đó chính là chế tạo ra đúng cái núm vặn giả mà mục này
+  đang nói. `RollingMinEstimator` đã xác nhận là **wrapper thuần** quanh `ClockOffset`, nên
+  chuyển `VideoPacer` sang contract là thay đổi không đổi hành vi — làm khi nào có một viewer
+  không-Apple bắt đầu dùng pacer, chứ không phải trước đó. Một contract không có caller
+  production chỉ là một đồ gá cho phép quét đang khoác áo interface, và viết thêm impl phía sau
+  nó không đổi được điều đó.
+- **Pacer chưa bao giờ gọi tới đúng cái method mà ba bản ước lượng đồng hồ khác nhau**: sau khi
+  chuyển `VideoPacer` sang contract `ClockOffsetEstimator` — không đổi hành vi, vì `rolling-min`
+  là wrapper thuần quanh chính `ClockOffset` mà nó vốn nhúng — một phép quét 18 điểm chạy cả ba
+  bản dưới wobble 0/5/20 ms, có và không có bước nhảy transit 30 ms. Chúng **không phân biệt
+  được**: phase spread nằm trong 6898–6937 µs với mọi bản ở mọi điểm, và `kalman` tái lập
+  `rolling-min` tới từng micro giây. Lý do nằm ở interface chứ không ở thuật toán. Pacer gọi
+  `AddSample`, `ready`, `Reset` và `floorUs` — **không bao giờ gọi `LatencyUs`**, mà `LatencyUs`
+  mới là method duy nhất ba bản cài khác nhau: `KalmanEstimator::floorUs()` trả về `lowest_`,
+  tức **đúng là** rolling minimum. Nên A5 không chấm điểm được bằng judder; trục nó làm dịch
+  chuyển là `e2e_abs_ms` công bố ra, và test riêng của nó vốn đã đo ở đó. Trước khi nối một
+  contract vào một nơi tiêu thụ để chạy bake-off, hãy kiểm tra nơi đó có gọi cái method mà các
+  bản dự thi khác nhau hay không — nếu không, phép quét chỉ đẻ ra một bảng gọn gàng của cùng
+  một con số.
+- **Xin gì ở encoder sau khi mất một reference là một chính sách, mà nó đang là hằng số**: gói
+  `InvalidateRef` của viewer vốn đã đi hết chiều dài dây, và host trả lời bằng
+  `forceIdr.store(true)` — nên "reference invalidation" trong mọi trường hợp chính là một IDR
+  nguyên khung. `media::RecoveryPolicy` nay chọn giữa ba câu trả lời dựa trên thứ backend khai
+  là mình làm được: tụt về long-term reference mới nhất còn cũ hơn frame đã mất, bắt đầu một
+  lượt intra refresh cuộn, hoặc gửi keyframe. Hai luật đáng nhớ. Một reference **mới hơn** frame
+  đã mất thì không bao giờ dùng được, vì viewer có thể chưa từng giải mã nó — chỉ cái cũ hơn mới
+  an toàn. Và một báo cáo mất lần thứ hai tới trước khi kịp mã hoá frame nào nghĩa là câu trả
+  lời rẻ đã không ăn thua, nên nó leo thang lên keyframe thay vì lặp mãi.
+  `ReferenceInvalidatingEncoder` và `IntraRefreshEncoder` gia nhập nhóm concept tuỳ chọn trong
+  `VideoContract.h`. Hai backend Windows nay thi hành chúng; bốn backend còn lại chưa khai gì, nên
+  tập khả năng của chúng vẫn rỗng và hành vi không đổi — một chính sách chỉ tốt đúng bằng cái
+  encoder thi hành được nó.
+- **Thương lượng codec vốn chỉ là một phép thử bit, trong khi mask đã rộng 16 bit sẵn**: `Hello`
+  mang `codecMask` và `HelloAck` mang `Codec`, nhưng host chỉ từng kiểm
+  `codecMask & kCodecMaskH264` rồi trả về `Codec::H264`. Mask nay gọi tên H264 4:2:0, H264
+  4:4:4, HEVC và AV1, còn `NegotiateCodec(hostMask, clientMask)` chọn mục đầu tiên trong một
+  bảng ưu tiên tường minh mà cả hai đầu cùng có, tụt về baseline 4:2:0 nằm cuối bảng — nằm cuối
+  đúng để nó là sàn chứ không bao giờ là lựa chọn đầu. Peer cũ chỉ báo mỗi bit 0 nên vẫn thoả
+  thuận ra H264 và nhận về giá trị 0, không có gì trên dây phải dịch chuyển. Không encoder nào
+  trong cây tạo ra thứ gì ngoài H264 4:2:0, nên cơ chế hôm nay là trơ — mà đó đúng là điều C3
+  yêu cầu: một bảng khả năng và một cơ chế thương lượng, không phải một cuộc đua. Bản thân thứ
+  tự ưu tiên là **tạm**: 4:4:4 cho chữ sắc nét có nên xếp trên AV1 cho ít bit hay không chính là
+  câu hỏi C3 tồn tại để giải, và nó cần phép đo mà thứ tự này chưa có.
+- **Một luồng một chiều không bao giờ cho ra được latency tuyệt đối, bộ ước lượng có tốt tới
+  đâu cũng vậy**: cả ba bản ước lượng offset — rolling minimum, trendline, Kalman — đều nhận
+  cùng một đầu vào là hiệu giữa dấu thời gian host của một frame và thời điểm nó tới máy mình,
+  mà hiệu đó là offset đồng hồ **cộng** độ trễ một chiều hàn dính vào nhau. Cả ba đều trừ đi một
+  mốc sàn rồi báo phần vượt, nên `e2e_ms` là con số về sự ứ đọng chứ không phải về độ trễ, và
+  đặt nó cạnh số của một tool khác là vô nghĩa. Cách sửa là **thêm một dấu thời gian thứ hai**,
+  không phải một bộ lọc tốt hơn: `PingPong` nay chở `hostTimeUs` cạnh `sendTimeUs` của client,
+  còn `ClockSync` giữ lần trao đổi có round trip nhỏ nhất trong cửa sổ mười giây — lần ít ứ đọng
+  nhất — để ước lượng offset đồng hồ. Latency đầu-cuối tuyệt đối khi đó là
+  `(thời điểm tới - offset) - hostPts`, báo ra dưới tên `e2e_abs_ms` cạnh `e2e_ms` tương đối.
+  Payload tăng từ 12 lên 20 byte, và điều đó an toàn vì common header không chở độ dài payload
+  còn `ParsePingPong` xưa nay chỉ cần mười hai byte đầu: peer cũ đọc đủ ba trường nguyên bản rồi
+  bỏ qua phần còn lại, peer mới đọc gói 12 byte cũ thì thấy `hostTimeUs == 0` và tụt về số tương
+  đối. Tất cả dựa trên giả định hai chiều đối xứng — đó là giả định của NTP và là giới hạn của
+  phương pháp, không phải của bản cài: một đường đi bất đối xứng sẽ đẩy thẳng một nửa độ bất đối
+  xứng đó vào offset.
+- **Một bộ lọc mũ dùng số không dấu đi ngược hướng ngay lần đầu đầu vào giảm xuống**: cả ước
+  lượng jitter của audio lẫn của pacer đều viết là
+  `jitterUs_ += (spread - jitterUs_) >> shift` với `spread` và `jitterUs_` đều là `uint64_t`.
+  Với bất kỳ mẫu nào yên hơn trung bình đang chạy, phép trừ tràn về gần 2^64, phép dịch giữ lại
+  gần như toàn bộ, và ước lượng **phồng lên** thay vì suy giảm. Nó vô hình cho tới khi đường
+  cong độ trễ/gián đoạn của audio thực sự được vẽ ra và target thích ứng ngồi lì ở trần 500 ms
+  trên một link chỉ wobble 15 ms. Cả hai nay tính bằng `int64_t`. Đường cong tìm ra nó; các
+  unit test quanh đó lẫn hình dạng của code đều không.
+- **Đường cong độ trễ ↔ gián đoạn nói target audio cố định vẫn là mặc định đúng**: sau khi sửa
+  bộ lọc và cho playout chạy theo đồng hồ thay vì theo lúc gói tới, phép quét chạy sáu mức
+  target trên ba mức jitter. Target thích ứng thắng dứt khoát trên link phẳng — giữ 20 ms thay
+  vì 60 ms cho cùng đúng một gap khởi động — và **thua** khi có jitter: ở wobble 40 ms nó chọn
+  đúng 60 ms như bản cố định nhưng trả bằng bốn lần che thay vì một. Chi phí nằm ở chính việc
+  thích ứng: nâng target giữa chừng nghĩa là phải chờ nạp lại tới mức mới, và cái chờ đó là một
+  underrun; chỉ nâng vào lúc hàng đợi đã đủ thì bớt được phần lớn nhưng lại khiến target thiếu
+  hụt. Bật cái này mặc định là đổi một mức tăng gián đoạn đo được lấy một cái lợi về độ trễ mà
+  phép quét chỉ xác nhận trên đúng những link vốn chẳng phải vấn đề.
+- **Khớp vsync không phải một cuộc đánh đổi độ trễ, và đó là điều phép quét chứng minh**: A6
+  đóng khung judder như thứ phải vẽ theo trục độ trễ cộng thêm, nên phép quét đổi lead của pacer
+  từ 8 ms tới 66 ms, có và không khớp vsync. Không khớp thì pha mà một frame rơi vào bên trong
+  chu kỳ quét 6944 µs trải rộng khoảng 6000 µs ở **mọi** mức lead — gấp tám lần độ trễ không thu
+  hẹp được gì, vì độ trải đó đến từ việc nội dung 60 fps gặp panel 144 Hz, không phải từ wobble
+  lúc tới. Khớp vsync đưa nó về đúng **0** và không tốn một chút độ trễ nào. Ở đây không có
+  đường cong nào để đánh đổi dọc theo; chỉ có một khiếm khuyết và một cách sửa.
+- **HRESULT không phải bool, và `ICodecAPI::IsSupported` trả `S_OK` nghĩa là có**: mọi thuộc tính
+  điều khiển tốc độ mà encoder Media Foundation đặt đều đi qua
+  `if (!codecApi->IsSupported(&api)) { report("NOT SUPPORTED"); return; }`. `S_OK` bằng 0, nên
+  nhánh đó chạy đúng vào những thuộc tính MFT **có** hỗ trợ, còn `SetValue` chỉ được thử trên
+  những thuộc tính nó không hỗ trợ. Đo trên máy này sau khi in thêm HRESULT thô: `MeanBitRate`,
+  `RateControlMode=CBR`, `GOPSize` và `BufferSize(VBV)` đều trả `hr=0x00000000` và đều đã bị bỏ
+  qua — nghĩa là backend MF suốt đời nó vẫn mã hoá bằng tham số mặc định của MFT: không CBR, không
+  bitrate đích, không GOP vô hạn, không VBV — trong khi NVENC nhận trọn rate plan. Mọi cuộc
+  bake-off giữa hai bên trước bản sửa này là đem một encoder đã cấu hình so với một encoder chưa
+  cấu hình. Nó cũng lật ngược bằng chứng của mục đầu tiên trong phần này: dòng
+  `MeanBitRate: NOT SUPPORTED` trích ở đó thật ra có nghĩa là MFT của Intel **có** thuộc tính này.
+  Kết luận "fallback phải là bắt buộc" vẫn đúng; chỉ có lý do đưa ra cho nó là một dòng log đọc
+  ngược. `SetBitrate` và `RequestKeyFrame` trong cùng file dùng cực ngược lại — đó là cái giá của
+  việc đọc một giá trị trả về ba trạng thái như một bool: hai chỗ gọi không thể cùng đúng, và
+  không có test nào phân biệt nổi.
+- **Núm vặn của C1 thiếu đúng cái caller mà A1 từng thiếu**: `CreateEncoder` thử NVENC, rồi Media
+  Foundation, và giữ cái nào khởi động được trước — nên trên mọi máy có driver NVIDIA thì đường MF
+  không đo được chút nào. Nay `--encoder auto|nvenc|mf|vaapi|videotoolbox` gọi tên backend, và gọi
+  tên một backend không khởi động được thì source **dừng** chứ không lặng lẽ đo cái còn lại — chính
+  cái thất bại mà fallback sẽ giấu đi mới là phép đo. Chấm điểm nó cũng cần một bộ đếm mới:
+  `enc_ms_avg`/`enc_ms_max` không thấy được cái đuôi, nên `evt=sum` nay chở `enc_us_p50` và
+  `enc_us_p99` từ một histogram bước 512 µs. Mỗi backend cũng khai khả năng phục hồi **đọc từ
+  driver** thay vì suy đoán: NVENC qua `nvEncGetEncodeCaps` (`max_ltr_frames=8`,
+  `ref_pic_invalidation=1`, `intra_refresh=1` trên RTX 5070 Ti), Media Foundation qua
+  `IsSupported` trên ba thuộc tính LTR và `GradualIntraRefresh`, tất cả đều có. Đó là câu trả lời
+  A4 đang chờ — cả hai backend Windows đều giữ được long-term reference — nhưng caps khi đó chỉ được
+  **ghi log** chứ chưa đưa vào `RecoveryPolicy`, cho tới khi có encoder thi hành được: khai khả
+  năng trong lúc chưa ai tiêu thụ `invalidateBeforeFrame` hay `wantIntraRefresh` sẽ biến phục hồi
+  mất gói thành vô tác dụng. Số đo đầu tiên, trên desktop rảnh chứ chưa phải một clip cố định: NVENC mã hoá ở
+  p50 2,5-5,6 ms và p99 2,7-5,7 ms, Media Foundation ở p50 0,5-13,8 ms và p99 12,3-17,6 ms. Ở đây
+  cả hai cùng chạm một phần cứng — trên máy này `mf` rơi vào "NVIDIA H.264 Encoder MFT" — nên đây
+  chưa phải câu hỏi Intel-so-với-NVIDIA mà C1 đặt ra; đây là cái giá của việc đi vòng qua Media
+  Foundation để tới cùng phần cứng đó. Một máy Windows thứ hai tách được hai vế ấy ra: một Intel
+  UHD 750 hoàn toàn không có driver NVIDIA, nơi `mf` rơi vào "Intel Quick Sync Video H.264 Encoder
+  MFT", báo đủ ba thuộc tính LTR cùng `GradualIntraRefresh` là có hỗ trợ, và mã hoá 1920 × 802 ở
+  p50 1,5-2,6 ms và p99 2,5-8,4 ms, thỉnh thoảng có cửa sổ chạm 27 ms. Đó là cột Intel mà C1 đòi,
+  và nó nói rằng Quick Sync cũng giữ được long-term reference — nhưng đây **chưa** phải một cuộc
+  đua công bằng với dòng NVENC ở trên: khác máy, khác cỡ capture, khác nội dung màn hình, và không
+  bên nào chạy trên một clip cố định. Cũng chính lần chạy đó xác nhận luật gọi tên từ đầu đến cuối:
+  `--encoder nvenc` ở đấy in "Failed to load nvEncodeAPI64.dll" rồi dừng nguồn, thay vì lặng lẽ mã
+  hoá bằng Quick Sync dưới tên NVENC, còn `--encoder auto` thì rơi tiếp xuống Media Foundation và
+  nói rõ vì sao nó đi tiếp.
+- **Mỗi lần `QuicEndpoint::Poll` đều kết thúc bằng một giấc ngủ, và chính việc gộp lô mới làm nó
+  lộ ra**: vòng đọc gọi `RecvFrom` cho tới khi một lần trả về không có gì, mà "không có gì" chỉ
+  quay lại sau khi `SO_RCVTIMEO` hết hạn — nên một lần poll đã vét sạch socket vẫn phải trả trọn
+  cái sàn timeout đó, thường là 1 ms, ở mọi lần gọi. `SessionTransport::RecvFrom` vốn đã chặn
+  chính `Poll` ấy sau `WaitReadable(10 ms)` của nó, nên giấc ngủ kia là phần cộng thêm thuần tuý
+  trên mọi lần nhận. Đọc theo lô bằng `recvmmsg` bỏ hẳn lần đọc thăm dò: một lô trả về ngắn nghĩa
+  là socket đã rỗng, nên vòng lặp dừng mà không hỏi lại. Còn lại `SetRecvTimeout(0)`, thứ mà POSIX
+  hiểu là "chờ mãi mãi" và vì thế code cũ ép thành 1 ms; nay nó nghĩa là "đừng chờ" (`O_NONBLOCK`
+  trên POSIX, `FIONBIO` trên Windows), đúng điều `Poll(now, 0)` vẫn luôn tự nhận. An toàn vì mọi
+  caller truyền 0 đều đã có cái chờ của riêng mình bao quanh — `WaitEstablished` poll rồi chờ,
+  `RecvFrom` chờ rồi poll — nên không chỗ nào biến thành vòng quay. Đo bằng `platform_perf` trên
+  loopback: một poll rảnh 1 978 692 ns → 732 ns, một record terminal 512 byte 4 244 632 ns →
+  9 201 ns, 64 KB stream 16,7 MB/s → 500,7 MB/s, một datagram QUIC 248 515 ns → 3 986 ns, và phép
+  vét 64 KB→256 KB vẫn tuyến tính (3,78x → 3,84x cho 4x công việc). Loopback không nói gì về thông
+  lượng của một đường thật, nhưng cái sàn 1 ms nó gỡ đi là thời gian đồng hồ trên mọi đường.
+- **Việc gộp lô mua được ít hơn giấc ngủ mà nó phơi ra, và phía gửi mua được nhiều hơn phía nhận**:
+  `sendmmsg` vốn đã gom cả burst vào một syscall, nên `UDP_SEGMENT` (GSO) mua phần việc trong
+  kernel chứ không mua số syscall — một lượt đi qua ngăn xếp UDP/IP thay vì mười sáu. Trên loopback
+  với 16 × 1200 byte: một `sendto` cộng một `recvfrom` cho mỗi datagram tốn 2036 ns/datagram, chỉ
+  gộp phía gửi tốn 636 ns, gộp cả hai tốn 623 ns. Nghĩa là GSO đáng 3,2x ở đây, còn bước cuối nằm
+  trong sai số giữa các lần chạy — hai dòng gộp lô đổi chỗ cho nhau giữa hai lần — vì trên loopback
+  kernel đã giữ sẵn mọi gói và một lần nhận gần như miễn phí. `recvmmsg` vẫn xứng chỗ của nó vì nó
+  gỡ đi lý do khiến vòng lặp phải thăm dò: đo trên một lần chạy `platform_tests` dưới `strace`,
+  17 317 datagram về trong 1631 lần gọi có kết quả, 10,6 gói mỗi syscall. GSO chỉ áp dụng cho một dãy datagram cùng cỡ với gói cuối được phép ngắn hơn, đúng
+  hình hài `quiche_conn_send` sinh ra, và kernel nào từ chối (`EIO`, `EINVAL`, `ENOPROTOOPT`,
+  `EOPNOTSUPP`, `EMSGSIZE`) thì socket quay về `sendmmsg` vĩnh viễn chứ không thử lại từng burst.
+- **Cấp phát của một vòng lặp nóng có thể núp sau chính giấc ngủ của nó**: `Service()` dựng một
+  `std::vector` id kết nối ở mọi lần gọi, `DrainStreams` một buffer 16 KB mới, `DrainDatagrams`
+  một buffer 1350 byte — khoảng 1,5 lần cấp phát mỗi `Poll`, trên một đường chạy theo từng gói.
+  Không cái nào lộ ra khi mỗi poll còn ngủ 1 ms; vừa bỏ giấc ngủ thì `quic/terminal-record-delivery`
+  nhảy từ 9 lên 27 lần cấp phát mỗi record, vì cùng một record nay tốn gấp ba số vòng poll và mỗi
+  vòng đều cấp phát. Bản sửa là mảng trên stack chặn bởi `kMaxConnections` cho hai danh sách id và
+  buffer do chính endpoint sở hữu cho hai chỗ vét, cộng với việc `DrainStreams` trả về trước khi
+  chạm buffer nếu không stream nào đọc được. `quic/poll-idle` đi từ 3,00 lần cấp phát mỗi poll về
+  0,00. Hình hài chung đáng giữ: một đường chạy theo từng gói mà có ngủ thì nó giấu chính chi phí
+  của mình, và cái ngân sách cấp phát đạt chuẩn bao năm nay thật ra đang đo giấc ngủ.
+- **Bộ đếm loss đang đo phần sống sót sau khi vá, không đo cái mà đường truyền thật sự làm**:
+  `packetsLost` và histogram `lossRuns` đều được cộng bên trong `Drop()`, nên chúng chỉ từng đếm
+  những gói vắng mặt trên các frame **đã bị vứt đi**. Một gói được FEC dựng lại, hay một gói NACK
+  lấy về, không để lại dấu vết ở đâu cả. Một phiên năm phút có tải qua Tailscale, trung vị 5,7 Mbps,
+  đo thẳng được vùng mù đó: **48 gói từng vắng mặt**, trong đó 41 gói không bao giờ tới và **7 gói
+  được NACK lấy về kịp** cho frame hoàn thành. Đúng 7 gói đó — cộng một run dài 2 gói không bao giờ
+  vào histogram — là thứ bộ đếm cũ không thể thấy, vì nó chỉ nhìn vào những frame đã bị vứt đi. Mọi
+  tham số Gilbert-Elliott rút từ nó vì thế là tham số của loss **không cứu được**, và càng lệch khi
+  FEC với NACK càng chạy tốt. (Bộ đếm `latePackets` là chuyện khác và không phải bằng chứng ở đây:
+  nó đếm những lần vá tới **sau** khi frame đã bị bỏ, mà phần mất đó đã được tính lúc drop.) Bản sửa không đi quét tìm gap;
+  nó đánh dấu một chỗ trống ở đúng ba thời điểm chỗ trống thật sự lộ ra — một gói lấp vào chỉ số
+  thấp hơn chỉ số cao nhất đã thấy, `TryRecover` dựng lại một mảnh, và một frame rời hàng đợi mà
+  mảnh vẫn trống (đây là lối duy nhất để nhận ra một cái đuôi bị mất, vì không có chỉ số nào cao
+  hơn tới để phơi nó ra). Mỗi gói từng vắng mặt sau đó rơi vào đúng một trong bốn thùng: không bao
+  giờ tới, FEC vá, vá sau khi hỏi bằng NACK, hoặc chỉ đơn thuần bị đảo thứ tự. Tách cái thùng cuối
+  ra là việc bắt buộc chứ không phải trang trí — đảo thứ tự không phải mất gói, gộp vào sẽ thổi
+  phồng mô hình burst — nên `wire_loss%` bằng `(everAbsent − reordered) / (received + neverArrived)`.
+  Thiên lệch đã biết: `nacked[i]` được đặt ngay khi `PlanNack` chọn chỉ số đó, nên một gói vừa bị
+  hỏi vừa chỉ tới muộn sẽ bị xếp là vá bằng NACK — tức nghiêng về phía coi là loss. `evt=sum` nay
+  chở `wire_loss` / `absent` / `gone` / `nack_fix` / `reorder`, và một histogram `wire runs` đứng
+  cạnh dòng `loss runs` cũ. Không dòng nào thay dòng nào: dòng cũ là thứ người xem phải chịu, dòng
+  mới là thứ đường truyền đã làm, và một cuộc bake-off cần dòng thứ hai trong khi một báo cáo lỗi
+  của người dùng cần dòng thứ nhất.
+- **Cho encoder quyền thi hành trước, rồi mới để chính sách gọi tên hành động**: `RecoveryPolicy`
+  đã hoàn chỉnh và nằm im từ A4, tập khả năng để rỗng một cách cố ý. Một host khai có long-term
+  reference trong khi encoder chẳng giữ cái nào sẽ đáp lại một reference bị mất bằng cách đặt
+  `invalidateBeforeFrame`, không ai đọc, và không còn xin cái IDR mà trước đây nó vẫn xin — phục
+  hồi mất gói đi từ đắt sang không có. Nên phần thực thi vào trước, `SetCaps` vào sau cùng.
+  `IVideoEncoder` có thêm `MarkLongTermReference`, `InvalidateReference` và `BeginIntraRefresh`,
+  với `static_assert` buộc nó vào `ReferenceInvalidatingEncoder` và `IntraRefreshEncoder` — đúng
+  công dụng mà hai concept tuỳ chọn ấy được viết ra. NVENC chạy LTR Per Picture (`enableLTR=1`,
+  `ltrTrustMode=0`) trên một ring 4 slot với `maxNumRefFrames` nâng theo: mark bằng
+  `ltrMarkFrame`/`ltrMarkFrameIdx`, vá bằng `ltrUseFrames`/`ltrUseFrameBitmap`, refresh bằng
+  `forceIntraRefreshWithFrameCnt`. `nvEncInvalidateRefFrames` cố ý không dùng — bitmap là đường
+  tất định, vì nó nói thẳng khung kế tiếp được phép tham chiếu cái gì, thay vì gọi tên cái đã hỏng
+  rồi để phần còn lại cho suy đoán. Driver nào từ chối LTR ở `InitializeEncoder` thì được thử lại
+  đúng một lần không có LTR, thay vì làm hỏng cả buổi share. Media Foundation đi qua
+  `AVEncVideoLTRBufferControl` lúc init rồi `MarkLTRFrame`/`UseLTRFrame`/`GradualIntraRefresh`
+  theo từng khung, và `RequestKeyFrame` nay quên ring, vì IDR xoá sạch DPB nên giữ lại cái record
+  ấy là tự nói dối. `deskhubp/host/EncoderRecovery.h` là chỗ nối: `PrepareRecovery()` tiêu thụ
+  `invalidateBeforeFrame` và `wantIntraRefresh`, rơi về IDR mỗi khi encoder không thi hành được,
+  và mark đúng những khung mà chính sách sẽ gọi tên về sau — kể cả IDR, vì bỏ sót chỗ đó là để
+  `core` tin vào một long-term reference mà encoder không giữ. Nó được bọc trong `if constexpr`
+  theo hai concept, nên Linux, Apple và Android giữ nguyên hành vi hôm nay cho tới khi encoder của
+  họ có ba hàm kia. Windows gọi `recovery.SetCaps(encoder->RecoveryCaps())` sau **mỗi** lần tạo
+  encoder, vì `SetCaps` reset luôn chính sách — đúng thứ cần khi encoder vừa dựng lại và đã mất
+  mọi reference nó từng giữ. Preamble nằm trong `EncodeTimed`, nên cả đường frame lẫn đường flush
+  đều đi qua nó thay vì mỗi bên chép một bản.
+- **Một lớp không ai gọi là một cuộc đua đang chờ caller đầu tiên**: `RecoveryPolicy` bị chạm từ
+  hai luồng — `OnReferenceLost` trên net loop của host, `NoteEncoded` và `ShouldMarkLongTerm` trên
+  luồng encode dưới `encMutex` — mà không có khoá nào, và điều đó không tốn gì suốt thời gian chưa
+  backend nào thi hành được phục hồi và đường này chưa bao giờ chạy. Bật Windows lên là TSan báo
+  ngay ở lần mất đầu tiên. Lớp này nay giữ mutex của riêng nó và không còn copy được nữa; không
+  chỗ nào copy cả. Một thành phần đỗ sau một tập khả năng rỗng không được chứng minh là an toàn
+  luồng bởi một lần chạy test xanh, nó chỉ chưa được động tới.
+- **Một nửa của tối ưu đa nền tảng là cái nền tảng chưa bao giờ nhận được nó**: P2 nói đường gửi
+  có gộp lô, và đúng là có — trên Linux. `UdpSocketWin::SendBatch` là một vòng `sendto`, mỗi
+  datagram một syscall, nên host Windows trả trọn chi phí mỗi gói trong khi ghi chú ở trên mô tả
+  một bên gửi đã gộp. Nay nó gọi `WSASendMsg` với control message `UDP_SEND_MSG_SIZE`, đối ứng
+  Windows của `UDP_SEGMENT`, phân giải một lần qua `WSAID_WSASENDMSG` lúc `Open` và tắt vĩnh viễn
+  — không phải theo từng burst — khi stack từ chối, rơi về đúng vòng một `sendto` mỗi datagram. Đó
+  là nửa rẻ trong những gì P2 liệt kê, nên nó đi trước RIO. `LeadingRunOfEqualSegments` chuyển từ
+  `UdpSocketPosix.cpp` lên `deskhubp/net/UdpSocket.h` để hai hệ điều hành dùng chung đúng một luật
+  thay vì hai bản chép, và luật "gói ngắn chỉ được là segment cuối của một run" nay được giữ bằng
+  một test đơn vị chứ không chỉ bằng một vòng loopback. Bảng loopback ở trên là số Linux:
+  `platform_perf` chưa chạy trước/sau thay đổi này trên Windows, nên những con số đó không chuyển
+  sang được.
+- **`enc_lat_ms` chưa bao giờ là con số của capture, và cái đồng hồ capture thì không ai đọc**: C2
+  hỏi Windows Graphics Capture trả bao nhiêu độ trễ so với DXGI Desktop Duplication, và phát hiện
+  đầu tiên là con số đó **chưa tồn tại** chứ không phải chưa được in. `ScreenCapture.cpp` điền
+  `fi.meta.timestampUs` từ `SystemRelativeTime` của WGC và không ai đọc nó: `SharingHost` chỉ lấy
+  `width` với `height` từ khung rồi truyền cho `Encode` một `NowUs()` mới tinh, nên `enc_lat_ms` đo
+  encoder và không nói gì về chặng capture→texture. Hai đồng hồ vốn đã khớp — `SystemRelativeTime`
+  là QPC đơn vị 100 ns và `NowUs()` trên Windows cũng là QPC — nên hiệu hai số dùng được ngay,
+  không cần quy đổi epoch, và đó là lý do cả câu hỏi chỉ tốn đúng một lời gọi.
+  `SourceDiag::NoteCapture` nhận timestamp của khung cùng thời điểm nó tới host, cộng tuổi khung
+  vào percentile `cap_us`, và đếm một khung được trao lại lần nữa thành `cap_repeat` thay vì đo
+  lại nó — tuổi của một khung lặp tính từ lần capture gốc nên sẽ thổi phồng cái đuôi. Nó nằm trong
+  `core/` để bốn backend capture còn lại nối vào bằng đúng một dòng mỗi cái, giấu sau
+  `ShareDiagCaps::captureLatency` để tới lúc đó chúng không in một cột rỗng. Trả lời "sự tiện lợi
+  của WGC tốn bao nhiêu" chỉ cần đúng cột ấy; chỉ khi con số xấu mới đáng viết backend Duplication,
+  và nếu viết thì nó nhận cờ `--capture wgc|dxgi` và **dừng** khi backend được gọi tên không khởi
+  động được — đúng luật `--encoder` đang theo, vì đúng lý do đó. Cột ấy nay đã đọc được, trên một
+  Intel UHD 750 capture 3440 × 1440 rồi hạ xuống 1920 × 802: qua mười sáu cửa sổ một giây,
+  `cap_us_p50` nằm ở 0,5-2 ms và `cap_us_p99` ở 2-20 ms, `cap_repeat=0` suốt — WGC trao một khung
+  hết đúng khoảng thời gian encoder sau đó bỏ ra để nén nó (`enc_us_p50` 1,5-2,6 ms), nên sự tiện
+  lợi ấy rẻ và **không đáng viết backend Duplication**. Ngoại lệ duy nhất là cửa sổ đầu tiên sau
+  `Start`, nơi `cap_us_p99` đọc ra 242 ms: đó là tuổi của chính khung đầu tiên, không phải cái đuôi
+  ở trạng thái ổn định.
+- **Gộp gói phía nhận là tấm gương của phía gửi, và nó tốn đúng một trường trong giao kèo đọc**:
+  nửa còn lại của P2 là GRO trên Linux và URO trên Windows, và cùng một thứ chặn cả hai — `RecvBatch`
+  hứa mỗi slot một datagram. Với `UDP_GRO` (Linux) hay `UDP_RECV_MAX_COALESCED_SIZE` (Windows), một
+  lần đọc trả về cả một dãy datagram cùng cỡ nằm trong một buffer, kèm cỡ segment trong control
+  message; nên `InboundDatagram` có thêm trường `segment`, còn `DatagramsIn` / `DatagramAt` tách một
+  slot trở lại thành đúng những datagram đã được gửi. `segment == 0` nghĩa là slot chứa đúng một
+  datagram — tức mọi caller không xin gộp — nên giao kèo cũ là mặc định chứ không phải ngoại lệ.
+  Gộp phải **xin mới có**, qua `EnableReceiveCoalescing()`, và không bao giờ tự bật, vì một slot quá
+  nhỏ là mất dữ liệu: đo tại chỗ, một run GSO 16 × 1200 byte về thành một skb gộp 19 200 byte, đọc
+  nó vào buffer 2048 byte thì trả về 2048 byte kèm cờ `MSG_TRUNC` và **vứt mất 17 152 byte còn
+  lại** — lần đọc kế tiếp không thấy gì nữa. Kernel gộp được tới trọn payload IP 64 KB, nên chỉ
+  caller nào có slot chứa nổi `kMaxCoalescedBytes` mới được bật gộp, và `RecvBatch` ghi ca
+  `MSG_TRUNC` thành một lỗi nói thẳng đòi hỏi ấy thay vì để một burst biến mất lặng lẽ. Vì thế
+  `QuicEndpoint` đổi số slot lấy cỡ slot — 16 × 1350 byte trên stack thành 4 × 65 535 byte do chính
+  endpoint sở hữu — và hoá ra số slot không quan trọng: 4, 8 và 16 đều nằm trong nhiễu giữa các lần
+  chạy của nhau, nên bản tốn ít bộ nhớ nhất thắng. Đo trên loopback, chạy xen kẽ hai binary để triệt
+  cái trôi của máy, trung vị của bốn cặp: đọc một burst 16 datagram 573 → 203 ns/datagram (2,8x),
+  `quic/stream-drain-scaling` 2095 → 1629 ns/KB, `quic/stream-throughput-64k` 2114 → 1785 ns/KB.
+  Những dòng mà mã hai binary giống hệt nhau vẫn xê dịch 3,3-5,1% — đó là sàn nhiễu của máy này —
+  nên `quic/handshake` +4,9% (13 → 15 lần cấp phát, một trong số đó là buffer đọc 256 KB) không tách
+  khỏi nhiễu được, còn `quic/datagram-delivery` +0,6% nói rằng đọc control message không tốn gì cho
+  đường không gộp. Nửa Windows viết theo đúng hình hài ấy bằng `WSARecvMsg` và `UDP_COALESCED_INFO`,
+  và nay đã được biên dịch và chạy: stack nhận `UDP_RECV_MAX_COALESCED_SIZE`, nhưng trên loopback
+  nó **không gộp gì cả** — một run USO 16 × 1200 byte về thành đúng mười sáu lần đọc riêng lẻ, mỗi
+  lần mang `segment == 0`, nên một slot 2048 byte quá nhỏ cũng chẳng mất gì, vì không có run nào để
+  mà cắt. Con số 2,8x ở trên vẫn là kết quả Linux. Trên Windows toàn bộ phần thắng đo được nằm ở
+  phía gửi: USO kéo một burst 16 gói từ 7183 xuống 3942 ns/datagram (−45%, trung vị của mười một
+  lần chạy), còn gộp phía nhận và URO đều rơi vào sàn nhiễu 45-60% — rộng gấp một bậc so với 5% của
+  máy Linux, và rộng tới mức mọi thứ dưới khoảng 1,5x đều không đo nổi ở đó. URO có bao giờ nổ hay
+  không thì phải có NIC thật mới biết; loopback không trả lời được.
+- **Một cuộc bake-off cần một clip trước khi cần cột thứ hai**: C1 đã có ba cột encoder mà không so
+  được cột nào, vì mỗi cột đo trên một máy khác, cỡ capture khác, nội dung desktop khác, và không
+  cột nào chạy trên clip cố định. Tệ hơn: mọi con số đều là độ trễ, không có gì đo xem encoder đã
+  đánh đổi cái gì để nhanh. `scripts/encoder-bake-off.sh` bịt cả hai lỗ hổng bằng một lệnh. Nó dựng
+  clip (`testsrc2` xác định, hoặc `--clip FILE` cho clip thật), đưa **đúng cùng** một chuỗi frame
+  thô, cùng cỡ, cùng fps, cùng bitrate cho mọi backend, rồi in VMAF, `enc_us_p50`, `enc_us_p99`,
+  CPU% và GPU% trong một bảng, kèm SHA-256 của clip để hai máy chứng minh được là đã đo cùng một
+  đống pixel. Encoder nhận `ID3D11Texture2D` chứ không nhận file, nên clip được nạp bởi
+  `client/windows/cpp/bench/EncoderBench.cpp` — một binary bench upload frame BGRA qua vòng bốn
+  texture và chỉ bấm giờ đúng lời gọi `Encode`. Đo `h264_qsv` và `h264_nvenc` của ffmpeg thay vào
+  đó thì chỉ tốn một dòng script, nhưng trả lời một câu hỏi khác: đó không phải code Deskhub ship.
+  Hai giới hạn được in ngay cạnh bảng chứ không giấu đi: `cpu_pct` và `gpu_pct` là số của cả tiến
+  trình nên tính cả phần upload frame của chính harness, và `testsrc2` không phải nội dung desktop
+  — clip tổng hợp làm các lần chạy so được với nhau, không làm chúng đại diện cho thực tế. Backend
+  nào không khởi động được thì bị bỏ khỏi bảng chứ không bị đo dưới tên backend khác, đúng luật mà
+  `--encoder` đã theo.
+- **Mười giây im lặng trên loopback là một link đang chờ câu trả lời không ai đưa**: `platform_tests`
+  hỏng đúng tám check, khoảng một trong năm lần chạy trên Windows, trải trên `HostLinkTests` và
+  `FileTransferTests`, với log nói rằng một link QUIC đã im tiếng trên loopback hơn mười giây — mà
+  tranh chấp CPU thì không giải thích nổi, nên deadline không phải thứ cần nới. Link không kẹt cũng
+  không chậm: nó **bị đỗ lại**. `HostLink::SettleTrust` so khoá host đưa ra với `known_hosts`, và khi
+  gặp `TrustVerdict::Changed` thì chuyển sang `Deciding` và chờ một con người chấp nhận hay từ chối.
+  Link đang đỗ thì không gửi gì, nên cả hai đầu đều báo bên kia im lặng; test không cài
+  `onTrustAsked` và không bao giờ chấp nhận, nên nó chờ hết deadline của chính mình. Mọi thứ còn lại
+  trong sự cố suy ra từ đó: "a terminal record goes out" vẫn qua, vì kết nối QUIC vẫn sống; tiếng
+  vọng quay về và bị vòng đọc của `Deciding` nuốt mất thay vì tới được channel, làm hỏng thêm hai
+  check; và `FileTransferTests` hỏng thêm ba check trên cổng của nó vì đúng lý do ấy. Cắm một
+  fingerprint hợp lệ nhưng khác cho `127.0.0.1:47845` và `127.0.0.1:47836` là dựng lại được cả tám
+  lỗi đúng tên, đúng kiểu im lặng, gọi ra lúc nào cũng được.
+  **Khoá khác nhau là vì trên Windows các test không có trạng thái riêng.**
+  `KeepTestLogsOutOfTheDeveloperHome()` dời `HOME` sang chỗ khác trên POSIX và là một hàm rỗng trên
+  Windows, nên cả hai binary test đọc ghi thẳng vào `%USERPROFILE%\.deskhub` — cùng một
+  `host_cert.pem`, `known_hosts`, `paired_devices` mà app đã cài và mọi tiến trình Deskhub khác trên
+  máy đang dùng. Thêm nữa, cái identity dùng chung ấy là giấy nháp của các bộ test: một lần chạy tạo
+  ra khoảng năm mươi cái, mỗi cái chụp lại cặp trước rồi khôi phục sau, và ba trong bốn file làm việc
+  này khôi phục ở cuối hàm với bốn tới sáu lệnh `return` sớm nằm giữa. Bất kỳ lối ra sớm nào, bất kỳ
+  lần kill nào, hay bất kỳ lượt ghi nào từ một app đang chạy, đều để lại cho lần `HostLinkTests` kế
+  tiếp một phép so khoá của lần này với bản ghi của lần trước. Bản sửa gồm bốn phần, không phần nào
+  là nới deadline: cả hai test main nay trỏ `SetAppDataDir` vào một thư mục riêng trên Windows; guard
+  RAII `SavedIdentity` mà `SessionTransportTests` đã có được dời vào `TestSupport.h` và thay cho mọi
+  đoạn khôi phục thủ công; các test quay số tới một endpoint cố định nhận thêm guard `ForgottenHost`
+  để phán quyết của chúng không phụ thuộc vào thứ lần chạy trước để lại; và `SettleTrust` nay ghi log
+  đúng lúc nó đỗ lại, nêu rõ khoá nó thấy, để lần im lặng sau tự giải thích trong log thay vì trông
+  như một cái bắt tay đã chết.
+- **Một dòng log ghép từ ba lệnh `printf` không phải là một dòng**: chính bản log đó cho thấy
+  `[Deskhub] [Deskhub] quic: …silencequic: …silence` — hai luồng lồng vào nhau giữa dòng, và nó tốn
+  thời gian thật trong lúc truy vết vì cái tên check quan trọng nằm ngay trong chỗ hỏng. `LOGI` trên
+  Windows là `printf("[Deskhub] ")`, rồi format của người gọi, rồi `printf("\n")`: ba cơ hội cho một
+  luồng khác chen vào giữa, và CRT chỉ khoá `stdout` trong đúng một lời gọi. Nay nó format tag, thân
+  và ký tự xuống dòng vào một buffer rồi phát ra bằng một `fputs` duy nhất, đúng hình dạng mà đường
+  POSIX đã có sẵn. Đó cũng là lý do nhánh Android và Apple được để yên: `__android_log_print` và một
+  `fprintf` vốn đã là một lời gọi.
+- **Encoder được chọn theo vendor của adapter, và bảng tự khai hàng nào đã đo**:
+  `CreateEncoder` trước đây thử NVENC rồi Media Foundation trên mọi máy, nên adapter Intel hay AMD
+  phải trả tiền cho một lần nạp `nvEncodeAPI64` hỏng trước khi rơi xuống. Thứ tự nay đến từ
+  `EncoderBackendOrderFor` trong `core/media/EncoderBackend.h` chứ không phải `client/windows`, vì
+  nó là một bảng chứ không phải lời gọi OS: chỗ của nó là nơi một bài test đọc được mà không cần
+  GPU. NVIDIA dẫn đầu bằng `nvenc`, Intel bằng `mf`, cả hai đều từ số đo bake-off trên đúng loại
+  silicon đó. **Hàng AMD là suy đoán, và được ghi rõ là suy đoán.** Dự án chưa bao giờ có máy AMD,
+  nên hàng đó mang `measured = false` và log in "no measurement on this vendor yet" thay vì trích
+  một con số không ai đo; khi nào có máy AMD thì hàng đó cùng cờ này là thứ phải sửa. Hai luật giữ
+  cho một lần đoán sai vẫn rẻ: không vendor nào được mất backend dự phòng, nên thứ tự sai chỉ tốn
+  một lần khởi động chậm chứ không bao giờ tạo ra một nguồn không encode được, và có test khoá
+  điều đó cho mọi vendor kể cả hàng suy đoán. `DESKHUB_GPU_VENDOR` ghim adapter để đo được cả hai
+  nhánh trên một máy; nó in log mỗi lần có hiệu lực và từ chối chạy khi máy không có adapter đó,
+  nên không phép đo nào bị gán nhầm tên vendor.

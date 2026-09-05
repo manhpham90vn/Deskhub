@@ -5,6 +5,7 @@
 #include "deskhub/ui/Strings.h"
 #include "deskhubp/diag/Log.h"
 #include "deskhubp/system/Clock.h"
+#include "deskhubp/system/Random.h"
 
 #include <utility>
 
@@ -97,7 +98,7 @@ bool TerminalViewer::Start(const TerminalViewerConfig& config,
     hooks.onRefused = [this](deskhub::TermReason reason) {
         if (lostAtUs_ != 0 && client_->CanReattach()) {
             SetState(TerminalViewerState::Reattaching, deskhub::ui::kTerminalReattaching);
-            resumeRetryAtUs_ = NowUs() + deskhub::ReconnectDelayUs(resumeAttempts_);
+            resumeRetryAtUs_ = NowUs() + deskhub::ReconnectDelayUs(resumeAttempts_, RandomU32());
             ++resumeAttempts_;
             return;
         }
@@ -196,7 +197,7 @@ void TerminalViewer::RetryResume(uint64_t nowUs) {
         client_->Reattach();
         return;
     }
-    resumeRetryAtUs_ = nowUs + deskhub::ReconnectDelayUs(resumeAttempts_);
+    resumeRetryAtUs_ = nowUs + deskhub::ReconnectDelayUs(resumeAttempts_, RandomU32());
 }
 
 void TerminalViewer::Stop() {

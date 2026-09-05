@@ -97,6 +97,11 @@ struct ShareOptions {
     std::optional<bool> audio{};
     std::optional<bool> allowNewPairings{};
     std::optional<std::string> bindIp{};
+    std::optional<uint32_t> fecParity{};
+    std::optional<uint32_t> fecDepth{};
+    std::optional<std::string> fecArm{};
+    std::optional<std::string> congestionControl{};
+    std::optional<std::string> encoder{};
 };
 
 struct Command {
@@ -112,6 +117,13 @@ struct Command {
     uint16_t port = kDeskhubPort;
     bool portGiven = false;
     uint32_t timeoutMs = kDefaultTimeoutMs;
+
+    std::optional<std::string> fecScheme{};
+    std::optional<std::string> videoPath{};
+    std::optional<bool> nack{};
+    std::optional<uint32_t> holdFrames{};
+    std::optional<uint32_t> audioDelayMs{};
+    std::optional<bool> audioAdaptive{};
 
     PasscodeSource passcodeSource = PasscodeSource::Absent;
     std::string passcode{};

@@ -2,9 +2,14 @@
 #include "support/TestSupport.h"
 
 #include "deskhub/cli/Command.h"
+#include "deskhub/media/EncoderBackend.h"
+#include "deskhub/media/ShareTypes.h"
+#include "deskhub/control/CongestionControl.h"
+#include "deskhub/transport/FecScheme.h"
 
 #include <cstdio>
 #include <string>
+#include <string_view>
 #include <vector>
 
 using namespace deskhub;
@@ -403,6 +408,160 @@ void TestShareFileFlags() {
         "while the tick itself is not saved: it is a source, like the terminal");
 }
 
+void TestFecFlag() {
+    std::printf("[cli] --fec names a scheme both ends must be told about...\n");
+
+    Check(!Parse({"share"}).fecScheme.has_value(), "no --fec leaves the built-in default alone");
+    Check(!Parse({"connect", "10.0.0.4"}).fecScheme.has_value(), "the same on the viewer side");
+
+    const cli::Command shared = Parse({"share", "--fec", "xor"});
+    Check(Ok(shared, cli::Verb::Share) && shared.fecScheme.value_or("") == "xor",
+        "share takes --fec");
+    const cli::Command viewed = Parse({"connect", "10.0.0.4", "--fec=xor"});
+    Check(Ok(viewed, cli::Verb::Connect) && viewed.fecScheme.value_or("") == "xor",
+        "connect takes --fec too, since parity has to be read with the scheme that wrote it");
+
+    const cli::Command wrong = Parse({"share", "--fec", "reed-solomon"});
+    Check(!wrong.error.empty(), "a scheme that is not built in is refused, not silently ignored");
+    Check(wrong.error.find("xor") != std::string::npos,
+        "and the refusal lists what this build actually has");
+
+    for (std::string_view name : deskhub::FecSchemeNames()) {
+        const std::string text(name);
+        const cli::Command every = Parse({"share", "--fec", text.c_str()});
+        Check(every.error.empty(), "every registered scheme name is accepted on the command line");
+    }
+}
+
+void TestAudioBufferFlags() {
+    std::printf("[cli] --audio-delay and --audio-adaptive reach the jitter buffer...\n");
+
+    const cli::Command bare = Parse({"connect", "10.0.0.4"});
+    Check(!bare.audioDelayMs && !bare.audioAdaptive,
+        "naming neither leaves the shipping fixed target alone");
+
+    const cli::Command set = Parse({"connect", "10.0.0.4", "--audio-delay", "120"});
+    Check(Ok(set, cli::Verb::Connect) && set.audioDelayMs.value_or(0) == 120,
+        "a target delay in milliseconds is taken");
+    Check(!Parse({"connect", "10.0.0.4", "--audio-delay", "5"}).error.empty(),
+        "a target under one audio frame is refused, because it cannot hold even one");
+    Check(!Parse({"connect", "10.0.0.4", "--audio-delay", "5000"}).error.empty(),
+        "and one past what the buffer can prefill is refused rather than silently clamped");
+
+    const cli::Command on = Parse({"connect", "10.0.0.4", "--audio-adaptive"});
+    Check(Ok(on, cli::Verb::Connect) && on.audioAdaptive.value_or(false),
+        "the adaptive target can be asked for, which is how its curve was measured");
+    const cli::Command off = Parse({"connect", "10.0.0.4", "--no-audio-adaptive"});
+    Check(Ok(off, cli::Verb::Connect) && off.audioAdaptive.has_value() && !*off.audioAdaptive,
+        "and asked against explicitly, which is not the same as leaving it off");
+
+    Check(!Parse({"share", "--audio-delay", "120"}).error.empty(),
+        "the host plays no audio, so this is a viewer flag only");
+}
+
+void TestCongestionControlFlag() {
+    std::printf("[cli] --cc names which control loop decides the bitrate...\n");
+
+    Check(!Parse({"share"}).share.congestionControl,
+        "no --cc leaves the host on its built-in default");
+
+    for (std::string_view name : deskhub::CongestionControlNames()) {
+        const std::string text(name);
+        const cli::Command every = Parse({"share", "--cc", text.c_str()});
+        Check(every.error.empty() && every.share.congestionControl.value_or("") == text,
+            "every registered control name is accepted on the command line");
+    }
+
+    const cli::Command wrong = Parse({"share", "--cc", "bbr"});
+    Check(!wrong.error.empty(), "a control that is not built in is refused");
+    Check(wrong.error.find("aimd") != std::string::npos,
+        "and the refusal lists what this build actually has");
+
+    Check(!Parse({"connect", "10.0.0.4", "--cc", "aimd"}).error.empty(),
+        "the viewer has no say in it, so --cc is not a connect flag");
+}
+
+void TestEncoderFlag() {
+    std::printf("[cli] --encoder names the backend to measure, not the first one that starts...\n");
+
+    Check(!Parse({"share"}).share.encoder,
+        "no --encoder leaves the factory picking whichever backend initialises first");
+
+    for (std::string_view name : deskhub::media::EncoderBackendNames()) {
+        const std::string text(name);
+        const cli::Command every = Parse({"share", "--encoder", text.c_str()});
+        Check(every.error.empty() && every.share.encoder.value_or("") == text,
+            "every backend a host can be asked for is accepted on the command line");
+    }
+
+    const cli::Command wrong = Parse({"share", "--encoder", "qsv"});
+    Check(!wrong.error.empty(),
+        "a backend no client has is refused here rather than at the far end of a measurement");
+    Check(wrong.error.find("nvenc") != std::string::npos,
+        "and the refusal names the backends that exist");
+
+    Check(!Parse({"connect", "10.0.0.4", "--encoder", "nvenc"}).error.empty(),
+        "the encoder runs on the host, so this is not a connect flag");
+}
+
+void TestFecSweepFlags() {
+    std::printf("[cli] --fec-parity, --fec-depth and --fec-arm reach the two axes that matter...\n");
+
+    const cli::Command bare = Parse({"share"});
+    Check(!bare.share.fecParity && !bare.share.fecDepth && !bare.share.fecArm,
+        "naming none of them leaves the shipping behaviour untouched");
+
+    const cli::Command pinned = Parse({"share", "--fec-parity", "3", "--fec-depth=8"});
+    Check(Ok(pinned, cli::Verb::Share) && pinned.share.fecParity.value_or(0) == 3 &&
+              pinned.share.fecDepth.value_or(0) == 8,
+        "both take a value, in either spelling");
+
+    Check(!Parse({"share", "--fec-parity", "0"}).error.empty(),
+        "zero parity is refused rather than quietly meaning no FEC");
+    Check(!Parse({"share", "--fec-depth", "0"}).error.empty(),
+        "and zero depth is refused rather than quietly meaning the derived count");
+    Check(!Parse({"share", "--fec-depth", "999"}).error.empty(),
+        "a depth past what one wire byte can signal is refused at the command line");
+
+    const cli::Command always = Parse({"share", "--fec-arm", "always"});
+    Check(Ok(always, cli::Verb::Share) && always.share.fecArm.value_or("") == "always",
+        "--fec-arm always holds parity on the wire for the length of a measurement");
+    const cli::Command policy = Parse({"share", "--fec-arm=policy"});
+    Check(Ok(policy, cli::Verb::Share) && policy.share.fecArm.value_or("") == "policy",
+        "and policy asks for the shipping behaviour explicitly, which is not the same as "
+        "leaving the flag off");
+    const cli::Command never = Parse({"share", "--fec-arm=never"});
+    Check(Ok(never, cli::Verb::Share) && never.share.fecArm.value_or("") == "never",
+        "never turns FEC off, which is the only way to measure NACK on its own");
+
+    const cli::Command wrong = Parse({"share", "--fec-arm", "on"});
+    Check(!wrong.error.empty(), "any other word is refused");
+    Check(wrong.error.find("never") != std::string::npos,
+        "and the refusal names all three modes");
+}
+
+void TestVideoPathFlag() {
+    std::printf("[cli] --video-path picks the leg the video rides on...\n");
+
+    Check(!Parse({"share"}).videoPath.has_value(), "no --video-path leaves the default alone");
+
+    const cli::Command raw = Parse({"share", "--video-path", "raw-udp"});
+    Check(Ok(raw, cli::Verb::Share) && raw.videoPath.value_or("") == "raw-udp",
+        "share takes --video-path raw-udp");
+    const cli::Command quic = Parse({"connect", "10.0.0.4", "--video-path=quic-datagram"});
+    Check(Ok(quic, cli::Verb::Connect) && quic.videoPath.value_or("") == "quic-datagram",
+        "connect takes it too - the receiver only accepts raw video when it expects raw video");
+
+    const cli::Command wrong = Parse({"share", "--video-path", "tcp"});
+    Check(!wrong.error.empty(), "a path that does not exist is refused");
+    Check(wrong.error.find("raw-udp") != std::string::npos,
+        "and the refusal names the two that do");
+
+    Check(deskhub::media::IsVideoPathName(deskhub::media::kVideoPathRawUdp) &&
+              deskhub::media::IsVideoPathName(deskhub::media::kVideoPathQuicDatagram),
+        "both names the CLI advertises are the ones the transport maps");
+}
+
 void TestUsageText() {
     std::printf("[cli] every command can explain itself...\n");
     Check(cli::UsageText().find("deskhub-cli") != std::string::npos, "the summary names the program");
@@ -444,5 +603,11 @@ void RunCliCommandTests() {
     TestDisplaysForget();
     TestApplyShareOptions();
     TestPickDisplays();
+    TestFecFlag();
+    TestAudioBufferFlags();
+    TestCongestionControlFlag();
+    TestEncoderFlag();
+    TestFecSweepFlags();
+    TestVideoPathFlag();
     TestUsageText();
 }

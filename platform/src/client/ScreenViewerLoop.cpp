@@ -2,7 +2,7 @@
 
 #include "deskhubp/system/Clock.h"
 
-#ifdef _WIN32
+#if defined(_WIN32)
 #include <processthreadsapi.h>
 #else
 #include <unistd.h>
@@ -13,7 +13,7 @@ namespace deskhubp {
 namespace {
 
 uint32_t CurrentProcessId() {
-#ifdef _WIN32
+#if defined(_WIN32)
     return uint32_t(GetCurrentProcessId());
 #else
     return uint32_t(getpid());

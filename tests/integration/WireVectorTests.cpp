@@ -134,14 +134,14 @@ std::vector<Vector> AllVectors() {
                      p.pingId = 7;
                      return BuildPing(out, 0x11223344, p);
                  },
-        "0230000011223344000000070000000000000000"});
+        "02300000112233440000000700000000000000000000000000000000"});
 
     v.push_back({"PONG", [](std::span<uint8_t> out) {
                      PingPong p{};
                      p.pingId = 7;
                      return BuildPong(out, 0x11223344, p);
                  },
-        "0231000011223344000000070000000000000000"});
+        "02310000112233440000000700000000000000000000000000000000"});
 
     v.push_back({"FEEDBACK", [](std::span<uint8_t> out) {
                      Feedback f{};
@@ -154,9 +154,9 @@ std::vector<Vector> AllVectors() {
         "0232000011223344000c05002800001770"});
 
     v.push_back({"REQUEST_KEYFRAME", [](std::span<uint8_t> out) {
-                     return BuildRequestKeyframe(out, 0x11223344);
+                     return BuildRequestKeyframe(out, 0x11223344, KeyframeReason::QOverflow);
                  },
-        "0233000011223344"});
+        "023300001122334402"});
 
     v.push_back({"RECONFIG", [](std::span<uint8_t> out) {
                      Reconfig r{};
@@ -391,6 +391,15 @@ void TestEveryVectorParsesBackToWhatWentIn() {
                       parsed[i].absolute == events[i].absolute &&
                       parsed[i].timestampUs == events[i].timestampUs,
                 "including negative deltas and the absolute flag");
+
+    const uint8_t legacyKeyframeRequest[] = {0x02, 0x33, 0x00, 0x00, 0x11, 0x22, 0x33, 0x44};
+    const auto legacyHeader = ParseCommonHeader(legacyKeyframeRequest);
+    Check(legacyHeader && legacyHeader->type == MsgType::RequestKeyframe,
+        "the payload-less REQUEST_KEYFRAME every peer built before the reason byte existed is "
+        "still a REQUEST_KEYFRAME");
+    Check(ParseRequestKeyframe(PayloadOf(legacyKeyframeRequest)) == KeyframeReason::Unknown,
+        "and it reads as unknown, so an old viewer keeps getting its keyframes while the host "
+        "counts its requests in a bucket that claims nothing about why they were asked for");
 }
 
 }

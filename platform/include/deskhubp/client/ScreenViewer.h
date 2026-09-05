@@ -51,6 +51,12 @@ struct ScreenViewerConfig {
     uint32_t screenH = 0;
     uint8_t desiredFps = 60;
     bool sendNacks = true;
+    uint32_t overtakenLimit = deskhub::kDefaultOvertakenLimit;
+    uint32_t audioDelayMs = deskhub::kDefaultAudioDelayMs;
+    bool audioAdaptive = false;
+    bool pacingAdaptive = false;
+    uint64_t displayIntervalUs = 0;
+    std::string clockOffset{};
     bool logLossRuns = true;
     bool alwaysFocused = false;
     bool wantsAudio = false;
@@ -58,6 +64,8 @@ struct ScreenViewerConfig {
     std::string passcode;
     std::string displayName;
     std::string hostLabel;
+    std::string fecScheme;
+    VideoPath videoPath = VideoPath::QuicDatagram;
 
     std::function<void(deskhub::TrustVerdict, std::string_view fingerprint)> onTrustAsked;
     std::function<void(uint32_t width, uint32_t height, uint8_t fps)> onParams;
@@ -113,6 +121,7 @@ public:
         linkConfig.recvWaitMs = 10;
         linkConfig.recoverLink = true;
         linkConfig.recoverGraceUs = deskhub::kViewerReattachGraceUs;
+        linkConfig.videoPath = cfg_.videoPath;
 
         HostLinkCallbacks linkHooks;
         linkHooks.onState = [this](HostLinkState state, std::string_view message) {
@@ -155,7 +164,8 @@ public:
             }
             return false;
         }
-        if (cfg_.wantsAudio && !player_.Start())
+        if (cfg_.wantsAudio &&
+            !player_.Start({}, cfg_.audioDelayMs, cfg_.audioAdaptive))
             LOGW("[Client] Watching without sound: no audio device could be opened.");
         decodeThread_ = std::thread([this] { DecodeThread(); });
         netThread_ = std::thread([this] { NetThread(); });
@@ -413,6 +423,13 @@ private:
 
         {
             Decoder decoder;
+            if constexpr (deskhub::media::PacedDecoder<Decoder>) {
+                decoder.SetPacing(cfg_.pacingAdaptive, cfg_.displayIntervalUs);
+                if (!cfg_.clockOffset.empty() && !decoder.SetClockOffset(cfg_.clockOffset))
+                    LOGW(
+                        "[Client] No clock offset estimator by that name is built in, so the "
+                        "pacer keeps the default");
+            }
             clockOffset_.Reset();
 
             for (;;) {
@@ -605,11 +622,13 @@ private:
         pcfg.sourceId = cfg_.sourceId;
         pcfg.desiredFps = cfg_.desiredFps;
         pcfg.sendNacks = cfg_.sendNacks;
+        pcfg.overtakenLimit = cfg_.overtakenLimit;
         pcfg.wantsAudio = cfg_.wantsAudio;
         pcfg.logLossRuns = cfg_.logLossRuns;
         pcfg.statusSeparator = cfg_.statusSeparator;
         pcfg.passcode = cfg_.passcode;
         pcfg.displayName = cfg_.displayName;
+        pcfg.fecScheme = cfg_.fecScheme;
         screen.Start(pcfg, NowUs());
 
         std::vector<deskhub::InputEvent> batch;
@@ -624,11 +643,11 @@ private:
         };
         hooks.afterFrames = [this](deskhub::ScreenClient& p, uint64_t now) {
             if (decodeFailed_.exchange(false, std::memory_order_acq_rel))
-                p.RequestKeyframe("dec_fail", now);
+                p.RequestKeyframe(deskhub::diag::KeyframeReason::DecFail, now);
             if (displayCongested_.exchange(false, std::memory_order_acq_rel))
-                p.RequestKeyframe("display_congested", now);
+                p.RequestKeyframe(deskhub::diag::KeyframeReason::DisplayCongested, now);
             if (queueOverflow_.exchange(false, std::memory_order_acq_rel))
-                p.RequestKeyframe("q_overflow", now);
+                p.RequestKeyframe(deskhub::diag::KeyframeReason::QOverflow, now);
         };
         hooks.beforeTick = [this, &batch, pcfg](deskhub::ScreenClient& p, uint64_t now) {
             if (relink_.exchange(false, std::memory_order_acq_rel)) {

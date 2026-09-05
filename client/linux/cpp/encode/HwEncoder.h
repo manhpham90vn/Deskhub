@@ -1,12 +1,15 @@
 #pragma once
 #include <cstdint>
 #include <memory>
+#include <string_view>
 
 #include "capture/CaptureTypes.h"
 #include "encode/VaEncoder.h"
 
+#include "deskhub/media/EncoderBackend.h"
 #include "deskhub/media/VideoContract.h"
 #include "deskhub/media/VideoTypes.h"
+#include "deskhubp/diag/Log.h"
 
 #ifdef DESKHUB_HAVE_NVENC
 #include "encode/NvEncoder.h"
@@ -14,19 +17,39 @@
 
 class HwEncoder {
 public:
-    bool Init(const deskhub::media::EncoderConfig& cfg, FrameMemory frameKind,
-        uint32_t drmFormat) {
+    bool Init(const deskhub::media::EncoderConfig& cfg, FrameMemory frameKind, uint32_t drmFormat,
+        std::string_view backend = deskhub::media::kEncoderBackendAuto) {
+        if (backend.empty()) backend = deskhub::media::kEncoderBackendAuto;
+        const bool any = backend == deskhub::media::kEncoderBackendAuto;
+        if (!any && backend != deskhub::media::kEncoderBackendNvenc &&
+            backend != deskhub::media::kEncoderBackendVaApi) {
+            LOGE("[HwEncoder] This build has no backend called \"%.*s\" - it has nvenc, vaapi.",
+                int(backend.size()), backend.data());
+            return false;
+        }
 #ifdef DESKHUB_HAVE_NVENC
-        if (frameKind == FrameMemory::Mapped && NvEncoder::DriverPresent()) {
-            auto nv = std::make_unique<NvEncoder>();
-            if (nv->Init(cfg, drmFormat)) {
-                nv_ = std::move(nv);
-                return true;
+        if (backend != deskhub::media::kEncoderBackendVaApi) {
+            if (frameKind == FrameMemory::Mapped && NvEncoder::DriverPresent()) {
+                auto nv = std::make_unique<NvEncoder>();
+                if (nv->Init(cfg, drmFormat)) {
+                    nv_ = std::move(nv);
+                    return true;
+                }
+            }
+            if (!any) {
+                LOGE(
+                    "[HwEncoder] nvenc was named on the command line and would not start, so "
+                    "this source stops rather than measuring VA-API under its name.");
+                return false;
             }
         }
 #else
         (void)frameKind;
         (void)drmFormat;
+        if (backend == deskhub::media::kEncoderBackendNvenc) {
+            LOGE("[HwEncoder] This build was made without NVENC, so nvenc cannot be measured.");
+            return false;
+        }
 #endif
         auto va = std::make_unique<VaEncoder>();
         if (!va->Init(cfg)) return false;

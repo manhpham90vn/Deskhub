@@ -253,6 +253,13 @@ bool ViewerSession::OpenWindow(const deskhub::SourceInfo& source, const ViewRequ
     config.passcode = request.passcode;
     config.displayName = request.displayName;
     config.wantsAudio = request.audio;
+    config.fecScheme = request.fecScheme;
+    if (request.nackGiven) config.sendNacks = request.nack;
+    config.overtakenLimit = request.holdFrames;
+    if (request.audioDelayMs) config.audioDelayMs = request.audioDelayMs;
+    if (request.audioAdaptiveGiven) config.audioAdaptive = request.audioAdaptive;
+    config.videoPath =
+        deskhubp::VideoPathFromName(request.videoPath, deskhubp::VideoPath::QuicDatagram);
     config.onStatus = [raw](const char* status) { raw->statusLine = status ? status : ""; };
     config.onEnded = [raw](const char* reason) {
         raw->endReason = reason ? reason : "";

@@ -109,9 +109,9 @@ Pty::~Pty() {
 }
 
 std::string DefaultShell() {
-    const std::string comspec = EnvOr("COMSPEC", "cmd.exe");
+    std::string comspec = EnvOr("COMSPEC", "cmd.exe");
     const std::string root = EnvOr("SystemRoot", "C:\\Windows");
-    const std::string powershell = root + "\\System32\\WindowsPowerShell\\v1.0\\powershell.exe";
+    std::string powershell = root + "\\System32\\WindowsPowerShell\\v1.0\\powershell.exe";
     if (GetFileAttributesA(powershell.c_str()) != INVALID_FILE_ATTRIBUTES) return powershell;
     return comspec;
 }

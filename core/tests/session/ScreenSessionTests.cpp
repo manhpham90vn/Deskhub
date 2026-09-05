@@ -27,7 +27,7 @@ void TestSessions() {
     hcb.send = [&](std::span<const uint8_t> d) { w.toClient.emplace_back(d.begin(), d.end()); };
     hcb.randomBytes = TestRandomBytes;
     hcb.onStart = [&] { hostStarted = true; };
-    hcb.onKeyframeRequest = [&] { hostKeyframeReq = true; };
+    hcb.onKeyframeRequest = [&](KeyframeReason) { hostKeyframeReq = true; };
     hcb.onDisconnect = [&] { hostDisconnected = true; };
     ScreenHostSession host(hcb, StreamParams{1920, 1080, 60, 20'000'000});
     host.SetPasscode(kTestPasscode);
@@ -81,7 +81,7 @@ void TestSessions() {
     pump();
     Check(cliRtt == uint32_t(now - pingSent), "RTT = simulated round-trip delay");
 
-    cli.RequestKeyframe();
+    cli.RequestKeyframe(KeyframeReason::Loss);
     now += 260'000;
     cli.Tick(now);
     pump();
@@ -707,7 +707,7 @@ void TestFocusRepeatsAndKeyframeCancel() {
     Check(CountType(r.w.toHost, MsgType::SetFocus) == 0, "SetFocused(same value) doesn't resend");
 
     r.w.toHost.clear();
-    r.cli.RequestKeyframe();
+    r.cli.RequestKeyframe(KeyframeReason::Loss);
     r.cli.Tick(r.now);
     r.now += kKeyframeRetryUs;
     r.cli.Tick(r.now);

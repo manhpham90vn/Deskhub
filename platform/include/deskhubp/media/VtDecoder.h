@@ -1,6 +1,7 @@
 #pragma once
 #include <cstddef>
 #include <cstdint>
+#include <string_view>
 
 #include "deskhub/control/VideoPacer.h"
 #include "deskhub/media/PresentCounters.h"
@@ -18,6 +19,15 @@ public:
     void Shutdown();
     bool IsOpen() const {
         return layer_ != nullptr;
+    }
+
+    void SetPacing(bool adaptiveLead, uint64_t displayIntervalUs) {
+        pacer_.SetAdaptiveLead(adaptiveLead);
+        pacer_.SetDisplayIntervalUs(displayIntervalUs);
+    }
+
+    bool SetClockOffset(std::string_view name) {
+        return pacer_.SetClockOffset(name);
     }
 
     bool Decode(const uint8_t* nal, size_t len, uint64_t ptsUs);

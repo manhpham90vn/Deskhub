@@ -277,8 +277,7 @@ void TestHostSharesAShell() {
         return;
     }
 
-    const std::string savedCert = deskhubp::ReadAppDataFile(deskhubp::kHostCertFileName);
-    const std::string savedKey = deskhubp::ReadAppDataFile(deskhubp::kHostKeyFileName);
+    const SavedIdentity guard;
     const std::string savedPaired =
         deskhubp::ReadAppDataFile(deskhubp::kPairedDevicesFileName);
     deskhubp::ForgetAllPairedDevices();
@@ -396,8 +395,6 @@ void TestHostSharesAShell() {
     Check(!host.Running(), "and the host stops sharing cleanly");
     viewer.endpoint.Close();
 
-    if (!savedCert.empty()) deskhubp::WriteAppDataFile(deskhubp::kHostCertFileName, savedCert);
-    if (!savedKey.empty()) deskhubp::WriteAppDataFile(deskhubp::kHostKeyFileName, savedKey);
     if (savedPaired.empty())
         deskhubp::RemoveAppDataFile(deskhubp::kPairedDevicesFileName);
     else
@@ -474,8 +471,7 @@ void TestHostStopsAndAttachesShell() {
         return;
     }
 
-    const std::string savedCert = deskhubp::ReadAppDataFile(deskhubp::kHostCertFileName);
-    const std::string savedKey = deskhubp::ReadAppDataFile(deskhubp::kHostKeyFileName);
+    const SavedIdentity guard;
     const std::string savedPaired =
         deskhubp::ReadAppDataFile(deskhubp::kPairedDevicesFileName);
     deskhubp::ForgetAllPairedDevices();
@@ -588,8 +584,6 @@ void TestHostStopsAndAttachesShell() {
     host.Stop();
     viewer.endpoint.Close();
 
-    if (!savedCert.empty()) deskhubp::WriteAppDataFile(deskhubp::kHostCertFileName, savedCert);
-    if (!savedKey.empty()) deskhubp::WriteAppDataFile(deskhubp::kHostKeyFileName, savedKey);
     if (savedPaired.empty())
         deskhubp::RemoveAppDataFile(deskhubp::kPairedDevicesFileName);
     else
@@ -603,8 +597,7 @@ void TestViewerTrustsThenRunsAShell() {
         return;
     }
 
-    const std::string savedCert = deskhubp::ReadAppDataFile(deskhubp::kHostCertFileName);
-    const std::string savedKey = deskhubp::ReadAppDataFile(deskhubp::kHostKeyFileName);
+    const SavedIdentity guard;
     const std::string savedTrust = deskhubp::ReadAppDataFile(deskhubp::kTrustStoreFileName);
     deskhubp::ForgetHostIdentity();
     deskhubp::RemoveAppDataFile(deskhubp::kTrustStoreFileName);
@@ -691,8 +684,6 @@ void TestViewerTrustsThenRunsAShell() {
               deskhub::TrustVerdict::Trusted,
         "so the next connection will not ask again");
 
-    if (!savedCert.empty()) deskhubp::WriteAppDataFile(deskhubp::kHostCertFileName, savedCert);
-    if (!savedKey.empty()) deskhubp::WriteAppDataFile(deskhubp::kHostKeyFileName, savedKey);
     if (savedTrust.empty())
         deskhubp::RemoveAppDataFile(deskhubp::kTrustStoreFileName);
     else
@@ -714,8 +705,7 @@ void TestTheTwoCasesAPasscodeCannotSettle() {
     std::printf("[termhost] no passcode, or a key that changed, still goes to the user...\n");
     if (!deskhubp::QuicAvailable() || deskhubp::DefaultShell().empty()) return;
 
-    const std::string savedCert = deskhubp::ReadAppDataFile(deskhubp::kHostCertFileName);
-    const std::string savedKey = deskhubp::ReadAppDataFile(deskhubp::kHostKeyFileName);
+    const SavedIdentity guard;
     const std::string savedTrust = deskhubp::ReadAppDataFile(deskhubp::kTrustStoreFileName);
     const std::string savedPaired = deskhubp::ReadAppDataFile(deskhubp::kPairedDevicesFileName);
     deskhubp::ForgetHostIdentity();
@@ -822,8 +812,6 @@ void TestTheTwoCasesAPasscodeCannotSettle() {
         second.Stop();
     }
 
-    if (!savedCert.empty()) deskhubp::WriteAppDataFile(deskhubp::kHostCertFileName, savedCert);
-    if (!savedKey.empty()) deskhubp::WriteAppDataFile(deskhubp::kHostKeyFileName, savedKey);
     if (savedTrust.empty())
         deskhubp::RemoveAppDataFile(deskhubp::kTrustStoreFileName);
     else
@@ -841,8 +829,7 @@ void TestWrongGuessesLockTheHost() {
         return;
     }
 
-    const std::string savedCert = deskhubp::ReadAppDataFile(deskhubp::kHostCertFileName);
-    const std::string savedKey = deskhubp::ReadAppDataFile(deskhubp::kHostKeyFileName);
+    const SavedIdentity guard;
     const std::string savedPaired = deskhubp::ReadAppDataFile(deskhubp::kPairedDevicesFileName);
     deskhubp::ForgetAllPairedDevices();
     deskhubp::ForgetHostIdentity();
@@ -884,8 +871,6 @@ void TestWrongGuessesLockTheHost() {
     lockedOut.endpoint.Close();
 
     host.Stop();
-    if (!savedCert.empty()) deskhubp::WriteAppDataFile(deskhubp::kHostCertFileName, savedCert);
-    if (!savedKey.empty()) deskhubp::WriteAppDataFile(deskhubp::kHostKeyFileName, savedKey);
     if (savedPaired.empty())
         deskhubp::RemoveAppDataFile(deskhubp::kPairedDevicesFileName);
     else
@@ -899,8 +884,7 @@ void TestAFloodOfOutputNeverTearsTheStream() {
         return;
     }
 
-    const std::string savedCert = deskhubp::ReadAppDataFile(deskhubp::kHostCertFileName);
-    const std::string savedKey = deskhubp::ReadAppDataFile(deskhubp::kHostKeyFileName);
+    const SavedIdentity guard;
     const std::string savedPaired =
         deskhubp::ReadAppDataFile(deskhubp::kPairedDevicesFileName);
     deskhubp::ForgetAllPairedDevices();
@@ -944,8 +928,6 @@ void TestAFloodOfOutputNeverTearsTheStream() {
     }
 
     host.Stop();
-    if (!savedCert.empty()) deskhubp::WriteAppDataFile(deskhubp::kHostCertFileName, savedCert);
-    if (!savedKey.empty()) deskhubp::WriteAppDataFile(deskhubp::kHostKeyFileName, savedKey);
     if (savedPaired.empty())
         deskhubp::RemoveAppDataFile(deskhubp::kPairedDevicesFileName);
     else

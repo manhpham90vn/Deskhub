@@ -84,6 +84,52 @@ void HostEngine::AttachSession(HostSource& st) {
     LOGI("[Host] Source %u \"%s\": %ux%u @%ufps, %u Mbps.", st.sourceId, st.name.c_str(),
         st.offer.width, st.offer.height, opt_.fps, opt_.bitrateMbps);
 
+    if (!opt_.fecScheme.empty() && !st.packetizer.SetFecScheme(opt_.fecScheme))
+        LOGW(
+            "[Host] No FEC scheme called \"%s\" is built in, so parity keeps going out as "
+            "%.*s and a viewer told otherwise will not understand it.",
+            opt_.fecScheme.c_str(), int(st.packetizer.fecScheme().size()),
+            st.packetizer.fecScheme().data());
+
+    if (!opt_.congestionControl.empty() &&
+        !st.SetCongestionControl(opt_.congestionControl, startBitrateBps_, kMinBitrateBps))
+        LOGW("[Host] No congestion control called \"%s\" is built in, so the default stays.",
+            opt_.congestionControl.c_str());
+
+    if (opt_.fecGroups) st.packetizer.SetFecGroups(opt_.fecGroups);
+
+    if (opt_.fecParityPerGroup) {
+        if (st.packetizer.SetFecParityPerGroup(opt_.fecParityPerGroup)) {
+            st.wantFecParity.store(opt_.fecParityPerGroup, std::memory_order_relaxed);
+            st.fecParityPin.store(opt_.fecParityPerGroup, std::memory_order_relaxed);
+        } else {
+            LOGW(
+                "[Host] Scheme %.*s carries no more than %zu parity per group, so --fec-parity "
+                "%u is refused and the loss-driven policy keeps the ratio.",
+                int(st.packetizer.fecScheme().size()), st.packetizer.fecScheme().data(),
+                st.packetizer.fecParityPerGroup(), opt_.fecParityPerGroup);
+        }
+    }
+
+    if (opt_.fecArmAlways) {
+        st.fecArmedAlways.store(true, std::memory_order_relaxed);
+        st.wantFec.store(true, std::memory_order_relaxed);
+    } else if (opt_.fecArmNever) {
+        st.fecArmedNever.store(true, std::memory_order_relaxed);
+        st.wantFec.store(false, std::memory_order_relaxed);
+    }
+
+    if (opt_.fecGroups || opt_.fecParityPerGroup || opt_.fecArmAlways || opt_.fecArmNever ||
+        !opt_.fecScheme.empty() || !opt_.congestionControl.empty() || !opt_.videoPath.empty()) {
+        const std::string_view path = VideoPathName(sock_.videoPath());
+        LOGI("[Host][%s] measurement: cc=%.*s fec=%.*s parity=%zu depth=%zu arm=%s video=%.*s",
+            st.name.c_str(), int(st.rate->Name().size()), st.rate->Name().data(),
+            int(st.packetizer.fecScheme().size()), st.packetizer.fecScheme().data(),
+            st.packetizer.fecParityPerGroup(), st.packetizer.fecGroups(),
+            opt_.fecArmAlways ? "always" : (opt_.fecArmNever ? "never" : "policy"),
+            int(path.size()), path.data());
+    }
+
     if (policy_.source.attachInput) policy_.source.attachInput(st);
 
     HostSource* p = &st;
@@ -192,6 +238,7 @@ bool HostEngine::Start(const std::vector<deskhub::media::ShareSource>& sources,
         return Fail(policy_.portError ? policy_.portError(sock_)
                                       : DefaultPortError(sock_, opt_.port));
     sock_.SetRecvTimeout(100);
+    sock_.SetVideoPath(VideoPathFromName(opt_.videoPath, VideoPath::QuicDatagram));
     LOGI("[Host] Host identity %s", deskhub::FormatFingerprint(identity.fingerprint).c_str());
 
     HostAuthConfig auth;

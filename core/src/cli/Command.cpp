@@ -3,8 +3,13 @@
 #include <optional>
 #include <string_view>
 
+#include "deskhub/media/EncoderBackend.h"
+#include "deskhub/media/ShareTypes.h"
 #include "deskhub/media/SourceLabel.h"
 #include "deskhub/net/Ipv4.h"
+#include "deskhub/control/CongestionControl.h"
+#include "deskhub/transport/AudioJitterBuffer.h"
+#include "deskhub/transport/FecScheme.h"
 #include "deskhub/ui/Strings.h"
 
 namespace deskhub::cli {
@@ -73,6 +78,37 @@ std::string UnknownOption(std::string_view name, Verb verb) {
 
 std::string MissingValue(std::string_view name) {
     return std::string(name) + " needs a value";
+}
+
+std::string KnownFecSchemes() {
+    std::string list;
+    for (std::string_view name : deskhub::FecSchemeNames()) {
+        if (!list.empty()) list += ", ";
+        list += name;
+    }
+    return list;
+}
+
+std::string KnownCongestionControls() {
+    std::string list;
+    for (std::string_view name : deskhub::CongestionControlNames()) {
+        if (!list.empty()) list += ", ";
+        list += name;
+    }
+    return list;
+}
+
+std::string KnownEncoders() {
+    std::string list;
+    for (std::string_view name : media::EncoderBackendNames()) {
+        if (!list.empty()) list += ", ";
+        list += name;
+    }
+    return list;
+}
+
+std::string KnownVideoPaths() {
+    return std::string(media::kVideoPathQuicDatagram) + ", " + std::string(media::kVideoPathRawUdp);
 }
 
 std::string BadValue(std::string_view name, std::string_view value) {
@@ -618,6 +654,46 @@ void ParseShare(Command& command, Cursor& cursor) {
         if (result == FlagResult::Failed) return;
         if (result == FlagResult::Handled) continue;
 
+        result = ApplyTextFlag(command, flag, cursor, "--fec", command.fecScheme);
+        if (result == FlagResult::Failed) return;
+        if (result == FlagResult::Handled) continue;
+
+        result = ApplyTextFlag(command, flag, cursor, "--cc", share.congestionControl);
+        if (result == FlagResult::Failed) return;
+        if (result == FlagResult::Handled) continue;
+
+        result = ApplyTextFlag(command, flag, cursor, "--encoder", share.encoder);
+        if (result == FlagResult::Failed) return;
+        if (result == FlagResult::Handled) continue;
+
+        result = ApplyBoundedFlag(command, flag, cursor, "--fec-parity", 1,
+            uint32_t(kMaxFecRecoveryPerGroup), share.fecParity);
+        if (result == FlagResult::Failed) return;
+        if (result == FlagResult::Handled) continue;
+
+        result = ApplyBoundedFlag(command, flag, cursor, "--fec-depth", 1,
+            uint32_t(kMaxSignalledFecGroups), share.fecDepth);
+        if (result == FlagResult::Failed) return;
+        if (result == FlagResult::Handled) continue;
+
+        if (flag.name == "--fec-arm") {
+            std::string text;
+            if (!ValueOf(flag, cursor, text, command.error)) return;
+            if (text != "always" && text != "policy" && text != "never") {
+                command.error = BadValue("--fec-arm", text) +
+                                " - always holds parity on the wire for a measurement, policy lets loss "
+                                "decide as a real session does, never turns FEC off so NACK is the only "
+                                "repair left";
+                return;
+            }
+            share.fecArm = text;
+            continue;
+        }
+
+        result = ApplyTextFlag(command, flag, cursor, "--video-path", command.videoPath);
+        if (result == FlagResult::Failed) return;
+        if (result == FlagResult::Handled) continue;
+
         command.error = UnknownOption(flag.name, Verb::Share);
         return;
     }
@@ -680,6 +756,34 @@ void ParseConnect(Command& command, Cursor& cursor) {
         if (result == FlagResult::Handled) continue;
 
         result = ApplyTextFlag(command, flag, cursor, "--name", command.deviceName);
+        if (result == FlagResult::Failed) return;
+        if (result == FlagResult::Handled) continue;
+
+        result = ApplyTextFlag(command, flag, cursor, "--fec", command.fecScheme);
+        if (result == FlagResult::Failed) return;
+        if (result == FlagResult::Handled) continue;
+
+        if (flag.name == "--nack" || flag.name == "--no-nack") {
+            command.nack = flag.name == "--nack";
+            continue;
+        }
+
+        result = ApplyBoundedFlag(command, flag, cursor, "--hold", 2,
+            uint32_t(kMaxSignalledFecGroups), command.holdFrames);
+        if (result == FlagResult::Failed) return;
+        if (result == FlagResult::Handled) continue;
+
+        if (flag.name == "--audio-adaptive" || flag.name == "--no-audio-adaptive") {
+            command.audioAdaptive = flag.name == "--audio-adaptive";
+            continue;
+        }
+
+        result = ApplyBoundedFlag(command, flag, cursor, "--audio-delay", kAudioFrameMs,
+            kMaxAudioDelayMs, command.audioDelayMs);
+        if (result == FlagResult::Failed) return;
+        if (result == FlagResult::Handled) continue;
+
+        result = ApplyTextFlag(command, flag, cursor, "--video-path", command.videoPath);
         if (result == FlagResult::Failed) return;
         if (result == FlagResult::Handled) continue;
 
@@ -770,6 +874,27 @@ Command ParseCommand(int argc, const char* const* argv) {
         case Verb::Send: ParseSend(command, cursor); break;
         case Verb::None: break;
     }
+    if (command.error.empty() && command.videoPath && !media::IsVideoPathName(*command.videoPath))
+        command.error = BadValue("--video-path", *command.videoPath) + " - it takes " +
+                        KnownVideoPaths() +
+                        ", and both ends of a session must be given the same one";
+    if (command.error.empty() && command.fecScheme && !IsFecSchemeName(*command.fecScheme))
+        command.error = BadValue("--fec", *command.fecScheme) + " - built in are " +
+                        KnownFecSchemes() +
+                        ", and both ends of a session must be given the same one";
+
+    if (command.error.empty() && command.share.congestionControl &&
+        !IsCongestionControlName(*command.share.congestionControl))
+        command.error = BadValue("--cc", *command.share.congestionControl) + " - built in are " +
+                        KnownCongestionControls() +
+                        "; the host alone decides this, so the viewer is told nothing";
+
+    if (command.error.empty() && command.share.encoder &&
+        !media::IsEncoderBackendName(*command.share.encoder))
+        command.error = BadValue("--encoder", *command.share.encoder) + " - the backends are " +
+                        KnownEncoders() +
+                        ", and a host that has no such backend refuses to share rather than "
+                        "measuring a different one";
     return command;
 }
 
@@ -962,6 +1087,18 @@ std::string UsageText(Verb verb) {
                    "  --audio / --no-audio  play the host's sound, or do not\n"
                    "  --passcode VALUE      the host's passcode, the same way sources takes it\n"
                    "  --name NAME           what the host sees this machine called\n"
+                   "  --fec NAME            which FEC scheme the host is sending parity\n"
+                   "                        with; for measurement, and it must match\n"
+                   "  --video-path NAME     quic-datagram or raw-udp; for measurement, and\n"
+                   "                        it must match what the host was started with\n"
+                   "  --nack / --no-nack    ask the host to resend lost packets, or do not;\n"
+                   "                        for measurement\n"
+                   "  --hold N              how many newer complete frames may pass before an\n"
+                   "                        incomplete one is dropped; for measurement\n"
+                   "  --audio-delay MS      how much audio to buffer before playing; for\n"
+                   "                        measurement\n"
+                   "  --audio-adaptive      let the buffer chase jitter instead of holding a\n"
+                   "                        fixed target; for measurement\n"
                    "\n"
                    "F9 locks the pointer to the window, Escape lets it go again.\n";
         case Verb::Shell:
@@ -1015,6 +1152,24 @@ std::string UsageText(Verb verb) {
                    "                         (deny by default, ask needs a terminal)\n"
                    "  --status-interval MS   how often to print the status line\n"
                    "  --no-status            print nothing until it stops\n"
+                   "  --cc NAME              which congestion control decides the bitrate;\n"
+                   "                         the host alone chooses it, for measurement\n"
+                   "  --encoder NAME         which encoder backend to measure, instead of the\n"
+                   "                         first one that starts; a host without it refuses\n"
+                   "                         to share rather than measuring another\n"
+                   "  --fec NAME             which FEC scheme to send parity with; for\n"
+                   "                         measurement, and the viewer must be given the\n"
+                   "                         same one\n"
+                   "  --fec-parity N         parity packets per group, pinned so the loss-driven\n"
+                   "                         policy cannot move it mid-measurement\n"
+                   "  --fec-depth N          spread a frame over N groups instead of deriving\n"
+                   "                         the count; buys rescue and costs overhead\n"
+                   "  --fec-arm MODE         always holds parity on the wire, policy lets loss\n"
+                   "                         decide, never turns FEC off so NACK is the only\n"
+                   "                         repair left\n"
+                   "  --video-path NAME      quic-datagram or raw-udp; for measuring what\n"
+                   "                         quiche's own congestion control costs the video,\n"
+                   "                         and the viewer must be given the same one\n"
                    "\n"
                    "Anything not named here comes from the settings the desktop app uses.\n";
         case Verb::Version:

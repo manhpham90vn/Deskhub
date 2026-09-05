@@ -63,6 +63,7 @@ bool ScreenClientSession::HandlePacket(std::span<const uint8_t> pkt, uint64_t no
             if (!m) return false;
             lastRecvUs_ = nowUs;
             lastRttUs_ = uint32_t(nowUs - m->sendTimeUs);
+            clockSync_.AddSample(m->sendTimeUs, m->hostTimeUs, nowUs);
             if (cb_.onRtt) cb_.onRtt(lastRttUs_);
             return true;
         }
@@ -180,7 +181,7 @@ void ScreenClientSession::Tick(uint64_t nowUs) {
     if (keyframeWanted_ && state_ == State::Streaming &&
         nowUs - lastKeyframeReqUs_ >= kKeyframeRetryUs) {
         lastKeyframeReqUs_ = nowUs;
-        const size_t n = BuildRequestKeyframe(buf_, sessionId_);
+        const size_t n = BuildRequestKeyframe(buf_, sessionId_, keyframeReason_);
         if (n && cb_.send) cb_.send(std::span<const uint8_t>(buf_, n));
     }
 }
