@@ -10,6 +10,11 @@ mối đe doạ nằm ở [`SECURITY.vi.md`](../SECURITY.vi.md).
 Đây là bản dịch của [`ARCHITECTURE.md`](ARCHITECTURE.md); khi hai bản khác nhau, bản
 tiếng Anh là bản chuẩn.
 
+Sáu tài liệu đi sâu hơn tài liệu này, mỗi tài liệu một hệ thống con:
+[`MEDIA-PIPELINE.vi.md`](MEDIA-PIPELINE.vi.md) (điều tiết tốc độ, codec, định thời phát lại),
+[`TERMINAL.vi.md`](TERMINAL.vi.md), [`AUTH.vi.md`](AUTH.vi.md), [`INPUT.vi.md`](INPUT.vi.md),
+[`FILE-TRANSFER.vi.md`](FILE-TRANSFER.vi.md) và [`THREADING.vi.md`](THREADING.vi.md).
+
 - **Trạng thái:** mô tả mã nguồn hiện tại.
 - **Đối tượng đọc:** bất kỳ ai sửa mã.
 

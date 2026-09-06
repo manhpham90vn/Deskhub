@@ -21,7 +21,7 @@ enough to actually play games remotely, which ordinary remote desktop tools can'
 
 **[Install](docs/INSTALL.md)** · [Build from source](docs/BUILD.md) ·
 [Spec](docs/SPECIFICATION.md) · [Architecture](docs/ARCHITECTURE.md) ·
-[Security](SECURITY.md)
+[Media pipeline](docs/MEDIA-PIPELINE.md) · [Security](SECURITY.md)
 
 </div>
 
@@ -124,6 +124,12 @@ authoritative one.
 | [Build](docs/BUILD.md) ([vi](docs/BUILD.vi.md) · [zh](docs/BUILD.zh.md) · [ja](docs/BUILD.ja.md)) | Compiling from source, tests, packaging, releasing |
 | [Specification](docs/SPECIFICATION.md) ([vi](docs/SPECIFICATION.vi.md) · [zh](docs/SPECIFICATION.zh.md) · [ja](docs/SPECIFICATION.ja.md)) | What Deskhub does, with no implementation detail |
 | [Architecture](docs/ARCHITECTURE.md) ([vi](docs/ARCHITECTURE.vi.md) · [zh](docs/ARCHITECTURE.zh.md) · [ja](docs/ARCHITECTURE.ja.md)) | Layers, threads, wire protocol, decisions |
+| [Media pipeline](docs/MEDIA-PIPELINE.md) ([vi](docs/MEDIA-PIPELINE.vi.md) · [zh](docs/MEDIA-PIPELINE.zh.md) · [ja](docs/MEDIA-PIPELINE.ja.md)) | Rate control, codecs, and the two feedback loops |
+| [Terminal](docs/TERMINAL.md) ([vi](docs/TERMINAL.vi.md) · [zh](docs/TERMINAL.zh.md) · [ja](docs/TERMINAL.ja.md)) | The VT emulator, PTYs, shell lifetime |
+| [Auth](docs/AUTH.md) ([vi](docs/AUTH.vi.md) · [zh](docs/AUTH.zh.md) · [ja](docs/AUTH.ja.md)) | Identity, pairing, the four-message handshake |
+| [Input](docs/INPUT.md) ([vi](docs/INPUT.vi.md) · [zh](docs/INPUT.zh.md) · [ja](docs/INPUT.ja.md)) | Keys, pointer, host-wins arbitration |
+| [File transfer](docs/FILE-TRANSFER.md) ([vi](docs/FILE-TRANSFER.vi.md) · [zh](docs/FILE-TRANSFER.zh.md) · [ja](docs/FILE-TRANSFER.ja.md)) | Batches, limits, safe names, checksums |
+| [Threading](docs/THREADING.md) ([vi](docs/THREADING.vi.md) · [zh](docs/THREADING.zh.md) · [ja](docs/THREADING.ja.md)) | Threads, locks, ownership rules |
 | [`SECURITY.md`](SECURITY.md) ([vi](SECURITY.vi.md) · [zh](SECURITY.zh.md) · [ja](SECURITY.ja.md)) | Threat model and how to report a vulnerability |
 | [`PRIVACY.md`](PRIVACY.md) ([vi](PRIVACY.vi.md) · [zh](PRIVACY.zh.md) · [ja](PRIVACY.ja.md)) | Privacy policy |
 | [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) ([vi](THIRD_PARTY_NOTICES.vi.md) · [zh](THIRD_PARTY_NOTICES.zh.md) · [ja](THIRD_PARTY_NOTICES.ja.md)) | Third-party components and licences |

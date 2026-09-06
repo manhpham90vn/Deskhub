@@ -21,7 +21,7 @@
 
 **[安装](docs/INSTALL.zh.md)** · [从源码构建](docs/BUILD.zh.md) ·
 [规格说明](docs/SPECIFICATION.zh.md) · [架构](docs/ARCHITECTURE.zh.md) ·
-[安全](SECURITY.zh.md)
+[媒体管线](docs/MEDIA-PIPELINE.zh.md) · [安全](SECURITY.zh.md)
 
 </div>
 
@@ -122,6 +122,12 @@ Android 版。
 | [构建](docs/BUILD.zh.md) ([en](docs/BUILD.md)) | 从源码编译、测试、打包、发布 |
 | [规格说明](docs/SPECIFICATION.zh.md) ([en](docs/SPECIFICATION.md)) | Deskhub 做什么，不含任何实现细节 |
 | [架构](docs/ARCHITECTURE.zh.md) ([en](docs/ARCHITECTURE.md)) | 分层、线程、线上协议、设计决策 |
+| [媒体管线](docs/MEDIA-PIPELINE.zh.md) ([en](docs/MEDIA-PIPELINE.md)) | 码率调控、编解码器与两条反馈环路 |
+| [终端](docs/TERMINAL.zh.md) ([en](docs/TERMINAL.md)) | VT 模拟器、PTY、shell 生命周期 |
+| [认证](docs/AUTH.zh.md) ([en](docs/AUTH.md)) | 身份、配对、四条消息的握手 |
+| [输入](docs/INPUT.zh.md) ([en](docs/INPUT.md)) | 按键、指针、主机优先的仲裁 |
+| [文件传输](docs/FILE-TRANSFER.zh.md) ([en](docs/FILE-TRANSFER.md)) | 批次、限制、安全文件名、校验和 |
+| [线程](docs/THREADING.zh.md) ([en](docs/THREADING.md)) | 线程、锁、所有权规则 |
 | [`SECURITY.zh.md`](SECURITY.zh.md) ([en](SECURITY.md)) | 威胁模型以及如何报告漏洞 |
 | [`PRIVACY.zh.md`](PRIVACY.zh.md) ([en](PRIVACY.md)) | 隐私政策 |
 | [`THIRD_PARTY_NOTICES.zh.md`](THIRD_PARTY_NOTICES.zh.md) ([en](THIRD_PARTY_NOTICES.md)) | 第三方组件与许可证 |

@@ -7,6 +7,11 @@ threads, the wire protocol, and the design decisions behind them. What the produ
 does, as a user sees it, lives in [`SPECIFICATION.md`](SPECIFICATION.md); the threat
 model lives in [`SECURITY.md`](../SECURITY.md).
 
+Six documents go deeper than this one, each on one subsystem:
+[`MEDIA-PIPELINE.md`](MEDIA-PIPELINE.md) (rate control, codecs, playback timing),
+[`TERMINAL.md`](TERMINAL.md), [`AUTH.md`](AUTH.md), [`INPUT.md`](INPUT.md),
+[`FILE-TRANSFER.md`](FILE-TRANSFER.md) and [`THREADING.md`](THREADING.md).
+
 - **Status:** describes the current code.
 - **Audience:** anyone changing the code.
 

@@ -8,6 +8,11 @@
 
 本文件是 [`ARCHITECTURE.md`](ARCHITECTURE.md) 的译本；若两者有出入，以英文版为准。
 
+有六份文档比本文更深入，各讲一个子系统：
+[`MEDIA-PIPELINE.zh.md`](MEDIA-PIPELINE.zh.md)（码率调控、编解码器、播放定时）、
+[`TERMINAL.zh.md`](TERMINAL.zh.md)、[`AUTH.zh.md`](AUTH.zh.md)、[`INPUT.zh.md`](INPUT.zh.md)、
+[`FILE-TRANSFER.zh.md`](FILE-TRANSFER.zh.md) 和 [`THREADING.zh.md`](THREADING.zh.md)。
+
 - **状态：** 描述的是当前代码。
 - **读者：** 任何要改这份代码的人。
 

@@ -21,7 +21,7 @@
 
 **[Cài đặt](docs/INSTALL.vi.md)** · [Build từ mã nguồn](docs/BUILD.vi.md) ·
 [Đặc tả](docs/SPECIFICATION.vi.md) · [Kiến trúc](docs/ARCHITECTURE.vi.md) ·
-[Bảo mật](SECURITY.vi.md)
+[Đường media](docs/MEDIA-PIPELINE.vi.md) · [Bảo mật](SECURITY.vi.md)
 
 </div>
 
@@ -123,6 +123,12 @@ Mọi tài liệu đều được xuất bản bằng tiếng Anh kèm các bả
 | [Build](docs/BUILD.vi.md) ([en](docs/BUILD.md) · [zh](docs/BUILD.zh.md) · [ja](docs/BUILD.ja.md)) | Biên dịch từ mã nguồn, kiểm thử, đóng gói, phát hành |
 | [Đặc tả](docs/SPECIFICATION.vi.md) ([en](docs/SPECIFICATION.md) · [zh](docs/SPECIFICATION.zh.md) · [ja](docs/SPECIFICATION.ja.md)) | Deskhub làm được gì, không có chi tiết cài đặt |
 | [Kiến trúc](docs/ARCHITECTURE.vi.md) ([en](docs/ARCHITECTURE.md) · [zh](docs/ARCHITECTURE.zh.md) · [ja](docs/ARCHITECTURE.ja.md)) | Các tầng, luồng, giao thức trên đường truyền, các quyết định thiết kế |
+| [Đường media](docs/MEDIA-PIPELINE.vi.md) ([en](docs/MEDIA-PIPELINE.md) · [zh](docs/MEDIA-PIPELINE.zh.md) · [ja](docs/MEDIA-PIPELINE.ja.md)) | Điều tiết tốc độ, codec, và hai vòng phản hồi |
+| [Terminal](docs/TERMINAL.vi.md) ([en](docs/TERMINAL.md) · [zh](docs/TERMINAL.zh.md) · [ja](docs/TERMINAL.ja.md)) | Bộ giả lập VT, PTY, vòng đời shell |
+| [Xác thực](docs/AUTH.vi.md) ([en](docs/AUTH.md) · [zh](docs/AUTH.zh.md) · [ja](docs/AUTH.ja.md)) | Danh tính, ghép cặp, cái bắt tay bốn bản tin |
+| [Điều khiển](docs/INPUT.vi.md) ([en](docs/INPUT.md) · [zh](docs/INPUT.zh.md) · [ja](docs/INPUT.ja.md)) | Phím, con trỏ, quy tắc host thắng |
+| [Truyền tệp](docs/FILE-TRANSFER.vi.md) ([en](docs/FILE-TRANSFER.md) · [zh](docs/FILE-TRANSFER.zh.md) · [ja](docs/FILE-TRANSFER.ja.md)) | Lô, giới hạn, tên an toàn, tổng kiểm tra |
+| [Luồng](docs/THREADING.vi.md) ([en](docs/THREADING.md) · [zh](docs/THREADING.zh.md) · [ja](docs/THREADING.ja.md)) | Luồng, khoá, quy tắc sở hữu |
 | [`SECURITY.vi.md`](SECURITY.vi.md) ([en](SECURITY.md) · [zh](SECURITY.zh.md) · [ja](SECURITY.ja.md)) | Mô hình mối đe doạ và cách báo lỗ hổng |
 | [`PRIVACY.vi.md`](PRIVACY.vi.md) ([en](PRIVACY.md) · [zh](PRIVACY.zh.md) · [ja](PRIVACY.ja.md)) | Chính sách quyền riêng tư |
 | [`THIRD_PARTY_NOTICES.vi.md`](THIRD_PARTY_NOTICES.vi.md) ([en](THIRD_PARTY_NOTICES.md) · [zh](THIRD_PARTY_NOTICES.zh.md) · [ja](THIRD_PARTY_NOTICES.ja.md)) | Thành phần bên thứ ba và giấy phép |

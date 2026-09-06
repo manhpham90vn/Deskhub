@@ -22,7 +22,7 @@
 
 **[インストール](docs/INSTALL.ja.md)** · [ソースからビルド](docs/BUILD.ja.md) ·
 [仕様](docs/SPECIFICATION.ja.md) · [アーキテクチャ](docs/ARCHITECTURE.ja.md) ·
-[セキュリティ](SECURITY.ja.md)
+[メディアパイプライン](docs/MEDIA-PIPELINE.ja.md) · [セキュリティ](SECURITY.ja.md)
 
 </div>
 
@@ -124,6 +124,12 @@
 | [ビルド](docs/BUILD.ja.md) ([en](docs/BUILD.md)) | ソースからのコンパイル、テスト、パッケージング、リリース |
 | [仕様](docs/SPECIFICATION.ja.md) ([en](docs/SPECIFICATION.md)) | Deskhub が何をするか。実装の詳細は含まない |
 | [アーキテクチャ](docs/ARCHITECTURE.ja.md) ([en](docs/ARCHITECTURE.md)) | レイヤ、スレッド、ワイヤプロトコル、設計判断 |
+| [メディアパイプライン](docs/MEDIA-PIPELINE.ja.md) ([en](docs/MEDIA-PIPELINE.md)) | レート制御、コーデック、2 つのフィードバックループ |
+| [ターミナル](docs/TERMINAL.ja.md) ([en](docs/TERMINAL.md)) | VT エミュレータ、PTY、シェルの寿命 |
+| [認証](docs/AUTH.ja.md) ([en](docs/AUTH.md)) | 識別情報、ペアリング、4 通のハンドシェイク |
+| [入力](docs/INPUT.ja.md) ([en](docs/INPUT.md)) | キー、ポインタ、ホスト優先の調停 |
+| [ファイル転送](docs/FILE-TRANSFER.ja.md) ([en](docs/FILE-TRANSFER.md)) | バッチ、上限、安全な名前、チェックサム |
+| [スレッド](docs/THREADING.ja.md) ([en](docs/THREADING.md)) | スレッド、ロック、所有権の規則 |
 | [`SECURITY.ja.md`](SECURITY.ja.md) ([en](SECURITY.md)) | 脅威モデルと脆弱性の報告方法 |
 | [`PRIVACY.ja.md`](PRIVACY.ja.md) ([en](PRIVACY.md)) | プライバシーポリシー |
 | [`THIRD_PARTY_NOTICES.ja.md`](THIRD_PARTY_NOTICES.ja.md) ([en](THIRD_PARTY_NOTICES.md)) | サードパーティ製コンポーネントとライセンス |

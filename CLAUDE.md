@@ -144,6 +144,12 @@ translation that lags behind its English original is a bug.
 | `docs/BUILD.md` | `docs/BUILD.{vi,zh,ja}.md` | Building from source, tests, packaging, releasing |
 | `docs/SPECIFICATION.md` | `docs/SPECIFICATION.{vi,zh,ja}.md` | Feature spec — behaviour only, no implementation detail |
 | `docs/ARCHITECTURE.md` | `docs/ARCHITECTURE.{vi,zh,ja}.md` | How it is built — layers, threads, wire protocol, design decisions |
+| `docs/MEDIA-PIPELINE.md` | `docs/MEDIA-PIPELINE.{vi,zh,ja}.md` | Rate control, codecs, the two feedback loops — the map to `core/control` |
+| `docs/TERMINAL.md` | `docs/TERMINAL.{vi,zh,ja}.md` | VT emulator, PTYs, shell lifetime, backpressure |
+| `docs/AUTH.md` | `docs/AUTH.{vi,zh,ja}.md` | Identity, pairing, the handshake mechanism |
+| `docs/INPUT.md` | `docs/INPUT.{vi,zh,ja}.md` | Key and pointer mapping, host-wins arbitration |
+| `docs/FILE-TRANSFER.md` | `docs/FILE-TRANSFER.{vi,zh,ja}.md` | Batch protocol, limits, safe names, audit |
+| `docs/THREADING.md` | `docs/THREADING.{vi,zh,ja}.md` | Threads, locks, ownership rules |
 | `SECURITY.md` | `SECURITY.{vi,zh,ja}.md` | Threat model, hardening, vulnerability reports |
 | `PRIVACY.md` | `PRIVACY.{vi,zh,ja}.md` | Privacy policy — versioned, with a changelog table |
 | `THIRD_PARTY_NOTICES.md` | `THIRD_PARTY_NOTICES.{vi,zh,ja}.md` | Third-party components and licences |

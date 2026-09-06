@@ -10,6 +10,11 @@
 本書は [`ARCHITECTURE.md`](ARCHITECTURE.md) の翻訳である。相違がある場合は英語版が正典と
 なる。
 
+本書より深く踏み込む文書が 6 つあり、それぞれ 1 つのサブシステムを扱う：
+[`MEDIA-PIPELINE.ja.md`](MEDIA-PIPELINE.ja.md)（レート制御、コーデック、再生タイミング）、
+[`TERMINAL.ja.md`](TERMINAL.ja.md)、[`AUTH.ja.md`](AUTH.ja.md)、[`INPUT.ja.md`](INPUT.ja.md)、
+[`FILE-TRANSFER.ja.md`](FILE-TRANSFER.ja.md)、[`THREADING.ja.md`](THREADING.ja.md)。
+
 - **状態：** 現在のコードを記述している。
 - **読者：** コードを変更するすべての人。
 
