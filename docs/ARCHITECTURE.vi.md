@@ -678,6 +678,18 @@ pull request, và dòng coverage của `core/`.
   suốt thời gian phiên còn mở, thay vì mượn một kết nối cho mỗi lời gọi. Ứng dụng desktop
   che lấp lỗi này rất lâu vì GTK giữ một tham chiếu tới session bus trong suốt vòng đời
   tiến trình; `deskhub-cli` không liên kết GTK nên không có tham chiếu nào.
+- **Mỗi màn hình được chụp đều mở một PipeWire remote riêng**: một phiên portal chỉ trao
+  ra một fd từ `OpenPipeWireRemote`, và nhân bản nó không tạo ra kết nối thứ hai — `dup`
+  chỉ là một descriptor khác trỏ vào cùng một socket. Hai lời gọi `pw_context_connect_fd`
+  trên các bản dup cho ra hai đối tượng `pw_core` với bảng proxy-id độc lập cùng ghi và
+  đọc trên một luồng byte: id của chúng đụng nhau trong không gian id một-client duy nhất
+  của daemon, và thread nào có epoll thức dậy trước sẽ nuốt luôn message dành cho thread
+  kia, kể cả các descriptor `SCM_RIGHTS` mang theo bộ nhớ buffer. Luồng thua cuộc đua sẽ
+  chết ở giai đoạn cấp phát của link với *Buffer allocation failed*, đó là lý do một màn
+  hình thì luôn chạy còn hai màn hình thì hên xui. Vì vậy `ScreenCapture::Start` gọi
+  `PortalScreenCast::OpenRemoteFd()` để có remote của riêng nó; portal cho phép gọi
+  `OpenPipeWireRemote` nhiều lần trên một phiên đã start. Phiên chỉ giữ lại fd đầu tiên để
+  chứng tỏ portal có trao remote và để làm chỗ dựa cho `isOpen()`.
 - **Mọi icon đều được dẫn xuất, và chỉ một phần được bo góc**: `make icons` dựng lại
   toàn bộ bộ icon từ một file gốc duy nhất `assets/icon_1024.png`. macOS, iOS, trang
   Play Store và đường adaptive-icon của Android tự cắt artwork theo hình dạng riêng
