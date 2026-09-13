@@ -821,6 +821,18 @@ coverage của core.
   gọi. App desktop che khuất vấn đề này trong thời gian dài vì GTK giữ một reference tới
   session bus trong suốt vòng đời process, còn `deskhub-cli` không link GTK nên không có
   reference đó.
+- **Mỗi màn hình được chụp đều mở một PipeWire remote riêng**: một phiên portal chỉ trao
+  ra một fd từ `OpenPipeWireRemote`, và nhân bản nó không tạo ra kết nối thứ hai — `dup`
+  chỉ là một descriptor khác trỏ vào cùng một socket. Hai lời gọi `pw_context_connect_fd`
+  trên các bản dup cho ra hai đối tượng `pw_core` với bảng proxy-id độc lập cùng ghi và
+  đọc trên một luồng byte: id của chúng đụng nhau trong không gian id một-client duy nhất
+  của daemon, và thread nào có epoll thức dậy trước sẽ nuốt luôn message dành cho thread
+  kia, kể cả các descriptor `SCM_RIGHTS` mang theo bộ nhớ buffer. Luồng thua cuộc đua sẽ
+  chết ở giai đoạn cấp phát của link với *Buffer allocation failed*, đó là lý do một màn
+  hình thì luôn chạy còn hai màn hình thì hên xui. Vì vậy `ScreenCapture::Start` gọi
+  `PortalScreenCast::OpenRemoteFd()` để có remote của riêng nó; portal cho phép gọi
+  `OpenPipeWireRemote` nhiều lần trên một phiên đã start. Phiên chỉ giữ lại fd đầu tiên để
+  chứng tỏ portal có trao remote và để làm chỗ dựa cho `isOpen()`.
 - **Mọi icon đều được sinh ra từ một nguồn, và chỉ một số được bo góc.** `make icons` dựng
   lại toàn bộ bộ icon từ file gốc duy nhất `assets/icon_1024.png`. macOS, iOS, phần hiển
   thị trên Play Store và pipeline adaptive-icon của Android đều tự mask hình theo hình dạng
