@@ -1,0 +1,67 @@
+name: windows-crash-dumps
+description: Point Windows Error Reporting at one folder and prove on this runner that it writes a dump there, so a test that dies by fail-fast leaves something behind. The handler tests/integration/TestMain.cpp installs covers every exception the kernel dispatches to user mode, but a fastfail is dispatched to nothing, so WER out of process is the only collector that can see one.
+
+inputs:
+  folder:
+    description: Where WER writes its dumps. Pass the same folder the test binary is given as DESKHUB_CRASH_DUMP_DIR, so one upload collects both collectors' dumps.
+    required: true
+  keep:
+    description: How many dumps WER keeps before it stops writing new ones. One per run the job lets itself crash.
+    required: false
+    default: '2'
+
+runs:
+  using: composite
+  steps:
+    - name: Let Windows Error Reporting run, prove it collects a dump on this runner, then keep the next ${{ inputs.keep }} in full
+      shell: pwsh
+      run: |
+        $ErrorActionPreference = 'Stop'
+
+        $folder = [System.IO.Path]::GetFullPath('${{ inputs.folder }}')
+        $probe = "$folder-probe"
+        New-Item -ItemType Directory -Path $folder -Force | Out-Null
+
+        $reporting = 'HKLM:\SOFTWARE\Microsoft\Windows\Windows Error Reporting'
+        $policy = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Windows Error Reporting'
+        $dumps = Join-Path $reporting 'LocalDumps'
+        New-Item -Path $reporting -Force | Out-Null
+        New-Item -Path $dumps -Force | Out-Null
+
+        try {
+          Set-ItemProperty -Path $reporting -Name Disabled -Value 0 -Type DWord
+          Set-ItemProperty -Path $reporting -Name DontShowUI -Value 1 -Type DWord
+          if (Test-Path $policy) {
+            Set-ItemProperty -Path $policy -Name Disabled -Value 0 -Type DWord
+          }
+          Set-Service -Name WerSvc -StartupType Manual
+        } catch {
+          Write-Host "::warning::Windows Error Reporting could not be switched on ($($_.Exception.Message)). The probe below says whether it collects anyway."
+        }
+
+        Remove-Item -Recurse -Force $probe -ErrorAction SilentlyContinue
+        New-Item -ItemType Directory -Path $probe -Force | Out-Null
+        Set-ItemProperty -Path $dumps -Name DumpFolder -Value $probe -Type ExpandString
+        Set-ItemProperty -Path $dumps -Name DumpType -Value 1 -Type DWord
+        Set-ItemProperty -Path $dumps -Name DumpCount -Value 1 -Type DWord
+
+        Start-Process -Wait -NoNewWindow -FilePath 'powershell.exe' -ArgumentList @(
+          '-NoProfile', '-Command', '[Environment]::FailFast("deskhub crash dump probe")')
+
+        $deadline = (Get-Date).AddSeconds(90)
+        while (-not (Test-Path (Join-Path $probe '*.dmp'))) {
+          if ((Get-Date) -ge $deadline) { break }
+          Start-Sleep -Seconds 2
+        }
+        $collected = Test-Path (Join-Path $probe '*.dmp')
+        Remove-Item -Recurse -Force $probe -ErrorAction SilentlyContinue
+
+        if ($collected) {
+          Write-Host "Windows Error Reporting collected a dump for a deliberate fail-fast, so a real one in the suite below will leave a dump too."
+        } else {
+          Write-Host "::error::Windows Error Reporting collected nothing for a deliberate fail-fast on this runner, so a 0xc0000409 in the suite below will leave nothing behind either. A fastfail never reaches SetUnhandledExceptionFilter, so the in-process dump writer in tests/integration/TestMain.cpp cannot stand in for this one, and the exit code is then the whole of what such a crash can ever tell you. Check that WerSvc starts and that Disabled is clear under both $reporting and $policy."
+        }
+
+        Set-ItemProperty -Path $dumps -Name DumpFolder -Value $folder -Type ExpandString
+        Set-ItemProperty -Path $dumps -Name DumpType -Value 2 -Type DWord
+        Set-ItemProperty -Path $dumps -Name DumpCount -Value ${{ inputs.keep }} -Type DWord

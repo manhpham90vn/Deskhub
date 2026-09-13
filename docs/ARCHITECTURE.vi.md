@@ -264,8 +264,11 @@ C++/Kotlin/Swift, quét gitleaks toàn bộ lịch sử, và coverage `core/` �
 nhánh. Ba bộ test còn được biên dịch chéo và chạy trên Linux arm64, emulator Android và
 iOS Simulator, và một job Windows chạy thêm ba lần bộ integration mỗi vòng để săn lỗi
 hỏng bộ nhớ chập chờn, thứ chỉ lộ ra khoảng một lần trong ba; khung chết là nạn nhân của
-lỗi chứ không bao giờ là nguyên nhân, nên mọi job Windows đều ghi một minidump đầy đủ và
-lần chạy đêm lặp lại các bài kiểm thử tải hai lượt — một lượt dưới full page heap, một
+lỗi chứ không bao giờ là nguyên nhân, nên cú sập bắt buộc phải để lại một bản dump: binary
+test tự ghi minidump đầy đủ cho mọi exception còn đến được handler, và vì fastfail không
+đến được handler nào, mỗi job Windows còn bật Windows Error Reporting rồi chứng minh bằng
+một cú fail-fast cố ý rằng nó thật sự thu được, trước khi bộ test mà nó canh chạy. Lần
+chạy đêm lặp lại các bài kiểm thử tải hai lượt — một lượt dưới full page heap, một
 lượt với quiche được dựng cùng debug assertion và kiểm tra tràn số của Rust, cái bẫy duy
 nhất nhìn được vào bên trong quiche, vì ASan không đo mã Rust còn page heap chỉ canh
 heap. Các job release trên Linux và macOS còn chạy `core_perf` và

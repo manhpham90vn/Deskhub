@@ -271,7 +271,10 @@ CodeQL over C++/Kotlin/Swift, a gitleaks sweep of the whole history, and ≥ 90 
 on arm64 Linux, an Android emulator and the iOS Simulator, and a Windows job runs the
 integration suite three more times per round, hunting an intermittent memory corruption
 that shows up in about one run in three; the frame it crashes in is a victim of that
-corruption and never its cause, so every Windows job writes a full minidump and the
+corruption and never its cause, so the crash has to leave a dump behind: the test binary
+writes its own full minidump for every exception that reaches a handler, and since a
+fastfail reaches none, each Windows job also turns Windows Error Reporting on and proves
+with a deliberate fail-fast that it collects, before the suite it guards runs. The
 nightly run repeats the load tests twice over — once under the full page heap, and once
 against a quiche built with Rust debug assertions and overflow checks on, the only trap
 that can see inside quiche, since ASan does not instrument Rust and the page heap guards

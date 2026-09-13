@@ -58,15 +58,11 @@ jobs:
             { grep -iE "error|warning C[0-9]|LNK[0-9]" build.log | tail -40 | sed 's/^/::error::/' || true
               exit 1; }
 
-      - name: Ask Windows to keep a dump when a test dies by fail-fast, which runs no in-process handler and so prints no stack
+      - uses: ./.github/actions/windows-crash-dumps
         if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          $key = 'HKLM:\SOFTWARE\Microsoft\Windows\Windows Error Reporting\LocalDumps'
-          New-Item -Path $key -Force | Out-Null
-          Set-ItemProperty -Path $key -Name DumpFolder -Value "$env:RUNNER_TEMP\crash-dumps" -Type ExpandString
-          Set-ItemProperty -Path $key -Name DumpType -Value 2 -Type DWord
-          Set-ItemProperty -Path $key -Name DumpCount -Value 2 -Type DWord
+        with:
+          folder: ${{ runner.temp }}/crash-dumps
+          keep: '2'
 
       - name: Run them through CTest
         env:
@@ -126,14 +122,10 @@ jobs:
       - name: Build the integration suite
         run: cmake --build --preset x64-release --target integration_tests
 
-      - name: Keep a dump, since the fastfail this hunts runs no in-process handler and so prints no stack
-        shell: pwsh
-        run: |
-          $dumps = 'HKLM:\SOFTWARE\Microsoft\Windows\Windows Error Reporting\LocalDumps'
-          New-Item -Path $dumps -Force | Out-Null
-          Set-ItemProperty -Path $dumps -Name DumpFolder -Value "$env:RUNNER_TEMP\crash-dumps" -Type ExpandString
-          Set-ItemProperty -Path $dumps -Name DumpType -Value 2 -Type DWord
-          Set-ItemProperty -Path $dumps -Name DumpCount -Value 4 -Type DWord
+      - uses: ./.github/actions/windows-crash-dumps
+        with:
+          folder: ${{ runner.temp }}/crash-dumps
+          keep: '4'
 
       - name: Run the whole suite three more times, failing only on a crash - this is the one build that reproduces the stack corruption, and one run in three is not enough to see it
         shell: pwsh

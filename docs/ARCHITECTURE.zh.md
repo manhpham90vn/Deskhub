@@ -232,8 +232,10 @@ Android Lint、actionlint + shellcheck、三个套件的 ASan/TSan 运行、对 
 CodeQL、对整个历史的 gitleaks 扫描，以及 `core/` 上行 ≥ 90 % / 分支 ≥ 80 % 的覆盖率。三个
 套件另外还会交叉构建并在 arm64 Linux、Android 模拟器和 iOS 模拟器上运行，而一个 Windows
 作业每轮把集成套件再多跑三遍，为的是抓那个大约三次运行才出现一次的间歇性内存破坏；崩溃
-所在的栈帧只是这一破坏的受害者，从不是原因，所以每个 Windows 作业都会写出完整的
-minidump，夜间任务则把负载测试重跑两轮——一轮在 full page heap 下，另一轮针对开启了 Rust
+所在的栈帧只是这一破坏的受害者，从不是原因，所以崩溃必须留下一份 dump：测试二进制自己为
+每一个还能到达处理器的异常写出完整的 minidump，而 fastfail 到不了任何处理器，所以每个
+Windows 作业还会打开 Windows Error Reporting，并在它所守护的套件开跑之前，用一次故意的
+fail-fast 证明它确实收得到。夜间任务则把负载测试重跑两轮——一轮在 full page heap 下，另一轮针对开启了 Rust
 debug assertion 与溢出检查构建的 quiche，那是唯一能看进 quiche 内部的陷阱，因为 ASan 不
 插桩 Rust，而 page heap 只看守堆。Linux 和 macOS 的发布作业还会带着分配和规模门槛跑 `core_perf` 和
 `platform_perf`（共享 runner 上不存在时间基线），而每个 pull request 另外还会收到一份

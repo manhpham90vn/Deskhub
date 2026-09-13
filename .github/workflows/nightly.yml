@@ -17,6 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 120
     permissions:
+      actions: write
       contents: write
       issues: write
       pull-requests: write
@@ -61,8 +62,12 @@ jobs:
           if [ -z "$open_pr" ]; then
             gh pr create --head nightly-fuzz-corpus \
               --title "chore: fold new fuzz coverage into the seed corpus" \
-              --body "Tonight's fuzz run grew coverage: $RUN_URL. Close and reopen this pull request to start the CI checks - the workflow token cannot trigger them."
+              --body "Tonight's fuzz run grew coverage: $RUN_URL. The checks below are dispatched onto the branch by the run that opened this, since a pull request opened with the workflow token raises none of its own."
           fi
+          for workflow in ci lint security codeql; do
+            gh workflow run "$workflow.yml" --ref nightly-fuzz-corpus ||
+              echo "::error::could not dispatch $workflow.yml onto nightly-fuzz-corpus. A push or pull request made with the workflow token raises no run of its own, and workflow_dispatch is the one event that token may still raise, so this loop is the only thing that puts checks on the corpus pull request - without it the seed corpus merges into main having been built and tested by nothing."
+          done
 
       - name: Upload crash reproducers
         if: failure() && steps.fuzz.outcome == 'failure'
@@ -134,14 +139,10 @@ jobs:
       - name: Build the integration suite
         run: cmake --build --preset x64-debug --target integration_tests
 
-      - name: Keep a dump, since a Rust panic crossing the FFI boundary aborts without running an in-process handler
-        shell: pwsh
-        run: |
-          $dumps = 'HKLM:\SOFTWARE\Microsoft\Windows\Windows Error Reporting\LocalDumps'
-          New-Item -Path $dumps -Force | Out-Null
-          Set-ItemProperty -Path $dumps -Name DumpFolder -Value "$env:RUNNER_TEMP\crash-dumps" -Type ExpandString
-          Set-ItemProperty -Path $dumps -Name DumpType -Value 2 -Type DWord
-          Set-ItemProperty -Path $dumps -Name DumpCount -Value 6 -Type DWord
+      - uses: ./.github/actions/windows-crash-dumps
+        with:
+          folder: ${{ runner.temp }}/crash-dumps
+          keep: '6'
 
       - name: Run the load tests five times, where quiche stops at the first wrapped index or broken invariant instead of writing through it
         shell: pwsh
@@ -215,6 +216,11 @@ jobs:
           New-Item -Path $image -Force | Out-Null
           Set-ItemProperty -Path $image -Name GlobalFlag -Value 0x02000000 -Type DWord
           Set-ItemProperty -Path $image -Name PageHeapFlags -Value 0x3 -Type DWord
+
+      - uses: ./.github/actions/windows-crash-dumps
+        with:
+          folder: ${{ runner.temp }}/crash-dumps
+          keep: '4'
 
       - name: Run the load tests three times, where a write past an allocation faults on the instruction that makes it
         shell: pwsh
