@@ -32,6 +32,10 @@ final class AppModel {
         }
     }
 
+    var hasLiveSession: Bool {
+        stream != nil || terminal != nil || fileSend != nil
+    }
+
     func dropHost() {
         connect.forgetHost()
         sources = []
