@@ -45,8 +45,9 @@ runs:
         Set-ItemProperty -Path $dumps -Name DumpType -Value 1 -Type DWord
         Set-ItemProperty -Path $dumps -Name DumpCount -Value 1 -Type DWord
 
-        $encoded = [Convert]::ToBase64String(
-          [System.Text.Encoding]::Unicode.GetBytes('[Environment]::FailFast("deskhub crash dump probe")'))
+        $probeType = 'using System; using System.Runtime.InteropServices; public static class FailFastProbe { [DllImport("kernel32.dll")] public static extern void RaiseFailFastException(IntPtr record, IntPtr context, uint flags); }'
+        $probeScript = "Add-Type -TypeDefinition '$probeType'; [FailFastProbe]::RaiseFailFastException([IntPtr]::Zero, [IntPtr]::Zero, 0)"
+        $encoded = [Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($probeScript))
         $child = Start-Process -Wait -PassThru -NoNewWindow -FilePath 'powershell.exe' `
           -ArgumentList @('-NoProfile', '-EncodedCommand', $encoded)
         $faulted = $child.ExitCode -eq -1073740791
@@ -60,7 +61,7 @@ runs:
         Remove-Item -Recurse -Force $probe -ErrorAction SilentlyContinue
 
         if (-not $faulted) {
-          Write-Host "::error::The crash dump probe exited 0x$('{0:x8}' -f $child.ExitCode) instead of the 0xc0000409 a fail-fast raises, so it never crashed and this run has learnt nothing about whether Windows Error Reporting collects. Fix the probe before trusting any later run that says dumps work - a probe that cannot crash reports a healthy collector as broken and a broken one as untested."
+          Write-Host "::error::The crash dump probe exited 0x$('{0:x8}' -f $child.ExitCode) instead of the 0xc0000409 a fail-fast raises, so it never crashed and this run has learnt nothing about whether Windows Error Reporting collects. Fix the probe before trusting any later run that says dumps work - a probe that cannot crash reports a healthy collector as broken and a broken one as untested. The probe has to reach RaiseFailFastException itself: [Environment]::FailFast does raise one, but the runtime swallows the status and exits 0x80131623 instead, which is indistinguishable here from a probe that never crashed at all."
         } elseif ($collected) {
           Write-Host "Windows Error Reporting collected a dump for a deliberate fail-fast, so a real one in the suite below will leave a dump too."
         } else {
