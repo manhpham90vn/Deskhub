@@ -165,9 +165,15 @@ jobs:
           retention-days: 7
 
   asan-windows:
-    name: windows-latest · asan
+    name: windows-latest · asan ${{ matrix.suite }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { suite: integration, target: integration_tests, exe: tests/integration/integration_tests.exe }
+          - { suite: platform,    target: platform_tests,    exe: platform/platform_tests.exe }
     runs-on: windows-latest
-    timeout-minutes: 90
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -185,11 +191,11 @@ jobs:
         with:
           cache-key: host-windows-latest
 
-      - name: Configure (app off - this job only runs the integration suite)
+      - name: Configure (app off - this job runs one suite under ASan; platform_tests is here too because the corruption has landed in it as often as in integration_tests, and nothing else on Windows instruments it)
         run: cmake --preset asan-msvc -DDESKHUB_LINUX_APP=OFF
 
-      - name: Build the integration suite
-        run: cmake --build --preset asan-msvc --target integration_tests
+      - name: Build the ${{ matrix.suite }} suite
+        run: cmake --build --preset asan-msvc --target ${{ matrix.target }}
 
       - name: Run the suite under AddressSanitizer, the only Windows build that can name the write itself rather than the frame it landed in
         shell: pwsh
@@ -197,7 +203,7 @@ jobs:
           ASAN_OPTIONS: detect_stack_use_after_return=1:exitcode=42
           DESKHUB_CRASH_DUMP_DIR: ${{ runner.temp }}/crash-dumps
         run: |
-          $exe = 'out/build/asan-msvc/tests/integration/integration_tests.exe'
+          $exe = 'out/build/asan-msvc/${{ matrix.exe }}'
           for ($i = 1; $i -le 3; $i++) {
             Write-Host "===== asan run $i ====="
             & $exe
@@ -207,7 +213,7 @@ jobs:
               throw "AddressSanitizer reported a bad access. The report above names the file and line of the write - that is what the x64-release crash dump cannot give, so start there."
             }
             if ($code -ne 0 -and $code -ne 1) {
-              throw "integration_tests died with 0x$('{0:x8}' -f $code) under ASan without an ASan report, so the corruption is one ASan does not instrument."
+              throw "${{ matrix.target }} died with 0x$('{0:x8}' -f $code) under ASan without an ASan report, so the corruption is one ASan does not instrument."
             }
           }
 
