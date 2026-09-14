@@ -994,8 +994,9 @@ void MainFrame::ForgetEveryDevice() {
 }
 
 wxWindow* MainFrame::BuildSettingsPage(wxWindow* parent) {
-    auto* panel = new wxPanel(parent);
+    auto* panel = new wxScrolledWindow(parent);
     panel->SetBackgroundColour(*wxWHITE);
+    panel->SetScrollRate(0, FromDIP(10));
     auto* sizer = new wxBoxSizer(wxVERTICAL);
     const wxSizerFlags pad = wxSizerFlags().Border(wxLEFT | wxRIGHT | wxTOP, FromDIP(16));
 
@@ -1093,7 +1094,7 @@ wxWindow* MainFrame::BuildSettingsPage(wxWindow* parent) {
     sizer->Add(autoShareCtrl_, wxSizerFlags().Border(wxLEFT | wxRIGHT | wxTOP, FromDIP(16)));
     startHiddenCtrl_ = new wxCheckBox(panel, wxID_ANY, ToWx(ui::kCloseToTrayLabel));
     startHiddenCtrl_->SetValue(settings_.startHidden);
-    sizer->Add(startHiddenCtrl_, wxSizerFlags().Border(wxLEFT | wxRIGHT | wxTOP, FromDIP(16)));
+    sizer->Add(startHiddenCtrl_, wxSizerFlags().Border(wxALL, FromDIP(16)));
 
     fpsCtrl_->Bind(wxEVT_SPINCTRL, [this](wxSpinEvent&) { SaveSettings(); });
     fpsCtrl_->Bind(wxEVT_TEXT, [this](wxCommandEvent&) { SaveSettings(); });
@@ -1111,6 +1112,7 @@ wxWindow* MainFrame::BuildSettingsPage(wxWindow* parent) {
     passcodeCtrl_->Bind(wxEVT_TEXT, [this](wxCommandEvent&) { SaveSettings(); });
 
     panel->SetSizer(sizer);
+    panel->FitInside();
     return panel;
 }
 
