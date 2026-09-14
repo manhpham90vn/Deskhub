@@ -14,6 +14,16 @@ struct ContentView: View {
         }
         .preferredColorScheme(.dark)
         .pairingPrompt(FilesHost.shared.pairing)
+        .onChange(of: scenePhase) { _, phase in
+            switch phase {
+            case .background:
+                if model.hasLiveSession { BackgroundHold.shared.begin() }
+            case .active:
+                BackgroundHold.shared.end()
+            default:
+                break
+            }
+        }
         .task(id: scenePhase) {
             if scenePhase == .active {
                 await FilesHost.shared.run()
