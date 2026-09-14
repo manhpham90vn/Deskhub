@@ -574,6 +574,7 @@ struct QuicEndpoint::Impl {
             if (entry.announced) ReportQuiet(entry, nowUs);
             if (entry.announced) {
                 DrainStreams(id, entry);
+                if (Lookup(id) != &entry) continue;
                 DrainDatagrams(id, entry);
                 if (Lookup(id) != &entry) continue;
             }

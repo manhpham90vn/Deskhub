@@ -158,7 +158,7 @@ jobs:
             Write-Host "===== quiche checks run $i exit $code ====="
             if ($code -ne 0 -and $code -ne 1) {
               $null = & "$env:GITHUB_WORKSPACE/scripts/wait-for-crash-dump.ps1" -Folder "$env:RUNNER_TEMP\crash-dumps"
-              throw "integration_tests died with 0x$('{0:x8}' -f $code) against a quiche built with debug assertions and overflow checks on. This job is the only one that can see inside quiche - ASan does not instrument Rust and the page heap only guards the heap - so if a panic message names a quiche file and line above, that line is the bug, not a later victim of it."
+              throw "integration_tests died with 0x$('{0:x8}' -f $code) against a quiche built with debug assertions and overflow checks on. This job is the only one that can see inside quiche - ASan does not instrument Rust and the page heap only guards the heap - so if a panic message names a quiche file and line above, that line is the bug, not a later victim of it. With no panic above it, quiche is not the suspect and this build is only a slower one that changes the timing: the last crash that failed this job every night was ours, a connection the QUIC service loop kept using after a callback had freed it."
             }
           }
 
@@ -235,7 +235,7 @@ jobs:
             Write-Host "===== page heap run $i exit $code ====="
             if ($code -ne 0 -and $code -ne 1) {
               $null = & "$env:GITHUB_WORKSPACE/scripts/wait-for-crash-dump.ps1" -Folder "$env:RUNNER_TEMP\crash-dumps"
-              throw "integration_tests died with 0x$('{0:x8}' -f $code) under the full page heap. Unlike every other Windows job, the stack printed above is the write itself and not a later victim of it - that frame is the bug."
+              throw "integration_tests died with 0x$('{0:x8}' -f $code) under the full page heap. Unlike every other Windows job, the stack printed above is the write itself and not a later victim of it - that frame is the bug. Note what this job cannot do: it guards allocations, so a use-after-free of an already freed block reads unmapped memory without ever overrunning anything, and this job stayed green through months of exactly that - a green run here rules out an overrun, nothing more."
             }
           }
 

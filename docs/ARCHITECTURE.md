@@ -750,3 +750,20 @@ line.
   looked healthy, counted its frames and showed black. `VtDecoder` checks the flag when it
   opens on a layer and again before every frame, flushes, and fails that frame so the
   keyframe request goes out with it.
+
+- **Every callback the QUIC service loop makes can erase the connection it was called for**:
+  `Service()` walks a snapshot of connection ids and looks each one up again, because
+  `cb_.onConnected`, `cb_.onStream` and `cb_.onDatagram` all run application code that can
+  close a peer and erase it from `connections_`. `DrainStreams` re-checks after every
+  callback it makes — the guards named `listStillIntact` are there for exactly this — but it
+  only ever returns from itself, so `Service()` fell straight on into
+  `DrainDatagrams(id, entry)` with `entry` already erased and freed, and the first thing that
+  does is hand `entry.conn` to `quiche_conn_dgram_recv`. The `Lookup(id) != &entry` check sat
+  after both drains: one call too late. On Windows CI this surfaced as about one run in three
+  dying with `0xc0000409` or `0xc0000374`, and it stayed unsolved for so long because a
+  fastfail never reaches the `SetUnhandledExceptionFilter` in `tests/integration/TestMain.cpp`,
+  so a red run left an exit code and nothing else — and neither of the two jobs built to hunt
+  it could see it, the page heap because the freed block is quiche's own and the corruption is
+  whatever the dead connection wrote next, the Rust-checks build because nothing in quiche is
+  wrong. The Windows ASan job is what finally named the frame. Re-validate the entry after
+  every call that can run a callback, never once at the end of the block.

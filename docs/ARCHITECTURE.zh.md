@@ -588,3 +588,17 @@ A/B（漂移只作为警告，绝不失败）、来自该 pull request 构建的
   `isReadyForMoreMediaData` 仍为 true，渲染器也不报任何错——所以观看端看上去很健康，帧数照算，
   画面全黑。`VtDecoder` 在图层上打开时检查这个标志，每一帧之前再检查一次，调用 flush，并让这一
   帧失败，好让关键帧请求随之发出。
+
+- **QUIC 服务循环发出的每一个回调都可能把它正在服务的那条连接抹掉**：`Service()` 遍历一份连接
+  id 的快照并逐个重新查找，因为 `cb_.onConnected`、`cb_.onStream` 和 `cb_.onDatagram` 跑的都是
+  应用代码，它们可以关掉一个对端并把它从 `connections_` 里抹掉。`DrainStreams` 在它发出的每个
+  回调之后都会重新检查——那些叫 `listStillIntact` 的守卫正是为此而生——但它只能从自己身上返回，
+  于是 `Service()` 一路落进 `DrainDatagrams(id, entry)`，而此时 `entry` 已被抹掉并释放，那个函数
+  做的第一件事就是把 `entry.conn` 交给 `quiche_conn_dgram_recv`。`Lookup(id) != &entry` 这道检查
+  却坐在两次 drain 之后：正好晚了一个调用。在 Windows CI 上它表现为大约每三次就有一次以
+  `0xc0000409` 或 `0xc0000374` 死掉，而它之所以拖了这么久，是因为 fastfail 永远到不了
+  `tests/integration/TestMain.cpp` 里的 `SetUnhandledExceptionFilter`，所以一次红色的运行只留下
+  一个退出码，别的什么都没有——而专门为抓它而建的那两个 job 也都看不见：page heap 看不见是因为
+  被释放的那块内存是 quiche 自己的，开了 Rust 检查的那个 build 看不见是因为 quiche 根本没错。
+  最后点出这个栈帧的是 Windows 上的 ASan job。请在每一个可能跑回调的调用之后重新验证 entry，
+  而不是在整块的末尾只验一次。

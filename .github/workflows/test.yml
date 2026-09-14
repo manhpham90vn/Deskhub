@@ -131,7 +131,7 @@ jobs:
           folder: ${{ runner.temp }}/crash-dumps
           keep: '4'
 
-      - name: Run the whole suite three more times, failing only on a crash - this is the one build that reproduces the stack corruption, and one run in three is not enough to see it
+      - name: Run the whole suite three more times, failing only on a crash - this build reproduces the teardown crash most often, and one run in three is not enough to see it
         shell: pwsh
         env:
           DESKHUB_CRASH_DUMP_DIR: ${{ runner.temp }}/crash-dumps
@@ -144,7 +144,7 @@ jobs:
             Write-Host "===== repeat run $i exit $code ====="
             if ($code -ne 0 -and $code -ne 1) {
               $null = & "$env:GITHUB_WORKSPACE/scripts/wait-for-crash-dump.ps1" -Folder "$env:RUNNER_TEMP\crash-dumps"
-              throw "integration_tests died with 0x$('{0:x8}' -f $code). The stack above names the frame the corruption landed in, not the write that caused it - download the crash-dumps-windows-repeat artifact and read the dump, or wait for the nightly page heap job to fault on the write itself."
+              throw "integration_tests died with 0x$('{0:x8}' -f $code). Expect no stack above it: 0xc0000409 and 0xc0000374 are both fastfails, and a fastfail never reaches the SetUnhandledExceptionFilter in tests/integration/TestMain.cpp, so a crash dump is all this job can leave. Do not wait on the nightly page heap job either - the last crash of this kind was a use-after-free of a connection the QUIC service loop kept using after a callback had freed it, not a write past an allocation, and the page heap guards only the latter, so it stayed green throughout. Read the crash-dumps-windows-repeat artifact, or the windows asan job, which is what named that frame."
             }
           }
 

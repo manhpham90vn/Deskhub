@@ -692,3 +692,19 @@ ASan は Rust を計装せず page heap はヒープしか見張らないため�
   だからビューアは健全そうに見え、フレームを数え、そして黒かった。`VtDecoder` はレイヤ上で開くときに
   この旗を調べ、フレームごとにもう一度調べ、flush し、そのフレームを失敗させてキーフレーム要求を
   一緒に出す。
+
+- **QUIC のサービスループが出すコールバックはどれも、その対象の接続そのものを消しうる**：
+  `Service()` は接続 id のスナップショットをたどり、そのつど引き直す。`cb_.onConnected`、
+  `cb_.onStream`、`cb_.onDatagram` はいずれもアプリ側のコードを走らせ、そこでピアを閉じて
+  `connections_` から消すことができるからである。`DrainStreams` は自分が出すコールバックのたびに
+  確認し直す — `listStillIntact` という名の番人はまさにそのためにある — が、戻れるのは自分からだけ
+  なので、`Service()` はそのまま `DrainDatagrams(id, entry)` へ落ちた。`entry` はすでに消されて解放
+  されており、その関数が最初にするのは `entry.conn` を `quiche_conn_dgram_recv` に渡すことである。
+  `Lookup(id) != &entry` の確認は 2 つの drain の後に座っていた：ちょうど 1 呼び出し遅い。Windows の
+  CI では 3 回に 1 回ほど `0xc0000409` か `0xc0000374` で死ぬ形で現れ、これほど長く残ったのは、
+  fastfail が `tests/integration/TestMain.cpp` の `SetUnhandledExceptionFilter` に決して届かないため
+  である。赤くなった実行が残すのは終了コードだけで、他には何もない — そしてこれを狩るために
+  作られた 2 つのジョブもどちらも見えなかった。page heap は解放された塊が quiche 自身のものだから、
+  Rust チェックを入れたビルドは quiche には何の誤りもないから。フレームをついに名指ししたのは
+  Windows の ASan ジョブだった。コールバックを走らせうる呼び出しのたびに entry を検証し直すこと。
+  ブロックの末尾で一度だけ、では足りない。

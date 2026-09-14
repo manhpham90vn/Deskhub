@@ -727,3 +727,19 @@ pull request, và dòng coverage của `core/`.
   lỗi nào — nên viewer trông vẫn khoẻ, vẫn đếm khung, và vẫn đen. `VtDecoder` kiểm tra cờ đó khi
   mở trên một layer và kiểm lại trước mỗi khung, gọi flush, rồi cho khung đó thất bại để yêu cầu
   keyframe đi kèm theo.
+
+- **Mỗi callback mà vòng lặp service của QUIC gọi ra đều có thể xoá chính connection nó đang
+  phục vụ**: `Service()` duyệt một bản chụp danh sách id rồi tra lại từng cái, vì
+  `cb_.onConnected`, `cb_.onStream` và `cb_.onDatagram` đều chạy code ứng dụng có thể đóng một
+  peer và xoá nó khỏi `connections_`. `DrainStreams` có kiểm lại sau mỗi callback nó gọi — các
+  guard tên `listStillIntact` sinh ra đúng để làm việc đó — nhưng nó chỉ `return` khỏi chính
+  nó, nên `Service()` rơi thẳng vào `DrainDatagrams(id, entry)` với `entry` đã bị xoá và giải
+  phóng, mà việc đầu tiên hàm đó làm là đưa `entry.conn` cho `quiche_conn_dgram_recv`. Phép
+  kiểm `Lookup(id) != &entry` lại nằm sau cả hai lần drain: muộn đúng một lời gọi. Trên CI
+  Windows nó hiện ra thành khoảng một trong ba lượt chết với `0xc0000409` hoặc `0xc0000374`, và
+  sống dai lâu như vậy vì fastfail không bao giờ tới được `SetUnhandledExceptionFilter` trong
+  `tests/integration/TestMain.cpp`, nên mỗi lượt đỏ chỉ để lại một mã thoát và không gì khác —
+  và cả hai job dựng ra để săn nó đều không thấy được, page heap thì vì khối được giải phóng là
+  của quiche, còn bản build bật Rust checks thì vì quiche không sai gì cả. Job ASan trên Windows
+  mới là thứ cuối cùng gọi tên được frame. Hãy kiểm lại entry sau mỗi lời gọi có thể chạy
+  callback, đừng kiểm một lần ở cuối khối.
