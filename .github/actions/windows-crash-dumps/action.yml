@@ -45,11 +45,12 @@ runs:
         Set-ItemProperty -Path $dumps -Name DumpType -Value 1 -Type DWord
         Set-ItemProperty -Path $dumps -Name DumpCount -Value 1 -Type DWord
 
-        $encoded = [Convert]::ToBase64String(
-          [System.Text.Encoding]::Unicode.GetBytes('[Environment]::FailFast("deskhub crash dump probe")'))
+        $probeType = 'using System; using System.Runtime.InteropServices; public static class FailFastProbe { [DllImport("kernel32.dll")] public static extern void RaiseFailFastException(IntPtr record, IntPtr context, uint flags); }'
+        $probeScript = "Add-Type -TypeDefinition '$probeType'; [FailFastProbe]::RaiseFailFastException([IntPtr]::Zero, [IntPtr]::Zero, 0)"
+        $encoded = [Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($probeScript))
         $child = Start-Process -Wait -PassThru -NoNewWindow -FilePath 'powershell.exe' `
           -ArgumentList @('-NoProfile', '-EncodedCommand', $encoded)
-        $faulted = $child.ExitCode -eq -1073740791
+        $faulted = @(-1073740791, -1073740286) -contains $child.ExitCode
 
         $deadline = (Get-Date).AddSeconds(90)
         while ($faulted -and -not (Test-Path (Join-Path $probe '*.dmp'))) {
@@ -60,7 +61,7 @@ runs:
         Remove-Item -Recurse -Force $probe -ErrorAction SilentlyContinue
 
         if (-not $faulted) {
-          Write-Host "::error::The crash dump probe exited 0x$('{0:x8}' -f $child.ExitCode) instead of the 0xc0000409 a fail-fast raises, so it never crashed and this run has learnt nothing about whether Windows Error Reporting collects. Fix the probe before trusting any later run that says dumps work - a probe that cannot crash reports a healthy collector as broken and a broken one as untested."
+          Write-Host "::error::The crash dump probe exited 0x$('{0:x8}' -f $child.ExitCode), which is neither of the two fail-fast statuses WER collects - 0xc0000409 STATUS_STACK_BUFFER_OVERRUN, which __fastfail and a /GS cookie failure raise, and 0xc0000602 STATUS_FAIL_FAST_EXCEPTION, which RaiseFailFastException raises - so it never crashed and this run has learnt nothing about whether Windows Error Reporting collects. Fix the probe before trusting any later run that says dumps work - a probe that cannot crash reports a healthy collector as broken and a broken one as untested. Reaching RaiseFailFastException is what the probe is for: [Environment]::FailFast also raises one, but the runtime swallows the status and exits 0x80131623 instead, which is indistinguishable here from a probe that never crashed at all."
         } elseif ($collected) {
           Write-Host "Windows Error Reporting collected a dump for a deliberate fail-fast, so a real one in the suite below will leave a dump too."
         } else {
