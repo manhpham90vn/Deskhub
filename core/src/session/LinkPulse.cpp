@@ -13,6 +13,18 @@ void LinkPulse::Reset() {
     *this = LinkPulse{};
 }
 
+void LinkPulse::Tick(uint64_t nowUs) {
+    const uint64_t lastUs = lastTickUs_;
+    lastTickUs_ = nowUs;
+    if (lastUs == 0 || nowUs <= lastUs) return;
+    if (lastPongUs_ == 0 || lastPongUs_ >= nowUs) return;
+    const uint64_t sinceUs = nowUs - lastUs;
+    if (sinceUs <= kLinkWatchStepUs) return;
+    const uint64_t unwatchedUs = sinceUs - kLinkWatchStepUs;
+    const uint64_t silentUs = nowUs - lastPongUs_;
+    lastPongUs_ = unwatchedUs >= silentUs ? nowUs : lastPongUs_ + unwatchedUs;
+}
+
 bool LinkPulse::PingDue(uint64_t nowUs) const {
     return lastPingUs_ == 0 || nowUs - lastPingUs_ >= kLinkPingIntervalUs;
 }

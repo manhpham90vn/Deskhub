@@ -201,7 +201,11 @@ timer only still matters while the link is parked in `Deciding`. A host too old 
 answer session-0 pings simply leaves the reading at Unknown — nothing regresses.
 On a recovering link the pulse is also the liveness check: five seconds without a
 pong (only ever after a first pong proved the host answers) drops the connection
-into the existing redial path.
+into the existing redial path. Those five seconds are counted in time the link
+loop was actually watching — `LinkPulse::Tick` runs once per turn of
+`HostLink::PumpReady`, and anything a turn spends beyond `kLinkWatchStepUs` is
+credited back to the silence, so a machine that froze is never mistaken for a
+host that went quiet.
 
 The screen viewer now opts into that recovery like the terminal always has: a
 dropped or silent link, or a session that stops receiving for five seconds, parks
@@ -767,3 +771,29 @@ line.
   whatever the dead connection wrote next, the Rust-checks build because nothing in quiche is
   wrong. The Windows ASan job is what finally named the frame. Re-validate the entry after
   every call that can run a callback, never once at the end of the block.
+
+- **A liveness watchdog measures the peer only while its own loop is running**: the
+  viewer's five-second pong window was wall-clock, so any stall on this side of the wire
+  read as a host that had gone silent. On the Windows ASan CI job, a 32 MB upload beside
+  a live stream froze the whole process for 3.7 s — log lines stamped `t=07:46:58` and
+  `t=07:47:00` both came out at 07:47:01, and four QUIC endpoints each reported their own
+  multi-second poll gap at that instant — and `HostLink` declared a perfectly healthy link
+  lost. The redial then moved the client to a new source port, the host's old connection
+  died on its 30 s idle timeout and took the in-flight batch with it (`transfer aborted
+  ... link-lost`), and `TestInputStaysLiveDuringABigTransfer` sat out its whole 120 s
+  deadline. `LinkPulse::Tick` now runs once per turn of `PumpReady` and credits back
+  everything a turn spent past `kLinkWatchStepUs`: silence counts only while we were in a
+  position to hear. Any watchdog that times a remote party from a local clock has to
+  subtract the time it was not looking, or the first thing it detects is its own machine.
+
+- **A transfer that outlives its connection has to be told**: `FileSender` only leaves
+  `Sending` on an ack, a cancel or `LinkLost()`, and `FileUpload::Pump` treats a refused
+  send as backpressure rather than failure. `ScreenViewer` wired `LinkLost()` to
+  `onStreamBroken`, which fires for a stream reset on a connection that is still up, and
+  to the end of the session — but not to `HostLink`'s own `onLinkLost`. So a mid-transfer
+  redial left `uploading()` true with nothing on the far side that could ever answer:
+  the host had already aborted the batch, and the new connection's receiver had never
+  seen the offer. The viewer now fails the upload on `onLinkLost` with
+  `TransferReason::LinkLost`. Resuming across a redial would need the offer replayed on
+  the new connection; until that exists, ending the transfer honestly beats a progress
+  bar that never moves again.

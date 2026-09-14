@@ -116,6 +116,33 @@ void TestAStalledLinkNeedsAFirstPong() {
     Check(pulse.View(now).quality == LinkQuality::Unknown, "and no reading");
 }
 
+void TestAFrozenLoopDoesNotBlameThePeer() {
+    std::printf("[pulse] time the loop spent not running is not counted as silence...\n");
+    LinkPulse pulse;
+    uint64_t now = 9'000'000;
+    const PingPong first = pulse.MakePing(now);
+    now += 40'000;
+    Check(pulse.OnPong(first, now), "the host answers once, so silence starts being measured");
+    pulse.Tick(now);
+
+    const uint64_t frozenUs = 4'000'000;
+    now += frozenUs;
+    pulse.Tick(now);
+    Check(!pulse.Stalled(now + kLinkStallAfterUs - frozenUs),
+        "a turn of the loop that took four seconds is four seconds we were not listening");
+    Check(pulse.Stalled(now + kLinkStallAfterUs),
+        "past the window the loop really did watch, the link has still stalled");
+
+    LinkPulse steady;
+    now = 9'000'000;
+    const PingPong only = steady.MakePing(now);
+    Check(steady.OnPong(only, now), "a second link answers once and then goes quiet");
+    for (uint64_t spent = 0; spent <= kLinkStallAfterUs; spent += kLinkWatchStepUs)
+        steady.Tick(now + spent);
+    Check(steady.Stalled(now + kLinkStallAfterUs + 1),
+        "a loop that kept its turns short forgives nothing");
+}
+
 void TestTheReadingsTurnIntoWords() {
     std::printf("[pulse] the readings turn into the words the status bar shows...\n");
     Check(std::string(ui::LinkQualityText(LinkQuality::Good)) == ui::kLinkQualityGood,
@@ -141,5 +168,6 @@ void RunLinkPulseTests() {
     TestUnansweredPingsCountAsLoss();
     TestQualityBandsAreStable();
     TestAStalledLinkNeedsAFirstPong();
+    TestAFrozenLoopDoesNotBlameThePeer();
     TestTheReadingsTurnIntoWords();
 }

@@ -199,7 +199,11 @@ nó kiêm luôn vai keepalive; bộ đếm keepalive thường chỉ còn có vi
 đỗ ở `Deciding`. Host quá cũ không trả lời ping session-0 thì số đo chỉ đứng ở
 Unknown — không gì thoái lui. Trên link có bật khôi phục, mạch đập cũng là phép
 thử sống: năm giây không có pong (và chỉ sau khi pong đầu tiên đã chứng minh host
-có trả lời) là kết nối bị thả xuống đường quay số lại sẵn có.
+có trả lời) là kết nối bị thả xuống đường quay số lại sẵn có. Năm giây đó được đếm
+bằng thời gian vòng lặp link thực sự đang lắng nghe — `LinkPulse::Tick` chạy một lần
+mỗi vòng của `HostLink::PumpReady`, và phần một vòng tiêu tốn quá `kLinkWatchStepUs`
+được trả lại cho khoảng im lặng, nên một máy bị đóng băng không bao giờ bị nhầm
+thành một host đã câm.
 
 Viewer màn hình giờ tham gia cơ chế khôi phục đó như terminal xưa nay: link rơi
 hay câm lặng, hoặc phiên năm giây không nhận được gì, sẽ đỗ cửa sổ ở `Reattaching`
@@ -743,3 +747,30 @@ pull request, và dòng coverage của `core/`.
   của quiche, còn bản build bật Rust checks thì vì quiche không sai gì cả. Job ASan trên Windows
   mới là thứ cuối cùng gọi tên được frame. Hãy kiểm lại entry sau mỗi lời gọi có thể chạy
   callback, đừng kiểm một lần ở cuối khối.
+
+- **Một watchdog sống-chết chỉ đo được đối phương trong lúc vòng lặp của chính nó còn
+  chạy**: cửa sổ năm giây chờ pong của viewer đếm theo đồng hồ treo tường, nên mọi đình
+  trệ ở phía bên này sợi dây đều đọc thành một host đã câm. Trên job ASan Windows của CI,
+  một lượt tải lên 32 MB chạy cạnh luồng hình đóng băng cả tiến trình 3,7 giây — các dòng
+  log đóng dấu `t=07:46:58` và `t=07:47:00` cùng ra lúc 07:47:01, và bốn endpoint QUIC mỗi
+  cái báo khoảng trống poll nhiều giây của riêng nó ngay khoảnh khắc đó — rồi `HostLink`
+  tuyên bố mất một link hoàn toàn khỏe mạnh. Lần quay số lại đưa client sang một cổng
+  nguồn mới, kết nối cũ của host chết theo idle timeout 30 giây và kéo theo cả lô file
+  đang bay (`transfer aborted ... link-lost`), còn
+  `TestInputStaysLiveDuringABigTransfer` ngồi hết trọn 120 giây hạn của nó.
+  `LinkPulse::Tick` giờ chạy mỗi vòng của `PumpReady` và trả lại mọi phần một vòng tiêu
+  quá `kLinkWatchStepUs`: im lặng chỉ được tính khi ta còn ở thế nghe được. Bất kỳ
+  watchdog nào đo một phía ở xa bằng đồng hồ tại chỗ đều phải trừ đi khoảng thời gian nó
+  không nhìn, nếu không thứ đầu tiên nó phát hiện ra chính là cái máy của nó.
+
+- **Một lượt truyền sống lâu hơn kết nối của nó thì phải được báo cho biết**: `FileSender`
+  chỉ rời `Sending` khi có ack, có cancel hoặc `LinkLost()`, còn `FileUpload::Pump` coi một
+  lần gửi bị từ chối là backpressure chứ không phải thất bại. `ScreenViewer` nối
+  `LinkLost()` vào `onStreamBroken` — thứ chỉ bắn khi một stream bị reset trên kết nối vẫn
+  còn sống — và vào lúc phiên kết thúc, nhưng không nối vào `onLinkLost` của chính
+  `HostLink`. Thế nên một lần quay số lại giữa chừng để `uploading()` mãi là true trong khi
+  đầu kia không còn ai có thể trả lời: host đã hủy lô file từ trước, và bộ nhận trên kết
+  nối mới chưa từng thấy lời mời. Viewer giờ cho lượt tải lên hỏng hẳn ở `onLinkLost` với
+  `TransferReason::LinkLost`. Muốn tiếp tục qua một lần quay số lại thì phải phát lại lời
+  mời trên kết nối mới; chừng nào chưa có điều đó, kết thúc lượt truyền một cách trung
+  thực vẫn hơn một thanh tiến trình không bao giờ nhúc nhích nữa.

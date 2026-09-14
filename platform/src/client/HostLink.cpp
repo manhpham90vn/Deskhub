@@ -391,6 +391,7 @@ void HostLink::PumpReady() {
         }
 
         const uint64_t nowUs = NowUs();
+        pulse_.Tick(nowUs);
         if (pulse_.PingDue(nowUs)) SendLinkPing(nowUs);
         if (config_.recoverLink && pulse_.Stalled(nowUs)) {
             LOGW("link: no pong from %s for %llu ms \xE2\x80\x94 treating the link as lost",

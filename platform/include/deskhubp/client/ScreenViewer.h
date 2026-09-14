@@ -128,6 +128,9 @@ public:
         linkHooks.onReady = [this](bool resumed) {
             if (resumed) relink_.store(true, std::memory_order_release);
         };
+        linkHooks.onLinkLost = [this] {
+            if (upload_) upload_->LinkLost();
+        };
 
         quit_.store(false);
         finished_.store(false);
