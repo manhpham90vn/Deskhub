@@ -706,3 +706,24 @@ pull request, và dòng coverage của `core/`.
   chọn từ danh sách quét. Vì vậy phép so sánh địa chỉ đi qua `ui::NormalizedDeviceAddr` /
   `ui::SameDeviceAddr` (`core/ui/Strings.h`), mở ra cho client Swift và Kotlin dưới tên
   `dh_same_device_addr`. Đừng bao giờ so sánh hai địa chỉ thiết bị bằng `==`.
+
+- **Một decoder vừa mở thì chưa có khung tham chiếu nào**: `ScreenViewer` dựng lại decoder mỗi
+  khi surface đổi, và app iOS trả surface lại khi app rời khỏi màn hình — khoá máy là đủ. Bộ
+  ráp gói không hề biết chuyện đó: nó cứ tiếp tục giao những khung P như trước, decoder mới
+  không có gì để dự đoán từ đó, còn host chỉ gửi IDR khi được yêu cầu, nên hình đen suốt
+  phần còn lại của phiên. Yêu cầu đó trước đây được gửi lúc decoder *cũ* bị dẹp — đúng
+  vào lúc không còn surface nào để vẽ: IDR về tới nơi, vòng lặp decode bỏ nó đi vì thiếu
+  surface, và `CancelKeyframeRequest` xoá luôn yêu cầu đang chờ khi đi ngang. Giờ `EnsureDecoder`
+  bật cờ cho mọi decoder nó mở ra, nên keyframe được xin đúng lúc đã có chỗ để vẽ.
+  `MediaCodecDecoder` mắc lỗi đối xứng ở đầu kia: nó bật `sentCsd_` ngay ở khung đầu tiên nhận
+  được kể cả khi khung đó không mang bộ tham số nào, nên SPS/PPS của keyframe đến sau bị đưa
+  vào như dữ liệu thường và không bao giờ cấu hình được codec; giờ nó chờ đúng khung có mang
+  chúng. Ai mở decoder thì người đó xin keyframe.
+
+- **Một `AVSampleBufferDisplayLayer` từng xuống nền sẽ nuốt khung hình trong im lặng**: iOS dừng
+  việc giải mã của layer khi app rời màn hình và bật `requiresFlushToResumeDecoding`; cho tới khi
+  gọi `flush`, mọi `enqueueSampleBuffer` đều được nhận rồi vứt đi. Không có gì khác nói ra điều
+  đó — `status` không phải `failed`, `isReadyForMoreMediaData` vẫn là true, và renderer không báo
+  lỗi nào — nên viewer trông vẫn khoẻ, vẫn đếm khung, và vẫn đen. `VtDecoder` kiểm tra cờ đó khi
+  mở trên một layer và kiểm lại trước mỗi khung, gọi flush, rồi cho khung đó thất bại để yêu cầu
+  keyframe đi kèm theo.

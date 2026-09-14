@@ -114,6 +114,48 @@ void TestAViewerConnectsAndSeesTheFramesTheHostEncoded() {
     host.Stop();
 }
 
+void TestAViewerBackFromTheBackgroundGetsAKeyframe() {
+    std::printf("[e2e] a viewer that hands its surface back asks the host for a keyframe...\n");
+    ResetObservations();
+    const uint16_t port = NextTestPort();
+
+    fake::SharingHost host;
+    if (!host.Start({fake::Source("Display 1", 1280, 720, 1)}, port)) {
+        Check(false, "the host could not start");
+        std::printf("  host error: %s\n", host.LastError().c_str());
+        return;
+    }
+
+    Viewer viewer;
+    viewer.SetSurface(kDummySurface);
+    Check(StartViewer(viewer, ViewerConfig(port, 0)), "the viewer opened its socket");
+    Check(WaitFor([&] { return Streaming(viewer); }, kConnectTimeoutMs),
+        "the session reached Streaming");
+    Check(WaitFor([&] { return fake::Decoded().frameCount() >= 3; }, kStreamTimeoutMs),
+        "and video is flowing");
+
+    const uint32_t keyframesBefore = fake::Host().keyframesEncoded.load();
+    const int initsBefore = fake::Decoded().inits.load();
+
+    viewer.SetSurface(nullptr);
+    viewer.SetSurface(kDummySurface);
+
+    Check(WaitFor([&] { return fake::Decoded().inits.load() > initsBefore; }, kStreamTimeoutMs),
+        "the decoder is rebuilt against the surface that came back");
+    Check(WaitFor([&] { return fake::Host().keyframesEncoded.load() > keyframesBefore; },
+              kStreamTimeoutMs),
+        "and the host is asked for a keyframe, because a decoder that has just been opened "
+        "holds no reference frame and shows nothing until one arrives");
+
+    const size_t framesBefore = fake::Decoded().frameCount();
+    Check(WaitFor([&] { return fake::Decoded().frameCount() > framesBefore + 2; },
+              kStreamTimeoutMs),
+        "and the picture keeps coming");
+
+    viewer.Stop();
+    host.Stop();
+}
+
 void TestKeystrokesReachTheHostInjector() {
     std::printf("[e2e] a key pressed in the viewer is injected on the host...\n");
     ResetObservations();
@@ -724,6 +766,7 @@ void RunSessionFlowTests() {
     }
     const SavedTrustFiles guard;
     TestAViewerConnectsAndSeesTheFramesTheHostEncoded();
+    TestAViewerBackFromTheBackgroundGetsAKeyframe();
     TestPasscodeGatesTheStream();
     TestDiscoveryIsGatedByThePasscode();
     TestAHostWithoutAPasscodeServesNobody();

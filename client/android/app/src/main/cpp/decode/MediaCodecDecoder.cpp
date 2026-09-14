@@ -71,23 +71,22 @@ bool MediaCodecDecoder::Decode(const uint8_t* nal, size_t len, uint64_t ptsUs) {
     if (!sentCsd_) {
         const size_t csdLen =
             deskhub::media::FirstVclOffset(std::span<const uint8_t>(nal, len));
-        if (csdLen > 0) {
-            const ssize_t idx = AMediaCodec_dequeueInputBuffer(codec_, 100'000);
-            if (idx < 0) {
-                LOGE("[Decoder] no input buffer for codec config.");
-                return false;
-            }
-            size_t cap = 0;
-            uint8_t* buf = AMediaCodec_getInputBuffer(codec_, size_t(idx), &cap);
-            if (!buf || cap < csdLen) {
-                AMediaCodec_queueInputBuffer(codec_, size_t(idx), 0, 0, 0, 0);
-                return false;
-            }
-            std::memcpy(buf, nal, csdLen);
-            if (AMediaCodec_queueInputBuffer(codec_, size_t(idx), 0, csdLen, 0,
-                    AMEDIACODEC_BUFFER_FLAG_CODEC_CONFIG) != AMEDIA_OK)
-                return false;
+        if (csdLen == 0) return true;
+        const ssize_t idx = AMediaCodec_dequeueInputBuffer(codec_, 100'000);
+        if (idx < 0) {
+            LOGE("[Decoder] no input buffer for codec config.");
+            return false;
         }
+        size_t cap = 0;
+        uint8_t* buf = AMediaCodec_getInputBuffer(codec_, size_t(idx), &cap);
+        if (!buf || cap < csdLen) {
+            AMediaCodec_queueInputBuffer(codec_, size_t(idx), 0, 0, 0, 0);
+            return false;
+        }
+        std::memcpy(buf, nal, csdLen);
+        if (AMediaCodec_queueInputBuffer(codec_, size_t(idx), 0, csdLen, 0,
+                AMEDIACODEC_BUFFER_FLAG_CODEC_CONFIG) != AMEDIA_OK)
+            return false;
         sentCsd_ = true;
     }
 

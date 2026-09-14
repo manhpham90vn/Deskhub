@@ -571,3 +571,20 @@ A/B（漂移只作为警告，绝不失败）、来自该 pull request 构建的
   保存的那个码。因此地址相等要走 `ui::NormalizedDeviceAddr` / `ui::SameDeviceAddr`
   （`core/ui/Strings.h`），并以 `dh_same_device_addr` 暴露给 Swift 和 Kotlin 客户端。永远
   不要用 `==` 比较两个设备地址。
+
+- **刚打开的解码器手里没有任何参考帧**：surface 一变 `ScreenViewer` 就重建解码器，而 iOS
+  应用在离开屏幕时会把 surface 交回去——锁一下屏就够了。重组器对此一无所知：它照旧把 P 帧
+  交下去，新解码器没有任何东西可以据以预测，而主机只有被要求时才发 IDR，于是画面在这一整段会话里
+  一直是黑的。以前那个请求是在*旧*解码器被拆掉时发出的，而那正是没有 surface 可画的时刻：IDR
+  到了，解码循环因为没有 surface 把它丢掉，`CancelKeyframeRequest` 顺手清掉了待处理的请求。
+  现在 `EnsureDecoder` 对它打开的每一个解码器都竖起标志，所以关键帧是在已经有地方可画的时候才要的。
+  `MediaCodecDecoder` 在另一头犯了对称的错：它在拿到的第一帧上就把 `sentCsd_` 置起来，哪怕那一帧
+  根本不带参数集，于是随后关键帧里的 SPS/PPS 被当作普通数据送进去，从未配置过编解码器；现在它会等
+  真正带着参数集的那一帧。谁打开解码器，谁就去要一个关键帧。
+
+- **进过后台的 `AVSampleBufferDisplayLayer` 会不声不响地把帧吞掉**：应用离开屏幕时 iOS 会停掉
+  该图层的解码并置上 `requiresFlushToResumeDecoding`；在调用 `flush` 之前，每一次
+  `enqueueSampleBuffer` 都会被接受然后丢弃。没有别的东西会说出这件事——`status` 不是 `failed`，
+  `isReadyForMoreMediaData` 仍为 true，渲染器也不报任何错——所以观看端看上去很健康，帧数照算，
+  画面全黑。`VtDecoder` 在图层上打开时检查这个标志，每一帧之前再检查一次，调用 flush，并让这一
+  帧失败，好让关键帧请求随之发出。

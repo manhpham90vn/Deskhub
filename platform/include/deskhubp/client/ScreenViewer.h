@@ -345,14 +345,12 @@ private:
 
         const uint64_t generation = surfaceGen_;
         lk.unlock();
-        const bool hadDecoder = decoder.IsOpen();
         decoder.Shutdown();
         lk.lock();
 
         surfaceAckGen_ = generation;
         surfaceAckCv_.notify_all();
         rebuildDecoder_.store(false);
-        if (hadDecoder) decodeFailed_.store(true, std::memory_order_release);
         return true;
     }
 
@@ -380,6 +378,7 @@ private:
             decodeFailed_.store(true, std::memory_order_release);
             return false;
         }
+        decoderOpened_.store(true, std::memory_order_release);
         return true;
     }
 
@@ -623,6 +622,8 @@ private:
             if (upload_) upload_->Pump();
         };
         hooks.afterFrames = [this](deskhub::ScreenClient& p, uint64_t now) {
+            if (decoderOpened_.exchange(false, std::memory_order_acq_rel))
+                p.RequestKeyframe("dec_open", now);
             if (decodeFailed_.exchange(false, std::memory_order_acq_rel))
                 p.RequestKeyframe("dec_fail", now);
             if (displayCongested_.exchange(false, std::memory_order_acq_rel))
@@ -730,6 +731,7 @@ private:
     std::condition_variable decCv_;
     std::deque<deskhub::Reassembler::Frame> decQueue_;
 
+    std::atomic<bool> decoderOpened_{false};
     std::atomic<bool> decodeFailed_{false};
     std::atomic<bool> displayCongested_{false};
     std::atomic<bool> queueOverflow_{false};

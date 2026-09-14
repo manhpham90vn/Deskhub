@@ -725,3 +725,28 @@ line.
   `ui::NormalizedDeviceAddr` / `ui::SameDeviceAddr` (`core/ui/Strings.h`), exposed to the
   Swift and Kotlin clients as `dh_same_device_addr`. Never compare two device addresses
   with `==`.
+
+- **A decoder that has just been opened holds no reference frame**: `ScreenViewer` rebuilds
+  its decoder whenever the surface changes, and the iOS app hands the surface back when the
+  app leaves the screen — locking the phone was enough. The reassembler knows none of that
+  happened: it keeps delivering the P-frames it was already delivering, the fresh decoder has
+  nothing to predict them from, and the host sends an IDR only when it is asked for one, so
+  the picture stayed black for the rest of the session. The request used to go out when the
+  *old* decoder was torn down, which is exactly the moment there is no surface to draw on:
+  the IDR arrived, the decode loop dropped it for want of a surface, and
+  `CancelKeyframeRequest` cleared the pending request on the way past. `EnsureDecoder` now
+  raises the flag for every decoder it opens, so the keyframe is asked for when there is
+  something to draw it on. `MediaCodecDecoder` had the matching slip on the other side: it
+  latched `sentCsd_` on the first frame it was given even when that frame carried no
+  parameter sets, so the SPS/PPS of the keyframe that followed were queued as ordinary data
+  and never configured the codec; it now waits for a frame that actually carries them.
+  Whoever opens a decoder asks for a keyframe.
+
+- **An `AVSampleBufferDisplayLayer` that has been in the background swallows frames in
+  silence**: iOS stops the layer decoding when the app leaves the screen and sets
+  `requiresFlushToResumeDecoding`; until `flush` is called, every `enqueueSampleBuffer` is
+  accepted and discarded. Nothing else says so — `status` is not `failed`,
+  `isReadyForMoreMediaData` stays true, and the renderer reports no error — so the viewer
+  looked healthy, counted its frames and showed black. `VtDecoder` checks the flag when it
+  opens on a layer and again before every frame, flushes, and fails that frame so the
+  keyframe request goes out with it.
