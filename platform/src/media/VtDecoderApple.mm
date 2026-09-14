@@ -42,7 +42,8 @@ bool VtDecoder::Init(void* layer, int width, int height) {
     Shutdown();
     if (!layer) return false;
     layer_ = layer;
-    AVSampleBufferDisplayLayer* fresh = (__bridge AVSampleBufferDisplayLayer*)layer;
+    AVSampleBufferVideoRenderer* fresh =
+        ((__bridge AVSampleBufferDisplayLayer*)layer).sampleBufferRenderer;
     if (fresh.requiresFlushToResumeDecoding) [fresh flush];
     counters_.Reset();
     LOGI("[Decoder] VideoToolbox H.264 target %dx%d ready (AVSampleBufferDisplayLayer).",
@@ -126,12 +127,13 @@ void VtDecoder::DisablePacing() {
 bool VtDecoder::Decode(const uint8_t* nal, size_t len, uint64_t ptsUs) {
     if (!layer_ || !nal || len == 0) return false;
 
-    AVSampleBufferDisplayLayer* l = (__bridge AVSampleBufferDisplayLayer*)layer_;
-    if (l.requiresFlushToResumeDecoding) {
+    AVSampleBufferVideoRenderer* r =
+        ((__bridge AVSampleBufferDisplayLayer*)layer_).sampleBufferRenderer;
+    if (r.requiresFlushToResumeDecoding) {
         LOGW("[Decoder] the display layer stopped decoding while the app was off screen and "
              "swallows every frame until it is flushed — flushing; the picture comes back with "
              "the next keyframe.");
-        [l flush];
+        [r flush];
         return false;
     }
 
@@ -229,8 +231,6 @@ bool VtDecoder::Decode(const uint8_t* nal, size_t len, uint64_t ptsUs) {
             }
         }
     }
-
-    AVSampleBufferVideoRenderer* r = l.sampleBufferRenderer;
 
     if (r.status == AVQueuedSampleBufferRenderingStatusFailed) {
         LOGW("[Decoder] display layer failed (%s); flushing.",
