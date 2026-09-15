@@ -354,41 +354,57 @@ PortalScreenCast::AttemptResult PortalScreenCast::OpenAttempt() {
         }
     }
 
-    {
-        GVariantBuilder ob;
-        g_variant_builder_init(&ob, G_VARIANT_TYPE_VARDICT);
-
-        GUnixFDList* fdList = nullptr;
-        GVariant* ret = g_dbus_connection_call_with_unix_fd_list_sync(conn, kBusName, kObjPath,
-            kScreenCast, "OpenPipeWireRemote",
-            g_variant_new("(oa{sv})", sessionHandle_.c_str(), &ob), G_VARIANT_TYPE("(h)"),
-            G_DBUS_CALL_FLAGS_NONE, -1, nullptr, &fdList, nullptr, &gerr);
-        if (!ret) {
-            lastError_ = std::string("OpenPipeWireRemote: ") + (gerr ? gerr->message : "?");
-            if (gerr) g_error_free(gerr);
-            LOGE("[Portal] %s", lastError_.c_str());
-            if (fdList) g_object_unref(fdList);
-            Close();
-            return finish(AttemptResult::Failed);
-        }
-
-        gint32 idx = -1;
-        g_variant_get(ret, "(h)", &idx);
-        g_variant_unref(ret);
-
-        pipewireFd_ = fdList ? g_unix_fd_list_get(fdList, idx, &gerr) : -1;
-        if (fdList) g_object_unref(fdList);
-        if (pipewireFd_ < 0) {
-            lastError_ = std::string("no PipeWire fd: ") + (gerr ? gerr->message : "?");
-            if (gerr) g_error_free(gerr);
-            LOGE("[Portal] %s", lastError_.c_str());
-            Close();
-            return finish(AttemptResult::Failed);
-        }
+    pipewireFd_ = OpenRemoteFd();
+    if (pipewireFd_ < 0) {
+        Close();
+        return finish(AttemptResult::Failed);
     }
 
     LOGI("[Portal] Ready: %zu screen(s), PipeWire fd %d.", streams_.size(), pipewireFd_);
     return finish(AttemptResult::Ok);
+}
+
+int PortalScreenCast::OpenRemoteFd() {
+    GDBusConnection* conn = static_cast<GDBusConnection*>(bus_);
+    if (!conn || sessionHandle_.empty()) {
+        lastError_ = "no ScreenCast session to open a PipeWire remote on";
+        LOGE("[Portal] %s", lastError_.c_str());
+        return -1;
+    }
+
+    GVariantBuilder ob;
+    g_variant_builder_init(&ob, G_VARIANT_TYPE_VARDICT);
+
+    GError* gerr = nullptr;
+    GUnixFDList* fdList = nullptr;
+    GVariant* ret = g_dbus_connection_call_with_unix_fd_list_sync(conn, kBusName, kObjPath,
+        kScreenCast, "OpenPipeWireRemote",
+        g_variant_new("(oa{sv})", sessionHandle_.c_str(), &ob), G_VARIANT_TYPE("(h)"),
+        G_DBUS_CALL_FLAGS_NONE, -1, nullptr, &fdList, nullptr, &gerr);
+    if (!ret) {
+        lastError_ = std::string("OpenPipeWireRemote: ") + (gerr ? gerr->message : "?") +
+                     " \xE2\x80\x94 every captured screen asks the portal for its own "
+                     "PipeWire remote, because two PipeWire connections cannot share one "
+                     "socket";
+        if (gerr) g_error_free(gerr);
+        LOGE("[Portal] %s", lastError_.c_str());
+        if (fdList) g_object_unref(fdList);
+        return -1;
+    }
+
+    gint32 idx = -1;
+    g_variant_get(ret, "(h)", &idx);
+    g_variant_unref(ret);
+
+    const int fd = fdList ? g_unix_fd_list_get(fdList, idx, &gerr) : -1;
+    if (fdList) g_object_unref(fdList);
+    if (fd < 0) {
+        lastError_ = std::string("no PipeWire fd: ") + (gerr ? gerr->message : "?");
+        if (gerr) g_error_free(gerr);
+        LOGE("[Portal] %s", lastError_.c_str());
+        return -1;
+    }
+    return fd;
 }
 
 void PortalScreenCast::Close() {
