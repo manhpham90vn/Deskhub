@@ -125,7 +125,12 @@ void TestALinkAdmitsOnceAndRoutesByChannel() {
     hooks.onReady = [&readyCalls](bool) { readyCalls.fetch_add(1, std::memory_order_relaxed); };
     Check(link.Start(LinkConfig(kLinkPasscode), std::move(hooks)), "the link starts");
 
-    Check(WaitUntil([&link] { return link.State() == deskhubp::HostLinkState::Ready; }, 10000),
+    Check(WaitUntil(
+              [&link, &readyCalls] {
+                  return link.State() == deskhubp::HostLinkState::Ready &&
+                         readyCalls.load(std::memory_order_relaxed) > 0;
+              },
+              10000),
         "the link is admitted inside the deadline");
     Check(readyCalls.load(std::memory_order_relaxed) == 1, "and says so exactly once");
     Check(deskhubp::CheckTrustedHost(link.Config().hostLabel, identity.fingerprint) ==
