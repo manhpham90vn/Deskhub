@@ -701,6 +701,18 @@ line.
   the session is open rather than borrowing one per call. The desktop app masked this
   for a long time because GTK keeps a reference on the session bus for the life of the
   process; `deskhub-cli` links no GTK and had none.
+- **Every captured screen opens its own PipeWire remote**: a portal session hands out
+  one fd from `OpenPipeWireRemote`, and duplicating it is not a second connection — a
+  `dup` is another descriptor onto the same socket. Two `pw_context_connect_fd` calls on
+  duplicates give two `pw_core` objects with independent proxy-id maps writing and
+  reading one byte stream: their ids collide in the daemon's single client id space, and
+  whichever thread's epoll wakes first swallows messages meant for the other, including
+  the `SCM_RIGHTS` descriptors that carry buffer memory. The stream that loses the race
+  dies at the link's allocation stage with *Buffer allocation failed*, which is why one
+  monitor always worked and two were a coin toss. `ScreenCapture::Start` therefore calls
+  `PortalScreenCast::OpenRemoteFd()` for a remote of its own; the portal permits repeated
+  `OpenPipeWireRemote` calls on a started session. The session keeps its first fd only to
+  prove the portal hands out remotes and to back `isOpen()`.
 - **Every icon is derived, and only some of them are rounded**: `make icons` rebuilds
   the whole set from the single master `assets/icon_1024.png`. macOS, iOS, the Play
   Store listing and Android's adaptive-icon pipeline mask artwork into their own

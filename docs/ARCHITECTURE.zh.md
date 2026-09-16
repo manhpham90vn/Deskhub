@@ -553,6 +553,15 @@ A/B（漂移只作为警告，绝不失败）、来自该 pull request 构建的
   `paused` 并以*没有可用的目标节点*失败。因此 `PortalScreenCast` 在会话打开期间一直拥有
   自己的 `GDBusConnection`，而不是每次调用借一条。桌面应用长期掩盖了这个问题，因为 GTK 会
   在整个进程生命期内持有会话总线的一个引用；`deskhub-cli` 不链接 GTK，就没有那个引用。
+- **每个被捕获的屏幕都开自己的 PipeWire remote**：一个 portal 会话只从 `OpenPipeWireRemote`
+  交出一个 fd，复制它并不等于第二条连接 —— `dup` 只是指向同一个 socket 的另一个描述符。对多个
+  副本调用两次 `pw_context_connect_fd`，得到的是两个各有独立 proxy-id 映射的 `pw_core`，却在同
+  一条字节流上收发：它们的 id 在守护进程唯一的 client id 空间里相撞，而哪个线程的 epoll 先醒来
+  就吞掉本该给另一个的消息，其中包括承载缓冲区内存的 `SCM_RIGHTS` 描述符。竞争中落败的那条流会
+  在 link 的分配阶段以*Buffer allocation failed* 死掉，这正是一个显示器总能用、两个显示器却全
+  凭运气的原因。因此 `ScreenCapture::Start` 调用 `PortalScreenCast::OpenRemoteFd()` 取得属于
+  自己的 remote；portal 允许在已 start 的会话上重复调用 `OpenPipeWireRemote`。会话保留第一个
+  fd，只是为了证明 portal 会交出 remote，并支撑 `isOpen()`。
 - **每个图标都是派生出来的，而且只有其中一些是圆角的**：`make icons` 从唯一的母版
   `assets/icon_1024.png` 重建整套图标。macOS、iOS、Play 商店的页面以及 Android 的自适应
   图标流水线，都会把美术素材裁进它们自己的形状，所以那些素材保持满幅方形；Windows、Linux
