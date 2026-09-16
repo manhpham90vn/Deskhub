@@ -127,6 +127,60 @@ void ReportStreamListOverwritten(const char* checkpoint, const StreamListShape& 
         static_cast<const void*>(now.data), now.size, now.capacity);
 }
 
+class ServiceStackWatch {
+public:
+    void Arm() {
+        for (uint32_t& word : words_) word = kIntactWord;
+    }
+
+    size_t FirstTornWord() const {
+        for (size_t i = 0; i < kWordCount; ++i)
+            if (words_[i] != kIntactWord) return i;
+        return kWordCount;
+    }
+
+    uint32_t WordAt(size_t index) const {
+        return words_[index];
+    }
+    const void* Begin() const {
+        return words_;
+    }
+    const void* End() const {
+        return words_ + kWordCount;
+    }
+
+    static constexpr uint32_t IntactWord() {
+        return kIntactWord;
+    }
+    static constexpr size_t WordCount() {
+        return kWordCount;
+    }
+
+private:
+    static constexpr uint32_t kIntactWord = 0xA5C3D719u;
+    static constexpr size_t kWordCount = 256;
+
+    uint32_t words_[kWordCount];
+};
+
+void ReportServiceStackWritten(const char* call, const NetAddr& peer,
+    const ServiceStackWatch& watch, size_t word) {
+    LOGE(
+        "quic: the service loop's stack canary was overwritten during %s for %s: word %zu of "
+        "%zu holds 0x%08x instead of 0x%08x. The canary covers [%p, %p), which sits between "
+        "this frame and the call it just made, the band that call's own frames run in, and "
+        "nothing writes to it while that call runs - so the write came from another thread, or "
+        "through a pointer into this stack that outlived the frame it was taken from. It is "
+        "the same corruption that kills the Windows integration run about once in three: a "
+        "stray write of zeros that is harmless in dead stack and fatal when it lands on a live "
+        "frame's /GS cookie, as it did in run 34957274225. The page heap, ASan and a quiche "
+        "built with Rust checks are all blind to it because the address it hits is a live and "
+        "valid one; this canary is the only thing that names the call it happens under, so "
+        "start there",
+        call, peer.ToString().c_str(), word, ServiceStackWatch::WordCount(), watch.WordAt(word),
+        ServiceStackWatch::IntactWord(), watch.Begin(), watch.End());
+}
+
 void FillRandomConnId(uint8_t* out, size_t len) {
     if (RandomBytes(out, len)) return;
     for (size_t i = 0; i < len; ++i) out[i] = uint8_t(i * 31 + 7);
@@ -553,6 +607,16 @@ struct QuicEndpoint::Impl {
             stats.sent, stats.lost);
     }
 
+    template <typename Work>
+    void RunWatched(const char* call, QuicConnId id, Work&& work) {
+        ServiceStackWatch watch;
+        watch.Arm();
+        work();
+        const size_t torn = watch.FirstTornWord();
+        if (torn == ServiceStackWatch::WordCount()) return;
+        ReportServiceStackWritten(call, NetAddr::Unpack(id), watch, torn);
+    }
+
     void Service() {
         std::vector<QuicConnId> dead;
         moreToSend_.store(false, std::memory_order_relaxed);
@@ -562,24 +626,27 @@ struct QuicEndpoint::Impl {
         live.reserve(connections_.size());
         for (const auto& connection : connections_) live.push_back(connection.first);
         for (const QuicConnId id : live) {
-            Connection* found = Lookup(id);
+            Connection* found = nullptr;
+            RunWatched("Lookup", id, [&] { found = Lookup(id); });
             if (found == nullptr) continue;
             Connection& entry = *found;
             if (quiche_conn_is_established(entry.conn) && !entry.announced) {
                 entry.announced = true;
                 if (entry.lastRecvUs == 0) entry.lastRecvUs = nowUs;
-                if (cb_.onConnected) cb_.onConnected(id, entry.peer);
+                if (cb_.onConnected)
+                    RunWatched("the onConnected callback", id, [&] { cb_.onConnected(id, entry.peer); });
                 if (Lookup(id) != &entry) continue;
             }
-            if (entry.announced) ReportQuiet(entry, nowUs);
+            if (entry.announced)
+                RunWatched("ReportQuiet", id, [&] { ReportQuiet(entry, nowUs); });
             if (entry.announced) {
-                DrainStreams(id, entry);
+                RunWatched("DrainStreams", id, [&] { DrainStreams(id, entry); });
                 if (Lookup(id) != &entry) continue;
-                DrainDatagrams(id, entry);
+                RunWatched("DrainDatagrams", id, [&] { DrainDatagrams(id, entry); });
                 if (Lookup(id) != &entry) continue;
             }
-            DrainOutboxes(entry);
-            Flush(entry);
+            RunWatched("DrainOutboxes", id, [&] { DrainOutboxes(entry); });
+            RunWatched("Flush", id, [&] { Flush(entry); });
             if (quiche_conn_is_closed(entry.conn)) dead.push_back(id);
         }
         for (QuicConnId id : dead) {
@@ -590,7 +657,8 @@ struct QuicEndpoint::Impl {
             if (announced) ReportClose(at->second);
             quiche_conn* conn = at->second.conn;
             connections_.erase(at);
-            if (announced && cb_.onClosed) cb_.onClosed(id, peer);
+            if (announced && cb_.onClosed)
+                RunWatched("the onClosed callback", id, [&] { cb_.onClosed(id, peer); });
             quiche_conn_free(conn);
         }
     }
