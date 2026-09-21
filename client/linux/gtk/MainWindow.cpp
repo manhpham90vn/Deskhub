@@ -574,13 +574,6 @@ void MainWindow::Build(GtkApplication* app) {
                 return G_SOURCE_REMOVE;
             },
             this);
-    } else {
-        g_idle_add(
-            [](gpointer user) -> gboolean {
-                static_cast<MainWindow*>(user)->StartTenants();
-                return G_SOURCE_REMOVE;
-            },
-            this);
     }
 }
 
@@ -1259,17 +1252,17 @@ void MainWindow::ApplyHostState(HostShareState state, const std::string& detail)
         AddClass(hostStateLabel_, "deskhub-banner-state-busy");
     }
 
-    const bool screen = screenSharing_ || starting;
+    const bool live = hosting_ || starting;
     gtk_button_set_label(GTK_BUTTON(shareButton_),
-        screen ? ui::kStopSharing : ui::kStartSharing);
-    if (screen) {
+        live ? ui::kStopSharing : ui::kStartSharing);
+    if (live) {
         AddClass(shareButton_, "deskhub-primary-stop");
     } else {
         RemoveClass(shareButton_, "deskhub-primary-stop");
     }
 
-    gtk_widget_set_sensitive(bindCombo_, !screen);
-    ShowHostTable(screen);
+    gtk_widget_set_sensitive(bindCombo_, !live);
+    ShowHostTable(live);
 }
 
 void MainWindow::ShowIdleHostState() {
@@ -1368,7 +1361,7 @@ bool MainWindow::EnsureTrayAttached() {
     actions.onToggleShare = [this] { OnShare(); };
     actions.onQuit = [this] { gtk_widget_destroy(window_); };
     if (!tray_.Attach(actions)) return false;
-    tray_.SetSharing(screenSharing_);
+    tray_.SetSharing(hosting_);
     tray_.SetWindowVisible(gtk_widget_get_visible(window_));
     return true;
 }
@@ -1386,7 +1379,7 @@ void MainWindow::ShowMainWindow() {
     gtk_widget_show_all(window_);
     gtk_window_present(GTK_WINDOW(window_));
     tray_.SetWindowVisible(true);
-    ShowHostTable(screenSharing_);
+    ShowHostTable(hosting_);
 }
 
 void MainWindow::OnSettingChanged(GtkWidget*, gpointer user) {
@@ -1784,25 +1777,12 @@ void MainWindow::OnMonitorsChanged(GdkScreen*, gpointer user) {
     self->RefreshDisplayChoices();
 }
 
-void MainWindow::StartTenants() {
-    if (hostStarting_ || Sharing()) return;
-    ShareOptions options = deskhub::ShareOptionsOf(settings_, TerminalTicked(), FilesTicked());
-    options.port = Port();
-    if (options.deviceName.empty()) options.deviceName = deskhubp::LocalDeviceName();
-    if (!options.terminal && !options.files) return;
-    terminalRequested_ = options.terminal;
-    filesRequested_ = options.files;
-    StartHosting({}, options);
-}
-
 void MainWindow::OnShare(ShareTrigger trigger) {
     if (hostStarting_) return;
-    if (screenSharing_) {
+    if (Sharing()) {
         StopHosting();
-        StartTenants();
         return;
     }
-    if (Sharing()) StopHosting();
     shareTrigger_ = trigger;
 
     ShareOptions options = deskhub::ShareOptionsOf(settings_, TerminalTicked(), FilesTicked());
@@ -1905,7 +1885,7 @@ void MainWindow::OnHostStarted(bool started, const std::string& error,
     if (terminalRequested_) share_.StartTerminalShare();
     if (filesRequested_) StartFileShare();
     ApplySharingBanner();
-    tray_.SetSharing(screenSharing_);
+    tray_.SetSharing(hosting_);
 
     if (hostTimerId_) g_source_remove(hostTimerId_);
     hostTimerId_ = g_timeout_add(deskhubp::kShareStatusPollMs, OnHostTimer, this);

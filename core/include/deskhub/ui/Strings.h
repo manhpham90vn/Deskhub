@@ -78,6 +78,8 @@ inline constexpr const char* kNotSharing = "Not sharing.";
 inline constexpr const char* kStartingShare = "Starting share...";
 inline constexpr const char* kShareStateOn = "Sharing";
 inline constexpr const char* kShareStateOff = "Not sharing";
+inline constexpr const char* kReceivingFilesState =
+    "Receiving files - the screen is not shared";
 inline constexpr const char* kStartSharing = "Start sharing";
 inline constexpr const char* kBroadcastMemoryLabel = "Broadcast memory";
 inline constexpr const char* kAllowControlLabel =
@@ -87,8 +89,8 @@ inline constexpr const char* kRequestControlLabel =
 inline constexpr const char* kViewOnlyNote = "View-only: viewers can watch but not control.";
 inline constexpr const char* kPickDisplaysHint = "Tick the displays to share, then press Share.";
 inline constexpr const char* kPickSourcesHint =
-    "Tick what to share \xE2\x80\x94 displays, the terminal, or both \xE2\x80\x94 then press "
-    "Share.";
+    "Tick what to share \xE2\x80\x94 displays, the terminal, file transfer \xE2\x80\x94 then "
+    "press Share. Nothing is shared until you press it.";
 inline constexpr const char* kPortalConfirmNote =
     "The desktop confirms the screen capture in its own dialog the first time; that choice "
     "is remembered, so the dialog does not appear again.";
@@ -343,6 +345,8 @@ inline constexpr const char* kTransferBusyNote =
 inline constexpr const char* kTransferChooseButton = "Choose files\xE2\x80\xA6";
 inline constexpr const char* kTransferCancelButton = "Stop sending";
 inline constexpr const char* kTransferAcceptLabel = "Take files viewers send";
+inline constexpr const char* kMobileTakesFilesNote =
+    "Always on: files viewers send are taken even when the screen is not shared.";
 inline constexpr const char* kTransferArrivedTitle = "Files received";
 inline constexpr const char* kTransferStopTakingButton = "Stop taking files";
 inline constexpr const char* kTransferFolderLabel = "Store them in";

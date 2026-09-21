@@ -62,7 +62,6 @@ struct MainMenuView: View {
                 }
                 await autoShare()
             }
-            await sharing.startTenantsIfIdle()
         }
         .task(id: sharing.port) {
             try? await Task.sleep(for: MainMenuView.portSettle)
@@ -218,8 +217,8 @@ struct MainMenuView: View {
 
 extension MainMenuView {
     private func share() async {
-        if sharing.isScreenSharing {
-            await sharing.stopScreenSharing()
+        if sharing.isSharing {
+            sharing.stopSharing()
             return
         }
         sharing.refreshPermissions()
@@ -233,7 +232,6 @@ extension MainMenuView {
             accessibilityWarning = true
             return
         }
-        if sharing.isSharing { sharing.stopSharing() }
         await doShare()
     }
 

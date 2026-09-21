@@ -10,10 +10,20 @@ struct SharingView: View {
             VStack(alignment: .leading, spacing: 16) {
                 deskhubHeading(DeskhubClient.string(DHStrHostHeading))
 
-                let live = model.status.sharing || FilesHost.shared.receiving
-                Text(DeskhubClient.string(live ? DHStrShareStateOn : DHStrShareStateOff))
+                let receiving = FilesHost.shared.receiving
+                let live = model.status.sharing || receiving
+                let state: DHStringId =
+                    model.status.sharing
+                        ? DHStrShareStateOn
+                        : (receiving ? DHStrReceivingFilesState : DHStrShareStateOff)
+                Text(DeskhubClient.string(state))
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(live ? DeskhubPalette.online : DeskhubPalette.muted)
+
+                Toggle(DeskhubClient.string(DHStrFilesPickerLabel), isOn: .constant(true))
+                    .disabled(true)
+
+                deskhubHint(DeskhubClient.string(DHStrMobileTakesFilesNote))
 
                 PasscodeCard(passcode: model.acceptedPasscode)
 

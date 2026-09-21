@@ -74,6 +74,8 @@ const char* dh_string(DHStringId id) {
         case DHStrPasscodeNoneSet: return deskhub::ui::kPasscodeNoneSet;
         case DHStrCopyPasscodeAction: return deskhub::ui::kCopyPasscodeAction;
         case DHStrPasscodeCopied: return deskhub::ui::kPasscodeCopied;
+        case DHStrReceivingFilesState: return deskhub::ui::kReceivingFilesState;
+        case DHStrMobileTakesFilesNote: return deskhub::ui::kMobileTakesFilesNote;
         case DHStrLanDevicesHeading: return deskhub::ui::kLanDevicesHeading;
         case DHStrRecentDevicesHeading: return deskhub::ui::kRecentDevicesHeading;
         case DHStrRecentDevicesHint: return deskhub::ui::kRecentDevicesHint;

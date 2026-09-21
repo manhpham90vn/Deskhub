@@ -276,6 +276,8 @@ typedef enum {
     DHStrPasscodeNoneSet = 165,
     DHStrCopyPasscodeAction = 166,
     DHStrPasscodeCopied = 167,
+    DHStrReceivingFilesState = 168,
+    DHStrMobileTakesFilesNote = 169,
 } DHStringId;
 
 int dh_link_quality_text(DHLinkQuality quality, char* out, int capacity);

@@ -36,6 +36,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -834,14 +835,36 @@ private fun HostScreen(
                 delay(POLL_INTERVAL_MS)
             }
         }
-        val live = sharing || receiving
 
         Text(
             NativeClient.string(
-                if (live) NativeClient.STR_SHARE_STATE_ON else NativeClient.STR_SHARE_STATE_OFF,
+                when {
+                    sharing -> NativeClient.STR_SHARE_STATE_ON
+                    receiving -> NativeClient.STR_RECEIVING_FILES_STATE
+                    else -> NativeClient.STR_SHARE_STATE_OFF
+                },
             ),
             style = MaterialTheme.typography.titleMedium,
-            color = if (live) OnlineColor else MutedColor,
+            color = if (sharing || receiving) OnlineColor else MutedColor,
+        )
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Checkbox(checked = true, onCheckedChange = null, enabled = false)
+            Text(
+                NativeClient.string(NativeClient.STR_FILES_PICKER_LABEL),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MutedColor,
+            )
+        }
+
+        Text(
+            NativeClient.string(NativeClient.STR_MOBILE_TAKES_FILES_NOTE),
+            style = MaterialTheme.typography.bodySmall,
+            color = MutedColor,
         )
 
         PasscodeCard(passcode)

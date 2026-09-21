@@ -216,34 +216,6 @@ final class SharingModel {
         return ok
     }
 
-    var isScreenSharing: Bool { isSharing && sharingScreen }
-
-    func startTenantsIfIdle() async {
-        guard !isSharing, !isStarting, shareTerminal || shareFiles else { return }
-        let options = ShareOptions(
-            fps: UInt32(max(1, fps)),
-            bitrateMbps: UInt32(max(1, bitrateMbps)),
-            maxDim: maxDim <= 0 ? UInt32(0) : UInt32(maxDim),
-            port: UInt16(max(1, min(65535, port))),
-            allowInput: allowInput,
-            passcode: acceptedPasscode,
-            terminal: shareTerminal,
-            files: shareFiles
-        )
-        isStarting = true
-        let ok = await Task.detached {
-            DeskhubShare.start(sources: [], options: options)
-        }.value
-        isStarting = false
-        isSharing = ok
-        if ok { noteSharingBegan(screen: false, terminal: shareTerminal, files: shareFiles) }
-    }
-
-    func stopScreenSharing() async {
-        stopSharing()
-        await startTenantsIfIdle()
-    }
-
     private func noteSharingBegan(screen: Bool, terminal: Bool, files: Bool) {
         sharingScreen = screen
         sharingTerminal = terminal

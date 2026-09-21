@@ -68,6 +68,9 @@ object NativeClient {
     const val STR_PASSCODE_LABEL = 24
     const val STR_SHARE_STATE_ON = 47
     const val STR_SHARE_STATE_OFF = 48
+    const val STR_RECEIVING_FILES_STATE = 168
+    const val STR_MOBILE_TAKES_FILES_NOTE = 169
+    const val STR_FILES_PICKER_LABEL = 133
     const val STR_START_SHARING = 49
     const val STR_STARTING_SHARE = 50
     const val STR_DISCONNECT_VIEWER_ACTION = 53

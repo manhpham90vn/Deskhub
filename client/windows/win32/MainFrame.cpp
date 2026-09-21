@@ -319,14 +319,10 @@ private:
     void OnDeviceStatus(const deskhubp::DeviceStatus& status);
 
     void OnShare(ShareTrigger trigger = ShareTrigger::kUser);
-    void StartTenants();
     void BeginAutoShare();
     void OnAutoShareTimer(wxTimerEvent& event);
     void ReportShareProblem(const wxString& text, const wxString& title);
     bool Sharing() const;
-    bool ScreenSharing() const {
-        return screenSharing_;
-    }
     bool TerminalTicked() const;
     bool FilesTicked() const;
     std::filesystem::path TransferFolder() const;
@@ -561,8 +557,6 @@ MainFrame::MainFrame() : wxFrame(nullptr, wxID_ANY, ToWx(ui::kAppTitle)) {
     if (settings_.autoShare) {
         SelectPage(kPageHost);
         CallAfter([this] { BeginAutoShare(); });
-    } else {
-        CallAfter([this] { StartTenants(); });
     }
 }
 
@@ -1473,13 +1467,13 @@ void MainFrame::ApplyHostState(HostShareState state, const wxString& detail) {
     if (wxWindow* page = hostBanner_->GetParent()) page->Layout();
     hostBanner_->Refresh();
 
-    const bool screen = screenSharing_ || state == HostShareState::kStarting;
-    shareBtn_->SetLabel(ToWx(screen ? ui::kStopSharing : ui::kStartSharing));
-    PaintButton(shareBtn_, screen ? kOffline : kAccent);
+    const bool live = hosting_ || state == HostShareState::kStarting;
+    shareBtn_->SetLabel(ToWx(live ? ui::kStopSharing : ui::kStartSharing));
+    PaintButton(shareBtn_, live ? kOffline : kAccent);
     shareBtn_->Refresh();
 
-    bindChoice_->Enable(!screen);
-    ShowHostTable(screen);
+    bindChoice_->Enable(!live);
+    ShowHostTable(live);
 }
 
 void MainFrame::ShowIdleHostState() {
@@ -1546,24 +1540,12 @@ void MainFrame::OnDisplayChanged(wxDisplayChangedEvent& event) {
     RefreshDisplayChoices();
 }
 
-void MainFrame::StartTenants() {
-    if (hostStarting_ || Sharing()) return;
-    const bool terminal = TerminalTicked();
-    const bool files = FilesTicked();
-    if (!terminal && !files) return;
-    terminalRequested_ = terminal;
-    filesRequested_ = files;
-    StartHosting({}, deskhub::ShareOptionsOf(settings_, terminal, files));
-}
-
 void MainFrame::OnShare(ShareTrigger trigger) {
     if (hostStarting_) return;
-    if (screenSharing_) {
+    if (Sharing()) {
         StopHosting();
-        StartTenants();
         return;
     }
-    if (Sharing()) StopHosting();
     shareTrigger_ = trigger;
 
     const bool terminal = TerminalTicked();
@@ -2217,7 +2199,7 @@ wxMenu* DeskhubTrayIcon::CreatePopupMenu() {
                 ToWx(frame_.IsShown() ? ui::kTrayHideWindow : ui::kTrayShowWindow))
             ->GetId();
     const int toggleShareId =
-        menu->Append(wxID_ANY, ToWx(frame_.ScreenSharing() ? ui::kStopSharing : ui::kStartSharing))
+        menu->Append(wxID_ANY, ToWx(frame_.Sharing() ? ui::kStopSharing : ui::kStartSharing))
             ->GetId();
     menu->AppendSeparator();
     const int quitId = menu->Append(wxID_ANY, ToWx(ui::kTrayQuit))->GetId();

@@ -125,7 +125,6 @@ private:
     bool ReadPasscode(GtkWidget* entry, std::string& out);
 
     void OnShare(ShareTrigger trigger = ShareTrigger::kUser);
-    void StartTenants();
     void BeginAutoShare();
     static gboolean OnAutoShareTimer(gpointer user);
     void ReportShareProblem(const char* title, const std::string& text);
