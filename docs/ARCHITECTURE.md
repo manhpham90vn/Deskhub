@@ -134,9 +134,9 @@ HostEngine (one per app, owns SessionTransport)
  ├─ audio worker: capture callback → lock-free frame ring → Opus encode →
  │    per-viewer datagrams (AudioBroadcaster)
  └─ TerminalHost (tenant, when the terminal is shared)
-      ├─ HandleMessage on the net-loop thread: TERM_OPEN/DATA/RESIZE/CLOSE → PTY
+      ├─ HandleMessage on the net-loop thread: TERM_OPEN/DATA/RESIZE/CLOSE/EXIT/LIST → PTY
       └─ pump thread: PTY output → host-side Screen mirror + TERM_DATA records,
-           expiry, kicks
+           detach on peer loss, kicks
 ```
 
 - The engine runs whenever anything is shared. With zero screen sources and the
@@ -156,9 +156,17 @@ HostEngine (one per app, owns SessionTransport)
 - Input: "host wins" — `LocalInputMonitor` pauses remote input while the person at
   the machine moves their own mouse; one viewer drives at a time.
 - Shells: one PTY per shell (`ConPTY` on Windows, `forkpty` elsewhere), at most 8; a
-  dropped connection detaches the shell and keeps the PTY alive for 2 minutes so the
-  same machine can reattach. Every open/close/detach/reattach is audit-logged with
-  address, name and key.
+  dropped connection detaches the shell and the PTY stays alive until the shell
+  process exits or the shell is closed — no time limit. Any admitted client can list
+  the kept shells (`TermList`/`TermListAck`), reattach a detached one by id, and end
+  any of them: `TERM_CLOSE` is answered ahead of the per-peer guard the data and resize
+  messages sit behind, and the machine that was in that shell is sent `TERM_EXIT`.
+  Every open/close/detach/reattach is audit-logged with address, name and key.
+- One picker, five clients: `core/ui/ShellPicker` turns a `TermSessionList` into the
+  rows every client draws — the id and size, whose shell it is, and whether this client
+  may reattach or close it. Only a detached shell can be reattached, and a shell the
+  host took over is neither. The Apple and Android apps read the same rows through
+  `DHTermSessionInfo`, so no client formats a shell row of its own.
 - Every shell's output also feeds a host-side `core/terminal` Screen from the moment
   it starts. *Stop & attach* disconnects the remote client and opens that mirror —
   scrollback intact — in a terminal window on the host; a shell taken over this way
@@ -531,8 +539,9 @@ line.
   simply never called) so the same shell comes back with its scrollback.
   `deskhub::KeepaliveIntervalUs` / `ReconnectDelayUs` hold the timings in core: the
   keepalive is at most half the idle timeout so one lost packet is survivable, and
-  retrying stops exactly at `kTerminalReattachGraceUs`, because past that the host
-  has already dropped the shell and reconnecting would silently open a new one.
+  retrying stops exactly at `kTerminalReattachGraceUs`: past that the window reports
+  the loss, but the shell itself stays on the host with no time limit, ready for an
+  explicit resume instead of being dropped.
 - **A record goes onto the stream whole or not at all, and a client that falls behind
   is repainted rather than fed every byte**: everything reliable — control, auth,
   terminal output — is length-prefixed records sharing one QUIC stream, so half a
@@ -571,7 +580,8 @@ line.
   identity — no second crypto library.
 - **No connection migration**: no usable client-side support in any candidate
   library. Reconnect-and-reattach (tmux-style, already required for mobile
-  backgrounding) covers it.
+  backgrounding) covers it; kept shells can also be listed (`TermList`) and resumed
+  by id from a fresh client.
 - **ECDSA P-256, not Ed25519**: BoringSSL's server side will not sign a TLS
   handshake with Ed25519 through quiche. Do not switch back. A stored Ed25519
   identity is replaced on load — it would fail every handshake as

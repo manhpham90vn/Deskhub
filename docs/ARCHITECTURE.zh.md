@@ -130,9 +130,9 @@ HostEngine（每个 app 一个实例，持有 SessionTransport）
  ├─ audio worker: capture 回调 → 无锁 frame ring → Opus encode →
  │    按 viewer 的 datagram（AudioBroadcaster）
  └─ TerminalHost（仅在 terminal 被共享时存在）
-      ├─ 在 net-loop thread 上 HandleMessage: TERM_OPEN/DATA/RESIZE/CLOSE → PTY
+      ├─ 在 net-loop thread 上 HandleMessage: TERM_OPEN/DATA/RESIZE/CLOSE/EXIT/LIST → PTY
       └─ pump thread: PTY 输出 → host 侧 Screen mirror 与 TERM_DATA record、
-           过期处理、断开处理
+           peer 丢失时分离、kicks
 ```
 
 - 只要有内容被共享，engine 即处于运行状态。当没有 screen source 而仅勾选 terminal 时，
@@ -150,11 +150,16 @@ HostEngine（每个 app 一个实例，持有 SessionTransport）
 - Input：host 优先。当机器前的用户操作自己的 mouse 时，`LocalInputMonitor` 暂停 remote
   input；同一时刻只有一个 viewer 进行操作。
 - Shell：每个 shell 对应一个 PTY（Windows 为 `ConPTY`，其他平台为 `forkpty`），最多 8
-  个。连接中断时，shell 被分离，PTY 保留 2 分钟，以便同一台机器 reattach。每次 open、
-  close、detach 与 reattach 均连同地址、名称与 key 记入审计日志。
+  个。连接中断时 shell 被分离，PTY 一直保留到 shell 进程退出或 shell 被关闭，不设时间限制。任何已准入的 client 均可列出被保留的 shell（`TermList`/`TermListAck`）并按 id reattach 其中之一。每次 open、close、detach 与 reattach 均连同地址、名称与 key 记入审计日志。
 - 每个 shell 的输出自启动起也同时写入 host 侧的 `core/terminal` Screen。*Stop & attach*
   断开远端 client，并在 host 的 terminal 窗口中打开该 mirror，scrollback 保持完整。以此
   方式接管的 shell 归属于 host，不会过期，并在 host 的窗口关闭时结束。
+- `TERM_CLOSE` 在 data 与 resize message 所受的 per-peer guard 之前被处理，因此任何已准入
+  的 client 都可以按 id 结束任意一个 shell，而当时身处该 shell 的机器会收到 `TERM_EXIT`。
+- 一个 picker，五个 client：`core/ui/ShellPicker` 把 `TermSessionList` 变成每个 client 都
+  绘制的那些行 —— id 与尺寸、shell 属于谁，以及本 client 是否可以 reattach 或关闭它。只有
+  已 detach 的 shell 才能 reattach，被 host 接管的 shell 两者皆不可。Apple 与 Android 的
+  app 通过 `DHTermSessionInfo` 读取同样的行，因此没有任何 client 自行格式化 shell 行。
 
 ## 5. Client 侧
 
@@ -459,8 +464,7 @@ runner 上与 base commit 的 A/B 结果（偏移仅作为警告，不导致失�
   `TerminalClient::Reattach()`（该函数早已在 core 中实现并测试，只是从未被调用），从而
   使同一个 shell 连同 scrollback 一起恢复。相关时间常量位于 core 的
   `deskhub::KeepaliveIntervalUs` 与 `ReconnectDelayUs`：keepalive 不超过 idle timeout
-  的一半，以便承受一次 packet 丢失；重试恰好在 `kTerminalReattachGraceUs` 处停止，因为
-  超过该时刻 host 已释放 shell，重新连接只会创建一个新的 shell。
+  的一半，以便承受一次 packet 丢失；重试恰好在 `kTerminalReattachGraceUs` 处停止：超过该时刻窗口报告连接丢失，但 shell 本体无时间限制地留在 host 上，可供后续显式 resume，而不是被释放。
 - **record 要么完整写入 stream，要么不写入；落后的 client 通过重绘同步，而非逐字节
   补发。** 所有可靠数据 —— control、auth、terminal 输出 —— 都是共用一条 QUIC stream 的
   带 length prefix 的 record，因此线上出现半条 record 会永久破坏对端的 framing；
@@ -490,7 +494,7 @@ runner 上与 base commit 的 A/B 结果（偏移仅作为警告，不导致失�
   的 QUIC 库。它附带 BoringSSL，后者同时服务于 SPAKE2 与 host identity，因此无需第二个
   密码学库。
 - **不使用 connection migration。** 候选库均缺乏可用的 client 侧支持。reconnect 与
-  reattach 机制（类似 tmux，本就是移动端进入后台所必需）已覆盖该需求。
+  reattach 机制（类似 tmux，本就是移动端进入后台所必需）已覆盖该需求；被保留的 shell 也可被列出（`TermList`）并由新 client 按 id resume。
 - **使用 ECDSA P-256 而非 Ed25519。** BoringSSL 的服务端不会通过 quiche 以 Ed25519 对
   TLS handshake 签名。不应改回。已保存的 Ed25519 identity 会在加载时被替换，否则它将使
   每次 handshake 以 `QUICHE_ERR_TLS_FAIL` 失败，且界面上没有任何说明。

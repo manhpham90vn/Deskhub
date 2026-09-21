@@ -26,6 +26,16 @@ if [ "$ONLY" = all ] || [ "$ONLY" = cpp ]; then
         echo "clang-format not found - run 'make bootstrap' first." >&2
         exit 1
     }
+    CLANG_FORMAT_VERSION=$(sed -n 's/^CLANG_FORMAT_VERSION=//p' scripts/bootstrap.sh)
+    [ -n "$CLANG_FORMAT_VERSION" ] || {
+        echo "no CLANG_FORMAT_VERSION in scripts/bootstrap.sh - codestyle reads the pin from there so what it enforces cannot drift from what bootstrap installs." >&2
+        exit 1
+    }
+    clang-format --version | grep -qF "$CLANG_FORMAT_VERSION" || {
+        echo "clang-format $CLANG_FORMAT_VERSION is what CI enforces, but $(command -v clang-format) is $(clang-format --version)." >&2
+        echo "Reformatting with another version churns files CI then rejects - run 'make bootstrap'." >&2
+        exit 1
+    }
     CPP_LIST=$(git ls-files 'core/*' 'platform/*' 'client/*' 'tests/*' | grep -E '\.(h|hpp|cpp|cc|c)$' || true)
     if [ -z "$CPP_LIST" ]; then
         echo "codestyle.sh: found no C++ files - is this a full checkout?" >&2

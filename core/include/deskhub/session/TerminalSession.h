@@ -12,12 +12,6 @@ namespace deskhub {
 inline constexpr size_t kMaxTerminalSessions = 8;
 inline constexpr uint64_t kTerminalReattachGraceUs = 120'000'000;
 
-enum class TerminalState : uint8_t {
-    Live = 0,
-    Detached = 1,
-    Local = 2,
-};
-
 struct TerminalRecord {
     uint32_t termId = 0;
     TerminalState state = TerminalState::Live;
@@ -49,7 +43,7 @@ public:
     bool AttachLocal(uint32_t termId);
     bool Close(uint32_t termId);
     void CloseAll();
-    std::vector<uint32_t> Expire(uint64_t nowUs);
+    TermSessionList List() const;
 
     bool Sharing() const {
         return sharing_;

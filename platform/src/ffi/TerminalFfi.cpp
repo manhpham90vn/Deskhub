@@ -2,8 +2,11 @@
 
 #include <algorithm>
 #include <cstring>
+#include <mutex>
 #include <string>
+#include <vector>
 
+#include "deskhub/ui/ShellPicker.h"
 #include "deskhub/ui/Strings.h"
 #include "deskhubp/ffi/TermGridFill.h"
 #include "deskhubp/client/TerminalViewer.h"
@@ -19,15 +22,50 @@ int FillText(char* out, int capacity, const std::string& text) {
     return int(take);
 }
 
+void CopyInto(char* out, size_t capacity, const std::string& text) {
+    const size_t take = std::min(capacity - 1, text.size());
+    std::memcpy(out, text.data(), take);
+    out[take] = '\0';
+}
+
+const deskhub::TermSessionEntry* EntryFor(const deskhub::TermSessionList& list, uint32_t termId) {
+    for (const deskhub::TermSessionEntry& e : list.sessions)
+        if (e.termId == termId) return &e;
+    return nullptr;
+}
+
+std::vector<DHTermSessionInfo> InfosFor(const deskhub::TermSessionList& list) {
+    std::vector<DHTermSessionInfo> infos;
+    for (const deskhub::ui::ShellPickerRow& row : deskhub::ui::BuildShellPickerRows(list)) {
+        const deskhub::TermSessionEntry* entry = EntryFor(list, row.termId);
+        if (entry == nullptr) continue;
+        DHTermSessionInfo info{};
+        info.termId = entry->termId;
+        info.state = int32_t(entry->state);
+        info.cols = entry->size.cols;
+        info.rows = entry->size.rows;
+        info.openedUs = entry->openedUs;
+        info.resumable = row.resumable;
+        info.closable = row.closable;
+        CopyInto(info.name, sizeof(info.name), entry->clientName);
+        CopyInto(info.line, sizeof(info.line), deskhub::ui::ShellPickerLine(row));
+        infos.push_back(info);
+    }
+    return infos;
+}
+
 }
 
 struct DHTermSession {
+    std::mutex mutex{};
+    std::vector<DHTermSessionInfo> sessions{};
+    bool sessionsKnown = false;
     deskhubp::TerminalViewer viewer{};
     DHTermCallbacks callbacks{};
 };
 
-DHTermSession* dh_term_open(const char* address, const char* passcode, uint16_t cols,
-    uint16_t rows, const DHTermCallbacks* callbacks) {
+static DHTermSession* StartViewer(const char* address, const char* passcode, uint16_t cols,
+    uint16_t rows, uint32_t resumeId, bool deferOpen, const DHTermCallbacks* callbacks) {
     if (address == nullptr) return nullptr;
     NetAddr server;
     if (!ParseNetAddr(address, server)) return nullptr;
@@ -41,6 +79,8 @@ DHTermSession* dh_term_open(const char* address, const char* passcode, uint16_t 
     config.passcode = passcode != nullptr ? passcode : "";
     config.clientName = deskhubp::SessionDeviceName();
     config.size = deskhub::TermSize{cols, rows};
+    config.resumeId = resumeId;
+    config.deferOpen = deferOpen;
 
     DHTermSession* raw = session;
     deskhubp::TerminalViewerCallbacks hooks;
@@ -60,12 +100,35 @@ DHTermSession* dh_term_open(const char* address, const char* passcode, uint16_t 
         const std::string copy(fingerprint);
         raw->callbacks.onTrustAsked(int32_t(verdict), copy.c_str(), raw->callbacks.user);
     };
+    hooks.onSessions = [raw](const deskhub::TermSessionList& sessions) {
+        const std::lock_guard<std::mutex> lock(raw->mutex);
+        raw->sessions = InfosFor(sessions);
+        raw->sessionsKnown = true;
+        if (raw->callbacks.onSessions == nullptr) return;
+        raw->callbacks.onSessions(
+            raw->sessions.data(), uint32_t(raw->sessions.size()), raw->callbacks.user);
+    };
 
     if (!session->viewer.Start(config, std::move(hooks))) {
         delete session;
         return nullptr;
     }
     return session;
+}
+
+DHTermSession* dh_term_open(const char* address, const char* passcode, uint16_t cols,
+    uint16_t rows, const DHTermCallbacks* callbacks) {
+    return StartViewer(address, passcode, cols, rows, 0, false, callbacks);
+}
+
+DHTermSession* dh_term_open_deferred(const char* address, const char* passcode, uint16_t cols,
+    uint16_t rows, const DHTermCallbacks* callbacks) {
+    return StartViewer(address, passcode, cols, rows, 0, true, callbacks);
+}
+
+DHTermSession* dh_term_open_resumed(const char* address, const char* passcode, uint16_t cols,
+    uint16_t rows, uint32_t resumeId, const DHTermCallbacks* callbacks) {
+    return StartViewer(address, passcode, cols, rows, resumeId, false, callbacks);
 }
 
 void dh_term_stop(DHTermSession* s) {
@@ -118,6 +181,42 @@ void dh_term_send_text(DHTermSession* s, const char* utf8) {
 
 void dh_term_paste(DHTermSession* s, const char* utf8) {
     if (s != nullptr && utf8 != nullptr && *utf8 != '\0') s->viewer.Paste(utf8);
+}
+
+void dh_term_open_new(DHTermSession* s) {
+    if (s != nullptr) s->viewer.OpenNew();
+}
+
+void dh_term_resume(DHTermSession* s, uint32_t termId) {
+    if (s != nullptr) s->viewer.ResumeSession(termId);
+}
+
+void dh_term_close_session(DHTermSession* s, uint32_t termId) {
+    if (s != nullptr) s->viewer.CloseSession(termId);
+}
+
+void dh_term_request_sessions(DHTermSession* s) {
+    if (s != nullptr) s->viewer.RequestSessions();
+}
+
+bool dh_term_sessions_known(DHTermSession* s) {
+    if (s == nullptr) return false;
+    const std::lock_guard<std::mutex> lock(s->mutex);
+    return s->sessionsKnown;
+}
+
+uint32_t dh_term_session_count(DHTermSession* s) {
+    if (s == nullptr) return 0;
+    const std::lock_guard<std::mutex> lock(s->mutex);
+    return uint32_t(s->sessions.size());
+}
+
+bool dh_term_session_info(DHTermSession* s, uint32_t index, DHTermSessionInfo* out) {
+    if (s == nullptr || out == nullptr) return false;
+    const std::lock_guard<std::mutex> lock(s->mutex);
+    if (index >= s->sessions.size()) return false;
+    *out = s->sessions[index];
+    return true;
 }
 
 void dh_term_resize(DHTermSession* s, uint16_t cols, uint16_t rows) {

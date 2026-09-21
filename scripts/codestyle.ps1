@@ -5,26 +5,36 @@
 
 $ErrorActionPreference = 'Stop'
 $root = Resolve-Path (Join-Path $PSScriptRoot '..')
+. (Join-Path $PSScriptRoot 'pinned-tools.ps1')
 Set-Location $root
+
+function Get-VisualStudioLlvmDir {
+    $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+    if (-not (Test-Path $vswhere)) { return @() }
+    $vs = & $vswhere -latest -products * -property installationPath
+    if (-not $vs) { return @() }
+    @(Join-Path $vs 'VC\Tools\Llvm\x64\bin')
+}
+
+function Get-PinnedClangFormat([string]$Version) {
+    $extraDirs = Get-VisualStudioLlvmDir
+    $found = Find-PinnedTool 'clang-format' $Version $extraDirs
+    if ($found) { return $found }
+    $others = Get-ToolCandidates 'clang-format' $extraDirs |
+        ForEach-Object { "$_ is $(((& $_ --version) -join ' ') -replace '^clang-format version ', '')" }
+    if (-not $others) { throw "clang-format not found - run 'make bootstrap' first." }
+    throw ("clang-format $Version not found, and reformatting with another version churns files CI then rejects " +
+        "($($others -join '; ')). Run 'make bootstrap' and put the clang-format it installs ahead of those on PATH.")
+}
 
 $fail = 0
 
 if ($Only -in @('all', 'cpp')) {
-    $clangFormat = (Get-Command clang-format -ErrorAction SilentlyContinue).Source
-    if (-not $clangFormat) {
-        $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
-        if (Test-Path $vswhere) {
-            $vs = & $vswhere -latest -products * -property installationPath
-            if ($vs) {
-                $cand = Join-Path $vs 'VC\Tools\Llvm\x64\bin\clang-format.exe'
-                if (Test-Path $cand) { $clangFormat = $cand }
-            }
-        }
-    }
-    if (-not $clangFormat) { throw "clang-format not found - run 'make bootstrap' first." }
+    $clangFormatVersion = Get-PinnedToolVersion 'CLANG_FORMAT_VERSION'
+    $clangFormat = Get-PinnedClangFormat $clangFormatVersion
 
     $cpp = git ls-files 'core/*' 'platform/*' 'client/*' 'tests/*' | Where-Object { $_ -match '\.(h|hpp|cpp|cc|c)$' }
-    Write-Host "[clang-format] $($cpp.Count) files ($clangFormat)"
+    Write-Host "[clang-format] $($cpp.Count) files ($clangFormat $clangFormatVersion)"
     if ($Check) {
         $bad = @()
         $prevEap = $ErrorActionPreference

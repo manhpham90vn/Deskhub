@@ -15,14 +15,7 @@ struct SharingView: View {
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(live ? DeskhubPalette.online : DeskhubPalette.muted)
 
-                deskhubSection(DeskhubClient.string(DHStrPasscodeLabel))
-                PasscodeField(
-                    passcode: $model.passcode,
-                    prompt: DeskhubClient.string(DHStrClientPasscodePrompt),
-                    width: 140,
-                    enabled: !model.status.sharing
-                )
-                .onChange(of: model.passcode) { _, _ in model.savePasscode() }
+                PasscodeCard(passcode: model.acceptedPasscode)
 
                 HStack(spacing: 12) {
                     Text(DeskhubClient.string(DHStrBindInterfaceLabel))

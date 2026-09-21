@@ -108,6 +108,15 @@ inline constexpr const char* kPasscodeHint =
     "A machine types this once, the first time it connects, and is remembered by its key "
     "afterwards. Leave it empty and you will be asked here instead, each time a new machine "
     "wants in.";
+inline constexpr const char* kPasscodeShareHeading = "Pairing passcode";
+inline constexpr const char* kPasscodeSetNote =
+    "A machine pairing for the first time types this code \xE2\x80\x94 or asks for your approval "
+    "here if it offers none.";
+inline constexpr const char* kPasscodeUnsetNote =
+    "No passcode set \xE2\x80\x94 you will be asked here before a new machine is let in.";
+inline constexpr const char* kPasscodeNoneSet = "None";
+inline constexpr const char* kCopyPasscodeAction = "Copy passcode";
+inline constexpr const char* kPasscodeCopied = "Passcode copied";
 inline constexpr const char* kClientPasscodePrompt = "Passcode (4 digits):";
 inline constexpr const char* kClientPasscodeHint =
     "Read the 4-digit code off the host \xE2\x80\x94 or leave it empty to ask the person at "
@@ -284,6 +293,18 @@ inline constexpr const char* kTerminalNoSuchSession =
 inline constexpr const char* kTerminalUnreachable = "Could not reach that machine.";
 inline constexpr const char* kTerminalReattaching = "Connection lost \xE2\x80\x94 reattaching\xE2\x80\xA6";
 inline constexpr const char* kTerminalReattached = "Reattached to the shell you had open.";
+inline constexpr const char* kTerminalPickSession =
+    "Pick a shell to reattach, or open a new one.";
+inline constexpr const char* kShellPickerTitle = "Shells this machine is keeping";
+inline constexpr const char* kShellPickerEmpty = "That machine is keeping no shells.";
+inline constexpr const char* kShellPickerResume = "Reattach";
+inline constexpr const char* kShellPickerNew = "New shell";
+inline constexpr const char* kShellPickerClose = "Close shell";
+inline constexpr const char* kShellPickerCloseAsk =
+    "Close that shell? Whatever it is running ends with it.";
+inline constexpr const char* kTerminalInUse = "(in use)";
+inline constexpr const char* kTerminalLocalElsewhere = "attached on that machine";
+inline constexpr const char* kTerminalUnnamedClient = "an unnamed machine";
 
 inline constexpr const char* kTransferConnecting = "Connecting\xE2\x80\xA6";
 inline constexpr const char* kTransferSending = "Sending\xE2\x80\xA6";
@@ -504,10 +525,22 @@ inline std::string ShareSummaryLine(bool screen, bool terminal, uint16_t port) {
     return ShareSummaryLine(screen, terminal, false, port);
 }
 
+inline const char* PasscodeShareNote(std::string_view passcode) {
+    return passcode.empty() ? kPasscodeUnsetNote : kPasscodeSetNote;
+}
+
+inline std::string PasscodeDisplay(std::string_view passcode) {
+    if (passcode.empty()) return kPasscodeNoneSet;
+    std::string spaced;
+    for (const char digit : passcode) {
+        if (!spaced.empty()) spaced += ' ';
+        spaced += digit;
+    }
+    return spaced;
+}
+
 inline std::string PasscodeNote(std::string_view passcode) {
-    if (passcode.empty())
-        return "No passcode set \xE2\x80\x94 you will be asked here before a new machine is "
-               "let in.";
+    if (passcode.empty()) return kPasscodeUnsetNote;
     return "A machine pairing for the first time needs passcode " + std::string(passcode) +
            " \xE2\x80\x94 or your approval here if it offers none.";
 }

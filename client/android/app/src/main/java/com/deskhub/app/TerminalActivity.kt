@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -158,6 +159,10 @@ private fun TerminalScreen(
     var keyView by remember { mutableStateOf<TermInputView?>(null) }
     var canvasSize by remember { mutableStateOf(IntSize.Zero) }
     var scrollOffset by remember { mutableIntStateOf(0) }
+    var shells by remember { mutableStateOf<List<NativeTerminal.Shell>>(emptyList()) }
+    var showPicker by remember { mutableStateOf(false) }
+    var pickerSettled by remember { mutableStateOf(false) }
+    var closing by remember { mutableStateOf<NativeTerminal.Shell?>(null) }
 
     val paint =
         remember {
@@ -203,6 +208,18 @@ private fun TerminalScreen(
         while (true) {
             termState = NativeTerminal.state()
             message = NativeTerminal.message()
+            if (showPicker || !pickerSettled) {
+                val offered = NativeTerminal.shells()
+                if (offered != shells) shells = offered
+                if (!pickerSettled && NativeTerminal.shellsKnown()) {
+                    pickerSettled = true
+                    if (offered.isEmpty()) {
+                        NativeTerminal.openFresh()
+                    } else {
+                        showPicker = true
+                    }
+                }
+            }
             var fresh = NativeTerminal.grid(scrollOffset)
             if (fresh != null) {
                 val arrived = fresh.scrollbackRows - scrollbackSeen
@@ -241,6 +258,43 @@ private fun TerminalScreen(
         }
         v.requestFocus()
         imm.showSoftInput(v, 0)
+    }
+
+    closing?.let { target ->
+        AlertDialog(
+            onDismissRequest = { closing = null },
+            title = { Text(NativeClient.string(NativeClient.STR_SHELL_PICKER_CLOSE)) },
+            text = { Text(NativeClient.string(NativeClient.STR_SHELL_PICKER_CLOSE_ASK)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    NativeTerminal.closeShell(target.termId)
+                    closing = null
+                }) {
+                    Text(NativeClient.string(NativeClient.STR_SHELL_PICKER_CLOSE))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { closing = null }) {
+                    Text(NativeClient.string(NativeClient.STR_TRANSFER_CANCEL_BUTTON))
+                }
+            },
+        )
+    }
+
+    if (showPicker) {
+        ShellPicker(
+            shells = shells,
+            onResume = {
+                showPicker = false
+                NativeTerminal.resumeShell(it)
+            },
+            onClose = { closing = it },
+            onFresh = {
+                showPicker = false
+                NativeTerminal.openFresh()
+            },
+        )
+        return
     }
 
     if (termState == NativeTerminal.STATE_DECIDING) {
@@ -418,6 +472,64 @@ private fun TerminalScreen(
             maxLines = 1,
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
         )
+    }
+}
+
+@Composable
+private fun ShellPicker(
+    shells: List<NativeTerminal.Shell>,
+    onResume: (Int) -> Unit,
+    onClose: (NativeTerminal.Shell) -> Unit,
+    onFresh: () -> Unit,
+) {
+    Column(
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .background(Color.Black)
+                .safeDrawingPadding()
+                .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Text(
+            NativeClient.string(NativeClient.STR_SHELL_PICKER_TITLE),
+            color = Color.White,
+            style = MaterialTheme.typography.titleMedium,
+        )
+        if (shells.isEmpty()) {
+            Text(
+                NativeClient.string(NativeClient.STR_SHELL_PICKER_EMPTY),
+                color = Color.Gray,
+            )
+        }
+        Column(
+            modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            for (shell in shells) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    OutlinedButton(
+                        onClick = { onResume(shell.termId) },
+                        enabled = shell.resumable,
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Text(shell.line, maxLines = 1)
+                    }
+                    if (shell.closable) {
+                        TextButton(onClick = { onClose(shell) }) {
+                            Text(NativeClient.string(NativeClient.STR_SHELL_PICKER_CLOSE))
+                        }
+                    }
+                }
+            }
+        }
+        OutlinedButton(onClick = onFresh, modifier = Modifier.fillMaxWidth()) {
+            Text(NativeClient.string(NativeClient.STR_SHELL_PICKER_NEW))
+        }
     }
 }
 

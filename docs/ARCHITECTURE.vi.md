@@ -138,9 +138,9 @@ HostEngine (mỗi app một instance, sở hữu SessionTransport)
  ├─ audio worker: callback capture → ring frame lock-free → Opus encode →
  │    datagram theo từng viewer (AudioBroadcaster)
  └─ TerminalHost (chỉ tồn tại khi terminal được share)
-      ├─ HandleMessage trên thread net-loop: TERM_OPEN/DATA/RESIZE/CLOSE → PTY
+      ├─ HandleMessage trên thread net-loop: TERM_OPEN/DATA/RESIZE/CLOSE/EXIT/LIST → PTY
       └─ thread pump: output của PTY → Screen mirror phía host và record TERM_DATA,
-           xử lý hết hạn và ngắt kết nối
+           tách shell khi mất peer, kicks
 ```
 
 - Engine hoạt động bất cứ khi nào có nội dung được share. Khi không có screen source nào
@@ -161,9 +161,15 @@ HostEngine (mỗi app một instance, sở hữu SessionTransport)
 - Input: host được ưu tiên. `LocalInputMonitor` tạm dừng remote input khi người dùng tại
   máy đang thao tác với mouse của họ; mỗi thời điểm chỉ một viewer điều khiển.
 - Shell: mỗi shell một PTY (`ConPTY` trên Windows, `forkpty` trên các nền tảng khác), tối
-  đa 8 shell. Khi mất kết nối, shell được tách ra và PTY được giữ sống 2 phút để chính máy
-  đó reattach. Mọi thao tác open, close, detach và reattach đều được ghi vào audit log kèm
-  địa chỉ, tên và key.
+  đa 8 shell. Khi mất kết nối, shell được tách ra và PTY được giữ sống cho đến khi tiến trình shell thoát hoặc shell bị đóng — không giới hạn thời gian. Mọi client đã được chấp nhận đều có thể liệt kê các shell đang được giữ (`TermList`/`TermListAck`) và reattach một shell theo id. Mọi thao tác open, close, detach và reattach đều được ghi vào audit log kèm
+  địa chỉ, tên và key. `TERM_CLOSE` được trả lời trước guard theo peer mà các message
+  data và resize phải đi qua, nên bất kỳ client đã được nhận vào cũng kết thúc được một
+  shell bất kỳ theo id, và máy đang ở trong shell đó nhận `TERM_EXIT`.
+- Một picker cho cả năm client: `core/ui/ShellPicker` biến một `TermSessionList` thành
+  các dòng mà mọi client vẽ ra —— id và kích thước, shell thuộc về ai, và client này có
+  được reattach hay đóng nó không. Chỉ shell đã detach mới reattach được, còn shell host
+  đã tiếp quản thì không thuộc cả hai. App Apple và Android đọc đúng các dòng đó qua
+  `DHTermSessionInfo`, nên không client nào tự format dòng shell của riêng mình.
 - Output của mỗi shell đồng thời được đưa vào một `core/terminal` Screen phía host ngay từ
   khi shell bắt đầu. *Stop & attach* ngắt client từ xa và mở bản mirror đó, giữ nguyên
   scrollback, trong một cửa sổ terminal trên host. Một shell được tiếp quản theo cách này
@@ -538,8 +544,7 @@ coverage của core.
   từng được gọi), nhờ đó cùng một shell được khôi phục kèm scrollback.
   `deskhub::KeepaliveIntervalUs` và `ReconnectDelayUs` giữ các mốc thời gian trong core:
   keepalive tối đa bằng một nửa idle timeout để chịu được việc mất một packet, và việc thử
-  lại dừng đúng tại `kTerminalReattachGraceUs`, vì sau mốc đó host đã bỏ shell và việc kết
-  nối lại chỉ tạo ra một shell mới.
+  lại dừng đúng tại `kTerminalReattachGraceUs`: sau mốc đó cửa sổ báo mất kết nối, nhưng bản thân shell vẫn ở trên host không giới hạn thời gian, sẵn sàng cho một lần resume tường minh thay vì bị huỷ.
 - **Một record được đưa lên stream trọn vẹn hoặc không đưa, và một client bị chậm sẽ được
   vẽ lại thay vì nhận lại toàn bộ byte.** Mọi dữ liệu tin cậy — control, auth, output
   terminal — đều là các record có length prefix dùng chung một QUIC stream, nên một record
@@ -577,7 +582,7 @@ coverage của core.
   phần cũng phục vụ SPAKE2 và host identity, nên không cần thư viện mật mã thứ hai.
 - **Không sử dụng connection migration.** Không thư viện ứng viên nào có hỗ trợ phía client
   dùng được. Cơ chế reconnect và reattach (tương tự tmux, vốn đã cần thiết cho việc app di
-  động chạy nền) đã đáp ứng yêu cầu này.
+  động chạy nền) đã đáp ứng yêu cầu này; các shell đang được giữ cũng có thể được liệt kê (`TermList`) và resume theo id từ một client mới.
 - **Sử dụng ECDSA P-256 thay vì Ed25519.** Phía server của BoringSSL không ký TLS
   handshake bằng Ed25519 thông qua quiche. Không nên chuyển lại. Một identity Ed25519 đã
   lưu sẽ bị thay khi load, vì nó làm fail mọi handshake với `QUICHE_ERR_TLS_FAIL` mà không

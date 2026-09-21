@@ -787,6 +787,63 @@ std::optional<TermSize> ParseTermResize(std::span<const uint8_t> payload) {
     return size;
 }
 
+size_t BuildTermList(std::span<uint8_t> out) {
+    return WriteCommon(out, MsgType::TermList, 0, Chan::Terminal, 0, 0);
+}
+
+size_t BuildTermListAck(std::span<uint8_t> out, const TermSessionList& m) {
+    const size_t count =
+        m.sessions.size() < kMaxTermListEntries ? m.sessions.size() : kMaxTermListEntries;
+    size_t payload = 2;
+    for (size_t i = 0; i < count; ++i)
+        payload += 18 + Utf8TruncLen(m.sessions[i].clientName, kMaxClientNameBytes);
+    const size_t total = WriteCommon(out, MsgType::TermListAck, 0, Chan::Terminal, 0, payload);
+    if (!total) return 0;
+    uint8_t* p = out.data() + kCommonHeaderSize;
+    PutU16(p, uint16_t(count));
+    p += 2;
+    for (size_t i = 0; i < count; ++i) {
+        const TermSessionEntry& e = m.sessions[i];
+        const TermSize size = ClampTermSize(e.size);
+        const size_t nameLen = Utf8TruncLen(e.clientName, kMaxClientNameBytes);
+        PutU32(p, e.termId);
+        p[4] = uint8_t(e.state > TerminalState::Local ? TerminalState::Live : e.state);
+        PutU16(p + 5, size.cols);
+        PutU16(p + 7, size.rows);
+        PutU64(p + 9, e.openedUs);
+        p[17] = uint8_t(nameLen);
+        std::memcpy(p + 18, e.clientName.data(), nameLen);
+        p += 18 + nameLen;
+    }
+    return total;
+}
+
+std::optional<TermSessionList> ParseTermListAck(std::span<const uint8_t> payload) {
+    if (payload.size() < 2) return std::nullopt;
+    const size_t count = GetU16(payload.data());
+    if (count > kMaxTermListEntries) return std::nullopt;
+    TermSessionList m;
+    m.sessions.reserve(count);
+    std::span<const uint8_t> rest = payload.subspan(2);
+    for (size_t i = 0; i < count; ++i) {
+        if (rest.size() < 18) return std::nullopt;
+        if (rest[4] > uint8_t(TerminalState::Local)) return std::nullopt;
+        const TermSize size{GetU16(rest.data() + 5), GetU16(rest.data() + 7)};
+        if (!IsValidTermSize(size)) return std::nullopt;
+        const size_t nameLen = rest[17];
+        if (nameLen > kMaxClientNameBytes || nameLen > rest.size() - 18) return std::nullopt;
+        TermSessionEntry e;
+        e.termId = GetU32(rest.data());
+        e.state = TerminalState(rest[4]);
+        e.size = size;
+        e.openedUs = GetU64(rest.data() + 9);
+        e.clientName.assign(reinterpret_cast<const char*>(rest.data() + 18), nameLen);
+        m.sessions.push_back(std::move(e));
+        rest = rest.subspan(18 + nameLen);
+    }
+    return m;
+}
+
 std::optional<int32_t> ParseTermExit(std::span<const uint8_t> payload) {
     if (payload.size() < 4) return std::nullopt;
     return int32_t(GetU32(payload.data()));

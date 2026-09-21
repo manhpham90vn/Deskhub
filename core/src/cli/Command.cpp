@@ -632,6 +632,57 @@ void ParseShare(Command& command, Cursor& cursor) {
         command.error = BadValue("--bind", *share.bindIp);
 }
 
+void ParseShell(Command& command, Cursor& cursor) {
+    bool haveAddress = false;
+    while (More(cursor)) {
+        const std::string_view token = Take(cursor);
+        if (!IsFlagToken(token)) {
+            if (haveAddress) {
+                command.error = "shell takes one address, but got " + Quoted(token) + " as well";
+                return;
+            }
+            if (!TakeAddress(command, token)) return;
+            haveAddress = true;
+            continue;
+        }
+        const Flag flag = SplitFlag(token);
+        if (WantsHelp(flag)) {
+            command.helpFor = Verb::Shell;
+            command.verb = Verb::Help;
+            return;
+        }
+        if (ApplyGlobalFlag(command, flag) == FlagResult::Handled) continue;
+
+        if (!flag.hasInlineValue && flag.name == "--list") {
+            command.shell.list = true;
+            continue;
+        }
+        if (flag.name == "--resume") {
+            std::string text;
+            if (!ValueOf(flag, cursor, text, command.error)) return;
+            const std::optional<uint32_t> id = ParseUint(text);
+            if (!id || *id == 0) {
+                command.error = BadValue(flag.name, text);
+                return;
+            }
+            command.shell.resumeId = *id;
+            continue;
+        }
+
+        FlagResult result = ApplyPasscodeFlag(command, flag, cursor);
+        if (result == FlagResult::Failed) return;
+        if (result == FlagResult::Handled) continue;
+
+        result = ApplyTextFlag(command, flag, cursor, "--name", command.deviceName);
+        if (result == FlagResult::Failed) return;
+        if (result == FlagResult::Handled) continue;
+
+        command.error = UnknownOption(flag.name, Verb::Shell);
+        return;
+    }
+    if (!haveAddress) command.error = NeedsAddress(Verb::Shell);
+}
+
 void ParseConnect(Command& command, Cursor& cursor) {
     bool haveAddress = false;
     while (More(cursor)) {
@@ -765,7 +816,7 @@ Command ParseCommand(int argc, const char* const* argv) {
         case Verb::Trust: ParseTrust(command, cursor); break;
         case Verb::Settings: ParseSettings(command, cursor); break;
         case Verb::Share: ParseShare(command, cursor); break;
-        case Verb::Shell: ParseAddressVerb(command, cursor, true, false); break;
+        case Verb::Shell: ParseShell(command, cursor); break;
         case Verb::Connect: ParseConnect(command, cursor); break;
         case Verb::Send: ParseSend(command, cursor); break;
         case Verb::None: break;
@@ -966,13 +1017,18 @@ std::string UsageText(Verb verb) {
                    "F9 locks the pointer to the window, Escape lets it go again.\n";
         case Verb::Shell:
             return "Usage: " + program +
-                   " shell ADDRESS[:PORT] [--passcode VALUE] [--name NAME]\n"
+                   " shell ADDRESS[:PORT] [--passcode VALUE] [--name NAME] [--resume ID] [--list]\n"
                    "\n"
                    "Open a shell on a host and drive it from this terminal. Everything the\n"
                    "shell prints is written straight through, so your own terminal draws it.\n"
+                   "A shell outlives a dropped connection or a closed window: it stays on the\n"
+                   "host until its shell exits, so --list shows the shells left behind and\n"
+                   "--resume ID picks one back up instead of opening a new one.\n"
                    "\n"
                    "  --passcode VALUE  the host's passcode, the same way sources takes it\n"
-                   "  --name NAME       what the host sees this machine called\n";
+                   "  --name NAME       what the host sees this machine called\n"
+                   "  --resume ID       reattach a shell the host is keeping, by its id\n"
+                   "  --list            list the shells open on the host, then quit\n";
         case Verb::Send:
             return "Usage: " + program +
                    " send ADDRESS[:PORT] FILE [FILE...] [--passcode VALUE] [--name NAME]\n"

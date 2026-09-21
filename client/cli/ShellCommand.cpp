@@ -1,7 +1,9 @@
 #include "Commands.h"
 
+#include <atomic>
 #include <chrono>
 #include <cstdio>
+#include <mutex>
 #include <string>
 #include <thread>
 #include <vector>
@@ -10,6 +12,7 @@
 #include "Passcode.h"
 #include "Signals.h"
 
+#include "deskhub/ui/ShellPicker.h"
 #include "deskhub/ui/Strings.h"
 #include "deskhubp/net/UdpSocket.h"
 #include "deskhubp/client/TerminalViewer.h"
@@ -23,6 +26,7 @@ namespace deskhubcli {
 namespace {
 
 constexpr uint32_t kReadTimeoutMs = 50;
+constexpr uint32_t kListWaitMs = 30'000;
 constexpr size_t kSendChunkBytes = 256;
 
 void WriteThrough(std::span<const uint8_t> bytes) {
@@ -51,6 +55,69 @@ ExitCode CodeFor(deskhubp::TerminalViewerState state, bool keyChanged) {
     return ExitCode::Ok;
 }
 
+ExitCode ListShells(const Command& command, const NetAddr& host, const std::string& passcodeValue) {
+    deskhubp::TerminalViewerConfig config;
+    config.host = host;
+    config.hostLabel = command.address;
+    config.passcode = passcodeValue;
+    config.clientName =
+        command.deviceName ? *command.deviceName : deskhubp::SessionDeviceName();
+    config.size = SizeNow();
+    config.deferOpen = true;
+
+    std::mutex mutex;
+    deskhub::TermSessionList sessions;
+    bool listed = false;
+    std::atomic<bool> keyChanged{false};
+
+    deskhubp::TerminalViewerCallbacks hooks;
+    hooks.onSessions = [&](const deskhub::TermSessionList& list) {
+        const std::lock_guard<std::mutex> lock(mutex);
+        sessions = list;
+        listed = true;
+    };
+    hooks.onState = [&](deskhubp::TerminalViewerState state, std::string_view message) {
+        if (Finished(state)) {
+            const std::lock_guard<std::mutex> lock(mutex);
+            listed = true;
+        }
+        if (!command.quiet && !message.empty() && state != deskhubp::TerminalViewerState::Live)
+            PrintError(message);
+    };
+    hooks.onTrustAsked = [&](deskhub::TrustVerdict verdict, std::string_view) {
+        if (verdict == deskhub::TrustVerdict::Changed) keyChanged.store(true);
+    };
+
+    deskhubp::TerminalViewer viewer;
+    if (!viewer.Start(config, std::move(hooks))) {
+        PrintError(deskhub::ui::CouldNotConnectTo(command.address));
+        return ExitCode::Unreachable;
+    }
+    const auto deadline =
+        std::chrono::steady_clock::now() + std::chrono::milliseconds(kListWaitMs);
+    for (;;) {
+        {
+            const std::lock_guard<std::mutex> lock(mutex);
+            if (listed) break;
+        }
+        if (keyChanged.load() || Finished(viewer.State())) break;
+        if (std::chrono::steady_clock::now() >= deadline) break;
+        std::this_thread::sleep_for(std::chrono::milliseconds(kReadTimeoutMs));
+    }
+
+    const deskhubp::TerminalViewerState last = viewer.State();
+    viewer.Stop();
+    if (keyChanged.load()) return ExitCode::KeyChanged;
+    if (last == deskhubp::TerminalViewerState::Refused) return ExitCode::Refused;
+    if (last == deskhubp::TerminalViewerState::Failed) return ExitCode::Unreachable;
+    if (!command.quiet) {
+        const std::lock_guard<std::mutex> lock(mutex);
+        for (const deskhub::ui::ShellPickerRow& row : deskhub::ui::BuildShellPickerRows(sessions))
+            PrintLine(deskhub::ui::ShellPickerLine(row));
+    }
+    return ExitCode::Ok;
+}
+
 }
 
 ExitCode RunShell(const Command& command) {
@@ -76,6 +143,9 @@ ExitCode RunShell(const Command& command) {
     config.host = host;
     config.hostLabel = command.address;
     config.passcode = passcode.value;
+    config.resumeId = command.shell.resumeId;
+
+    if (command.shell.list) return ListShells(command, host, passcode.value);
     config.clientName =
         command.deviceName ? *command.deviceName : deskhubp::SessionDeviceName();
     config.size = SizeNow();

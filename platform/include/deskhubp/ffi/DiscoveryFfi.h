@@ -115,6 +115,7 @@ const char* dh_local_addresses(void);
 int dh_idle_host_status(uint16_t port, char* out, int capacity);
 int dh_sharing_status(uint16_t port, const char* passcode, bool allow_input, bool screen,
     bool terminal, bool files, char* out, int capacity);
+int dh_passcode_display(const char* passcode, char* out, int capacity);
 
 typedef struct {
     char name[80];

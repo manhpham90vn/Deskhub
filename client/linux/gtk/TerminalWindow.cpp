@@ -7,6 +7,7 @@
 #include <memory>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "gtk/GtkUtil.h"
 
@@ -14,6 +15,7 @@
 #include "deskhub/terminal/Palette.h"
 #include "deskhub/terminal/ScrollAnchor.h"
 #include "deskhub/terminal/VtParser.h"
+#include "deskhub/ui/ShellPicker.h"
 #include "deskhub/ui/Strings.h"
 #include "deskhubp/net/UdpSocket.h"
 #include "deskhubp/client/TerminalFeed.h"
@@ -128,6 +130,8 @@ private:
         g_signal_connect(grid_, "focus-out-event", G_CALLBACK(OnFocusChange), this);
         gtk_box_pack_start(GTK_BOX(box), grid_, TRUE, TRUE, 0);
 
+        BuildPicker(box);
+
         GtkWidget* footer = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
         gtk_widget_set_margin_start(footer, 8);
         gtk_widget_set_margin_end(footer, 8);
@@ -142,6 +146,147 @@ private:
         g_signal_connect(window_, "destroy", G_CALLBACK(OnDestroy), this);
 
         MeasureCell();
+    }
+
+    void BuildPicker(GtkWidget* box) {
+        picker_ = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
+        gtk_widget_set_no_show_all(picker_, TRUE);
+        gtk_widget_set_margin_start(picker_, 12);
+        gtk_widget_set_margin_end(picker_, 12);
+        gtk_widget_set_margin_top(picker_, 12);
+        gtk_widget_set_margin_bottom(picker_, 12);
+
+        GtkWidget* title = gtk_label_new(ui::kShellPickerTitle);
+        gtk_label_set_xalign(GTK_LABEL(title), 0.f);
+        gtk_box_pack_start(GTK_BOX(picker_), title, FALSE, FALSE, 0);
+
+        GtkWidget* scroller = gtk_scrolled_window_new(nullptr, nullptr);
+        gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scroller), GTK_POLICY_NEVER,
+            GTK_POLICY_AUTOMATIC);
+        list_ = gtk_list_box_new();
+        gtk_list_box_set_selection_mode(GTK_LIST_BOX(list_), GTK_SELECTION_SINGLE);
+        g_signal_connect(list_, "row-selected", G_CALLBACK(OnRowSelected), this);
+        g_signal_connect(list_, "row-activated", G_CALLBACK(OnRowActivated), this);
+        gtk_container_add(GTK_CONTAINER(scroller), list_);
+        gtk_box_pack_start(GTK_BOX(picker_), scroller, TRUE, TRUE, 0);
+
+        GtkWidget* actions = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
+        resumeButton_ = gtk_button_new_with_label(ui::kShellPickerResume);
+        g_signal_connect(resumeButton_, "clicked", G_CALLBACK(OnResumeClicked), this);
+        gtk_box_pack_start(GTK_BOX(actions), resumeButton_, FALSE, FALSE, 0);
+        closeButton_ = gtk_button_new_with_label(ui::kShellPickerClose);
+        g_signal_connect(closeButton_, "clicked", G_CALLBACK(OnCloseClicked), this);
+        gtk_box_pack_start(GTK_BOX(actions), closeButton_, FALSE, FALSE, 0);
+        GtkWidget* fresh = gtk_button_new_with_label(ui::kShellPickerNew);
+        g_signal_connect(fresh, "clicked", G_CALLBACK(OnFreshClicked), this);
+        gtk_box_pack_end(GTK_BOX(actions), fresh, FALSE, FALSE, 0);
+        gtk_box_pack_start(GTK_BOX(picker_), actions, FALSE, FALSE, 0);
+
+        gtk_box_pack_start(GTK_BOX(box), picker_, TRUE, TRUE, 0);
+    }
+
+    const ui::ShellPickerRow* SelectedRow() const {
+        GtkListBoxRow* row = gtk_list_box_get_selected_row(GTK_LIST_BOX(list_));
+        if (row == nullptr) return nullptr;
+        const gint at = gtk_list_box_row_get_index(row);
+        if (at < 0 || size_t(at) >= rows_.size()) return nullptr;
+        return &rows_[size_t(at)];
+    }
+
+    void RefreshPickerButtons() {
+        const ui::ShellPickerRow* row = SelectedRow();
+        gtk_widget_set_sensitive(resumeButton_, row != nullptr && row->resumable);
+        gtk_widget_set_sensitive(closeButton_, row != nullptr && row->closable);
+    }
+
+    void OnSessions(const std::vector<ui::ShellPickerRow>& rows) {
+        rows_ = rows;
+        if (!pickerShown_ && rows_.empty()) {
+            OpenFresh();
+            return;
+        }
+        GList* was = gtk_container_get_children(GTK_CONTAINER(list_));
+        for (GList* at = was; at != nullptr; at = at->next)
+            gtk_widget_destroy(GTK_WIDGET(at->data));
+        g_list_free(was);
+
+        for (const ui::ShellPickerRow& row : rows_) {
+            GtkWidget* label = gtk_label_new(ui::ShellPickerLine(row).c_str());
+            gtk_label_set_xalign(GTK_LABEL(label), 0.f);
+            gtk_widget_set_margin_start(label, 6);
+            gtk_widget_set_margin_end(label, 6);
+            gtk_widget_set_margin_top(label, 4);
+            gtk_widget_set_margin_bottom(label, 4);
+            gtk_list_box_insert(GTK_LIST_BOX(list_), label, -1);
+        }
+        gtk_widget_show_all(list_);
+        if (!rows_.empty())
+            gtk_list_box_select_row(GTK_LIST_BOX(list_),
+                gtk_list_box_get_row_at_index(GTK_LIST_BOX(list_), 0));
+        RefreshPickerButtons();
+        ShowPicker();
+    }
+
+    void ShowPicker() {
+        pickerShown_ = true;
+        gtk_widget_hide(grid_);
+        gtk_widget_set_no_show_all(picker_, FALSE);
+        gtk_widget_show_all(picker_);
+        gtk_label_set_text(GTK_LABEL(statusLabel_),
+            rows_.empty() ? ui::kShellPickerEmpty : ui::kTerminalPickSession);
+        gtk_widget_grab_focus(list_);
+    }
+
+    void HidePicker() {
+        pickerShown_ = false;
+        gtk_widget_hide(picker_);
+        gtk_widget_set_no_show_all(picker_, TRUE);
+        gtk_widget_show(grid_);
+        gtk_widget_grab_focus(grid_);
+    }
+
+    void ResumeSelected() {
+        const ui::ShellPickerRow* row = SelectedRow();
+        if (row == nullptr || !row->resumable || remote_ == nullptr) return;
+        remote_->viewer.ResumeSession(row->termId);
+        HidePicker();
+    }
+
+    void CloseSelected() {
+        const ui::ShellPickerRow* row = SelectedRow();
+        if (row == nullptr || !row->closable || remote_ == nullptr) return;
+        GtkWidget* ask = gtk_message_dialog_new(GTK_WINDOW(window_), GTK_DIALOG_MODAL,
+            GTK_MESSAGE_WARNING, GTK_BUTTONS_OK_CANCEL, "%s", ui::kShellPickerCloseAsk);
+        const gint answer = gtk_dialog_run(GTK_DIALOG(ask));
+        gtk_widget_destroy(ask);
+        if (answer != GTK_RESPONSE_OK) return;
+        remote_->viewer.CloseSession(row->termId);
+    }
+
+    void OpenFresh() {
+        if (remote_ == nullptr) return;
+        remote_->viewer.OpenNew();
+        HidePicker();
+    }
+
+    static void OnRowSelected(GtkListBox*, GtkListBoxRow*, gpointer user) {
+        static_cast<TerminalWindow*>(user)->RefreshPickerButtons();
+    }
+
+    static void OnRowActivated(GtkListBox*, GtkListBoxRow*, gpointer user) {
+        static_cast<TerminalWindow*>(user)->ResumeSelected();
+    }
+
+    static void OnResumeClicked(GtkButton*, gpointer user) {
+        static_cast<TerminalWindow*>(user)->ResumeSelected();
+    }
+
+    static void OnCloseClicked(GtkButton*, gpointer user) {
+        static_cast<TerminalWindow*>(user)->CloseSelected();
+    }
+
+    static void OnFreshClicked(GtkButton*, gpointer user) {
+        static_cast<TerminalWindow*>(user)->OpenFresh();
     }
 
     void ShowBuilt() {
@@ -165,8 +310,14 @@ private:
         config.passcode = launch.passcode;
         config.clientName = launch.clientName;
         config.size = CellsFor(kInitialGridW, kInitialGridH);
+        config.deferOpen = true;
 
         deskhubp::TerminalViewerCallbacks hooks;
+        hooks.onSessions = [token = alive_](const deskhub::TermSessionList& sessions) {
+            RunOnMain([token, rows = ui::BuildShellPickerRows(sessions)] {
+                if (TerminalWindow* self = *token) self->OnSessions(rows);
+            });
+        };
         hooks.onState = [token = alive_](deskhubp::TerminalViewerState state,
                             std::string_view message) {
             RunOnMain([token, state, copy = std::string(message)] {
@@ -457,6 +608,12 @@ private:
     GtkWidget* window_ = nullptr;
     GtkWidget* grid_ = nullptr;
     GtkWidget* statusLabel_ = nullptr;
+    GtkWidget* picker_ = nullptr;
+    GtkWidget* list_ = nullptr;
+    GtkWidget* resumeButton_ = nullptr;
+    GtkWidget* closeButton_ = nullptr;
+    bool pickerShown_ = false;
+    std::vector<ui::ShellPickerRow> rows_{};
     guint redrawTimerId_ = 0;
     PangoFontDescription* font_ = nullptr;
     int cellWidth_ = 8;

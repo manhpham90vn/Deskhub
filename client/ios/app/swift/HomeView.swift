@@ -34,7 +34,7 @@ struct HomeView: View {
             }
             .tag(2)
 
-            SettingsView(settings: model.settings) { port in
+            SettingsView(settings: model.settings, sharing: model.sharing) { port in
                 model.discovery.usePort(port)
             }
             .tabItem {

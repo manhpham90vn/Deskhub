@@ -38,6 +38,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
     ParseTermOpenAck(pl);
     ParseTermResize(pl);
     ParseTermExit(pl);
+    ParseTermListAck(pl);
 
     ClassifyPacket(d);
     for (std::span<const uint8_t> rest = d; !rest.empty();) {

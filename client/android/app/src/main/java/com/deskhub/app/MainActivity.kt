@@ -30,6 +30,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -67,10 +68,12 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.addPathNodes
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -210,6 +213,7 @@ private val HeadingColor = Color(0xFFE5E7EB)
 private val MutedColor = Color(0xFF9CA3AF)
 private val OnlineColor = Color(0xFF4ADE80)
 private val OfflineColor = Color(0xFFF87171)
+private val PasscodeCardColor = Color(0xFF111827)
 
 private val DeskhubDarkColors =
     darkColorScheme(
@@ -575,6 +579,46 @@ private fun portFieldText(addr: String): String {
     return port.toString()
 }
 
+@Composable
+private fun PasscodeCard(passcode: String) {
+    val context = LocalContext.current
+    val digits = remember(passcode) { NativeHost.passcodeDisplay(passcode) }
+    Column(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .background(PasscodeCardColor, RoundedCornerShape(12.dp))
+                .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Text(
+            NativeClient.string(NativeClient.STR_PASSCODE_SHARE_HEADING),
+            style = MaterialTheme.typography.labelLarge,
+            color = MutedColor,
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text(
+                NativeHost.passcodeDisplay(passcode),
+                modifier = Modifier.weight(1f),
+                fontSize = 34.sp,
+                fontWeight = FontWeight.Bold,
+                fontFamily = FontFamily.Monospace,
+                letterSpacing = 2.sp,
+                color = HeadingColor,
+            )
+            if (passcode.isNotEmpty()) {
+                OutlinedButton(onClick = { copyToClipboard(context, passcode) }) {
+                    Text(NativeClient.string(NativeClient.STR_COPY_PASSCODE_ACTION))
+                }
+            }
+        }
+    }
+}
+
 private fun copyToClipboard(
     context: Context,
     text: String,
@@ -756,6 +800,7 @@ private fun HostScreen(
             error = NativeHost.shareError
             rows = if (state == NativeHost.ShareState.SHARING) NativeHost.hostRows() else emptyList()
             addresses = NativeHost.localAddresses()
+            passcode = NativeHost.passcode()
             if (state == NativeHost.ShareState.SHARING && !NativeHost.isRunning()) onStopSharing()
             delay(POLL_INTERVAL_MS)
         }
@@ -763,8 +808,6 @@ private fun HostScreen(
 
     val sharing = state == NativeHost.ShareState.SHARING
     val starting = state == NativeHost.ShareState.STARTING
-    val trimmedCode = passcode.trim()
-    val ready = trimmedCode.isEmpty() || NativeClient.isValidPasscode(trimmedCode)
 
     Column(
         modifier =
@@ -801,17 +844,7 @@ private fun HostScreen(
             color = if (live) OnlineColor else MutedColor,
         )
 
-        OutlinedTextField(
-            value = passcode,
-            onValueChange = { typed ->
-                passcode = typed.filter { it.isDigit() }.take(NativeClient.passcodeDigits())
-            },
-            label = { Text(NativeClient.string(NativeClient.STR_PASSCODE_LABEL)) },
-            singleLine = true,
-            enabled = !sharing && !starting,
-            modifier = Modifier.fillMaxWidth(),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
-        )
+        PasscodeCard(passcode)
 
         var bindIp by remember { mutableStateOf(NativeHost.bindIp()) }
         var bindMenuOpen by remember { mutableStateOf(false) }
@@ -871,8 +904,6 @@ private fun HostScreen(
                     onStopSharing()
                     return@Button
                 }
-                val trimmed = passcode.trim()
-                NativeHost.savePasscode(trimmed)
                 val defaults = NativeHost.shareDefaults()
                 onStartSharing(
                     HostService.ShareRequest(
@@ -880,11 +911,11 @@ private fun HostScreen(
                         bitrateMbps = defaults.bitrateMbps,
                         maxDim = defaults.maxDim,
                         port = port,
-                        passcode = trimmed,
+                        passcode = passcode,
                     ),
                 )
             },
-            enabled = sharing || (ready && !starting),
+            enabled = sharing || !starting,
             modifier = Modifier.fillMaxWidth(),
         ) {
             Text(
@@ -900,20 +931,13 @@ private fun HostScreen(
 
         Text(
             if (sharing || receiving) {
-                NativeHost.sharingStatus(port, passcode.trim(), sharing)
+                NativeHost.sharingStatus(port, passcode, sharing)
             } else {
                 NativeHost.idleStatus(port)
             },
             style = MaterialTheme.typography.bodyMedium,
             color = MutedColor,
         )
-
-        if (!ready) {
-            Text(
-                NativeClient.string(NativeClient.STR_PASSCODE_INVALID),
-                color = MaterialTheme.colorScheme.error,
-            )
-        }
 
         if (error.isNotEmpty()) {
             Text(error, color = MaterialTheme.colorScheme.error)
@@ -1151,6 +1175,40 @@ private fun SettingsScreen(
             modifier = Modifier.fillMaxWidth(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
         )
+
+        SectionLabel(NativeClient.string(NativeClient.STR_SECTION_SECURITY))
+        var passcode by remember { mutableStateOf(NativeHost.passcode()) }
+        var hostIdle by remember { mutableStateOf(NativeHost.shareState == NativeHost.ShareState.IDLE) }
+        LaunchedEffect(Unit) {
+            while (true) {
+                hostIdle = NativeHost.shareState == NativeHost.ShareState.IDLE
+                delay(POLL_INTERVAL_MS)
+            }
+        }
+        val passcodeReady = passcode.isEmpty() || NativeClient.isValidPasscode(passcode)
+        OutlinedTextField(
+            value = passcode,
+            onValueChange = { typed ->
+                val digits = typed.filter { it.isDigit() }.take(NativeClient.passcodeDigits())
+                passcode = digits
+                if (digits.isEmpty() || NativeClient.isValidPasscode(digits)) {
+                    NativeHost.savePasscode(digits)
+                }
+            },
+            label = { Text(NativeClient.string(NativeClient.STR_PASSCODE_LABEL)) },
+            supportingText = { Text(NativeClient.string(NativeClient.STR_PASSCODE_HINT)) },
+            isError = !passcodeReady,
+            enabled = hostIdle,
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+        )
+        if (!passcodeReady) {
+            Text(
+                NativeClient.string(NativeClient.STR_PASSCODE_INVALID),
+                color = MaterialTheme.colorScheme.error,
+            )
+        }
 
         SectionLabel(NativeClient.string(NativeClient.STR_SECTION_SESSION))
         var clipboardSync by remember { mutableStateOf(NativeClient.clipboardSync()) }

@@ -210,6 +210,9 @@ int main() {
     RunHostRowsTests();
     RunDeviceRowsTests();
 
+    std::printf("--- ui: the shells a host is keeping, as a client sees them ---\n");
+    RunShellPickerTests();
+
     std::printf("--- ui: what a file transfer looks like while it runs ---\n");
     RunTransferViewTests();
 

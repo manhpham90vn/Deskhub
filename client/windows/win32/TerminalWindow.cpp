@@ -7,11 +7,13 @@
 #include <memory>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "WxUi.h"
 #include "deskhub/terminal/KeyEncoder.h"
 #include "deskhub/terminal/Palette.h"
 #include "deskhub/terminal/ScrollAnchor.h"
+#include "deskhub/ui/ShellPicker.h"
 #include "deskhub/ui/Strings.h"
 #include "deskhubp/diag/Log.h"
 #include "deskhubp/net/UdpSocket.h"
@@ -270,7 +272,9 @@ public:
         CreateStatusBar();
         grid_ = new TerminalGrid(this);
         grid_->onResize_ = [this] { ResizeToGrid(); };
+        BuildPicker();
         auto* sizer = new wxBoxSizer(wxVERTICAL);
+        sizer->Add(picker_, wxSizerFlags(1).Expand());
         sizer->Add(grid_, wxSizerFlags(1).Expand());
         SetSizerAndFit(sizer);
         Bind(wxEVT_CLOSE_WINDOW, &TerminalFrame::OnClose, this);
@@ -296,8 +300,13 @@ public:
         config.passcode = launch.passcode;
         config.clientName = launch.clientName;
         config.size = grid_->CellsThatFit();
+        config.deferOpen = true;
 
         deskhubp::TerminalViewerCallbacks hooks;
+        hooks.onSessions = [this](const deskhub::TermSessionList& sessions) {
+            std::vector<ui::ShellPickerRow> rows = ui::BuildShellPickerRows(sessions);
+            CallAfter([this, rows = std::move(rows)] { OnSessions(rows); });
+        };
         hooks.onState = [this](deskhubp::TerminalViewerState state, std::string_view message) {
             const std::string copy(message);
             CallAfter([this, state, copy] { OnViewerState(state, copy); });
@@ -324,6 +333,104 @@ public:
     }
 
 private:
+    void BuildPicker() {
+        picker_ = new wxPanel(this);
+        picker_->SetName("shell-picker");
+        auto* box = new wxBoxSizer(wxVERTICAL);
+        box->Add(new wxStaticText(picker_, wxID_ANY, ToWx(ui::kShellPickerTitle)),
+            wxSizerFlags().Border(wxALL, FromDIP(12)));
+
+        list_ = new wxListBox(picker_, wxID_ANY);
+        list_->SetName("shell-list");
+        list_->Bind(wxEVT_LISTBOX, [this](wxCommandEvent&) { RefreshPickerButtons(); });
+        list_->Bind(wxEVT_LISTBOX_DCLICK, [this](wxCommandEvent&) { ResumeSelected(); });
+        box->Add(list_, wxSizerFlags(1).Expand().Border(wxLEFT | wxRIGHT, FromDIP(12)));
+
+        auto* row = new wxBoxSizer(wxHORIZONTAL);
+        resumeBtn_ = new wxButton(picker_, wxID_ANY, ToWx(ui::kShellPickerResume));
+        resumeBtn_->SetName("shell-resume");
+        resumeBtn_->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { ResumeSelected(); });
+        closeBtn_ = new wxButton(picker_, wxID_ANY, ToWx(ui::kShellPickerClose));
+        closeBtn_->SetName("shell-close");
+        closeBtn_->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { CloseSelected(); });
+        auto* freshBtn = new wxButton(picker_, wxID_ANY, ToWx(ui::kShellPickerNew));
+        freshBtn->SetName("shell-new");
+        freshBtn->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { OpenFresh(); });
+        row->Add(resumeBtn_, wxSizerFlags().Border(wxRIGHT, FromDIP(8)));
+        row->Add(closeBtn_, wxSizerFlags().Border(wxRIGHT, FromDIP(8)));
+        row->AddStretchSpacer();
+        row->Add(freshBtn);
+        box->Add(row, wxSizerFlags().Expand().Border(wxALL, FromDIP(12)));
+
+        picker_->SetSizer(box);
+        picker_->Hide();
+    }
+
+    const ui::ShellPickerRow* Selected() const {
+        const int at = list_->GetSelection();
+        if (at == wxNOT_FOUND || size_t(at) >= rows_.size()) return nullptr;
+        return &rows_[size_t(at)];
+    }
+
+    void RefreshPickerButtons() {
+        const ui::ShellPickerRow* row = Selected();
+        resumeBtn_->Enable(row != nullptr && row->resumable);
+        closeBtn_->Enable(row != nullptr && row->closable);
+    }
+
+    void OnSessions(const std::vector<ui::ShellPickerRow>& rows) {
+        rows_ = rows;
+        if (!pickerShown_ && rows_.empty()) {
+            OpenFresh();
+            return;
+        }
+        list_->Clear();
+        for (const ui::ShellPickerRow& row : rows_)
+            list_->Append(ToWx(ui::ShellPickerLine(row)));
+        if (!rows_.empty()) list_->SetSelection(0);
+        RefreshPickerButtons();
+        ShowPicker();
+    }
+
+    void ShowPicker() {
+        pickerShown_ = true;
+        grid_->Hide();
+        picker_->Show();
+        Layout();
+        SetStatusText(ToWx(rows_.empty() ? ui::kShellPickerEmpty : ui::kTerminalPickSession));
+        list_->SetFocus();
+    }
+
+    void HidePicker() {
+        pickerShown_ = false;
+        picker_->Hide();
+        grid_->Show();
+        Layout();
+        grid_->SetFocus();
+    }
+
+    void ResumeSelected() {
+        const ui::ShellPickerRow* row = Selected();
+        if (row == nullptr || !row->resumable || remote_ == nullptr) return;
+        remote_->viewer.ResumeSession(row->termId);
+        HidePicker();
+    }
+
+    void CloseSelected() {
+        const ui::ShellPickerRow* row = Selected();
+        if (row == nullptr || !row->closable || remote_ == nullptr) return;
+        wxMessageDialog ask(this, ToWx(ui::kShellPickerCloseAsk), ToWx(ui::kShellPickerClose),
+            wxYES_NO | wxNO_DEFAULT | wxICON_WARNING);
+        if (ask.ShowModal() != wxID_YES) return;
+        remote_->viewer.CloseSession(row->termId);
+    }
+
+    void OpenFresh() {
+        if (remote_ == nullptr) return;
+        remote_->viewer.OpenNew();
+        HidePicker();
+    }
+
     void StartFeeding(const char* status) {
         grid_->Attach(feed_.get());
         grid_->SetFocus();
@@ -387,6 +494,12 @@ private:
     std::unique_ptr<deskhubp::TerminalFeed> feed_{};
     deskhubp::RemoteTerminalFeed* remote_ = nullptr;
     bool localEndShown_ = false;
+    bool pickerShown_ = false;
+    std::vector<ui::ShellPickerRow> rows_{};
+    wxPanel* picker_ = nullptr;
+    wxListBox* list_ = nullptr;
+    wxButton* resumeBtn_ = nullptr;
+    wxButton* closeBtn_ = nullptr;
     TerminalGrid* grid_ = nullptr;
     wxTimer redrawTimer_{};
 };

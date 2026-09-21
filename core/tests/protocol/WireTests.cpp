@@ -718,9 +718,53 @@ void TestTerminalWire() {
         ParseTermOpenAck(d);
         ParseTermResize(d);
         ParseTermExit(d);
+        ParseTermListAck(d);
         ReadRecord(d);
         ClassifyPacket(d);
     }
+    TermSessionList offered;
+    TermSessionEntry kept;
+    kept.termId = 7;
+    kept.state = TerminalState::Detached;
+    kept.size = TermSize{80, 24};
+    kept.openedUs = 123456;
+    kept.clientName = "Pixel 9";
+    offered.sessions.push_back(kept);
+    TermSessionEntry live;
+    live.termId = 9;
+    offered.sessions.push_back(live);
+    const size_t ln = BuildTermListAck(buf, offered);
+    Check(ln != 0, "a session listing fits the datagram");
+    const auto lh = ParseCommonHeader(std::span<const uint8_t>(buf, ln));
+    Check(lh && lh->type == MsgType::TermListAck && lh->chan == Chan::Terminal,
+        "TERM_LIST_ACK rides the terminal channel");
+    const auto parsed = ParseTermListAck(PayloadOf(std::span<const uint8_t>(buf, ln)));
+    Check(parsed && parsed->sessions.size() == 2, "both sessions come back");
+    Check(parsed && parsed->sessions[0].termId == 7 &&
+              parsed->sessions[0].state == TerminalState::Detached &&
+              parsed->sessions[0].size == TermSize{80, 24} &&
+              parsed->sessions[0].openedUs == 123456 && parsed->sessions[0].clientName == "Pixel 9",
+        "a kept shell round-trips with its state, size, age and owner");
+    Check(parsed && parsed->sessions[1].termId == 9 &&
+              parsed->sessions[1].state == TerminalState::Live &&
+              parsed->sessions[1].openedUs == 0 && parsed->sessions[1].clientName.empty(),
+        "and a fresh one keeps its defaults");
+
+    const size_t lq = BuildTermList(buf);
+    const auto lqh = ParseCommonHeader(std::span<const uint8_t>(buf, lq));
+    Check(lq != 0 && lqh && lqh->type == MsgType::TermList && lqh->chan == Chan::Terminal,
+        "TERM_LIST asks on the terminal channel with no payload at all");
+    Check(BuildTermList(tiny) == 0, "even the listing needs room for its header");
+
+    const uint8_t badState[] = {1, 0, 7, 0, 0, 0, 5, 80, 0, 24, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+    Check(!ParseTermListAck(badState).has_value(), "a state no shell can be in is rejected");
+    const uint8_t badCount[] = {uint8_t(kMaxTermListEntries + 1), 0};
+    Check(!ParseTermListAck(badCount).has_value(), "a listing larger than any host keeps is rejected");
+    const uint8_t cutShort[] = {1, 0, 7, 0, 0, 0, 1};
+    Check(!ParseTermListAck(cutShort).has_value(), "a listing cut mid-entry is rejected");
+    const uint8_t nameOverrun[] = {1, 0, 7, 0, 0, 0, 1, 80, 0, 24, 0, 0, 0, 0, 0, 0, 0, 0, 5, 'a', 'b'};
+    Check(!ParseTermListAck(nameOverrun).has_value(), "a name longer than the payload is rejected");
+    Check(!ParseTermListAck(std::span<const uint8_t>(buf, 1)).has_value(), "short TERM_LIST_ACK");
     Check(true, "the terminal parsers survived 300 garbage payloads");
 }
 

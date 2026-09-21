@@ -51,6 +51,14 @@ machine to the Internet.
 
 This is the honest list. Nothing below is solved today:
 
+- **A kept shell belongs to the pairing, not to the machine that opened it.** A
+  shell left behind on a host outlives the connection that opened it, with no time
+  limit, and every admitted machine can list the shells a host is keeping, reattach a
+  detached one, and close any of them. The id, size and device name of each shell are
+  part of that listing. So a second machine you pair — or one whose key you have not
+  revoked on the Devices page — can read back what an earlier shell was doing and
+  carry on in it. Revoke a device you no longer trust, and close the shells you are
+  finished with rather than leaving them.
 - **The first meeting is a leap of faith.** Pairing stops a machine-in-the-middle who
   arrives *later* — the key is pinned and a change is refused loudly. It cannot stop one
   who is already in the middle at the very first contact: with no passcode set, whoever

@@ -135,15 +135,18 @@ void TerminalSessions::CloseAll() {
     records_.clear();
 }
 
-std::vector<uint32_t> TerminalSessions::Expire(uint64_t nowUs) {
-    std::vector<uint32_t> gone;
+TermSessionList TerminalSessions::List() const {
+    TermSessionList out;
     for (const TerminalRecord& r : records_) {
-        if (r.state != TerminalState::Detached) continue;
-        if (nowUs - r.detachedUs < kTerminalReattachGraceUs) continue;
-        gone.push_back(r.termId);
+        TermSessionEntry e;
+        e.termId = r.termId;
+        e.state = r.state;
+        e.size = r.size;
+        e.openedUs = r.openedUs;
+        e.clientName = r.clientName;
+        out.sessions.push_back(std::move(e));
     }
-    for (uint32_t id : gone) Close(id);
-    return gone;
+    return out;
 }
 
 std::string TerminalAuditLine(const TerminalRecord& record, std::string_view what) {

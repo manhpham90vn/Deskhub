@@ -61,8 +61,7 @@ bool TerminalViewer::Start(const TerminalViewerConfig& config,
     outbox_.clear();
     outboxBytes_ = 0;
     lostAtUs_ = 0;
-    resumeRetryAtUs_ = 0;
-    resumeAttempts_ = 0;
+    ResetResumeBackoff();
     {
         const std::lock_guard<std::mutex> lock(commandMutex_);
         commands_.clear();
@@ -89,8 +88,7 @@ bool TerminalViewer::Start(const TerminalViewerConfig& config,
     };
     hooks.onOpened = [this](const deskhub::TermOpenAck& ack) {
         lostAtUs_ = 0;
-        resumeRetryAtUs_ = 0;
-        resumeAttempts_ = 0;
+        ResetResumeBackoff();
         SetState(TerminalViewerState::Live,
             ack.resumed ? deskhub::ui::kTerminalReattached : deskhub::ui::kTerminalConnected);
     };
@@ -105,6 +103,13 @@ bool TerminalViewer::Start(const TerminalViewerConfig& config,
     };
     hooks.onExit = [this](int32_t) {
         SetState(TerminalViewerState::Ended, deskhub::ui::kTerminalClosed);
+    };
+    hooks.onSessions = [this](const deskhub::TermSessionList& sessions) {
+        {
+            const std::lock_guard<std::mutex> lock(mutex_);
+            sessions_ = sessions;
+        }
+        if (cb_.onSessions) cb_.onSessions(sessions);
     };
     client_ = std::make_unique<deskhub::TerminalClient>(std::move(hooks));
 
@@ -178,7 +183,22 @@ void TerminalViewer::HandleLinkReady(bool resumed) {
         client_->Reattach();
         return;
     }
+    if (config_.resumeId != 0) {
+        client_->Resume(config_.resumeId);
+        SetState(TerminalViewerState::Reattaching, deskhub::ui::kTerminalReattaching);
+        return;
+    }
+    if (config_.deferOpen) {
+        client_->RequestList();
+        SetState(TerminalViewerState::Opening, deskhub::ui::kTerminalPickSession);
+        return;
+    }
     client_->Open(std::string(), config_.size, config_.clientName);
+}
+
+void TerminalViewer::ResetResumeBackoff() {
+    resumeRetryAtUs_ = 0;
+    resumeAttempts_ = 0;
 }
 
 void TerminalViewer::RetryResume(uint64_t nowUs) {
@@ -199,11 +219,53 @@ void TerminalViewer::RetryResume(uint64_t nowUs) {
     resumeRetryAtUs_ = nowUs + deskhub::ReconnectDelayUs(resumeAttempts_);
 }
 
+void TerminalViewer::RequestSessions() {
+    if (!Running()) return;
+    Post([this] {
+        if (client_) client_->RequestList();
+    });
+    if (channel_) channel_->Kick();
+}
+
+void TerminalViewer::OpenNew() {
+    if (!Running()) return;
+    Post([this] {
+        if (client_) client_->Open(std::string(), config_.size, config_.clientName);
+    });
+    if (channel_) channel_->Kick();
+}
+
+void TerminalViewer::ResumeSession(uint32_t termId) {
+    if (!Running() || termId == 0) return;
+    Post([this, termId] {
+        if (client_) client_->Resume(termId);
+    });
+    SetState(TerminalViewerState::Reattaching, deskhub::ui::kTerminalReattaching);
+    if (channel_) channel_->Kick();
+}
+
+void TerminalViewer::CloseSession(uint32_t termId) {
+    if (!Running() || termId == 0) return;
+    Post([this, termId] {
+        if (!client_) return;
+        const bool leavingOurOwn = client_->TermId() == termId;
+        client_->CloseSession(termId);
+        if (leavingOurOwn) {
+            SetState(TerminalViewerState::Ended, deskhub::ui::kTerminalClosed);
+            return;
+        }
+        client_->RequestList();
+    });
+    if (channel_) channel_->Kick();
+}
+
+std::vector<deskhub::TermSessionEntry> TerminalViewer::Sessions() const {
+    const std::lock_guard<std::mutex> lock(mutex_);
+    return sessions_.sessions;
+}
+
 void TerminalViewer::Stop() {
     if (Running()) {
-        if (State() == TerminalViewerState::Live) {
-            Post([this] { client_->Close(); });
-        }
         stop_.store(true, std::memory_order_release);
         if (channel_) channel_->Kick();
         if (thread_.joinable()) thread_.join();

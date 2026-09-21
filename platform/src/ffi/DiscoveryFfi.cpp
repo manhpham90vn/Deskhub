@@ -529,9 +529,13 @@ int dh_idle_host_status(uint16_t port, char* out, int capacity) {
 int dh_sharing_status(uint16_t port, const char* passcode, bool allow_input, bool screen,
     bool terminal, bool files, char* out, int capacity) {
     std::string text = ui::ShareSummaryLine(screen, terminal, files, port);
-    text += "\n" + ui::PasscodeNote(passcode ? passcode : "");
+    text += std::string("\n") + ui::PasscodeShareNote(passcode ? passcode : "");
     if (screen && !allow_input) text += std::string("\n") + ui::kViewOnlyNote;
     return FillText(out, capacity, text);
+}
+
+int dh_passcode_display(const char* passcode, char* out, int capacity) {
+    return FillText(out, capacity, ui::PasscodeDisplay(passcode ? passcode : ""));
 }
 
 int dh_scan_status_text(uint16_t port, char* out, int capacity) {

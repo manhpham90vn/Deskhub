@@ -38,6 +38,8 @@ struct TerminalViewerConfig {
     std::string passcode{};
     std::string clientName{};
     deskhub::TermSize size{};
+    uint32_t resumeId = 0;
+    bool deferOpen = false;
 };
 
 struct TerminalViewerCallbacks {
@@ -45,6 +47,7 @@ struct TerminalViewerCallbacks {
     std::function<void(std::span<const uint8_t> bytes)> onOutput;
     std::function<void(TerminalViewerState, std::string_view message)> onState;
     std::function<void(deskhub::TrustVerdict, std::string_view fingerprint)> onTrustAsked;
+    std::function<void(const deskhub::TermSessionList&)> onSessions;
 };
 
 using TerminalSnapshot = deskhub::term::TerminalSnapshot;
@@ -66,6 +69,11 @@ public:
     void SendText(std::string_view text);
     void Paste(std::string_view text);
     void Resize(deskhub::TermSize size);
+    void RequestSessions();
+    void OpenNew();
+    void ResumeSession(uint32_t termId);
+    void CloseSession(uint32_t termId);
+    std::vector<deskhub::TermSessionEntry> Sessions() const;
 
     TerminalViewerState State() const {
         return state_.load(std::memory_order_acquire);
@@ -84,6 +92,7 @@ private:
     void Loop();
     void HandleLinkReady(bool resumed);
     void RetryResume(uint64_t nowUs);
+    void ResetResumeBackoff();
     void OnLinkState(HostLinkState state, std::string_view message);
     void SetState(TerminalViewerState state, std::string_view message);
     void Post(std::function<void()> command);
@@ -102,6 +111,7 @@ private:
     std::string message_{};
     std::deque<std::vector<uint8_t>> outbox_{};
     size_t outboxBytes_ = 0;
+    deskhub::TermSessionList sessions_{};
 
     mutable std::mutex mutex_{};
     std::mutex commandMutex_{};

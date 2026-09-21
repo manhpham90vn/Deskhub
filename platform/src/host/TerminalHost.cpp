@@ -92,10 +92,6 @@ void TerminalHost::Loop() {
             DrainGone(nowUs);
             DrainKicks();
             PumpShells(nowUs);
-            for (uint32_t id : sessions_.Expire(nowUs)) {
-                shells_.erase(id);
-                LOGI("terminal host: gave up on detached session %u", unsigned(id));
-            }
         }
         SleepUs(kPumpWaitUs);
     }
@@ -120,6 +116,24 @@ void TerminalHost::HandleMessage(const NetAddr& from, std::span<const uint8_t> m
 
     const std::lock_guard<std::mutex> lock(mutex_);
     if (sock_ == nullptr) return;
+
+    if (header->type == deskhub::MsgType::TermList) {
+        std::vector<uint8_t> out(deskhub::kMaxDatagram);
+        out.resize(deskhub::BuildTermListAck(out, sessions_.List()));
+        SendToPeer(from, out);
+        return;
+    }
+
+    if (header->type == deskhub::MsgType::TermClose) {
+        const uint32_t asked = header->sessionId != 0 ? header->sessionId : TermIdFor(from);
+        const auto target = shells_.find(asked);
+        if (target == shells_.end()) return;
+        const deskhub::TerminalRecord* record = sessions_.Find(asked);
+        const bool anotherMachineIsInIt = record != nullptr &&
+                                          record->state == deskhub::TerminalState::Live && !(target->second.peer == from);
+        CloseShell(asked, 0, anotherMachineIsInIt);
+        return;
+    }
 
     if (header->type == deskhub::MsgType::TermOpen) {
         const std::optional<deskhub::TermOpen> request = deskhub::ParseTermOpen(payload);
@@ -185,9 +199,6 @@ void TerminalHost::HandleMessage(const NetAddr& from, std::span<const uint8_t> m
                 shell->second.pty->Resize(*size);
                 shell->second.mirror->Resize(deskhub::ClampTermSize(*size));
             }
-            return;
-        case deskhub::MsgType::TermClose:
-            CloseShell(termId, 0, false);
             return;
         default: return;
     }

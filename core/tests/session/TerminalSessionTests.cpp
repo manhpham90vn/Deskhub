@@ -183,7 +183,7 @@ void TestAttachLocal() {
         "it no longer counts as a remote session, but it still holds its slot");
     Check(!host.AttachLocal(9999), "taking over a stranger does nothing");
 
-    Check(host.Expire(1'000'000'000'000).empty(),
+    Check(host.Count() == 1,
         "a locally attached shell is never given up, however long it runs");
     Check(!host.Detach(id, 1000), "losing an old link cannot detach it");
     Check(host.Open(MakeRequest(kTestPasscode, id), 2000).reason == TermReason::NoSuchSession,
@@ -198,23 +198,46 @@ void TestAttachLocal() {
     Check(host.Find(id) == nullptr, "and forgets it");
 }
 
-void TestExpiry() {
-    std::printf("[term] a detached shell is kept for a while, then given up...\n");
+void TestDetachedPersists() {
+    std::printf("[term] a detached shell is kept until it ends, never timed out...\n");
     TerminalSessions host;
     host.SetSharing(true);
     const uint32_t kept = host.Open(MakeRequest(""), 0).termId;
-    const uint32_t gone = host.Open(MakeRequest(""), 0).termId;
-    host.Detach(gone, 1000);
+    const uint32_t dropped = host.Open(MakeRequest(""), 0).termId;
+    host.Detach(dropped, 1000);
 
-    Check(host.Expire(1000).empty(), "a session that just detached is not given up");
-    Check(host.Expire(1000 + kTerminalReattachGraceUs - 1).empty(),
-        "nor one still inside the grace period");
-    const std::vector<uint32_t> expired = host.Expire(1000 + kTerminalReattachGraceUs);
-    Check(expired.size() == 1 && expired[0] == gone,
-        "once the grace period is up the caller is told which shell to kill");
-    Check(host.Find(gone) == nullptr && host.Find(kept) != nullptr,
-        "and only that one is dropped");
-    Check(host.Expire(1'000'000'000).empty(), "a live session is never expired");
+    Check(host.Count() == 2, "two shells are on the list");
+    Check(host.Find(dropped) != nullptr && host.Find(dropped)->state == TerminalState::Detached,
+        "a session that detached stays on the list, detached");
+    Check(host.Find(kept) != nullptr, "and so does the live one");
+
+    const TermOpenAck back = host.Open(MakeRequest("", dropped), 10'000'000'000);
+    Check(back.reason == TermReason::Accepted && back.termId == dropped && back.resumed,
+        "years later in host time a client still gets its shell back");
+    Check(host.Close(kept) && host.Close(dropped), "closing ends them for good");
+    Check(host.Count() == 0, "and the list is empty again");
+}
+
+void TestSessionList() {
+    std::printf("[term] the host can describe every shell it is keeping...\n");
+    TerminalSessions host;
+    host.SetSharing(true);
+    Check(host.List().sessions.empty(), "with nothing open the list is empty");
+
+    const uint32_t first = host.Open(MakeRequest(""), 1000).termId;
+    const uint32_t second = host.Open(MakeRequest(""), 2000).termId;
+    host.Detach(second, 3000);
+    host.AttachLocal(first);
+
+    const TermSessionList list = host.List();
+    Check(list.sessions.size() == 2, "every open shell is described, whatever its state");
+    Check(list.sessions[0].termId == first && list.sessions[0].state == TerminalState::Local,
+        "the first was taken over at the host");
+    Check(list.sessions[0].size == TermSize{100, 30} && list.sessions[0].openedUs == 1000,
+        "with its size and when it started");
+    Check(list.sessions[0].clientName == "Pixel 9", "and who opened it");
+    Check(list.sessions[1].termId == second && list.sessions[1].state == TerminalState::Detached,
+        "the second is waiting for its client");
 }
 
 void TestRecordStream() {
@@ -290,6 +313,7 @@ struct ClientHarness {
     std::vector<int32_t> exits{};
     size_t opens = 0;
     bool lastResumed = false;
+    std::vector<TermSessionList> lists{};
 
     ClientHarness()
         : client(TerminalClientCallbacks{}) {
@@ -312,6 +336,7 @@ std::unique_ptr<ClientHarness> MakeClient() {
     };
     cb.onRefused = [raw](TermReason reason) { raw->refusals.push_back(reason); };
     cb.onExit = [raw](int32_t code) { raw->exits.push_back(code); };
+    cb.onSessions = [raw](const TermSessionList& list) { raw->lists.push_back(list); };
     harness->client = TerminalClient(std::move(cb));
     return harness;
 }
@@ -453,6 +478,87 @@ void TestClientReattachAndRefusal() {
         "and asking anyway does nothing");
 }
 
+void TestClientListAndResume() {
+    std::printf("[term] the client can ask what the host is keeping, and name the one it wants...\n");
+    auto h = MakeClient();
+    const size_t before = h->sent.size();
+    h->client.RequestList();
+    Check(h->sent.size() == before + 1, "asking sends one message");
+    const auto asked = ParseCommonHeader(h->sent.back());
+    Check(asked && asked->type == MsgType::TermList && asked->chan == Chan::Terminal,
+        "which is a session listing on the terminal channel");
+
+    TermSessionList offered;
+    TermSessionEntry kept;
+    kept.termId = 6;
+    kept.state = TerminalState::Detached;
+    kept.size = TermSize{80, 24};
+    kept.openedUs = 777;
+    kept.clientName = "Pixel 9";
+    offered.sessions.push_back(kept);
+    std::vector<uint8_t> reply(kMaxDatagram);
+    reply.resize(BuildTermListAck(reply, offered));
+    h->client.HandleMessage(reply);
+    Check(h->lists.size() == 1 && h->lists[0].sessions.size() == 1,
+        "the answer is remembered and reported");
+    Check(h->client.Sessions().sessions.size() == 1 &&
+              h->client.Sessions().sessions[0].termId == 6 &&
+              h->client.Sessions().sessions[0].state == TerminalState::Detached,
+        "and can be read back");
+
+    h->client.Resume(6);
+    Check(h->client.State() == TerminalClientState::Reattaching, "resuming puts it in flight");
+    const auto again = ParseTermOpen(PayloadOf(h->sent.back()));
+    Check(again && again->resumeId == 6, "naming the session it wants back");
+    h->client.HandleMessage(AckMessage(6, TermReason::Accepted, true));
+    Check(h->client.State() == TerminalClientState::Open, "and the host hands it back");
+    const size_t attached = h->sent.size();
+    h->client.Resume(7);
+    Check(h->sent.size() == attached, "naming another while attached sends nothing");
+
+    h->client.Resume(0);
+    Check(h->client.State() == TerminalClientState::Open, "resuming nothing changes nothing");
+
+    auto shut = MakeClient();
+    shut->client.Open("", TermSize{80, 24}, "");
+    shut->client.HandleMessage(AckMessage(3, TermReason::Accepted, false));
+    shut->client.Close();
+    const size_t quiet = shut->sent.size();
+    shut->client.RequestList();
+    shut->client.Resume(3);
+    Check(shut->sent.size() == quiet, "a closed client sends nothing more");
+}
+
+void TestClientClosesAShellItIsNotIn() {
+    std::printf("[term] the client can end a shell it never attached to...\n");
+    auto h = MakeClient();
+    const size_t before = h->sent.size();
+    h->client.CloseSession(6);
+    Check(h->sent.size() == before + 1, "asking to close sends one message");
+    const auto asked = ParseCommonHeader(h->sent.back());
+    Check(asked && asked->type == MsgType::TermClose && asked->chan == Chan::Terminal,
+        "which is a close on the terminal channel");
+    Check(asked && asked->sessionId == 6, "naming the shell to end");
+    Check(h->client.State() != TerminalClientState::Closed,
+        "and ending someone else's shell does not end the client");
+
+    h->client.CloseSession(0);
+    Check(h->sent.size() == before + 1, "there is no shell zero to close");
+
+    auto mine = MakeClient();
+    mine->client.Open("", TermSize{80, 24}, "");
+    mine->client.HandleMessage(AckMessage(4, TermReason::Accepted, false));
+    mine->client.CloseSession(4);
+    const auto ended = ParseCommonHeader(mine->sent.back());
+    Check(ended && ended->type == MsgType::TermClose && ended->sessionId == 4,
+        "closing the shell we are in tells the host");
+    Check(mine->client.State() == TerminalClientState::Closed && mine->client.TermId() == 0,
+        "and takes the client down with it");
+    const size_t quiet = mine->sent.size();
+    mine->client.CloseSession(9);
+    Check(mine->sent.size() == quiet, "a closed client closes nothing further");
+}
+
 void TestClientIgnoresJunk() {
     std::printf("[term] the client drops anything that is not its own protocol...\n");
     auto h = MakeClient();
@@ -495,9 +601,12 @@ void RunTerminalSessionTests() {
     TestResizeAndDetach();
     TestReattach();
     TestAttachLocal();
-    TestExpiry();
+    TestDetachedPersists();
+    TestSessionList();
     TestRecordStream();
     TestClientLifecycle();
     TestClientReattachAndRefusal();
+    TestClientListAndResume();
+    TestClientClosesAShellItIsNotIn();
     TestClientIgnoresJunk();
 }

@@ -21,6 +21,10 @@ nonisolated enum DeskhubClient {
         buffered(320) { dh_host_title(address, width, height, $0, $1) }
     }
 
+    static func passcodeDisplay(_ passcode: String) -> String {
+        buffered(32) { dh_passcode_display(passcode, $0, $1) }
+    }
+
     static func zoomLabel(_ zoom: Double) -> String {
         buffered(32) { dh_zoom_label(zoom, $0, $1) }
     }
@@ -35,6 +39,13 @@ nonisolated enum DeskhubClient {
 
     static func linkPingText(haveRtt: Bool, rttMs: UInt32) -> String {
         buffered(32) { dh_link_ping_text(haveRtt, rttMs, $0, $1) }
+    }
+
+    static func text(of field: inout some Any) -> String {
+        withUnsafeBytes(of: &field) { raw in
+            guard let base = raw.baseAddress else { return "" }
+            return String(cString: base.assumingMemoryBound(to: CChar.self))
+        }
     }
 
     static func buffered(

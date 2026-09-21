@@ -96,6 +96,8 @@ object NativeHost {
 
     private external fun nativePasscode(): String
 
+    private external fun nativePasscodeDisplay(passcode: String): String
+
     private external fun nativeSavePasscode(passcode: String)
 
     private external fun nativeShareDefaults(): IntArray
@@ -243,6 +245,8 @@ object NativeHost {
     fun idleStatus(port: Int): String = nativeIdleStatus(port)
 
     fun passcode(): String = nativePasscode()
+
+    fun passcodeDisplay(passcode: String): String = nativePasscodeDisplay(passcode)
 
     fun savePasscode(passcode: String) = nativeSavePasscode(passcode)
 

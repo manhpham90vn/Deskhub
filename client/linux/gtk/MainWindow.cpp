@@ -49,6 +49,7 @@ constexpr int kConnectionWindowWidth = 460;
 constexpr int kPrimaryButtonH = 46;
 
 constexpr guint kRescanDelayMs = deskhubp::kLanRescanSecs * 1000;
+constexpr guint kCopiedRevertMs = 1500;
 
 constexpr int kHostActionWidth = 104;
 constexpr int kHostActionHeight = 26;
@@ -102,6 +103,10 @@ const char* const kStyleSheet =
     ".deskhub-banner-state { font-weight: bold; font-size: 1.1em; color: #6b7280; }"
     ".deskhub-banner-state-busy { color: #2563eb; }"
     ".deskhub-banner-state-live { color: #00913c; }"
+    ".deskhub-passcode-card { padding: 10px; border-radius: 8px;"
+    " background-color: #eff4ff; }"
+    ".deskhub-passcode-code { font-family: monospace; font-weight: bold; font-size: 2.2em;"
+    " letter-spacing: 4px; color: #111827; }"
     ".deskhub-primary { font-weight: bold; color: #ffffff; background-image: none;"
     " background-color: #2563eb; border: none; }"
     ".deskhub-primary:hover { background-color: #2563eb; }"
@@ -651,6 +656,20 @@ GtkWidget* MainWindow::BuildHostPage() {
     gtk_label_set_line_wrap(GTK_LABEL(hostStatusLabel_), TRUE);
     gtk_box_pack_start(GTK_BOX(hostBanner_), hostStatusLabel_, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(box), hostBanner_, FALSE, FALSE, 0);
+
+    hostPasscodeCard_ = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
+    AddClass(hostPasscodeCard_, "deskhub-passcode-card");
+    GtkWidget* passcodeText = gtk_box_new(GTK_ORIENTATION_VERTICAL, 2);
+    gtk_box_pack_start(GTK_BOX(passcodeText), Hint(ui::kPasscodeShareHeading), FALSE, FALSE, 0);
+    hostPasscodeLabel_ = StyledLabel(std::string(), "deskhub-passcode-code");
+    gtk_label_set_selectable(GTK_LABEL(hostPasscodeLabel_), TRUE);
+    gtk_box_pack_start(GTK_BOX(passcodeText), hostPasscodeLabel_, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(hostPasscodeCard_), passcodeText, TRUE, TRUE, 0);
+    hostPasscodeCopy_ = gtk_button_new_with_label(ui::kCopyPasscodeAction);
+    gtk_widget_set_valign(hostPasscodeCopy_, GTK_ALIGN_CENTER);
+    g_signal_connect(hostPasscodeCopy_, "clicked", G_CALLBACK(OnCopyPasscodeClicked), this);
+    gtk_box_pack_start(GTK_BOX(hostPasscodeCard_), hostPasscodeCopy_, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(box), hostPasscodeCard_, FALSE, FALSE, 0);
 
     GtkWidget* pickerBox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 6);
     AddClass(pickerBox, "deskhub-picker");
@@ -1226,6 +1245,7 @@ void MainWindow::ApplyHostState(HostShareState state, const std::string& detail)
     gtk_label_set_text(GTK_LABEL(hostStateLabel_),
         sharing ? ui::kShareStateOn : (starting ? ui::kStartingShare : ui::kShareStateOff));
     gtk_label_set_text(GTK_LABEL(hostStatusLabel_), detail.c_str());
+    ShowPasscodeCard();
 
     RemoveClass(hostBanner_, "deskhub-banner-busy");
     RemoveClass(hostBanner_, "deskhub-banner-live");
@@ -1254,6 +1274,39 @@ void MainWindow::ApplyHostState(HostShareState state, const std::string& detail)
 
 void MainWindow::ShowIdleHostState() {
     ApplyHostState(HostShareState::kIdle, HostPortDetail());
+}
+
+const std::string& MainWindow::ShownPasscode() const {
+    return hosting_ ? sharePasscode_ : settings_.passcode;
+}
+
+void MainWindow::ShowPasscodeCard() {
+    if (copiedRevertId_) {
+        g_source_remove(copiedRevertId_);
+        copiedRevertId_ = 0;
+    }
+    const std::string& code = ShownPasscode();
+    gtk_label_set_text(GTK_LABEL(hostPasscodeLabel_), ui::PasscodeDisplay(code).c_str());
+    gtk_button_set_label(GTK_BUTTON(hostPasscodeCopy_), ui::kCopyPasscodeAction);
+    gtk_widget_set_no_show_all(hostPasscodeCopy_, code.empty());
+    gtk_widget_set_visible(hostPasscodeCopy_, !code.empty());
+}
+
+gboolean MainWindow::OnCopiedRevertTimer(gpointer user) {
+    MainWindow* self = static_cast<MainWindow*>(user);
+    self->copiedRevertId_ = 0;
+    self->ShowPasscodeCard();
+    return G_SOURCE_REMOVE;
+}
+
+void MainWindow::OnCopyPasscodeClicked(GtkButton* b, gpointer user) {
+    MainWindow* self = static_cast<MainWindow*>(user);
+    const std::string& code = self->ShownPasscode();
+    if (code.empty()) return;
+    gtk_clipboard_set_text(gtk_clipboard_get(GDK_SELECTION_CLIPBOARD), code.c_str(), -1);
+    gtk_button_set_label(b, ui::kPasscodeCopied);
+    if (self->copiedRevertId_) g_source_remove(self->copiedRevertId_);
+    self->copiedRevertId_ = g_timeout_add(kCopiedRevertMs, OnCopiedRevertTimer, self);
 }
 
 void MainWindow::SaveSettings() {
@@ -1846,7 +1899,7 @@ void MainWindow::OnHostStarted(bool started, const std::string& error,
 
     screenSharing_ = !share_.sharingHost().Status().empty();
     sharePort_ = options.port;
-    sharePasscodeNote_ = ui::PasscodeNote(options.passcode);
+    sharePasscode_ = options.passcode;
     shareViewOnly_ = !options.allowInput;
     shareBindWarning_ = share_.sharingHost().BindWarning();
     if (terminalRequested_) share_.StartTerminalShare();
@@ -1872,7 +1925,7 @@ void MainWindow::ApplySharingBanner() {
     banner.hosting = hosting_;
     banner.port = sharePort_;
     banner.viewOnly = shareViewOnly_;
-    banner.passcodeNote = sharePasscodeNote_;
+    banner.passcodeNote = ui::PasscodeShareNote(sharePasscode_);
     banner.bindWarning = shareBindWarning_;
     ApplyHostState(HostShareState::kSharing, share_.BannerText(banner));
 }
@@ -1900,7 +1953,7 @@ void MainWindow::StopHosting() {
     filesRequested_ = false;
     shareViewOnly_ = false;
     sharePort_ = 0;
-    sharePasscodeNote_.clear();
+    sharePasscode_.clear();
     shareBindWarning_.clear();
     hostStatus_.clear();
     tray_.SetSharing(false);

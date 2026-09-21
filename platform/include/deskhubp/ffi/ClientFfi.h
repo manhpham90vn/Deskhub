@@ -266,6 +266,16 @@ typedef enum {
     DHStrLinkQualityPoor = 155,
     DHStrLinkNoReading = 156,
     DHStrLinkReattaching = 157,
+    DHStrShellPickerTitle = 158,
+    DHStrShellPickerEmpty = 159,
+    DHStrShellPickerResume = 160,
+    DHStrShellPickerNew = 161,
+    DHStrShellPickerClose = 162,
+    DHStrShellPickerCloseAsk = 163,
+    DHStrPasscodeShareHeading = 164,
+    DHStrPasscodeNoneSet = 165,
+    DHStrCopyPasscodeAction = 166,
+    DHStrPasscodeCopied = 167,
 } DHStringId;
 
 int dh_link_quality_text(DHLinkQuality quality, char* out, int capacity);

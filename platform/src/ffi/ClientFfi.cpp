@@ -70,6 +70,10 @@ const char* dh_string(DHStringId id) {
         case DHStrClientPasscodeHint: return deskhub::ui::kClientPasscodeHint;
         case DHStrPasscodeInvalid: return deskhub::ui::kPasscodeInvalid;
         case DHStrPasscodeLabel: return deskhub::ui::kPasscodeLabel;
+        case DHStrPasscodeShareHeading: return deskhub::ui::kPasscodeShareHeading;
+        case DHStrPasscodeNoneSet: return deskhub::ui::kPasscodeNoneSet;
+        case DHStrCopyPasscodeAction: return deskhub::ui::kCopyPasscodeAction;
+        case DHStrPasscodeCopied: return deskhub::ui::kPasscodeCopied;
         case DHStrLanDevicesHeading: return deskhub::ui::kLanDevicesHeading;
         case DHStrRecentDevicesHeading: return deskhub::ui::kRecentDevicesHeading;
         case DHStrRecentDevicesHint: return deskhub::ui::kRecentDevicesHint;
@@ -201,6 +205,12 @@ const char* dh_string(DHStringId id) {
         case DHStrTerminalLocalWindowTitle: return deskhub::ui::kTerminalLocalWindowTitle;
         case DHStrTerminalAttachedHere: return deskhub::ui::kTerminalAttachedHere;
         case DHStrTerminalClosed: return deskhub::ui::kTerminalClosed;
+        case DHStrShellPickerTitle: return deskhub::ui::kShellPickerTitle;
+        case DHStrShellPickerEmpty: return deskhub::ui::kShellPickerEmpty;
+        case DHStrShellPickerResume: return deskhub::ui::kShellPickerResume;
+        case DHStrShellPickerNew: return deskhub::ui::kShellPickerNew;
+        case DHStrShellPickerClose: return deskhub::ui::kShellPickerClose;
+        case DHStrShellPickerCloseAsk: return deskhub::ui::kShellPickerCloseAsk;
         case DHStrShareClampWarning: {
             static const std::string warning = deskhub::ui::ShareClampWarning();
             return warning.c_str();

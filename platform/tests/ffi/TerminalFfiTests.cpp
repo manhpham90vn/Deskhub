@@ -268,9 +268,39 @@ void RunTerminalFfiTests() {
               10000),
         "a resize through the C ABI reaches the host");
 
+    const std::vector<deskhub::TerminalRecord> held = rig.term.Sessions();
+    const uint32_t kept = held.empty() ? 0 : held[0].termId;
     dh_term_stop(session);
-    Check(WaitForMs([&rig] { return rig.term.SessionCount() == 0; }, 10000),
-        "closing the session ends the shell on the host");
+    Check(WaitForMs(
+              [&rig] {
+                  const std::vector<deskhub::TerminalRecord> left = rig.term.Sessions();
+                  return left.size() == 1 &&
+                         left[0].state == deskhub::TerminalState::Detached;
+              },
+              10000) &&
+              kept != 0,
+        "stopping the viewer leaves the shell on the host, detached rather than ended");
+
+    DHTermSession* picker =
+        dh_term_open_deferred(address.c_str(), kTestPasscode, 80, 24, &callbacks);
+    Check(picker != nullptr, "a second session opens without asking for a shell of its own");
+    if (picker != nullptr) {
+        Check(WaitForMs([picker] { return dh_term_sessions_known(picker); }, 20000),
+            "and is told what the host is keeping before it decides what to show");
+        Check(dh_term_session_count(picker) == 1, "which is the one shell left behind");
+        DHTermSessionInfo info{};
+        Check(dh_term_session_info(picker, 0, &info) && info.termId == kept &&
+                  info.state == int32_t(deskhub::TerminalState::Detached),
+            "with the id and state a picker needs to offer it");
+        Check(info.resumable && info.closable && info.line[0] != 0,
+            "and the row text and verbs the picker draws from core");
+        Check(!dh_term_session_info(picker, 1, &info), "and nothing past the end");
+
+        dh_term_close_session(picker, kept);
+        Check(WaitForMs([&rig] { return rig.term.SessionCount() == 0; }, 10000),
+            "closing that shell by id through the C ABI ends it on the host");
+        dh_term_stop(picker);
+    }
 
     rig.Stop();
     if (!savedCert.empty()) deskhubp::WriteAppDataFile(deskhubp::kHostCertFileName, savedCert);

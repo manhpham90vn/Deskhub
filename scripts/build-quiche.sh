@@ -192,6 +192,10 @@ prefer_android_sdk_cmake() {
     export CMAKE_GENERATOR=Ninja
 }
 
+bindgen_args_single_ndk_resource() {
+    printf '%s' "--target=$1 -isystem$2 -nobuiltininc"
+}
+
 build_android_with_ndk_clang() {
     local target=$1
     local triple_u triple_upper ndk prebuilt bin resource clang_target
@@ -225,7 +229,8 @@ build_android_with_ndk_clang() {
     export "CXXFLAGS_$triple_u=--target=$clang_target"
     export "CARGO_TARGET_${triple_upper}_LINKER=$bin/clang.exe"
     export "CARGO_TARGET_${triple_upper}_RUSTFLAGS=-Clink-arg=--target=$clang_target"
-    export BINDGEN_EXTRA_CLANG_ARGS="--target=$clang_target -isystem$resource"
+    BINDGEN_EXTRA_CLANG_ARGS="$(bindgen_args_single_ndk_resource "$clang_target" "$resource")"
+    export BINDGEN_EXTRA_CLANG_ARGS
     prefer_runtime_checks "$target"
 
     cargo build --release --target "$target" -p quiche --features ffi >/dev/null

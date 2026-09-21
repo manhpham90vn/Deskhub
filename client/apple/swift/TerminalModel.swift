@@ -36,11 +36,20 @@ struct TerminalGridSnapshot {
     }
 }
 
+struct ShellRow: Identifiable, Equatable {
+    var id: UInt32
+    var line: String
+    var resumable: Bool
+    var closable: Bool
+}
+
 @MainActor protocol TerminalFeed {
     var state: Int32 { get }
     var message: String { get }
     var trustVerdict: Int32 { get }
     var fingerprint: String { get }
+    var shells: [ShellRow] { get }
+    var shellsKnown: Bool { get }
 
     func answerTrust(_ accept: Bool)
     func grid(
@@ -51,20 +60,77 @@ struct TerminalGridSnapshot {
     func sendText(_ text: String)
     func paste(_ text: String)
     func resize(cols: UInt16, rows: UInt16)
+    func requestShells()
+    func resumeShell(_ termId: UInt32)
+    func closeShell(_ termId: UInt32)
+    func openFreshShell()
     func stop()
+}
+
+extension TerminalFeed {
+    var shells: [ShellRow] { [] }
+    var shellsKnown: Bool { false }
+    func requestShells() {}
+    func resumeShell(_: UInt32) {}
+    func closeShell(_: UInt32) {}
+    func openFreshShell() {}
 }
 
 @MainActor
 final class RemoteTerminalFeed: TerminalFeed {
     private var handle: OpaquePointer?
 
-    init?(address: String, passcode: String, cols: UInt16, rows: UInt16) {
+    init?(address: String, passcode: String, cols: UInt16, rows: UInt16, picker: Bool = true) {
         var callbacks = DHTermCallbacks()
         callbacks.onTrustAsked = { _, _, _ in }
-        guard let opened = dh_term_open(address, passcode, cols, rows, &callbacks) else {
-            return nil
-        }
+        let opened = picker
+            ? dh_term_open_deferred(address, passcode, cols, rows, &callbacks)
+            : dh_term_open(address, passcode, cols, rows, &callbacks)
+        guard let opened else { return nil }
         handle = opened
+    }
+
+    var shellsKnown: Bool {
+        guard let handle else { return false }
+        return dh_term_sessions_known(handle)
+    }
+
+    var shells: [ShellRow] {
+        guard let handle else { return [] }
+        var rows: [ShellRow] = []
+        var info = DHTermSessionInfo()
+        for index in 0 ..< dh_term_session_count(handle) {
+            guard dh_term_session_info(handle, index, &info) else { continue }
+            rows.append(
+                ShellRow(
+                    id: info.termId,
+                    line: DeskhubClient.text(of: &info.line),
+                    resumable: info.resumable,
+                    closable: info.closable
+                )
+            )
+        }
+        return rows
+    }
+
+    func requestShells() {
+        guard let handle else { return }
+        dh_term_request_sessions(handle)
+    }
+
+    func resumeShell(_ termId: UInt32) {
+        guard let handle else { return }
+        dh_term_resume(handle, termId)
+    }
+
+    func closeShell(_ termId: UInt32) {
+        guard let handle else { return }
+        dh_term_close_session(handle, termId)
+    }
+
+    func openFreshShell() {
+        guard let handle else { return }
+        dh_term_open_new(handle)
     }
 
     var state: Int32 {
@@ -147,6 +213,9 @@ final class TerminalModel {
     var state: Int32 = 0
     var message = ""
     var grid = TerminalGridSnapshot()
+    var shells: [ShellRow] = []
+    var showingPicker = false
+    private var pickerSettled = false
     var askingTrust = false
     var trustChanged = false
     var trustFingerprint = ""
@@ -167,6 +236,33 @@ final class TerminalModel {
         return true
     }
 
+    func resumeShell(_ termId: UInt32) {
+        showingPicker = false
+        feed?.resumeShell(termId)
+    }
+
+    func closeShell(_ termId: UInt32) {
+        feed?.closeShell(termId)
+    }
+
+    func openFreshShell() {
+        showingPicker = false
+        feed?.openFreshShell()
+    }
+
+    private func refreshShells() {
+        guard let feed, showingPicker || !pickerSettled else { return }
+        let rows = feed.shells
+        if rows != shells { shells = rows }
+        guard !pickerSettled, feed.shellsKnown else { return }
+        pickerSettled = true
+        if rows.isEmpty {
+            feed.openFreshShell()
+        } else {
+            showingPicker = true
+        }
+    }
+
     func attach(_ source: any TerminalFeed) {
         stop()
         feed = source
@@ -174,6 +270,9 @@ final class TerminalModel {
         lastOffset = -1
         lastScrollbackRows = 0
         scrollOffset = 0
+        shells = []
+        showingPicker = false
+        pickerSettled = false
         startPolling()
     }
 
@@ -197,6 +296,9 @@ final class TerminalModel {
         feed?.stop()
         feed = nil
         state = 0
+        shells = []
+        showingPicker = false
+        pickerSettled = false
     }
 
     func answerTrust(_ accept: Bool) {
@@ -259,6 +361,7 @@ final class TerminalModel {
         guard let feed else { return }
         state = feed.state
         message = feed.message
+        refreshShells()
 
         if state == TerminalModel.deciding, !askingTrust {
             trustChanged = feed.trustVerdict == 2

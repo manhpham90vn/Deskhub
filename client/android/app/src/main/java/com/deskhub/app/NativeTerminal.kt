@@ -29,6 +29,7 @@ object NativeTerminal {
     const val ATTR_BOLD = 1
     const val ATTR_UNDERLINE = 8
 
+    private const val SHELL_FIELDS = 3
     private const val HEADER_INTS = 9
     private const val INTS_PER_CELL = 3
 
@@ -85,6 +86,18 @@ object NativeTerminal {
 
     private external fun nativeStop()
 
+    private external fun nativeShells(): Array<String>?
+
+    private external fun nativeShellsKnown(): Boolean
+
+    private external fun nativeRequestShells()
+
+    private external fun nativeResumeShell(termId: Int)
+
+    private external fun nativeCloseShell(termId: Int)
+
+    private external fun nativeOpenFresh()
+
     private external fun nativeState(): Int
 
     private external fun nativeMessage(): String
@@ -122,6 +135,45 @@ object NativeTerminal {
     ): Boolean = nativeOpen(addr, passcode, cols, rows)
 
     fun stop() = nativeStop()
+
+    data class Shell(
+        val termId: Int,
+        val line: String,
+        val resumable: Boolean,
+        val closable: Boolean,
+    )
+
+    fun shells(): List<Shell> {
+        val packed = nativeShells() ?: return emptyList()
+        val out = ArrayList<Shell>(packed.size / SHELL_FIELDS)
+        var at = 0
+        while (at + SHELL_FIELDS <= packed.size) {
+            val termId = packed[at].toIntOrNull()
+            val flags = packed[at + 1].toIntOrNull()
+            if (termId != null && flags != null && termId > 0) {
+                out.add(
+                    Shell(
+                        termId = termId,
+                        line = packed[at + 2],
+                        resumable = flags and 1 != 0,
+                        closable = flags and 2 != 0,
+                    ),
+                )
+            }
+            at += SHELL_FIELDS
+        }
+        return out
+    }
+
+    fun shellsKnown(): Boolean = nativeShellsKnown()
+
+    fun requestShells() = nativeRequestShells()
+
+    fun resumeShell(termId: Int) = nativeResumeShell(termId)
+
+    fun closeShell(termId: Int) = nativeCloseShell(termId)
+
+    fun openFresh() = nativeOpenFresh()
 
     fun state(): Int = nativeState()
 

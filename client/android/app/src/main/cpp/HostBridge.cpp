@@ -229,6 +229,14 @@ JNIEXPORT jstring JNICALL Java_com_deskhub_app_NativeHost_nativeIdleStatus(JNIEn
     return NewString(env, buf);
 }
 
+JNIEXPORT jstring JNICALL Java_com_deskhub_app_NativeHost_nativePasscodeDisplay(JNIEnv* env,
+    jobject, jstring passcode) {
+    char buf[32];
+    const std::string code = deskhubj::FromJString(env, passcode);
+    dh_passcode_display(code.c_str(), buf, int(sizeof(buf)));
+    return NewString(env, buf);
+}
+
 JNIEXPORT jstring JNICALL Java_com_deskhub_app_NativeHost_nativePasscode(JNIEnv* env, jobject) {
     const DHUiSettings settings = dh_settings_load();
     return NewString(env, settings.passcode);

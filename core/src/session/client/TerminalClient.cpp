@@ -27,10 +27,21 @@ void TerminalClient::Open(std::string passcode, TermSize size, std::string clien
 }
 
 void TerminalClient::Reattach() {
-    if (termId_ == 0) return;
+    Resume(termId_);
+}
+
+void TerminalClient::Resume(uint32_t termId) {
+    if (termId == 0 || state_ == TerminalClientState::Closed) return;
+    if (state_ == TerminalClientState::Open) return;
+    termId_ = termId;
     state_ = TerminalClientState::Reattaching;
     reason_ = TermReason::Accepted;
     SendOpen();
+}
+
+void TerminalClient::RequestList() {
+    if (state_ == TerminalClientState::Closed) return;
+    Emit(BuildTermList(buf_));
 }
 
 void TerminalClient::SendInput(std::span<const uint8_t> bytes) {
@@ -48,6 +59,14 @@ void TerminalClient::Resize(TermSize size) {
     size_ = clamped;
     if (state_ != TerminalClientState::Open) return;
     Emit(BuildTermResize(buf_, termId_, size_));
+}
+
+void TerminalClient::CloseSession(uint32_t termId) {
+    if (termId == 0 || state_ == TerminalClientState::Closed) return;
+    Emit(BuildTermClose(buf_, termId));
+    if (termId != termId_) return;
+    termId_ = 0;
+    state_ = TerminalClientState::Closed;
 }
 
 void TerminalClient::Close() {
@@ -90,6 +109,14 @@ void TerminalClient::HandleMessage(std::span<const uint8_t> message) {
             termId_ = ack->termId;
             state_ = TerminalClientState::Open;
             if (cb_.onOpened) cb_.onOpened(*ack);
+            return;
+        }
+        case MsgType::TermListAck: {
+            if (state_ == TerminalClientState::Closed) return;
+            const std::optional<TermSessionList> list = ParseTermListAck(payload);
+            if (!list) return;
+            sessions_ = *list;
+            if (cb_.onSessions) cb_.onSessions(sessions_);
             return;
         }
         case MsgType::TermData:

@@ -43,7 +43,9 @@ void TestEveryLabelSaysSomething() {
         ui::kTrayShowWindow, ui::kTrayHideWindow, ui::kTrayQuit,
         ui::kSettingsSectionVideo, ui::kSettingsSectionConnection, ui::kSettingsSectionSecurity,
         ui::kSettingsSectionSession, ui::kSettingsSectionLaunch,
-        ui::kPairingRequestTitle, ui::kPairingAllow, ui::kPairingDeny, ui::kAuthLocked};
+        ui::kPairingRequestTitle, ui::kPairingAllow, ui::kPairingDeny, ui::kAuthLocked,
+        ui::kPasscodeShareHeading, ui::kPasscodeSetNote, ui::kPasscodeUnsetNote,
+        ui::kPasscodeNoneSet, ui::kCopyPasscodeAction, ui::kPasscodeCopied};
     for (const char* s : labels) Check(s && *s, "every shared UI string is non-empty");
     Check(Contains(ui::PasscodeNote("0417"), "0417"),
         "the sharing status quotes the passcode viewers must enter");
@@ -53,6 +55,20 @@ void TestEveryLabelSaysSomething() {
         "with no code set, it promises the owner will be asked instead");
     Check(Contains(ui::kClientPasscodeHint, "empty"),
         "the client hint says the field may be left empty");
+}
+
+void TestPasscodeIsShownOnItsOwn() {
+    std::printf("[strings] the host shows the passcode as digits, not buried in a sentence...\n");
+    Check(ui::PasscodeDisplay("0417") == "0 4 1 7",
+        "the digits are spaced apart so they can be read off the screen");
+    Check(ui::PasscodeDisplay("") == std::string(ui::kPasscodeNoneSet),
+        "with no code set the panel says so instead of showing an empty gap");
+    Check(!Contains(ui::PasscodeShareNote("0417"), "0417"),
+        "the note beside it explains the code without repeating the digits");
+    Check(Contains(ui::PasscodeShareNote("0417"), "approval"),
+        "and still says a machine offering no code falls back to the owner's approval");
+    Check(std::string(ui::PasscodeShareNote("")) == ui::kPasscodeUnsetNote,
+        "with no code set the note promises the owner will be asked instead");
 }
 
 void TestBindFallbackNamesTheMissingNetwork() {
@@ -304,6 +320,7 @@ void TestOneHostIsOneAddressHoweverItIsSpelled() {
 
 void RunStringsTests() {
     TestEveryLabelSaysSomething();
+    TestPasscodeIsShownOnItsOwn();
     TestConnectingMentionsTheAddress();
     TestQueryFailureExplainsWhatToCheck();
     TestHostTitleOnlyShowsAKnownSize();

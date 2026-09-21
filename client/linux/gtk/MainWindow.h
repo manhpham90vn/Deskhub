@@ -142,6 +142,8 @@ private:
     std::string HostPortDetail() const;
     void ApplyHostState(HostShareState state, const std::string& detail);
     void ShowIdleHostState();
+    void ShowPasscodeCard();
+    const std::string& ShownPasscode() const;
     void RefreshDisplayChoices();
     void ShowHostTable(bool sharing);
     bool TerminalTicked() const;
@@ -172,6 +174,8 @@ private:
     static void OnConnectClicked(GtkButton* b, gpointer user);
     static void OnAddressActivate(GtkEntry* e, gpointer user);
     static void OnCopyClicked(GtkButton* b, gpointer user);
+    static void OnCopyPasscodeClicked(GtkButton* b, gpointer user);
+    static gboolean OnCopiedRevertTimer(gpointer user);
     static void OnSettingChanged(GtkWidget* w, gpointer user);
     static void OnBindChanged(GtkWidget* w, gpointer user);
     static void OnRefreshDevicesClicked(GtkButton* b, gpointer user);
@@ -194,6 +198,10 @@ private:
     GtkWidget* hostBanner_ = nullptr;
     GtkWidget* hostStateLabel_ = nullptr;
     GtkWidget* hostStatusLabel_ = nullptr;
+    GtkWidget* hostPasscodeCard_ = nullptr;
+    GtkWidget* hostPasscodeLabel_ = nullptr;
+    GtkWidget* hostPasscodeCopy_ = nullptr;
+    guint copiedRevertId_ = 0;
     GtkWidget* hostHintLabel_ = nullptr;
     GtkWidget* hostPortalNote_ = nullptr;
     GtkWidget* hostGrid_ = nullptr;
@@ -276,7 +284,7 @@ private:
     bool filesRequested_ = false;
     bool shareViewOnly_ = false;
     uint16_t sharePort_ = 0;
-    std::string sharePasscodeNote_;
+    std::string sharePasscode_;
     std::string shareBindWarning_;
 
     deskhub::OpenViewerCount openViewers_;

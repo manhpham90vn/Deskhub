@@ -138,9 +138,9 @@ HostEngine（app ごとに 1 インスタンス、SessionTransport を保持）
  ├─ audio worker: capture コールバック → lock-free な frame ring → Opus encode →
  │    viewer ごとの datagram（AudioBroadcaster）
  └─ TerminalHost（terminal が共有されている場合にのみ存在）
-      ├─ net-loop thread 上で HandleMessage: TERM_OPEN/DATA/RESIZE/CLOSE → PTY
+      ├─ net-loop thread 上で HandleMessage: TERM_OPEN/DATA/RESIZE/CLOSE/EXIT/LIST → PTY
       └─ pump thread: PTY 出力 → host 側の Screen mirror と TERM_DATA record、
-           期限切れ処理、切断処理
+           peer 喪失時の切り離し、kicks
 ```
 
 - 何らかの内容が共有されている限り、engine は動作する。screen source がなく terminal
@@ -162,13 +162,19 @@ HostEngine（app ごとに 1 インスタンス、SessionTransport を保持）
   `LocalInputMonitor` は remote input を停止する。同時に操作できる viewer は 1 つで
   ある。
 - Shell: shell ごとに PTY を 1 つ割り当てる（Windows は `ConPTY`、他は `forkpty`）。
-  上限は 8 である。接続が切れた場合は shell を切り離し、同一のマシンが reattach できる
-  よう PTY を 2 分間保持する。open、close、detach、reattach はいずれもアドレス、名前、
-  key とともに監査ログに記録する。
+  上限は 8 である。接続が切れた場合は shell を切り離し、shell プロセスが終了するか shell が閉じられるまで PTY を保持する。時間制限はない。許可された client はいずれも、保持されている shell を一覧（`TermList`/`TermListAck`）して id で reattach できる。open、close、detach、reattach はいずれもアドレス、名前、key とともに監査ログに記録する。
 - 各 shell の出力は、開始時点から host 側の `core/terminal` Screen にも書き込まれる。
   *Stop & attach* はリモートの client を切断し、その mirror を scrollback を保ったまま
   host の terminal ウィンドウで開く。この方法で引き継いだ shell は host に帰属し、
   期限切れせず、host のウィンドウを閉じた時点で終了する。
+- `TERM_CLOSE` は、data と resize の message が従う peer ごとの guard より前に処理される。
+  したがって許可された client はいずれも、任意の shell を id で終了させることができ、その
+  shell に入っていたマシンには `TERM_EXIT` が送られる。
+- picker は 1 つ、client は 5 つ: `core/ui/ShellPicker` は `TermSessionList` を、すべての
+  client が描画する行 —— id とサイズ、その shell が誰のものか、この client が reattach
+  または close してよいか —— に変換する。reattach できるのは detach された shell だけで
+  あり、host が引き取った shell はそのどちらでもない。Apple と Android の app は
+  `DHTermSessionInfo` を通じて同じ行を読むため、shell の行を独自に整形する client はない。
 
 ## 5. Client 側
 
@@ -540,8 +546,7 @@ scaling の 2 つの判定とともに実行する（共有 runner には時間�
   する。タイミングの定数は core の `deskhub::KeepaliveIntervalUs` と
   `ReconnectDelayUs` が保持する。keepalive は idle timeout の半分以下とし、packet が
   1 つ失われても維持できるようにしている。再試行は `kTerminalReattachGraceUs` で正確に
-  停止する。それを過ぎると host は既に shell を解放しており、再接続は新しい shell を
-  開くだけになるからである。
+  停止する。それを過ぎるとウィンドウは喪失を報告するが、shell 自体は時間制限なく host 上に残り、破棄される代わりに後の明示的な resume を待つ。
 - **record は stream へ完全な形で書き込むか、まったく書き込まないかのいずれかであり、
   遅れた client は再描画によって同期させる。** 信頼性を要するデータ、すなわち control、
   auth、terminal の出力は、いずれも 1 本の QUIC stream を共有する length prefix 付きの
@@ -578,7 +583,7 @@ scaling の 2 つの判定とともに実行する（共有 runner には時間�
   host identity にも利用できるため、暗号ライブラリを 2 つ抱える必要がない。
 - **connection migration は使用しない。** 候補となるライブラリのいずれにも、利用可能な
   client 側の対応がなかった。reconnect と reattach の機構（tmux と同様の方式であり、
-  モバイルのバックグラウンド動作のために元より必要であった）がこの要件を満たしている。
+  モバイルのバックグラウンド動作のために元より必要であった）がこの要件を満たしている。保持されている shell は一覧（`TermList`）して新しい client から id で resume することもできる。
 - **Ed25519 ではなく ECDSA P-256 を使用する。** BoringSSL のサーバ側は、quiche を通じて
   Ed25519 で TLS handshake に署名しない。元に戻してはならない。保存された Ed25519 の
   identity は読み込み時に置き換える。そのままではすべての handshake が

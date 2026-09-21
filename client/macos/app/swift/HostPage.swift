@@ -33,6 +33,8 @@ struct HostPage: View {
 
             HostStatusBanner(state: shareState, detail: sharing.statusLine)
 
+            PasscodeCard(passcode: sharing.acceptedPasscode)
+
             if sharing.isScreenSharing {
                 HostSourceTable(
                     rows: sharing.rows,

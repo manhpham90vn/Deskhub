@@ -8,6 +8,7 @@ extern "C" {
 #endif
 
 typedef struct DHTermSession DHTermSession;
+typedef struct DHTermSessionInfo DHTermSessionInfo;
 
 typedef enum {
     DHTermIdle = 0,
@@ -82,11 +83,47 @@ typedef struct {
     void (*onState)(int32_t state, const char* message, void* user);
     void (*onRedraw)(void* user);
     void (*onTrustAsked)(int32_t verdict, const char* fingerprint, void* user);
+    void (*onSessions)(const DHTermSessionInfo* infos, uint32_t count, void* user);
     void* user;
 } DHTermCallbacks;
 
+#define DH_TERM_NAME_LEN 65
+#define DH_TERM_LINE_LEN 192
+
+struct DHTermSessionInfo {
+    uint32_t termId;
+    int32_t state;
+    uint16_t cols;
+    uint16_t rows;
+    uint64_t openedUs;
+    char name[DH_TERM_NAME_LEN];
+    char line[DH_TERM_LINE_LEN];
+    bool resumable;
+    bool closable;
+};
+
 DHTermSession* dh_term_open(const char* address, const char* passcode, uint16_t cols,
     uint16_t rows, const DHTermCallbacks* callbacks);
+
+DHTermSession* dh_term_open_deferred(const char* address, const char* passcode, uint16_t cols,
+    uint16_t rows, const DHTermCallbacks* callbacks);
+
+DHTermSession* dh_term_open_resumed(const char* address, const char* passcode, uint16_t cols,
+    uint16_t rows, uint32_t resumeId, const DHTermCallbacks* callbacks);
+
+void dh_term_open_new(DHTermSession* s);
+
+void dh_term_resume(DHTermSession* s, uint32_t termId);
+
+void dh_term_close_session(DHTermSession* s, uint32_t termId);
+
+void dh_term_request_sessions(DHTermSession* s);
+
+bool dh_term_sessions_known(DHTermSession* s);
+
+uint32_t dh_term_session_count(DHTermSession* s);
+
+bool dh_term_session_info(DHTermSession* s, uint32_t index, DHTermSessionInfo* out);
 
 void dh_term_stop(DHTermSession* s);
 

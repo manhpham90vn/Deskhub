@@ -4,6 +4,7 @@ struct SettingsView: View {
     private static let portSettle = Duration.milliseconds(600)
 
     @Bindable var settings: SettingsModel
+    @Bindable var sharing: SharingModel
     let onPortChange: (UInt16) -> Void
 
     var body: some View {
@@ -27,6 +28,16 @@ struct SettingsView: View {
                         dh_udp_port_line(UInt32(settings.acceptedPort), $0, $1)
                     }
                 )
+
+                deskhubSection(DeskhubClient.string(DHStrSettingsSectionSecurity))
+                PasscodeField(
+                    passcode: $sharing.passcode,
+                    prompt: DeskhubClient.string(DHStrClientPasscodePrompt),
+                    width: 140,
+                    enabled: !sharing.status.sharing
+                )
+                .onChange(of: sharing.passcode) { _, _ in sharing.savePasscode() }
+                deskhubHint(DeskhubClient.string(DHStrPasscodeHint))
 
                 deskhubSection(DeskhubClient.string(DHStrSettingsSectionSession))
                 Toggle(isOn: $settings.clipboardSync) {

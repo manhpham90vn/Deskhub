@@ -76,6 +76,11 @@ struct ConnectOptions {
     std::optional<bool> audio{};
 };
 
+struct ShellOptions {
+    bool list = false;
+    uint32_t resumeId = 0;
+};
+
 struct SendOptions {
     std::vector<std::string> files{};
 };
@@ -128,6 +133,7 @@ struct Command {
     ShareOptions share{};
     ConnectOptions connect{};
     SendOptions send{};
+    ShellOptions shell{};
 };
 
 ui::UiSettings ApplyShareOptions(const Command& command, ui::UiSettings settings);

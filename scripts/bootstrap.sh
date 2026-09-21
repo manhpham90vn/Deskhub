@@ -108,24 +108,50 @@ install_format_tools() {
     fi
 }
 
+ANDROID_SDK_PACKAGES="platform-tools platforms;android-37.0 ndk;26.1.10909125 cmake;3.22.1"
+
+missing_android_packages() {
+    for pkg in $ANDROID_SDK_PACKAGES; do
+        [ -d "$1/$(echo "$pkg" | tr ';' '/')" ] || printf ' %s' "$pkg"
+    done
+}
+
 install_android_packages() {
     SDK="${ANDROID_HOME:-$1}"
+    ANDROID_CLI=""
     SDKMANAGER=""
+    for cand in "$SDK"/cmdline-tools/*/bin/android; do
+        if [ -x "$cand" ]; then ANDROID_CLI="$cand"; break; fi
+    done
     for cand in "$SDK"/cmdline-tools/*/bin/sdkmanager; do
         if [ -x "$cand" ]; then SDKMANAGER="$cand"; break; fi
     done
-    if [ -n "$SDKMANAGER" ]; then
-        echo "[ok]      Android SDK ($SDK)"
-        if [ -d "$SDK/platform-tools" ] && [ -d "$SDK/platforms/android-37.0" ] &&
-           [ -d "$SDK/ndk/26.1.10909125" ] && [ -d "$SDK/cmake/3.22.1" ]; then
-            echo "[ok]      Android SDK packages (platform 37.0, NDK 26.1.10909125, cmake 3.22.1)"
-            return
-        fi
-        echo "[install] SDK packages (platform 37.0, NDK 26.1.10909125, cmake 3.22.1)..."
-        "$SDKMANAGER" --install 'platform-tools' 'platforms;android-37.0' 'ndk;26.1.10909125' 'cmake;3.22.1'
-    else
+    if [ -z "$ANDROID_CLI" ] && [ -z "$SDKMANAGER" ]; then
         echo "[action]  Android cmdline-tools missing - install Android Studio or sdkmanager, set ANDROID_HOME, then re-run bootstrap."
+        return
     fi
+    echo "[ok]      Android SDK ($SDK)"
+    missing=$(missing_android_packages "$SDK")
+    if [ -z "$missing" ]; then
+        echo "[ok]      Android SDK packages ($ANDROID_SDK_PACKAGES)"
+        return
+    fi
+    echo "[install] SDK packages (${missing# })..."
+    for pkg in $missing; do
+        if [ -n "$ANDROID_CLI" ]; then
+            "$ANDROID_CLI" sdk install "$(echo "$pkg" | tr ';' '/')" || true
+        else
+            "$SDKMANAGER" --install "$pkg" || true
+        fi
+    done
+    missing=$(missing_android_packages "$SDK")
+    [ -z "$missing" ] || {
+        echo "bootstrap: Android SDK packages still absent after the install ran:$missing" >&2
+        echo "           cmdline-tools 23 replaced sdkmanager with 'android sdk install <group>/<version>', which returns a" >&2
+        echo "           non-zero exit code even when it succeeds, so bootstrap judges the install by the directories under" >&2
+        echo "           $SDK rather than by that code. Install them by hand and re-run." >&2
+        exit 1
+    }
 }
 
 sync_submodules

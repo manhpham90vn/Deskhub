@@ -68,6 +68,7 @@ void RunPaletteTests();
 void RunScrollAnchorTests();
 void RunStringsTests();
 void RunHostRowsTests();
+void RunShellPickerTests();
 void RunTransferViewTests();
 void RunDeviceRowsTests();
 void RunRecentDevicesTests();

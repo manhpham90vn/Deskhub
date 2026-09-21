@@ -74,6 +74,8 @@ constexpr int kHostTimerId = 1;
 constexpr int kScanTimerId = 2;
 constexpr int kClipTimerId = 3;
 constexpr int kAutoShareTimerId = 4;
+constexpr int kCopiedTimerId = 5;
+constexpr int kCopiedRevertMs = 1500;
 constexpr int kRescanDelayMs = int(deskhubp::kLanRescanSecs) * 1000;
 constexpr int kPrimaryButtonH = 46;
 constexpr int kConnectionWindowWidth = 460;
@@ -104,6 +106,7 @@ const wxColour kViewerRowBg(249, 250, 251);
 const wxColour kBannerIdleBg(243, 244, 246);
 const wxColour kBannerLiveBg(232, 250, 239);
 const wxColour kBannerBusyBg(235, 243, 255);
+const wxColour kPasscodeCardBg(239, 244, 255);
 
 enum class HostShareState { kIdle,
     kStarting,
@@ -131,6 +134,7 @@ constexpr int kHostActionWidth = 104;
 constexpr int kHostAttachWidth = 104;
 constexpr int kHostActionsWidth = kHostActionWidth + kHostCellGap + kHostAttachWidth;
 constexpr int kHostRowHeight = 32;
+constexpr int kPasscodePointSize = 26;
 constexpr int kHostRowBarWidth = 3;
 
 const HostColumn kHostColumns[kHostColumnCount] = {{"Source", 168, wxALIGN_LEFT, false},
@@ -349,6 +353,9 @@ private:
     void KickViewer(uint8_t sourceId, const std::string& viewerAddr);
     void ApplyHostState(HostShareState state, const wxString& detail);
     void ShowIdleHostState();
+    void ShowPasscodeCard();
+    const std::string& ShownPasscode() const;
+    void CopySharePasscode();
 
     void StartConnect(const std::string& addr);
     void OpenShell(const NetAddr& server, const std::string& passcode);
@@ -402,6 +409,9 @@ private:
     wxWindow* hostBannerBar_ = nullptr;
     wxStaticText* hostStateLabel_ = nullptr;
     wxStaticText* hostStatusLabel_ = nullptr;
+    wxPanel* hostPasscodePanel_ = nullptr;
+    wxStaticText* hostPasscodeLabel_ = nullptr;
+    wxButton* hostPasscodeCopyBtn_ = nullptr;
     wxStaticText* hostHint_ = nullptr;
     wxListCtrl* hostPicker_ = nullptr;
     wxWindow* hostTableHolder_ = nullptr;
@@ -438,7 +448,7 @@ private:
     bool terminalRequested_ = false;
     bool filesRequested_ = false;
     uint16_t sharePort_ = 0;
-    std::string sharePasscodeNote_;
+    std::string sharePasscode_;
     std::string shareBindWarning_;
     bool shareViewOnly_ = false;
     std::vector<ui::HostRow> hostRows_;
@@ -456,6 +466,7 @@ private:
     wxTimer scanTimer_;
     wxTimer clipTimer_;
     wxTimer autoShareTimer_;
+    wxTimer copiedTimer_;
     ui::AutoShareGate autoShareGate_;
     ShareTrigger shareTrigger_ = ShareTrigger::kUser;
     bool hosting_ = false;
@@ -515,10 +526,12 @@ MainFrame::MainFrame() : wxFrame(nullptr, wxID_ANY, ToWx(ui::kAppTitle)) {
     scanTimer_.SetOwner(this, kScanTimerId);
     clipTimer_.SetOwner(this, kClipTimerId);
     autoShareTimer_.SetOwner(this, kAutoShareTimerId);
+    copiedTimer_.SetOwner(this, kCopiedTimerId);
     Bind(wxEVT_TIMER, &MainFrame::OnHostTimer, this, kHostTimerId);
     Bind(wxEVT_TIMER, &MainFrame::OnScanTimer, this, kScanTimerId);
     Bind(wxEVT_TIMER, &MainFrame::OnClipboardTimer, this, kClipTimerId);
     Bind(wxEVT_TIMER, &MainFrame::OnAutoShareTimer, this, kAutoShareTimerId);
+    Bind(wxEVT_TIMER, [this](wxTimerEvent&) { ShowPasscodeCard(); }, kCopiedTimerId);
     Bind(wxEVT_DISPLAY_CHANGED, &MainFrame::OnDisplayChanged, this);
     Bind(wxEVT_CLOSE_WINDOW, &MainFrame::OnClose, this);
 
@@ -678,6 +691,31 @@ wxWindow* MainFrame::BuildHostPage(wxWindow* parent) {
 
     hostBanner_->SetSizer(bannerRow);
     sizer->Add(hostBanner_, wxSizerFlags().Expand().Border(wxLEFT | wxRIGHT | wxTOP, FromDIP(16)));
+
+    hostPasscodePanel_ = new wxPanel(panel);
+    hostPasscodePanel_->SetBackgroundColour(kPasscodeCardBg);
+    auto* passcodeRow = new wxBoxSizer(wxHORIZONTAL);
+    auto* passcodeText = new wxBoxSizer(wxVERTICAL);
+    auto* passcodeHeading =
+        new wxStaticText(hostPasscodePanel_, wxID_ANY, ToWx(ui::kPasscodeShareHeading));
+    passcodeHeading->SetForegroundColour(kMutedText);
+    passcodeText->Add(passcodeHeading);
+    hostPasscodeLabel_ = new wxStaticText(hostPasscodePanel_, wxID_ANY, wxString());
+    wxFont passcodeFont = MonoFont(hostPasscodeLabel_).Bold();
+    passcodeFont.SetPointSize(kPasscodePointSize);
+    hostPasscodeLabel_->SetFont(passcodeFont);
+    passcodeText->Add(hostPasscodeLabel_, wxSizerFlags().Border(wxTOP, FromDIP(2)));
+    passcodeRow->Add(passcodeText, wxSizerFlags(1).Expand().Border(wxALL, FromDIP(10)));
+
+    hostPasscodeCopyBtn_ = new wxButton(hostPasscodePanel_, wxID_ANY,
+        ToWx(ui::kCopyPasscodeAction));
+    hostPasscodeCopyBtn_->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { CopySharePasscode(); });
+    passcodeRow->Add(hostPasscodeCopyBtn_,
+        wxSizerFlags().CentreVertical().Border(wxRIGHT, FromDIP(10)));
+
+    hostPasscodePanel_->SetSizer(passcodeRow);
+    sizer->Add(hostPasscodePanel_,
+        wxSizerFlags().Expand().Border(wxLEFT | wxRIGHT | wxTOP, FromDIP(16)));
 
     hostPicker_ = new wxListCtrl(panel, wxID_ANY, wxDefaultPosition, wxDefaultSize,
         wxLC_REPORT | wxLC_NO_HEADER | wxLC_SINGLE_SEL);
@@ -1428,6 +1466,7 @@ void MainFrame::ApplyHostState(HostShareState state, const wxString& detail) {
     hostStatusLabel_->Wrap(FromDIP(kBannerWrapWidth));
     hostStatusLabel_->Show(!detail.empty());
     hostStatusLabel_->SetBackgroundColour(style.background);
+    ShowPasscodeCard();
     hostBannerBar_->SetBackgroundColour(style.tint);
     hostBanner_->SetBackgroundColour(style.background);
     hostBanner_->Layout();
@@ -1446,6 +1485,25 @@ void MainFrame::ApplyHostState(HostShareState state, const wxString& detail) {
 void MainFrame::ShowIdleHostState() {
     ApplyHostState(HostShareState::kIdle,
         ToWx(ui::UdpPortLine(uint16_t(settings_.port)) + "."));
+}
+
+const std::string& MainFrame::ShownPasscode() const {
+    return hosting_ ? sharePasscode_ : settings_.passcode;
+}
+
+void MainFrame::ShowPasscodeCard() {
+    copiedTimer_.Stop();
+    hostPasscodeLabel_->SetLabel(ToWx(ui::PasscodeDisplay(ShownPasscode())));
+    hostPasscodeCopyBtn_->SetLabel(ToWx(ui::kCopyPasscodeAction));
+    hostPasscodeCopyBtn_->Show(!ShownPasscode().empty());
+    hostPasscodePanel_->Layout();
+}
+
+void MainFrame::CopySharePasscode() {
+    if (ShownPasscode().empty()) return;
+    CopyTextToClipboard(HWND(GetHandle()), ToWx(ShownPasscode()));
+    hostPasscodeCopyBtn_->SetLabel(ToWx(ui::kPasscodeCopied));
+    copiedTimer_.StartOnce(kCopiedRevertMs);
 }
 
 void MainFrame::BeginAutoShare() {
@@ -1549,7 +1607,7 @@ void MainFrame::ApplySharingBanner() {
     banner.hosting = hosting_;
     banner.port = sharePort_;
     banner.viewOnly = shareViewOnly_;
-    banner.passcodeNote = sharePasscodeNote_;
+    banner.passcodeNote = ui::PasscodeShareNote(sharePasscode_);
     banner.bindWarning = shareBindWarning_;
     ApplyHostState(HostShareState::kSharing, ToWx(share_.BannerText(banner)));
 }
@@ -1594,7 +1652,7 @@ void MainFrame::OnHostStarted(bool started, const std::string& error, uint16_t p
     hosting_ = true;
     screenSharing_ = !share_.sharingHost().Status().empty();
     sharePort_ = port;
-    sharePasscodeNote_ = ui::PasscodeNote(passcode);
+    sharePasscode_ = passcode;
     shareViewOnly_ = !allowInput;
     shareBindWarning_ = share_.sharingHost().BindWarning();
     if (terminalRequested_) share_.StartTerminalShare();
@@ -1638,7 +1696,7 @@ void MainFrame::StopHosting() {
     terminalRequested_ = false;
     filesRequested_ = false;
     pendingClipboard_.reset();
-    sharePasscodeNote_.clear();
+    sharePasscode_.clear();
     shareBindWarning_.clear();
     shareViewOnly_ = false;
     hostStatus_.clear();

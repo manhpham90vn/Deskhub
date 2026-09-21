@@ -81,6 +81,8 @@ enum class MsgType : uint8_t {
     TermResize = 0x53,
     TermClose = 0x54,
     TermExit = 0x55,
+    TermList = 0x56,
+    TermListAck = 0x57,
     AuthStart = 0x60,
     AuthChallenge = 0x61,
     AuthResponse = 0x62,
@@ -423,12 +425,32 @@ inline constexpr uint16_t kMaxTermRows = 1000;
 inline constexpr uint16_t kDefaultTermCols = 80;
 inline constexpr uint16_t kDefaultTermRows = 24;
 
+enum class TerminalState : uint8_t {
+    Live = 0,
+    Detached = 1,
+    Local = 2,
+};
+
 struct TermSize {
     uint16_t cols = kDefaultTermCols;
     uint16_t rows = kDefaultTermRows;
 
     bool operator==(const TermSize&) const = default;
 };
+
+struct TermSessionEntry {
+    uint32_t termId = 0;
+    TerminalState state = TerminalState::Live;
+    TermSize size{};
+    uint64_t openedUs = 0;
+    std::string clientName{};
+};
+
+struct TermSessionList {
+    std::vector<TermSessionEntry> sessions{};
+};
+
+inline constexpr size_t kMaxTermListEntries = 16;
 
 bool IsValidTermSize(TermSize size);
 TermSize ClampTermSize(TermSize size);
@@ -460,11 +482,14 @@ size_t BuildTermData(std::span<uint8_t> out, uint32_t termId, std::span<const ui
 size_t BuildTermResize(std::span<uint8_t> out, uint32_t termId, TermSize size);
 size_t BuildTermClose(std::span<uint8_t> out, uint32_t termId);
 size_t BuildTermExit(std::span<uint8_t> out, uint32_t termId, int32_t exitCode);
+size_t BuildTermList(std::span<uint8_t> out);
+size_t BuildTermListAck(std::span<uint8_t> out, const TermSessionList& m);
 
 std::optional<TermOpen> ParseTermOpen(std::span<const uint8_t> payload);
 std::optional<TermOpenAck> ParseTermOpenAck(std::span<const uint8_t> payload);
 std::optional<TermSize> ParseTermResize(std::span<const uint8_t> payload);
 std::optional<int32_t> ParseTermExit(std::span<const uint8_t> payload);
+std::optional<TermSessionList> ParseTermListAck(std::span<const uint8_t> payload);
 
 inline constexpr size_t kMaxTransferFiles = 32;
 inline constexpr size_t kMaxTransferNameBytes = 255;

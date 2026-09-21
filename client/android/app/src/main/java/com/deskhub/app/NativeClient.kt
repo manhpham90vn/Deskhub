@@ -83,7 +83,9 @@ object NativeClient {
     const val STR_PLAY_AUDIO_LABEL = 131
     const val STR_BIND_NOT_CONNECTED = 70
     const val STR_SECTION_CONNECTION = 72
+    const val STR_SECTION_SECURITY = 73
     const val STR_SECTION_SESSION = 74
+    const val STR_PASSCODE_HINT = 112
     const val STR_KEEP_AWAKE_LABEL = 76
     const val STR_PAIRING_REQUEST_TITLE = 77
     const val STR_PAIRING_ALLOW = 78
@@ -125,6 +127,14 @@ object NativeClient {
     const val STR_TRANSFER_ARRIVED_TITLE = 148
     const val STR_DISCONNECT_BUTTON = 152
     const val STR_LINK_REATTACHING = 157
+    const val STR_SHELL_PICKER_TITLE = 158
+    const val STR_SHELL_PICKER_EMPTY = 159
+    const val STR_SHELL_PICKER_RESUME = 160
+    const val STR_SHELL_PICKER_NEW = 161
+    const val STR_SHELL_PICKER_CLOSE = 162
+    const val STR_SHELL_PICKER_CLOSE_ASK = 163
+    const val STR_PASSCODE_SHARE_HEADING = 164
+    const val STR_COPY_PASSCODE_ACTION = 166
 
     private external fun nativeString(id: Int): String
 

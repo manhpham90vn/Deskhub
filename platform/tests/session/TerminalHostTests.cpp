@@ -41,6 +41,7 @@ struct Viewer {
     std::vector<deskhub::TermReason> refusals{};
     std::vector<int32_t> exits{};
     size_t opens = 0;
+    deskhub::TermSessionList listed{};
     bool resumed = false;
 
     std::unique_ptr<deskhub::TerminalClient> client{};
@@ -124,6 +125,7 @@ struct Viewer {
             resumed = ack.resumed;
         };
         cb.onRefused = [this](deskhub::TermReason reason) { refusals.push_back(reason); };
+        cb.onSessions = [this](const deskhub::TermSessionList& list) { listed = list; };
         cb.onExit = [this](int32_t code) { exits.push_back(code); };
         client = std::make_unique<deskhub::TerminalClient>(std::move(cb));
     }
@@ -377,6 +379,13 @@ void TestHostSharesAShell() {
     Check(host.Sessions().size() == 1 && host.Sessions()[0].size == deskhub::TermSize{120, 40},
         "a window resize reaches the host");
 
+    viewer.client->RequestList();
+    Check(viewer.PumpUntil([&viewer] { return viewer.listed.sessions.size() == 1; }, kMaxRounds),
+        "the host answers a listing with the shell it is keeping");
+    Check(viewer.listed.sessions[0].state == deskhub::TerminalState::Live &&
+              viewer.listed.sessions[0].clientName == "test-client",
+        "naming its state and who opened it");
+
     viewer.client->Close();
     Check(viewer.PumpUntil([&host] { return host.SessionCount() == 0; }, kMaxRounds),
         "closing the shell from the client ends the session on the host");
@@ -465,6 +474,223 @@ void TypeLocalChar(deskhubp::TerminalHost& term, uint32_t termId, char32_t ch) {
     key.key = deskhub::term::TermKey::Char;
     key.codepoint = ch;
     term.SendLocalKey(termId, key);
+}
+
+void TestDroppedShellWaitsForItsClient() {
+    std::printf("[termhost] a client that vanishes keeps its shell, and a second one picks it up...\n");
+    if (!deskhubp::QuicAvailable() || deskhubp::DefaultShell().empty()) {
+        std::printf("[termhost] skipped: this build has no QUIC library or no shell to host\n");
+        return;
+    }
+
+    const std::string savedCert = deskhubp::ReadAppDataFile(deskhubp::kHostCertFileName);
+    const std::string savedKey = deskhubp::ReadAppDataFile(deskhubp::kHostKeyFileName);
+    const std::string savedPaired =
+        deskhubp::ReadAppDataFile(deskhubp::kPairedDevicesFileName);
+    deskhubp::ForgetAllPairedDevices();
+    deskhubp::ForgetHostIdentity();
+    const deskhubp::HostIdentity clientIdentity =
+        deskhubp::LoadOrCreateHostIdentity("deskhub-client");
+    deskhubp::ForgetHostIdentity();
+    const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity("deskhub-test");
+    Check(identity.Valid() && clientIdentity.Valid(), "the host has an identity to present");
+    if (!identity.Valid()) return;
+
+    HostRig host;
+    if (!host.Start(identity, kTestPort, kTestPasscode)) {
+        Check(false, "the terminal host attaches to the shared listener");
+        return;
+    }
+
+    Viewer first;
+    first.Start();
+    first.endpoint.Connect(deskhubp::QuicSettings{}, NetAddr{0x7F000001u, kTestPort},
+        "deskhub-test", first.Hooks());
+    if (!first.PumpUntil([&first] { return first.connected; }, kMaxRounds)) {
+        Check(false, "the first client dials in");
+        host.Stop();
+        return;
+    }
+    first.BeginAuth(clientIdentity, identity.fingerprint, kTestPasscode);
+    if (!first.PumpUntil([&first] { return first.Allowed(); }, kMaxRounds)) {
+        Check(false, "and proves itself");
+        host.Stop();
+        return;
+    }
+    first.client->Open(std::string(), deskhub::TermSize{80, 24}, "first-client");
+    if (!first.PumpUntil([&first] { return first.opens == 1; }, kMaxRounds)) {
+        Check(false, "and opens a shell");
+        host.Stop();
+        return;
+    }
+    const uint32_t id = host.Sessions()[0].termId;
+    first.Type("echo kept-shell-marker\n");
+    Check(first.PumpUntil(
+              [&first] {
+                  return first.screen.Text().find("kept-shell-marker") !=
+                         std::string::npos;
+              },
+              kMaxRounds * 3),
+        "which runs and shows its output");
+
+    first.endpoint.Close();
+    Check(WaitFor(
+              [&host, id] {
+                  const std::vector<deskhub::TerminalRecord> kept = host.Sessions();
+                  return kept.size() == 1 && kept[0].termId == id &&
+                         kept[0].state == deskhub::TerminalState::Detached;
+              },
+              10000),
+        "losing the client detaches the shell instead of ending it");
+
+    Viewer second;
+    second.Start();
+    second.endpoint.Connect(deskhubp::QuicSettings{}, NetAddr{0x7F000001u, kTestPort},
+        "deskhub-test", second.Hooks());
+    if (!second.PumpUntil([&second] { return second.connected; }, kMaxRounds)) {
+        Check(false, "a second client dials in");
+        host.Stop();
+        return;
+    }
+    second.BeginAuth(clientIdentity, identity.fingerprint, kTestPasscode);
+    if (!second.PumpUntil([&second] { return second.Allowed(); }, kMaxRounds)) {
+        Check(false, "and proves itself too");
+        host.Stop();
+        return;
+    }
+    second.client->RequestList();
+    Check(second.PumpUntil(
+              [&second, id] {
+                  for (const deskhub::TermSessionEntry& e : second.listed.sessions)
+                      if (e.termId == id && e.state == deskhub::TerminalState::Detached)
+                          return true;
+                  return false;
+              },
+              kMaxRounds),
+        "it sees the shell the first one left behind");
+    second.client->Resume(id);
+    Check(second.PumpUntil([&second] { return second.opens == 1 && second.resumed; }, kMaxRounds),
+        "and picks it back up instead of starting over");
+    Check(second.PumpUntil(
+              [&second] {
+                  return second.screen.Text().find("kept-shell-marker") !=
+                         std::string::npos;
+              },
+              kMaxRounds * 3),
+        "with the old output repainted on its grid");
+
+    host.Stop();
+    second.endpoint.Close();
+
+    if (!savedCert.empty()) deskhubp::WriteAppDataFile(deskhubp::kHostCertFileName, savedCert);
+    if (!savedKey.empty()) deskhubp::WriteAppDataFile(deskhubp::kHostKeyFileName, savedKey);
+    if (savedPaired.empty())
+        deskhubp::RemoveAppDataFile(deskhubp::kPairedDevicesFileName);
+    else
+        deskhubp::WriteAppDataFile(deskhubp::kPairedDevicesFileName, savedPaired);
+}
+
+void TestAnotherClientClosesAShell() {
+    std::printf("[termhost] any admitted client can end a shell, and the one in it is told...\n");
+    if (!deskhubp::QuicAvailable() || deskhubp::DefaultShell().empty()) {
+        std::printf("[termhost] skipped: this build has no QUIC library or no shell to host\n");
+        return;
+    }
+
+    const std::string savedCert = deskhubp::ReadAppDataFile(deskhubp::kHostCertFileName);
+    const std::string savedKey = deskhubp::ReadAppDataFile(deskhubp::kHostKeyFileName);
+    const std::string savedPaired =
+        deskhubp::ReadAppDataFile(deskhubp::kPairedDevicesFileName);
+    deskhubp::ForgetAllPairedDevices();
+    deskhubp::ForgetHostIdentity();
+    const deskhubp::HostIdentity clientIdentity =
+        deskhubp::LoadOrCreateHostIdentity("deskhub-client");
+    deskhubp::ForgetHostIdentity();
+    const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity("deskhub-test");
+    Check(identity.Valid() && clientIdentity.Valid(), "the host has an identity to present");
+    if (!identity.Valid()) return;
+
+    HostRig host;
+    if (!host.Start(identity, kTestPort, kTestPasscode)) {
+        Check(false, "the terminal host attaches to the shared listener");
+        return;
+    }
+
+    Viewer owner;
+    owner.Start();
+    owner.endpoint.Connect(deskhubp::QuicSettings{}, NetAddr{0x7F000001u, kTestPort},
+        "deskhub-test", owner.Hooks());
+    if (!owner.PumpUntil([&owner] { return owner.connected; }, kMaxRounds)) {
+        Check(false, "the client holding the shell dials in");
+        host.Stop();
+        return;
+    }
+    owner.BeginAuth(clientIdentity, identity.fingerprint, kTestPasscode);
+    if (!owner.PumpUntil([&owner] { return owner.Allowed(); }, kMaxRounds)) {
+        Check(false, "and proves itself");
+        host.Stop();
+        return;
+    }
+    owner.client->Open(std::string(), deskhub::TermSize{80, 24}, "owner-client");
+    if (!owner.PumpUntil([&owner] { return owner.opens == 1; }, kMaxRounds)) {
+        Check(false, "and opens a shell");
+        host.Stop();
+        return;
+    }
+    const uint32_t id = host.Sessions()[0].termId;
+
+    Viewer other;
+    other.Start();
+    other.endpoint.Connect(deskhubp::QuicSettings{}, NetAddr{0x7F000001u, kTestPort},
+        "deskhub-test", other.Hooks());
+    if (!other.PumpUntil([&other] { return other.connected; }, kMaxRounds)) {
+        Check(false, "a second client dials in");
+        host.Stop();
+        return;
+    }
+    other.BeginAuth(clientIdentity, identity.fingerprint, kTestPasscode);
+    if (!other.PumpUntil([&other] { return other.Allowed(); }, kMaxRounds)) {
+        Check(false, "and proves itself too");
+        host.Stop();
+        return;
+    }
+
+    other.client->RequestList();
+    Check(other.PumpUntil(
+              [&other, id] {
+                  for (const deskhub::TermSessionEntry& e : other.listed.sessions)
+                      if (e.termId == id && e.state == deskhub::TerminalState::Live) return true;
+                  return false;
+              },
+              kMaxRounds),
+        "it sees the shell the first one is sitting in");
+
+    other.client->CloseSession(id);
+    const auto bothPump = [&owner, &other](const std::function<bool()>& done, int rounds) {
+        for (int i = 0; i < rounds; ++i) {
+            if (done()) return true;
+            owner.Pump(1);
+            other.Pump(1);
+        }
+        return done();
+    };
+    Check(bothPump([&host] { return host.SessionCount() == 0; }, kMaxRounds),
+        "closing it by id ends the shell even though another machine opened it");
+    Check(bothPump([&owner] { return !owner.exits.empty(); }, kMaxRounds),
+        "and the machine that was typing in it is told its shell ended");
+    Check(other.client->State() != deskhub::TerminalClientState::Closed,
+        "while the machine that closed it carries on");
+
+    host.Stop();
+    owner.endpoint.Close();
+    other.endpoint.Close();
+
+    if (!savedCert.empty()) deskhubp::WriteAppDataFile(deskhubp::kHostCertFileName, savedCert);
+    if (!savedKey.empty()) deskhubp::WriteAppDataFile(deskhubp::kHostKeyFileName, savedKey);
+    if (savedPaired.empty())
+        deskhubp::RemoveAppDataFile(deskhubp::kPairedDevicesFileName);
+    else
+        deskhubp::WriteAppDataFile(deskhubp::kPairedDevicesFileName, savedPaired);
 }
 
 void TestHostStopsAndAttachesShell() {
@@ -957,6 +1183,8 @@ void TestAFloodOfOutputNeverTearsTheStream() {
 void RunTerminalHostTests() {
     TestHostRefusesWithoutListener();
     TestHostSharesAShell();
+    TestDroppedShellWaitsForItsClient();
+    TestAnotherClientClosesAShell();
     TestHostStopsAndAttachesShell();
     TestViewerTrustsThenRunsAShell();
     TestTheTwoCasesAPasscodeCannotSettle();

@@ -3,13 +3,13 @@ ANDROID_QUICHE_TARGETS := aarch64-linux-android x86_64-linux-android
 ANDROID_OPUS_TARGETS := aarch64-linux-android x86_64-linux-android
 
 ifeq ($(OS),Windows_NT)
-GRADLEW := cd client\android && .\gradlew.bat
 ANDROID_SDK := $(if $(ANDROID_HOME),$(ANDROID_HOME),$(LOCALAPPDATA)\Android\Sdk)
+GRADLEW := set "ANDROID_HOME=$(ANDROID_SDK)" && cd client\android && .\gradlew.bat
 ADB     := $(ANDROID_SDK)\platform-tools\adb.exe
 ANDROID_NDK_ENV := set "ANDROID_NDK_HOME=$(ANDROID_SDK)\ndk\$(ANDROID_NDK_VERSION)" &&
 else
-GRADLEW := cd client/android && ./gradlew
 ANDROID_SDK := $(if $(ANDROID_HOME),$(ANDROID_HOME),$(firstword $(wildcard $(HOME)/Android/Sdk $(HOME)/Library/Android/sdk)))
+GRADLEW := cd client/android && $(if $(ANDROID_SDK),ANDROID_HOME=$(ANDROID_SDK) ,)./gradlew
 ADB     := $(if $(ANDROID_SDK),$(ANDROID_SDK)/platform-tools/adb,adb)
 ANDROID_NDK_ENV := ANDROID_NDK_HOME=$(ANDROID_SDK)/ndk/$(ANDROID_NDK_VERSION)
 endif

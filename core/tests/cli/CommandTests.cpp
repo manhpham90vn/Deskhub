@@ -254,6 +254,15 @@ void TestShell() {
     Check(command.deviceName.value_or("") == "laptop", "the name");
     Check(!Parse({"shell"}).error.empty(), "shell needs an address");
     Check(!Parse({"shell", "1.2.3.4", "--fps", "30"}).error.empty(), "a shell has no frame rate");
+    const cli::Command resumed = Parse({"shell", "10.0.0.5", "--resume", "3"});
+    Check(Ok(resumed, cli::Verb::Shell) && resumed.shell.resumeId == 3, "--resume names the shell to pick back up");
+    Check(!resumed.shell.list, "without asking for the list");
+    const cli::Command listed = Parse({"shell", "10.0.0.5", "--list"});
+    Check(Ok(listed, cli::Verb::Shell) && listed.shell.list, "--list asks what the host is keeping");
+    Check(listed.shell.resumeId == 0, "without naming one");
+    Check(!Parse({"shell", "1.2.3.4", "--resume", "0"}).error.empty(), "zero is no session id");
+    Check(!Parse({"shell", "1.2.3.4", "--resume", "abc"}).error.empty(), "nor is text");
+    Check(!Parse({"shell", "1.2.3.4", "--resume"}).error.empty(), "a missing id is usage");
 }
 
 void TestConnect() {

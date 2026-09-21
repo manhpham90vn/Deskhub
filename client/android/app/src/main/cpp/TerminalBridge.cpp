@@ -14,6 +14,7 @@ DHTermSession* g_term = nullptr;
 
 void HoldTrustDecision(int32_t, const char*, void*) {}
 
+constexpr int kShellFields = 3;
 constexpr int kGridHeaderInts = 9;
 constexpr int kGridIntsPerCell = 3;
 
@@ -35,9 +36,54 @@ JNIEXPORT jboolean JNICALL Java_com_deskhub_app_NativeTerminal_nativeOpen(JNIEnv
     callbacks.onTrustAsked = HoldTrustDecision;
     const std::string address = deskhubj::FromJString(env, addr);
     const std::string code = deskhubj::FromJString(env, passcode);
-    g_term = dh_term_open(address.c_str(), code.c_str(), uint16_t(cols), uint16_t(rows),
-        &callbacks);
+    g_term = dh_term_open_deferred(address.c_str(), code.c_str(), uint16_t(cols),
+        uint16_t(rows), &callbacks);
     return g_term != nullptr ? JNI_TRUE : JNI_FALSE;
+}
+
+JNIEXPORT jobjectArray JNICALL Java_com_deskhub_app_NativeTerminal_nativeShells(JNIEnv* env,
+    jobject) {
+    if (g_term == nullptr) return nullptr;
+    const uint32_t count = dh_term_session_count(g_term);
+    jclass stringClass = env->FindClass("java/lang/String");
+    if (stringClass == nullptr) return nullptr;
+    jobjectArray out = env->NewObjectArray(jsize(count) * kShellFields, stringClass, nullptr);
+    if (out == nullptr) return nullptr;
+    for (uint32_t i = 0; i < count; ++i) {
+        DHTermSessionInfo info{};
+        if (!dh_term_session_info(g_term, i, &info)) continue;
+        const int flags = (info.resumable ? 1 : 0) | (info.closable ? 2 : 0);
+        const jsize base = jsize(i) * kShellFields;
+        env->SetObjectArrayElement(out, base,
+            env->NewStringUTF(std::to_string(info.termId).c_str()));
+        env->SetObjectArrayElement(out, base + 1,
+            env->NewStringUTF(std::to_string(flags).c_str()));
+        env->SetObjectArrayElement(out, base + 2, env->NewStringUTF(info.line));
+    }
+    return out;
+}
+
+JNIEXPORT jboolean JNICALL Java_com_deskhub_app_NativeTerminal_nativeShellsKnown(JNIEnv*,
+    jobject) {
+    return dh_term_sessions_known(g_term) ? JNI_TRUE : JNI_FALSE;
+}
+
+JNIEXPORT void JNICALL Java_com_deskhub_app_NativeTerminal_nativeRequestShells(JNIEnv*, jobject) {
+    dh_term_request_sessions(g_term);
+}
+
+JNIEXPORT void JNICALL Java_com_deskhub_app_NativeTerminal_nativeResumeShell(JNIEnv*, jobject,
+    jint termId) {
+    if (termId > 0) dh_term_resume(g_term, uint32_t(termId));
+}
+
+JNIEXPORT void JNICALL Java_com_deskhub_app_NativeTerminal_nativeCloseShell(JNIEnv*, jobject,
+    jint termId) {
+    if (termId > 0) dh_term_close_session(g_term, uint32_t(termId));
+}
+
+JNIEXPORT void JNICALL Java_com_deskhub_app_NativeTerminal_nativeOpenFresh(JNIEnv*, jobject) {
+    dh_term_open_new(g_term);
 }
 
 JNIEXPORT void JNICALL Java_com_deskhub_app_NativeTerminal_nativeStop(JNIEnv*, jobject) {

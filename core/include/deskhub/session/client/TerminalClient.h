@@ -23,6 +23,7 @@ struct TerminalClientCallbacks {
     std::function<void(std::span<const uint8_t>)> onOutput;
     std::function<void(const TermOpenAck&)> onOpened;
     std::function<void(TermReason)> onRefused;
+    std::function<void(const TermSessionList&)> onSessions;
     std::function<void(int32_t exitCode)> onExit;
 };
 
@@ -32,9 +33,12 @@ public:
 
     void Open(std::string passcode, TermSize size, std::string clientName);
     void Reattach();
+    void Resume(uint32_t termId);
+    void RequestList();
     void HandleMessage(std::span<const uint8_t> message);
     void SendInput(std::span<const uint8_t> bytes);
     void Resize(TermSize size);
+    void CloseSession(uint32_t termId);
     void Close();
     void LinkLost();
 
@@ -49,6 +53,9 @@ public:
     }
     TermReason LastReason() const {
         return reason_;
+    }
+    const TermSessionList& Sessions() const {
+        return sessions_;
     }
     bool CanReattach() const {
         return termId_ != 0 && state_ == TerminalClientState::Idle;
@@ -66,6 +73,7 @@ private:
     std::string passcode_{};
     std::string clientName_{};
     std::vector<uint8_t> buf_ = std::vector<uint8_t>(kMaxRecordSize);
+    TermSessionList sessions_{};
 };
 
 }

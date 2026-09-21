@@ -56,6 +56,14 @@ mở máy của bạn ra Internet.
 
 Đây là danh sách đầy đủ. Không mục nào dưới đây đã được giải quyết:
 
+- **Shell được giữ lại thuộc về cặp đã pair, không thuộc riêng máy đã mở nó.** Một
+  shell còn lại trên host sống lâu hơn kết nối đã mở nó, không có giới hạn thời gian,
+  và mọi máy đã được nhận vào đều có thể liệt kê các shell host đang giữ, reattach một
+  shell đã detach, và đóng bất kỳ shell nào. Id, kích thước và tên thiết bị của từng
+  shell nằm trong danh sách đó. Vì vậy một máy thứ hai bạn pair —— hoặc một máy mà bạn
+  chưa thu hồi key trên trang Devices —— có thể đọc lại những gì shell trước đó đang
+  làm và tiếp tục trong đó. Hãy thu hồi thiết bị bạn không còn tin tưởng, và đóng các
+  shell đã dùng xong thay vì để lại.
 - **Lần kết nối đầu tiên dựa trên tin cậy chưa được xác minh.** Pairing ngăn được kẻ xen
   giữa xuất hiện ở *các lần sau*: key đã được ghim và mọi thay đổi đều bị từ chối kèm cảnh
   báo rõ ràng. Nó không ngăn được kẻ đã xen giữa ngay từ lần tiếp xúc đầu tiên: khi không
