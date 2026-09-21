@@ -30,7 +30,7 @@ jobs:
 
       - name: Install gitleaks
         run: |
-          curl -fsSL -o /tmp/gitleaks.tar.gz \
+          curl -fsSL --retry 5 --retry-all-errors -o /tmp/gitleaks.tar.gz \
             "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
           echo "${GITLEAKS_SHA256}  /tmp/gitleaks.tar.gz" | sha256sum -c -
           tar xzf /tmp/gitleaks.tar.gz -C /tmp gitleaks

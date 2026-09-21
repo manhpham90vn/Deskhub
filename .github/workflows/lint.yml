@@ -31,9 +31,9 @@ jobs:
         run: |
           pipx install clang-format==22.1.3
           mkdir -p tools
-          curl -fsSL -o tools/ktlint.jar https://github.com/pinterest/ktlint/releases/download/1.5.0/ktlint
+          curl -fsSL --retry 5 --retry-all-errors -o tools/ktlint.jar https://github.com/pinterest/ktlint/releases/download/1.5.0/ktlint
           echo "a16be01dcc480aab2f55f444b620142152f66e31564b3b9376506d624c28a2ad  tools/ktlint.jar" | sha256sum -c -
-          curl -fsSL -o /tmp/swiftformat.zip https://github.com/nicklockwood/SwiftFormat/releases/download/0.62.1/swiftformat_linux.zip
+          curl -fsSL --retry 5 --retry-all-errors -o /tmp/swiftformat.zip https://github.com/nicklockwood/SwiftFormat/releases/download/0.62.1/swiftformat_linux.zip
           echo "61ff55f3581e2144a4ad114831167102c38be853df75c1477d20b40a8e8120aa  /tmp/swiftformat.zip" | sha256sum -c -
           unzip -o -q -d tools /tmp/swiftformat.zip swiftformat_linux
           mv tools/swiftformat_linux tools/swiftformat
@@ -71,7 +71,7 @@ jobs:
 
       - name: Install SwiftLint 0.65.0 (pinned)
         run: |
-          curl -fsSL -o /tmp/portable_swiftlint.zip https://github.com/realm/SwiftLint/releases/download/0.65.0/portable_swiftlint.zip
+          curl -fsSL --retry 5 --retry-all-errors -o /tmp/portable_swiftlint.zip https://github.com/realm/SwiftLint/releases/download/0.65.0/portable_swiftlint.zip
           echo "d6cb0aa7a2f5f1ef306fc9e37bcb54dc9a26facc8f7784ac0c3dd3eccf5c6ba6  /tmp/portable_swiftlint.zip" | shasum -a 256 -c -
           unzip -o -q -d /tmp/swiftlint /tmp/portable_swiftlint.zip swiftlint
           chmod +x /tmp/swiftlint/swiftlint
@@ -118,7 +118,7 @@ jobs:
 
       - name: Install actionlint ${{ env.ACTIONLINT_VERSION }} (pinned)
         run: |
-          curl -fsSL -o /tmp/actionlint.tar.gz \
+          curl -fsSL --retry 5 --retry-all-errors -o /tmp/actionlint.tar.gz \
             "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
           echo "${ACTIONLINT_SHA256}  /tmp/actionlint.tar.gz" | sha256sum -c -
           tar xzf /tmp/actionlint.tar.gz -C /tmp actionlint
