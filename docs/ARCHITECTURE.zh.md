@@ -683,3 +683,12 @@ runner 上与 base commit 的 A/B 结果（偏移仅作为警告，不导致失�
   也从未收到该 offer。现在 viewer 在 `onLinkLost` 时以 `TransferReason::LinkLost` 判定
   上传失败。跨越重连继续传输需要在新的 connection 上重放 offer；在该功能实现之前，明确
   结束传输优于保留一个不再变化的进度条。
+
+- **host 放开的 socket 仍被它启动的每个 shell 占着**：`Pty::Start` 使用 `forkpty`，
+  子进程因此继承所有已打开的描述符，而 `ChildSetup` 直接 exec shell，一个也没关闭。
+  会话的 UDP socket 就这样被带了过去。terminal host 停止时，`Pty::Impl::Shutdown`
+  发出 `SIGHUP` 并以 `WNOHANG` 回收 —— 它不等待 —— 所以 shell 多久才退出，端口就被
+  占用多久，即使 Deskhub 已经关闭了自己的描述符。在 ASan 下，platform 测试套件在
+  `bind(127.0.0.1:47793)` 上以 `EADDRINUSE` 失败：上一个测试的 shell 还没退出。
+  `UdpSocket::Open` 现在设置 `FD_CLOEXEC`，shell 一 exec 描述符就消失，端口只属于 host。
+  任何会 fork 用户 shell 的进程中的长命描述符都需要这一点；仅在父进程关闭是不够的。

@@ -825,3 +825,14 @@ scaling の 2 つの判定とともに実行する（共有 runner には時間�
   upload を失敗させる。再接続をまたいで転送を継続するには、新しい connection で offer を
   再送する必要がある。その機能が実装されるまでは、転送を明示的に終了するほうが、変化
   しない進捗バーを残すより適切である。
+
+- **host が手放した socket を、それが生んだ shell がなお抛えている**：`Pty::Start` は
+  `forkpty` を使うため、子プロセスは開いている記述子をすべて引き継ぎ、`ChildSetup` は
+  一つも閉じずに shell を exec する。セッションの UDP socket も一緒に付いていく。
+  terminal host を止めるとき、`Pty::Impl::Shutdown` は `SIGHUP` を送って `WNOHANG` で
+  回収する —— 待たない —— ので、shell が死ぬまでの間はポートを押さえたままだ。Deskhub
+  自身の記述子はもう閉じていてもである。ASan 下で platform スイートが
+  `bind(127.0.0.1:47793)` で `EADDRINUSE` となって失敗した。前のテストの shell がまだ
+  終了していなかったのだ。`UdpSocket::Open` は `FD_CLOEXEC` を立てるようになり、shell が
+  exec した瞬間に記述子は消え、ポートは host だけのものになる。ユーザの shell を
+  fork するプロセスの長命な記述子はすべてこれを必要とする。親で閉じるだけでは足りない。

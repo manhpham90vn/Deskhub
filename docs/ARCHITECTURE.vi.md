@@ -812,3 +812,13 @@ coverage của core.
   Việc tiếp tục truyền qua một lượt kết nối lại đòi hỏi phát lại đề nghị trên connection
   mới; cho tới khi tính năng đó được bổ sung, việc kết thúc phiên truyền một cách rõ ràng
   tốt hơn một thanh tiến độ không còn thay đổi.
+
+- **Socket mà host đã nhả vẫn còn bị mọi shell nó sinh ra giữ**: `Pty::Start` dùng
+  `forkpty`, nên tiến trình con thừa kế mọi descriptor đang mở, và `ChildSetup` exec shell
+  mà không đóng cái nào. Socket UDP của phiên đi theo luôn. Khi terminal host dừng,
+  `Pty::Impl::Shutdown` gửi `SIGHUP` rồi reap bằng `WNOHANG` — không chờ — nên shell còn
+  sống bao lâu thì cổng còn bị giữ bấy lâu, dù Deskhub đã đóng descriptor của mình. Dưới
+  ASan, bộ test platform hỏng ở `bind(127.0.0.1:47793)` với `EADDRINUSE`: shell của test
+  trước chưa kịp thoát. `UdpSocket::Open` giờ đặt `FD_CLOEXEC`, nên descriptor biến mất
+  ngay khi shell exec và cổng chỉ thuộc về host. Bất kỳ descriptor sống lâu nào trong một
+  tiến trình có fork shell của người dùng đều cần điều này; đóng ở tiến trình cha là chưa đủ.

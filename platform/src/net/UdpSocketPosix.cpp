@@ -1,6 +1,7 @@
 ﻿#include "deskhubp/net/UdpSocket.h"
 
 #include <arpa/inet.h>
+#include <fcntl.h>
 #include <netinet/in.h>
 #include <poll.h>
 #include <sys/socket.h>
@@ -18,6 +19,15 @@ std::string NetAddr::ToString() const {
     std::snprintf(b, sizeof(b), "%u.%u.%u.%u:%u", (ip >> 24) & 0xFF, (ip >> 16) & 0xFF,
         (ip >> 8) & 0xFF, ip & 0xFF, port);
     return b;
+}
+
+namespace {
+
+bool CloseWhenAChildExecs(int fd) {
+    const int flags = fcntl(fd, F_GETFD, 0);
+    return flags >= 0 && fcntl(fd, F_SETFD, flags | FD_CLOEXEC) == 0;
+}
+
 }
 
 bool ParseNetAddr(const std::string& s, NetAddr& out) {
@@ -41,6 +51,15 @@ bool UdpSocket::Open(uint16_t localPort, const std::string& bindIp) {
     const int s = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
     if (s < 0) {
         LOGE("[UDP] socket() failed: %d", errno);
+        return false;
+    }
+
+    if (!CloseWhenAChildExecs(s)) {
+        LOGE(
+            "[UDP] could not mark the socket close-on-exec: %d - a shell the terminal host "
+            "spawns would inherit it and keep the port bound after Deskhub released it",
+            errno);
+        close(s);
         return false;
     }
 

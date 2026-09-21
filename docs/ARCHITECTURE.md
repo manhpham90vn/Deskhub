@@ -807,3 +807,14 @@ line.
   `TransferReason::LinkLost`. Resuming across a redial would need the offer replayed on
   the new connection; until that exists, ending the transfer honestly beats a progress
   bar that never moves again.
+
+- **A socket the host lets go of is still held by every shell it spawned**: `Pty::Start`
+  uses `forkpty`, so the child inherits every open descriptor, and `ChildSetup` execs the
+  shell without closing any of them. The session UDP socket went along for the ride. When
+  the terminal host stopped, `Pty::Impl::Shutdown` sent `SIGHUP` and reaped with `WNOHANG`
+  — it does not wait — so for as long as the shell took to die it kept the port bound,
+  even though Deskhub had closed its own descriptor. Under ASan the platform suite failed
+  on `bind(127.0.0.1:47793)` with `EADDRINUSE`: the previous test's shell had not exited
+  yet. `UdpSocket::Open` now sets `FD_CLOEXEC`, so the descriptor is gone the moment the
+  shell execs and the port belongs to nobody but the host. Any long-lived descriptor in a
+  process that forks a user's shell needs this; closing it in the parent is not enough.
