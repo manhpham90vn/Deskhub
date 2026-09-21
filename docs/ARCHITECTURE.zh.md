@@ -1,627 +1,681 @@
 [English](ARCHITECTURE.md) · [Tiếng Việt](ARCHITECTURE.vi.md) · **中文** · [日本語](ARCHITECTURE.ja.md)
 
-# Deskhub —— 架构
+# Deskhub —— Architecture
 
-本文档描述 Deskhub **是怎么建起来的**：分层、进程与线程、线上协议，以及它们背后的设计
-决策。产品在用户眼里做什么，在 [`SPECIFICATION.zh.md`](SPECIFICATION.zh.md)；威胁模型在
+本文档描述 Deskhub **是如何构建的**：layer 的划分、process 与 thread、wire protocol，
+以及其背后的设计决策。产品在用户视角下的行为见
+[`SPECIFICATION.zh.md`](SPECIFICATION.zh.md)；threat model 见
 [`SECURITY.zh.md`](../SECURITY.zh.md)。
 
 本文件是 [`ARCHITECTURE.md`](ARCHITECTURE.md) 的译本；若两者有出入，以英文版为准。
 
-- **状态：** 描述的是当前代码。
-- **读者：** 任何要改这份代码的人。
+- **状态：** 描述当前代码。
+- **读者：** 需要修改此代码的人员。
 
 ---
 
-## 1. 分层
+## 1. Layer
 
-整个布局由一条规则驱动：逻辑只写一次，由每个客户端共享。
+整体结构遵循一条原则：逻辑只编写一次，由所有 client 共享。
 
 ```
-core/       纯 C++20，不含 OS 头文件，不含第三方代码，离线做单元测试
-platform/   薄薄一层 OS 抽象，每个头文件对外只有一套完全相同的 API（依赖 core）
-client/     各系统的应用：windows、linux、macos、ios、android（依赖 platform + core）
-            外加 client/cli，一个覆盖三个桌面系统的命令行客户端
+core/       纯 C++20，不含 OS 头文件与第三方代码，离线进行 unit test
+platform/   面向 OS 的薄 abstraction，每个头文件对外提供同一套 API（依赖 core）
+client/     各 OS 的 app: windows、linux、macos、ios、android（依赖 platform 与 core）
+            另有 client/cli，面向三个桌面平台的 command line client
 ```
 
-| 层 | 内容 |
+| Layer | 内容 |
 | --- | --- |
-| `core/protocol` | 线格式（`Wire.h`）、流的记录分帧（`RecordStream.h`）、把 QUIC 与 Deskhub 信标数据报区分开的包分类器 |
-| `core/transport` | 视频的 Packetizer/Reassembler、FEC、重传缓存、发送节拍器 |
-| `core/session` | 会话状态机，按角色拆分：`session/host`（每观看者的会话、观看者表、信标、文件接收器、认证节流器）、`session/client`（屏幕客户端、文件发送器、终端客户端、连接流程），以及放在它们旁边的共享部件（传输类型、终端会话表、剪贴板同步、链路恢复） |
-| `core/control` | 码率控制器、画质阶梯、流尺寸计算、时钟偏移 |
-| `core/terminal` | 每个客户端共享的 VT 模拟器：`VtParser`、`Screen`、`KeyEncoder`、`Palette` |
-| `core/net` | 信任存储（客户端侧）、已配对设备（主机侧）、绑定地址选择、LAN 扫描逻辑 |
-| `core/ui` | 每一条用户可见的字符串、设置解析、表格行构造器 —— 好让五个客户端说同样的话 |
-| `platform/net` | `UdpSocket`（各系统一份）、`QuicEndpoint`（quiche 藏在 pimpl 后面）、`SessionTransport` |
-| `platform/auth` | `AuthNegotiation` —— 两端共说的那一套配对/通行码握手 |
-| `platform/client` | `HostLink`（拨号 + 信任 + 认证 + 通道，被每个界面共享）、`ScreenViewer`、`TerminalViewer`、`FileTransferClient`、`SourceQuery`、主机探测、LAN 扫描器 |
+| `core/protocol` | Wire format（`Wire.h`）、stream 的 record framing（`RecordStream.h`）、区分 QUIC 与 Deskhub beacon datagram 的 packet classifier |
+| `core/transport` | 面向 video 的 Packetizer/Reassembler、FEC、retransmit 缓存、send pacer |
+| `core/session` | session state machine，按角色划分：`session/host`（按 viewer 的 session、viewer 表、beacon、file receiver、auth throttle）、`session/client`（screen client、file sender、terminal client、connect 流程），以及置于其旁的共享组件（transfer 类型、terminal session 表、clipboard sync、link recovery） |
+| `core/control` | Bitrate controller、quality ladder、stream 尺寸计算、clock offset |
+| `core/terminal` | 所有 client 共享的 VT emulator: `VtParser`、`Screen`、`KeyEncoder`、`Palette` |
+| `core/net` | Trust store（client 侧）、paired devices（host 侧）、bind 地址选择、LAN scan 逻辑 |
+| `core/ui` | 全部面向用户的字符串、settings 解析、表格行构造器，使五个 client 呈现一致的内容 |
+| `platform/net` | `UdpSocket`（按 OS 实现）、`QuicEndpoint`（quiche 置于 pimpl 之后）、`SessionTransport` |
+| `platform/auth` | `AuthNegotiation` —— 双方共用的唯一 pairing/passcode handshake |
+| `platform/client` | `HostLink`（dial、trust、auth、channel，由所有界面共用）、`ScreenViewer`、`TerminalViewer`、`FileTransferClient`、`SourceQuery`、host probe、LAN scanner |
 | `platform/host` | `HostEngine`、`HostNetLoop`、`SharingHost`、`TerminalHost`、`FileHost`、`ViewerBroadcast` |
-| `platform/system` | 时钟、随机数、PTY（ConPTY / forkpty）、主机身份（密钥）、信任/已配对设备文件、自启动、保持唤醒 |
-| `core/cli` | 命令行语法及其 JSON 输出器 —— 纯文本进，校验过的命令出 |
-| `client/<os>` | 采集、编码、解码、渲染、窗口、对话框 —— 没有任何协议形状的东西 |
-| `client/cli` | 从参数到会话：一个二进制，不用任何图形工具包就能做主机、连接和开 shell。它链接的是桌面应用用的那同一份各系统媒体库 |
+| `platform/system` | Clock、random、PTY（ConPTY / forkpty）、host identity（key）、trust 与 paired-device 文件、autostart、keep-awake |
+| `core/cli` | command line 语法及其 JSON writer：输入纯文本，输出经校验的 command |
+| `client/<os>` | Capture、encode、decode、render、windowing、对话框；不包含任何 protocol 相关内容 |
+| `client/cli` | 从 flag 到 session：一个 binary 即可完成 host、connect 与打开 shell，无需 GUI toolkit。它 link 桌面 app 所用的同一套各 OS media 库 |
 
-`core/` 必须保持可离线测试，不需要网络也不需要 GPU。`platform/` 可以碰 OS，但必须在各处
-暴露一套完全相同的 API。如果同一段代码在两个客户端里都出现了，那它属于更下面那一层。
+`core/` 必须始终可在离线、无 network 与 GPU 的条件下测试。`platform/` 可以使用 OS，但
+必须在各平台提供完全一致的 API。若同一段代码出现在两个 client 中，则它应归属更低的
+layer。
 
-## 2. 一个端口，一个传输
+## 2. 一个 port，一个 transport
 
-主机提供的一切都跑在**一个 UDP 端口**上（默认 47777），通过一个 `SessionTransport`，它
-包着一个 `QuicEndpoint`：
+host 提供的全部功能都运行在**一个 UDP port**（默认 47777）之上，经由一个
+`SessionTransport`，后者封装单个 `QuicEndpoint`：
 
 ```
-                      UDP 端口 47777
+                      UDP port 47777
                             |
-                 ClassifyPacket（看第一个字节）
+                 ClassifyPacket（检查首字节）
                    /                    \
-            QUIC 包                Deskhub 数据报
+            QUIC packet            Deskhub datagram
                  |                        |
-   +-------------+------------+       只有信标：
-   |             |            |       LIST_SOURCES / PING 以明文
- streams     datagrams     (TLS)      回答；其余每一个原始包
-   |             |                    一律丢弃
+   +-------------+------------+       仅 beacon:
+   |             |            |       以明文应答 LIST_SOURCES / PING；
+ stream      datagram      (TLS)      其他裸 packet 一律丢弃
+   |             |
  control      video
- input        audio       流承载分帧的记录（RecordStream）：
- clipboard                带长度前缀的消息，最大 16 KiB。
- terminal                 数据报每个承载一个视频或音频包
- files                    （≤ 1200 B）。
+ input        audio       stream 承载经 framing 的 record（RecordStream）:
+ clipboard                带 length prefix 的 message，最大 16 KiB。
+ terminal                 每个 datagram 承载一个 video 或 audio
+ file                     packet（≤ 1200 B）。
 ```
 
-- **流**（可靠、有序）：控制、输入、剪贴板、终端、文件 —— 每条连接用一条由客户端打开的
-  双向流。一条连接上卡住的流不会拖住另一条连接。入站流数据在每轮服务中按 64 KiB 的预算
-  排空：消费它的东西（尤其是终端的 VT 模拟）会在两个切片之间把循环还给 ACK、保活和超时
-  处理，所以一场 `cat` 风暴再也不会把连接饿到触发它自己的空闲超时。
-- **数据报**（不可靠、无序，但仍然加密）：视频和音频包。丢了的 QUIC 从不重传；视频有应用
-  自己的 FEC/NACK 机制处理丢包，音频则没有任何机制 —— 见第 9 节。
-- **裸 UDP** 只为发现而存在：信标回答不会说 QUIC 的扫描器，而它没邀请过的探测得到的是空的
-  来源列表。不属于发现类型的入站裸包，在到达任何会话代码之前就被丢弃。
+- **Stream**（可靠、有序）：control、input、clipboard、terminal、file。每条 connection
+  使用一条由 client 打开的 bidirectional stream。某条 connection 上阻塞的 stream 不会
+  影响其他 connection。进入的 stream 数据按每轮 service 64 KiB 的预算处理：消费数据的
+  组件，主要是 terminal 的 VT emulation，会在各分片之间将控制权交还给 ACK、keepalive
+  与 timeout 处理，因此 terminal 的大量输出不再导致 connection 因 idle timeout 被关闭。
+- **Datagram**（不可靠、无序，但仍经 encrypt）：video 与 audio 的 packet。QUIC 不重传
+  丢失的 packet；video 由 app 自身的 FEC/NACK 机制处理丢失，audio 则没有相应机制 ——
+  见第 9 节。
+- **裸 UDP** 仅用于 discovery：beacon 应答不使用 QUIC 的 scanner，而未经邀请的 probe
+  只会得到空的 source 列表。不属于 discovery 类型的裸 packet，在到达任何 session 代码
+  之前即被丢弃。
 
-`QuicEndpoint` 把 quiche 完全藏了起来（pimpl；`QuicEndpointNone.cpp` 把它打桩掉，但只在
-构建用 `-DDESKHUB_QUIC=OFF` 主动退出时才有 —— 缺了 quiche 会让 configure 失败，因为打桩的
-二进制既不能共享也不能连接）。连接以对端地址标识；没有连接迁移。按契约，一条 quiche 连接
-是单线程的，所以每一次碰这个端点都在传输层的发送互斥锁之下 —— 而传输层从不在阻塞的
-socket 等待期间一直持有那把锁（先不加锁地 `WaitReadable`，然后短暂地加锁 `Poll`）。跨越
-等待持有它会把每一个发送方都饿死。
+`QuicEndpoint` 完全隐藏 quiche（pimpl；`QuicEndpointNone.cpp` 提供 stub，但仅在 build
+显式使用 `-DDESKHUB_QUIC=OFF` 时生效。缺少 quiche 会导致 configure 失败，因为 stub
+binary 既无法 share 也无法 connect）。connection 以 peer 地址标识，不支持 connection
+migration。按约定，quiche 的 connection 是 single-threaded 的，因此对 endpoint 的所有
+操作都在 transport 的 send mutex 之下进行。transport 不会在阻塞的 socket 等待期间持有
+该 mutex：先在未加锁状态执行 `WaitReadable`，随后加锁执行一次短暂的 `Poll`。若在等待
+期间持有该 mutex，将阻塞所有发送方。
 
-## 3. 准入：配对
+## 3. 准入：pairing
 
-每台机器在首次运行时创建一个 ECDSA P-256 密钥（`HostIdentity`）；它的 SHA-256 SPKI 哈希
-就是人看到的指纹。TLS 使用基于该密钥的自签名证书。在 TLS 之上，一次应用层握手
-（`AuthNegotiation`）按连接决定准入。传输层运行它，并丢弃来自认证尚未落定的连接的每一条
-消息：
+每台机器在首次运行时创建一个 ECDSA P-256 key（`HostIdentity`），其 SHA-256 SPKI hash
+即为用户所见的 fingerprint。TLS 使用基于该 key 的自签 certificate。在 TLS 之上，应用层
+handshake（`AuthNegotiation`）按 connection 决定准入。transport 负责执行该 handshake，
+并丢弃来自 auth 尚未完成的 connection 的所有 message：
 
-| 客户端提供 | 主机认识这台机器 | 结果 |
+| client 提供的内容 | host 是否认识该机器 | 结果 |
 | --- | --- | --- |
-| 什么都不提供 | 已配对 | **签名**：客户端用自己的密钥对一段 nonce+主机指纹的转录签名。静默放行。 |
-| 什么都不提供 | 不认识 | **审批**：去问主机前的人（*让这台机器进来吗？*）。 |
-| 一个通行码 | 主机有一个 | **通行码**：在加盐验证器上跑 SPAKE2 —— 码从不上网，每条连接一次猜测，两边互相证明，MAC 绑定到客户端实际看到的那个主机密钥（干掉中继）。输入的码总是会被检查，不管配没配对。 |
-| 一个通行码 | 主机没有 | 没有东西可比对 → 已配对就走签名，否则走审批。 |
-| 任何东西 | 配对开关已关 | **拒绝**（已配对的机器仍然走签名）。 |
+| 不提供 | 已 pair | **Signature**: client 使用自身 key 对包含 nonce 与 host fingerprint 的 transcript 签名，随即被接受。 |
+| 不提供 | 未知 | **Approval**: 询问 host 前的用户（*Let this machine in?*）。 |
+| 提供 passcode | host 设有 passcode | **Passcode**: 在加 salt 的 verifier 上执行 SPAKE2。码本身不经过网络，每条 connection 仅允许一次尝试，双方均需证明，且 MAC 绑定到 client 实际接收到的 host key，从而使 relay 攻击无效。填入的码始终会被校验，无论是否已 pair。 |
+| 提供 passcode | host 未设 passcode | 无可比对的值 → 已 pair 走 Signature，否则走 Approval。 |
+| 任意 | pairing 已关闭 | **Denied**（已 pair 的机器仍走 Signature）。 |
 
-成功之后会把该客户端写进主机的 `paired_devices`；配对是按密钥而不是按地址。三次通行码
-猜错会把通行码这条路锁上 30 秒（`AuthThrottle`，与旧的会话锁定共用常量）；审批那条路不需要
-节流 —— 把关的是人。
+成功后 client 被写入 host 的 `paired_devices`；pairing 基于 key，而非地址。passcode 连
+续错误三次将使 passcode 通道锁定 30 秒（`AuthThrottle`，与旧的 session lockout 共用
+常量）。approval 通道无需 throttle，因为由人进行判断。
 
-客户端一侧，`known_hosts`（`TrustStore`）固定主机密钥。密钥**变了**会在一条醒目的警告后面
-挡住连接；从没见过的密钥由握手本身来解决（一台证明了通行码的主机会被直接记住，不再多问）。
+在 client 侧，`known_hosts`（`TrustStore`）固定 host 的 key。key **发生变化**时将以明确
+的警告阻止连接；未知的 key 由 handshake 本身处理 —— 已证明 passcode 的 host 会被直接
+记录，不再提示。
 
-线上传的是公钥本身，而不是一个光秃秃的指纹 —— 主机会对收到的东西做哈希，所以想披上别人的
-身份，就得用一把冒充者手里没有的密钥去签名。而且因为准入在每条连接上只落定一次，传输层
-之上的东西从此不再多问：一台证明过自己的机器，在之后的任何消息里都不带通行码，会话代码
-把整条连接都当作已认证的。
+线上传输的是 public key 本身，而非单独的 fingerprint：host 对收到的内容自行计算 hash，
+因此冒用他人身份需要使用冒名者并不持有的 key 进行签名。由于准入在每条 connection 上仅
+处理一次，transport 之上的任何组件都不会再次询问：已证明身份的机器在后续 message 中不
+携带 passcode，session 代码将整条 connection 视为已 authenticate。
 
-## 4. 主机侧
-
-```
-HostEngine（每个应用一个，拥有 SessionTransport）
- ├─ 网络循环线程：RunHostNetLoop
- │    recv → 信标回复 | 视频路径入口 | Chan::Terminal → TerminalHost
- │    每个来源的会话 Tick、剪贴板刷新、重新配置、统计
- ├─ 采集/编码：按来源，由 OS 采集回调驱动（client 层）
- │    帧 → 编码器（每来源一把互斥锁）→ Packetizer → FEC → SendTo（数据报）
- ├─ 音频工作线程：采集回调 → 无锁帧环 → Opus 编码 →
- │    每观看者的数据报（AudioBroadcaster）
- └─ TerminalHost（租户，终端被共享时）
-      ├─ 网络循环线程上的 HandleMessage：TERM_OPEN/DATA/RESIZE/CLOSE → PTY
-      └─ 泵线程：PTY 输出 → 主机侧 Screen 镜像 + TERM_DATA 记录、
-           过期、踢出
-```
-
-- 只要有东西被共享，引擎就在跑。零个屏幕来源、只勾了终端时，它就以无来源的方式跑；终端还
-  活着，循环就还活着。
-- 每个屏幕来源是一个 `SourcePipelineState`：有自己的 `ScreenHostSession`（观看者表、协商、
-  输入仲裁）、编码器、画质阶梯和诊断。一次编码喂给该来源的所有观看者。
-- 反馈回路：观看者每秒发一次 `Feedback`（丢包/RTT），主机再加上自己的一个信号 —— 一帧到达
-  发送端时的年龄，也就是 `enc_lat_ms` 报告的那个量。`BitrateController`（AIMD）和
-  `QualityLadder` 根据这三者调整编码器码率、分辨率和帧率；FEC 从第一帧起就武装着，只有在
-  长时间干净运行之后才撤下，因为它要防的那种丢包，出现得比第一份报告还早 —— 积压不会武装
-  它，因为奇偶包只会让队列更深。quiche 的 CUBIC 拥塞控制坐在数据报路径下面；两者串联工作
-  —— quiche 限定离开这台机器的量，应用则让编码器适应由此产生的丢包。
-- 输入："主机优先" —— 当机器前的人自己动鼠标时，`LocalInputMonitor` 暂停远程输入；同时只有
-  一个观看者在驾驶。
-- shell：每个 shell 一个 PTY（Windows 上是 `ConPTY`，其他地方是 `forkpty`），最多 8 个；
-  连接掉了会把 shell 分离出来，并让 PTY 再活 2 分钟，好让同一台机器重新接上。每一次
-  打开/关闭/分离/重接都会带着地址、名字和密钥写进审计日志。
-- 每个 shell 的输出从它启动那一刻起也喂给一个主机侧的 `core/terminal` Screen。*Stop &
-  attach* 会断开远端客户端，并在主机上的终端窗口里打开那份镜像 —— 回滚历史完好；这样被
-  接管的 shell 归主机所有，永不过期，并在主机那个窗口关闭时结束。
-
-## 5. 客户端侧
-
-每一个客户端界面都通过同一个部件够到主机：`HostLink`
-（`platform/client/HostLink`）：它拨通 QUIC 连接、查信任存储、跑认证握手、维持链路，并且
-—— 对那些要求它的界面 —— 在链路掉了之后以退避策略重拨。再也没有哪个服务自己拨号或自己
-认证了；服务按线上的 `Chan` 打开一个通道，拿到自己的收件队列，并在自己的线程上排空它：
+## 4. Host 侧
 
 ```
-HostLink（每个打开的界面一个）
- ├─ 链路线程：拨号 → 信任检查 → 认证 → 泵
- │   （按 Chan 把入站记录和数据报路由进各通道的队列；
- │    链路脉搏；开了恢复的地方以退避策略重拨）
+HostEngine（每个 app 一个实例，持有 SessionTransport）
+ ├─ net-loop thread: RunHostNetLoop
+ │    recv → beacon 应答 | video 数据摄入 | Chan::Terminal → TerminalHost
+ │    按 source 的 session Tick、clipboard flush、reconfig、统计
+ ├─ capture/encode: 按 source，由 OS 的 capture 回调驱动（client 层）
+ │    frame → encoder（按 source 的 mutex）→ Packetizer → FEC → SendTo（datagram）
+ ├─ audio worker: capture 回调 → 无锁 frame ring → Opus encode →
+ │    按 viewer 的 datagram（AudioBroadcaster）
+ └─ TerminalHost（仅在 terminal 被共享时存在）
+      ├─ 在 net-loop thread 上 HandleMessage: TERM_OPEN/DATA/RESIZE/CLOSE → PTY
+      └─ pump thread: PTY 输出 → host 侧 Screen mirror 与 TERM_DATA record、
+           过期处理、断开处理
+```
+
+- 只要有内容被共享，engine 即处于运行状态。当没有 screen source 而仅勾选 terminal 时，
+  engine 以无 source 的方式运行；只要 terminal 存在，循环即继续。
+- 每个 screen source 对应一个 `SourcePipelineState`，拥有各自的 `ScreenHostSession`
+  （viewer 表、negotiation、input 仲裁）、encoder、quality ladder 与诊断数据。一次
+  encode 服务该 source 的全部 viewer。
+- 反馈环：viewer 每秒发送一次 `Feedback`（loss 与 RTT），host 另外提供一个自身的信号，
+  即 frame 到达发送环节时的时延，也就是 `enc_lat_ms` 报告的量。`BitrateController`
+  （AIMD）与 `QualityLadder` 依据这三个信号调整 encoder 的 bitrate、分辨率与 fps。FEC
+  自第一个 frame 起即启用，仅在长时间无丢失后才关闭，因为它所防范的丢失会在第一份报告
+  之前出现；积压状态不会启用 FEC，因为 parity 只会加深队列。quiche 的 CUBIC congestion
+  control 位于 datagram 通道之下，两者串联工作：quiche 限制离开本机的数据量，app 依据
+  由此产生的丢失调整 encoder。
+- Input：host 优先。当机器前的用户操作自己的 mouse 时，`LocalInputMonitor` 暂停 remote
+  input；同一时刻只有一个 viewer 进行操作。
+- Shell：每个 shell 对应一个 PTY（Windows 为 `ConPTY`，其他平台为 `forkpty`），最多 8
+  个。连接中断时，shell 被分离，PTY 保留 2 分钟，以便同一台机器 reattach。每次 open、
+  close、detach 与 reattach 均连同地址、名称与 key 记入审计日志。
+- 每个 shell 的输出自启动起也同时写入 host 侧的 `core/terminal` Screen。*Stop & attach*
+  断开远端 client，并在 host 的 terminal 窗口中打开该 mirror，scrollback 保持完整。以此
+  方式接管的 shell 归属于 host，不会过期，并在 host 的窗口关闭时结束。
+
+## 5. Client 侧
+
+所有 client 界面都通过同一个组件 `HostLink`（`platform/client/HostLink`）连接到 host：
+它建立 QUIC connection、检查 trust store、执行 auth handshake、维持 link，并在有此需求
+的界面上于 link 中断时以 backoff 方式重新连接。没有任何 service 自行建立连接或
+authenticate；service 按 wire 上的 `Chan` 打开一条 channel，获得独立的 inbox 队列，并在
+自身的 thread 上处理该队列：
+
+```
+HostLink（每个打开的界面一个实例）
+ ├─ link thread: dial → 检查 trust → auth → pump
+ │   （按 Chan 将进入的 record 与 datagram 分发到各 channel 的队列；
+ │    link pulse；在启用 recovery 的场景下以 backoff 重新连接）
  ├─ Chan::Control/Video/Audio ─> ScreenViewer
- │    ├─ 网络线程：HELLO/协商、视频入口（Reassembler+FEC）、
- │    │   NACK、反馈、剪贴板
- │    └─ 解码线程：解码器 + 渲染队列
- ├─ Chan::Terminal ─> TerminalViewer 服务线程
- │    ├─ core/terminal 的 Screen 持有字符网格
- │    └─ UI 轮询 Snapshot()，把按键投进命令队列
- └─ Chan::File ─> FileTransferClient 服务线程（FileUpload 环）
+ │    ├─ net thread: HELLO/negotiation、video 摄入（Reassembler 与 FEC）、
+ │    │   NACK、feedback、clipboard
+ │    └─ decode thread: decoder 与 render 队列
+ ├─ Chan::Terminal ─> TerminalViewer 的 service thread
+ │    ├─ core/terminal 的 Screen 保存字符网格
+ │    └─ UI 轮询 Snapshot()，并将按键送入 command 队列
+ └─ Chan::File ─> FileTransferClient 的 service thread（FileUpload ring）
 ```
 
-一旦被放行，链路就开始给自己把脉（`core/session/LinkPulse`）：一个会话 id 为 0 的 `Ping`
-数据报每秒发出一次，主机的信标在同一条连接上回答它、不需要任何会话，回来的时间戳变成一个
-平滑后的 RTT，而那些再也没回来的 pong 的 id 变成一个丢包百分比。`ClassifyLinkQuality` 把
-两者折成 Good / Fair / Poor，供设备列表和那个应答了主机的面板使用 —— 桌面上是它自己的
-窗口，Android 和 iOS 上是连接页面 —— 会话窗口不再承载它 —— `HostLink` 通过 `onPulse` 和
-`Pulse()` 把读数交出去，而且因为 ping 是会引发 ack 的，它同时兼任保活；纯粹的保活定时器
-只在链路停在 `Deciding` 时还有意义。老到不会回答 session-0 ping 的主机，读数就停在
-Unknown —— 什么都不会倒退。在正在恢复的链路上，脉搏同时也是存活检查：五秒没有 pong
-（而且只在第一个 pong 已经证明主机会回答之后才算）就会把连接扔进现有的重拨路径。这五秒
-只计入链路循环真正在听的时间 —— `LinkPulse::Tick` 在 `HostLink::PumpReady` 的每一轮里跑
-一次，一轮里超出 `kLinkWatchStepUs` 的部分会被退还给那段静默，所以一台冻住的机器永远
-不会被当成一台不出声的主机。
+准入完成后，link 自行监测自身状态（`core/session/LinkPulse`）：每秒发送一个 session id
+为 0 的 `Ping` datagram，host 的 beacon 在同一条 connection 上应答且无需 session，回传
+的时间戳形成平滑后的 RTT，而未返回的 pong 的 id 构成丢包率。`ClassifyLinkQuality` 将两
+者归纳为 Good / Fair / Poor，供设备列表以及接收 host 应答的面板使用 —— 桌面端为独立
+窗口，Android 与 iOS 为 connect 页。session 窗口不再显示该指标，`HostLink` 通过
+`onPulse` 与 `Pulse()` 对外提供。由于 ping 是 ack-eliciting 的，它同时充当 keepalive；
+普通的 keepalive 定时器仅在 link 处于 `Deciding` 状态时仍有意义。过旧的 host 无法应答
+session-0 的 ping，此时该指标保持为 Unknown，不产生其他影响。在恢复中的 link 上，该
+pulse 同时用作 liveness 检查：连续五秒未收到 pong（且仅在首个 pong 已确认 host 会应答
+之后计算），即将 connection 转入既有的重连流程。这五秒按 link 循环实际处于监测状态的
+时间计算：`LinkPulse::Tick` 在 `HostLink::PumpReady` 每轮执行一次，某一轮中超出
+`kLinkWatchStepUs` 的部分会从静默时间中扣除，因此本机卡顿不会被误判为 host 停止应答。
 
-屏幕观看端现在也像终端一直以来那样主动加入了这套恢复：链路掉了或静默了，或者会话五秒没
-收到东西，就把窗口停在 `Reattaching`（最后一帧留在屏幕上，状态行切成正在重新接入的文字），
-而不是结束它。当会话先察觉时，`HostLink::RequestRedial` 会强制重拨，链路重新被放行后，
-观看端会用同一个 client id 重跑一遍 `HELLO` —— 主机把观看者的槽位重新绑上 —— 然后从新的
-关键帧接着播。六十秒（`kViewerReattachGraceUs`）之内没能回来，窗口才带着通常那个原因结束。
+screen viewer 现在也采用该恢复机制，与 terminal 一致：link 中断或静默，或 session 连续
+五秒未接收数据，会使窗口进入 `Reattaching` 状态（保留最后一帧画面，status 行切换为
+reattach 提示），而不是直接结束。当 session 先发现问题时，`HostLink::RequestRedial` 触
+发重连；link 重新获得准入后，viewer 以相同的 client id 重新执行 `HELLO`，host 重新绑定
+该 viewer 的位置，stream 从新的 keyframe 恢复。若六十秒（`kViewerReattachGraceUs`）内
+仍未恢复，窗口按常规流程连同原因关闭。
 
-来源查询（`QuerySources`）以一次性的阻塞形式跑在同一条链路上。UI 仍然把意图（按键、
-调整大小、接受指纹）投进命令队列；主机密钥变了就把链路停在 `Deciding`，直到有人接受或
-拒绝。终端窗口从不解析转义序列 —— `core/terminal` 把字节流变成字符网格，窗口只负责画格子
-和转发按键事件。今天每个窗口仍然各自持有一条链路；把一条已放行的链路在所有指向同一主机的
-窗口之间共享，是既定的下一步，而它的落点就在 `HostLink` —— 一个注册表加观察者扇出 ——
-而不是再来一次握手。
+source 查询（`QuerySources`）以一次性、阻塞的形式使用同一条 link。UI 仍将各项请求（按
+键、resize、接受 fingerprint）送入 command 队列。host key 发生变化时，link 保持在
+`Deciding` 状态，直至用户接受或拒绝。terminal 窗口不解析 escape sequence：
+`core/terminal` 将 byte stream 转换为字符网格，窗口仅负责绘制单元格并转发按键事件。目
+前每个窗口仍各自持有一条 link；让指向同一 host 的所有窗口共享一条已准入的 link 是既定
+的下一步，将在 `HostLink` 处以 registry 加 observer fan-out 的形式实现，而不是新增一次
+handshake。
 
-## 6. 发现
+## 6. Discovery
 
-信标以明文 UDP 回答 `LIST_SOURCES` 和 `PING`，好让扫描器不必做 254 次 TLS 握手就能扫一遍
-子网。陌生人得到的回复是一份空列表；真正的来源列表只在已放行的连接上才透露。那个回答还
-在 `SOURCE_LIST` 的头部标志里带上了主机能做什么 —— 它收不收输入、共不共享终端 —— 所以
-客户端在打开任何窗口之前就知道一台手机只能看。标志出现之前的老主机一个都不设。最近的
-设备、它们的在线状态（ping/pong 探测）和 LAN 扫描汇成一份合并的设备列表，由
-`core/ui/DeviceRows` 构建，五个客户端都用它显示。
+beacon 以明文 UDP 应答 `LIST_SOURCES` 与 `PING`，使 scanner 扫描一个 subnet 时无需执行
+254 次 TLS handshake。未获准入的机器得到的是空列表；真实的 source 列表仅在已准入的
+connection 上提供。该应答同时通过 `SOURCE_LIST` 的 header flag 说明 host 的能力 ——
+是否接受 input、是否共享 terminal —— 因此 client 在打开任何窗口之前即可得知手机只能被
+观看。早于这些 flag 的 host 不会设置任何一项。最近设备、其在线状态（ping/pong probe）
+以及 LAN scan 结果汇总为同一份设备列表，由 `core/ui/DeviceRows` 构建，并由五个 client
+共同使用。
 
 ## 7. 磁盘上的数据
 
-一切都在用户的 Deskhub 文件夹里（`~/.deskhub`、`%USERPROFILE%\.deskhub`）：
-`host_key.pem` + `host_cert.pem`（身份）、`known_hosts`（本机信任的主机）、
-`paired_devices`（本主机放行的机器）、`auth_salt`（非秘密的验证器盐值）、
-`ui-settings.txt`、`recent-devices.txt`（地址 + 混淆过的通行码）、Linux 上的
-`portal-restore-token.txt`（桌面自己为在其屏幕共享对话框里选中的屏幕生成的令牌），以及
-每次运行的日志。文件 I/O 留在 `platform/` 里；解析和数据结构在 `core/` 里，并且有单元测试。
+全部数据位于用户的 Deskhub 文件夹（`~/.deskhub`、`%USERPROFILE%\.deskhub`）：
+`host_key.pem` 与 `host_cert.pem`（identity）、`known_hosts`（本机 trust 的 host）、
+`paired_devices`（本 host 接受的机器）、`auth_salt`（verifier 使用的非机密 salt）、
+`ui-settings.txt`、`recent-devices.txt`（地址与遮蔽后的 passcode）、Linux 上的
+`portal-restore-token.txt`（桌面针对所选屏幕签发的 token），以及每次运行的 log。文件
+I/O 位于 `platform/`；解析逻辑与数据结构位于 `core/`，并具备 unit test。
 
-观看者发来的文件落在完全不同的地方：主机选定的一个文件夹（`ui-settings.txt` 里的
-`transfer_dir`，默认是用户主目录下的 `Deskhub`）。`FileStore` 把每个文件先写成
-`<name>.deskhub-part`，只有整个文件带着匹配的 CRC-32 到齐之后才改名，所以写了一半的文件
-绝不会以真名出现，而 `UniqueFileName` 保证什么都不会被覆盖。线上传来的名字在 `platform/`
-碰到文件系统之前，先由 `core/` 的 `SafeFileName` 清洗过 —— 路径分隔符、控制字节、Windows
-拒绝的字符和保留设备名统统去掉。
+viewer 发送的文件保存在其他位置：由 host 选定的文件夹（`ui-settings.txt` 中的
+`transfer_dir`，默认为用户主目录下的 `Deskhub`）。`FileStore` 将每个文件写为
+`<name>.deskhub-part`，仅在整个文件到达且 CRC-32 匹配后改名，因此写入中途的文件不会以
+真实名称出现；`UniqueFileName` 确保不覆盖任何文件。线上的文件名先由 `core/` 的
+`SafeFileName` 处理，去除路径分隔符、控制字节、Windows 不接受的字符以及保留设备名，
+然后 `platform/` 才访问 filesystem。
 
 ## 8. 测试
 
-| 套件 | 运行环境 | 覆盖 |
+| Suite | 运行环境 | 覆盖内容 |
 | --- | --- | --- |
-| `make test` | 离线，不用 socket | 整个 `core/`：线格式、分帧、FEC、会话、VT 模拟器、设置、字符串、确定性的结构化 fuzz |
-| `make test-platform` | 回环 socket | 真实的 QUIC 握手、端到端 SPAKE2、终端主机 + 观看端走真实链路、对着真 shell 的 PTY、锁定、审批 |
-| `make test-integration` | 回环，假的采集/编码 | 完整的主机↔客户端会话：协商、视频过网、输入、通行码/审批门禁、抗垃圾数据，以及交叉负载下的延迟 —— 一次文件传输、一个被灌爆的终端和按键，与一条活着的流并行，各自以观测到的最差停顿为门槛 |
-| fuzz 目标 | 每个 PR 每目标 30 秒，每晚每目标 15 分钟 | 线格式、H.264、重组、终端字节和界面文本的解析器，加上主机端和观看端的会话状态机 |
-| `make test-perf` | release 构建，离线 + 回环 | 真正测量而不只是跑一遍热路径：`core_perf` 覆盖纯 C++ 路径，`platform_perf` 覆盖回环上的真实 QUIC；两者都会因每单位的分配、4 倍输入下的代价，以及相对该机器上记录的基线的漂移而失败 |
+| `make test` | 离线，不使用 socket | 整个 `core/`: wire、framing、FEC、session、VT emulator、settings、文案、确定性的 structured fuzzing |
+| `make test-platform` | loopback socket | 真实的 QUIC handshake、端到端的 SPAKE2、经由网络的 terminal host 与 viewer、面向真实 shell 的 PTY、lockout、approval |
+| `make test-integration` | loopback，capture/encode 为模拟实现 | 完整的 host↔client session: negotiation、经网络传输的视频、input、passcode 与 approval 的准入控制、对无效数据的容错，以及交叉负载下的时延 —— 文件传输、大量输出的 terminal 与按键操作与运行中的 stream 并行，各自按观测到的最大停顿设定阈值 |
+| fuzz target | 每个 PR 上每个 target 30 秒，nightly 每个 15 分钟 | wire、H.264、reassembly、terminal 字节与 UI 文本的 parser，以及 host 与 viewer 两侧的 session state machine |
+| `make test-perf` | release build，离线与 loopback | 对 hot path 进行实测: `core_perf` 覆盖纯 C++ 的路径，`platform_perf` 覆盖 loopback 上的真实 QUIC；两者均按每单位的 allocation 次数、4 倍输入下的开销，以及相对本机 baseline 的偏移进行判定 |
 
-CI 另外还强制 clang-format 和 clang-tidy（两者都锁定版本）、SwiftLint `--strict`、
-Android Lint、actionlint + shellcheck、三个套件的 ASan/TSan 运行、对 C++/Kotlin/Swift 的
-CodeQL、对整个历史的 gitleaks 扫描，以及 `core/` 上行 ≥ 90 % / 分支 ≥ 80 % 的覆盖率。三个
-套件另外还会交叉构建并在 arm64 Linux、Android 模拟器和 iOS 模拟器上运行，而一个 Windows
-作业每轮把集成套件再多跑三遍，为的是抓那个大约三次运行才出现一次的间歇性内存破坏；崩溃
-所在的栈帧只是这一破坏的受害者，从不是原因，所以崩溃必须留下一份 dump：测试二进制自己为
-每一个还能到达处理器的异常写出完整的 minidump，而 fastfail 到不了任何处理器，所以每个
-Windows 作业还会打开 Windows Error Reporting，并在它所守护的套件开跑之前，用一次故意的
-fail-fast 证明它确实收得到。夜间任务则把负载测试重跑两轮——一轮在 full page heap 下，另一轮针对开启了 Rust
-debug assertion 与溢出检查构建的 quiche，那是唯一能看进 quiche 内部的陷阱，因为 ASan 不
-插桩 Rust，而 page heap 只看守堆。Linux 和 macOS 的发布作业还会带着分配和规模门槛跑 `core_perf` 和
-`platform_perf`（共享 runner 上不存在时间基线），而每个 pull request 另外还会收到一份
-性能与延迟报告，作为一条自我更新的评论发出：两个性能套件在同一台 runner 上与基准提交做
-A/B（漂移只作为警告，绝不失败）、来自该 pull request 构建的负载下集成数据，以及 core 的
-覆盖率那一行。
+CI 另外强制执行 clang-format 与 clang-tidy（两者均固定版本）、SwiftLint `--strict`、
+Android Lint、actionlint 与 shellcheck、三个 suite 在 ASan 与 TSan 下的运行、对
+C++/Kotlin/Swift 的 CodeQL、对完整历史的 gitleaks 扫描，以及 `core/` 的 line ≥ 90 % 与
+branch ≥ 80 % coverage。这三个 suite 还会被 cross-build 并在 arm64 Linux、Android
+emulator 与 iOS Simulator 上运行。此外，一个 Windows job 每轮将 integration suite 额外
+运行三次，用于定位一处间歇性的 memory corruption，该问题约每三次运行出现一次。发生
+crash 的 frame 是该 corruption 的结果而非起因，因此 crash 必须留下 dump：测试 binary
+为每个到达 handler 的异常写出完整的 minidump；由于 fastfail 不会到达任何 handler，各
+Windows job 还会启用 Windows Error Reporting，并在其守护的 suite 运行之前，以一次有意
+的 fail-fast 验证采集是否正常。nightly 将 load test 额外运行两轮：一轮启用 full page
+heap，另一轮针对启用 Rust debug assertion 与 overflow check 构建的 quiche —— 这是唯一
+能够观察 quiche 内部的手段，因为 ASan 不 instrument Rust，而 page heap 只保护 heap。
+Linux 与 macOS 的 release job 同样运行 `core_perf` 与 `platform_perf`，并应用 allocation
+与 scaling 两项判定（共享 runner 上不存在时间 baseline）。每个 pull request 还会收到一
+份 perf-and-lag 报告，以一条自动更新的 comment 呈现，内容包括：两个 perf suite 在同一
+runner 上与 base commit 的 A/B 结果（偏移仅作为警告，不导致失败）、来自 pull request
+构建的负载下 integration 数据，以及 core 的 coverage 行。
 
-## 9. 值得记住的决策
+## 9. 需要记录的设计决策
 
-- **一个返回 false 的能力探测可以关掉整条控制回路**：只要 MFT 不暴露
-  `CODECAPI_AVEncCommonMeanBitRate`，Media Foundation 编码器就用 `false` 回答 `SetBitrate`，
-  而 `ApplyFeedback` 正确地把拒绝当成"什么都没提交"。在一块报告
-  `MeanBitRate: NOT SUPPORTED` 的 Intel Quick Sync MFT 上，结果就是一台从不改变码率的主机：
-  在这块硬件上实测，30 秒持续 29-40 % 的丢包产生了零个 `Bitrate` 决策，所以画质阶梯也一步
-  没动。启动日志一直写着 `NOT SUPPORTED`，没有人把它读成"自适应已经死了"。同一个文件里的
-  `SetFps` 和 `RequestKeyFrame` 早就回退到 `ReinitTransform()`；只有 `SetBitrate` 直接放弃，
-  现在它也照样回退了 —— `ConfigureTransform` 会从 `cfg` 写入 `MF_MT_AVG_BITRATE`，所以
-  重建就能应用新的码率。重建的代价是一个 IDR，这也是为什么仍然先试那条活的 `codecapi`
-  路径。当某个逐设备的能力把守着一路控制输入时，就得让回退成为强制的：降级成"更慢"是一个
-  选择，悄无声息地降级成"永不"不是。
+- **返回 false 的 capability probe 可能使整个控制环失效。** 当 MFT 未提供
+  `CODECAPI_AVEncCommonMeanBitRate` 时，Media Foundation 的 encoder 会对 `SetBitrate`
+  返回 `false`，而 `ApplyFeedback` 正确地将该拒绝理解为「未应用任何变更」。在报告
+  `MeanBitRate: NOT SUPPORTED` 的 Intel Quick Sync MFT 上，结果是 host 从不改变
+  bitrate：在该硬件上实测，30 秒持续 29-40 % 的丢包未产生任何 `Bitrate` 决策，quality
+  ladder 也未发生变化。启动日志全程显示 `NOT SUPPORTED`，但未被理解为自适应机制已停止
+  工作。同一文件中的 `SetFps` 与 `RequestKeyFrame` 早已具备回退到 `ReinitTransform()`
+  的路径，唯独 `SetBitrate` 没有，现已按相同方式补充：`ConfigureTransform` 会从 `cfg`
+  写入 `MF_MT_AVG_BITRATE`，因此重建一次即可应用新的速率。重建的代价是一个 IDR，因此仍
+  优先尝试在线的 `codecapi` 路径。当按设备而异的 capability 控制着某一路控制输入时，
+  回退必须是强制的：降级为更低性能是一种选择，静默降级为完全不生效则不是。
 
-- **一个跟不上的发送方，看起来和一条干净的链路一模一样**：`BitrateController` 拿到的每个
-  输入 —— 丢包、RTT、接收速率 —— 都来自观看者，所以回路里没有任何东西能说"落后的是我"。
-  在一台给两个观看者做主机的 Pixel 4 上实测：帧离开编码器时已经陈旧了 15 秒，而观看者报告
-  0 % 丢包、15 ms RTT，控制器把那读成余量，一路把码率抬回它 20 Mbps 的上限 —— 这是发送方
-  内部的缓冲膨胀，链路看起来越干净，它就泵得越狠。主机现在在发送这一步测量帧的年龄，并把
-  它和观看者的数字一起喂进去：超过 `kBacklogMs` 就按 2 % 丢包退让，超过 `kSevereBacklogMs`
-  就按 5 % 退让，两者中的任何一个都会把爬升挡住通常那两秒。码率仍然是唯一的控制变量，所以
-  `QualityLadder` 跟在它后面降级，帧率上限也跟着走。任何只由远端喂养的控制回路，对它真正
-  拥有的那半条流水线都是瞎的。
+- **跟不上的发送方与无丢失的链路表现完全相同。** `BitrateController` 的所有输入 ——
+  loss、RTT、接收速率 —— 均来自 viewer，因此控制环中没有任何组件能够判断落后的是发送方
+  自身。在一台为两个 viewer 提供 host 的 Pixel 4 上实测：frame 离开 encoder 时已滞后
+  15 秒，而 viewer 报告 0 % 丢包与 15 ms RTT，控制器将其视为余量并把 bitrate 重新提升至
+  20 Mbps 上限。这是发送方内部的 bufferbloat：链路看起来越好，推送的数据量越大。现在
+  host 在发送环节测量 frame 的时延，并将其与 viewer 的数据一同输入：超过 `kBacklogMs`
+  时按 2 % 丢包处理，超过 `kSevereBacklogMs` 时按 5 % 丢包处理，两者都会按惯例封锁两秒
+  内的回升。bitrate 仍是唯一的控制变量，因此 `QualityLadder` 随之下调，fps 上限相应调
+  整。仅由对端提供数据的控制环，无法观察自身实际掌控的那半条 pipeline。
 
-- **只有在有东西会丢帧的地方，限制帧率才有用**：阶梯上的帧率那一档是一个请求，而每个平台
-  都得在某个能扔掉帧的地方兑现它。Windows 和 Linux 在采集处用 `FrameGate` 把关；Android 用
-  `max-fps-to-encoder` 限制 MediaCodec 的输入；macOS 重新配置 ScreenCaptureKit 的帧间隔。
-  iOS 无处可去：ReplayKit 按屏幕刷新率投递，而 `VtEncoder::SetFps` 只设置
-  `kVTCompressionPropertyKey_ExpectedFrameRate`，那是一个不会丢掉任何东西的码率控制提示。
-  在那里换一档，只是重新调了编码器，对它必须吞下多少帧毫无改变。`OfferVtFrame` 现在为两个
-  Apple 应用都跑同一个 `FrameGate`，位置在空闲刷新缓存更新之后，好让静止的屏幕仍然有一帧
-  可以重发。当一个旋钮在每个平台上都存在时，先看清楚每个平台拿它干什么，再去信任那个阶梯。
+- **限制 fps 只在确实会丢弃 frame 的位置才有效。** ladder 的 fps 档位是一项请求，各平台
+  必须在某个可以丢弃 frame 的位置予以落实。Windows 与 Linux 通过 `FrameGate` 在 capture
+  阶段处理；Android 通过 `max-fps-to-encoder` 限制 MediaCodec 的输入；macOS 重新配置
+  ScreenCaptureKit 的 frame interval。iOS 缺少相应位置：ReplayKit 按屏幕速率提供 frame，
+  而 `VtEncoder::SetFps` 仅设置 `kVTCompressionPropertyKey_ExpectedFrameRate`，这是给
+  rate control 的提示，不会丢弃任何内容。在此处调整档位只是重新配置 encoder，其需要处理
+  的 frame 数量并未改变。现在 `OfferVtFrame` 在两个 Apple app 上运行同一个 `FrameGate`，
+  并置于 idle-flush 缓存刷新之后，使静止画面仍有可重发的 frame。当某个参数在所有平台上
+  都存在时，应先确认各平台如何处理它，再依赖 ladder。
 
-- **发送节拍器必须远高于编码器自己的输出速率**：`Pacer::Gate` 睡在 `SendEncodedFrame` 所在
-  的那个线程上，而在 Android 上那就是 MediaCodec 的排空循环 —— 正是那个必须先调用
-  `releaseOutputBuffer`、编码器才能交出下一帧的循环。因此节拍设定的是排空速率，而不只是
-  上线速率，与此同时 VirtualDisplay 还在按屏幕刷新率往里推新帧。为了抹平发送突发而把
-  `kPacingRateMultiple` 从 2 收窄到 1.2，在一台 Pixel 4 上实测：每帧的突发从 20 ms 变成
-  中位数 63 ms，编码器积压无止境地增长 —— `enc_lat_ms` 在 100 秒内爬过 46 秒，观看端落后
-  4.6 秒。取 2 时，同样的运行把 `enc_lat_ms` 保持在 0。那份余量不是可以回收的松弛；它正是
-  让编码流水线排空快于填充的东西。要对付发送突发，就动 socket 缓冲区，或者把节拍挪出排空
-  线程，绝不要靠收紧这个数字。
+- **send pacer 必须显著高于 encoder 自身的输出速率。** `Pacer::Gate` 在
+  `SendEncodedFrame` 所处的 thread 上等待，而在 Android 上该 thread 即 MediaCodec 的
+  drain 循环，也就是必须先调用 `releaseOutputBuffer`、encoder 才能交付下一帧的循环。
+  因此 pacing 决定的不仅是线上速率，还包括 drain 速率，而 VirtualDisplay 仍按屏幕速率
+  持续送入新的 frame。为平滑发送突发而将 `kPacingRateMultiple` 从 2 收紧至 1.2 的改动，
+  已在 Pixel 4 上实测：每帧的突发中位数由 20 ms 升至 63 ms，encoder 的积压无限增长 ——
+  `enc_lat_ms` 在 100 秒内超过 46 秒，viewer 落后 4.6 秒。取值为 2 时，同一次运行将
+  `enc_lat_ms` 保持为 0。这部分余量不是可以回收的冗余，而是保证 encode pipeline 的排空
+  速度快于填充速度的前提。处理发送突发应使用 socket buffer，或将 pacing 移出 drain
+  thread，而不是调低该数值。
 
-- **性能套件以代价为门槛，所以还得有第二道门看结果**：`core_perf` 测量每个包的分配次数和
-  时间随输入的增长方式，而在一条真实链路上单个丢包正让 22 % 的完整帧被丢掉时，它所有的
-  重组器负载全都通过了。它本来就抓不到：把好的视频丢掉，比解码它*更便宜*，所以那条坏策略
-  在这个套件盯着的每个数字上都得分更高。`LossGoodputTests` 是它的搭档，当代码干的活比它
-  应该干的少时就失败 —— 用一条带真实往返的模拟尾部丢包链路，以那些包全都到齐的帧里真正
-  抵达解码器的比例，以及两个已投递帧之间的最长间隔为门槛。两者都与机器无关，所以在笔记本、
-  CI runner 和手机上都成立。只要一条策略可以靠扔掉工作来"成功"，就该祭出一道产出门槛。
+- **perf suite 依据开销判定，因此还需要一项依据结果的判定。** `core_perf` 测量每个
+  packet 的 allocation 次数以及时间随输入的增长方式；在真实链路上单个丢包导致 22 % 的
+  完整 frame 被丢弃期间，其全部 reassembler workload 仍然通过。该 suite 无法发现这一
+  问题：丢弃有效 video 的开销*低于*对其 decode，因此错误的策略在该 suite 关注的每一项
+  指标上得分更高。`LossGoodputTests` 是配套的判定，在代码所做工作少于应有水平时失败：
+  它模拟带真实往返时延的尾部丢包链路，依据「所有 packet 均已到达的 frame 中实际抵达
+  decoder 的比例」以及「相邻两个已交付 frame 之间的最大间隔」进行判定。两者均与硬件
+  无关，因此在笔记本、CI runner 与手机上结果一致。当某项策略可以通过减少工作量而「成
+  功」时，都应引入 goodput 判定。
 
-- **一个丢包的代价是一帧，而不是直到下一个关键帧之前的整幅画面**：重组器过去在每次丢包时
-  都武装 `waitingForIdr_`，于是一个缺失的包会把后面每一个*完整*的帧都扔掉，直到新的 IDR
-  到来。在一台通过 Wi-Fi 做主机的手机上实测，那把 64 个真正不完整的帧变成了 381 个被丢弃
-  的帧 —— 6.4 MB 可解码的视频进了垃圾桶，画面每次冻结的中位数是 146 ms，最长达 1.4 秒。
-  现在只丢掉那个不完整的帧；它后面的帧直接进解码器，由解码器遮掩缺失的参考帧，同时
-  `InvalidateRef` 向主机点名那个坏帧，关键帧请求把它修好。短暂的宏块伪影，是不冻结所要
-  付出的、有意为之的代价。`waitingForIdr_` 为它当初唯一说对的那个场景保留了下来：中途加入
-  的观看者根本没有参考帧，必须等第一个 IDR。
+- **单个 packet 丢失应只影响一帧，而不是影响到下一个 keyframe 为止的全部画面。**
+  reassembler 此前在每次丢包时都置位 `waitingForIdr_`，因此单个缺失的 packet 会导致其后
+  所有*完整*的 frame 被丢弃，直到新的 IDR 到达。在通过 Wi-Fi 作为 host 的手机上实测，这
+  使 64 个真正不完整的 frame 变为 381 个被丢弃的 frame：6.4 MB 可 decode 的 video 被
+  丢弃，画面冻结的中位数为 146 ms，单次最长 1.4 秒。现在仅丢弃不完整的 frame，其后的
+  frame 直接进入 decoder，由 decoder 遮盖缺失的参考帧，同时 `InvalidateRef` 向 host 指
+  明出错的 frame，并由 keyframe 请求完成修复。短暂的宏块瑕疵是为避免画面冻结而接受的
+  代价。`waitingForIdr_` 仅保留用于其原本正确的一种情形：中途加入的 viewer 没有任何参考
+  帧，必须等待第一个 IDR。
 
-- **停顿窗口必须比一次重传更长，否则 NACK 只是装饰**：过去一帧在被宣告丢失之前只有两个帧
-  间隔（60 fps 下是 33 ms），而同一条链路上实测的 RTT 是 24-49 ms。NACK 发出去了，答复回来
-  时那帧已经进了垃圾桶 —— 表现为 `late_ms_avg=24`，每秒有 87 个包落在已经不存在的帧上。
-  `StallTimeoutUs` 现在取节拍窗口和一点五倍往返中的较大者，仍然受硬超时的封顶，所以恰恰在
-  需要重传的那些链路上，重传才值得去要。
+- **判定丢失前的等待时间必须长于一次 retransmit，否则 NACK 不起作用。** 此前一帧在被
+  判定为丢失前仅等待两个帧间隔（60 fps 下为 33 ms），而同一链路上实测的 RTT 为
+  24-49 ms。NACK 发出后，应答到达时该帧已被丢弃，表现为 `late_ms_avg=24`，且每秒有 87
+  个 packet 属于已不存在的 frame。现在 `StallTimeoutUs` 取「按 pacing 计算的等待时间」
+  与「1.5 倍往返时延」中的较大者，并仍受硬性 timeout 的上限约束，因此仅在确有需要的链路
+  上才请求重传。
 
-- **性能套件以分配次数和形状为门槛，而不是以毫秒**：三个测试套件构建的是 debug，而且 CI
-  还会在 ASan、TSan 和覆盖率下再跑一遍，那里的墙钟预算测的是 sanitizer 而不是代码。所以
-  `core_perf`（release 预设、`make test-perf`）在两件与机器无关的事情上失败 —— 每个包、
-  每帧或每 KB 的分配次数（通过替换全局 `operator new` 来计数），以及某个 `-scaling` 行的
-  时间增长远快于它的输入 —— 并把计时那一半留作与 `out/perf/baseline.txt` 的比较，那个文件
-  由 `make perf-baseline` 按机器记录，永不提交。正是这种拆分，让这个套件能在笔记本、CI
-  runner 或手机上一样地判定"重组器现在把每一片都拷了两遍"这种回归，同时对那些数字本身
-  就是重点的路径，仍然打印出每单位纳秒数和 MB/s。CI 在 Linux 和 macOS 的发布作业上跑这两道
-  与机器无关的门槛；Windows 只构建二进制，因为 MSVC 的 deque 对任何大于 16 字节的元素都
-  每个元素分配一个块，所以同样的代码在那里分配次数不同。pull request 还会拿到一份共享
-  runner 的噪声无法推翻的计时比较 —— 基准提交和 pull request 在同一台 runner 上测量，容差
-  50 %，只报警告。`platform_perf` 把同样的门槛扩展到回环上的真实 QUIC，那里墙钟时间测的是
-  服务循环的节奏 —— 64 KiB 的流排空预算乘以 1 ms 的轮询节拍 —— 所以预算被缩小、排空不再
-  线性伸缩，或者轮询循环里多了一次分配，都会表现为一次跳变，尽管同样工作的 CPU 代价几乎
-  不会变。
+- **performance suite 依据 allocation 与开销的增长形态判定，而非毫秒数。** 三个 test
+  suite 以 debug 方式构建，CI 还会在 ASan、TSan 与 coverage 下再次运行，此时以挂钟时间
+  设定的预算衡量的是 sanitizer 而非代码本身。因此 `core_perf`（release preset，
+  `make test-perf`）依据两项与硬件无关的指标判定失败：通过替换全局 `operator new` 计数
+  的每 packet、每 frame 或每 KB 的 allocation 次数；以及某一行 `-scaling` 的耗时增长远
+  快于输入。计时部分保留为与 `out/perf/baseline.txt` 的对比，该文件由 `make
+  perf-baseline` 按机器生成，不纳入版本控制。这种划分使该 suite 能在笔记本、CI runner
+  与手机上同样地判定出「reassembler 现在将每个分片复制两次」这类回退，同时仍为数值本身
+  具有意义的路径输出每单位的 ns 与 MB/s。CI 在 Linux 与 macOS 的 release job 上执行这两
+  项与硬件无关的判定；Windows 仅构建 binary，因为对于大于 16 字节的元素，MSVC 的 deque
+  会为每个元素单独 allocate 一个 block，同样的代码在该平台的 allocation 计数不同。pull
+  request 还会获得一份不受共享 runner 噪声影响的计时对比：base commit 与 pull request
+  在同一 runner 上测量，容差 50 %，仅作为警告。`platform_perf` 将同样的判定扩展至
+  loopback 上的真实 QUIC，此处挂钟时间反映的是 service 循环的节奏 —— 64 KiB 的 stream
+  处理预算乘以 1 ms 的 poll tick —— 因此预算被缩小、处理不再线性扩展，或 poll 循环中新
+  增一次 allocation，都会表现为明显的跳变，即使同样工作的 CPU 开销几乎不变。
 
-- **`FileHost` 从不在持有自己的锁时发送**：QUIC 服务循环在 `SessionTransport::sendMutex_`
-  之下运行 `QuicEndpoint::Poll`，而在那里关闭的连接会直接回调进 `FileHost::OnPeerGone`，
-  它会去拿 `FileHost::mutex_`。所以 `sendMutex_ -> mutex_` 这个顺序是传输层定死的。任何
-  先拿 `mutex_` 再发送的路径 —— `FileReceiver` 通过 `hooks.send` 发出一个 accept、一个 ack
-  或一个 cancel —— 就把环闭合了，TSan 把它抓成了接收循环与某个在活跃传输上翻
-  `SetAccepting(false)` 的 UI 线程之间的锁序倒置。因此接收器发出的记录都在 `mutex_` 之下
-  排进 `outbox_`，只有在它被释放之后才发送，并且在两半上都持有 `outboxMutex_`，好让对端
-  仍然按它们产生的顺序看到它们。`OnPeerGone` 根本不能发送：它已经跑在 `sendMutex_` 之下，
-  所以它把自己排进去的东西丢掉。
+- **`FileHost` 不在持有自身 lock 时发送数据。** QUIC 的 service 循环在
+  `SessionTransport::sendMutex_` 之下执行 `QuicEndpoint::Poll`，而在该处关闭的
+  connection 会直接回调至 `FileHost::OnPeerGone`，后者会获取 `FileHost::mutex_`。因此
+  `sendMutex_ -> mutex_` 的顺序由 transport 固定。任何先获取 `mutex_` 再发送的路径 ——
+  例如 `FileReceiver` 通过 `hooks.send` 发出 accept、ack 或 cancel —— 都会形成锁环，
+  TSan 已将其识别为接收循环与在活动传输上切换 `SetAccepting(false)` 的 UI thread 之间的
+  lock-order inversion。因此 receiver 产生的 record 在 `mutex_` 之下写入 `outbox_`，并
+  在释放该锁之后才发送，两个阶段均持有 `outboxMutex_`，以保证 peer 收到的顺序与产生顺序
+  一致。`OnPeerGone` 不发送任何数据：它本身运行于 `sendMutex_` 之下，因此丢弃已排入队列
+  的内容。
 
-- **命令行客户端是第四个前端，不是第二套实现**：它在 `core/cli` 里解析参数，然后驱动的正是
-  桌面应用驱动的那些部件 —— 用 `SharingHost` 做主机、用 `ScreenViewer` 观看、用
-  `TerminalViewer` 打开 shell。它唯一拥有的东西是一个窗口：Linux 上是 X11 + EGL，Windows
-  上是桌面应用自己的 `RunViewer`。这就是为什么每个客户端的 `cpp/` 目录树是一个静态库
-  （`deskhub_linux_core`、`deskhub_win_core`、`deskhub_win_view`、`deskhub_mac_core`），
-  而 GUI 代码坐在它上面 —— 这个拆分的存在，就是为了让 CLI 能链接媒体流水线而不必链接 GTK
+- **command line client 是第四个前端，而非第二套实现。** 它在 `core/cli` 中解析 flag，
+  随后驱动与桌面 app 完全相同的组件：`SharingHost` 用于 host，`ScreenViewer` 用于观看，
+  `TerminalViewer` 用于打开 shell。它自身独有的只有显示窗口：Linux 上为 X11 与 EGL，
+  Windows 上为桌面 app 自身的 `RunViewer`。这正是每个 client 的 `cpp/` 树被组织为静态库
+  （`deskhub_linux_core`、`deskhub_win_core`、`deskhub_win_view`、`deskhub_mac_core`）
+  而 GUI 代码位于其上的原因：这种划分使 CLI 能够 link media pipeline，而无需 link GTK
   或 wxWidgets。
 
-- **`preflight` 只在真的有屏幕要采集时才跑**：每个客户端都用它来检查采集路径 —— Linux 上的
-  xdg portal、macOS 上的屏幕录制授权、Windows 上的一个 D3D11 设备。只带一个 shell 的共享
-  完全不需要这些，所以照样去问，就把无头机器上的 `share --terminal` 变成了"屏幕采集权限
-  没了"。`HostEngine::Start` 现在在来源列表为空时跳过它。
+- **`preflight` 仅在存在需要 capture 的屏幕时执行。** 所有 client 都用它检查 capture
+  路径：Linux 上的 xdg portal、macOS 上的 Screen Recording 授权、Windows 上的 D3D11
+  设备。仅包含 shell 的共享不需要这些条件，因此无条件检查曾导致无显示器主机上的
+  `share --terminal` 报告 screen-capture permission 缺失。现在 source 列表为空时，
+  `HostEngine::Start` 会跳过该检查。
 
-- **有 shell 没屏幕的主机要活下去**：网络循环在没有来源活着时就结束会话，而只共享终端的
-  情况按定义就没有来源。`keepAlive` 现在根据调用方的意图（`ShareOptions::terminal`）来回答，
-  而不是根据一个只有在循环已经跑起来之后才挂上去的 `TerminalHost` 指针。
+- **只有 shell 而没有屏幕的 host 仍保持运行。** net 循环在没有任何 source 处于活动状态
+  时结束 session，而仅共享 terminal 的场景按定义没有 source。`keepAlive` 依据调用方的
+  意图（`ShareOptions::terminal`）确定，而不是依据在循环启动之后才挂接的 `TerminalHost`
+  指针。
 
-- **帧闸门是朝着一个截止时刻计数，而不是从它留下的上一帧算起**：一个在 30 fps 目标下交出
-  40 fps 的合成器，在大多数 33 ms 的边界上根本没有帧，所以一个只问"这一帧离我留下的那帧
-  够远了吗"的闸门会拒掉每隔一帧，最后稳定在 20 fps —— 低于目标，而且参差不齐，那是抖动而
-  不是更慢的流。`FrameGate` 改为携带一个滚动的到期时间：放行会把它精确推进一个间隔，于是
-  余数被保留下来，进 40 出 30。比目标慢的采集永远不会被抽帧，而落后于真实时间的到期时间会
-  重新同步而不是攒下一个突发，所以安静的一段时间买不来之后的一次爆发。
+- **frame gate 按目标时刻计数，而不是从上一个保留的 frame 开始计数。** 当 compositor
+  以 40 fps 向 30 fps 的目标提供画面时，大多数 33 ms 边界上并没有 frame，因此仅判断「与
+  上一个保留帧的间隔是否足够」的 gate 会每隔一帧丢弃一帧，最终稳定在 20 fps：低于目标
+  且不均匀，表现为 judder 而非速率更低的 stream。`FrameGate` 改为维护一个滚动的目标
+  时刻：每次放行将其精确推进一个间隔，因此余量得以保留，输入 40 帧可输出 30 帧。低于
+  目标速率的 capture 不会被抽稀，而已落后于真实时间的目标时刻会重新同步而非累积，因此
+  一段空闲时间不会换来之后的突发。
 
-- **Linux 主机在自己的线程上编码，而且交给那个线程的是小帧而不是大帧**：在 PipeWire 的
-  `process` 回调里编码，会把采集限制到 `1000 / enc_ms` fps，并把每一次编码耗时的抖动都变成
-  客户端上的帧节奏抖动。现在编码跑在自己的线程上，经由 `FrameMailbox` 投喂 —— 一个最新者
-  胜出的单槽队列 —— 编码器落后时，最新的帧胜出，陈旧的那帧被计数而不是排队。穿过这个队列
-  的是已经缩放到编码尺寸的帧，大约只有原来七分之一的字节。改成把全分辨率的帧拷过去，代价
-  远不止那次拷贝本身：20 MB 的缓存行脏在采集核心里，编码核心随后还得把它们拉过来，实测是
-  16 ms，而它读自己不拥有的同一块内存只要 3.4 ms。采集线程反正必须把每个源像素碰一遍，
-  所以那正是花掉这一趟的正确地方。Dma-buf 帧仍然内联编码：回调一返回，合成器就会复用它们
-  的后备内存，所以它们活不过那个回调，而 VA-API 反正是在 GPU 上缩放它们的。
-- **Linux 主机按帧住在哪里挑编码器，而不是按装了什么**：dma-buf 帧交给 VA-API，它能在
-  产生这帧的那块 GPU 上零拷贝导入；映射（CPU）帧在有 NVIDIA 驱动时交给 NVENC，因为在一台
-  由 NVIDIA GPU 渲染的桌面上，合成器会把 screencast 重新协商成共享内存，那么编码就该归那块
-  能直接从系统内存取像素的卡。`HwEncoder` 在每次重建编码器时做这个判断，之后来了另一种帧
-  就返回 `false`，那就是重建的信号。
-- **NVENC 之前的缩放是我们自己的，不是 swscale 的**：NVENC 接受打包的 32 位像素，但不会
-  帮你缩放，而采集来的是全分辨率桌面。`libswscale` 在 3440x1440 → 1280x534 上实测 9.2 ms
-  —— 大约 2 GB/s，比这台机器的内存带宽低了一个数量级，因为打包 RGB 的缩放会掉出它的优化
-  路径。`core/` 里的 `RgbDownscale` 是一个专为这种形状写的面积平均：每个源像素一次 32 位
-  加载、整数累加，同一帧 4.0 ms，而且是正确的抗锯齿，而不是 swscale 给的双线性采样。整帧
-  NVENC 的开销落在约 5 ms，所以 60 fps 还有余量。
-- **性能数字只有出自 release 构建才有意义**：`make build-linux` 和 `make run-linux` 配置的
-  是 `x64-debug` 预设，也就是 `-O0`，而编码路径如今是 `core/` 里的像素算术。同一帧在那里
-  约 19 ms，而 `make release-linux` 出来的约 5 ms。一份对着 debug 二进制测出来的卡顿报告，
-  测的是构建类型。
+- **Linux host 在独立 thread 上 encode，并向该 thread 传递缩小后的 frame，而非完整
+  frame。** 在 PipeWire 的 `process` 回调中执行 encode 会将 capture 限制在
+  `1000 / enc_ms` fps，并使每次 encode 耗时的波动转化为 client 侧的帧节奏抖动。现在
+  encode 在独立 thread 上运行，通过 `FrameMailbox` 获取数据 —— 这是一个采用「保留最新」
+  策略的单槽队列：encoder 落后时保留最新的 frame，旧的 frame 被计数而非排队。跨越队列
+  传递的是已缩放到 encode 尺寸的 frame，约为原始数据量的七分之一。改为传递全分辨率的
+  frame 所付出的代价远高于复制本身：capture 所在核心中留下 20 MB 处于 dirty 状态的
+  cache line，随后 encode 所在核心必须将其取回，实测为 16 ms，而读取同等数量、但归其
+  所有的内存仅需 3.4 ms。capture thread 无论如何都要处理每个源像素一次，因此这是执行该
+  次遍历的正确位置。dma-buf 的 frame 仍在原位 encode：回调返回后 compositor 即复用其
+  后备内存，因此它们无法存活于回调之外，而 VA-API 本身也在 GPU 上完成缩放。
+- **Linux host 依据 frame 所处位置选择 encoder，而非依据已安装的软件。** dma-buf 的
+  frame 交由 VA-API，它可以在生成该 frame 的 GPU 上以 zero-copy 方式导入；已映射到 CPU
+  内存的 frame 在存在 NVIDIA driver 时交由 NVENC，因为在由 NVIDIA GPU 渲染的桌面上，
+  compositor 会将 screencast 重新协商为共享内存，此时 encode 应由能够直接从系统内存
+  读取像素的显卡承担。`HwEncoder` 在每次重建 encoder 时作出该判断，之后若收到另一类型
+  的 frame 则返回 `false`，这即为需要重建的信号。
+- **NVENC 之前的缩放由本项目实现，而非使用 swscale。** NVENC 接受 packed 的 32 位像素
+  但不执行 resize，而 capture 得到的是全分辨率桌面。`libswscale` 在 3440x1440 →
+  1280x534 上实测为 9.2 ms，约合 2 GB/s，比本机内存带宽低一个数量级，原因是 packed RGB
+  的缩放不在其优化路径内。`core/` 中的 `RgbDownscale` 是针对该场景实现的面积平均算法：
+  每个源像素一次 32 位 load，使用整数累加，同一 frame 实测 4.0 ms，并给出正确的抗锯齿
+  结果，而非 swscale 采用的双线性单点采样。整帧 NVENC 的开销约为 5 ms，因此 60 fps 仍有
+  余量。
+- **性能数据只有来自 release 构建才有意义。** `make build-linux` 与 `make run-linux`
+  配置的是 `x64-debug` preset，即 `-O0`，而 encode 路径现已是 `core/` 中的像素运算。同
+  一帧在该配置下约需 19 ms，而 `make release-linux` 构建的版本约需 5 ms。基于 debug
+  binary 得出的 judder 报告，实际衡量的是构建类型。
 
-- **Apple 观看端按 PTS 在一个控制时基上给视频定节奏，而节拍器从不信任自己**：帧一到就显示，
-  会把 Wi-Fi 到达抖动变成肉眼可见的卡顿，而所有延迟数字却都好得很 —— 节奏不是延迟。
-  `VideoPacer`（core，离线测试）用与端到端指标相同的方式把主机 PTS 映射到本地显示时间 ——
-  `arrival − pts` 的窗口最小值 —— 再加上一段约 33 ms 的提前量，用来支付到达抖动，而
-  `VtDecoder` 用它驱动一个 `AVSampleBufferDisplayLayer` 的控制时基，只有偏离超过 250 ms
-  才重新同步。超过 2 秒的 pts 跳变会被读成一条新的流而不是抖动，所以映射会重新起头，而不是
-  冻结一个窗口那么久。因为渲染器是否遵守外部时基没法在这里对每个系统版本都证明，解码器会
-  自己留个心眼：一连串按节奏的帧被塞满的渲染队列吞掉，就把它翻回立即显示并冲刷 —— 宁可
-  交出平滑，也不交出画面。
+- **Apple 平台的 viewer 依据 PTS 在 control timebase 上进行视频节奏控制，且 pacer 不
+  信任自身的结果。** 每帧一到达即显示，会使 Wi-Fi 的到达抖动表现为 judder，而各项
+  latency 指标仍然良好：显示节奏与 latency 不是同一回事。`VideoPacer`（位于 core，具备
+  离线测试）以与 e2e 指标相同的方式将 host 的 PTS 映射到本地显示时间 —— 采用
+  `arrival − pts` 在滑动窗口内的最小值 —— 并加上约 33 ms 的提前量以吸收到达抖动，
+  `VtDecoder` 据此驱动 `AVSampleBufferDisplayLayer` 的 control timebase，仅在偏差超过
+  250 ms 时重新同步。超过 2 秒的 pts 跳变被视为新的 stream 而非抖动，因此映射会重新
+  初始化，而不是在一个窗口内保持冻结。由于无法在此确认所有 OS 版本的渲染器都遵守外部
+  timebase，decoder 会自行核查：连续多个经节奏控制的 frame 被已满的渲染队列丢弃时，它
+  将切回立即显示模式并执行 flush，宁可放弃平滑处理，也不放弃画面。
 
-- **音频是一个数据报一帧，丢了的那帧从不去追**：64 kbps 下一个 20 ms 的 Opus 帧实测约
-  160 字节，最宽 209 字节，而一个数据报有 1180 字节的空间 —— 所以音频路径没有分包器、没有
-  FEC、没有重组器、没有 NACK，而那几乎就是视频路径的全部。丢包在代价最小的地方被吸收：
-  Opus 在后一帧里带有带内 FEC，而接收端会让解码器遮掩抖动缓冲报告的那个空洞。重传只会
-  比没用更糟，因为晚到 200 ms 的一帧既没法播，还要拖住它后面那十帧。`make opus-smoke`
-  能在任何能构建这个库的机器上量出这些数字。
-- **抖动缓冲里没有定时器**：`AudioJitterBuffer` 是纯状态，而目标延迟不过是它在开始播放前
-  先填几帧 —— 60 ms 就是三帧。这让整个东西可以离线测试、不用睡眠，也让失败模式变得明确：
-  突发会被封顶而不是排队，空缓冲会重新缓冲而不是断续，序号跳变会被读成一条新流而不是几千
-  个丢帧。节奏住在 `AudioPlayer` 里，它每 20 ms 墙钟时间把一帧弹进一个 PCM 环，由音频输出
-  的渲染回调来排空。
-- **采集回调从不编码**：PipeWire 和 ScreenCaptureKit 在实时线程上投递音频，截止时间只有
-  几毫秒，而在那里错过截止时间，搞坏的是主机自己的播放，不只是 Deskhub 的。Opus 编码是
-  0.3–1.5 ms 且有尖峰，而过去每个观看者一次 `sendto` 还跟在它后面跑在同一个线程上。
-  `AudioBroadcaster::Offer` 现在只把那 20 ms 的帧拷进一个预分配的无锁槽环并打上采集时间戳；
-  一个工作线程去做编码、诊断和逐观看者的发送。工作线程落后的代价是一次被计数的丢弃
-  （`framesRefused`），而绝不是主机音频里的一次爆音。
-- **声音需要两端都点头，老客户端永远听不到**：观看者置位 `Hello.features` 的第 0 位，主机
-  在自己的能力里通告 `kHostSharesAudio`，而主机只给置了那一位的观看者发包。这正是
-  `kProtocolVersion` 停在 2 的原因：5.0.x 的观看者发 `features = 0`，所以 5.1 的主机绝不会
-  往线上放一条它解析不了的消息。
+- **音频为每个 datagram 一帧，丢失的 packet 不予重传。** 64 kbps 下 20 ms 的 Opus frame
+  约为 160 字节，最大 209 字节，而一个 datagram 可容纳 1180 字节。因此音频通道没有
+  packetizer、FEC、reassembler 与 NACK，而这几乎是 video 通道的全部组成。丢失在代价最低
+  处处理：Opus 在下一帧中携带 in-band FEC，接收端让 decoder 遮盖 jitter buffer 报告的
+  缺口。重传没有意义，因为延迟 200 ms 到达的帧既无法播放，又会延后其后的十帧。
+  `make opus-smoke` 可在任何能够构建该库的机器上测得上述数据。
+- **jitter buffer 中不含定时器。** `AudioJitterBuffer` 仅为状态机，目标延迟即为开始播放
+  前需要缓存的帧数，60 ms 对应三帧。这使整个组件可以离线测试而无需等待实际时间，也使各
+  失败情形变得明确：突发被限制而非排队，缓冲为空时重新缓冲而非断续播放，序号跳变被视为
+  新的 stream 而非数千帧丢失。节奏控制位于 `AudioPlayer`，它每 20 ms 实际时间向一个 PCM
+  ring 送入一帧，由 sink 的 render 回调读取。
+- **capture 回调不执行 encode。** PipeWire 与 ScreenCaptureKit 在实时 thread 上提供
+  音频，截止期为数毫秒，在此处超时会导致 host 自身音频播放的 xrun，而不仅是 Deskhub 的。
+  Opus encode 耗时 0.3–1.5 ms 并存在尖峰，此前每个 viewer 的 `sendto` 还紧随其后运行在
+  同一 thread 上。现在 `AudioBroadcaster::Offer` 仅将 20 ms 的 frame 复制到预先分配的
+  无锁槽位 ring 中并记录 capture 时间；encode、诊断与按 viewer 的发送由 worker thread
+  完成。worker 处理不及时的后果是一次被计数的丢弃（`framesRefused`），而不是 host 音频
+  中的异常。
+- **音频需要双方同时启用，旧版本 client 不会接收。** viewer 设置 `Hello.features` 的
+  bit 0，host 在其 capability 中声明 `kHostSharesAudio`，host 仅向设置了该位的 viewer
+  发送 packet。这正是 `kProtocolVersion` 保持为 2 的原因：5.0.x 的 viewer 发送
+  `features = 0`，因此 5.1 的 host 不会向其发送无法解析的 message。
 
-- **终端链路自己保活、自己重拨**：终端观看端拥有一条属于自己的 QUIC 连接，与视频会话分开，
-  所以视频路径的保活一个都够不到它。停在提示符前没人管时，它完全没有流量，会死在 30 秒的
-  QUIC 空闲超时上，而观看端随后就把自己的线程停在 `Reattaching`，从不重拨 —— shell 还在
-  主机上整整等了 2 分钟，却没有任何东西回去找它。`TerminalViewer` 现在按定时器发一个会
-  引发 ack 的包，并以退避策略重拨，复用 `TerminalClient::Reattach()`（它早就在 core 里写好
-  也测过，只是从来没被调用过），好让同一个 shell 带着回滚历史回来。
-  `deskhub::KeepaliveIntervalUs` / `ReconnectDelayUs` 把时间参数放在 core 里：保活至多是
-  空闲超时的一半，好让丢一个包也扛得住，而重试恰好停在 `kTerminalReattachGraceUs`，因为
-  过了那个点主机已经把 shell 丢掉了，再连上只会悄悄开出一个新的。
-- **一条记录要么整条上流，要么一点都不上；而落后的客户端是被重绘，不是被喂完每一个字节**：
-  所有可靠的东西 —— 控制、认证、终端输出 —— 都是共用一条 QUIC 流的带长度前缀的记录，所以
-  线上出现半条记录，就会让对面的分帧永久失步；`RecordStream` 没有任何重新同步的办法，对端
-  只能关闭连接。`QuicEndpoint::SendStream` 过去是能写多少写多少、剩下的丢掉，这一直没出事，
-  直到像 `make test` 这样的命令跑得比链路快：1 MiB 的流窗口填满了，一条 `TermData` 记录的
-  尾巴被丢掉，观看端的分帧器失败，于是 shell 在打开一分钟后"断开"了。它现在会拒绝一条流
-  放不下的记录，并且一旦真的发生了部分写入就关闭连接，因为撕裂的流没法就地修复。在它上面，
-  `TerminalHost` 把没发出去的输出放在每个 shell 各自的队列里，并在每次 tick 时重试，所以
-  只是一时跑赢了链路的突发 —— 比如一次构建的输出 —— 仍然会一字节不差地送到客户端。超过
-  `kMaxPendingBytes` 之后，队列会被丢掉而不是继续长大：每个字节其实早就到过主机侧的镜像
-  `Screen`，所以客户端是用 `deskhub::term::RenderScreen` 追上来的 —— 把当前网格重绘一次，
-  最快每 `kRepaintIntervalUs` 一次。没人来得及读的输出被跳过而不是缓冲，这让一条灌爆屏幕的
-  命令能按自己的速度跑完，最后仍然留下正确的画面。重新接入的客户端拿到的也是这同一次重绘，
-  因为在断了一段之后，它在字节流里的位置已经没有意义了。
-- **自动共享是等桌面出现，而不是只枚举一次**：Windows 把自启动注册成一个 `ONLOGON` 计划
-  任务，它在会话还没有显示器可枚举时就触发，所以构造时那一次 `ListDisplays()` 过去回来是
-  空的，应用就报告没有东西可共享。`deskhub::ui::AutoShareGate`（core，有单元测试）拥有那条
-  重试规则 —— 每 `kAutoShareProbeMs` 探测一次，`kAutoShareGiveUpMs` 之后放弃 —— 每个客户端
-  用自己的定时器驱动它，所以那条策略只存在一份。`NextAutoShareStep` 是同一条规则的无状态
-  版本，Swift 客户端通过 `dh_auto_share_step` 用的就是它。自动共享绝不打开模态框：登录时
-  窗口可能藏在托盘里，对话框在那里既看不见又会把共享永远挡住，所以拒绝的理由去 Host 的
-  横幅和日志里。桌面客户端还会在 OS 的显示器变更信号上刷新自己的选择器，这就是后来插上一块
-  显示器时列表仍然正确的原因。
-- **选 quiche 而不是 msquic/ngtcp2**：它是唯一在 Android 和 iOS 上都有生产证据的 QUIC 库。
-  它带来 BoringSSL，而 BoringSSL 同时供给 SPAKE2 和主机身份 —— 不需要第二个加密库。
-- **不做连接迁移**：候选库里没有一个在客户端侧有可用的支持。重连再重新接入（tmux 那一套，
-  移动端进后台本来就要求这个）已经覆盖了它。
-- **用 ECDSA P-256，不用 Ed25519**：BoringSSL 的服务端一侧在 quiche 里不肯用 Ed25519 签
-  TLS 握手。不要改回去。存下来的 Ed25519 身份会在加载时被替换掉 —— 它会让每一次握手都以
-  `QUICHE_ERR_TLS_FAIL` 失败，而屏幕上没有任何东西解释原因。
-- **通行码验证器是一次 SHA-256，不是一个昂贵的 KDF**：SPAKE2 已经把攻击者限制在每条连接
-  一次在线猜测，并且不留下任何值得离线破解的转录，而那正是 KDF 的硬度存在的全部意义。
-- **quiche 是预构建的，不是 FetchContent**：`scripts/build-quiche.sh` 在
-  `third_party/quiche/` 下为每个 rust 目标写一个目录，外加一个共享的 `include/` ——
-  quiche.h 和 boring-sys 内置的 BoringSSL 头文件被拷了出来，因为 Deskhub 为了主机身份直接
-  调用 BoringSSL，并且希望只有一条 include 路径、没有第二个 TLS 库。`DeskhubQuiche.cmake`
-  把那变成 `deskhub::quiche`；库不在就让 configure 失败。
-- **Apple 链接 `libplatform_bundled.a`**：Xcode 应用是在 CMake 之外消费这个 platform 归档
-  的，那里对 quiche 的 PRIVATE 链接根本到不了它们的链接行 —— 所以有一步 `libtool` 把
-  platform + quiche 熔成 `.pbxproj` 所链接的那一个归档。
-- **Windows 工具链的那些坑已经填平了 —— 请保持填平**：quiche 通过
-  `CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_RUSTFLAGS` 让 Rust 目标文件链接静态 CRT，再加上
-  `CFLAGS_x86_64_pc_windows_msvc` 里的 `/MT` 管住 BoringSSL 的目标文件（msvc 的默认是 DLL
-  运行时，而用一个笼统的 `RUSTFLAGS` 硬塞这个标志会直接搞垮 cargo 构建），整棵树都把
-  `MultiThreaded` 钉死以匹配，好让 exe 不带 VC++ 可再发行组件就能发布；wxWidgets 在每次
-  configure 时重新钉住 `wxBUILD_USE_STATIC_RUNTIME`，因为 `wx_option()` 会把它永久缓存。
-  BoringSSL 必须在默认的 Visual Studio 生成器下构建 —— cmake crate 在那里只能通过按配置的
-  标志传达 /MT，所以强行 `CMAKE_GENERATOR=Ninja` 会悄悄把 BoringSSL 退回 /MD，最终链接死在
-  LNK2038；如果 MSBuild 在长路径上触发 MSB6003，那就去启用 Windows 长路径。Git Bash 的
-  `/usr/bin/link.exe` 会盖住 MSVC 的链接器（把 `cl.exe` 所在目录放前面），它的路径改写会把
-  `/` 风格的参数搅乱（`MSYS2_ARG_CONV_EXCL`），而 NASM 的安装程序不动 PATH。
-- **Windows 主机上的 Android quiche 跳过 cargo-ndk**：cargo-ndk 交给 boring-sys 一个没有
-  扩展名的 `clang` 路径，CMake 在 Windows 上拒绝它，所以 `build-quiche.sh` 自己设
-  `CC_*`/`CXX_*`/`AR_*`、cargo 的链接器和该 ABI 的 `--target=`，然后直接调用普通的 cargo。
-  BoringSSL 在那里仍然需要 Ninja（Visual Studio 生成器没法以 NDK 为目标），而 bindgen 会
-  捡起 Visual Studio 的 libclang，它会在自己二进制旁边找 `stddef.h` ——
-  `BINDGEN_EXTRA_CLANG_ARGS` 用正斜杠把它指向 NDK 的资源头文件，因为 bindgen 按 shell 规则
-  切分那个变量，会把反斜杠吃掉。
-- **每个交叉编译的应用都先构建自己的 quiche**：`build-android`、`build-ios`、`build-macos`
-  和 `build-linux` 都依赖它们各自 ABI 的 quiche 目标，就像 `debug`/`release` 依赖宿主的那样。
-  quiche 是按 ABI 的，而 CMake 的 configure 没有它就失败，所以跳过了这一步的构建看起来像
-  工具链坏了，而不是缺了个库 —— 而一个停留在上一次成功构建的应用，说的是它的对端已经不再
-  回答的协议。
-- **iOS 的 quiche 钉住 `IPHONEOS_DEPLOYMENT_TARGET=17.0`**：boring-sys 的 clang 会浮到 SDK
-  默认值，而 rustc 按它自己的最低版本链接，这个错配在链接时表现为未定义的
+- **terminal 的 link 自行保活并自行重连。** terminal viewer 持有独立于 video session 的
+  QUIC connection，因此 video 通道的 keepalive 都不会到达它。在提示符处无操作时该
+  connection 没有流量，会因 QUIC 的 30 秒 idle timeout 被关闭，随后 viewer 在
+  `Reattaching` 状态下停止 thread 而不重连，而 shell 仍被 host 保留完整的 2 分钟。现在
+  `TerminalViewer` 按定时器发送 ack-eliciting 的 packet 并以 backoff 方式重连，复用
+  `TerminalClient::Reattach()`（该函数早已在 core 中实现并测试，只是从未被调用），从而
+  使同一个 shell 连同 scrollback 一起恢复。相关时间常量位于 core 的
+  `deskhub::KeepaliveIntervalUs` 与 `ReconnectDelayUs`：keepalive 不超过 idle timeout
+  的一半，以便承受一次 packet 丢失；重试恰好在 `kTerminalReattachGraceUs` 处停止，因为
+  超过该时刻 host 已释放 shell，重新连接只会创建一个新的 shell。
+- **record 要么完整写入 stream，要么不写入；落后的 client 通过重绘同步，而非逐字节
+  补发。** 所有可靠数据 —— control、auth、terminal 输出 —— 都是共用一条 QUIC stream 的
+  带 length prefix 的 record，因此线上出现半条 record 会永久破坏对端的 framing；
+  `RecordStream` 没有重新同步的手段，peer 只能关闭 connection。`QuicEndpoint::SendStream`
+  此前写入能容纳的部分并丢弃其余，该做法在诸如 `make test` 的命令产生的输出超过链路
+  能力时失效：1 MiB 的 stream 窗口被占满，一条 `TermData` record 的尾部被丢弃，viewer
+  的 framer 失败，shell 在打开一分钟后断开。现在它会拒绝 stream 无法容纳的 record，并在
+  仍然发生部分写入时关闭 connection，因为已错位的 stream 无法原地修复。在其之上，
+  `TerminalHost` 将未发送的输出保存在按 shell 划分的队列中，并在每个 tick 重试，因此
+  短时间超过链路能力的输出突发（例如一次构建的输出）仍可完整到达 client。超过
+  `kMaxPendingBytes` 时队列被丢弃而非继续增长：所有字节都已进入 host 侧的 `Screen`
+  mirror，因此通过 `deskhub::term::RenderScreen` 使 client 同步，即对当前网格执行一次
+  重绘，最快每 `kRepaintIntervalUs` 一次。用户来不及阅读的输出被跳过而非缓存，从而使持续
+  输出的命令能够以自身速度运行，同时仍留下正确的最终画面。正在 reattach 的 client 同样
+  接收该重绘，因为在出现中断之后，它在 byte stream 中的位置已无意义。
+- **自动共享会等待桌面就绪，而不是只枚举一次。** Windows 将 autostart 注册为 `ONLOGON`
+  的 scheduled task，它在 session 具备可枚举的显示器之前即触发，因此构造时的一次
+  `ListDisplays()` 此前返回空，app 随即报告没有可共享的内容。
+  `deskhub::ui::AutoShareGate`（位于 core，具备 unit test）承载重试规则 —— 每
+  `kAutoShareProbeMs` 执行一次 probe，`kAutoShareGiveUpMs` 后停止 —— 各 client 以自身的
+  定时器驱动它，因此该策略只存在一份。`NextAutoShareStep` 是同一规则的无状态形式，Swift
+  client 通过 `dh_auto_share_step` 使用它。自动共享不会弹出模态对话框：登录时窗口可能位
+  于 tray 中，此处的对话框既不可见又会无限期阻塞共享，因此拒绝的原因写入 Host 页的横幅
+  与 log。桌面 client 还会在 OS 的 display 变更信号上刷新其选择列表，这使得之后接入显示
+  器时列表仍然正确。
+- **选择 quiche 而非 msquic 或 ngtcp2。** 这是唯一在 Android 与 iOS 上均有生产使用证据
+  的 QUIC 库。它附带 BoringSSL，后者同时服务于 SPAKE2 与 host identity，因此无需第二个
+  密码学库。
+- **不使用 connection migration。** 候选库均缺乏可用的 client 侧支持。reconnect 与
+  reattach 机制（类似 tmux，本就是移动端进入后台所必需）已覆盖该需求。
+- **使用 ECDSA P-256 而非 Ed25519。** BoringSSL 的服务端不会通过 quiche 以 Ed25519 对
+  TLS handshake 签名。不应改回。已保存的 Ed25519 identity 会在加载时被替换，否则它将使
+  每次 handshake 以 `QUICHE_ERR_TLS_FAIL` 失败，且界面上没有任何说明。
+- **passcode 的 verifier 是一次 SHA-256，而非开销较大的 KDF。** SPAKE2 已将攻击者限制为
+  每条 connection 一次在线尝试，且不留下值得离线破解的 transcript，这正是 KDF 的计算
+  强度所要达到的目的。
+- **quiche 预先构建，不使用 FetchContent。** `scripts/build-quiche.sh` 在
+  `third_party/quiche/` 下为每个 rust target 生成一个目录，另有共享的 `include/`，其中
+  包含 quiche.h 与 boring-sys 附带的 BoringSSL 头文件。这些头文件被单独取出，因为
+  Deskhub 为实现 host identity 直接调用 BoringSSL，并且需要单一的 include 路径与单一的
+  TLS 库。`DeskhubQuiche.cmake` 将其转换为 `deskhub::quiche`；缺少该库会导致 configure
+  失败。
+- **Apple 平台 link `libplatform_bundled.a`。** Xcode 的 app 在 CMake 之外使用 platform
+  的 archive，而在该场景下，对 quiche 的 PRIVATE link 不会出现在其 link 行中。因此通过
+  一步 `libtool` 将 platform 与 quiche 合并为 `.pbxproj` 所 link 的单个 archive。
+- **Windows toolchain 的既有问题已解决，应保持现状。** quiche 通过
+  `CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_RUSTFLAGS` 使 Rust 目标文件链接静态 CRT，并通过
+  `CFLAGS_x86_64_pc_windows_msvc` 中的 `/MT` 约束 BoringSSL 的目标文件（msvc 的默认值为
+  DLL 运行时，而通过通用的 `RUSTFLAGS` 传入该 flag 会直接破坏 cargo 构建）。整棵树固定
+  `MultiThreaded` 以保持一致，从而使发布的 exe 不依赖 VC++ Redistributable；wxWidgets
+  在每次 configure 时重新固定 `wxBUILD_USE_STATIC_RUNTIME`，因为 `wx_option()` 会永久
+  缓存该值。BoringSSL 必须在默认的 Visual Studio generator 下构建：在该 generator 下，
+  cmake crate 仅通过 per-config 的 flag 传递 /MT，因此强制 `CMAKE_GENERATOR=Ninja` 会使
+  BoringSSL 退回 /MD，最终 link 以 LNK2038 失败。若 MSBuild 因长路径触发 MSB6003，应启用
+  Windows 的长路径支持。Git Bash 的 `/usr/bin/link.exe` 会遮蔽 MSVC 的 linker，应将
+  `cl.exe` 所在目录置于前面；其路径改写会破坏以 `/` 开头的参数，需使用
+  `MSYS2_ARG_CONV_EXCL`；NASM 的安装程序不修改 PATH。
+- **在 Windows 主机上构建 Android 的 quiche 时不使用 cargo-ndk。** cargo-ndk 向
+  boring-sys 传递不带扩展名的 `clang` 路径，而 CMake 在 Windows 上不接受该形式。因此
+  `build-quiche.sh` 自行设置 `CC_*`、`CXX_*`、`AR_*`、cargo 的 linker 以及对应 ABI 的
+  `--target=`，并直接调用 cargo。BoringSSL 在此仍需要 Ninja，因为 Visual Studio
+  generator 无法面向 NDK；而 bindgen 会使用 Visual Studio 的 libclang，后者在自身
+  binary 旁查找 `stddef.h`，因此 `BINDGEN_EXTRA_CLANG_ARGS` 以正斜杠指向 NDK 的 resource
+  头文件，原因是 bindgen 按 shell 规则分割该变量并会去除反斜杠。
+- **每个 cross-compile 的 app 都先构建自己的 quiche。** `build-android`、`build-ios`、
+  `build-macos` 与 `build-linux` 均依赖对应 ABI 的 quiche target，正如 `debug` 与
+  `release` 依赖 host 的 ABI 一样。quiche 按 ABI 构建，缺少时 CMake configure 会失败，
+  因此跳过该步骤的构建表现得更像 toolchain 故障而非缺少库。此外，停留在上次成功构建
+  状态的 app 使用的是其他机器已不再支持的 protocol。
+- **iOS 的 quiche 固定 `IPHONEOS_DEPLOYMENT_TARGET=17.0`。** boring-sys 的 clang 采用
+  SDK 的默认值，而 rustc 按自身的最低版本 link，两者不一致会在 link 阶段表现为未定义的
   `___chkstk_darwin`。
-- **两个时钟，是故意的**：`NowUs()` 是单调的（开机以来的秒数），用于计算时间间隔；
-  `NowUnixSeconds()` 是唯一一个能渲染成日期的。混用它们不会大声报错 —— 存下来的单调时间戳
-  会显示成 1970 年 1 月 1 日的某个时刻。
-- **Windows 上的 PTY 子进程不该拿到标准句柄**：当主机自己的 stdout 被重定向时，Windows 会
-  把那份重定向越过伪控制台属性往下传，于是 shell 对着管道说话；完全不给句柄，才会把它送回
-  挂上的 ConPTY。
-- **Windows 终端网格上的 `wxWANTS_CHARS`**：没有它，框架的对话框导航会在终端看到之前就把
-  Enter、Tab 和方向键吃掉。
-- **macOS 的 TCC 把授权和代码签名绑在一起**：本地构建的 app.app（ad-hoc，每次构建重新签名）
-  和 Developer ID 的 dmg 会争抢同一行 `com.deskhub.macos` —— 系统设置显示权限已授予，而刚
-  启动的那个副本却被拒绝，对辅助功能而言还是静默的。`make reset-macos-permissions` 会清掉
-  每一项授权，好让下次启动重新询问。
-- **macOS 在 CI 里是桌面构建，在发布时是签名构建，绝不同时是两者**：`build-desktop` 在每次
-  推送时以 ad-hoc 签名编译应用，好让一处不再能构建的 Cocoa 改动在它自己的 pull request 上
-  失败；`deploy` 则通过 `release-macos` 这条 fastlane 路径够到同一个应用 —— Developer ID、
-  公证、dmg —— 产出用户真正打得开的东西。因此那个可复用的工作流在设了 `for_release` 时会
-  跳过它的 macOS 作业，否则一个标签就要多付一台 macOS runner 的钱，去做一个没人会发布的
-  bundle。`build-mobile` 只带 iOS 和 Android，理由相同，拆法也相同。
-- **每个工作流都从同一个 action 拿 quiche 和 opus，而缓存键就是整份契约**：
-  `.github/actions/third-party` 会为作业点名的任意目标构建这两个库，这就是同一段
-  "先缓存再构建"的代码从十九份变成每个作业一行的原因。它的 `cache-key` 输入不是装饰 ——
-  它是唯一阻止两个作业互相还原对方库文件的东西。两个目标集合不同，两个构建同一个三元组的
-  runner 镜像也不同：在 ubuntu-latest 上编译、又在 ubuntu-22.04 上还原的 `libquiche.a`，
-  链接的正是这个发布版本要避开的那个 glibc。任何会改变构建产物的东西，都属于那个键。
-- **Windows 上只有一份静态 release CRT，所有配置都是**：cargo 让 quiche 链接静态 release
-  CRT（msvc 的默认 —— 绝不要用 `RUSTFLAGS` 硬塞，那会渗进 proc-macro 并搞垮 cargo），整棵
-  CMake 树钉住 `MultiThreaded` 与之匹配，这也正是让应用保持单个 exe、不需要 VC++ 可再发行
-  组件的原因。Rust 不提供 debug CRT 的构建，所以 Debug 也照此匹配：`_ITERATOR_DEBUG_LEVEL=0`、
-  `/U_DEBUG`、去掉 `/RTC1` —— release CRT 没有 `_CrtDbgReport`，也不支持运行时检查。任何
-  错配的结局都是一大堵 LNK2038 的墙。
-- **通行码 = 自助准入，审批 = 兜底**：输入的码总会被验证；没有码就由人来决定。通行码从不以
-  任何攻击者能带回家的形式穿过网络。
-- **VT 模拟器是我们自己的**：没有任何一个平台终端控件能以可用的许可证覆盖全部五个客户端，
-  而自己拥有它让终端行为可以离线测试，而且在各处完全一致。
-- **主机的 shell 镜像从第一个字节起就被喂养**：PTY 输出是一条破坏性的单消费者流 —— 读出来
-  并发给观看者的字节，之后没法重放 —— 所以 *Stop & attach* 打开的那个网格，必须在字节经过
-  时就构建，而不是在按钮被按下时。远端观看者还挂着的时候，镜像自己那些终端查询的响应会被
-  丢弃：观看者的屏幕已经回答过了，而 shell 不该听到两个答案。
-- **一个端口**：信标、屏幕和终端共用一个监听器；QUIC 复用连接和流。过去那第二个端口的存在，
-  只是因为 QUIC 之前的屏幕路径独占了那个 socket。
-- **一个 `HostLink`，四次从前的握手**：拨号 + 信任检查 + 认证 + 恢复，过去在客户端一侧被写
-  了四遍 —— 来源查询、观看端、文件发送端，以及跑在自己那个裸 `QuicEndpoint` 上的终端 ——
-  这就是发送窗口比观看端晚三个修复才知道主机密钥变了的原因。`HostLink` 现在是客户端一侧
-  唯一会拨号或认证的代码；服务打开自己的 `Chan`，拿到自己的收件队列，在自己的线程上排空它。
-  终端那套"退避重拨"挪进了链路里，好让每一个要求恢复的界面都继承它，而信任规则只住在一个
-  地方：密钥变了就把链路停在 `Deciding` 直到有人回答（只有来源查询是直接放行的，
-  `trustGate=false`，什么都不记 —— 它的调用者没有提示框可显示），而且只有主机用密码学证明
-  过的通行码才会自动固定一个密钥。
-- **`HostLink` 通过 `Send` 发送，而不是 `SendMessage`**：在 Windows 上，platform 层背后的
-  OS 头文件把 `SendMessage` 定义成 `SendMessageA` 的宏，而在 `HostLink.cpp` 里它们落在类
-  声明之后、方法定义之前 —— 于是 MSVC 要求一个没有任何头文件声明过的 `SendMessageA` 成员的
-  定义。Win32 API 的名字（`SendMessage`、`PostMessage`、`CreateWindow`、`GetObject`……）在
-  任何 OS 头文件够得到的翻译单元里，都不适合做方法名；改名才是修复，而不是 `#undef`。
-- **portal 的 ScreenCast 会话与一条 D-Bus 连接同生共死**：GLib 用弱引用缓存共享的会话总线，
-  所以对最后一个句柄 `g_object_unref` 会直接把这条连接销毁掉。`xdg-desktop-portal` 随后
-  丢掉会话，合成器销毁 PipeWire 节点，而 portal 刚交出来的那个节点 id 指向了空 —— 流走到
-  `paused` 并以*没有可用的目标节点*失败。因此 `PortalScreenCast` 在会话打开期间一直拥有
-  自己的 `GDBusConnection`，而不是每次调用借一条。桌面应用长期掩盖了这个问题，因为 GTK 会
-  在整个进程生命期内持有会话总线的一个引用；`deskhub-cli` 不链接 GTK，就没有那个引用。
-- **每个图标都是派生出来的，而且只有其中一些是圆角的**：`make icons` 从唯一的母版
-  `assets/icon_1024.png` 重建整套图标。macOS、iOS、Play 商店的页面以及 Android 的自适应
-  图标流水线，都会把美术素材裁进它们自己的形状，所以那些素材保持满幅方形；Windows、Linux
-  和 API 26 之前的 Android 启动器则你给什么它画什么，所以它们的图标自带圆角和透明 ——
-  否则这个应用会在一堆圆角图标旁边显示成一个硬邦邦的蓝色方块。`scripts/make-icons.py` 刻意
-  只用标准库：bootstrap 不安装任何图像工具。
-- **桌面客户端可以同时握着多台主机；手机只握一台**：Windows、Linux 和 macOS 上的连接页面
-  自己不保留任何已连接状态。应答的主机会拿到一个连接窗口 —— `client/windows/win32/MainFrame.cpp`
-  里的 `ConnectionFrame`、`client/linux/gtk/MainWindow.cpp` 里的 `ConnectionWindow`、
-  `client/macos/app/swift/App.swift` 里的 `connection` `WindowGroup` —— 由它拥有那台主机的
-  地址、通行码、能力、来源和控制勾选，页面因此腾出手去拨下一台。主窗口只保留一份已打开窗口
-  的清单，用来在同一台主机被拨第二次时把窗口提前、把每次状态探测推给地址匹配的那个窗口，
-  并在退出时把它们全关掉。Android 和 iOS 有意保持单连接：手机屏幕放不下第二块面板，而它
-  打开的会话反正是全屏的。`ui::SameDeviceAddr` 就是各处所说的"同一台主机"—— 见下一条。
-- **一台主机，两种写法，一次比较**：`ScanAddressText` 在端口是默认值时会把它省掉，所以扫描
-  出来的一行写作 `192.168.1.60`，而用户输入并连接用的那个地址写作 `192.168.1.60:47777`。
-  把这两个当字符串比会静默失败，而每一处这么做的地方都真的丢了东西：已连接的面板找不到
-  匹配的设备行，于是不显示延迟；`PasscodeForDevice` 也找不到为一台从扫描列表里挑出来的主机
-  保存的那个码。因此地址相等要走 `ui::NormalizedDeviceAddr` / `ui::SameDeviceAddr`
-  （`core/ui/Strings.h`），并以 `dh_same_device_addr` 暴露给 Swift 和 Kotlin 客户端。永远
-  不要用 `==` 比较两个设备地址。
+- **两个 clock，出于设计考虑。** `NowUs()` 为单调时钟（自启动以来的秒数），用于时间
+  间隔；`NowUnixSeconds()` 是唯一可呈现为日期的时钟。混用两者不会产生明显错误：保存的
+  单调时间戳会显示为 1970 年 1 月 1 日的某个时刻。
+- **Windows 上的 PTY 子进程不接收任何标准句柄。** 当 host 自身的 stdout 被重定向时，
+  Windows 会将该重定向越过 pseudo-console 属性向下传递，shell 随即与管道通信；只有在不
+  传递任何句柄时，shell 才会使用已挂接的 ConPTY。
+- **Windows 的 terminal 网格需要 `wxWANTS_CHARS`。** 缺少它时，frame 的对话框导航会在
+  terminal 处理之前接收 Enter、Tab 与方向键。
+- **macOS 的 TCC 将授权与代码签名绑定。** 本地构建的 app.app（ad-hoc，每次构建重新
+  签名）与 Developer ID 的 dmg 共用同一条 `com.deskhub.macos` 记录：System Settings 显示
+  权限已授予，而刚启动的副本却被拒绝，对 Accessibility 则是无提示的拒绝。
+  `make reset-macos-permissions` 清除全部授权，使下次启动重新询问。
+- **macOS 在 CI 中为桌面构建，在 release 时为签名构建，两者不同时进行。**
+  `build-desktop` 在每次 push 时以 ad-hoc 签名编译 app，因此无法构建的 Cocoa 改动会在其
+  自身的 pull request 上失败；`deploy` 通过 `release-macos` 处理同一个 app，即 fastlane
+  路径（Developer ID、notarization、dmg），产出用户可以实际打开的版本。因此当
+  `for_release` 被设置时，可复用的 workflow 会跳过其 macOS job，否则一个 tag 将额外占用
+  一台 macOS runner，用于生成不会发布的 bundle。`build-mobile` 仅包含 iOS 与 Android，
+  原因与划分方式相同。
+- **所有 workflow 从同一个 action 获取 quiche 与 opus，且 cache key 即为完整的约定。**
+  `.github/actions/third-party` 为 job 指定的任意 target 构建这两个库，因此原先十九份
+  相同的「先 cache 再构建」代码块缩减为每个 job 一行。其 `cache-key` 输入是防止两个 job
+  相互恢复对方库的唯一手段。两组不同的 target 属于不同情形，两个构建同一 triple 的
+  runner 镜像同样属于不同情形：在 ubuntu-latest 上编译、在 ubuntu-22.04 上恢复的
+  `libquiche.a`，会 link 到该 release 本应避免的 glibc 版本。任何改变构建产物的因素都
+  应纳入该 key。
+- **Windows 上所有 configuration 均使用同一种静态 release CRT。** cargo 以静态 release
+  CRT 构建 quiche（msvc 的默认值；不应通过 `RUSTFLAGS` 强制指定，该设置会波及
+  proc-macro 并导致 cargo 失败），整棵 CMake 树固定 `MultiThreaded` 以保持一致，这也是
+  app 得以保持为不依赖 VC++ Redistributable 的单个 exe 的原因。Rust 不提供 debug CRT 的
+  构建，因此 Debug 配置同样对齐：`_ITERATOR_DEBUG_LEVEL=0`、`/U_DEBUG`、移除 `/RTC1`，
+  因为 release CRT 不含 `_CrtDbgReport`，也不支持 run-time check。任何不一致都会导致
+  大量 LNK2038 错误。
+- **passcode 是自助准入方式，approval 是备用方式。** 填入的码始终会被验证；没有码则由
+  人进行判断。passcode 不会以任何攻击者可获取的形式经过网络。
+- **VT emulator 由本项目实现。** 没有任何平台自带的 terminal 控件能够同时在五个 client
+  上使用并具备合适的许可证；自行实现使 terminal 行为可以离线测试，并在各平台保持一致。
+- **host 侧的 shell mirror 自首字节起即开始更新。** PTY 的输出是具破坏性的单消费者
+  stream：已读取并发送给 viewer 的字节无法重放。因此 *Stop & attach* 打开的字符网格必须
+  在字节经过时同步构建，而非在按下按钮时构建。远端 viewer 处于连接状态期间，mirror 自身
+  对 terminal query 的响应会被丢弃：viewer 的屏幕已经作出响应，shell 不应收到两个响应。
+- **仅使用一个 port。** beacon、屏幕与 terminal 共用一个 listener；connection 与 stream
+  的多路复用由 QUIC 负责。此前的第二个 port 仅因 QUIC 之前的屏幕通路独占 socket 而存在。
+- **一个 `HostLink` 取代此前的四套 handshake。** dial、trust 检查、auth 与 recovery 此前
+  在 client 侧被实现了四次：source 查询、viewer、file sender，以及运行在独立
+  `QuicEndpoint` 上的 terminal。这导致文件发送部分比 viewer 晚三个修复才获知 host key
+  已变更。现在 `HostLink` 是 client 侧唯一执行 dial 或 authenticate 的代码；service 打
+  开自己的 `Chan`，获得独立的 inbox 队列，并在自身 thread 上处理。terminal 的 backoff
+  重连已移入 link，使所有需要 recovery 的界面都继承该行为，trust 规则也集中于一处：变更
+  过的 key 使 link 保持在 `Deciding` 状态直至用户作出回应（仅 source 查询直接通过，
+  `trustGate=false` 且不记录任何内容，因为其调用方没有可展示的对话框），并且只有 host
+  以密码学方式证明过的 passcode 才会自动固定一个 key。
+- **`HostLink` 通过 `Send` 发送，而非 `SendMessage`。** 在 Windows 上，platform 层背后
+  的 OS 头文件将 `SendMessage` 定义为 `SendMessageA` 的宏，而在 `HostLink.cpp` 中这些
+  头文件位于类声明之后、方法定义之前，导致 MSVC 要求为一个没有任何头文件声明过的
+  `SendMessageA` 成员提供定义。Win32 的 API 名称（`SendMessage`、`PostMessage`、
+  `CreateWindow`、`GetObject` 等）在任何 OS 头文件可达的 translation unit 中都不适合作
+  为方法名；正确的处理方式是改名，而非 `#undef`。
+- **portal 的 ScreenCast session 与一条 D-Bus 连接共存亡。** GLib 以弱引用缓存共享的
+  session bus，因此对最后一个句柄执行 `g_object_unref` 会直接销毁该连接。随后
+  `xdg-desktop-portal` 释放 session，compositor 销毁 PipeWire 节点，portal 刚刚提供的
+  节点 id 不再指向任何对象，stream 进入 `paused` 并以 *no target node available* 失败。
+  因此 `PortalScreenCast` 在 session 打开期间自行持有 `GDBusConnection`，而不是每次调用
+  临时借用。桌面 app 长期掩盖了该问题，因为 GTK 在整个进程生命周期内持有 session bus 的
+  引用；而 `deskhub-cli` 不 link GTK，因而没有该引用。
+- **所有图标均由同一来源派生，且仅部分为圆角。** `make icons` 从唯一的母版
+  `assets/icon_1024.png` 重新生成整套图标。macOS、iOS、Play Store 的商店展示以及
+  Android 的 adaptive-icon 流程都会按各自的形状对图形进行遮罩，因此这些资源保持为满幅
+  方形；Windows、Linux 以及 API 26 之前的 Android launcher 直接显示所提供的图形，因此
+  其图标已内置圆角与透明部分，否则该 app 会在一组圆角图标中显示为实心方块。
+  `scripts/make-icons.py` 刻意仅使用标准库，因为 bootstrap 不安装任何图像处理工具。
+- **桌面 client 可同时持有多个 host，手机端仅持有一个。** Windows、Linux 与 macOS 上的
+  connect 页不保存任何连接状态。每个应答的 host 会获得一个连接窗口 ——
+  `client/windows/win32/MainFrame.cpp` 中的 `ConnectionFrame`、
+  `client/linux/gtk/MainWindow.cpp` 中的 `ConnectionWindow`、
+  `client/macos/app/swift/App.swift` 中名为 `connection` 的 `WindowGroup` —— 由其持有该
+  host 的地址、passcode、capability、source 列表与 control 选项，从而使 connect 页可以
+  继续连接下一个 host。主窗口仅保存已打开窗口的列表，用于在同一 host 被再次连接时将对应
+  窗口置前、将每次 status probe 分发给地址匹配的窗口，以及在退出时关闭全部窗口。Android
+  与 iOS 有意保持单连接模型：手机屏幕没有容纳第二个面板的空间，而其打开的 session 本身
+  即为全屏。`ui::SameDeviceAddr` 是各处「同一个 host」的统一定义 —— 见下一条。
+- **同一个 host 有两种地址写法，但只有一种比较方式。** `ScanAddressText` 在 port 为默认
+  值时将其省略，因此 scan 结果行显示为 `192.168.1.60`，而用户输入并连接使用的地址为
+  `192.168.1.60:47777`。将两者作为字符串比较会在无任何提示的情况下失败，而每一处这样做
+  的位置都因此失去了某项功能：已连接的面板找不到匹配的设备行，因而不显示 ping；
+  `PasscodeForDevice` 无法找到从 scan 列表中选中的 host 所保存的码。因此地址的相等判断
+  必须经由 `ui::NormalizedDeviceAddr` 与 `ui::SameDeviceAddr`（`core/ui/Strings.h`），
+  并以 `dh_same_device_addr` 提供给 Swift 与 Kotlin 的 client。不要使用 `==` 比较两个
+  设备地址。
 
-- **刚打开的解码器手里没有任何参考帧**：surface 一变 `ScreenViewer` 就重建解码器，而 iOS
-  应用在离开屏幕时会把 surface 交回去——锁一下屏就够了。重组器对此一无所知：它照旧把 P 帧
-  交下去，新解码器没有任何东西可以据以预测，而主机只有被要求时才发 IDR，于是画面在这一整段会话里
-  一直是黑的。以前那个请求是在*旧*解码器被拆掉时发出的，而那正是没有 surface 可画的时刻：IDR
-  到了，解码循环因为没有 surface 把它丢掉，`CancelKeyframeRequest` 顺手清掉了待处理的请求。
-  现在 `EnsureDecoder` 对它打开的每一个解码器都竖起标志，所以关键帧是在已经有地方可画的时候才要的。
-  `MediaCodecDecoder` 在另一头犯了对称的错：它在拿到的第一帧上就把 `sentCsd_` 置起来，哪怕那一帧
-  根本不带参数集，于是随后关键帧里的 SPS/PPS 被当作普通数据送进去，从未配置过编解码器；现在它会等
-  真正带着参数集的那一帧。谁打开解码器，谁就去要一个关键帧。
+- **刚打开的 decoder 尚未持有参考帧。** `ScreenViewer` 在 surface 变化时重建 decoder，
+  而 iOS 的 app 在离开屏幕时交回 surface，锁屏即会触发该情形。reassembler 对此并不知情：
+  它继续投递原有的 P-frame，新建的 decoder 没有可供预测的数据，而 host 仅在收到请求时才
+  发送 IDR，因此画面在该 session 的其余时间内保持黑屏。keyframe 请求此前在*旧* decoder
+  被销毁时发出，而那恰是没有 surface 可供绘制的时刻：IDR 到达后被 decode 循环因缺少
+  surface 而丢弃，`CancelKeyframeRequest` 同时清除了待处理的请求。现在 `EnsureDecoder`
+  为其打开的每个 decoder 设置该标志，使 keyframe 在已具备绘制目标时才被请求。
+  `MediaCodecDecoder` 在另一侧存在对应的问题：它在收到第一帧时即锁定 `sentCsd_`，即使该
+  帧并不携带 parameter set，导致随后 keyframe 的 SPS/PPS 被当作普通数据排入队列，从未
+  用于配置 codec；现在它会等待确实携带这些数据的帧。打开 decoder 的组件负责请求
+  keyframe。
 
-- **进过后台的 `AVSampleBufferDisplayLayer` 会不声不响地把帧吞掉**：应用离开屏幕时 iOS 会停掉
-  该图层的解码并置上 `requiresFlushToResumeDecoding`；在调用 `flush` 之前，每一次
-  `enqueueSampleBuffer` 都会被接受然后丢弃。没有别的东西会说出这件事——`status` 不是 `failed`，
-  `isReadyForMoreMediaData` 仍为 true，渲染器也不报任何错——所以观看端看上去很健康，帧数照算，
-  画面全黑。`VtDecoder` 在图层上打开时检查这个标志，每一帧之前再检查一次，调用 flush，并让这一
-  帧失败，好让关键帧请求随之发出。
+- **曾进入后台的 `AVSampleBufferDisplayLayer` 会无提示地丢弃 frame。** app 离开屏幕时
+  iOS 会停止该 layer 的解码并设置 `requiresFlushToResumeDecoding`；在调用 `flush` 之前，
+  每一次 `enqueueSampleBuffer` 都会被接受并丢弃。没有其他迹象表明这一点：`status` 不是
+  `failed`，`isReadyForMoreMediaData` 仍为 true，渲染器也不报错，因此 viewer 在计数上
+  表现正常，画面却为黑屏。`VtDecoder` 现在在 layer 上打开时检查该标志，并在每帧之前再次
+  检查，执行 flush，并使该帧失败，以便 keyframe 请求随之发出。
 
-- **QUIC 服务循环发出的每一个回调都可能把它正在服务的那条连接抹掉**：`Service()` 遍历一份连接
-  id 的快照并逐个重新查找，因为 `cb_.onConnected`、`cb_.onStream` 和 `cb_.onDatagram` 跑的都是
-  应用代码，它们可以关掉一个对端并把它从 `connections_` 里抹掉。`DrainStreams` 在它发出的每个
-  回调之后都会重新检查——那些叫 `listStillIntact` 的守卫正是为此而生——但它只能从自己身上返回，
-  于是 `Service()` 一路落进 `DrainDatagrams(id, entry)`，而此时 `entry` 已被抹掉并释放，那个函数
-  做的第一件事就是把 `entry.conn` 交给 `quiche_conn_dgram_recv`。`Lookup(id) != &entry` 这道检查
-  却坐在两次 drain 之后：正好晚了一个调用。在 Windows CI 上它表现为大约每三次就有一次以
-  `0xc0000409` 或 `0xc0000374` 死掉，而它之所以拖了这么久，是因为 fastfail 永远到不了
-  `tests/integration/TestMain.cpp` 里的 `SetUnhandledExceptionFilter`，所以一次红色的运行只留下
-  一个退出码，别的什么都没有——而专门为抓它而建的那两个 job 也都看不见：page heap 看不见是因为
-  被释放的那块内存是 quiche 自己的，开了 Rust 检查的那个 build 看不见是因为 quiche 根本没错。
-  最后点出这个栈帧的是 Windows 上的 ASan job。请在每一个可能跑回调的调用之后重新验证 entry，
-  而不是在整块的末尾只验一次。
+- **QUIC service 循环发起的每个回调都可能删除其对应的 connection。** `Service()` 遍历
+  connection id 的快照并逐个重新查找，因为 `cb_.onConnected`、`cb_.onStream` 与
+  `cb_.onDatagram` 都会执行应用代码，而应用代码可能关闭某个 peer 并将其从
+  `connections_` 中移除。`DrainStreams` 在其发起的每个回调之后重新检查 —— 名为
+  `listStillIntact` 的 guard 正是为此而设 —— 但它仅从自身返回，因此 `Service()` 会继续
+  执行 `DrainDatagrams(id, entry)`，此时 `entry` 已被移除并释放，而该函数的第一步操作即
+  是将 `entry.conn` 传给 `quiche_conn_dgram_recv`。`Lookup(id) != &entry` 的检查位于两次
+  drain 之后，即晚了一步。在 Windows CI 上，该问题表现为约每三次运行有一次以
+  `0xc0000409` 或 `0xc0000374` 终止，长期未能定位的原因是 fastfail 不会到达
+  `tests/integration/TestMain.cpp` 中的 `SetUnhandledExceptionFilter`，因此失败的运行
+  只留下一个 exit code。此外，为定位该问题而设置的两个 job 均无法发现它：page heap 无法
+  发现，因为被释放的内存块属于 quiche 自身，而 corruption 是已销毁的 connection 随后写入
+  的内容；Rust-checks 构建同样无法发现，因为 quiche 内部并无错误。最终确定出错 frame 的
+  是 Windows 的 ASan job。应在每次可能执行回调的调用之后重新校验 entry，而不是仅在代码块
+  末尾校验一次。
 
-- **存活看门狗只在自己的循环还在跑的时候才量得到对端**：观看端那个五秒等 pong 的窗口按墙上时钟
-  计时，于是线这一头的任何停顿都会被读成一台不出声的主机。在 Windows 的 ASan CI job 上，一次
-  32 MB 的上传与实时画面同行，把整个进程冻住了 3.7 秒 —— 打着 `t=07:46:58` 和 `t=07:47:00` 的日志
-  行都在 07:47:01 一起出来，四个 QUIC endpoint 在那一瞬间各自报了自己好几秒的 poll 空档 ——
-  于是 `HostLink` 宣告一条完全健康的链路已经丢了。重拨把客户端换到了新的源端口，主机那条旧连接
-  死在它 30 秒的 idle timeout 上，并把还在飞的那一批文件一起带走（`transfer aborted ...
-  link-lost`），而 `TestInputStaysLiveDuringABigTransfer` 把 120 秒的期限整整坐满。
-  `LinkPulse::Tick` 现在在 `PumpReady` 的每一轮里跑一次，并把一轮里超出 `kLinkWatchStepUs` 的部分
-  全部退回：只有我们还处在听得见的位置时，静默才算数。任何用本地时钟去给远端计时的看门狗，都必须
-  减去自己没在看的那段时间，否则它最先发现的就是自己这台机器。
+- **liveness watchdog 只有在自身循环运行时才能衡量对端。** viewer 的五秒 pong 窗口按挂
+  钟时间计算，因此本侧的任何停顿都会被判定为 host 停止应答。在 Windows 的 ASan CI job
+  上，一次 32 MB 的上传与运行中的 stream 并行，使整个进程冻结 3.7 秒：标记为
+  `t=07:46:58` 与 `t=07:47:00` 的日志行均在 07:47:01 输出，四个 QUIC endpoint 在该时刻
+  各自报告了数秒的 poll 间隔，而 `HostLink` 判定一条完全正常的 link 已丢失。随后的重连
+  将 client 切换到新的源 port，host 侧原有的 connection 因 30 秒 idle timeout 关闭，并
+  中断了传输中的 batch（`transfer aborted ... link-lost`），
+  `TestInputStaysLiveDuringABigTransfer` 因此耗尽其 120 秒的期限。现在
+  `LinkPulse::Tick` 在 `PumpReady` 每轮执行一次，并扣除某一轮中超出 `kLinkWatchStepUs`
+  的全部时间：只有在本侧确实处于监测状态时，静默时间才被计入。任何以本地时钟衡量远端
+  状态的 watchdog，都必须扣除自身未进行观测的时间，否则它首先检测到的将是本机的状况。
 
-- **一次活过了自己连接的传输，必须有人告诉它**：`FileSender` 只有在收到 ack、收到 cancel 或者
-  `LinkLost()` 时才离开 `Sending`，而 `FileUpload::Pump` 把一次被拒绝的发送当成背压而不是失败。
-  `ScreenViewer` 把 `LinkLost()` 接到了 `onStreamBroken`（它只在连接仍然活着、某条流被 reset 时
-  才触发）和会话结束的地方，却没接到 `HostLink` 自己的 `onLinkLost`。于是传输中途的一次重拨会让
-  `uploading()` 永远为真，而对面再也没有任何人能回答它：主机早已中止了这一批，新连接上的接收端
-  也从没见过那份邀约。观看端现在会在 `onLinkLost` 上以 `TransferReason::LinkLost` 让上传彻底失败。
-  想跨一次重拨接着传，就得在新连接上把邀约重放一遍；在那之前，老实地结束这次传输，好过一根再也
-  不动的进度条。
+- **存续时间超过其 connection 的传输必须被明确告知。** `FileSender` 仅在收到 ack、
+  cancel 或 `LinkLost()` 时离开 `Sending` 状态，而 `FileUpload::Pump` 将被拒绝的发送
+  视为 backpressure 而非失败。`ScreenViewer` 将 `LinkLost()` 接入了 `onStreamBroken`
+  （该事件在 connection 仍然存续而 stream 被 reset 时触发）以及 session 的结束，但未接入
+  `HostLink` 自身的 `onLinkLost`。因此传输中途的一次重连会使 `uploading()` 保持为 true，
+  而对端已没有任何组件能够作出响应：host 已中止该 batch，新 connection 上的 receiver
+  也从未收到该 offer。现在 viewer 在 `onLinkLost` 时以 `TransferReason::LinkLost` 判定
+  上传失败。跨越重连继续传输需要在新的 connection 上重放 offer；在该功能实现之前，明确
+  结束传输优于保留一个不再变化的进度条。

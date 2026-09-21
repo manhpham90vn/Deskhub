@@ -4,11 +4,11 @@
 
 # 🖥️ Deskhub
 
-### あなたのマシンを、手持ちのすべての画面へ。
+### あなたのマシンを、手元のすべての画面へ。
 
-**オープンソース、ネイティブ、クロスプラットフォーム。ローカルと変わらない感触のリモート
-デスクトップ — 一般的なリモートデスクトップでは無理な、リモートでゲームが本当に遊べる
-速さと素直さ。**
+**Open-source、native、クロスプラットフォーム。手元で操作しているのと変わらない
+remote desktop —— 通常のリモートデスクトップでは実現できない、遠隔でのゲームプレイに
+耐えるだけの速さと直接性を備える。**
 
 [![Release](https://img.shields.io/github/v/release/manhpham90vn/Deskhub?label=release&color=2563eb)](https://github.com/manhpham90vn/Deskhub/releases)
 [![License: MIT](https://img.shields.io/github/license/manhpham90vn/Deskhub?color=2563eb)](LICENSE)
@@ -20,9 +20,9 @@
 [![codeql](https://github.com/manhpham90vn/Deskhub/actions/workflows/codeql.yml/badge.svg)](https://github.com/manhpham90vn/Deskhub/actions/workflows/codeql.yml)
 [![nightly](https://github.com/manhpham90vn/Deskhub/actions/workflows/nightly.yml/badge.svg)](https://github.com/manhpham90vn/Deskhub/actions/workflows/nightly.yml)
 
-**[インストール](docs/INSTALL.ja.md)** · [ソースからビルド](docs/BUILD.ja.md) ·
-[仕様](docs/SPECIFICATION.ja.md) · [アーキテクチャ](docs/ARCHITECTURE.ja.md) ·
-[セキュリティ](SECURITY.ja.md)
+**[インストール](docs/INSTALL.ja.md)** · [source から build](docs/BUILD.ja.md) ·
+[Spec](docs/SPECIFICATION.ja.md) · [Architecture](docs/ARCHITECTURE.ja.md) ·
+[Security](SECURITY.ja.md)
 
 </div>
 
@@ -30,109 +30,111 @@
 
 <div align="center">
 
-<img src="docs/imgs/macos_1.png" alt="macOS の Deskhub ホスト画面：ネットワーク共有の選択、他の端末が接続に使う Wi-Fi と Tailscale のアドレス、UDP ポート 47777 の未共有バナー、ターミナルにチェックの入ったソース一覧と共有開始ボタン" width="850">
+<img src="docs/imgs/macos_1.png" alt="macOS の Deskhub Host ページ。Share on network の選択欄、他のマシンが connect してくる Wi-Fi と Tailscale のアドレス、UDP port 47777 の Not sharing バナー、Start sharing ボタンの上にある Terminal を選択済みの source 一覧" width="850">
 
-<sub>あとひとつチェックを入れれば共有できる macOS ホスト。何をこのマシンから出すか — 任意のディスプレイ、シェル、あるいは両方 — を選んで <b>Start sharing</b> を押すだけ。</sub>
+<sub>共有を開始する前の macOS host。このマシンから出すものを選択する —— 任意の display、shell、またはその両方 —— そのうえで <b>Start sharing</b> を押す。</sub>
 
 </div>
 
 <table>
   <tr>
     <td align="center" width="33%">
-      <img src="docs/imgs/macos_2.png" alt="macOS の Deskhub クライアント画面：ホスト IP、UDP ポート、パスコード、自分の名前の入力欄、リモートデスクトップ・操作・ターミナルを選ぶチェックボックス、接続ボタン、状態・ping・最終接続時刻の列を持つ端末一覧">
-      <br><sub><b>クライアント</b> — IP を打つか、スキャンで見つかったマシンをクリックし、開くものを選ぶ：画面、その操作、シェル、あるいはその組み合わせ。</sub>
+      <img src="docs/imgs/macos_2.png" alt="macOS の Deskhub Client ページ。host IP、UDP port、passcode と自分の名前の入力欄、remote desktop・control・terminal を選ぶチェックボックス、Connect ボタン、status・ping・最終接続時刻を並べたデバイス表">
+      <br><sub><b>Client</b> —— IP を入力するか、scan が検出したマシンを選択し、開く対象を選ぶ。画面、control 権限、shell、またはその組み合わせ。</sub>
     </td>
     <td align="center" width="33%">
-      <img src="docs/imgs/macos_3.png" alt="macOS の Deskhub デバイス画面：ペアリング済みマシンと鍵、ペアリング時刻と最終確認時刻、個別の削除と全削除ボタン、新規ペアリングのスイッチ、このマシンの SHA256 鍵">
-      <br><sub><b>デバイス</b> — これまで入れたすべてのマシンを名前と鍵で一覧し、いつでも取り消せる。自分の端末が揃ったら新規ペアリングは切る。</sub>
+      <img src="docs/imgs/macos_3.png" alt="macOS の Deskhub Devices ページ。pair 済みマシンと各 key、pair した時刻と最後に確認された時刻、Forget と Forget every machine のボタン、新規 pair を許可するスイッチ、本マシンの SHA256 key">
+      <br><sub><b>Devices</b> —— 受け入れたことのあるマシンを名前と key とともに一覧表示し、個別に取り消せる。必要なマシンの pair が済んだら、新規 pair を無効にできる。</sub>
     </td>
     <td align="center" width="33%">
-      <img src="docs/imgs/macos_4.png" alt="macOS の Deskhub 設定画面：fps、ビットレート、画質、UDP ポート、ペアリングパスコード、視聴者にこのマシンの操作を許すかのスイッチ、クリップボードとスリープ防止のトグル、画面収録とアクセシビリティ権限の現在の状態、ログイン時起動のスイッチ">
-      <br><sub><b>設定</b> — fps、ビットレート、画質、ポート、パスコード、視聴者に操作を許すか、そして macOS 権限の現在の状態。</sub>
+      <img src="docs/imgs/macos_4.png" alt="macOS の Deskhub Settings ページ。fps、bitrate、quality、UDP port、pair に使う passcode、viewer が本マシンを control できるかのスイッチ、clipboard とスリープ防止のトグル、Screen Recording と Accessibility permission の現在の状態、ログイン時起動のスイッチ">
+      <br><sub><b>Settings</b> —— fps、bitrate、quality、port、passcode、viewer による control の可否、および macOS permission の現在の状態。</sub>
     </td>
   </tr>
 </table>
 
 <p align="center">
-  <img src="docs/imgs/ios_1.png" alt="Deskhub iOS クライアント画面：IP、ポート、パスコード、名前の入力欄、接続とターミナルのボタン、リモート操作のスイッチ、確認済みアドレス数を表示するネットワークスキャン" width="195">
-  <img src="docs/imgs/ios_2.png" alt="Deskhub iOS ホスト画面：ペアリングパスコード、ネットワーク共有、共有開始、他の端末が接続に使う IP アドレス" width="195">
-  <img src="docs/imgs/ios_3.png" alt="Deskhub iOS デバイス画面：空のペアリング済み一覧、新しいマシンのペアリングを許可するスイッチ、この端末の SHA256 鍵" width="195">
-  <img src="docs/imgs/ios_4.png" alt="Deskhub iOS 接続設定画面：スキャンが見る UDP ポート、クリップボード同期とスリープ防止のスイッチ" width="195">
+  <img src="docs/imgs/ios_1.png" alt="iOS の Deskhub Client ページ。IP・port・passcode・名前の入力欄、Connect と Terminal のボタン、リモートのマシンを control するスイッチ、確認済みアドレス数を報告する scan" width="195">
+  <img src="docs/imgs/ios_2.png" alt="iOS の Deskhub Host ページ。pair に使う passcode、Share on network、Start sharing、他のマシンが connect に使う IP アドレス" width="195">
+  <img src="docs/imgs/ios_3.png" alt="iOS の Deskhub Devices ページ。まだ空の pair 済みマシン一覧、新しいマシンの pair を許可するスイッチ、本デバイスの SHA256 key" width="195">
+  <img src="docs/imgs/ios_4.png" alt="iOS の Deskhub 接続 settings ページ。scan が確認する UDP port、clipboard 同期とスリープ防止のスイッチ" width="195">
 </p>
-<p align="center"><sub><b>iPhone</b> — 同じ 4 画面。スキャンしてマシンをタップし、映像をトラックパッド代わりに操作する。あるいは端末自身の画面を、閲覧専用でホストする。</sub></p>
+<p align="center"><sub><b>iPhone</b> —— 同じ 4 ページ。scan を実行してマシンを選択し、映像を trackpad として操作する。iPhone 自身の画面を host することもできるが、view-only に限られる。</sub></p>
 
 <p align="center">
-  <img src="docs/imgs/android_1.png" alt="Deskhub Android クライアント画面：IP、ポート、パスコード、名前の入力欄、接続とターミナルのボタン、操作のチェックボックス、サブネットを順に調べるネットワークスキャン" width="195">
-  <img src="docs/imgs/android_2.png" alt="Deskhub Android ホスト画面：ペアリングパスコード、ネットワーク共有、共有開始、他の端末が接続に使う IP アドレス" width="195">
-  <img src="docs/imgs/android_3.png" alt="Deskhub Android デバイス画面：空のペアリング済み一覧、新しいマシンのペアリングを許可するチェックボックス、この端末の SHA256 鍵" width="195">
-  <img src="docs/imgs/android_4.png" alt="Deskhub Android 接続設定画面：スキャンが見る UDP ポート、クリップボード同期とスリープ防止のチェックボックス" width="195">
+  <img src="docs/imgs/android_1.png" alt="Android の Deskhub Client ページ。IP・port・passcode・名前の入力欄、Connect と Terminal のボタン、control のチェックボックス、subnet を走査中の scan" width="195">
+  <img src="docs/imgs/android_2.png" alt="Android の Deskhub Host ページ。pair に使う passcode、Share on network、Start sharing、他のマシンが connect に使う IP アドレス" width="195">
+  <img src="docs/imgs/android_3.png" alt="Android の Deskhub Devices ページ。まだ空の pair 済みマシン一覧、新しいマシンの pair を許可するチェックボックス、本デバイスの SHA256 key" width="195">
+  <img src="docs/imgs/android_4.png" alt="Android の Deskhub 接続 settings ページ。scan が確認する UDP port、clipboard 同期とスリープ防止のチェックボックス" width="195">
 </p>
-<p align="center"><sub><b>Android</b> — Material の装いで同じ 4 画面。Android 10 以降では、ホストは閲覧専用の画面共有。</sub></p>
+<p align="center"><sub><b>Android</b> —— 同じ 4 ページを Material Design で構成している。host としては、Android 10+ で view-only の画面共有のみを行う。</sub></p>
 
 ## 📖 概要
 
-ひとつの **C++20 コア**が Windows から iPhone まですべてで動き、プロトコルの書き直しは
-ゼロ。ディスプレイを共有し、もう一方のマシンで IP を打てば、もう操作できている。どの
-プラットフォームでも画面は 4 つ — **Host**、**Client**、**Devices**、**Settings** —
-なので、Mac で覚えれば Android アプリも同時に覚えたことになる。
+一つの **C++20 core** が、Windows から iPhone まですべてのプラットフォームで動作し、
+protocol を書き直す必要はない。display を共有し、もう一方のマシンで IP を入力すれば
+操作できる。どのプラットフォームでも同じ 4 ページ —— **Host**、**Client**、
+**Devices**、**Settings** —— で構成されているため、macOS で操作を覚えれば Android の
+app もそのまま利用できる。
 
-| ⚡ 速い | 📦 ファイルひとつ | 🎛️ 単純 |
+| ⚡ 速い | 📦 ファイル一つ | 🎛️ シンプル |
 | ------ | ---------- | --------- |
-| キャプチャ→表示 **約 3.5 ms**、60 fps。ゼロコピーの VRAM パイプラインで、ホットパスは CPU に触れない。 | インストーラなし、常駐サービスなし、アカウント不要。Windows アプリ全体が **約 5.1 MB** の exe ひとつ、macOS は **1.9 MB** の dmg。 | ディスプレイを**共有**するか、IP へ**接続**する。それだけ。デスクトップはさらに**シェル**を共有し、視聴者が送る**ファイル**を受け取れる。スマートフォンもホストになれるが閲覧専用 — 入力注入を許すモバイル OS が存在しないため。 |
+| capture から表示まで **~3.5 ms**、60 fps。zero-copy pipeline は VRAM 内で完結し、hot path は CPU を経由しない。 | installer、background service、アカウントのいずれも不要。Windows app 全体が **~5.1 MB** の exe 一つ、macOS は **1.9 MB** の dmg。 | display を **Share** するか、IP へ **Connect** する。デスクトップではさらに **shell** を共有でき、viewer が送信した**ファイル**も受け取れる。スマートフォンも host になれるが view-only に限られる。app に input を inject させるモバイル OS が存在しないためである。 |
 
-セッションは **QUIC/TLS** でエンドツーエンドに暗号化され、未知のマシンはホストのパスコードを
-知っていると証明するか — **SPAKE2** を使うのでコード自体は決して流れない — ホスト側で承認
-されるかでしか入れない。それでも開いたポートの上にある小さな秘密であることに変わりはない。
-信頼できるネットワークか VPN を使い、**UDP 47777 は絶対にポート転送しないこと**。完全な
-脅威モデルは [`SECURITY.ja.md`](SECURITY.ja.md) にある。
+Session は **QUIC/TLS** 上で end-to-end に encrypt される。未知のマシンが受け入れられる
+のは、host の passcode を知っていることを証明した場合 —— **SPAKE2** を用いるため
+passcode 自体は送信されない —— または host 側の利用者が承認した場合に限られる。ただし
+これは開いた port 上の短い秘密であることに変わりはない。信頼できる network か VPN を
+使用し、**UDP 47777 を port-forward しないこと**。完全な threat model は
+[`SECURITY.ja.md`](SECURITY.ja.md) を参照。
 
-## 💡 なぜ
+## 💡 用途
 
-- 💻 **仕事** — 非力なノート PC やカフェの iPad から、自宅 PC の Claude Code、VS Code、ビルドを動かす。
-- 🌐 **なんでも** — どの端末からでも Chrome、Office、PC 専用ソフトを操作する。
-- 🎮 **ゲーム** — 60 fps、相対マウス + DirectInput スキャンコード、`F9` でポインタロック。
-- 🖥️ **マルチモニタ** — 1 枚でも複数枚でも、各ディスプレイを個別のセッションとして共有。
+- 💻 **作業** —— 性能の低いノート PC や iPad から、自宅 PC の Claude Code、VS Code、build を実行する。
+- 🌐 **汎用** —— Chrome、Office、PC 専用ソフトウェアを任意の端末から操作する。
+- 🎮 **ゲーム** —— 60 fps、relative mouse と DirectInput scancode、`F9` による pointer lock。
+- 🖥️ **マルチ display** —— display を 1 つまたは複数共有し、それぞれが独立した session となる。
 
 ## 🚦 対応プラットフォーム
 
-| プラットフォーム | ホスト | クライアント | 状態 |
+| プラットフォーム | Host | Client | 状態 |
 | -------- | :--: | :----: | ------ |
-| **Windows** | ✅ | ✅ | リファレンス実装 — LAN + Tailscale（インターネット/NAT）で日常的に使用 |
+| **Windows** | ✅ | ✅ | reference 実装 —— LAN および Tailscale（Internet/NAT）で日常的に使用 |
 | **macOS** | ✅ | ✅ | 両方の役割が動作（ScreenCaptureKit + VideoToolbox + CGEvent） |
-| **Android** | ✅ | ✅ | クライアント：映像 + 入力（トラックパッド、キーボード）。ホスト：閲覧専用の画面共有（MediaProjection + MediaCodec）、Android 10 以降 — Google Play でテスト中 |
-| **iOS** | ✅ | ✅ | クライアント：映像 + 入力（トラックパッド、キーボード）。ホスト：Broadcast Upload Extension による閲覧専用の画面共有（ReplayKit + VideoToolbox）— TestFlight でテスト中 |
-| **Linux** | ✅ | ✅ | 両方の役割が動作（PipeWire + VA-API + uinput + GTK3）— Ubuntu、Debian、Mint、Fedora、openSUSE、Arch に deb / rpm / 単体バイナリで。2 台間の LAN で確認済み |
+| **Android** | ✅ | ✅ | Client: video と input（trackpad、keyboard）。Host: view-only の画面共有（MediaProjection + MediaCodec）、Android 10+ —— Google Play でテスト中 |
+| **iOS** | ✅ | ✅ | Client: video と input（trackpad、keyboard）。Host: Broadcast Upload Extension による view-only の画面共有（ReplayKit + VideoToolbox）—— TestFlight でテスト中 |
+| **Linux** | ✅ | ✅ | 両方の役割が動作（PipeWire + VA-API + uinput + GTK3）—— Ubuntu、Debian、Mint、Fedora、openSUSE、Arch に deb / rpm / portable binary で提供。2 台間の LAN で検証済み |
 
 ## ✨ 中身
 
-- **端から端までゼロコピー** — VRAM へ直接キャプチャ → NVENC → HW デコード → 描画。ホットパスは CPU に触れない。
-- **QUIC 上の専用プロトコル** — 無限 GOP + 要求時 IDR、XOR FEC、適応ビットレート。すべてを暗号化された 1 本の接続に多重化。
-- **画面には音がついてくる** — そのマシン自身のオーディオミックスを Opus 64 kbps、1 データグラムにつき 20 ms フレーム 1 つ。パケットを 1 つ落としても失うのは 1 秒の何分の一かで、映像を乱すことはない。マイクは決して使わない。
-- **本物の入力** — 相対マウス（Raw Input）と DirectInput ゲーム向けスキャンコード。ホスト自身のマウス・キーボードが常に優先。
-- **共有コアはひとつ** — プロトコル、FEC、ビットレート制御は `core/` にあり、すべてのクライアントにコンパイルされる。
-- **コマンドラインもある** — `deskhub-cli` は画面を共有し、リモートシェルを開き、スクリプトや SSH 越しにホストを操作する。GUI ツールキットは一切不要。[ビルド](docs/BUILD.ja.md#コマンドラインクライアント)を参照。
-- **わざと痛めつけている** — コアはオフラインでユニットテストされ、CI では ASan・UBSan・TSan の下で走り、7 つの libFuzzer ターゲットがワイヤフォーマット、H.264 パース、再組み立て、ターミナルのバイト列、UI テキスト、セッション状態機械を毎晩叩く。見つかったクラッシュはすべて回帰テストになる。
+- **端から端まで zero-copy** —— capture が直接 VRAM へ入り、NVENC → hardware decode → render と進む。hot path は CPU を経由しない。
+- **QUIC 上の専用 protocol** —— 無限 GOP と必要時の IDR、XOR FEC、adaptive bitrate を、encrypt 済みの connection 1 本に multiplex する。
+- **画面に音声が伴う** —— マシン自身の audio mix を Opus 64 kbps で送る。1 datagram につき 20 ms の frame を 1 つ。packet を 1 つ失っても損失は数十ミリ秒にとどまり、映像には影響しない。microphone は capture しない。
+- **実際の input** —— relative mouse（Raw Input）と、DirectInput ゲーム向けの scancode。host 自身の mouse と keyboard が常に優先される。
+- **共有された core** —— protocol、FEC、bitrate control は `core/` にあり、すべての client にコンパイルされる。
+- **command line も提供** —— `deskhub-cli` は画面の共有、remote shell の起動、スクリプトや SSH 経由での host の操作を行う。GUI toolkit は不要。[Build](docs/BUILD.ja.md#command-line-client) を参照。
+- **十分にテストされている** —— core にはオフラインで動作する unit test がある。CI では ASan、UBSan、TSan も実行する。7 つの libFuzzer target が、wire format、H.264 の parse、reassembly、terminal の byte stream、UI の文字列、session state machine を毎晩検査する。検出された crash はいずれも regression test として追加される。
 
 ## 📚 ドキュメント
 
-すべての文書は英語で公開し、隣にベトナム語 `*.vi.md`、中国語 `*.zh.md`、日本語 `*.ja.md`
-の訳を置いている。正典は英語版。
+すべてのドキュメントは英語で公開し、その隣に訳を置いている。ベトナム語 `*.vi.md`、
+中国語 `*.zh.md`、日本語 `*.ja.md`。正文は英語版である。
 
-| 文書 | 内容 |
+| ドキュメント | 内容 |
 | --- | --- |
-| [インストール](docs/INSTALL.ja.md) ([en](docs/INSTALL.md)) | 5 つのプラットフォームそれぞれに Deskhub を入れる |
-| [ビルド](docs/BUILD.ja.md) ([en](docs/BUILD.md)) | ソースからのコンパイル、テスト、パッケージング、リリース |
-| [仕様](docs/SPECIFICATION.ja.md) ([en](docs/SPECIFICATION.md)) | Deskhub が何をするか。実装の詳細は含まない |
-| [アーキテクチャ](docs/ARCHITECTURE.ja.md) ([en](docs/ARCHITECTURE.md)) | レイヤ、スレッド、ワイヤプロトコル、設計判断 |
-| [`SECURITY.ja.md`](SECURITY.ja.md) ([en](SECURITY.md)) | 脅威モデルと脆弱性の報告方法 |
-| [`PRIVACY.ja.md`](PRIVACY.ja.md) ([en](PRIVACY.md)) | プライバシーポリシー |
-| [`THIRD_PARTY_NOTICES.ja.md`](THIRD_PARTY_NOTICES.ja.md) ([en](THIRD_PARTY_NOTICES.md)) | サードパーティ製コンポーネントとライセンス |
+| [Install](docs/INSTALL.ja.md) ([en](docs/INSTALL.md) · [vi](docs/INSTALL.vi.md) · [zh](docs/INSTALL.zh.md)) | 5 つのプラットフォームそれぞれへの Deskhub の導入 |
+| [Build](docs/BUILD.ja.md) ([en](docs/BUILD.md) · [vi](docs/BUILD.vi.md) · [zh](docs/BUILD.zh.md)) | source からのコンパイル、test、パッケージング、release |
+| [Specification](docs/SPECIFICATION.ja.md) ([en](docs/SPECIFICATION.md) · [vi](docs/SPECIFICATION.vi.md) · [zh](docs/SPECIFICATION.zh.md)) | Deskhub が何をするか。実装の詳細は扱わない |
+| [Architecture](docs/ARCHITECTURE.ja.md) ([en](docs/ARCHITECTURE.md) · [vi](docs/ARCHITECTURE.vi.md) · [zh](docs/ARCHITECTURE.zh.md)) | layer、thread、wire protocol、設計判断 |
+| [`SECURITY.ja.md`](SECURITY.ja.md) ([en](SECURITY.md) · [vi](SECURITY.vi.md) · [zh](SECURITY.zh.md)) | Threat model と脆弱性の報告方法 |
+| [`PRIVACY.ja.md`](PRIVACY.ja.md) ([en](PRIVACY.md) · [vi](PRIVACY.vi.md) · [zh](PRIVACY.zh.md)) | プライバシーポリシー |
+| [`THIRD_PARTY_NOTICES.ja.md`](THIRD_PARTY_NOTICES.ja.md) ([en](THIRD_PARTY_NOTICES.md) · [vi](THIRD_PARTY_NOTICES.vi.md) · [zh](THIRD_PARTY_NOTICES.zh.md)) | サードパーティ製コンポーネントと license |
 
-不具合とフィードバック：[issues](https://github.com/manhpham90vn/Deskhub/issues) —
-端末のモデル名を添えてください。
+バグ報告と意見: [issues](https://github.com/manhpham90vn/Deskhub/issues) —— 端末の機種名
+を添えてほしい。
 
 ## 📄 ライセンス
 
-MIT — [`LICENSE`](LICENSE) を参照。サードパーティ製コンポーネントとその告知（Linux アプリに
-静的リンクされた LGPL 版 FFmpeg を含む）は
+MIT —— [`LICENSE`](LICENSE) を参照。サードパーティ製コンポーネントとその表示（Linux
+app に静的 link されている LGPL ビルドの FFmpeg を含む）は
 [`THIRD_PARTY_NOTICES.ja.md`](THIRD_PARTY_NOTICES.ja.md) に一覧がある。

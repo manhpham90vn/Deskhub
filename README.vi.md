@@ -6,8 +6,9 @@
 
 ### Máy của bạn, trên mọi màn hình bạn có.
 
-**Mã nguồn mở. Native. Đa nền tảng. Remote desktop mượt như ngồi tại máy — nhanh và thô
-đủ để chơi game từ xa thật sự, điều mà các công cụ remote desktop thông thường không làm nổi.**
+**Open-source. Native. Đa nền tảng. Remote desktop cho cảm giác như đang dùng máy tại chỗ
+— nhanh tới mức chơi được game từ xa, điều mà các công cụ remote desktop thông thường
+không làm được.**
 
 [![Release](https://img.shields.io/github/v/release/manhpham90vn/Deskhub?label=release&color=2563eb)](https://github.com/manhpham90vn/Deskhub/releases)
 [![License: MIT](https://img.shields.io/github/license/manhpham90vn/Deskhub?color=2563eb)](LICENSE)
@@ -19,119 +20,119 @@
 [![codeql](https://github.com/manhpham90vn/Deskhub/actions/workflows/codeql.yml/badge.svg)](https://github.com/manhpham90vn/Deskhub/actions/workflows/codeql.yml)
 [![nightly](https://github.com/manhpham90vn/Deskhub/actions/workflows/nightly.yml/badge.svg)](https://github.com/manhpham90vn/Deskhub/actions/workflows/nightly.yml)
 
-**[Cài đặt](docs/INSTALL.vi.md)** · [Build từ mã nguồn](docs/BUILD.vi.md) ·
-[Đặc tả](docs/SPECIFICATION.vi.md) · [Kiến trúc](docs/ARCHITECTURE.vi.md) ·
-[Bảo mật](SECURITY.vi.md)
+**[Cài đặt](docs/INSTALL.vi.md)** · [Build từ source](docs/BUILD.vi.md) ·
+[Spec](docs/SPECIFICATION.vi.md) · [Architecture](docs/ARCHITECTURE.vi.md) ·
+[Security](SECURITY.vi.md)
 
 </div>
 
-## 👀 Xem thử
+## 👀 Demo
 
 <div align="center">
 
-<img src="docs/imgs/macos_1.png" alt="Trang Host của Deskhub trên macOS: ô chọn Share on network, các địa chỉ Wi-Fi và Tailscale để máy khác kết nối tới, khung Not sharing trên cổng UDP 47777, và danh sách nguồn với Terminal đang được tick phía trên nút Start sharing" width="850">
+<img src="docs/imgs/macos_1.png" alt="Trang Host của Deskhub trên macOS: ô chọn Share on network, các địa chỉ Wi-Fi và Tailscale để máy khác connect tới, banner Not sharing trên UDP port 47777, và danh sách source với Terminal được chọn, phía trên nút Start sharing" width="850">
 
-<sub>Một host macOS, chỉ còn một cú tick nữa là chia sẻ: chọn thứ được phép rời khỏi máy này — màn hình bất kỳ, cái shell, hay cả hai — rồi bấm <b>Start sharing</b>.</sub>
+<sub>Host macOS trước khi share: chọn những gì được phép rời khỏi máy — display bất kỳ, shell, hoặc cả hai — rồi bấm <b>Start sharing</b>.</sub>
 
 </div>
 
 <table>
   <tr>
     <td align="center" width="33%">
-      <img src="docs/imgs/macos_2.png" alt="Trang Client của Deskhub trên macOS: IP của host, cổng UDP, ô mật mã và tên máy, các ô tick chọn màn hình từ xa, điều khiển và terminal, nút Connect, cùng bảng thiết bị với trạng thái, ping và lần kết nối gần nhất">
-      <br><sub><b>Client</b> — gõ một IP hoặc bấm vào máy mà bản quét mạng tìm thấy, rồi chọn mở cái gì: màn hình, quyền điều khiển, một shell, hay kết hợp tuỳ ý.</sub>
+      <img src="docs/imgs/macos_2.png" alt="Trang Client của Deskhub trên macOS: IP của host, UDP port, ô passcode và tên máy, các checkbox chọn remote desktop, control và terminal, nút Connect, cùng bảng thiết bị với status, ping và thời điểm connect gần nhất">
+      <br><sub><b>Client</b> — nhập IP hoặc chọn một máy mà scan tìm được, sau đó chọn nội dung cần mở: màn hình, quyền control, shell, hoặc kết hợp.</sub>
     </td>
     <td align="center" width="33%">
-      <img src="docs/imgs/macos_3.png" alt="Trang Devices của Deskhub trên macOS: các máy đã ghép cặp kèm khoá, thời điểm ghép cặp và lần thấy gần nhất, nút Forget và Forget every machine, công tắc cho phép ghép cặp mới, và khoá SHA256 của máy này">
-      <br><sub><b>Devices</b> — mọi máy từng được cho vào, theo tên và khoá, gỡ được từng cái; tắt ghép cặp mới khi các máy của bạn đã nằm trong danh sách.</sub>
+      <img src="docs/imgs/macos_3.png" alt="Trang Devices của Deskhub trên macOS: các máy đã pair kèm key, thời điểm pair và thời điểm thấy gần nhất, nút Forget và Forget every machine, switch cho phép pair máy mới, và key SHA256 của máy này">
+      <br><sub><b>Devices</b> — danh sách mọi máy đã được chấp nhận, kèm tên và key, có thể gỡ từng máy. Sau khi pair xong các máy cần dùng, có thể tắt việc pair máy mới.</sub>
     </td>
     <td align="center" width="33%">
-      <img src="docs/imgs/macos_4.png" alt="Trang Settings của Deskhub trên macOS: fps, bitrate và chất lượng, cổng UDP, mật mã ghép cặp, công tắc cho phép người xem điều khiển máy này, các nút bật clipboard và chống ngủ, trạng thái hiện thời của quyền Screen Recording và Accessibility, cùng công tắc khởi động cùng máy">
-      <br><sub><b>Settings</b> — fps, bitrate, chất lượng, cổng, mật mã, cho phép người xem điều khiển máy này hay không, và trạng thái hiện thời của các quyền macOS.</sub>
+      <img src="docs/imgs/macos_4.png" alt="Trang Settings của Deskhub trên macOS: fps, bitrate và quality, UDP port, passcode dùng để pair, switch cho phép viewer control máy này, các switch clipboard và chống sleep, trạng thái hiện thời của permission Screen Recording và Accessibility, cùng switch khởi động khi đăng nhập">
+      <br><sub><b>Settings</b> — fps, bitrate, quality, port, passcode, cho phép viewer control máy này hay không, và trạng thái hiện thời của các permission macOS.</sub>
     </td>
   </tr>
 </table>
 
 <p align="center">
-  <img src="docs/imgs/ios_1.png" alt="Trang Client của Deskhub trên iOS: các ô IP, cổng, mật mã và tên, nút Connect và Terminal, công tắc điều khiển máy từ xa, và bản quét mạng báo đã kiểm tra bao nhiêu địa chỉ" width="195">
-  <img src="docs/imgs/ios_2.png" alt="Trang Host của Deskhub trên iOS: mật mã ghép cặp, Share on network, Start sharing, và các địa chỉ IP để máy khác kết nối tới" width="195">
-  <img src="docs/imgs/ios_3.png" alt="Trang Devices của Deskhub trên iOS: danh sách máy đã ghép cặp còn trống, công tắc cho phép ghép cặp mới, và khoá SHA256 của thiết bị này" width="195">
-  <img src="docs/imgs/ios_4.png" alt="Trang cài đặt kết nối của Deskhub trên iOS: cổng UDP mà bản quét tìm trên đó, cùng các công tắc đồng bộ clipboard và giữ máy thức" width="195">
+  <img src="docs/imgs/ios_1.png" alt="Trang Client của Deskhub trên iOS: các ô IP, port, passcode và tên, nút Connect và Terminal, switch control máy từ xa, và scan báo số địa chỉ đã kiểm tra" width="195">
+  <img src="docs/imgs/ios_2.png" alt="Trang Host của Deskhub trên iOS: passcode dùng để pair, Share on network, Start sharing, và các địa chỉ IP để máy khác connect tới" width="195">
+  <img src="docs/imgs/ios_3.png" alt="Trang Devices của Deskhub trên iOS: danh sách máy đã pair còn trống, switch cho phép pair máy mới, và key SHA256 của thiết bị này" width="195">
+  <img src="docs/imgs/ios_4.png" alt="Trang settings kết nối của Deskhub trên iOS: UDP port mà scan kiểm tra, cùng các switch sync clipboard và giữ thiết bị không sleep" width="195">
 </p>
-<p align="center"><sub><b>iPhone</b> — vẫn bốn trang đó. Quét mạng, chạm vào một máy, dùng khung hình như bàn di chuột để điều khiển; hoặc chia sẻ màn hình của chính điện thoại, chỉ để xem.</sub></p>
+<p align="center"><sub><b>iPhone</b> — vẫn bốn trang đó. Scan, chọn một máy, dùng khung video như trackpad để điều khiển; hoặc host màn hình của chính điện thoại ở chế độ view-only.</sub></p>
 
 <p align="center">
-  <img src="docs/imgs/android_1.png" alt="Trang Client của Deskhub trên Android: các ô IP, cổng, mật mã và tên, nút Connect và Terminal, ô tick điều khiển, và bản quét mạng đang chạy qua dải mạng" width="195">
-  <img src="docs/imgs/android_2.png" alt="Trang Host của Deskhub trên Android: mật mã ghép cặp, Share on network, Start sharing, và các địa chỉ IP để máy khác kết nối tới" width="195">
-  <img src="docs/imgs/android_3.png" alt="Trang Devices của Deskhub trên Android: danh sách máy đã ghép cặp còn trống, ô tick cho phép ghép cặp mới, và khoá SHA256 của thiết bị này" width="195">
-  <img src="docs/imgs/android_4.png" alt="Trang cài đặt kết nối của Deskhub trên Android: cổng UDP mà bản quét tìm trên đó, cùng các ô tick đồng bộ clipboard và giữ máy thức" width="195">
+  <img src="docs/imgs/android_1.png" alt="Trang Client của Deskhub trên Android: các ô IP, port, passcode và tên, nút Connect và Terminal, checkbox control, và scan đang chạy qua subnet" width="195">
+  <img src="docs/imgs/android_2.png" alt="Trang Host của Deskhub trên Android: passcode dùng để pair, Share on network, Start sharing, và các địa chỉ IP để máy khác connect tới" width="195">
+  <img src="docs/imgs/android_3.png" alt="Trang Devices của Deskhub trên Android: danh sách máy đã pair còn trống, checkbox cho phép pair máy mới, và key SHA256 của thiết bị này" width="195">
+  <img src="docs/imgs/android_4.png" alt="Trang settings kết nối của Deskhub trên Android: UDP port mà scan kiểm tra, cùng các checkbox sync clipboard và giữ thiết bị không sleep" width="195">
 </p>
-<p align="center"><sub><b>Android</b> — vẫn bốn trang đó, trong lớp áo Material. Ở vai host, Android 10+ chỉ chia sẻ màn hình để xem.</sub></p>
+<p align="center"><sub><b>Android</b> — vẫn bốn trang đó, theo Material Design. Khi làm host, Android 10+ chỉ share màn hình ở chế độ view-only.</sub></p>
 
 ## 📖 Giới thiệu
 
-Một **lõi C++20** duy nhất chạy trên mọi nền tảng — từ Windows tới iPhone — không phải
-viết lại giao thức lần nào. Chia sẻ một màn hình, gõ IP ở máy kia, và bạn đang điều khiển
-nó. Bốn trang trên mọi nền tảng — **Host**, **Client**, **Devices**, **Settings** — nên
-học trên máy Mac là biết luôn app Android.
+Một **core C++20** duy nhất chạy trên mọi nền tảng, từ Windows đến iPhone, không phải viết
+lại protocol. Share một display, nhập IP trên máy còn lại là có thể điều khiển máy đó. Bốn
+trang giống nhau trên mọi nền tảng — **Host**, **Client**, **Devices**, **Settings** —
+nên khi đã quen trên macOS thì dùng được ngay app Android.
 
 | ⚡ Nhanh | 📦 Một file | 🎛️ Đơn giản |
 | ------ | ---------- | --------- |
-| **~3.5 ms** từ lúc thu hình tới lúc hiện hình, 60 fps. Đường dữ liệu đi thẳng trong VRAM — không đụng tới CPU. | Không cài đặt, không dịch vụ chạy nền, không tài khoản. Toàn bộ app Windows là một file exe **~5.1 MB**; macOS là file dmg **1.9 MB**. | **Share** một màn hình hoặc **Connect** tới một IP, hết. Máy desktop còn chia sẻ được cả một **shell** và nhận **tệp** người xem gửi tới. Điện thoại cũng chia sẻ được màn hình, nhưng chỉ để xem, vì không hệ điều hành di động nào cho app bơm thao tác điều khiển. |
+| **~3.5 ms** từ capture đến khi hiển thị, 60 fps. Pipeline zero-copy nằm hoàn toàn trong VRAM; hot path không đi qua CPU. | Không installer, không background service, không tài khoản. Toàn bộ app Windows là một file exe **~5.1 MB**; bản macOS là file dmg **1.9 MB**. | **Share** một display hoặc **Connect** tới một IP. Máy desktop share thêm được một **shell** và nhận **file** do viewer gửi. Điện thoại cũng host được nhưng chỉ view-only, vì không OS di động nào cho phép app inject input. |
 
-Phiên làm việc được mã hoá đầu-cuối trên **QUIC/TLS**, và một máy lạ chỉ vào được khi
-chứng minh nó biết mật mã của host — bằng **SPAKE2**, nên bản thân mã đó không bao giờ
-truyền đi — hoặc được người ngồi tại host bấm đồng ý. Dù vậy đó vẫn là một bí mật nhỏ trên
-một cổng đang mở: hãy dùng mạng bạn tin tưởng hoặc một VPN, và **đừng bao giờ mở
-port-forward cho UDP 47777**. Mô hình mối đe doạ đầy đủ nằm ở [`SECURITY.vi.md`](SECURITY.vi.md).
+Session được encrypt end-to-end trên **QUIC/TLS**. Máy lạ chỉ được chấp nhận khi chứng
+minh được mình biết passcode của host — thông qua **SPAKE2**, nên passcode không bao giờ
+được truyền đi — hoặc khi người dùng tại host chấp thuận. Dù vậy đó vẫn chỉ là một chuỗi bí mật
+ngắn nằm trên port đang mở: hãy dùng network tin cậy hoặc VPN, và **không port-forward
+UDP 47777**. Threat model đầy đủ nằm trong [`SECURITY.vi.md`](SECURITY.vi.md).
 
 ## 💡 Vì sao
 
-- 💻 **Công việc** — chạy Claude Code, VS Code hay build trên PC ở nhà, từ một laptop yếu hoặc một chiếc iPad ngoài quán cà phê.
-- 🌐 **Mọi thứ** — điều khiển Chrome, Office hay phần mềm chỉ có trên PC, từ bất kỳ thiết bị nào.
-- 🎮 **Game** — 60 fps, chuột tương đối + scancode DirectInput, khoá con trỏ bằng `F9`.
-- 🖥️ **Nhiều màn hình** — chia sẻ một hoặc nhiều màn hình, mỗi cái là một phiên riêng.
+- 💻 **Công việc** — chạy Claude Code, VS Code hoặc build trên PC ở nhà, từ một laptop cấu hình thấp hoặc từ iPad.
+- 🌐 **Mọi thứ** — điều khiển Chrome, Office hoặc phần mềm chỉ chạy trên PC, từ bất kỳ thiết bị nào.
+- 🎮 **Game** — 60 fps, relative mouse và scancode DirectInput, pointer lock bằng `F9`.
+- 🖥️ **Nhiều display** — share một hoặc nhiều display, mỗi display là một session riêng.
 
 ## 🚦 Nền tảng
 
 | Nền tảng | Host | Client | Trạng thái |
 | -------- | :--: | :----: | ---------- |
-| **Windows** | ✅ | ✅ | Bản tham chiếu — dùng hằng ngày qua LAN + Tailscale (Internet/NAT) |
-| **macOS** | ✅ | ✅ | Cả hai vai đều chạy (ScreenCaptureKit + VideoToolbox + CGEvent) |
-| **Android** | ✅ | ✅ | Client: hình ảnh + điều khiển (bàn di chuột, bàn phím). Host: chia sẻ màn hình chỉ để xem (MediaProjection + MediaCodec), Android 10+ — đang thử nghiệm trên Google Play |
-| **iOS** | ✅ | ✅ | Client: hình ảnh + điều khiển (bàn di chuột, bàn phím). Host: chia sẻ màn hình chỉ để xem qua Broadcast Upload Extension (ReplayKit + VideoToolbox) — đang thử nghiệm qua TestFlight |
-| **Linux** | ✅ | ✅ | Cả hai vai đều chạy (PipeWire + VA-API + uinput + GTK3) — Ubuntu, Debian, Mint, Fedora, openSUSE, Arch qua deb / rpm / bản chạy thẳng; đã kiểm chứng giữa hai máy trong LAN |
+| **Windows** | ✅ | ✅ | Bản reference — sử dụng hằng ngày qua LAN và Tailscale (Internet/NAT) |
+| **macOS** | ✅ | ✅ | Cả hai vai trò đều hoạt động (ScreenCaptureKit + VideoToolbox + CGEvent) |
+| **Android** | ✅ | ✅ | Client: video và input (trackpad, keyboard). Host: share màn hình view-only (MediaProjection + MediaCodec), Android 10+ — đang thử nghiệm trên Google Play |
+| **iOS** | ✅ | ✅ | Client: video và input (trackpad, keyboard). Host: share màn hình view-only qua Broadcast Upload Extension (ReplayKit + VideoToolbox) — đang thử nghiệm qua TestFlight |
+| **Linux** | ✅ | ✅ | Cả hai vai trò đều hoạt động (PipeWire + VA-API + uinput + GTK3) — Ubuntu, Debian, Mint, Fedora, openSUSE, Arch qua deb / rpm / binary chạy trực tiếp; đã kiểm chứng giữa hai máy trong LAN |
 
 ## ✨ Bên trong có gì
 
-- **Zero-copy từ đầu tới cuối** — thu hình thẳng vào VRAM → NVENC → giải mã bằng phần cứng → vẽ ra màn hình; đường dữ liệu nóng không đụng tới CPU.
-- **Giao thức viết riêng, chạy trên QUIC** — GOP vô hạn + IDR theo yêu cầu, FEC kiểu XOR, bitrate tự điều chỉnh, tất cả ghép chung trên một kết nối đã mã hoá.
-- **Có hình thì có tiếng** — bản trộn âm thanh của chính máy đó, Opus 64 kbps, mỗi datagram một khung 20 ms; mất một gói chỉ mất một phần nhỏ của giây và không bao giờ làm hỏng hình. Không bao giờ là micro.
-- **Điều khiển thật** — chuột tương đối (Raw Input) + scancode cho game DirectInput; chuột và bàn phím của chính máy host luôn được ưu tiên.
-- **Một lõi dùng chung** — giao thức, FEC và điều khiển bitrate nằm trong `core/`, được biên dịch vào mọi client.
-- **Có cả dòng lệnh** — `deskhub-cli` chia sẻ màn hình, mở shell từ xa và điều khiển host từ script hay qua SSH, không cần toolkit đồ hoạ nào. Xem [Build](docs/BUILD.vi.md#client-dòng-lệnh).
-- **Bị hành cho ra bã** — lõi được kiểm thử offline, chạy dưới ASan, UBSan và TSan trong CI, và bảy mục tiêu libFuzzer nện vào định dạng gói tin, bộ phân tích H.264, khâu ghép lại gói, luồng byte của terminal, chuỗi giao diện và các máy trạng thái phiên mỗi đêm; mỗi lần tìm ra một cú crash là một bài kiểm thử hồi quy mới.
+- **Zero-copy từ đầu đến cuối** — capture trực tiếp vào VRAM → NVENC → hardware decode → render. Hot path không đi qua CPU.
+- **Protocol riêng chạy trên QUIC** — GOP vô hạn kết hợp IDR theo yêu cầu, XOR FEC, adaptive bitrate, tất cả được multiplex trên một connection đã encrypt.
+- **Âm thanh đi kèm hình ảnh** — audio mix của chính máy đó, Opus 64 kbps, mỗi datagram chứa một frame 20 ms. Mất một packet chỉ mất một phần nhỏ của giây và không ảnh hưởng tới hình ảnh. Không bao giờ capture microphone.
+- **Input thật** — relative mouse (Raw Input) và scancode cho game DirectInput. Mouse và keyboard tại máy host luôn được ưu tiên.
+- **Core dùng chung** — protocol, FEC và bitrate control nằm trong `core/`, được compile vào mọi client.
+- **Có cả command line** — `deskhub-cli` share màn hình, mở remote shell và điều khiển host từ script hoặc qua SSH, không cần GUI toolkit. Xem [Build](docs/BUILD.vi.md#command-line-client).
+- **Được kiểm thử kỹ** — core có unit test chạy offline. CI chạy thêm ASan, UBSan và TSan. Bảy libFuzzer target kiểm tra wire format, phần parse H.264, reassembly, byte stream của terminal, chuỗi UI và các session state machine mỗi đêm. Mỗi crash phát hiện được bổ sung thành một regression test.
 
 ## 📚 Tài liệu
 
-Mọi tài liệu đều được xuất bản bằng tiếng Anh kèm các bản dịch đặt bên cạnh — tiếng Việt
+Mọi tài liệu đều được xuất bản bằng tiếng Anh, kèm bản dịch đặt bên cạnh: tiếng Việt
 `*.vi.md`, tiếng Trung `*.zh.md`, tiếng Nhật `*.ja.md`. Bản tiếng Anh là bản chuẩn.
 
 | Tài liệu | Nội dung |
 | --- | --- |
-| [Cài đặt](docs/INSTALL.vi.md) ([en](docs/INSTALL.md) · [zh](docs/INSTALL.zh.md) · [ja](docs/INSTALL.ja.md)) | Đưa Deskhub lên từng nền tảng trong năm nền tảng |
-| [Build](docs/BUILD.vi.md) ([en](docs/BUILD.md) · [zh](docs/BUILD.zh.md) · [ja](docs/BUILD.ja.md)) | Biên dịch từ mã nguồn, kiểm thử, đóng gói, phát hành |
-| [Đặc tả](docs/SPECIFICATION.vi.md) ([en](docs/SPECIFICATION.md) · [zh](docs/SPECIFICATION.zh.md) · [ja](docs/SPECIFICATION.ja.md)) | Deskhub làm được gì, không có chi tiết cài đặt |
-| [Kiến trúc](docs/ARCHITECTURE.vi.md) ([en](docs/ARCHITECTURE.md) · [zh](docs/ARCHITECTURE.zh.md) · [ja](docs/ARCHITECTURE.ja.md)) | Các tầng, luồng, giao thức trên đường truyền, các quyết định thiết kế |
-| [`SECURITY.vi.md`](SECURITY.vi.md) ([en](SECURITY.md) · [zh](SECURITY.zh.md) · [ja](SECURITY.ja.md)) | Mô hình mối đe doạ và cách báo lỗ hổng |
+| [Install](docs/INSTALL.vi.md) ([en](docs/INSTALL.md) · [zh](docs/INSTALL.zh.md) · [ja](docs/INSTALL.ja.md)) | Cài Deskhub trên từng nền tảng trong năm nền tảng |
+| [Build](docs/BUILD.vi.md) ([en](docs/BUILD.md) · [zh](docs/BUILD.zh.md) · [ja](docs/BUILD.ja.md)) | Compile từ source, test, đóng gói, release |
+| [Specification](docs/SPECIFICATION.vi.md) ([en](docs/SPECIFICATION.md) · [zh](docs/SPECIFICATION.zh.md) · [ja](docs/SPECIFICATION.ja.md)) | Deskhub làm được gì, không đề cập chi tiết triển khai |
+| [Architecture](docs/ARCHITECTURE.vi.md) ([en](docs/ARCHITECTURE.md) · [zh](docs/ARCHITECTURE.zh.md) · [ja](docs/ARCHITECTURE.ja.md)) | Các layer, thread, wire protocol và các quyết định thiết kế |
+| [`SECURITY.vi.md`](SECURITY.vi.md) ([en](SECURITY.md) · [zh](SECURITY.zh.md) · [ja](SECURITY.ja.md)) | Threat model và cách báo lỗ hổng |
 | [`PRIVACY.vi.md`](PRIVACY.vi.md) ([en](PRIVACY.md) · [zh](PRIVACY.zh.md) · [ja](PRIVACY.ja.md)) | Chính sách quyền riêng tư |
-| [`THIRD_PARTY_NOTICES.vi.md`](THIRD_PARTY_NOTICES.vi.md) ([en](THIRD_PARTY_NOTICES.md) · [zh](THIRD_PARTY_NOTICES.zh.md) · [ja](THIRD_PARTY_NOTICES.ja.md)) | Thành phần bên thứ ba và giấy phép |
+| [`THIRD_PARTY_NOTICES.vi.md`](THIRD_PARTY_NOTICES.vi.md) ([en](THIRD_PARTY_NOTICES.md) · [zh](THIRD_PARTY_NOTICES.zh.md) · [ja](THIRD_PARTY_NOTICES.ja.md)) | Thành phần bên thứ ba và license |
 
-Báo lỗi và góp ý: [issues](https://github.com/manhpham90vn/Deskhub/issues) — nhớ ghi kèm
-model thiết bị của bạn.
+Báo lỗi và góp ý: [issues](https://github.com/manhpham90vn/Deskhub/issues) — vui lòng ghi
+kèm model thiết bị.
 
-## 📄 Giấy phép
+## 📄 License
 
-MIT — xem [`LICENSE`](LICENSE). Các thành phần bên thứ ba và thông báo giấy phép của
-chúng (bao gồm bản FFmpeg LGPL được liên kết tĩnh trong app Linux) được liệt kê ở
+MIT — xem [`LICENSE`](LICENSE). Các thành phần bên thứ ba cùng thông báo license của chúng
+(bao gồm bản FFmpeg LGPL được link tĩnh trong app Linux) được liệt kê trong
 [`THIRD_PARTY_NOTICES.vi.md`](THIRD_PARTY_NOTICES.vi.md).

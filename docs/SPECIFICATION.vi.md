@@ -2,235 +2,234 @@
 
 # Deskhub — Đặc tả chức năng
 
-Tài liệu này mô tả Deskhub **làm được gì**, dưới góc nhìn của người dùng. Đây là đặc tả
-sản phẩm, không phải tài liệu thiết kế: không có chi tiết cài đặt, không mô tả giao thức,
-không hướng dẫn build. Những nội dung đó nằm ở [`INSTALL.vi.md`](INSTALL.vi.md),
-[`BUILD.vi.md`](BUILD.vi.md), [`SECURITY.vi.md`](../SECURITY.vi.md) và trong mã nguồn.
+Tài liệu này mô tả Deskhub **làm gì**, theo góc nhìn của người sử dụng. Đây là đặc tả sản
+phẩm, không phải tài liệu thiết kế: không chứa chi tiết triển khai, không mô tả protocol
+và không có hướng dẫn build. Các nội dung đó nằm trong
+[`INSTALL.vi.md`](INSTALL.vi.md), [`BUILD.vi.md`](BUILD.vi.md),
+[`SECURITY.vi.md`](../SECURITY.vi.md) và trong cây source.
 
-Đây là bản dịch của [`SPECIFICATION.md`](SPECIFICATION.md); khi hai bản khác nhau, bản
+Đây là bản dịch của [`SPECIFICATION.md`](SPECIFICATION.md). Nếu hai bản có khác biệt, bản
 tiếng Anh là bản chuẩn.
 
 - **Trạng thái:** mô tả hành vi của mã nguồn hiện tại.
-- **Đối tượng đọc:** người cần biết sản phẩm phải làm gì — người kiểm thử, người review,
-  người đóng góp, nội dung mô tả trên store.
+- **Đối tượng:** những người cần biết sản phẩm phải làm được gì — tester, reviewer, người
+  đóng góp, và nội dung mô tả trên store.
 
 ---
 
 ## 1. Tóm tắt sản phẩm
 
-Deskhub cho phép một máy hiển thị màn hình của nó cho các máy khác trong cùng mạng, và
-cho phép các máy đó điều khiển chuột và bàn phím của nó. Chỉ có một ứng dụng duy nhất:
-cùng một app vừa chia sẻ màn hình, vừa xem màn hình của máy khác. Máy để bàn còn chia sẻ
-được cả **terminal**: một shell thật trên host mà máy khác mở trong cửa sổ riêng (mục 4
-và 5).
+Deskhub cho phép một máy chiếu màn hình sang các máy khác trong cùng network, và cho
+những máy đó điều khiển mouse cùng keyboard của máy này. Đây là một ứng dụng duy nhất:
+cùng một app vừa share màn hình vừa xem màn hình của máy khác. Máy desktop còn share được
+một **terminal**, tức một shell thật trên host mà máy khác mở trong cửa sổ riêng (mục 4 và
+5).
 
-Không bắt buộc cài đặt, không có tài khoản, không đăng nhập, không chạy nền, không có
-thành phần đám mây. Hai máy tìm thấy nhau bằng địa chỉ IP trong một mạng mà cả hai đều
-truy cập được.
+Không yêu cầu installer, không tài khoản, không đăng nhập, không background service và
+không có thành phần cloud. Hai máy tìm thấy nhau qua địa chỉ IP trên một network mà cả hai
+đều truy cập được.
 
 ## 2. Thuật ngữ
 
 | Thuật ngữ | Ý nghĩa |
 | --- | --- |
-| **Host** | Máy đang được chia sẻ màn hình (hoặc terminal). |
-| **Client** / **Viewer** | Máy đang xem host, và có thể điều khiển host. |
-| **Source** (nguồn) | Một thứ chia sẻ được trên host: một màn hình, hoặc terminal. Một host có thể chia sẻ nhiều nguồn cùng lúc. |
-| **Session** (phiên) | Một viewer đang xem một nguồn. Mỗi nguồn mở trong một cửa sổ riêng. |
-| **Key** (khoá) | Danh tính mật mã mà mỗi máy tự sinh ở lần chạy đầu, hiển thị cho người dùng dưới dạng dấu vân tay (`SHA256:…`). |
-| **Pairing** (ghép đôi) | Việc host cho một máy vào lâu dài. Máy đã ghép đôi được nhận diện bằng khoá của nó và kết nối không cần passcode, cho tới khi bị quên đi (mục 9). |
-| **Passcode** (mã) | Mã 4 chữ số tuỳ chọn mà host có thể yêu cầu trước khi một máy lạ được ghép đôi. |
+| **Host** | Máy đang được share màn hình (hoặc terminal). |
+| **Client** / **Viewer** | Máy đang xem một host, và có thể điều khiển host đó. |
+| **Source** | Một đối tượng có thể share trên host: một display, hoặc terminal. Một host có thể share nhiều source cùng lúc. |
+| **Session** | Một viewer xem một source. Mỗi source mở trong một cửa sổ riêng. |
+| **Key** | Danh tính mật mã mà một máy tạo ra trong lần chạy đầu tiên, hiển thị cho người dùng dưới dạng fingerprint (`SHA256:…`). |
+| **Pairing** | Việc host chấp nhận một máy một cách lâu dài. Máy đã pair được nhận diện qua key và connect không cần passcode, cho tới khi bị forget (mục 9). |
+| **Passcode** | Mã 4 chữ số tùy chọn mà host có thể yêu cầu trước khi một máy chưa biết được pair. |
 
-Một máy có thể vừa là host vừa là client cùng lúc.
+Một máy có thể đồng thời là host và client.
 
 ## 3. Vai trò theo nền tảng
 
-| Nền tảng | Chia sẻ được | Xem được | Âm thanh |
+| Nền tảng | Host | Xem | Âm thanh |
 | --- | :--: | :--: | :--: |
 | Windows | ✅ | ✅ | ✅ |
 | macOS | ✅ | ✅ | ✅ |
 | Linux | ✅ | ✅ | ✅ |
-| Android | ✅ chỉ xem | ✅ | ⚠️ Android 10+ |
-| iOS | ✅ chỉ xem | ✅ | ⚠️ chỉ tiếng của app |
+| Android | ✅ view-only | ✅ | ⚠️ Android 10+ |
+| iOS | ✅ view-only | ✅ | ⚠️ chỉ audio của app |
 
-Mọi nền tảng đều có cùng bộ tính năng phía client, trừ những khác biệt nêu ở mục 12.
-Điện thoại và máy tính bảng chia sẻ ở chế độ **chỉ xem**: chúng phát màn hình nhưng không
-bao giờ nhận điều khiển từ xa, vì không hệ điều hành di động nào cho một ứng dụng thường
-điều khiển máy.
+Mọi nền tảng đều có cùng tập tính năng phía client, trừ những điểm nêu ở mục 12. Điện
+thoại và tablet host ở chế độ **view-only**: chúng stream màn hình nhưng không nhận remote
+input, vì không OS di động nào cho phép app thông thường điều khiển thiết bị.
 
-Ứng dụng được chia thành các mục cùng tên trên mọi nền tảng: **Host**, **Client** và
-**Settings** — cộng thêm trang **Devices** liệt kê các máy đã ghép đôi với máy này
-(mục 9).
+App được tổ chức thành các phần giống nhau trên mọi nền tảng: **Host**, **Client** và
+**Settings**, cùng trang **Devices** liệt kê các máy đã pair với máy này (mục 9).
 
-Ba nền tảng để bàn còn có một client dòng lệnh. Nó làm đúng những việc trên mà không có
-trang nào cả: làm host, kết nối, mở shell từ xa, tìm máy, và đọc ghi đúng những cấu hình,
-máy đã ghép đôi và khoá host đã tin mà app dùng. Nó là một khuôn mặt khác của những hành vi
-mô tả trong tài liệu này, không bao giờ là hành vi khác.
+Ba nền tảng desktop còn có một command line client. Nó cung cấp cùng hành vi nhưng không
+có giao diện trang: nó host, connect, mở remote shell, tìm máy, đồng thời đọc và ghi đúng
+những file settings, danh sách máy đã pair và host key đã trust mà app sử dụng. Đây là một
+giao diện khác cho các hành vi mô tả trong tài liệu này, không phải một tập hành vi khác.
 
 ---
 
-## 4. Host — chia sẻ màn hình máy này
+## 4. Host — share màn hình của máy này
 
 | ID | Tính năng | Mô tả |
 | --- | --- | --- |
-| H-1 | Chọn màn hình | Trước khi chia sẻ, người dùng tích chọn những màn hình của máy sẽ được chia sẻ. Phải chọn ít nhất một. |
-| H-2 | Chia sẻ nhiều màn hình | Có thể chia sẻ nhiều màn hình cùng lúc; mỗi màn hình thành một nguồn riêng để viewer chọn. |
-| H-3 | Giới hạn nguồn | Tối đa **8** màn hình được chia sẻ cùng lúc. Nếu máy có nhiều hơn, người dùng được cảnh báo rằng chỉ 8 màn hình đầu được chia sẻ. |
-| H-4 | Bật / tắt chia sẻ | Một thao tác để bắt đầu, một thao tác để dừng. Trạng thái hiện tại luôn được hiển thị (*Không chia sẻ* / *Đang bắt đầu…* / *Đang chia sẻ*). |
-| H-5 | Dừng một màn hình | Có thể dừng riêng một màn hình đang chia sẻ mà không kết thúc toàn bộ phiên chia sẻ. |
-| H-6 | Thông tin kết nối | Khi đang chia sẻ, ứng dụng liệt kê các địa chỉ mạng của máy và cổng mà viewer cần dùng, để đọc hoặc sao chép cho người khác. Trên desktop, mục *Chia sẻ trên mạng* (T-9) nằm ngay trên màn host cạnh danh sách này, và danh sách chỉ hiện địa chỉ của mạng đang được chọn — chọn *Mọi mạng* thì hiện tất cả. Khi đang chia sẻ (hoặc đang khởi động chia sẻ), mục chọn này bị khoá; dừng chia sẻ để đổi. |
-| H-7 | Bảng phiên trực tiếp | Với mỗi màn hình đang chia sẻ, host thấy: tên màn hình, độ phân giải, số viewer, tốc độ thu hình, tốc độ gửi, băng thông đang dùng và độ trễ khứ hồi. Mỗi viewer đang kết nối hiện thành một dòng riêng dưới màn hình tương ứng, nhận diện bằng tên hiển thị kèm địa chỉ — dạng "Tên (ip:port)" — nếu viewer đã đặt tên (C-7), hoặc chỉ bằng địa chỉ nếu chưa. |
-| H-8 | Ngắt một viewer | Host có thể ngắt bất kỳ viewer nào từ bảng phiên. |
-| H-9 | Giới hạn viewer | Tối đa **5** viewer xem một host cùng lúc. Các kết nối thêm bị từ chối với lý do máy đang bận. |
-| H-10 | Báo lỗi | Nếu không bắt đầu chia sẻ được, lý do được hiển thị cho người dùng thay vì thất bại âm thầm. Terminal không khởi động được vì cổng đã bị chiếm sẽ báo đúng điều đó. |
-| H-11 | Nguồn Terminal (desktop) | Danh sách nguồn có thêm mục **Terminal — a shell on this machine**. Nó được tích sẵn mỗi lần danh sách hiện ra và không bao giờ được lưu; chia sẻ màn hình không kèm terminal, terminal không kèm màn hình, hay cả hai, đều hợp lệ. Mọi thứ dùng chung một cổng UDP duy nhất của app (T-4), passcode và lựa chọn mạng. |
-| H-12 | Phiên shell trong bảng | Khi terminal đang được chia sẻ, bảng phiên trực tiếp có một dòng *Terminal* (kèm cổng), và mỗi shell đang mở là một dòng bên dưới, nhận diện như viewer (C-7), với nút *Disconnect*; nút *Stop* của dòng *Terminal* chỉ dừng chia sẻ terminal. Tối đa **8** shell mở cùng lúc. Mọi lần shell được mở, đóng, gắn lại hay hết hạn đều được ghi vào nhật ký phiên (G-3) kèm địa chỉ, tên và khoá của máy client. |
-| H-13 | Shell sống sót khi rớt mạng | Shell bị mất kết nối được giữ sống trong **2 phút** để đúng máy đó gắn lại với nội dung phiên còn nguyên; quá hạn thì bị huỷ. Client tự gắn lại: nó thử lại với khoảng chờ giãn dần trong suốt thời gian host còn giữ shell, báo là đang gắn lại trong lúc đó, và lấy lại đúng shell cũ với nội dung lẫn scrollback. Chỉ khi hết 2 phút nó mới báo mất kết nối và mời làm lại từ đầu. |
-| H-15 | Shell rảnh không phải shell đứt | Kết nối terminal không có lưu lượng vẫn được client giữ sống, nên một shell để yên ở dấu nhắc không bị nhầm là đứt link rồi đóng đi. |
-| H-16 | Nguồn truyền tệp (desktop) | Danh sách nguồn có thêm mục **File transfer — files viewers send**, được tích sẵn mỗi lần danh sách hiện ra và không bao giờ được lưu; nó dùng chung một cổng UDP duy nhất của app (T-4), passcode và lựa chọn mạng như terminal (H-11). Tệp rơi vào thư mục được nêu ngay dưới bộ chọn và trong trạng thái chia sẻ (T-25). Một lô mang tối đa **32** tệp, **8 GiB** mỗi tệp và **32 GiB** tổng cộng; lớn hơn thế, hoặc tên không lưu được, sẽ bị từ chối kèm lý do. Mỗi tệp được ghi cạnh tên cuối cùng của nó với đuôi `.deskhub-part` và chỉ được đổi tên khi đã tới đủ và khớp checksum; tệp hỏng bị bỏ đi và làm lô dừng lại. Không bao giờ có gì bị ghi đè: tên đã có trong thư mục sẽ được thêm số vào sau. Nếu không ghi được vào thư mục đó thì không nhận tệp nào cả, và host nói rõ thay vì thất bại lặng lẽ. |
-| H-17 | Lượt truyền trong bảng | Khi truyền tệp đang được chia sẻ, bảng trực tiếp hiện một dòng *File transfer* nêu tên thư mục, và mỗi máy đang gửi là một dòng bên dưới, nhận diện như một viewer (C-7), kèm tệp đang nhận, vị trí của nó trong lô và phần đã xong — hoặc lý do lô dừng lại. Nút *Stop* trên dòng *File transfer* chỉ kết thúc riêng phần truyền tệp. Mọi lô được chào, được nhận, bị từ chối hay đã xong đều được ghi vào nhật ký phiên (G-3) kèm địa chỉ, tên và khóa của máy gửi. |
-| H-14 | Stop & attach (desktop) | Mỗi dòng shell — đang sống hay đang chờ gắn lại — còn có nút **Stop & attach**: client từ xa bị ngắt (cửa sổ của họ báo shell đã kết thúc) và đúng shell đó mở ra trong một cửa sổ terminal ngay trên máy host, nội dung lẫn scrollback còn nguyên. Từ đó shell thuộc về máy host: client cũ không gắn lại được, giới hạn 2 phút (H-13) không còn áp dụng, bảng đánh dấu dòng đó là *attached on this machine*, và đóng cửa sổ của host — hoặc bấm *Stop* trên dòng đó — sẽ kết thúc shell. Lần tiếp quản được ghi vào nhật ký phiên (G-3). |
+| H-1 | Chọn display | Trước khi share, người dùng chọn những display nào của máy này được hiển thị ra ngoài. Phải chọn ít nhất một. |
+| H-2 | Share nhiều display | Có thể share nhiều display đồng thời; mỗi display trở thành một source riêng để viewer lựa chọn. |
+| H-3 | Giới hạn source | Tối đa **8** display được share cùng lúc. Nếu máy có nhiều hơn, người dùng được cảnh báo rằng chỉ 8 display đầu tiên được share. |
+| H-4 | Bắt đầu và dừng share | Một thao tác bắt đầu share, một thao tác dừng. Trạng thái hiện thời luôn được hiển thị (*Not sharing* / *Starting share…* / *Sharing*). |
+| H-5 | Dừng một display | Có thể dừng riêng một display đang được share mà không kết thúc toàn bộ phiên share. |
+| H-6 | Thông tin kết nối | Trong khi share, app liệt kê các địa chỉ network của máy này cùng port mà viewer cần dùng, để người dùng đọc hoặc copy. Trên desktop, lựa chọn *Share on network* (T-9) nằm trên màn hình host cạnh danh sách này, và danh sách chỉ hiển thị địa chỉ của network đã chọn; *All networks* hiển thị toàn bộ địa chỉ. Trong khi đang share hoặc đang bắt đầu share, lựa chọn này bị khoá; cần dừng share để thay đổi. |
+| H-7 | Bảng session trực tiếp | Với mỗi display đang share, host thấy: tên display, độ phân giải, số lượng viewer, capture rate, send rate, băng thông đang sử dụng và round-trip time. Mỗi viewer đang kết nối là một dòng riêng bên dưới display tương ứng, được nhận diện bằng tên hiển thị và địa chỉ theo dạng "Tên (ip:port)" nếu viewer đã đặt tên (C-7), hoặc chỉ bằng địa chỉ nếu chưa. |
+| H-8 | Ngắt kết nối một viewer | Host có thể ngắt kết nối bất kỳ viewer nào từ bảng session. |
+| H-9 | Giới hạn viewer | Tối đa **5** viewer xem cùng một host tại một thời điểm. Các yêu cầu tiếp theo bị từ chối với lý do bận. |
+| H-10 | Báo lỗi | Nếu không thể bắt đầu share, nguyên nhân được hiển thị cho người dùng thay vì thất bại âm thầm. Trường hợp terminal không khởi động được do port đã bị chiếm sẽ được nêu rõ. |
+| H-11 | Source terminal (desktop) | Danh sách source còn có mục **Terminal — a shell on this machine**. Mục này được chọn lại từ đầu mỗi lần danh sách hiển thị và không được lưu; share màn hình không kèm terminal, chỉ terminal không kèm màn hình, hoặc cả hai, đều hợp lệ. Tất cả dùng chung một UDP port (T-4), cùng passcode và cùng lựa chọn network của app. |
+| H-12 | Các shell session trong bảng | Khi terminal đang được share, bảng trực tiếp hiển thị một dòng *Terminal* kèm port của nó, và mỗi shell đang mở là một dòng bên dưới, được nhận diện như một viewer (C-7), kèm nút *Disconnect*. Nút *Stop* trên dòng *Terminal* chỉ kết thúc phần share terminal. Tối đa **8** shell mở đồng thời. Mỗi lần một shell được mở, đóng, reattach hoặc hết hạn đều được ghi vào session log (G-3) kèm địa chỉ, tên và key của client. |
+| H-13 | Shell tồn tại qua gián đoạn kết nối | Một shell bị mất kết nối được giữ sống trong **2 phút** để chính máy đó reattach với nguyên nội dung session; sau thời gian đó, shell bị huỷ. Client tự thực hiện reattach: nó thử lại với khoảng chờ tăng dần trong suốt thời gian host còn giữ shell, hiển thị trạng thái đang reattach, và nhận lại đúng shell đó cùng nội dung và scrollback. Chỉ khi hết 2 phút, client mới báo mất kết nối và đề nghị bắt đầu lại. |
+| H-15 | Shell không hoạt động khác với shell mất kết nối | Một kết nối terminal không có lưu lượng vẫn được client giữ sống, nên một shell đang dừng tại dấu nhắc không bị hiểu nhầm là đứt kết nối và bị đóng. |
+| H-16 | Source file transfer (desktop) | Danh sách source còn có mục **File transfer — files viewers send**, được chọn lại từ đầu mỗi lần danh sách hiển thị và không được lưu. Giống terminal (H-11), mục này dùng chung một UDP port (T-4), passcode và lựa chọn network của app. File được lưu vào thư mục ghi bên dưới ô chọn và trong status khi share (T-25). Một batch chứa tối đa **32** file, **8 GiB** mỗi file và **32 GiB** tổng cộng; phần vượt quá, hoặc tên file không lưu được, bị từ chối kèm lý do. Mỗi file được ghi cạnh tên cuối cùng với hậu tố `.deskhub-part` và chỉ được đổi tên khi đã nhận đủ và checksum khớp; file hỏng bị loại bỏ và làm dừng cả batch. Không có file nào bị ghi đè: tên đã tồn tại trong thư mục sẽ được thêm số thứ tự. Nếu không ghi được vào thư mục, host không nhận file nào và thông báo rõ thay vì thất bại âm thầm. |
+| H-17 | Các phiên truyền file trong bảng | Khi file transfer đang được share, bảng trực tiếp hiển thị một dòng *File transfer* ghi tên thư mục, và mỗi máy đang gửi là một dòng bên dưới, được nhận diện như một viewer (C-7), kèm file đang nhận, vị trí của nó trong batch và tiến độ, hoặc lý do batch dừng lại. Nút *Stop* trên dòng *File transfer* chỉ kết thúc phần file transfer. Mỗi batch được đề nghị, chấp nhận, từ chối hoặc hoàn tất đều được ghi vào session log (G-3) kèm địa chỉ, tên và key của máy gửi. |
+| H-14 | Stop & attach (desktop) | Mọi dòng shell, dù đang hoạt động hay đang chờ reattach, đều có thêm **Stop & attach**: client từ xa bị ngắt kết nối (cửa sổ của nó báo shell đã kết thúc) và chính shell đó được mở trong một cửa sổ terminal trên host, giữ nguyên nội dung và scrollback. Từ thời điểm đó, shell thuộc về máy host: client cũ không reattach được nữa, giới hạn 2 phút (H-13) không còn áp dụng, bảng đánh dấu dòng đó là *attached on this machine*, và việc đóng cửa sổ trên host, hoặc nhấn *Stop* trên dòng tương ứng, sẽ kết thúc shell. Việc chuyển giao này được ghi vào session log (G-3). |
 
-## 5. Client — kết nối và xem máy khác
-
-| ID | Tính năng | Mô tả |
-| --- | --- | --- |
-| C-1 | Kết nối theo địa chỉ | Người dùng nhập địa chỉ IP của host vào một ô và cổng UDP vào ô riêng, được điền sẵn giá trị mặc định `47777`. Dán `192.168.1.10:47777` vào ô địa chỉ vẫn hoạt động — cổng ghi rõ trong địa chỉ được ưu tiên hơn ô cổng. Nhập sai định dạng sẽ hiện gợi ý giải thích chứ không báo lỗi cụt. |
-| C-2 | Nhập passcode | Ô passcode được phép để trống. Mã đã gõ phải đúng 4 chữ số, nếu không kết nối bị chặn trước khi gửi đi bất cứ thứ gì. Ô hiện gì thì đúng cái đó được dùng — không có gì được điền hộ sau lưng người dùng. Với ô trống, host là bên quyết định: máy đã ghép đôi được vào thẳng; máy chưa ghép thì đứng chờ (khoảng một phút) trong lúc người ở host được hỏi có cho vào không (S-2). Mã đã gõ mà host từ chối thì báo lỗi nêu rõ lý do passcode. Hộp thoại mở ra từ danh sách thiết bị hiển thị cổng UDP của thiết bị và mã đã nhớ (D-7), đều điền sẵn và sửa được. |
-| C-3 | Tuỳ chọn chỉ xem | Trước khi kết nối, viewer có thể bỏ tích *điều khiển máy từ xa* để chỉ xem mà không gửi bất kỳ thao tác nào. Một host hoàn toàn không nhận thao tác — điện thoại hay máy tính bảng (P-4), hoặc một desktop chia sẻ với tuỳ chọn nhận thao tác tắt — sẽ nói rõ điều đó khi được hỏi nó đang chia sẻ những gì, và các client desktop luôn hiển thị một dòng lưu ý rằng ô điều khiển và ô terminal không có tác dụng với host như vậy. |
-| C-4 | Chọn nguồn | Nếu host chia sẻ nhiều hơn một màn hình, viewer được hỏi muốn xem màn hình nào. Chọn nhiều thì mở nhiều cửa sổ. Nếu host chỉ chia sẻ một màn hình, cửa sổ mở ngay. |
-| C-5 | Lỗi rõ ràng | Nếu không tới được host, host không chia sẻ, hoặc passcode sai, viewer được cho biết chính xác là trường hợp nào — kèm địa chỉ trong thông báo. |
-| C-6 | Thông báo kết thúc | Khi một phiên kết thúc, từ phía nào cũng vậy, viewer được cho biết lý do. |
-| C-7 | Tên người xem | Ô *Your name* trên trang kết nối dùng để đặt tên cho thiết bị này. Khi người dùng chưa từng đặt tên, ô được điền sẵn giá trị mặc định theo nền tảng: hostname của máy trên Windows và Linux (tên đăng nhập nếu không lấy được hostname), tên máy tính trên macOS, tên thiết bị trên iOS, và model thiết bị trên Android. Ô có thể sửa, và nội dung của ô lúc kết nối chính là thứ được lưu và gửi đi. Ô không bao giờ rơi vào trạng thái không có tên: kết nối khi ô bị xoá trắng sẽ quay về giá trị mặc định theo nền tảng ở trên — giá trị đó được điền lại vào ô, được lưu và gửi đi — nên mỗi kết nối luôn kèm theo một cái tên. Host hiển thị tên đó bên cạnh địa chỉ của máy để phân biệt các viewer với nhau. Tên được nhớ trên thiết bị, dài tối đa **64** byte, và các ký tự điều khiển bị loại bỏ. Host chạy phiên bản cũ đơn giản là không hiển thị tên. |
-| C-8 | Mở shell | *Terminal — open a shell* là một nút xuất hiện khi host đã trả lời (C-10), trên mọi client. Shell mở trong cửa sổ riêng — lưới ký tự, cuộn lại lịch sử, dòng trạng thái, và trên điện thoại có thêm hàng phím phụ (Esc, Tab, Ctrl/Alt giữ trạng thái, mũi tên, ^C) — và cửa sổ đó nêu rõ vì sao shell không mở được (sai passcode, bị từ chối, không tới được máy). Vừa xem màn hình vừa chạy shell là chuyện bình thường. Mọi client đều biết host chia sẻ những gì trước khi mở bất cứ thứ gì: với host không có terminal — điện thoại, máy tính bảng, hoặc một desktop không chia sẻ terminal — nút này không bật, nên không cửa sổ terminal nào được mở ra cả. |
-| C-9 | Gửi tệp | Mọi client đều có thể gửi tệp tới host đang nhận tệp. *File transfer — send files to it* là một nút xuất hiện khi host đã trả lời (C-10), trên mọi client, và mở màn hình **Send files**. Trên Android và iOS, tệp được chọn từ bộ chọn ảnh của hệ thống hoặc trình duyệt tệp của hệ thống, và một bản sao được chuẩn bị trong cache riêng của app trước khi gửi. Mỗi lần một lô: khi một lô đang chạy thì các bộ chọn bị khóa và lời chào thứ hai bị từ chối vì đang bận. Tiến độ nêu tên tệp đang gửi, vị trí của nó trong lô và phần đã xong, và có thể dừng lượt truyền bất cứ lúc nào. Khi lô kết thúc, từng tệp được liệt kê là đã gửi hay chưa, kèm lý do. Mọi client đều biết host chia sẻ những gì trước khi mở bất cứ thứ gì: với host không nhận tệp thì nút này không bật, nên không cửa sổ nào được mở ra cả. |
-| C-10 | Kết nối rồi mới chọn | Nút Connect chỉ làm việc xác thực: nó gọi tới host, hoàn tất ghép đôi hoặc passcode (S-2), và hỏi host đang chia sẻ những gì. Một host đã trả lời thì đưa ra cùng những thứ đó ở mọi nơi: địa chỉ của nó, nút **Ngắt kết nối**, dòng trực tiếp của V-7, và mỗi khả năng một nút: *Remote desktop — view its screen*, *Terminal — open a shell* và *File transfer — send files to it*, mỗi nút chỉ bật nếu host có chia sẻ khả năng tương ứng. Mở một phiên dùng lại chính lần ghép đôi vừa xong, nên không ai ở phía host bị hỏi lần thứ hai. Những thứ đó nằm ở đâu thì tuỳ nền tảng (C-11). |
-| C-11 | Mỗi host một cửa sổ (desktop) | Trên Windows, Linux và macOS, host nào trả lời thì mở một **cửa sổ kết nối** riêng, lấy địa chỉ làm tiêu đề và chứa mọi thứ C-10 liệt kê. Bản thân trang kết nối không đổi trạng thái: các ô địa chỉ, cổng, passcode và tên, nút Connect và danh sách thiết bị vẫn nguyên đó, nên có thể gọi host tiếp theo trong khi host đầu vẫn đang mở, và một máy có thể kết nối tới nhiều host cùng lúc. Kết nối lại tới host đã có cửa sổ thì cửa sổ đó được đưa lên trước chứ không mở thêm cái thứ hai. Đóng một cửa sổ kết nối, hoặc bấm **Ngắt kết nối** của nó, chỉ bỏ host đó và không đụng tới các host khác; thoát app thì đóng hết. Những phiên đã mở từ một cửa sổ (V-1, C-8, C-9) là cửa sổ riêng và sống lâu hơn nó. Trên Android và iOS thì mỗi lúc chỉ một kết nối và nó nằm ngay trên trang kết nối: cho tới khi Connect thành công, trang chỉ gồm các ô, nút Connect và danh sách thiết bị — không có gì khác; khi host trả lời, những thứ đó nhường chỗ cho những gì C-10 liệt kê, và Ngắt kết nối, hoặc sửa địa chỉ, cổng hay passcode, đưa trang về trạng thái đầu. |
-
-## 6. Tìm máy để kết nối
+## 5. Connect — xem một máy khác
 
 | ID | Tính năng | Mô tả |
 | --- | --- | --- |
-| D-1 | Quét mạng | Client quét mạng nội bộ để tìm các máy đang chia sẻ và liệt kê chúng, có hiển thị tiến độ trong lúc quét ("đã kiểm tra *n* trên *m* địa chỉ"). Khi quét xong mà không tìm thấy gì, người dùng được giải thích vì sao một máy có thể vắng mặt: máy chỉ xuất hiện khi đang chia sẻ. |
-| D-2 | Phạm vi quét | Mỗi lần quét kiểm tra tối đa **512** địa chỉ trong mạng nội bộ. Nếu máy không có địa chỉ mạng nội bộ, người dùng được báo là không quét được. |
-| D-3 | Tự quét lại | Việc quét lặp lại định kỳ, và có thể chạy lại ngay bằng *Refresh now*. |
-| D-4 | Bấm để kết nối | Bấm vào một thiết bị tìm được sẽ bắt đầu kết nối tới thiết bị đó. |
-| D-5 | Thiết bị gần đây | Các máy đã từng kết nối được lưu trong danh sách *Devices* — tối đa **10** — được đánh dấu *Recent* ở cột *Where*, kèm địa chỉ, trạng thái, ping và thời điểm kết nối gần nhất. |
-| D-6 | Trạng thái trực tiếp | Mỗi thiết bị gần đây hiển thị **Online**, **Offline** hoặc **Checking…** kèm độ trễ khứ hồi, tự làm mới mỗi **30 giây** và làm mới được theo yêu cầu. |
-| D-7 | Nhớ passcode | Passcode đã dùng cho một thiết bị được lưu cùng thiết bị đó và điền sẵn vào hộp thoại khi kết nối từ danh sách thiết bị — hiện rõ trong ô sửa được, không bao giờ dùng ngầm. Kết nối mà không gõ mã sẽ không xoá mã đã nhớ; gõ mã mới thì thay mã cũ. Mã được lưu ở dạng che đi — đây là tiện lợi, không phải bảo vệ (xem mục 9). Khi hai máy đã ghép đôi thì mã không còn vai trò: chúng nhận nhau bằng khoá. |
-| D-8 | Xoá thiết bị | Có thể xoá một thiết bị khỏi danh sách gần đây. |
+| C-1 | Connect bằng địa chỉ | Người dùng nhập địa chỉ IP của host vào một ô và UDP port vào ô còn lại, với giá trị mặc định `47777`. Dán `192.168.1.10:47777` vào ô địa chỉ cũng hợp lệ; port ghi trong chuỗi được ưu tiên hơn ô port. Dữ liệu nhập không hợp lệ tạo ra gợi ý giải thích, không phải một lỗi. |
+| C-2 | Nhập passcode | Ô passcode có thể để trống. Mã đã nhập phải đúng 4 chữ số, nếu không thì yêu cầu connect bị từ chối trước khi gửi bất cứ dữ liệu nào. Giá trị hiển thị trong ô chính là giá trị được sử dụng; không có giá trị nào được điền ngầm. Khi để trống, host quyết định: máy đã pair được chấp nhận ngay; máy chưa pair phải chờ khoảng một phút trong khi người dùng tại host được hỏi có chấp nhận hay không (S-2). Mã đã nhập nhưng bị host từ chối sẽ gây lỗi kèm thông báo nêu rõ passcode. Hộp thoại mở từ danh sách thiết bị hiển thị UDP port của thiết bị đó cùng passcode đã lưu (D-7), cả hai đều được điền sẵn và có thể chỉnh sửa. |
+| C-3 | Bỏ chọn control | Trước khi connect, viewer có thể bỏ chọn *control the remote machine* để chỉ xem mà không gửi input. Một host không nhận input — điện thoại hoặc tablet (P-4), hoặc một desktop share với input tắt — sẽ thông báo điều này khi được hỏi về nội dung đang share, và các client desktop hiển thị ghi chú thường trực rằng control và terminal không có tác dụng với host như vậy. |
+| C-4 | Chọn source | Nếu host đang share nhiều hơn một display, viewer được hỏi muốn xem display nào. Chọn nhiều display sẽ mở nhiều cửa sổ. Nếu host chỉ share một display, display đó mở ngay. |
+| C-5 | Thông báo lỗi rõ ràng | Nếu không truy cập được host, host không share, hoặc host từ chối passcode, viewer được thông báo cụ thể trường hợp nào, kèm địa chỉ trong nội dung thông báo. |
+| C-6 | Thông báo kết thúc session | Khi một session kết thúc, từ bất kỳ phía nào, viewer được thông báo nguyên nhân. |
+| C-7 | Tên viewer | Ô *Your name* trên trang connect đặt tên cho thiết bị này. Cho tới khi người dùng đặt tên lần đầu, ô này được điền sẵn giá trị mặc định theo nền tảng: hostname trên Windows và Linux (tên đăng nhập nếu không có hostname), tên máy trên macOS, tên thiết bị trên iOS, và model thiết bị trên Android. Ô này có thể chỉnh sửa, và giá trị tại thời điểm connect là giá trị được lưu và gửi đi. Giá trị này không bao giờ rỗng: connect với ô đã xoá trắng sẽ khôi phục giá trị mặc định theo nền tảng, giá trị đó được điền lại vào ô, được lưu và gửi đi, nên mỗi kết nối luôn kèm một tên. Host hiển thị tên này cạnh địa chỉ của máy để phân biệt các viewer. Tên được lưu trên chính thiết bị, chứa tối đa **64** byte văn bản, và các ký tự điều khiển bị loại bỏ. Host chạy phiên bản cũ hơn sẽ không hiển thị tên này. |
+| C-8 | Mở một shell | *Terminal — open a shell* là nút xuất hiện sau khi host đã phản hồi (C-10), trên mọi client. Shell mở trong cửa sổ riêng, gồm lưới ký tự, scrollback, dòng status, và trên điện thoại có thêm một hàng phím phụ (Esc, Tab, Ctrl/Alt có thể khoá, các phím mũi tên, ^C). Cửa sổ này cũng nêu nguyên nhân khi không mở được shell (sai passcode, bị từ chối, không truy cập được). Việc vừa xem màn hình vừa dùng một shell là bình thường. Mọi client đều xác định host share những gì trước khi mở bất kỳ cửa sổ nào: với host không có terminal — điện thoại, tablet, hoặc desktop không share terminal — nút này ở trạng thái disabled và không có cửa sổ terminal nào được mở. |
+| C-9 | Gửi file | Mọi client đều có thể gửi file tới một host đang nhận file. *File transfer — send files to it* là nút xuất hiện sau khi host đã phản hồi (C-10), trên mọi client, và mở màn hình **Send files**. Trên Android và iOS, file được chọn từ photo picker hoặc trình duyệt file của hệ thống, và một bản sao được chuẩn bị trong cache riêng của app trước khi gửi. Mỗi lần chỉ một batch: khi một batch đang chạy, các picker bị vô hiệu hoá và đề nghị thứ hai bị từ chối với lý do bận. Phần tiến độ nêu tên file đang gửi, vị trí của nó trong batch và tỷ lệ hoàn tất; phiên truyền có thể dừng bất cứ lúc nào. Khi kết thúc, từng file trong batch được liệt kê là đã gửi hay chưa, kèm lý do. Mọi client đều xác định host share những gì trước khi mở bất kỳ cửa sổ nào: với host không nhận file, nút này ở trạng thái disabled và không có cửa sổ nào được mở. |
+| C-10 | Connect trước, chọn sau | Connect chỉ thực hiện việc authenticate: nó kết nối tới host, hoàn tất pairing hoặc kiểm tra passcode (S-2), sau đó truy vấn nội dung host đang share. Một host đã phản hồi cung cấp cùng một tập nội dung trên mọi nền tảng: địa chỉ của nó, nút **Disconnect**, dòng trạng thái trực tiếp ở V-7, và một nút cho mỗi mục *Remote desktop — view its screen*, *Terminal — open a shell* và *File transfer — send files to it*, trong đó chỉ các mục host thực sự share mới được bật. Việc mở một session sử dụng lại kết quả pairing vừa hoàn tất, nên người dùng tại host không bị hỏi lần thứ hai. Vị trí hiển thị các nội dung này khác nhau theo nền tảng (C-11). |
+| C-11 | Mỗi host một cửa sổ (desktop) | Trên Windows, Linux và macOS, một host phản hồi sẽ mở một **cửa sổ kết nối** riêng, tiêu đề là địa chỉ của host, chứa toàn bộ nội dung liệt kê ở C-10. Bản thân trang connect không đổi trạng thái: các ô địa chỉ, port, passcode và tên, nút Connect cùng danh sách thiết bị vẫn giữ nguyên, nên có thể kết nối tới host tiếp theo trong khi host đầu vẫn đang mở, và một máy có thể kết nối tới nhiều host cùng lúc. Connect lại tới một host đã có cửa sổ sẽ đưa cửa sổ đó lên trước thay vì mở cửa sổ thứ hai. Đóng một cửa sổ kết nối, hoặc nhấn **Disconnect** trong đó, chỉ ngắt host tương ứng và không ảnh hưởng các host khác; thoát app sẽ đóng toàn bộ. Các session đã mở từ một cửa sổ (V-1, C-8, C-9) là những cửa sổ riêng và tồn tại độc lập với nó. Trên Android và iOS, mỗi lần chỉ có một kết nối và kết nối này nằm trên trang connect: cho tới khi Connect thành công, trang chỉ gồm các ô nhập, nút Connect và danh sách thiết bị; khi host phản hồi, các thành phần đó được thay bằng nội dung liệt kê ở C-10, và Disconnect, hoặc việc chỉnh sửa địa chỉ, port hay passcode, sẽ đưa trang về trạng thái ban đầu. |
 
-## 7. Xem một phiên
+## 6. Tìm máy
 
 | ID | Tính năng | Mô tả |
 | --- | --- | --- |
-| V-1 | Vừa khung | Màn hình từ xa được co giãn vừa cửa sổ, giữ nguyên tỉ lệ; cửa sổ mở ra với kích thước theo nguồn. Trên desktop, khi hình dạng luồng thực sự thay đổi giữa phiên — host điện thoại/máy tính bảng xoay màn hình, hoặc chuyển sang màn hình có tỉ lệ khác — cửa sổ tự chỉnh lại theo hình dạng mới; thay đổi chất lượng cùng tỉ lệ thì không đụng tới cửa sổ. |
-| V-2 | Phóng to và kéo | Có thể phóng to tới **5×** và kéo để di chuyển vùng nhìn. Mức phóng được hiển thị và đặt lại được bằng một thao tác. |
-| V-3 | Trạng thái phiên | Cửa sổ hiển thị dòng trạng thái trực tiếp: tốc độ khung hình, băng thông, độ trễ khứ hồi và độ trễ đầu-cuối. |
-| V-4 | Cửa sổ có tiêu đề | Mỗi cửa sổ xem có tiêu đề gồm tên nguồn đang xem và trạng thái hiện tại, để phân biệt được khi mở nhiều phiên. |
-| V-5 | Ngắt kết nối | Viewer có thể kết thúc phiên bất cứ lúc nào. |
-| V-6 | Âm thanh | Ở những nơi cả hai máy đều hỗ trợ (mục 3), viewer nghe được thứ máy đang chia sẻ phát ra, lệch hình chừng một khung. Âm thanh đi trên kênh riêng: mất một gói chỉ mất một phần nhỏ của giây tiếng và không bao giờ làm hỏng hình, còn máy không phát gì thì gần như không tốn băng thông. Viewer tắt (T-23) thì không nghe, host tắt (T-22) thì không gửi. |
-| V-7 | Sức khỏe kết nối | Số đo nằm ở nơi host được trả lời — cửa sổ kết nối trên desktop, trang kết nối trên Android và iOS (C-11) — chứ không phải cửa sổ phiên: nó hiện địa chỉ của host, nút **Ngắt kết nối** (V-5) và một dòng trực tiếp báo đang kết nối, kèm ping bên cạnh, chuyển đỏ ngay khi host đó ngừng trả lời. Số đo đến từ chính nhịp dò mỗi giây một lần nuôi danh sách thiết bị, nên nó có mặt trước khi mở phiên và ở lại trong lúc nhiều phiên đang chạy, và trên desktop mỗi host đang mở mang số đo của riêng nó. Cửa sổ phiên mất host vẫn báo đang nối lại (V-8). |
-| V-8 | Tự nối lại | Phiên mất host — mạng rơi, luồng hình câm lặng — không kết thúc. Cửa sổ giữ khung hình cuối, báo đang nối lại, và quay số lại theo backoff trong tối đa một phút; host trả lời lại là hình tự chạy tiếp. Chỉ sau một phút đó, hoặc khi host chủ động kết thúc hay từ chối phiên, cửa sổ mới đóng kèm lý do. Cửa sổ shell giữ nguyên hai phút ân hạn nối lại như trước. |
+| D-1 | Scan network | Client scan network cục bộ để tìm các máy đang share và liệt kê chúng, có hiển thị tiến độ trong khi scan ("đã kiểm tra *n* trên *m* địa chỉ"). Khi scan không tìm thấy kết quả, người dùng được cho biết lý do một máy có thể không xuất hiện: máy chỉ hiện ra khi đang share. |
+| D-2 | Phạm vi scan | Một lần scan bao phủ tối đa **512** địa chỉ trên subnet cục bộ. Nếu máy không có địa chỉ network cục bộ, người dùng được thông báo không thể scan. |
+| D-3 | Tự động scan lại | Việc scan được lặp lại định kỳ, và có thể chạy lại theo yêu cầu qua *Refresh now*. |
+| D-4 | Nhấn để connect | Nhấn vào một thiết bị đã tìm thấy sẽ bắt đầu kết nối tới thiết bị đó. |
+| D-5 | Thiết bị gần đây | Các máy từng kết nối được giữ trong danh sách *Devices*, tối đa **10** máy, đánh dấu *Recent* ở cột *Where*, kèm địa chỉ, status, ping và thời điểm kết nối gần nhất. |
+| D-6 | Trạng thái trực tiếp | Mỗi thiết bị gần đây hiển thị **Online**, **Offline** hoặc **Checking…** kèm round-trip time, tự động làm mới mỗi **30 giây** và có thể làm mới theo yêu cầu. |
+| D-7 | Passcode đã lưu | Passcode dùng cho một thiết bị được lưu cùng thiết bị đó và điền sẵn vào hộp thoại khi connect từ danh sách thiết bị, hiển thị rõ trong ô có thể chỉnh sửa. Connect mà không nhập mã không xoá mã đã lưu; nhập mã mới sẽ thay thế mã cũ. Mã được lưu ở dạng che, đây là tiện ích chứ không phải biện pháp bảo vệ (xem mục 9). Sau khi các máy đã pair, mã không còn vai trò: chúng được nhận diện qua key. |
+| D-8 | Xoá một thiết bị | Một thiết bị gần đây có thể được gỡ khỏi danh sách. |
+
+## 7. Xem một session
+
+| ID | Tính năng | Mô tả |
+| --- | --- | --- |
+| V-1 | Vừa khung cửa sổ | Màn hình từ xa được scale vừa cửa sổ, giữ nguyên tỷ lệ khung hình, và cửa sổ lấy kích thước theo source khi mở. Trên desktop, khi hình dạng của stream thay đổi giữa phiên — host là điện thoại hoặc tablet xoay màn hình, hoặc chuyển sang một display có hình dạng khác — cửa sổ tự điều chỉnh theo hình dạng mới. Việc thay đổi quality khi hình dạng không đổi không làm thay đổi cửa sổ. |
+| V-2 | Zoom và pan | Khung xem có thể zoom tới **5×** và pan. Mức zoom được hiển thị và có thể đặt lại bằng một thao tác. |
+| V-3 | Trạng thái session | Cửa sổ hiển thị một dòng status trực tiếp: frame rate, băng thông, round-trip time và latency end-to-end. |
+| V-4 | Cửa sổ có tiêu đề | Mỗi cửa sổ viewer có tiêu đề gồm source đang hiển thị và trạng thái hiện thời, nên nhiều session vẫn phân biệt được. |
+| V-5 | Disconnect | Viewer có thể kết thúc session bất cứ lúc nào. |
+| V-6 | Âm thanh | Khi cả hai máy đều hỗ trợ (mục 3), viewer nghe được nội dung máy được share đang phát, đồng bộ với hình ảnh trong khoảng một frame. Âm thanh đi trên channel riêng: mất một packet chỉ mất một phần nhỏ của giây và không ảnh hưởng tới hình ảnh, còn một máy không phát gì thì gần như không tiêu tốn băng thông. Âm thanh bị tắt với viewer đã tắt nó (T-23) và không được gửi bởi host đã tắt nó (T-22). |
+| V-7 | Tình trạng kết nối | Chỉ số này nằm ở nơi host đã phản hồi — cửa sổ kết nối trên desktop, trang connect trên Android và iOS (C-11) — chứ không nằm trong cửa sổ session. Nó hiển thị địa chỉ của host, nút **Disconnect** (V-5) và một dòng trực tiếp báo trạng thái đang kết nối kèm ping, chuyển sang màu đỏ ngay khi host ngừng phản hồi. Số liệu lấy từ cùng probe mỗi giây một lần dùng cho danh sách thiết bị, nên nó đã có trước khi mở session và tiếp tục hiển thị khi nhiều session đang chạy; trên desktop, mỗi host đang mở có chỉ số riêng. Cửa sổ session mất kết nối với host vẫn báo trạng thái đang reattach (V-8). |
+| V-8 | Tự kết nối lại | Một session mất host — network gián đoạn, stream ngừng dữ liệu — không kết thúc ngay. Cửa sổ giữ nguyên khung hình cuối, báo trạng thái đang reattach, và kết nối lại với backoff trong tối đa một phút; khi host phản hồi trở lại, hình ảnh tiếp tục. Chỉ sau khoảng thời gian đó, hoặc khi host chủ động kết thúc hay từ chối session, cửa sổ mới đóng kèm lý do. Cửa sổ shell vẫn giữ khoảng thời gian reattach hai phút riêng của nó. |
 
 ## 8. Điều khiển máy từ xa
 
 | ID | Tính năng | Mô tả |
 | --- | --- | --- |
-| I-1 | Chuột | Di chuyển, các nút trái / phải / giữa / lùi / tiến, và con lăn đều được gửi tới host. |
-| I-2 | Bàn phím | Nhấn và nhả phím được gửi đi, bao gồm cả tổ hợp phím bổ trợ. |
-| I-3 | Khoá con trỏ (desktop) | `F9` khoá chuột vào màn hình từ xa, phục vụ game và các phần mềm cần chuyển động chuột thô; `F9` hoặc `Esc` để nhả. Trạng thái hiện tại hiển thị trên tiêu đề cửa sổ. |
-| I-4 | An toàn khi mất focus | Khi cửa sổ mất focus, con trỏ được nhả khoá và mọi phím đang giữ được thả ra, nên không có phím nào bị kẹt trên host. |
-| I-5 | Trackpad cảm ứng (di động) | Trên điện thoại và máy tính bảng, khung hình hoạt động như trackpad: kéo để di chuyển con trỏ, chạm để bấm, chạm hai lần để bấm chuột phải, giữ rồi kéo để rê, kéo hai ngón theo chiều dọc để cuộn. |
-| I-6 | Chế độ con trỏ / kéo (di động) | Một nút chuyển giữa điều khiển con trỏ từ xa và kéo vùng nhìn khi đang phóng to. |
-| I-7 | Bàn phím ảo (di động) | Bàn phím của thiết bị có thể hiện/ẩn theo yêu cầu và gõ thẳng vào máy từ xa. |
-| I-8 | Thanh phím tắt (di động) | Nút tắt cho những phím khó gõ trên bàn phím cảm ứng: `Esc`, `Tab`, `Enter`, bốn phím mũi tên, `Del`, `Ctrl+C`, `Ctrl+V`. |
-| I-9 | Host luôn thắng | Thao tác của người đang ngồi trực tiếp tại máy host được ưu tiên hơn mọi viewer từ xa. |
-| I-10 | Mỗi lúc một người điều khiển | Chỉ một viewer điều khiển chuột và bàn phím tại một thời điểm. Người vào sớm nhất thắng khi tranh chấp; thao tác của các viewer còn lại bị bỏ qua cho tới khi người đang điều khiển ngừng thao tác **1 giây**. |
-| I-11 | Bắt buộc chỉ xem | Khi host tắt quyền điều khiển, hoặc viewer chọn chỉ xem, không thao tác nào tới được host và cửa sổ viewer ghi rõ đang ở chế độ chỉ xem. |
+| I-1 | Mouse | Chuyển động, các nút trái, phải, giữa, back và forward, cùng bánh xe cuộn đều được gửi tới host. |
+| I-2 | Keyboard | Các sự kiện nhấn và nhả phím đều được gửi, bao gồm cả tổ hợp phím modifier. |
+| I-3 | Pointer lock (desktop) | `F9` khoá mouse vào màn hình từ xa, phục vụ game và các phần mềm cần chuyển động thô; `F9` hoặc `Esc` giải phóng. Trạng thái hiện thời được hiển thị trên tiêu đề cửa sổ. |
+| I-4 | An toàn khi mất focus | Khi mất focus, pointer lock và mọi phím đang được giữ đều được giải phóng, nên không phím nào bị kẹt trên host. |
+| I-5 | Trackpad cảm ứng (mobile) | Trên điện thoại và tablet, khung video hoạt động như một trackpad: kéo để di chuyển con trỏ, chạm để nhấn chuột trái, chạm hai lần để nhấn chuột phải, giữ và kéo để drag, kéo dọc bằng hai ngón để cuộn. |
+| I-6 | Chế độ pointer và pan (mobile) | Một công tắc chuyển giữa việc di chuyển con trỏ từ xa và pan khung hình đang zoom. |
+| I-7 | Keyboard trên màn hình (mobile) | Keyboard của thiết bị có thể hiển thị hoặc ẩn theo yêu cầu và nhập trực tiếp vào máy từ xa. |
+| I-8 | Thanh hotkey (mobile) | Các nút tắt cho những phím khó nhập trên keyboard cảm ứng: `Esc`, `Tab`, `Enter`, bốn phím mũi tên, `Del`, `Ctrl+C`, `Ctrl+V`. |
+| I-9 | Host được ưu tiên | Input từ người đang ngồi tại máy host được ưu tiên hơn mọi viewer từ xa. |
+| I-10 | Mỗi lúc một viewer điều khiển | Chỉ một viewer điều khiển mouse và keyboard tại một thời điểm. Khi có tranh chấp, viewer tham gia sớm hơn được ưu tiên; input của các viewer khác bị bỏ qua cho tới khi viewer đang điều khiển không thao tác trong **1 giây**. |
+| I-11 | Bắt buộc view-only | Khi host đã tắt control, hoặc viewer chọn chỉ xem, không input nào tới được host và cửa sổ viewer hiển thị trạng thái view-only. |
 
 ## 9. Kiểm soát truy cập và an toàn
 
 | ID | Tính năng | Mô tả |
 | --- | --- | --- |
-| S-1 | Mã hoá | Phiên làm việc chạy trên kênh truyền có mã hoá (QUIC/TLS). Mọi thứ một phiên chuyên chở — video, điều khiển, thao tác chuột phím, clipboard và terminal — đều đi trong kênh mã hoá giữa hai máy. Gói beacon phục vụ dò tìm là bản rõ có chủ đích và không mang bí mật nào; mọi gói không mã hoá khác tới cổng đều bị bỏ. Xem bức tranh đầy đủ trong [`SECURITY.vi.md`](../SECURITY.vi.md). |
-| S-2 | Ghép đôi quyết định việc vào | Lần đầu một máy kết nối, host là bên quyết định cho vào hay không. Máy đưa ra passcode của host thì chứng minh nó biết mã bằng mật mã — bản thân mã không bao giờ đi qua mạng. Máy không đưa mã nào — hoặc host không đặt mã để đối chiếu — thì câu hỏi được chuyển cho người ngồi tại host: *Let this machine in?*, với **Allow** và **Deny**, và một câu trả lời áp cho mọi thứ máy đó đang mở (cả màn hình lẫn shell). Cho vào tức là **ghép đôi** hai máy: từ đó nó được nhận diện bằng khoá và kết nối không cần passcode, cho tới khi bị quên đi. Nhưng mã đã gõ thì luôn bị kiểm — máy đã ghép đôi mà đưa mã sai cũng bị chặn. |
-| S-3 | Passcode tuỳ chọn, danh sách máy đã ghép | Passcode là tuỳ chọn và mặc định để trống; khi trống, không gì vào được nếu người ở host chưa phê duyệt. Các máy đã ghép đôi được liệt kê trên trang **Devices** — tên, khoá, ngày ghép, lần gặp cuối — với *Forget* và *Forget every machine*, một công tắc *allow new pairings* mà khi tắt thì chỉ máy đã ghép mới vào được, cùng khoá của chính máy này để đọc đối chiếu. Host chỉ tiết lộ đang chia sẻ những gì cho máy đã được cho vào. |
-| S-4 | Khoá khi sai nhiều lần | Sai passcode **3** lần sẽ khoá phần ghép đôi của host trong **30 giây**, và máy đang thử được báo là phải chờ. Máy đã ghép đôi không bị ảnh hưởng. |
-| S-5 | Công tắc điều khiển | Host có thể chia sẻ với tuỳ chọn *viewer được điều khiển máy này* tắt đi, khiến mọi phiên đều là chỉ xem bất kể viewer yêu cầu gì. |
-| S-6 | Đồng ý thu hình | Trên các nền tảng yêu cầu, hệ điều hành tự hiện hộp thoại xin quyền và hộp thoại chọn màn hình; Deskhub không thu hình được nếu người dùng chưa cấp quyền. |
-| S-7 | Chỉ chia sẻ khi được yêu cầu | Không có gì được chia sẻ cho tới khi người dùng bấm bắt đầu. Đóng ứng dụng hoặc dừng chia sẻ sẽ kết thúc mọi phiên. |
-| S-8 | Cảnh báo khoá đổi | Client ghi nhớ khoá của mọi host nó đã tin. Nếu khoá đó đổi — đúng hình dạng của một máy chen giữa — một cảnh báo lớn hiện dấu vân tay mới và kết nối bị từ chối cho tới khi người dùng chấp nhận rõ ràng. Khoá chưa gặp bao giờ thì được chính cuộc bắt tay ghép đôi phân xử, không hỏi gì thêm. |
+| S-1 | Encrypt | Session chạy trên một transport đã encrypt (QUIC/TLS). Mọi dữ liệu một session mang theo — video, control, input, clipboard và lưu lượng terminal — đều được encrypt giữa hai máy. Discovery beacon ở dạng không encrypt là thiết kế có chủ đích và không mang thông tin bí mật; mọi packet chưa encrypt khác gửi tới port đều bị loại bỏ. [`SECURITY.vi.md`](../SECURITY.vi.md) mô tả đầy đủ. |
+| S-2 | Pairing kiểm soát việc chấp nhận | Trong lần đầu một máy connect tới, host quyết định có chấp nhận hay không. Máy cung cấp được passcode của host đã chứng minh bằng mật mã rằng nó biết mã đó; bản thân mã không đi qua network. Máy không cung cấp mã, hoặc trường hợp host không đặt mã, được chuyển sang người dùng tại host: *Let this machine in?*, với hai lựa chọn **Allow** và **Deny**; một câu trả lời áp dụng cho toàn bộ nội dung máy đó đang mở, gồm cả màn hình và shell. Việc chấp nhận đồng nghĩa với **pair** hai máy: từ đó máy được nhận diện qua key và connect không cần passcode, cho tới khi bị forget. Tuy nhiên mã đã nhập luôn được kiểm tra: kể cả máy đã pair, nếu cung cấp mã sai vẫn bị từ chối. |
+| S-3 | Passcode tùy chọn, danh sách máy đã pair | Passcode là tùy chọn và mặc định để trống; khi để trống, không máy nào được chấp nhận nếu không có người tại host phê duyệt. Các máy đã pair được liệt kê trên trang **Devices** kèm tên, key, thời điểm pair và thời điểm thấy gần nhất, cùng các thao tác *Forget* và *Forget every machine*, một công tắc *allow new pairings* mà khi tắt chỉ chấp nhận các máy đã pair, và key của chính máy này để đối chiếu. Host chỉ tiết lộ nội dung đang share cho những máy đã được chấp nhận. |
+| S-4 | Khoá sau nhiều lần thất bại | **3** lần nhập sai passcode sẽ khoá cơ chế pairing của host trong **30 giây**, và máy đang thử được thông báo chờ. Các máy đã pair không bị ảnh hưởng. |
+| S-5 | Công tắc control | Host có thể share với *viewers can control this machine* ở trạng thái tắt, khiến mọi session trở thành view-only bất kể viewer yêu cầu gì. |
+| S-6 | Đồng ý cho capture | Trên các nền tảng yêu cầu, hệ thống sử dụng chính hộp thoại permission và hộp chọn màn hình của hệ điều hành; Deskhub không capture được nếu người dùng không cấp quyền. |
+| S-7 | Chỉ share khi được yêu cầu | Không nội dung nào được share cho tới khi người dùng bắt đầu một phiên share. Việc đóng app hoặc dừng share sẽ kết thúc mọi session. |
+| S-8 | Cảnh báo khi key thay đổi | Client lưu key của mọi host từng trust. Nếu key đó thay đổi — dấu hiệu đặc trưng của một cuộc tấn công xen giữa — một cảnh báo rõ ràng hiển thị fingerprint mới và kết nối bị từ chối cho tới khi người dùng chấp nhận một cách tường minh. Key chưa từng gặp được chính pairing handshake xử lý và không yêu cầu xác nhận. |
 
-## 10. Cài đặt
+## 10. Settings
 
-Cài đặt thuộc về từng máy, được lưu lại qua các lần khởi động, và có hiệu lực từ lần bắt
-đầu chia sẻ kế tiếp. Điện thoại và máy tính bảng chỉ hiện cổng mạng (T-4) — cũng chính là
-cổng mà việc quét mạng gõ vào — đồng bộ clipboard (T-17) và giữ máy thức (T-19), cùng mã
-passcode (T-5) và mạng để chia sẻ (T-9) trên màn hình chia sẻ; mọi thứ còn lại chúng dùng
+Settings áp dụng theo từng máy, được lưu qua các lần khởi động lại, và có hiệu lực từ lần
+share tiếp theo. Điện thoại và tablet chỉ hiển thị network port (T-4) — cũng là port mà
+network scan kiểm tra — cùng clipboard sync (T-17) và keep awake (T-19), thêm passcode
+(T-5) và network dùng để share (T-9) trên màn hình share. Các thiết lập còn lại sử dụng
 giá trị mặc định dựng sẵn.
 
-| ID | Cài đặt | Khoảng giá trị | Mặc định |
+| ID | Setting | Khoảng giá trị | Mặc định |
 | --- | --- | --- | --- |
-| T-1 | Tốc độ khung hình | 1 – 240 fps | 60 |
+| T-1 | Frame rate | 1 – 240 fps | 60 |
 | T-2 | Bitrate | 1 – 1000 Mbps | 20 |
-| T-3 | Chất lượng | 720p · 1080p · 1440p · Native | 1080p |
-| T-4 | Cổng mạng | 1 – 65535 | 47777 |
+| T-3 | Quality | 720p · 1080p · 1440p · Native | 1080p |
+| T-4 | Network port | 1 – 65535 | 47777 |
 | T-5 | Passcode | trống, hoặc đúng 4 chữ số | trống (xem S-2, S-3) |
-| T-6 | Viewer được điều khiển máy này | bật / tắt | bật |
-| T-9 | Chia sẻ trên mạng | Mọi mạng · một trong các địa chỉ của máy | Mọi mạng |
-| T-11 | Bắt đầu chia sẻ khi mở app | bật / tắt | tắt |
+| T-6 | Viewer được control máy này | bật / tắt | bật |
+| T-9 | Share on network | All networks · một trong các địa chỉ của máy này | All networks |
+| T-11 | Bắt đầu share khi mở app | bật / tắt | tắt |
 | T-13 | Khởi động Deskhub khi đăng nhập | bật / tắt | tắt |
-| T-15 | Tiếp tục chạy trong nền | bật / tắt | tắt |
-| T-17 | Đồng bộ văn bản clipboard | bật / tắt | tắt |
-| T-19 | Giữ thiết bị này thức trong phiên | bật / tắt | bật |
-| T-21 | Cho máy mới ghép đôi (trang Devices) | bật / tắt | bật |
-| T-22 | Chia sẻ tiếng của máy này cho viewer | bật / tắt | bật |
-| T-23 | Phát tiếng của máy đang xem | bật / tắt | bật |
+| T-15 | Tiếp tục chạy dưới nền | bật / tắt | tắt |
+| T-17 | Sync clipboard dạng văn bản | bật / tắt | tắt |
+| T-19 | Giữ thiết bị này không sleep trong session | bật / tắt | bật |
+| T-21 | Cho phép máy mới pair (trang Devices) | bật / tắt | bật |
+| T-22 | Share âm thanh của thiết bị này cho viewer | bật / tắt | bật |
+| T-23 | Phát âm thanh của thiết bị đang xem | bật / tắt | bật |
 
 | ID | Tính năng | Mô tả |
 | --- | --- | --- |
-| T-7 | Chất lượng tự động | Chất lượng luồng tự điều chỉnh theo băng thông khả dụng, trong giới hạn đã cấu hình; người dùng không phải làm gì khi điều kiện mạng thay đổi. |
-| T-8 | Kiểm tra giá trị | Giá trị ngoài khoảng hoặc không phải số bị từ chối và giữ nguyên giá trị cũ, thay vì được áp dụng. |
-| T-10 | Quay về mọi mạng | Khi đã chọn một mạng cụ thể (T-9), host chỉ tiếp cận được qua địa chỉ đó. Nếu địa chỉ đó không còn tồn tại lúc bắt đầu chia sẻ, host chia sẻ trên mọi mạng và nói rõ điều đó trong dòng trạng thái chia sẻ. Địa chỉ đã lưu nhưng hiện không khả dụng vẫn được liệt kê, đánh dấu *not connected*. |
-| T-12 | Tự chia sẻ khi mở app | Chỉ desktop. Khi bật T-11, mở app sẽ vào thẳng trang Host và bắt đầu chia sẻ với cài đặt đã lưu, đúng như khi người dùng bấm Share. Khi app được khởi chạy lúc đăng nhập (T-13), desktop có thể chưa có màn hình nào; lúc đó việc chia sẻ sẽ chờ, kiểm tra lại mỗi nửa giây trong tối đa 30 giây, và bắt đầu ngay khi một màn hình xuất hiện. Trong lúc chờ, trang Host báo là đang chờ. Nếu không màn hình nào xuất hiện, app chia sẻ những gì còn được tick (terminal) hoặc đứng yên với lý do hiển thị trên trang Host — một lần chia sẻ tự động không bao giờ mở hộp thoại, vì lúc đăng nhập cửa sổ có thể đang ẩn trong khay hệ thống, không ai thấy. Các quy tắc nền tảng vẫn áp dụng: Linux hiện hộp thoại chia sẻ màn hình của desktop lần đầu rồi dùng lại lựa chọn đã nhớ từ đó về sau (P-3), macOS vẫn yêu cầu các quyền của nó (P-2). |
-| T-14 | Khởi động cùng hệ điều hành | Chỉ desktop. Khi bật T-13: Linux ghi một mục autostart vào `~/.config/autostart`; Windows đăng ký một scheduled task tên *Deskhub* khởi động app với quyền cao lúc đăng nhập, nên không hiện hộp thoại UAC; macOS đăng ký một Login Item mà người dùng cũng thấy được trong System Settings. Tắt đi sẽ gỡ bỏ đúng thứ đã tạo. Ô chọn luôn hiển thị trạng thái mà hệ điều hành báo, không chỉ là giá trị đã lưu lần cuối. |
-| T-16 | Chế độ chạy nền | Chỉ desktop. Khi bật T-15, một biểu tượng khay / thanh menu xuất hiện với *Hiện/Ẩn cửa sổ*, *Bắt đầu/Dừng chia sẻ* và *Thoát*; đóng cửa sổ sẽ ẩn app thay vì thoát, và việc chia sẻ tiếp tục trong nền. Cửa sổ luôn hiện ra lúc khởi động và chỉ ẩn khi người dùng đóng nó, nên T-13 + T-11 + T-15 kết hợp sẽ tự chia sẻ ngay khi đăng nhập với cửa sổ hiện cho tới khi được đóng. Trên Windows, bấm chuột trái vào biểu tượng khay sẽ hiện hoặc ẩn cửa sổ. Trên macOS biểu tượng Dock biến mất khi cửa sổ đang ẩn. Trên Linux khay cần một StatusNotifier host (mặc định có trên KDE; GNOME cần extension AppIndicator) — nếu không có, đóng cửa sổ vẫn thoát app, để app không bao giờ trở nên không với tới được. Trên Windows và Linux, khi đang chia sẻ, đóng cửa sổ luôn ẩn về khay kể cả khi T-15 tắt (nếu khay khả dụng), nên các viewer đang kết nối không bị ngắt; trên macOS đóng cửa sổ không bao giờ thoát app, nên việc chia sẻ vẫn tiếp tục dù T-15 bật hay tắt. |
-| T-18 | Đồng bộ clipboard | Khi bật T-17, văn bản thuần copy trên một máy trong phiên sẽ xuất hiện trên các máy còn lại trong vòng vài giây, theo cả hai chiều; host chuyển tiếp bản copy của một viewer tới các viewer khác. Văn bản giới hạn 32 KiB (bản dài hơn bị cắt tại ranh giới ký tự); ảnh, file và định dạng không bao giờ được truyền. Công tắc của host quyết định cả phiên: tắt thì host bỏ qua và không bao giờ gửi dữ liệu clipboard. Mỗi máy cũng cần bật công tắc của chính nó để đọc/ghi clipboard cục bộ. Trên Android và iOS, hệ điều hành giới hạn việc này: thiết bị Android chỉ nhặt được bản copy của chính nó khi Deskhub là ứng dụng đang ở nền trước, còn văn bản gửi tới thì được áp dụng bất cứ lúc nào; viewer trên iOS có thể thấy hộp thoại dán của hệ thống khi Deskhub đọc một bản copy mới; và thiết bị iOS đang làm host hoàn toàn không tham gia, vì broadcast của nó chạy trong một process riêng không truy cập được clipboard. |
-| T-20 | Giữ máy thức | Khi bật T-19, máy không đi ngủ và màn hình không tắt trong lúc đang chia sẻ hoặc đang xem; khóa được nhả ngay khi phiên kết thúc, và không cài đặt ngủ nào của hệ thống bị thay đổi. Trên Windows, macOS và Linux, điều này chặn cả ngủ màn hình lẫn ngủ hệ thống, cho cả host lẫn viewer (trên Linux cần systemd-logind và một desktop tôn trọng giao diện screensaver của freedesktop — mặc định có trên KDE và GNOME). Hệ điều hành vẫn thắng ở những chỗ nó cương quyết: gập nắp laptop, bấm nút nguồn, hoặc macOS chạy pin vẫn có thể đưa máy vào giấc ngủ. Trên Android và iOS, công tắc này giữ màn hình sáng khi đang xem một stream; việc chia sẻ từ điện thoại vốn đã sống sót khi màn hình tắt (P-5), nên khi làm host điện thoại không giữ màn hình sáng. |
-| T-25 | Tệp rơi vào đâu | Chỉ desktop. Tệp viewer gửi tới được ghi vào một thư mục do máy này chọn — `Deskhub` trong thư mục nhà của người dùng nếu không chọn thư mục khác. Thư mục đã chọn được hiện cạnh ô tích truyền tệp trước khi chia sẻ và trong trạng thái chia sẻ khi đang chia sẻ, được tạo ra nếu chưa có, và được lưu cùng các thiết lập khác. Không có gì được ghi ra ngoài thư mục đó: tên do bên gửi đưa sang bị cắt còn thành phần cuối của đường dẫn và loại bỏ mọi ký tự hệ tệp cục bộ không lưu được. |
-| T-24 | Tiếng nào được chia sẻ | Khi bật T-22, host chia sẻ đúng thứ loa của nó đang phát — bản trộn của mọi ứng dụng trên máy. Nó không bao giờ thu micro: Deskhub không có âm thanh hai chiều. Android là nền tảng duy nhất có dính tới một quyền — API thu tiếng phát lại của nó nằm sau quyền mà hệ thống ghi nhãn là *Micro*, app xin khi bắt đầu chia sẻ và không dùng vào việc gì khác; từ chối thì phiên chia sẻ vẫn chạy, chỉ là không có tiếng. Không nền tảng nào khác xin quyền micro. Viewer chỉ nhận tiếng nếu chính nó xin (T-23), nên một host bật T-22 vẫn không gửi gì cho viewer không nghe; cả hai công tắc có hiệu lực từ phiên kế tiếp. |
+| T-7 | Quality tự động | Quality của stream tự thích ứng theo dung lượng network hiện có, trong giới hạn đã cấu hình; người dùng không phải thao tác khi điều kiện thay đổi. |
+| T-8 | Kiểm tra giá trị | Giá trị ngoài khoảng cho phép hoặc không phải số bị từ chối và giá trị trước đó được giữ lại, thay vì được áp dụng. |
+| T-10 | Dự phòng network | Khi một network cụ thể được chọn (T-9), host chỉ truy cập được qua địa chỉ đó. Nếu địa chỉ này không còn tồn tại khi bắt đầu share, host chuyển sang share trên mọi network và nêu rõ điều đó trong status. Một địa chỉ đã lưu nhưng hiện không khả dụng vẫn được liệt kê, kèm chú thích *not connected*. |
+| T-12 | Tự động share khi khởi động | Chỉ desktop. Khi T-11 bật, mở app sẽ chuyển thẳng tới trang Host và bắt đầu share với settings đã lưu, tương đương với việc người dùng nhấn Share. Khi app được khởi động lúc đăng nhập (T-13), desktop có thể chưa có display nào; khi đó việc share sẽ chờ, kiểm tra lại mỗi nửa giây trong tối đa 30 giây, và bắt đầu ngay khi có display xuất hiện. Trong thời gian chờ, trang Host hiển thị trạng thái đang chờ. Nếu không có display nào xuất hiện, app share các nội dung khác đang được chọn (terminal) hoặc dừng lại kèm lý do trên trang Host. Một phiên share tự động không bao giờ mở hộp thoại, vì tại thời điểm đăng nhập cửa sổ có thể đang ẩn trong tray và người dùng không nhìn thấy. Các quy tắc của từng nền tảng vẫn áp dụng: Linux hiển thị hộp thoại chia sẻ màn hình của desktop trong lần đầu rồi dùng lại lựa chọn đã lưu (P-3), còn macOS vẫn yêu cầu các permission tương ứng (P-2). |
+| T-14 | Khởi động khi đăng nhập | Chỉ desktop. Khi T-13 bật: Linux ghi một mục autostart vào `~/.config/autostart`; Windows đăng ký một scheduled task tên *Deskhub* khởi động app ở quyền cao khi đăng nhập, nên không xuất hiện prompt UAC; macOS đăng ký một Login Item mà người dùng cũng thấy trong System Settings. Khi tắt, mục tương ứng bị gỡ bỏ. Checkbox luôn hiển thị trạng thái do hệ điều hành báo về, không chỉ là giá trị đã lưu lần cuối. |
+| T-16 | Chế độ nền | Chỉ desktop. Khi T-15 bật, một icon xuất hiện ở tray hoặc menu bar với các mục *Show/Hide window*, *Start/Stop sharing* và *Quit*; đóng cửa sổ sẽ ẩn app thay vì thoát, và việc share tiếp tục dưới nền. Cửa sổ luôn hiển thị khi khởi động và chỉ ẩn khi người dùng đóng nó, nên kết hợp T-13, T-11 và T-15 sẽ bắt đầu share khi đăng nhập với cửa sổ hiển thị cho tới khi được đóng. Trên Windows, nhấn chuột trái vào icon tray sẽ hiển thị hoặc ẩn cửa sổ. Trên macOS, icon Dock biến mất khi cửa sổ đang ẩn. Trên Linux, tray cần một StatusNotifier host (có sẵn trên KDE; GNOME cần extension AppIndicator); nếu không có, đóng cửa sổ vẫn là thoát app, để app không rơi vào trạng thái không thể truy cập. Trên Windows và Linux, khi đang share, đóng cửa sổ luôn thu về tray kể cả khi T-15 tắt (nếu có tray), để không ngắt các viewer đang kết nối. Trên macOS, đóng cửa sổ không thoát app, nên việc share tiếp tục trong mọi trường hợp. |
+| T-18 | Sync clipboard | Khi T-17 bật, văn bản thuần được copy trên bất kỳ máy nào trong session sẽ xuất hiện trên các máy còn lại trong vài giây, theo cả hai chiều; host chuyển tiếp nội dung copy của một viewer tới các viewer khác. Văn bản bị giới hạn ở 32 KiB (phần dài hơn bị cắt tại ranh giới một ký tự trọn vẹn); ảnh, file và định dạng không được truyền. Công tắc của host chi phối toàn bộ session: khi tắt, host bỏ qua và không gửi dữ liệu clipboard. Mỗi máy cũng cần bật công tắc của chính nó để đọc hoặc ghi clipboard cục bộ. Trên Android và iOS, hệ điều hành có các giới hạn riêng: thiết bị Android chỉ nhận được nội dung copy của chính nó khi Deskhub đang ở tiền cảnh, dù văn bản nhận từ ngoài luôn được áp dụng; viewer trên iOS có thể thấy prompt dán của hệ thống khi Deskhub đọc nội dung copy mới; thiết bị iOS đang host không tham gia, vì broadcast của nó chạy trong một process riêng không có quyền truy cập clipboard. |
+| T-20 | Giữ thiết bị không sleep | Khi T-19 bật, máy không chuyển sang sleep và display không tắt trong khi đang share hoặc đang xem; hạn chế này được gỡ bỏ ngay khi session kết thúc, và không thiết lập sleep nào của hệ thống bị thay đổi. Trên Windows, macOS và Linux, điều này áp dụng cho cả display sleep và system sleep, với cả host lẫn viewer (trên Linux cần systemd-logind và một desktop tuân thủ interface screensaver của freedesktop, có sẵn trên KDE và GNOME). Hệ điều hành vẫn được ưu tiên ở những trường hợp bắt buộc: gập nắp laptop, nhấn nút nguồn, hoặc macOS chạy bằng pin vẫn có thể đưa máy vào sleep. Trên Android và iOS, công tắc này giữ màn hình sáng khi đang xem một stream; việc share từ điện thoại vốn đã hoạt động khi màn hình tắt (P-5), nên ở vai host công tắc không giữ màn hình. |
+| T-25 | Nơi lưu file nhận được | Chỉ desktop. File do viewer gửi được ghi vào một thư mục do máy này chọn, mặc định là `Deskhub` trong thư mục home của người dùng. Thư mục đã chọn được hiển thị cạnh ô chọn file transfer trước khi share và trong status khi đang share, được tạo nếu chưa tồn tại, và được lưu cùng các settings khác. Không có nội dung nào được ghi ra ngoài thư mục đó: tên do bên gửi cung cấp bị cắt còn phần cuối của đường dẫn và loại bỏ mọi ký tự mà filesystem cục bộ không lưu được. |
+| T-24 | Nội dung âm thanh được share | Khi T-22 bật, host share nội dung mà loa của chính máy đang phát, tức bản mix của mọi ứng dụng trên máy đó. Deskhub không capture microphone và không có audio hai chiều. Android là nền tảng duy nhất có liên quan tới một permission: API playback-capture của nó nằm sau permission mà hệ thống gọi là *Microphone*, được app xin khi bắt đầu share và không dùng cho mục đích nào khác; nếu từ chối, phiên share vẫn tiếp tục nhưng không có âm thanh. Không nền tảng nào khác xin permission microphone. Viewer chỉ nhận âm thanh nếu đã bật tuỳ chọn tương ứng (T-23), nên host bật T-22 cũng không gửi dữ liệu tới viewer không nghe; cả hai công tắc có hiệu lực từ session tiếp theo. |
 
-## 11. Trạng thái và chẩn đoán
+## 11. Trạng thái và xử lý sự cố
 
 | ID | Tính năng | Mô tả |
 | --- | --- | --- |
-| G-1 | Thống kê phía host | Số liệu theo từng màn hình và từng viewer: tốc độ thu hình, tốc độ gửi, băng thông và độ trễ khứ hồi. |
-| G-2 | Thống kê phía client | Theo từng phiên: tốc độ khung hình, băng thông, độ trễ khứ hồi và độ trễ đầu-cuối. |
-| G-3 | Nhật ký phiên | Trên Windows, macOS và Linux, mỗi lần chạy ghi một tệp log vào thư mục Deskhub của người dùng, để đính kèm khi báo lỗi. Android và iOS thay vào đó ghi chẩn đoán vào luồng log của chính hệ điều hành và không để lại tệp nào. |
-| G-4 | Phiên bản và liên kết dự án | Ứng dụng hiển thị phiên bản của nó và liên kết tới trang dự án. |
+| G-1 | Thống kê host trực tiếp | Số liệu theo từng display và từng viewer: capture rate, send rate, băng thông và round-trip time. |
+| G-2 | Thống kê client trực tiếp | Theo từng session: frame rate, băng thông, round-trip time và latency end-to-end. |
+| G-3 | Session log | Trên Windows, macOS và Linux, mỗi lần chạy ghi một file log vào thư mục Deskhub của người dùng, phục vụ việc đính kèm khi báo lỗi. Android và iOS ghi thông tin chẩn đoán vào luồng log của hệ điều hành và không để lại file. |
+| G-4 | Phiên bản và liên kết dự án | App hiển thị phiên bản và liên kết tới trang dự án. |
 
-## 12. Khác biệt theo nền tảng
+## 12. Hành vi riêng theo nền tảng
 
 | ID | Nền tảng | Hành vi |
 | --- | --- | --- |
-| P-1 | Windows | Ứng dụng xin quyền quản trị một lần lúc khởi động, đây là điều kiện để gõ được vào các cửa sổ chạy với quyền cao. Khi bắt đầu chia sẻ, ứng dụng tự thêm luật tường lửa của mình. |
-| P-2 | macOS | Hiển thị mục **Permissions** với trạng thái cấp quyền theo thời gian thực của *Screen Recording* (cần để chia sẻ) và *Accessibility* (cần để nhận thao tác từ xa), nút xin từng quyền, và lối tắt mở System Settings. Một số phím bị macOS chặn âm thầm nếu chưa cấp Accessibility. |
-| P-3 | Linux | Trang Host liệt kê các màn hình của máy này và terminal dưới dạng các ô tick, giống các desktop khác, và chỉ những màn hình được tick mới được chia sẻ. Môi trường desktop vẫn xác nhận việc thu màn hình trong hộp thoại chia sẻ màn hình của chính nó sau khi bấm Share; xác nhận đó được ghi nhớ khi desktop hỗ trợ (ScreenCast portal phiên bản 4 trở lên): các lần chia sẻ sau dùng lại nó trong im lặng, kể cả sau khi khởi động lại, nên hộp thoại chỉ hiện lần đầu tiên. Nếu những gì desktop đã cấp không khớp chút nào với các màn hình được tick, xác nhận đã nhớ sẽ bị quên và hộp thoại hiện lại một lần nữa để người dùng cấp đúng màn hình; nếu desktop từ chối hoặc đã hết hạn xác nhận — sau khi nâng cấp compositor hay thay đổi màn hình — hộp thoại đơn giản là hiện lại, và bấm hủy sẽ không bị hỏi lại. Nếu desktop cấp những màn hình mà ứng dụng không khớp được với danh sách đã tick, toàn bộ những gì desktop cấp sẽ được chia sẻ thay vì không chia sẻ gì. Chỉ tick terminal thì bỏ qua hoàn toàn hộp thoại của desktop. Việc chia sẻ còn cần hệ thống cho phép mô phỏng thao tác nhập liệu. |
-| P-4 | Android / iOS | Chia sẻ ở chế độ **chỉ xem**: thiết bị phát màn hình và lặng lẽ bỏ qua mọi gói điều khiển, vì cả hai hệ điều hành đều không cho ứng dụng bơm thao tác vào toàn hệ thống. Nó không chia sẻ terminal — và nói rõ điều đó khi được hỏi, nên không client nào mở cửa sổ terminal nhắm vào điện thoại (C-8) — và các client desktop có thể nói trước rằng ô điều khiển sẽ không có tác dụng (C-3). Nó nhận tệp ngay từ lúc app hiện trên màn hình, theo đúng các quy tắc lô của H-16, không phải đi tìm công tắc nào, và tiếp tục nhận tệp trong lúc đang chia sẻ màn hình, nên một viewer có thể vừa xem màn hình vừa gửi tệp sang; trên iOS phần mở rộng broadcast giữ cổng duy nhất đó suốt thời gian broadcast và phục vụ cả hai việc từ nó. Ảnh và video nhận được sẽ được thêm vào thư viện ảnh của thiết bị — trên iOS là sau quyền Photos chỉ-thêm của hệ thống, xin ở lần đầu có tệp như vậy tới và không bao giờ cho Deskhub quyền đọc, từ chối thì tệp vào Documents; trên Android là vào `Pictures/Deskhub` và `Movies/Deskhub` qua kho media của hệ thống. Mọi tệp khác nằm ở nơi trình duyệt tệp của hệ thống thấy được (thư mục Documents của app trên iOS, `Download/Deskhub` trên Android), và một thông báo nêu tên những gì vừa tới. Kho media của Android dùng cho việc này cần Android 10: trên Android 9 trở về trước, tệp đến ở lại trong thư mục riêng của app trên thiết bị, không vào thư viện ảnh và không vào Downloads. Toàn bộ màn hình được chia sẻ như một nguồn duy nhất, nên bộ chọn màn hình, chia sẻ nhiều màn hình và dừng từng màn hình (H-1, H-2, H-3, H-5) không áp dụng. Xoay thiết bị thì luồng xoay theo: hình người xem thấy vẫn đúng chiều, và cửa sổ của họ tự chỉnh lại theo hình dạng mới (V-1). Giao diện phiên ưu tiên cảm ứng: cử chỉ trackpad, nút phóng to, thanh phím tắt, bàn phím ảo, nút đổi màn hình, và một nút đóng ở góc dùng chung với màn hình shell và gửi tệp. |
-| P-5 | Android | Muốn chia sẻ phải qua hộp thoại xin quyền quay màn hình của hệ thống, cấp cho từng lần và không nhớ được, và muốn chia sẻ tiếng thì cần thêm quyền mà Android ghi nhãn là *Micro* — API thu tiếng phát lại của nó nằm sau quyền đó — xin khi bắt đầu chia sẻ; từ chối thì vẫn chia sẻ màn hình, chỉ là không có tiếng. Trong lúc chia sẻ luôn có một thông báo thường trực, và luồng vẫn chạy khi ứng dụng xuống nền hoặc màn hình tắt. Tắt chia sẻ từ thông báo hệ thống sẽ kết thúc phiên. |
-| P-6 | iOS | Chia sẻ được khởi động từ nút **Start sharing** trong ứng dụng, nút này mở bảng broadcast của hệ thống vì iOS bắt buộc phải qua bảng đó để xác nhận mọi lần phát, và chạy trong một tiến trình broadcast riêng nên vẫn tiếp tục sau khi đóng ứng dụng. Màn hình chia sẻ báo số người xem đang kết nối — liệt kê tên của những người xem đã đặt tên (C-7) — và mức bộ nhớ hiện tại của tiến trình broadcast — iOS sẽ chấm dứt buổi phát nào dùng quá giới hạn bộ nhớ — không có bảng chi tiết từng người như H-7, và không thể ngắt riêng từng người xem (H-8). Một sự kiện hệ thống làm dừng broadcast — ví dụ cuộc gọi đến — sẽ kết thúc phiên. Một phiên đang mở khi ứng dụng rời khỏi màn hình — luồng hình, shell hay một lần truyền tệp — được giữ sống đúng khoảng thời gian iOS cho một ứng dụng đã rời màn hình, chừng nửa phút, nên ngó sang ứng dụng khác một lát không làm rớt phiên; quá khoảng đó hệ thống treo ứng dụng và phiên tự gắn lại khi quay về (V-8). |
+| P-1 | Windows | App xin quyền administrator một lần khi khởi động; đây là điều kiện để nó nhập được vào các cửa sổ chạy ở quyền cao. App tự thêm rule firewall khi bắt đầu share. |
+| P-2 | macOS | Hiển thị panel **Permissions** với trạng thái cấp quyền hiện thời của *Screen Recording* (cần để share) và *Accessibility* (cần để nhận remote input), nút xin từng quyền, và lối tắt sang System Settings. Một số phím bị macOS chặn âm thầm nếu chưa cấp Accessibility. |
+| P-3 | Linux | Trang Host liệt kê các display của máy này cùng terminal dưới dạng ô chọn, giống các nền tảng desktop khác, và chỉ những display được chọn mới được share. Sau khi nhấn Share, desktop vẫn xác nhận việc screen capture bằng hộp thoại chia sẻ màn hình của riêng nó; xác nhận này được lưu ở những desktop có hỗ trợ (ScreenCast portal phiên bản 4 trở lên), nên các lần share sau dùng lại một cách âm thầm, kể cả sau khi khởi động lại, và hộp thoại chỉ xuất hiện trong lần đầu. Nếu nội dung desktop cấp không khớp với danh sách display đã chọn, xác nhận đã lưu bị xoá và hộp thoại xuất hiện lại để người dùng cấp đúng display. Nếu desktop từ chối hoặc xác nhận đã hết hạn — sau khi nâng cấp compositor hoặc thay đổi màn hình — hộp thoại xuất hiện lại, và việc huỷ hộp thoại không kích hoạt thử lại. Nếu desktop cấp những display mà app không khớp được với danh sách đã chọn, toàn bộ nội dung desktop cấp sẽ được share thay vì không share gì. Khi chỉ chọn terminal, hộp thoại của desktop được bỏ qua hoàn toàn. Ngoài ra, việc share yêu cầu hệ thống cho phép inject input. |
+| P-4 | Android / iOS | Khi làm host, chế độ hoạt động là **view-only**: thiết bị stream màn hình và loại bỏ mọi packet control, vì cả hai OS đều không cho phép app inject input ở phạm vi toàn hệ thống. Thiết bị không share terminal và thông báo điều này khi được truy vấn, nên không client nào mở cửa sổ terminal với điện thoại (C-8); các client desktop nhờ đó thông báo được rằng tuỳ chọn control sẽ không có tác dụng (C-3). Thiết bị nhận file ngay khi app hiển thị trên màn hình, theo các quy tắc batch ở H-16, không cần bật công tắc nào, và tiếp tục nhận trong khi màn hình đang được share, nên một viewer có thể vừa xem màn hình vừa gửi file. Trên iOS, broadcast extension giữ một port duy nhất trong suốt phiên broadcast và phục vụ cả hai chức năng từ đó. Ảnh và video nhận được sẽ được thêm vào thư viện ảnh của thiết bị: trên iOS thông qua permission Photos dạng chỉ-thêm của hệ thống, được xin trong lần đầu có file tới và không cấp cho Deskhub quyền đọc; nếu bị từ chối, file được lưu vào Documents. Trên Android, ảnh và video vào `Pictures/Deskhub` và `Movies/Deskhub` qua media store của hệ thống. Các file khác được lưu vào nơi trình duyệt file của hệ thống truy cập được (thư mục Documents của app trên iOS, `Download/Deskhub` trên Android), kèm một notification nêu tên file vừa tới. Media store của Android dùng ở đây yêu cầu Android 10: trên Android 9 trở xuống, file tới nơi được lưu trong thư mục riêng của app, không xuất hiện trong gallery và trong Downloads. Toàn bộ màn hình được share như một source duy nhất, nên phần chọn display, share nhiều display và dừng từng display (H-1, H-2, H-3, H-5) không áp dụng. Khi xoay thiết bị, stream xoay theo: nội dung viewer nhìn thấy luôn đúng chiều, và cửa sổ của họ điều chỉnh theo hình dạng mới (V-1). Giao diện session ưu tiên thao tác cảm ứng: cử chỉ trackpad, điều khiển zoom, thanh hotkey, keyboard trên màn hình, nút chuyển display, và một nút đóng ở góc dùng chung với màn hình shell và file transfer. |
+| P-5 | Android | Việc share yêu cầu hộp thoại đồng ý ghi màn hình của hệ thống, được cấp theo từng phiên share và không thể lưu lại. Share âm thanh cần thêm permission mà Android gọi là *Microphone*, do API playback-capture nằm sau permission này; permission được xin khi bắt đầu share, và nếu bị từ chối thì màn hình vẫn được share nhưng không có âm thanh. Trong khi share, một notification thường trực được hiển thị và stream tiếp tục khi app chuyển xuống nền hoặc màn hình tắt. Dừng share từ notification của hệ thống sẽ kết thúc session. |
+| P-6 | iOS | Việc share được bắt đầu từ nút **Start sharing** trong app; nút này mở broadcast sheet của hệ thống, vì iOS yêu cầu mọi phiên broadcast phải được xác nhận qua đó. Phiên broadcast chạy trong một process riêng nên tiếp tục sau khi app đóng. Màn hình share báo số viewer đang kết nối, kèm tên của những viewer đã đặt tên (C-7), và mức bộ nhớ hiện thời của process broadcast, do iOS kết thúc broadcast vượt quá giới hạn bộ nhớ. Màn hình này không có bảng theo từng viewer như H-7, và không hỗ trợ ngắt kết nối từng viewer (H-8). Một sự kiện hệ thống làm kết thúc broadcast, chẳng hạn cuộc gọi đến, sẽ kết thúc session. Một session đang mở khi app rời khỏi màn hình — stream, shell hoặc phiên truyền file — được giữ trong khoảng thời gian iOS cho phép với một app đã rời màn hình, khoảng nửa phút, nên việc chuyển sang app khác trong thời gian ngắn không làm mất session. Quá khoảng thời gian đó, hệ thống tạm dừng app và session tự reattach khi app quay lại (V-8). |
 
 ## 13. Nằm ngoài phạm vi
 
-Deskhub **không** cung cấp, và đặc tả này không bao gồm:
+Deskhub **không** cung cấp, và đặc tả này không đề cập:
 
-- Thu micro, âm thanh hai chiều, hay bất kỳ kênh thoại nào. Tiếng chỉ đi một chiều, từ máy
-  đang chia sẻ tới những người đang xem nó (V-6).
+- Capture microphone, audio hai chiều, hay bất kỳ channel thoại nào. Âm thanh chỉ truyền
+  một chiều, từ máy được share tới những người đang xem (V-6).
 - In từ xa.
-- Đồng bộ clipboard ngoài văn bản thuần (ảnh, tệp, văn bản có định dạng).
-- Bất kỳ hệ thống tài khoản, danh bạ, hiện diện hay lời mời nào.
-- Dịch vụ trung chuyển, điểm hẹn hay xuyên NAT — việc tiếp cận host qua internet là trách
-  nhiệm của người dùng (ví dụ bằng VPN).
-- Ghi lại phiên làm việc.
-- Truy cập khi không có người tại máy, wake-on-LAN, hay điều khiển nguồn điện từ xa.
-- Quản trị nhiều người dùng, phân quyền, hay nhật ký kiểm toán.
+- Sync clipboard ngoài văn bản thuần (ảnh, file, văn bản có định dạng).
+- Bất kỳ hệ thống tài khoản, thư mục người dùng, presence hay lời mời nào.
+- Dịch vụ relay, rendezvous hay NAT-traversal. Việc truy cập một host qua internet thuộc
+  trách nhiệm của người dùng, ví dụ thông qua VPN.
+- Ghi lại session.
+- Truy cập khi không có người tại máy, wake-on-LAN, hay điều khiển nguồn từ xa.
+- Quản trị nhiều người dùng, phân quyền theo vai trò, hay audit trail.

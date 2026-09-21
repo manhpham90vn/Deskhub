@@ -1,776 +1,809 @@
 [English](ARCHITECTURE.md) · **Tiếng Việt** · [中文](ARCHITECTURE.zh.md) · [日本語](ARCHITECTURE.ja.md)
 
-# Deskhub — Kiến trúc
+# Deskhub — Architecture
 
-Tài liệu này mô tả Deskhub **được xây như thế nào**: các tầng, tiến trình và luồng,
-giao thức trên đường truyền, và các quyết định thiết kế đứng sau. Sản phẩm làm được gì
-dưới góc nhìn người dùng nằm ở [`SPECIFICATION.vi.md`](SPECIFICATION.vi.md); mô hình
-mối đe doạ nằm ở [`SECURITY.vi.md`](../SECURITY.vi.md).
+Tài liệu này mô tả Deskhub được xây dựng **như thế nào**: các layer, process và thread,
+wire protocol, cùng những quyết định thiết kế đứng sau chúng. Phần mô tả sản phẩm dưới góc
+nhìn người dùng nằm trong [`SPECIFICATION.vi.md`](SPECIFICATION.vi.md); threat model nằm
+trong [`SECURITY.vi.md`](../SECURITY.vi.md).
 
-Đây là bản dịch của [`ARCHITECTURE.md`](ARCHITECTURE.md); khi hai bản khác nhau, bản
+Đây là bản dịch của [`ARCHITECTURE.md`](ARCHITECTURE.md). Nếu hai bản có khác biệt, bản
 tiếng Anh là bản chuẩn.
 
 - **Trạng thái:** mô tả mã nguồn hiện tại.
-- **Đối tượng đọc:** bất kỳ ai sửa mã.
+- **Đối tượng:** những người sửa đổi mã nguồn này.
 
 ---
 
-## 1. Các tầng
+## 1. Các layer
 
-Một quy tắc chi phối toàn bộ bố cục: logic viết một lần và dùng chung cho mọi client.
+Toàn bộ cấu trúc tuân theo một nguyên tắc: logic được viết một lần và dùng chung cho mọi
+client.
 
 ```
-core/       C++20 thuần, không header OS, không mã bên thứ ba, test offline được
-platform/   lớp trừu tượng OS mỏng, mỗi header một API giống hệt nhau mọi nơi (phụ thuộc core)
-client/     app theo từng OS: windows, linux, macos, ios, android (phụ thuộc platform + core)
-            cộng thêm client/cli, một client dòng lệnh dùng chung cho cả ba máy để bàn
+core/       C++20 thuần, không OS header, không mã bên thứ ba, unit test offline
+platform/   lớp abstraction mỏng cho OS, mỗi header cung cấp một API giống nhau (phụ thuộc core)
+client/     app theo từng OS: windows, linux, macos, ios, android (phụ thuộc platform và core)
+            cùng client/cli, một command line client cho cả ba nền tảng desktop
 ```
 
-| Tầng | Nội dung |
+| Layer | Nội dung |
 | --- | --- |
-| `core/protocol` | Định dạng gói (`Wire.h`), cắt khung record cho stream (`RecordStream.h`), bộ phân loại gói QUIC với gói beacon |
-| `core/transport` | Packetizer/Reassembler cho video, FEC, cache gửi lại, bộ điều tốc gửi |
-| `core/session` | Máy trạng thái phiên, chia theo vai trò: `session/host` (phiên theo viewer, bảng viewer, beacon, bên nhận file, khoá đếm lần đoán mã), `session/client` (screen client, bên gửi file, terminal client, luồng connect), và các mảnh dùng chung nằm cạnh (kiểu dữ liệu transfer, bảng phiên terminal, đồng bộ clipboard, khôi phục kết nối) |
-| `core/control` | Điều khiển bitrate, thang chất lượng, cỡ luồng, lệch đồng hồ |
-| `core/terminal` | Bộ giả lập VT mọi client dùng chung: `VtParser`, `Screen`, `KeyEncoder`, `Palette` |
-| `core/net` | Trust store (phía client), danh sách máy đã ghép (phía host), chọn địa chỉ bind, logic quét LAN |
-| `core/ui` | Mọi chuỗi hiển thị, đọc/ghi cài đặt, dựng dòng bảng — để cả năm client nói giống hệt nhau |
-| `platform/net` | `UdpSocket` (theo OS), `QuicEndpoint` (quiche sau pimpl), `SessionTransport` |
-| `platform/auth` | `AuthNegotiation` — một bắt tay ghép cặp/passcode duy nhất cả hai phía cùng nói |
-| `platform/client` | `HostLink` (quay số + tin cậy + auth + kênh, mọi bề mặt dùng chung), `ScreenViewer`, `TerminalViewer`, `FileTransferClient`, `SourceQuery`, dò host, quét LAN |
+| `core/protocol` | Wire format (`Wire.h`), record framing cho stream (`RecordStream.h`), packet classifier phân biệt QUIC với datagram beacon của Deskhub |
+| `core/transport` | Packetizer/Reassembler cho video, FEC, cache retransmit, send pacer |
+| `core/session` | Các session state machine, chia theo vai trò: `session/host` (session theo từng viewer, bảng viewer, beacon, file receiver, auth throttle), `session/client` (screen client, file sender, terminal client, luồng connect), cùng các thành phần dùng chung đặt cạnh chúng (kiểu dữ liệu transfer, bảng terminal session, clipboard sync, link recovery) |
+| `core/control` | Bitrate controller, quality ladder, tính kích thước stream, clock offset |
+| `core/terminal` | VT emulator dùng chung cho mọi client: `VtParser`, `Screen`, `KeyEncoder`, `Palette` |
+| `core/net` | Trust store (phía client), paired devices (phía host), chọn bind address, logic scan LAN |
+| `core/ui` | Toàn bộ chuỗi hiển thị cho người dùng, phần parse settings, các builder dòng bảng, để cả năm client hiển thị cùng nội dung |
+| `platform/net` | `UdpSocket` (theo từng OS), `QuicEndpoint` (quiche đặt sau pimpl), `SessionTransport` |
+| `platform/auth` | `AuthNegotiation` — pairing/passcode handshake duy nhất mà cả hai phía sử dụng |
+| `platform/client` | `HostLink` (dial, trust, auth, channel; dùng chung cho mọi giao diện), `ScreenViewer`, `TerminalViewer`, `FileTransferClient`, `SourceQuery`, host probe, LAN scanner |
 | `platform/host` | `HostEngine`, `HostNetLoop`, `SharingHost`, `TerminalHost`, `FileHost`, `ViewerBroadcast` |
-| `platform/system` | Đồng hồ, ngẫu nhiên, PTY (ConPTY / forkpty), danh tính máy (khoá), file trust/paired, autostart, giữ máy thức |
-| `core/cli` | Ngữ pháp dòng lệnh và bộ ghi JSON của nó — vào là văn bản thuần, ra là một lệnh đã kiểm tra hợp lệ |
-| `client/<os>` | Thu hình, mã hoá, giải mã, vẽ, cửa sổ, hộp thoại — không có gì mang hình dạng giao thức |
-| `client/cli` | Từ cờ thành phiên: một binary vừa làm host, vừa kết nối, vừa mở shell, không cần toolkit đồ hoạ. Nó link đúng thư viện media theo OS mà app để bàn đang dùng |
+| `platform/system` | Clock, random, PTY (ConPTY / forkpty), host identity (key), file trust và paired-device, autostart, keep-awake |
+| `core/cli` | Cú pháp command line và bộ ghi JSON của nó: nhận văn bản thuần, trả về command đã được kiểm tra |
+| `client/<os>` | Capture, encode, decode, render, windowing, hộp thoại; không chứa thành phần nào thuộc protocol |
+| `client/cli` | Từ cờ tới session: một binary có thể host, connect và mở shell mà không cần GUI toolkit. Nó link cùng thư viện media theo từng OS mà app desktop sử dụng |
 
-`core/` phải test offline được, không mạng không GPU. `platform/` được đụng OS nhưng
-API công khai phải giống hệt nhau trên mọi hệ. Nếu cùng một đoạn mã xuất hiện ở hai
-client, nó thuộc về tầng thấp hơn.
+`core/` phải luôn test được offline, không cần network và GPU. `platform/` được phép sử
+dụng OS nhưng phải cung cấp một API giống nhau ở mọi nền tảng. Nếu cùng một đoạn mã xuất
+hiện ở hai client, nó thuộc về layer thấp hơn.
 
-## 2. Một cổng, một transport
+## 2. Một port, một transport
 
-Mọi thứ host cung cấp đi trên **một cổng UDP** (mặc định 47777) qua một
-`SessionTransport` duy nhất, bọc một `QuicEndpoint`:
+Mọi dịch vụ mà host cung cấp đều chạy trên **một UDP port** (mặc định 47777) thông qua một
+`SessionTransport`, bao bọc một `QuicEndpoint` duy nhất:
 
 ```
-                      Cổng UDP 47777
+                      UDP port 47777
                             |
-                 ClassifyPacket (byte đầu)
+                 ClassifyPacket (byte đầu tiên)
                    /                    \
-            gói QUIC              gói Deskhub thuần
+            packet QUIC          datagram Deskhub
                  |                        |
    +-------------+------------+       chỉ beacon:
    |             |            |       LIST_SOURCES / PING được trả lời
- stream      datagram      (TLS)      ở bản rõ; mọi gói thô khác
-   |             |                    đều bị bỏ
+ stream      datagram      (TLS)      ở dạng không encrypt; mọi packet
+   |             |                    thô khác đều bị loại bỏ
  control      video
- input        audio       Stream chở các record có tiền tố độ dài
- clipboard                (RecordStream), tối đa 16 KiB mỗi record.
- terminal                 Mỗi datagram chở đúng một gói video hoặc
- files                    một gói audio (≤ 1200 B).
+ input        audio       Stream mang các record đã framing (RecordStream):
+ clipboard                message có length prefix, tối đa 16 KiB.
+ terminal                 Mỗi datagram mang một packet video
+ file                     hoặc audio (≤ 1200 B).
 ```
 
-- **Stream** (tin cậy, đúng thứ tự): control, input, clipboard, terminal, files — mỗi kết
-  nối dùng một stream hai chiều do client mở. Stream nghẽn ở kết nối này không làm
-  đứng kết nối khác. Dữ liệu stream đến được rút theo ngân sách 64 KiB mỗi lượt phục
-  vụ: bên tiêu thụ (nặng nhất là giả lập VT của terminal) phải trả vòng lặp lại cho
-  ACK, keepalive và xử lý timeout giữa các lát, nên một trận `cat` không thể bỏ đói
-  kết nối đến mức tự rơi vào idle timeout nữa.
-- **Datagram** (không tin cậy, không thứ tự, vẫn mã hoá): gói video và gói audio.
-  QUIC không bao giờ gửi lại datagram mất; với video thì FEC/NACK của app tự xử lý,
-  còn với audio thì không gì xử lý cả — xem mục 9.
-- **UDP thô** chỉ còn cho dò tìm: beacon trả lời máy quét không nói QUIC, và gói dò
-  không mời nhận danh sách rỗng. Gói thô đến mà không phải loại dò tìm bị loại trước
-  khi chạm tới bất kỳ mã phiên nào.
+- **Stream** (tin cậy, đúng thứ tự): control, input, clipboard, terminal, file. Mỗi
+  connection sử dụng một bidirectional stream do client mở. Một stream bị nghẽn trên
+  connection này không làm nghẽn connection khác. Dữ liệu stream đi vào được xử lý theo
+  hạn mức 64 KiB mỗi lượt service: thành phần tiêu thụ dữ liệu, chủ yếu là phần VT
+  emulation của terminal, trả quyền điều khiển lại cho ACK, keepalive và xử lý timeout
+  giữa các lát, nên một lượng output lớn từ terminal không còn khiến connection bị đóng
+  do idle timeout.
+- **Datagram** (không tin cậy, không bảo đảm thứ tự, vẫn được encrypt): packet video và
+  audio. QUIC không retransmit các packet bị mất; với video, cơ chế FEC/NACK của app xử
+  lý phần mất mát, còn với audio thì không có cơ chế nào — xem mục 9.
+- **UDP thô** chỉ phục vụ discovery: beacon trả lời các scanner không dùng QUIC, và các
+  probe không được mời nhận về danh sách source rỗng. Packet thô đi vào không thuộc các
+  loại discovery đều bị loại bỏ trước khi tới bất kỳ phần mã session nào.
 
-`QuicEndpoint` giấu kín quiche (pimpl; `QuicEndpointNone.cpp` thế chỗ, nhưng chỉ khi
-build chủ động tắt bằng `-DDESKHUB_QUIC=OFF` — thiếu quiche thì configure lỗi ngay,
-vì binary dùng stub không chia sẻ hay kết nối được). Kết nối được định danh bằng địa
-chỉ peer; không có connection migration. Một
-kết nối quiche chỉ dùng được từ một luồng, nên mọi lần chạm endpoint đều nằm dưới
-mutex gửi của transport — và transport không bao giờ giữ mutex đó xuyên qua một lần
-chờ socket (`WaitReadable` trước, không khoá; rồi `Poll` ngắn có khoá). Giữ khoá
-xuyên qua lần chờ sẽ bỏ đói mọi bên gửi.
+`QuicEndpoint` che hoàn toàn quiche (pimpl; `QuicEndpointNone.cpp` thay bằng stub, nhưng
+chỉ khi bản build chủ động dùng `-DDESKHUB_QUIC=OFF`; thiếu quiche sẽ làm fail bước
+configure, vì một binary stub không thể share hay connect). Connection được nhận diện qua
+địa chỉ peer; không có connection migration. Theo hợp đồng, một connection quiche là
+single-threaded, nên mọi thao tác trên endpoint đều diễn ra dưới send mutex của transport.
+Transport không giữ mutex này xuyên qua một lần chờ socket blocking: `WaitReadable` chạy
+trước ở trạng thái không khoá, sau đó là một lần `Poll` ngắn có khoá. Giữ mutex xuyên qua
+lần chờ sẽ chặn mọi bên gửi.
 
-## 3. Quyền vào: ghép đôi
+## 3. Cơ chế chấp nhận: pairing
 
-Mỗi máy sinh một khoá ECDSA P-256 ở lần chạy đầu (`HostIdentity`); băm SHA-256 của
-SPKI là dấu vân tay người dùng nhìn thấy. TLS dùng chứng chỉ tự ký trên khoá đó. Trên
-TLS, một cuộc bắt tay tầng ứng dụng (`AuthNegotiation`) quyết định quyền vào theo
-từng kết nối. Transport chạy nó và bỏ mọi message từ kết nối chưa chốt xong auth:
+Mỗi máy tạo một key ECDSA P-256 trong lần chạy đầu tiên (`HostIdentity`); hash SHA-256 của
+SPKI chính là fingerprint mà người dùng nhìn thấy. TLS sử dụng một certificate tự ký trên
+key đó. Bên trên TLS, một handshake ở tầng ứng dụng (`AuthNegotiation`) quyết định việc
+chấp nhận theo từng connection. Transport thực thi handshake này và loại bỏ mọi message từ
+connection chưa hoàn tất phần auth:
 
-| Client đưa ra | Host biết máy đó | Kết quả |
+| Client cung cấp | Host có biết máy này không | Kết quả |
 | --- | --- | --- |
-| không gì cả | đã ghép đôi | **Signature**: client ký transcript nonce+dấu-vân-tay-host bằng khoá của nó. Vào êm. |
-| không gì cả | máy lạ | **Approval**: người ngồi tại host được hỏi (*Let this machine in?*). |
-| một passcode | host có mã | **Passcode**: SPAKE2 trên verifier có salt — mã không bao giờ đi qua mạng, mỗi kết nối một lần đoán, hai bên cùng chứng minh, MAC trói vào đúng khoá host mà client đang thấy (chặn chuyển tiếp). Mã đã gõ luôn bị kiểm, quen hay lạ. |
-| một passcode | host không có mã | không có gì để đối chiếu → Signature nếu đã ghép, Approval nếu chưa. |
-| bất kỳ | tắt ghép đôi mới | **Denied** (máy đã ghép vẫn đi đường Signature). |
+| không cung cấp gì | đã pair | **Signature**: client ký một transcript gồm nonce và fingerprint của host bằng key của nó, và được chấp nhận không cần thao tác thêm. |
+| không cung cấp gì | chưa biết | **Approval**: người dùng tại host được hỏi (*Let this machine in?*). |
+| một passcode | host có passcode | **Passcode**: SPAKE2 trên một verifier đã salt. Mã không đi qua đường truyền, mỗi connection chỉ được thử một lần, cả hai phía cùng chứng minh, và MAC được ràng buộc với đúng host key mà client thực sự nhận được, nhờ đó vô hiệu hoá các cuộc tấn công relay. Mã đã nhập luôn được kiểm tra, bất kể máy đã pair hay chưa. |
+| một passcode | host không có passcode | không có giá trị để đối chiếu → Signature nếu đã pair, ngược lại là Approval. |
+| bất kỳ | pairing đã tắt | **Denied** (máy đã pair vẫn đi theo đường Signature). |
 
-Thành công thì client được ghi vào `paired_devices` của host; ghép đôi theo khoá,
-không theo địa chỉ. Đoán sai passcode 3 lần khoá đường passcode 30 giây
-(`AuthThrottle`, dùng chung hằng số với khoá phiên cũ); đường approval không cần
-khoá — người thật là cái cổng.
+Khi thành công, client được ghi vào `paired_devices` của host; pairing dựa trên key, không
+dựa trên địa chỉ. Ba lần nhập sai passcode sẽ khoá đường passcode trong 30 giây
+(`AuthThrottle`, dùng chung hằng số với cơ chế lockout session cũ). Đường approval không
+cần throttle vì đã có người quyết định.
 
-Phía client, `known_hosts` (`TrustStore`) ghim khoá host. Khoá **đổi** thì chặn kết
-nối sau một cảnh báo lớn; khoá chưa gặp được chính cuộc bắt tay phân xử (host chứng
-minh được passcode thì được ghi nhớ mà không cần hỏi).
+Ở phía client, `known_hosts` (`TrustStore`) ghim key của host. Một key **đã thay đổi** sẽ
+chặn kết nối kèm cảnh báo rõ ràng; một key chưa biết được chính handshake xử lý — host đã
+chứng minh được passcode sẽ được lưu mà không cần hỏi thêm.
 
-Trên wire là chính public key, không bao giờ là fingerprint trần — host tự hash thứ
-nó nhận được, nên muốn khoác danh tính máy khác thì phải ký được bằng khoá mà kẻ mạo
-danh không nắm. Và vì quyền vào chốt một lần cho mỗi kết nối, không tầng nào phía
-trên transport hỏi lại: máy đã chứng minh mình không mang passcode trong bất kỳ
-message nào về sau, và code phiên coi cả kết nối là đã xác thực.
+Dữ liệu truyền đi là bản thân public key, không phải một fingerprint đơn lẻ: host tự hash
+nội dung nhận được, nên việc mạo danh đòi hỏi phải ký bằng một key mà kẻ mạo danh không
+có. Và vì việc chấp nhận chỉ được xử lý một lần cho mỗi connection, không thành phần nào
+phía trên transport phải hỏi lại: một máy đã chứng minh danh tính không mang passcode
+trong các message sau đó, và phần mã session coi toàn bộ connection là đã authenticate.
 
 ## 4. Phía host
 
 ```
-HostEngine (một cho cả app, sở hữu SessionTransport)
- ├─ luồng net-loop: RunHostNetLoop
- │    recv → trả lời beacon | nhận đường video | Chan::Terminal → TerminalHost
- │    Tick phiên theo từng nguồn, đẩy clipboard, reconfig, thống kê
- ├─ thu hình/mã hoá: theo từng nguồn, do callback thu hình của OS lái (tầng client)
- │    frame → encoder (mutex theo nguồn) → Packetizer → FEC → SendTo (datagram)
- ├─ luồng audio worker: callback thu âm → vòng khung lock-free → mã hoá Opus →
- │    datagram cho từng viewer (AudioBroadcaster)
- └─ TerminalHost (khách thuê, khi terminal được chia sẻ)
-      ├─ HandleMessage trên luồng net-loop: TERM_OPEN/DATA/RESIZE/CLOSE → PTY
-      └─ luồng bơm: đầu ra PTY → Screen mirror phía host + record TERM_DATA,
-           hết hạn, kick
+HostEngine (mỗi app một instance, sở hữu SessionTransport)
+ ├─ thread net-loop: RunHostNetLoop
+ │    recv → trả lời beacon | nạp dữ liệu video | Chan::Terminal → TerminalHost
+ │    Tick session theo từng source, flush clipboard, reconfig, thống kê
+ ├─ capture/encode: theo từng source, do callback capture của OS điều khiển (layer client)
+ │    frame → encoder (mutex theo source) → Packetizer → FEC → SendTo (datagram)
+ ├─ audio worker: callback capture → ring frame lock-free → Opus encode →
+ │    datagram theo từng viewer (AudioBroadcaster)
+ └─ TerminalHost (chỉ tồn tại khi terminal được share)
+      ├─ HandleMessage trên thread net-loop: TERM_OPEN/DATA/RESIZE/CLOSE → PTY
+      └─ thread pump: output của PTY → Screen mirror phía host và record TERM_DATA,
+           xử lý hết hạn và ngắt kết nối
 ```
 
-- Engine chạy khi bất kỳ thứ gì được chia sẻ. Không có nguồn màn hình mà terminal
-  được tick thì nó chạy không-nguồn; vòng lặp sống chừng nào terminal còn sống.
-- Mỗi nguồn màn hình là một `SourcePipelineState`: `ScreenHostSession` riêng (bảng viewer,
-  thương lượng, phân xử input), encoder, thang chất lượng và chẩn đoán riêng. Một
-  lần mã hoá nuôi mọi viewer của nguồn đó.
-- Vòng phản hồi: viewer gửi `Feedback` (loss/RTT) mỗi giây, và host góp thêm một tín
-  hiệu của chính nó — tuổi của frame lúc nó tới bộ gửi, đúng đại lượng mà `enc_lat_ms`
-  báo cáo. `BitrateController` (AIMD) và `QualityLadder` chỉnh bitrate, độ phân giải,
-  fps của encoder theo cả ba; FEC bật sẵn từ frame đầu và chỉ hạ xuống sau một chuỗi dài
-  không mất gói, vì loss mà nó chống lại xuất hiện trước cả báo cáo đầu tiên — backlog
-  không bao giờ bật FEC, vì gói parity chỉ làm hàng đợi dày thêm. CUBIC của quiche nằm
-  dưới đường datagram; hai bộ hoạt động nối
-  tiếp — quiche giới hạn thứ rời khỏi máy, app điều tốc encoder theo loss sinh ra.
-- Input: "host thắng" — `LocalInputMonitor` tạm dừng input từ xa khi người ngồi tại
-  máy động vào chuột thật; mỗi lúc một viewer điều khiển.
-- Shell: mỗi shell một PTY (`ConPTY` trên Windows, `forkpty` nơi khác), tối đa 8;
-  kết nối rớt thì shell được tách và PTY sống thêm 2 phút để đúng máy đó gắn lại.
-  Mọi lần mở/đóng/tách/gắn lại đều ghi audit kèm địa chỉ, tên và khoá.
-- Đầu ra của mỗi shell còn nuôi một Screen `core/terminal` phía host ngay từ lúc
-  shell khởi động. *Stop & attach* ngắt client từ xa và mở mirror đó — scrollback
-  còn nguyên — trong một cửa sổ terminal trên máy host; shell bị tiếp quản kiểu này
-  thuộc về host, không bao giờ hết hạn, và kết thúc khi cửa sổ của host đóng.
+- Engine hoạt động bất cứ khi nào có nội dung được share. Khi không có screen source nào
+  và terminal được chọn, engine chạy ở trạng thái không source; vòng lặp tồn tại chừng nào
+  terminal còn hoạt động.
+- Mỗi screen source là một `SourcePipelineState` với `ScreenHostSession` riêng (bảng
+  viewer, negotiation, phân xử input), encoder, quality ladder và phần chẩn đoán riêng.
+  Một lần encode phục vụ mọi viewer của source đó.
+- Vòng phản hồi: viewer gửi `Feedback` (loss và RTT) mỗi giây một lần, và host bổ sung một
+  tín hiệu của riêng nó là tuổi của frame tại thời điểm nó tới bên gửi, cũng chính là đại
+  lượng `enc_lat_ms` báo cáo. `BitrateController` (AIMD) và `QualityLadder` điều chỉnh
+  bitrate của encoder, độ phân giải và fps dựa trên cả ba tín hiệu. FEC được bật từ frame
+  đầu tiên và chỉ tắt sau một khoảng dài không có mất mát, vì loại mất mát mà nó bảo vệ
+  xuất hiện trước cả báo cáo đầu tiên; tình trạng tồn đọng không kích hoạt FEC, vì parity
+  chỉ làm hàng đợi dài thêm. Congestion control CUBIC của quiche nằm bên dưới đường
+  datagram; hai cơ chế hoạt động nối tiếp: quiche giới hạn lượng dữ liệu rời khỏi máy, còn
+  app điều chỉnh encoder theo mức mất mát phát sinh.
+- Input: host được ưu tiên. `LocalInputMonitor` tạm dừng remote input khi người dùng tại
+  máy đang thao tác với mouse của họ; mỗi thời điểm chỉ một viewer điều khiển.
+- Shell: mỗi shell một PTY (`ConPTY` trên Windows, `forkpty` trên các nền tảng khác), tối
+  đa 8 shell. Khi mất kết nối, shell được tách ra và PTY được giữ sống 2 phút để chính máy
+  đó reattach. Mọi thao tác open, close, detach và reattach đều được ghi vào audit log kèm
+  địa chỉ, tên và key.
+- Output của mỗi shell đồng thời được đưa vào một `core/terminal` Screen phía host ngay từ
+  khi shell bắt đầu. *Stop & attach* ngắt client từ xa và mở bản mirror đó, giữ nguyên
+  scrollback, trong một cửa sổ terminal trên host. Một shell được tiếp quản theo cách này
+  thuộc về host, không hết hạn, và kết thúc khi cửa sổ trên host đóng lại.
 
 ## 5. Phía client
 
-Mọi bề mặt client đi tới host qua cùng một mảnh, `HostLink`
-(`platform/client/HostLink`): nó quay số kết nối QUIC, kiểm tra kho tin cậy, chạy
-bắt tay auth, giữ kết nối sống, và — với bề mặt nào yêu cầu — tự quay số lại theo
-backoff khi kết nối rơi. Không dịch vụ nào còn tự quay số hay tự auth; mỗi dịch vụ
-mở một kênh theo `Chan` trên dây, nhận hàng đợi inbox riêng, và tự rút trên luồng
-của chính nó:
+Mọi giao diện client đều kết nối tới host thông qua cùng một thành phần là `HostLink`
+(`platform/client/HostLink`): nó thiết lập connection QUIC, kiểm tra trust store, thực
+hiện auth handshake, duy trì link, và với những giao diện có yêu cầu, thực hiện kết nối
+lại với backoff khi link bị mất. Không service nào tự thiết lập kết nối hay tự
+authenticate; mỗi service mở một channel theo `Chan` trên đường truyền, nhận một hàng đợi
+inbox riêng và xử lý hàng đợi đó trên thread của chính nó:
 
 ```
-HostLink (một cho mỗi bề mặt đang mở)
- ├─ luồng link: quay số → kiểm tra tin cậy → auth → bơm
- │   (chia record và datagram vào hàng đợi theo Chan của từng kênh;
- │    mạch đập của link; quay số lại theo backoff nơi bật khôi phục)
+HostLink (mỗi giao diện đang mở một instance)
+ ├─ thread link: dial → kiểm tra trust → auth → pump
+ │   (định tuyến record và datagram đi vào theo Chan tới các hàng đợi
+ │    riêng của từng channel; link pulse; kết nối lại với backoff nếu bật recovery)
  ├─ Chan::Control/Video/Audio ─> ScreenViewer
- │    ├─ luồng net: HELLO/thương lượng, nhận video (Reassembler+FEC),
+ │    ├─ thread net: HELLO/negotiation, nạp video (Reassembler và FEC),
  │    │   NACK, feedback, clipboard
- │    └─ luồng giải mã: decoder + hàng đợi vẽ
- ├─ Chan::Terminal ─> luồng dịch vụ của TerminalViewer
- │    ├─ Screen của core/terminal giữ lưới ký tự
- │    └─ UI poll Snapshot(), post phím vào hàng đợi lệnh
- └─ Chan::File ─> luồng dịch vụ của FileTransferClient (vòng FileUpload)
+ │    └─ thread decode: decoder và hàng đợi render
+ ├─ Chan::Terminal ─> thread service của TerminalViewer
+ │    ├─ core/terminal Screen giữ lưới ký tự
+ │    └─ UI poll Snapshot() và đẩy phím vào một hàng đợi lệnh
+ └─ Chan::File ─> thread service của FileTransferClient (ring FileUpload)
 ```
 
-Khi đã được nhận vào, link tự bắt mạch cho chính nó (`core/session/LinkPulse`):
-mỗi giây một datagram `Ping` mang session id 0 đi ra, beacon của host trả lời nó
-trên chính kết nối đó mà không cần phiên nào, timestamp được vọng lại trở thành
-RTT đã làm mượt, còn những id không có pong quay về trở thành phần trăm mất gói.
-`ClassifyLinkQuality` gộp hai con số thành Tốt / Khá / Kém cho danh sách thiết bị
-và cho panel đã trả lời host — cửa sổ riêng trên desktop, trang kết nối trên Android
-và iOS — các cửa sổ phiên không còn chở nó nữa — `HostLink` đưa số đo ra
-qua `onPulse` và `Pulse()`, và vì ping là gói đòi ACK nên
-nó kiêm luôn vai keepalive; bộ đếm keepalive thường chỉ còn có việc khi link đang
-đỗ ở `Deciding`. Host quá cũ không trả lời ping session-0 thì số đo chỉ đứng ở
-Unknown — không gì thoái lui. Trên link có bật khôi phục, mạch đập cũng là phép
-thử sống: năm giây không có pong (và chỉ sau khi pong đầu tiên đã chứng minh host
-có trả lời) là kết nối bị thả xuống đường quay số lại sẵn có. Năm giây đó được đếm
-bằng thời gian vòng lặp link thực sự đang lắng nghe — `LinkPulse::Tick` chạy một lần
-mỗi vòng của `HostLink::PumpReady`, và phần một vòng tiêu tốn quá `kLinkWatchStepUs`
-được trả lại cho khoảng im lặng, nên một máy bị đóng băng không bao giờ bị nhầm
-thành một host đã câm.
+Sau khi được chấp nhận, link tự theo dõi tình trạng của chính nó
+(`core/session/LinkPulse`): một datagram `Ping` với session id 0 được gửi mỗi giây, beacon
+của host trả lời trên cùng connection mà không cần session, và timestamp phản hồi trở
+thành RTT đã làm mượt, còn id của các pong không quay lại tạo thành tỷ lệ mất gói.
+`ClassifyLinkQuality` tổng hợp hai giá trị này thành Good / Fair / Poor cho danh sách
+thiết bị và cho panel đã nhận phản hồi của host — một cửa sổ riêng trên desktop, trang
+connect trên Android và iOS. Các cửa sổ session không còn hiển thị chỉ số này; `HostLink`
+cung cấp nó qua `onPulse` và `Pulse()`. Vì một ping là ack-eliciting nên nó đồng thời đóng
+vai trò keepalive; timer keepalive thông thường chỉ còn ý nghĩa khi link đang ở trạng thái
+`Deciding`. Host phiên bản cũ không trả lời được ping session-0 sẽ để chỉ số ở mức
+Unknown, không gây ảnh hưởng nào khác. Trên một link đang phục hồi, pulse cũng là phép
+kiểm tra liveness: năm giây không nhận được pong, và chỉ tính sau khi đã có một pong đầu
+tiên xác nhận host có phản hồi, sẽ đưa connection vào đường kết nối lại sẵn có. Năm giây
+này được tính theo thời gian mà vòng lặp link thực sự theo dõi: `LinkPulse::Tick` chạy một
+lần mỗi vòng của `HostLink::PumpReady`, và phần thời gian một vòng vượt quá
+`kLinkWatchStepUs` được trừ khỏi khoảng im lặng, nên một máy bị treo không bị hiểu nhầm là
+host đã ngừng phản hồi.
 
-Viewer màn hình giờ tham gia cơ chế khôi phục đó như terminal xưa nay: link rơi
-hay câm lặng, hoặc phiên năm giây không nhận được gì, sẽ đỗ cửa sổ ở `Reattaching`
-(khung hình cuối vẫn treo, dòng trạng thái chuyển sang chữ đang nối lại) thay vì
-kết thúc nó. `HostLink::RequestRedial` ép quay số lại khi phía phiên nhận ra
-trước, và khi link được nhận vào lại viewer chạy lại `HELLO` với đúng client id
-cũ — host gắn lại slot viewer — rồi hình tiếp tục từ keyframe mới. Sau sáu mươi
-giây (`kViewerReattachGraceUs`) không vào lại được, cửa sổ kết thúc với lý do như
-thường lệ.
+Screen viewer hiện cũng sử dụng cơ chế recovery này, giống terminal từ trước: một link bị
+mất hoặc ngừng dữ liệu, hoặc một session năm giây không nhận được gì, sẽ đưa cửa sổ về
+trạng thái `Reattaching` (khung hình cuối vẫn hiển thị, dòng status chuyển sang nội dung
+đang reattach) thay vì kết thúc. `HostLink::RequestRedial` kích hoạt kết nối lại khi
+session phát hiện vấn đề trước, và khi link được chấp nhận lại, viewer thực hiện lại
+`HELLO` với cùng client id — host gắn lại vị trí của viewer — và việc stream tiếp tục từ
+keyframe mới. Sau sáu mươi giây (`kViewerReattachGraceUs`) mà không kết nối lại được, cửa
+sổ kết thúc kèm lý do như thông thường.
 
-Truy vấn nguồn (`QuerySources`) đi cùng loại link đó ở dạng một-lần, chờ-kết-quả.
-UI vẫn đăng ý định (phím, đổi cỡ, chấp nhận dấu vân tay) vào hàng đợi lệnh; key của
-host đổi thì link đỗ ở `Deciding` cho tới khi người dùng chấp nhận hay từ chối. Cửa
-sổ terminal không bao giờ tự phân tích escape sequence — `core/terminal` biến luồng
-byte thành lưới ô, cửa sổ chỉ vẽ ô và chuyển tiếp sự kiện phím. Hiện mỗi cửa sổ vẫn
-giữ link riêng; dùng chung một link đã được nhận vào cho mọi cửa sổ nhắm tới cùng
-host là bước kế tiếp dự kiến, và nó cắm vào `HostLink` — một registry cộng fan-out
-observer — chứ không phải thêm một bắt tay nữa.
+Phần truy vấn source (`QuerySources`) sử dụng cùng link đó theo hình thức một lần, dạng
+blocking. UI vẫn đẩy các yêu cầu (phím, resize, chấp nhận fingerprint) vào các hàng đợi
+lệnh. Một host key đã thay đổi sẽ giữ link ở trạng thái `Deciding` cho tới khi người dùng
+chấp nhận hoặc từ chối. Cửa sổ terminal không parse escape sequence: `core/terminal`
+chuyển byte stream thành lưới ô, còn cửa sổ chỉ vẽ ô và chuyển tiếp sự kiện phím. Hiện mỗi
+cửa sổ vẫn giữ link riêng; việc dùng chung một link đã được chấp nhận cho mọi cửa sổ trỏ
+tới cùng một host là bước tiếp theo đã dự kiến, và sẽ được bổ sung tại `HostLink` dưới
+dạng một registry cùng cơ chế fan-out cho observer, không phải thêm một handshake mới.
 
-## 6. Dò tìm
+## 6. Discovery
 
-Beacon trả lời `LIST_SOURCES` và `PING` bằng UDP thuần để máy quét quét được cả dải
-mạng mà không tốn 254 lần bắt tay TLS. Máy lạ nhận danh sách rỗng; danh sách nguồn
-thật chỉ lộ qua kết nối đã được cho vào. Câu trả lời đó còn mang theo những gì host
-làm được — có nhận thao tác không, có chia sẻ terminal không — trong các cờ ở header
-`SOURCE_LIST`, nên client biết trước khi mở bất kỳ cửa sổ nào rằng một chiếc điện
-thoại chỉ có thể xem. Host bản cũ, có từ trước khi có các cờ này, không bật cờ nào. Thiết bị gần đây, trạng thái online
-(ping/pong) và kết quả quét LAN đổ vào một danh sách thiết bị gộp, do
-`core/ui/DeviceRows` dựng và cả năm client đều hiển thị.
+Beacon trả lời `LIST_SOURCES` và `PING` bằng UDP không encrypt, để một scanner quét được
+cả subnet mà không cần 254 lần TLS handshake. Máy chưa được chấp nhận nhận về danh sách
+rỗng; danh sách source thật chỉ được cung cấp trên một connection đã được chấp nhận. Phản
+hồi này cũng cho biết host hỗ trợ những gì — có nhận input hay không, có share terminal
+hay không — thông qua các flag trong header `SOURCE_LIST`, nhờ đó client biết trước khi mở
+bất kỳ cửa sổ nào rằng một điện thoại chỉ có thể được xem. Host phát hành trước khi các
+flag này tồn tại sẽ không đặt flag nào. Các thiết bị gần đây, trạng thái online của chúng
+(probe ping/pong) và kết quả scan LAN được hợp nhất thành một danh sách thiết bị duy nhất,
+dựng bởi `core/ui/DeviceRows` và hiển thị trên cả năm client.
 
 ## 7. Dữ liệu trên đĩa
 
-Tất cả nằm trong thư mục Deskhub của người dùng (`~/.deskhub`,
-`%USERPROFILE%\.deskhub`): `host_key.pem` + `host_cert.pem` (danh tính),
-`known_hosts` (host mà máy này tin), `paired_devices` (máy mà host này cho vào),
-`auth_salt` (salt không bí mật), `ui-settings.txt`, `recent-devices.txt` (địa chỉ +
-passcode che đi), `portal-restore-token.txt` trên Linux (token của chính desktop cho
-những màn hình đã chọn trong hộp thoại chia sẻ của nó), và log theo từng lần chạy. I/O file nằm ở `platform/`; phần phân
-tích và cấu trúc dữ liệu nằm ở `core/` và có unit test.
+Mọi dữ liệu nằm trong thư mục Deskhub của người dùng (`~/.deskhub`,
+`%USERPROFILE%\.deskhub`): `host_key.pem` và `host_cert.pem` (identity), `known_hosts`
+(các host mà máy này trust), `paired_devices` (các máy mà host này chấp nhận), `auth_salt`
+(salt không bí mật cho verifier), `ui-settings.txt`, `recent-devices.txt` (địa chỉ và
+passcode đã che), `portal-restore-token.txt` trên Linux (token của chính desktop cho những
+màn hình đã chọn trong hộp thoại chia sẻ màn hình), cùng log theo từng lần chạy. Phần file
+I/O nằm trong `platform/`; phần parse và các cấu trúc dữ liệu nằm trong `core/` và có unit
+test.
 
-Tệp viewer gửi tới thì nằm ở chỗ khác hẳn: một thư mục do host chọn (`transfer_dir`
-trong `ui-settings.txt`, mặc định là `Deskhub` trong thư mục nhà của người dùng).
-`FileStore` ghi mỗi tệp thành `<tên>.deskhub-part` và chỉ đổi tên khi cả tệp đã tới
-với CRC-32 khớp, nên tệp ghi dở không bao giờ xuất hiện dưới tên thật, và
-`UniqueFileName` bảo đảm không có gì bị ghi đè. Tên đi trên dây được `SafeFileName`
-của `core/` chà sạch — dấu phân cách đường dẫn, byte điều khiển, ký tự Windows không
-nhận và tên thiết bị dành riêng đều bị loại — trước khi `platform/` chạm vào hệ tệp.
+File do viewer gửi được lưu ở nơi khác: một thư mục do host chọn (trường `transfer_dir`
+trong `ui-settings.txt`, mặc định là `Deskhub` trong thư mục home của người dùng).
+`FileStore` ghi từng file dưới tên `<name>.deskhub-part` và chỉ đổi tên sau khi toàn bộ
+file đã tới với CRC-32 khớp, nên một file ghi dở không bao giờ xuất hiện dưới tên thật;
+`UniqueFileName` bảo đảm không file nào bị ghi đè. Tên file trên đường truyền được
+`SafeFileName` trong `core/` xử lý — loại bỏ dấu phân cách đường dẫn, byte điều khiển, ký
+tự Windows không chấp nhận và các tên thiết bị dành riêng — trước khi `platform/` thao tác
+với filesystem.
 
-## 8. Kiểm thử
+## 8. Test
 
-| Bộ | Chạy | Phủ |
+| Suite | Phạm vi chạy | Nội dung kiểm tra |
 | --- | --- | --- |
-| `make test` | offline, không socket | toàn bộ `core/`: wire, framing, FEC, phiên, bộ giả lập VT, cài đặt, chuỗi, fuzz có cấu trúc |
-| `make test-platform` | socket loopback | bắt tay QUIC thật, SPAKE2 đầu-cuối, terminal host + viewer qua mạng, PTY với shell thật, lockout, approval |
-| `make test-integration` | loopback, thu/mã hoá giả | phiên host↔client đầy đủ: thương lượng, video qua mạng, input, cổng passcode/approval, chịu gói rác, và độ trễ dưới tải chéo — file transfer, terminal bị flood và phím gõ chạy cạnh stream đang phát, mỗi thứ bị chặn theo khoảng đứng tệ nhất quan sát được |
-| các target fuzz | 30 giây mỗi target ở mọi PR, 15 phút mỗi target hằng đêm | parser cho wire, H.264, ráp gói, byte terminal và chuỗi UI, cộng máy trạng thái phiên phía host và viewer |
-| `make test-perf` | bản release, offline + loopback | đo các đường nóng chứ không chỉ chạy chúng: `core_perf` cho phần C++ thuần, `platform_perf` cho QUIC thật qua loopback; cả hai fail theo số lần cấp phát trên mỗi đơn vị, chi phí khi đầu vào gấp 4, và độ lệch so với mốc ghi ngay trên máy đó |
+| `make test` | offline, không socket | toàn bộ `core/`: wire, framing, FEC, session, VT emulator, settings, chuỗi văn bản, structured fuzzing tất định |
+| `make test-platform` | socket loopback | QUIC handshake thật, SPAKE2 end-to-end, terminal host và viewer qua đường truyền, PTY với shell thật, lockout, approval |
+| `make test-integration` | loopback, capture/encode giả lập | session host↔client đầy đủ: negotiation, video qua đường truyền, input, kiểm soát bằng passcode và approval, khả năng chịu dữ liệu không hợp lệ, và độ trễ dưới tải chéo — một phiên truyền file, một terminal có lượng output lớn và các phím gõ chạy song song với một stream đang hoạt động, mỗi hạng mục được kiểm theo độ trễ lớn nhất quan sát được |
+| fuzz target | 30 giây mỗi target trên mỗi PR, 15 phút mỗi target hằng đêm | parser cho wire, H.264, reassembly, byte terminal và chuỗi UI, cùng các session state machine phía host và phía viewer |
+| `make test-perf` | bản release, offline và loopback | đo thực tế các hot path: `core_perf` bao phủ các đường thuần C++, `platform_perf` bao phủ QUIC thật qua loopback; cả hai fail theo số allocation trên mỗi đơn vị, theo chi phí ở mức input gấp 4 lần, và theo độ lệch so với baseline ghi trên chính máy đó |
 
-CI còn ép clang-format và clang-tidy (đều ghim phiên bản), SwiftLint `--strict`,
-Android Lint, actionlint + shellcheck, chạy cả ba bộ dưới ASan/TSan, CodeQL cho
-C++/Kotlin/Swift, quét gitleaks toàn bộ lịch sử, và coverage `core/` ≥ 90% dòng / 80%
-nhánh. Ba bộ test còn được biên dịch chéo và chạy trên Linux arm64, emulator Android và
-iOS Simulator, và một job Windows chạy thêm ba lần bộ integration mỗi vòng để săn lỗi
-hỏng bộ nhớ chập chờn, thứ chỉ lộ ra khoảng một lần trong ba; khung chết là nạn nhân của
-lỗi chứ không bao giờ là nguyên nhân, nên cú sập bắt buộc phải để lại một bản dump: binary
-test tự ghi minidump đầy đủ cho mọi exception còn đến được handler, và vì fastfail không
-đến được handler nào, mỗi job Windows còn bật Windows Error Reporting rồi chứng minh bằng
-một cú fail-fast cố ý rằng nó thật sự thu được, trước khi bộ test mà nó canh chạy. Lần
-chạy đêm lặp lại các bài kiểm thử tải hai lượt — một lượt dưới full page heap, một
-lượt với quiche được dựng cùng debug assertion và kiểm tra tràn số của Rust, cái bẫy duy
-nhất nhìn được vào bên trong quiche, vì ASan không đo mã Rust còn page heap chỉ canh
-heap. Các job release trên Linux và macOS còn chạy `core_perf` và
-`platform_perf` với hai cổng chặn cấp phát và độ tuyến tính (máy CI dùng chung không có
-mốc thời gian), và mỗi pull request có thêm một báo cáo perf-và-lag đăng thành một
-comment tự cập nhật: cả hai suite perf được A/B với commit gốc trên cùng một runner (độ
-lệch chỉ là cảnh báo, không bao giờ đánh trượt), số đo tích hợp dưới tải của chính bản
-pull request, và dòng coverage của `core/`.
+CI còn áp dụng thêm clang-format và clang-tidy (cả hai đều pin phiên bản), SwiftLint
+`--strict`, Android Lint, actionlint và shellcheck, các lượt chạy cả ba suite dưới ASan và
+TSan, CodeQL trên C++/Kotlin/Swift, một lượt gitleaks quét toàn bộ lịch sử, cùng yêu cầu
+coverage của `core/` đạt ≥ 90 % line và ≥ 80 % branch. Ba suite này còn được cross-build và
+chạy trên Linux arm64, một Android emulator và iOS Simulator. Ngoài ra, một job Windows
+chạy integration suite thêm ba lần mỗi vòng để tìm một lỗi memory corruption không thường
+xuyên, xuất hiện khoảng một lần trong ba lần chạy. Frame xảy ra crash là hệ quả của lỗi
+corruption chứ không phải nguyên nhân, nên cú crash bắt buộc phải để lại dump: binary test
+tự ghi minidump đầy đủ cho mọi exception tới được handler, và vì fastfail không tới được
+handler nào, mỗi job Windows còn bật Windows Error Reporting và xác nhận khả năng thu thập
+bằng một lần fail-fast có chủ đích trước khi suite tương ứng bắt đầu chạy. Bản nightly chạy
+lại các load test thêm hai lượt: một lượt dưới full page heap, và một lượt với quiche được
+build kèm Rust debug assertion và overflow check — đây là cơ chế duy nhất quan sát được
+bên trong quiche, vì ASan không instrument Rust còn page heap chỉ bảo vệ phần heap. Các
+job release trên Linux và macOS cũng chạy `core_perf` và `platform_perf` với hai tiêu chí
+allocation và scaling (trên runner dùng chung không có baseline thời gian). Mỗi pull
+request còn nhận một báo cáo perf-and-lag dưới dạng một comment tự cập nhật, gồm: kết quả
+A/B của cả hai perf suite so với base commit trên cùng runner (độ lệch chỉ là cảnh báo,
+không gây fail), các số liệu integration dưới tải từ bản build của pull request, và dòng
+coverage của core.
 
-## 9. Các quyết định đáng nhớ
+## 9. Những quyết định cần ghi nhớ
 
-- **Một phép dò năng lực trả về false có thể tắt hẳn cả một vòng điều khiển**: encoder
-  Media Foundation trả `false` cho `SetBitrate` mỗi khi MFT không có
-  `CODECAPI_AVEncCommonMeanBitRate`, và `ApplyFeedback` hoàn toàn đúng khi coi một lần từ
-  chối là "không commit gì". Trên MFT Intel Quick Sync báo `MeanBitRate: NOT SUPPORTED`,
-  hệ quả là host không bao giờ đổi bitrate: đo trên chính phần cứng này, 30 giây loss
-  29-40 % liên tục không sinh ra một quyết định `Bitrate` nào, nên thang chất lượng cũng
-  đứng im. Log khởi động ghi `NOT SUPPORTED` suốt thời gian đó mà không ai đọc nó thành
-  "khả năng thích ứng đã chết". `SetFps` và `RequestKeyFrame` trong cùng file vốn đã lùi
-  về `ReinitTransform()`; chỉ `SetBitrate` là bỏ cuộc, và giờ nó lùi về y như vậy —
-  `ConfigureTransform` ghi `MF_MT_AVG_BITRATE` từ `cfg` nên việc dựng lại sẽ áp bitrate
-  mới. Dựng lại tốn một IDR, nên đường `codecapi` trực tiếp vẫn được thử trước. Khi một
-  năng lực tuỳ thiết bị chặn mất một đầu vào điều khiển, hãy bắt buộc phải có đường lùi:
-  xuống cấp thành "chậm hơn" là một lựa chọn, âm thầm xuống cấp thành "không bao giờ"
-  thì không.
+- **Một capability probe trả về false có thể vô hiệu hoá cả một vòng điều khiển.** Encoder
+  Media Foundation trả về `false` cho `SetBitrate` mỗi khi MFT không cung cấp
+  `CODECAPI_AVEncCommonMeanBitRate`, và `ApplyFeedback` xử lý việc từ chối này đúng theo
+  nghĩa "không có thay đổi nào được áp dụng". Trên một MFT Intel Quick Sync báo
+  `MeanBitRate: NOT SUPPORTED`, kết quả là host không bao giờ thay đổi bitrate: đo trên
+  chính phần cứng đó, 30 giây với mức mất gói 29-40 % liên tục không tạo ra quyết định
+  `Bitrate` nào, và quality ladder cũng không thay đổi. Log khởi động hiển thị
+  `NOT SUPPORTED` trong suốt thời gian đó nhưng không được hiểu là cơ chế thích ứng đã
+  ngừng hoạt động. `SetFps` và `RequestKeyFrame` trong cùng file vốn đã có đường lui về
+  `ReinitTransform()`; `SetBitrate` là trường hợp duy nhất không có, và nay đã được bổ
+  sung tương tự: `ConfigureTransform` ghi `MF_MT_AVG_BITRATE` từ `cfg`, nên một lần dựng
+  lại sẽ áp dụng tốc độ mới. Việc dựng lại tiêu tốn một IDR, vì vậy đường `codecapi` trực
+  tiếp vẫn được thử trước. Khi một capability theo từng thiết bị kiểm soát một đầu vào
+  điều khiển, cần bắt buộc có đường lui: chấp nhận hiệu năng thấp hơn là một lựa chọn,
+  nhưng âm thầm vô hiệu hoá hoàn toàn thì không.
 
-- **Máy gửi không theo kịp trông y hệt một đường truyền sạch**: mọi đầu vào mà
-  `BitrateController` có — loss, RTT, tốc độ nhận — đều đến từ viewer, nên không gì
-  trong vòng lặp nói được "chính tôi đang tụt lại". Đo trên Pixel 4 làm host cho hai
-  viewer: frame rời encoder khi đã cũ 15 s trong lúc viewer báo 0 % loss và RTT 15 ms,
-  còn bộ điều khiển đọc đó là dư địa và bơm bitrate ngược lên trần 20 Mbps — bufferbloat
-  nằm ngay trong máy gửi, càng thấy đường truyền sạch thì càng bơm mạnh. Host giờ đo tuổi
-  frame ngay tại bước gửi và đưa vào cạnh các số của viewer: quá `kBacklogMs` thì lùi như
-  gặp 2 % loss, quá `kSevereBacklogMs` thì lùi như gặp 5 % loss, và cả hai đều chặn nhánh
-  tăng trong hai giây như thường lệ. Bitrate vẫn là biến điều khiển duy nhất, nên
-  `QualityLadder` tụt bậc theo sau và mức trần fps đi theo. Vòng điều khiển nào chỉ được
-  nuôi bằng số liệu từ đầu kia thì mù với đúng nửa đường ống mà nó sở hữu.
+- **Một bên gửi không theo kịp có biểu hiện giống hệt một đường truyền không lỗi.** Mọi
+  đầu vào của `BitrateController` — loss, RTT, tốc độ nhận — đều đến từ viewer, nên không
+  thành phần nào trong vòng điều khiển xác định được rằng chính bên gửi đang chậm. Đo trên
+  một Pixel 4 làm host cho hai viewer: frame rời encoder khi đã cũ 15 giây, trong khi
+  viewer báo 0 % loss và RTT 15 ms; controller hiểu đó là dư địa và nâng bitrate trở lại
+  mức trần 20 Mbps. Đây là hiện tượng bufferbloat bên trong bên gửi: đường truyền càng có
+  vẻ tốt thì lượng dữ liệu đẩy ra càng nhiều. Hiện host đo tuổi của frame tại bước gửi và
+  đưa giá trị này vào cùng các số liệu của viewer: vượt `kBacklogMs` thì giảm tương đương
+  mức 2 % loss, vượt `kSevereBacklogMs` thì tương đương 5 % loss, và cả hai đều chặn việc
+  tăng trở lại trong hai giây theo thông lệ. Bitrate vẫn là biến điều khiển duy nhất, nên
+  `QualityLadder` giảm theo sau và trần fps điều chỉnh tương ứng. Một vòng điều khiển chỉ
+  nhận dữ liệu từ đầu bên kia sẽ không quan sát được nửa pipeline mà nó trực tiếp quản lý.
 
-- **Chặn fps chỉ có tác dụng ở nơi thật sự có thứ gì đó bỏ frame**: bậc fps của thang
-  chất lượng là một yêu cầu, và mỗi nền tảng phải thực thi nó ở chỗ frame có thể bị vứt
-  đi. Windows và Linux chặn ngay tại capture bằng `FrameGate`; Android chặn đầu vào
-  MediaCodec bằng `max-fps-to-encoder`; macOS cấu hình lại khoảng cách frame của
-  ScreenCaptureKit. iOS thì không có chỗ nào: ReplayKit giao frame theo nhịp màn hình,
-  còn `VtEncoder::SetFps` chỉ đặt `kVTCompressionPropertyKey_ExpectedFrameRate` — một
-  gợi ý cho rate control, không bỏ frame nào cả. Đổi bậc ở đó chỉ chỉnh lại encoder chứ
-  không thay đổi số frame nó phải nuốt. `OfferVtFrame` giờ chạy cùng một `FrameGate` cho
-  cả hai app Apple, đặt sau khi cache dùng cho flush lúc màn hình tĩnh đã được làm mới,
-  để màn hình đứng yên vẫn còn frame để gửi lại. Khi một núm vặn tồn tại trên mọi nền
-  tảng, hãy kiểm tra từng nơi làm gì với nó trước khi tin vào thang chất lượng.
+- **Giới hạn fps chỉ có tác dụng ở nơi thực sự có frame bị loại bỏ.** Nấc fps của ladder
+  là một yêu cầu, và mỗi nền tảng phải thực hiện nó tại một điểm có thể bỏ frame. Windows
+  và Linux thực hiện tại bước capture bằng `FrameGate`; Android giới hạn đầu vào của
+  MediaCodec bằng `max-fps-to-encoder`; macOS cấu hình lại frame interval của
+  ScreenCaptureKit. iOS không có điểm tương ứng: ReplayKit cung cấp frame theo tốc độ màn
+  hình, còn `VtEncoder::SetFps` chỉ đặt `kVTCompressionPropertyKey_ExpectedFrameRate`, vốn
+  là một gợi ý cho rate control và không loại bỏ frame nào. Việc đổi nấc ở đó chỉ cấu hình
+  lại encoder mà không thay đổi số frame nó phải xử lý. Hiện `OfferVtFrame` chạy cùng
+  `FrameGate` đó cho cả hai app Apple, sau khi cache idle-flush được làm mới để một màn
+  hình tĩnh vẫn còn frame để gửi lại. Khi một tham số tồn tại trên mọi nền tảng, cần kiểm
+  tra cách từng nền tảng xử lý nó trước khi dựa vào ladder.
 
-- **Bộ điều tốc gửi phải luôn cao hơn hẳn tốc độ ra của chính encoder**: `Pacer::Gate`
-  ngủ ngay trên thread mà `SendEncodedFrame` đang chạy, và trên Android đó là vòng drain
-  của MediaCodec — đúng vòng phải gọi `releaseOutputBuffer` trước khi encoder giao được
-  frame kế tiếp. Vì vậy điều tốc quyết định tốc độ drain, không chỉ tốc độ trên dây, trong
-  khi VirtualDisplay vẫn bơm frame mới vào theo nhịp màn hình. Việc siết
-  `kPacingRateMultiple` từ 2 xuống 1.2 để làm mượt burst đã được đo trên Pixel 4: thời
-  gian gửi mỗi frame tăng từ 20 ms lên 63 ms trung vị, và hàng đợi encoder phình vô hạn —
-  `enc_lat_ms` vượt 46 s chỉ sau 100 s, viewer tụt lại 4.6 s. Với giá trị 2, cùng kịch
-  bản giữ `enc_lat_ms` ở 0. Khoảng dư đó không phải phần thừa để thu hồi; nó là thứ giữ
-  cho đường mã hoá rút nhanh hơn tốc độ nạp vào. Muốn giảm burst thì dùng bộ đệm socket
-  hoặc tách điều tốc khỏi thread drain, tuyệt đối không siết con số này.
+- **Send pacer phải cao hơn đáng kể so với tốc độ đầu ra của encoder.** `Pacer::Gate` chờ
+  trên chính thread mà `SendEncodedFrame` đang chạy, và trên Android đó là vòng drain của
+  MediaCodec, tức vòng phải gọi `releaseOutputBuffer` trước khi encoder có thể cung cấp
+  frame tiếp theo. Do đó pacing quyết định cả tốc độ drain chứ không riêng tốc độ trên
+  đường truyền, trong khi VirtualDisplay vẫn tiếp tục đưa frame mới vào theo tốc độ màn
+  hình. Việc giảm `kPacingRateMultiple` từ 2 xuống 1.2 nhằm làm mượt các đợt gửi dồn đã
+  được đo trên một Pixel 4: mức burst trên mỗi frame tăng từ 20 ms lên 63 ms ở giá trị
+  trung vị, và lượng tồn đọng của encoder tăng không giới hạn — `enc_lat_ms` vượt 46 giây
+  trong 100 giây, và viewer chậm 4,6 giây. Ở mức 2, cùng lượt chạy giữ `enc_lat_ms` ở 0.
+  Khoảng dư này không phải phần có thể cắt giảm; nó là điều kiện để pipeline encode được
+  giải phóng nhanh hơn tốc độ nạp vào. Cần xử lý các đợt gửi dồn bằng socket buffer hoặc
+  bằng cách chuyển pacing ra khỏi thread drain, không phải bằng cách giảm giá trị này.
 
-- **Bộ perf gate trên chi phí, nên cần một gate thứ hai canh kết quả**: `core_perf` đo
-  số lần cấp phát trên mỗi packet và cách thời gian giãn theo input, và mọi workload
-  reassembler của nó đều pass trong khi một packet mất làm mất 22 % số frame nguyên vẹn
-  trên đường truyền thật. Nó không thể bắt được: vứt video tốt còn *rẻ hơn* giải mã nó,
-  nên chính sách hỏng lại ghi điểm cao hơn ở mọi con số bộ suite theo dõi.
-  `LossGoodputTests` là bộ đi kèm, fail khi code làm ít việc hơn mức đáng phải làm — một
-  đường truyền mất gói đuôi mô phỏng với vòng truyền thật, gate trên tỉ lệ frame nhận đủ
-  packet mà thực sự tới được decoder, và trên khoảng cách dài nhất giữa hai frame được
-  giao. Cả hai đều độc lập với máy, nên đúng như nhau trên laptop, CI runner hay điện
-  thoại. Hãy nghĩ tới goodput gate mỗi khi một chính sách có thể "thành công" bằng cách
-  vứt bớt việc.
+- **Perf suite kiểm theo chi phí, nên cần thêm một tiêu chí kiểm theo kết quả.**
+  `core_perf` đo số allocation trên mỗi packet và cách thời gian tăng theo input, và toàn
+  bộ workload reassembler của nó đều đạt trong khi một packet bị mất đang làm loại bỏ 22 %
+  số frame còn nguyên vẹn trên một đường truyền thực tế. Suite này không thể phát hiện vấn
+  đề đó: loại bỏ video hợp lệ có chi phí *thấp hơn* việc decode nó, nên chính sách sai lại
+  đạt điểm tốt hơn trên mọi chỉ số mà suite theo dõi. `LossGoodputTests` là bài kiểm bổ
+  sung, fail khi mã thực hiện ít công việc hơn mức cần thiết: nó mô phỏng một đường truyền
+  mất gói ở phần đuôi với round trip thực tế, và kiểm theo tỷ lệ số frame có đủ packet mà
+  thực sự tới được decoder, cùng khoảng trống dài nhất giữa hai frame được giao. Cả hai
+  đều độc lập với phần cứng, nên kết quả nhất quán trên laptop, CI runner và điện thoại.
+  Khi một chính sách có thể "thành công" bằng cách bỏ bớt công việc, cần bổ sung một tiêu
+  chí kiểm theo goodput.
 
-- **Mất một packet chỉ tốn một frame, không phải cả khung hình tới keyframe kế tiếp**:
-  trước đây bộ ghép lại bật `waitingForIdr_` với mọi lần mất, nên chỉ một packet thiếu
-  là vứt sạch mọi frame *nguyên vẹn* phía sau cho tới khi có IDR mới. Đo trên host điện
-  thoại qua Wi-Fi, 64 frame thực sự thiếu đã kéo theo 381 frame bị vứt — 6.4 MB video
-  giải mã được bị bỏ, hình đứng trung vị 146 ms và có lúc tới 1.4 s. Giờ chỉ frame thiếu
-  bị bỏ; các frame sau đi thẳng tới decoder, nơi che khuyết tham chiếu đã mất, trong khi
-  `InvalidateRef` báo cho host frame nào hỏng và yêu cầu keyframe sửa lại. Vài vệt
-  macroblock ngắn là cái giá cố ý trả để không đứng hình. `waitingForIdr_` giữ lại đúng
-  trường hợp nó đúng: viewer vào giữa luồng chưa có tham chiếu nào nên phải đợi IDR đầu.
+- **Một packet bị mất chỉ nên làm mất một frame, không phải toàn bộ hình ảnh cho tới
+  keyframe tiếp theo.** Reassembler trước đây bật `waitingForIdr_` ở mọi lần mất gói, nên
+  một packet thiếu làm loại bỏ mọi frame *hoàn chỉnh* theo sau cho tới khi có IDR mới. Đo
+  trên một host là điện thoại qua Wi-Fi, điều này biến 64 frame thực sự không hoàn chỉnh
+  thành 381 frame bị loại bỏ: 6,4 MB video có thể decode bị bỏ đi, và hình ảnh đứng yên
+  trung vị 146 ms, cao nhất là 1,4 giây mỗi lần. Hiện chỉ frame không hoàn chỉnh bị loại
+  bỏ; các frame sau đó được đưa thẳng tới decoder, decoder che phần reference bị thiếu
+  trong khi `InvalidateRef` thông báo frame lỗi cho host và yêu cầu keyframe khắc phục.
+  Một vài vệt macroblock ngắn là chi phí chấp nhận được để tránh đứng hình.
+  `waitingForIdr_` vẫn được giữ cho trường hợp duy nhất mà nó đúng: một viewer tham gia
+  giữa chừng không có reference nào và phải chờ IDR đầu tiên.
 
-- **Cửa sổ chờ phải dài hơn một vòng truyền lại, nếu không NACK chỉ là trang trí**:
-  trước đây một frame chỉ được cho hai chu kỳ khung hình (33 ms ở 60 fps) trước khi bị
-  coi là mất, trong khi RTT đo được trên cùng đường là 24-49 ms. NACK gửi đi và câu trả
-  lời về sau khi frame đã bị vứt — thấy rõ qua `late_ms_avg=24` với 87 packet mỗi giây
-  rơi vào những frame không còn tồn tại. `StallTimeoutUs` giờ lấy giá trị lớn hơn giữa
-  cửa sổ theo nhịp khung hình và một vòng rưỡi RTT, vẫn bị chặn bởi hard timeout, nên
-  việc yêu cầu truyền lại chỉ đáng giá trên đúng những đường cần nó.
+- **Khoảng chờ trước khi coi là mất gói phải dài hơn một lần retransmit, nếu không NACK
+  không có tác dụng.** Trước đây một frame chỉ được chờ hai khoảng frame (33 ms ở 60 fps)
+  trước khi bị coi là mất, trong khi RTT đo được trên cùng đường truyền là 24-49 ms. NACK
+  được gửi đi nhưng phản hồi về tới nơi sau khi frame đã bị loại bỏ, thể hiện qua
+  `late_ms_avg=24` cùng 87 packet mỗi giây thuộc về những frame không còn tồn tại. Hiện
+  `StallTimeoutUs` lấy giá trị lớn hơn giữa khoảng chờ theo pacing và một lần rưỡi round
+  trip, vẫn bị giới hạn bởi timeout cứng, nên việc yêu cầu retransmit chỉ diễn ra trên
+  những đường truyền thực sự cần.
 
-- **`FileHost` không bao giờ gửi khi đang giữ khoá của chính nó**: vòng lặp phục vụ QUIC
-  chạy `QuicEndpoint::Poll` dưới `SessionTransport::sendMutex_`, và một kết nối đóng lại ở
-  đó sẽ gọi thẳng ngược vào `FileHost::OnPeerGone`, nơi lấy `FileHost::mutex_`. Nghĩa là
-  thứ tự `sendMutex_ -> mutex_` đã bị tầng vận chuyển ấn định. Bất kỳ đường nào lấy
-  `mutex_` trước rồi mới gửi — `FileReceiver` phát một accept, một ack hay một cancel qua
-  `hooks.send` — đều khép kín vòng lặp, và TSan bắt được nó dưới dạng lock-order inversion
-  giữa vòng lặp nhận và một luồng UI gạt `SetAccepting(false)` khi đang có transfer chạy.
-  Vì vậy các bản ghi mà receiver phát ra được xếp vào `outbox_` dưới `mutex_` rồi chỉ gửi
-  sau khi đã nhả khoá, với `outboxMutex_` giữ suốt cả hai nửa để phía bên kia vẫn nhận
-  đúng thứ tự chúng được sinh ra. Riêng `OnPeerGone` thì không thể gửi gì: nó vốn đã chạy
-  dưới `sendMutex_`, nên nó bỏ đi những gì đã xếp hàng.
+- **Performance suite kiểm theo số allocation và hình dạng chi phí, không theo mili-giây.**
+  Ba test suite được build ở chế độ debug, và CI chạy lại chúng dưới ASan, TSan và
+  coverage, nơi một ngưỡng thời gian thực tế đo sanitizer chứ không đo mã nguồn. Vì vậy
+  `core_perf` (preset release, `make test-perf`) fail theo hai tiêu chí độc lập với phần
+  cứng: số allocation trên mỗi packet, frame hoặc KB, đếm bằng cách thay thế `operator
+  new` toàn cục; và một dòng `-scaling` có thời gian tăng nhanh hơn input rất nhiều. Phần
+  đo thời gian được giữ như một phép so sánh với `out/perf/baseline.txt`, ghi theo từng
+  máy bằng `make perf-baseline` và không được commit. Cách phân chia này cho phép suite
+  phát hiện một hồi quy dạng "reassembler nay copy mỗi mảnh hai lần" trên laptop, CI runner
+  và điện thoại như nhau, đồng thời vẫn in ra ns trên mỗi đơn vị và MB/s cho những đường mà
+  bản thân con số là thông tin cần thiết. CI chạy hai tiêu chí độc lập với phần cứng này
+  trên các job release Linux và macOS; Windows chỉ build binary, vì deque của MSVC allocate
+  một block cho mỗi phần tử với kích thước lớn hơn 16 byte, nên cùng một đoạn mã có số
+  allocation khác. Pull request còn nhận một phép so sánh thời gian không bị ảnh hưởng bởi
+  nhiễu của runner dùng chung: base commit và pull request được đo trên cùng một runner,
+  dung sai 50 %, chỉ ở mức cảnh báo. `platform_perf` mở rộng các tiêu chí này sang QUIC
+  thật qua loopback, nơi thời gian thực tế phản ánh nhịp của service loop — hạn mức rút
+  stream 64 KiB nhân với nhịp poll 1 ms — nên một hạn mức bị thu hẹp, một thao tác drain
+  không còn tuyến tính, hoặc một allocation mới trong vòng poll đều xuất hiện dưới dạng một
+  bước nhảy, dù chi phí CPU của cùng khối lượng công việc gần như không đổi.
 
-- **Bộ đo hiệu năng chặn theo số lần cấp phát và hình dạng chi phí, không theo mili-giây**:
-  cả ba bộ test đều dựng bản debug, và CI còn chạy lại chúng dưới ASan, TSan và coverage —
-  nơi một hạn mức thời gian đo chính sanitizer chứ không đo mã. Vì vậy `core_perf` (preset
-  release, `make test-perf`) fail theo hai thứ độc lập với máy — số lần cấp phát trên mỗi
-  gói, mỗi khung hình hay mỗi KB, đếm bằng cách thay `operator new` toàn cục, và một dòng
-  `-scaling` có thời gian tăng nhanh hơn hẳn đầu vào — còn phần đo thời gian chỉ so với
-  `out/perf/baseline.txt`, ghi riêng cho từng máy bằng `make perf-baseline` và không bao
-  giờ commit. Chính cách chia đó cho phép bộ đo bắt được hồi quy kiểu "khâu ghép gói giờ
-  chép mỗi mảnh hai lần" trên laptop, trên máy CI hay trên điện thoại như nhau, mà vẫn in
-  ra ns mỗi đơn vị và MB/s cho những đường mà bản thân con số mới là thứ ta cần. CI chạy
-  đúng hai cổng chặn độc-lập-với-máy đó trên các job release Linux và macOS; Windows chỉ
-  build binary, vì `deque` của MSVC cấp phát một khối cho mỗi phần tử lớn hơn 16 byte,
-  nên cùng đoạn mã lại ra số lần cấp phát khác. Pull request còn được so thời gian theo
-  cách mà nhiễu của runner dùng chung không phá được — commit gốc và pull request đo trên
-  cùng một runner, dung sai 50%, chỉ cảnh báo. `platform_perf` kéo dài đúng các cổng chặn
-  đó xuống QUIC thật qua loopback, nơi thời gian đo chính là nhịp của vòng service —
-  budget drain stream 64 KiB nhân với tick poll 1 ms — nên budget bị thu nhỏ, vòng drain
-  mất tuyến tính, hay một cấp phát mới trong vòng poll đều hiện thành cú nhảy, dù chi phí
-  CPU của cùng khối việc gần như không đổi.
+- **`FileHost` không gửi dữ liệu khi đang giữ lock của chính nó.** QUIC service loop chạy
+  `QuicEndpoint::Poll` dưới `SessionTransport::sendMutex_`, và một connection đóng lại tại
+  đó sẽ gọi trực tiếp vào `FileHost::OnPeerGone`, hàm này lấy `FileHost::mutex_`. Như vậy
+  thứ tự `sendMutex_ -> mutex_` đã được transport quy định. Bất kỳ đường nào lấy `mutex_`
+  trước rồi mới gửi — `FileReceiver` phát ra accept, ack hoặc cancel qua
+  `hooks.send` — đều tạo thành chu trình khoá, và TSan phát hiện đây là lock-order
+  inversion giữa vòng nhận và một thread UI đang chuyển `SetAccepting(false)` trên một
+  phiên truyền đang hoạt động. Vì vậy các record do receiver phát ra được đưa vào `outbox_`
+  dưới `mutex_` và chỉ được gửi sau khi nhả mutex, với `outboxMutex_` giữ xuyên suốt cả hai
+  giai đoạn để peer nhận được chúng theo đúng thứ tự phát sinh. `OnPeerGone` không gửi dữ
+  liệu: nó vốn đã chạy dưới `sendMutex_`, nên nó loại bỏ những gì đã xếp hàng.
 
-- **Client dòng lệnh là mặt tiền thứ tư, không phải bản cài đặt thứ hai**: nó phân tích cờ
-  trong `core/cli`, rồi điều khiển đúng những mảnh mà app để bàn điều khiển — `SharingHost`
-  để làm host, `ScreenViewer` để xem, `TerminalViewer` để mở shell. Thứ duy nhất của riêng
-  nó là cửa sổ: X11 + EGL trên Linux, còn trên Windows là chính `RunViewer` của app để bàn.
-  Đó là lý do phần `cpp/` của mỗi client được tách thành thư viện tĩnh
-  (`deskhub_linux_core`, `deskhub_win_core`, `deskhub_win_view`, `deskhub_mac_core`) và
-  phần giao diện nằm bên trên — tách như vậy để CLI link được đường ống media mà không phải
-  kéo theo GTK hay wxWidgets.
+- **Command line client là giao diện thứ tư, không phải một bản triển khai thứ hai.** Nó
+  parse cờ trong `core/cli`, sau đó điều khiển đúng các thành phần mà app desktop điều
+  khiển: `SharingHost` để host, `ScreenViewer` để xem, `TerminalViewer` để mở shell. Phần
+  duy nhất thuộc về riêng nó là cửa sổ hiển thị: X11 và EGL trên Linux, chính `RunViewer`
+  của app desktop trên Windows. Đây là lý do cây `cpp/` của mỗi client là một thư viện tĩnh
+  (`deskhub_linux_core`, `deskhub_win_core`, `deskhub_win_view`, `deskhub_mac_core`) và mã
+  GUI nằm bên trên: cách phân chia này cho phép CLI link phần media pipeline mà không phải
+  link GTK hay wxWidgets.
 
-- **`preflight` chỉ chạy khi thật sự có màn hình để chụp**: mọi client dùng nó để kiểm tra
-  đường chụp hình — portal xdg trên Linux, quyền Screen Recording trên macOS, thiết bị
-  D3D11 trên Windows. Một phiên chia sẻ chỉ có shell thì không cần gì trong số đó, nên hỏi
-  vẫn hỏi làm `share --terminal` trên máy không màn hình báo "quyền chụp màn hình đã mất".
-  `HostEngine::Start` nay bỏ qua nó khi danh sách nguồn rỗng.
+- **`preflight` chỉ chạy khi có màn hình cần capture.** Mọi client dùng nó để kiểm tra
+  đường capture: xdg portal trên Linux, quyền Screen Recording trên macOS, một thiết bị
+  D3D11 trên Windows. Một phiên share chỉ gồm shell không cần các điều kiện đó, nên việc
+  kiểm tra bắt buộc đã khiến `share --terminal` trên một máy không có màn hình báo lỗi
+  thiếu permission screen-capture. Hiện `HostEngine::Start` bỏ qua bước này khi danh sách
+  source rỗng.
 
-- **Host chỉ chia sẻ shell mà không có màn hình vẫn phải sống**: vòng lặp mạng kết thúc
-  phiên khi không còn nguồn nào sống, mà phiên chỉ có shell thì theo định nghĩa là không có
-  nguồn nào. `keepAlive` nay trả lời theo ý định của người gọi (`ShareOptions::terminal`),
-  chứ không theo con trỏ `TerminalHost` vốn chỉ được gắn vào sau khi vòng lặp đã chạy.
+- **Một host có shell nhưng không có màn hình vẫn tiếp tục hoạt động.** Net loop kết thúc
+  session khi không còn source nào hoạt động, mà một phiên share chỉ có terminal thì theo
+  định nghĩa không có source. `keepAlive` được xác định từ ý định của bên gọi
+  (`ShareOptions::terminal`), không phải từ con trỏ `TerminalHost` vốn chỉ được gắn sau khi
+  vòng lặp đã chạy.
 
-- **Cổng khung hình đếm tới một mốc hạn, không đếm từ khung nó vừa giữ**: một compositor
-  đưa sang 40 fps trong khi mục tiêu là 30 fps thì hầu hết các mốc 33 ms đều không có
-  khung nào rơi đúng vào, nên một cổng chỉ hỏi "khung này có cách khung tôi giữ đủ xa
-  không?" sẽ loại một khung xen kẽ và dừng ở 20 fps — vừa dưới mục tiêu, vừa lởm chởm,
-  tức là giật hình chứ không phải luồng chậm hơn. `FrameGate` thay vào đó mang theo một
-  mốc hạn chạy đều: mỗi lần nhận khung, mốc tiến đúng một chu kỳ, nên phần dư được giữ
-  lại và 40 vào cho ra 30. Capture chậm hơn mục tiêu không bao giờ bị chặt bớt, và một
-  mốc hạn đã tụt lại sau thời gian thực sẽ đồng bộ lại thay vì tích lũy, nên một quãng
-  lặng không mua được một cú dồn khung về sau.
+- **Frame gate đếm tới một thời điểm đến hạn, không đếm từ frame gần nhất được giữ lại.**
+  Một compositor cung cấp 40 fps trong khi mục tiêu là 30 fps sẽ không có frame tại phần
+  lớn các mốc 33 ms, nên một gate chỉ kiểm tra khoảng cách so với frame vừa giữ sẽ loại bỏ
+  cứ một frame lại một frame và ổn định ở 20 fps: thấp hơn mục tiêu và không đều, tức là
+  judder chứ không phải một stream chậm hơn. `FrameGate` thay vào đó duy trì một thời điểm
+  đến hạn chạy dần: mỗi lần chấp nhận sẽ đẩy thời điểm này lên đúng một khoảng, nên phần dư
+  được giữ lại và 40 frame đầu vào cho ra 30 frame đầu ra. Một lượt capture chậm hơn mục
+  tiêu không bị lược bớt, và một thời điểm đến hạn đã chậm hơn thời gian thực sẽ đồng bộ
+  lại thay vì tích luỹ, nên một khoảng thời gian ít hoạt động không tạo ra đợt dồn về sau.
 
-- **Host Linux encode trên thread riêng, và đưa cho thread đó khung hình nhỏ chứ không
-  phải khung lớn**: encode ngay trong callback `process` của PipeWire từng ghìm capture
-  xuống `1000 / enc_ms` fps và biến mọi dao động thời gian encode thành rung nhịp khung
-  hình phía client. Giờ encode chạy trên thread riêng, được nạp qua `FrameMailbox`, một
-  hàng đợi một-chỗ kiểu mới-nhất-thắng — khi encoder chậm chân, frame mới nhất thắng và
-  frame cũ được đếm chứ không xếp hàng. Thứ đi qua hàng đợi là khung hình đã thu nhỏ về
-  kích thước encode, còn khoảng một phần bảy số byte. Chuyển khung nguyên độ phân giải
-  qua đó tốn hơn nhiều so với bản thân phép copy: 20 MB cache line bị bỏ lại ở trạng
-  thái dirty trong core capture, và core encode phải kéo sang, đo được 16 ms so với
-  3,4 ms cho cùng phép đọc trên vùng nhớ nó không sở hữu. Thread capture đằng nào cũng
-  phải chạm mỗi pixel nguồn đúng một lần, nên đó là chỗ đúng để tiêu lượt duyệt duy
-  nhất ấy. Frame dma-buf vẫn encode tại chỗ: compositor tái dùng bộ nhớ của chúng ngay
-  khi callback trả về nên chúng không sống lâu hơn callback, và VA-API đằng nào cũng
-  thu nhỏ chúng trên GPU.
-- **Host Linux chọn encoder theo nơi frame nằm, không phải theo thứ được cài**: frame
-  dma-buf đi vào VA-API, nơi import được zero-copy trên đúng GPU đã tạo ra nó; frame
-  mapped (CPU) đi vào NVENC khi có driver NVIDIA, vì trên desktop do GPU NVIDIA render,
-  compositor thương lượng lại screencast về shared memory, và việc encode khi đó thuộc
-  về card lấy được pixel thẳng từ bộ nhớ hệ thống. `HwEncoder` đưa ra lựa chọn đó mỗi
-  lần dựng lại encoder, và một frame khác loại đến sau sẽ trả về `false` — đó là tín
-  hiệu để dựng lại.
-- **Phần thu nhỏ ảnh trước NVENC là của chúng ta, không phải của swscale**: NVENC nhận
-  pixel packed 32-bit nhưng không tự resize, còn ảnh capture là nguyên độ phân giải màn
-  hình. `libswscale` đo được 9,2 ms cho 3440x1440 → 1280x534 — khoảng 2 GB/s, kém băng
-  thông bộ nhớ của máy này cả một bậc, vì rescale packed-RGB rơi ra ngoài các đường đã
-  tối ưu của nó. `RgbDownscale` trong `core/` là một bộ trung bình theo vùng viết đúng
-  cho hình dạng này: mỗi pixel nguồn một lần nạp 32-bit, cộng dồn số nguyên, 4,0 ms cho
-  cùng khung hình đó, và khử răng cưa đúng cách thay vì một mẫu bilinear như swscale.
-  Tổng chi phí NVENC cho cả khung rơi vào ~5 ms, nên 60 fps còn dư chỗ.
-- **Các con số hiệu năng chỉ có ý nghĩa khi đo trên bản release**: `make build-linux`
-  và `make run-linux` cấu hình preset `x64-debug`, tức `-O0`, trong khi đường encode giờ
-  là số học pixel nằm trong `core/`. Cùng một khung hình tốn ~19 ms ở đó so với ~5 ms từ
-  `make release-linux`. Một báo cáo giật hình đo trên binary debug là đang đo kiểu build.
+- **Host Linux encode trên thread riêng và nhận frame đã được thu nhỏ, không phải frame
+  đầy đủ.** Việc encode ngay trong callback `process` của PipeWire giới hạn capture ở mức
+  `1000 / enc_ms` fps và biến mọi dao động thời gian encode thành dao động nhịp frame ở
+  phía client. Hiện phần encode chạy trên thread riêng, nhận dữ liệu qua `FrameMailbox`,
+  một hàng đợi một ô theo nguyên tắc giữ frame mới nhất: khi encoder chậm lại, frame mới
+  nhất được giữ và frame cũ được đếm thay vì xếp hàng. Dữ liệu đi qua hàng đợi là frame đã
+  downscale về kích thước encode, tương đương khoảng một phần bảy số byte. Việc copy frame
+  ở độ phân giải đầy đủ tốn kém hơn nhiều so với bản thân thao tác copy: 20 MB cache line ở
+  trạng thái dirty trong core thực hiện capture, mà core thực hiện encode sau đó phải nạp
+  về, đo được 16 ms so với 3,4 ms cho cùng lượng dữ liệu mà nó sở hữu. Thread capture dù
+  sao cũng phải xử lý mỗi pixel nguồn một lần, nên đây là vị trí phù hợp để thực hiện lượt
+  quét duy nhất đó. Frame dma-buf vẫn được encode tại chỗ: compositor tái sử dụng vùng nhớ
+  của chúng ngay khi callback trả về nên chúng không tồn tại lâu hơn callback, và VA-API
+  thực hiện scale trực tiếp trên GPU.
+- **Host Linux chọn encoder theo vị trí của frame, không theo phần mềm đã cài.** Một frame
+  dma-buf được chuyển tới VA-API, thành phần có thể import nó theo cơ chế zero-copy trên
+  chính GPU đã tạo ra nó. Một frame đã map vào bộ nhớ CPU được chuyển tới NVENC khi có
+  driver NVIDIA, vì trên một desktop do GPU NVIDIA render, compositor sẽ thương lượng lại
+  screencast sang shared memory, và khi đó việc encode thuộc về card có thể đọc pixel trực
+  tiếp từ bộ nhớ hệ thống. `HwEncoder` đưa ra quyết định này ở mỗi lần dựng lại encoder, và
+  một frame thuộc loại còn lại tới sau sẽ trả về `false`, đây là tín hiệu cần dựng lại.
+- **Phần downscale trước NVENC do dự án tự triển khai, không dùng swscale.** NVENC nhận
+  pixel 32-bit dạng packed nhưng không thực hiện resize, trong khi dữ liệu capture là màn
+  hình ở độ phân giải đầy đủ. `libswscale` đo được 9,2 ms cho 3440x1440 → 1280x534, tương
+  đương khoảng 2 GB/s, thấp hơn băng thông bộ nhớ của máy này một bậc độ lớn, vì phép
+  rescale RGB dạng packed không nằm trong các đường đã tối ưu của nó. `RgbDownscale` trong
+  `core/` là phép trung bình theo vùng viết riêng cho trường hợp này: mỗi pixel nguồn một
+  lần load 32-bit, cộng dồn bằng số nguyên, đo được 4,0 ms cho cùng frame, và cho kết quả
+  khử răng cưa đúng thay vì phép lấy mẫu bilinear một tap của swscale. Chi phí NVENC cho cả
+  frame vào khoảng 5 ms, nên 60 fps vẫn còn dư địa.
+- **Số liệu hiệu năng chỉ có ý nghĩa khi lấy từ bản release.** `make build-linux` và
+  `make run-linux` cấu hình preset `x64-debug`, tức `-O0`, trong khi đường encode hiện là
+  phép tính trên pixel nằm trong `core/`. Cùng một frame tốn khoảng 19 ms ở đó so với
+  khoảng 5 ms từ `make release-linux`. Một báo cáo judder đo trên binary debug thực chất
+  đang đo loại build.
 
-- **Viewer Apple hiển thị video theo PTS trên một control timebase, và pacer không bao
-  giờ tin chính nó**: hiển thị mỗi frame ngay lúc nó đến khiến jitter Wi-Fi hiện ra
-  thành giật hình trong khi mọi con số độ trễ vẫn đẹp — nhịp không phải là độ trễ.
-  `VideoPacer` (core, test offline được) ánh xạ PTS của host sang giờ hiển thị local
-  theo đúng cách metric e2e làm — minimum theo cửa sổ của `arrival − pts` — cộng một
-  khoảng đệm ~33 ms để jitter được trả từ đó, và `VtDecoder` lái control timebase của
-  `AVSampleBufferDisplayLayer` theo nó, chỉ resync khi lệch quá 250 ms. Một cú nhảy pts
-  quá 2 s được đọc là stream mới chứ không phải jitter, nên ánh xạ được dựng lại thay
-  vì đứng hình suốt một cửa sổ. Vì không thể chứng minh từ đây rằng renderer tôn trọng
-  timebase ngoài trên mọi phiên bản OS, decoder tự canh lưng mình: một chuỗi frame bị
-  hàng đợi renderer đầy nuốt mất sẽ lật về display-immediately và flush — thà mất phần
-  mượt còn hơn mất hình.
+- **Viewer trên Apple điều tiết video theo PTS trên một control timebase, và pacer không
+  tự tin tưởng kết quả của chính nó.** Việc hiển thị mọi frame ngay khi nhận được làm
+  jitter thời điểm đến của Wi-Fi biểu hiện thành judder, trong khi mọi chỉ số latency vẫn
+  ở mức tốt: nhịp hiển thị không phải là latency. `VideoPacer` (thuộc core, có test
+  offline) ánh xạ PTS của host sang thời gian hiển thị cục bộ theo cùng cách mà chỉ số e2e
+  sử dụng — giá trị nhỏ nhất của `arrival − pts` trong một cửa sổ trượt — cộng thêm khoảng
+  dẫn khoảng 33 ms để bù jitter, và `VtDecoder` điều khiển một control timebase của
+  `AVSampleBufferDisplayLayer` từ giá trị đó, chỉ đồng bộ lại khi lệch quá 250 ms. Một bước
+  nhảy pts lớn hơn 2 giây được hiểu là một stream mới chứ không phải jitter, nên phép ánh
+  xạ được khởi tạo lại thay vì đứng yên trong một khoảng. Vì không thể xác nhận từ phía
+  ứng dụng rằng renderer tuân thủ một timebase bên ngoài trên mọi phiên bản OS, decoder tự
+  kiểm tra: một chuỗi frame đã điều tiết bị hàng đợi renderer đầy loại bỏ sẽ khiến nó
+  chuyển về chế độ hiển thị ngay và thực hiện flush, chấp nhận mất phần làm mượt thay vì
+  mất hình ảnh.
 
-- **Audio là một khung một datagram, và mất thì không đuổi theo**: một khung Opus 20 ms
-  ở 64 kbps đo được khoảng 160 byte, rộng nhất 209 byte, so với 1180 byte một datagram
-  chứa được — nên đường audio không có packetizer, không FEC, không reassembler, không
-  NACK, tức là bỏ đi gần hết những gì đường video có. Mất gói được hấp thụ ở chỗ rẻ
-  nhất: Opus mang sẵn FEC trong khung kế tiếp, và bên nhận bảo bộ giải mã che chỗ hổng
-  mà jitter buffer báo. Gửi lại còn tệ hơn vô ích, vì một khung đến muộn 200 ms thì
-  không phát được nữa nhưng vẫn kịp làm chậm mười khung sau nó. `make opus-smoke` đo
-  đúng những con số đó trên bất kỳ máy nào dựng được thư viện.
-- **Jitter buffer không có timer nào bên trong**: `AudioJitterBuffer` là trạng thái
-  thuần, còn độ trễ mục tiêu chỉ là số khung nó nạp trước khi bắt đầu — 60 ms là ba
-  khung. Nhờ vậy toàn bộ phần này test được offline mà không phải ngủ, và các kiểu
-  hỏng đều hiện rõ: bùng gói thì bị chặn thay vì xếp hàng, hết gói thì nạp lại thay
-  vì giật, số thứ tự nhảy xa thì coi là luồng mới thay vì hàng nghìn khung mất. Phần
-  giữ nhịp nằm ở `AudioPlayer`: nó bơm một khung mỗi 20 ms đồng hồ tường vào một
-  vòng PCM mà callback phát của sink rút ra.
-- **Callback thu âm không bao giờ mã hoá**: PipeWire và ScreenCaptureKit giao audio
-  trên thread real-time với deadline vài mili giây, và trễ deadline ở đó làm xrun cả
-  phần phát của chính máy host, không riêng gì Deskhub. Mã hoá Opus mất 0.3–1.5 ms
-  kèm lúc trồi sụt, và trước đây còn kéo theo một `sendto` cho mỗi viewer trên đúng
-  thread đó. `AudioBroadcaster::Offer` giờ chỉ chép khung 20 ms vào một vòng slot
-  lock-free cấp phát sẵn và đóng dấu thời điểm thu; một thread worker lo mã hoá,
-  chẩn đoán và gửi cho từng viewer. Worker chậm chân thì tốn một lần rơi có đếm
-  (`framesRefused`), không bao giờ thành tiếng rè trên máy host.
-- **Tiếng cần cả hai đầu đồng ý, và client cũ không bao giờ nghe thấy**: viewer đặt bit
-  0 của `Hello.features`, host quảng bá `kHostSharesAudio` trong phần năng lực của nó,
-  và host chỉ gửi gói cho viewer nào có bit đó. Chính điều này giữ `kProtocolVersion` ở
-  mức 2: viewer 5.0.x gửi `features = 0`, nên host 5.1 không bao giờ đặt lên dây một
-  thông điệp mà nó không phân tích được.
+- **Audio truyền mỗi datagram một frame, và packet bị mất không được yêu cầu gửi lại.**
+  Một frame Opus 20 ms ở 64 kbps có kích thước khoảng 160 byte, tối đa 209 byte, so với
+  1180 byte mà một datagram chứa được. Do đó đường audio không có packetizer, không FEC,
+  không reassembler và không NACK, tức là phần lớn những gì đường video có. Mất mát được
+  xử lý ở nơi chi phí thấp nhất: Opus mang FEC in-band trong frame kế tiếp, và bên nhận
+  yêu cầu decoder che khoảng trống mà jitter buffer báo về. Việc retransmit không mang lại
+  lợi ích, vì một frame tới trễ 200 ms vừa không phát được vừa làm chậm mười frame sau đó.
+  `make opus-smoke` đo các số liệu này trên bất kỳ máy nào build được thư viện.
+- **Jitter buffer không chứa timer.** `AudioJitterBuffer` chỉ gồm state, và độ trễ mục
+  tiêu đơn giản là số frame cần tích luỹ trước khi bắt đầu phát: 60 ms tương ứng ba frame.
+  Nhờ đó toàn bộ thành phần này test được offline mà không cần chờ thời gian thực, và các
+  trạng thái lỗi trở nên rõ ràng: một đợt dồn bị giới hạn thay vì xếp hàng, một buffer rỗng
+  sẽ nạp lại thay vì phát ngắt quãng, và một bước nhảy số thứ tự được hiểu là stream mới
+  chứ không phải hàng nghìn frame bị mất. Phần điều tiết nằm trong `AudioPlayer`, đưa một
+  frame mỗi 20 ms thời gian thực vào một ring PCM mà callback render của sink đọc ra.
+- **Callback capture không thực hiện encode.** PipeWire và ScreenCaptureKit cung cấp audio
+  trên các thread real-time với deadline vài mili-giây, và việc vượt deadline tại đó gây
+  xrun cho chính phần phát âm thanh của host, không chỉ của Deskhub. Opus encode mất
+  0,3–1,5 ms kèm các đỉnh, và trước đây mỗi viewer còn có một lệnh `sendto` chạy tiếp sau
+  trên cùng thread. Hiện `AudioBroadcaster::Offer` chỉ copy frame 20 ms vào một ring ô
+  lock-free đã cấp phát sẵn và ghi nhận thời điểm capture; một thread worker thực hiện
+  phần encode, phần chẩn đoán và các lượt gửi theo từng viewer. Khi worker không theo kịp,
+  hệ quả là một lần drop được đếm (`framesRefused`), không phải hiện tượng nhiễu trong âm
+  thanh của host.
+- **Âm thanh cần cả hai phía cùng bật, và client phiên bản cũ không nhận được.** Viewer
+  đặt bit 0 của `Hello.features`, host công bố `kHostSharesAudio` trong phần capability, và
+  host chỉ gửi packet tới những viewer có bit này được đặt. Đây là lý do
+  `kProtocolVersion` vẫn ở mức 2: một viewer 5.0.x gửi `features = 0`, nên một host 5.1
+  không đưa lên đường truyền message mà viewer đó không parse được.
 
-- **Link terminal tự giữ sống và tự quay số lại**: viewer terminal có QUIC connection
-  riêng, tách khỏi phiên video, nên không keepalive nào của đường video chạm tới nó.
-  Để yên ở dấu nhắc thì nó không có lưu lượng gì cả và chết vì idle timeout 30 giây
-  của QUIC; sau đó viewer dừng luôn thread ở trạng thái `Reattaching` mà không hề
-  quay số lại — trong khi shell vẫn đang chờ trên host suốt 2 phút và không ai quay
-  lại lấy. Giờ `TerminalViewer` gửi gói ack-eliciting theo chu kỳ và quay số lại có
-  backoff, dùng `TerminalClient::Reattach()` (vốn đã viết và có test trong core,
-  chỉ là chưa ai gọi) để lấy lại đúng shell cũ kèm scrollback.
-  `deskhub::KeepaliveIntervalUs` / `ReconnectDelayUs` giữ các mốc thời gian trong
-  core: keepalive tối đa bằng nửa idle timeout để mất một gói vẫn sống, và việc thử
-  lại dừng đúng ở `kTerminalReattachGraceUs`, vì quá mốc đó host đã bỏ shell rồi,
-  kết nối lại chỉ âm thầm mở một shell mới.
-- **Một record lên stream thì lên trọn vẹn, còn client tụt lại thì được vẽ lại chứ
-  không nhận từng byte**: mọi thứ tin cậy — control, auth, output terminal — đều là
-  record có tiền tố độ dài dùng chung một QUIC stream, nên nửa record trên đường
-  truyền làm lệch khung vĩnh viễn ở đầu bên kia; `RecordStream` không có cách nào
-  đồng bộ lại và peer đóng luôn kết nối. `QuicEndpoint::SendStream` trước đây ghi
-  được bao nhiêu hay bấy nhiêu rồi bỏ phần dư, chịu được cho tới khi một lệnh như
-  `make test` chạy nhanh hơn đường truyền: cửa sổ stream 1 MiB đầy, phần đuôi của một
-  record `TermData` bị bỏ, framer của viewer hỏng và shell "mất kết nối" một phút sau
-  khi mở. Giờ nó từ chối cả record khi stream không còn chỗ, và đóng kết nối nếu vẫn
-  lỡ ghi được một phần, vì stream đã rách thì không vá tại chỗ được. Ở tầng trên,
-  `TerminalHost` giữ output chưa gửi trong hàng đợi riêng của từng shell và thử gửi
-  lại ở mỗi nhịp, nên một đợt xả chỉ nhanh hơn đường truyền trong chốc lát — output
-  của một lần build chẳng hạn — vẫn tới client đủ từng byte. Vượt `kMaxPendingBytes`
-  thì hàng đợi bị bỏ chứ không
-  phình thêm: mọi byte đều đã vào `Screen` gương phía host rồi, nên client được kéo
-  cho kịp bằng `deskhub::term::RenderScreen` — vẽ lại lưới hiện tại, nhiều nhất một
-  lần mỗi `kRepaintIntervalUs`. Phần output không ai kịp đọc thì bỏ chứ không đệm, nhờ
-  vậy lệnh xả dữ liệu vẫn chạy đúng tốc độ của nó mà màn hình cuối cùng vẫn đúng.
-  Client gắn lại phiên cũng nhận đúng bản vẽ lại đó, vì sau một quãng đứt thì vị trí
-  của nó trong dòng byte không còn nghĩa gì.
-- **Chia sẻ tự động phải chờ desktop, không phải liệt kê một lần rồi thôi**: Windows
-  đăng ký autostart bằng scheduled task `ONLOGON`, chạy trước khi phiên có màn hình
-  nào để liệt kê, nên một lần gọi `ListDisplays()` lúc dựng cửa sổ trả về rỗng và app
-  báo là không có gì để chia sẻ. `deskhub::ui::AutoShareGate` (trong core, có unit
-  test) giữ quy tắc thử lại — dò mỗi `kAutoShareProbeMs`, bỏ cuộc sau
-  `kAutoShareGiveUpMs` — và mỗi client tự chạy nó bằng timer của mình, nên chính sách
-  chỉ tồn tại một chỗ. `NextAutoShareStep` là đúng quy tắc đó nhưng không giữ trạng
-  thái, và đó là thứ client Swift gọi qua `dh_auto_share_step`. Một lần chia sẻ tự
-  động không bao giờ mở hộp thoại modal: lúc đăng nhập cửa sổ có thể đang ẩn trong
-  khay hệ thống, nơi hộp thoại vừa không nhìn thấy vừa chặn việc chia sẻ vĩnh viễn,
-  nên các lý do từ chối đi vào banner trang Host và log. Các client desktop cũng làm
-  mới danh sách nguồn theo tín hiệu đổi màn hình của OS, nhờ vậy danh sách vẫn đúng
-  khi cắm thêm màn hình về sau.
-- **Chọn quiche thay vì msquic/ngtcp2**: thư viện QUIC duy nhất có bằng chứng chạy
-  thật trên cả Android lẫn iOS. Nó mang theo BoringSSL, thứ phục vụ luôn SPAKE2 và
-  danh tính máy — không cần thư viện mật mã thứ hai.
-- **Không có connection migration**: không thư viện ứng viên nào hỗ trợ dùng được
-  phía client. Kết-nối-lại-và-gắn-lại (kiểu tmux, vốn đã bắt buộc cho mobile chạy
-  nền) là đủ.
-- **ECDSA P-256, không phải Ed25519**: phía server của BoringSSL không ký bắt tay
-  TLS bằng Ed25519 qua quiche. Đừng đổi lại. Khoá Ed25519 còn lưu trên đĩa được
-  thay ngay khi nạp — để nguyên thì mọi bắt tay chết với `QUICHE_ERR_TLS_FAIL` mà
-  màn hình không hiện gì.
-- **Verifier của passcode là một lần SHA-256, không phải KDF đắt tiền**: SPAKE2 đã
-  giới hạn kẻ tấn công còn đúng một lần đoán online mỗi kết nối và không để lại
-  transcript nào đáng mang về crack offline — đó chính là việc mà độ nặng của KDF
-  sinh ra để làm.
-- **quiche là thư viện build sẵn, không phải FetchContent**: `scripts/build-quiche.sh`
-  ghi mỗi rust target một thư mục dưới `third_party/quiche/` cộng một `include/`
-  dùng chung — quiche.h và bộ header BoringSSL mà boring-sys vendor, được chép ra vì
-  Deskhub gọi thẳng BoringSSL cho danh tính host và muốn một đường include duy nhất,
-  không thư viện TLS thứ hai. `DeskhubQuiche.cmake` biến chỗ đó thành
-  `deskhub::quiche`; thiếu thư viện là configure lỗi.
-- **Apple link `libplatform_bundled.a`**: app Xcode tiêu thụ archive platform từ
-  ngoài CMake, nơi link PRIVATE tới quiche không bao giờ tới được dòng link của
-  chúng — nên một bước `libtool` gộp platform + quiche thành đúng một archive mà
-  `.pbxproj` link.
-- **Bãi mìn toolchain Windows đã được dọn — giữ nguyên như vậy**: quiche build với
-  CRT tĩnh qua `CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_RUSTFLAGS` cho phần Rust cộng
-  `/MT` trong `CFLAGS_x86_64_pc_windows_msvc` cho phần BoringSSL (mặc định của msvc
-  là runtime DLL, còn ép flag qua `RUSTFLAGS` chung thì cargo build hỏng thẳng), cả
-  cây pin `MultiThreaded` cho khớp để exe không cần VC++ Redistributable; wxWidgets
-  re-pin `wxBUILD_USE_STATIC_RUNTIME` mỗi lần configure vì `wx_option()` cache vĩnh
-  viễn. BoringSSL phải build dưới generator Visual Studio mặc định — crate cmake chỉ
-  truyền được /MT qua flag per-config ở đó, nên ép `CMAKE_GENERATOR=Ninja` là
-  BoringSSL âm thầm quay về /MD và bước link cuối chết với LNK2038; nếu MSBuild dính
-  MSB6003 vì path dài thì bật Windows long paths thay vì đổi generator. `link.exe`
-  của Git Bash trong `/usr/bin` che mất linker MSVC (đặt thư mục của `cl.exe` lên
-  trước), cơ chế rewrite path của nó bóp méo tham số kiểu `/...`
-  (`MSYS2_ARG_CONV_EXCL`), và installer của NASM không đụng vào PATH.
-- **quiche cho Android bỏ qua cargo-ndk trên máy Windows**: cargo-ndk đưa cho
-  boring-sys đường dẫn `clang` không có phần mở rộng, CMake trên Windows từ chối nó,
-  nên `build-quiche.sh` tự đặt `CC_*`/`CXX_*`/`AR_*`, linker của cargo và `--target=`
-  cho từng ABI rồi gọi cargo thuần. BoringSSL ở đó vẫn cần Ninja (generator Visual
-  Studio không nhắm được NDK), còn bindgen lấy libclang của Visual Studio — nó tìm
-  `stddef.h` cạnh binary của chính nó — nên `BINDGEN_EXTRA_CLANG_ARGS` trỏ sang
-  resource header của NDK bằng dấu gạch chéo xuôi, vì bindgen tách biến đó theo luật
-  shell và nuốt mất dấu gạch chéo ngược.
-- **Mỗi app cross-compile tự build quiche của mình trước**: `build-android`,
-  `build-ios`, `build-macos` và `build-linux` phụ thuộc vào một target quiche cho ABI
-  của chúng, giống như `debug`/`release` làm cho host. quiche là per-ABI và bước
-  configure của CMake thất bại nếu thiếu, nên một bản build bỏ qua bước này trông như
-  hỏng toolchain chứ không như thiếu thư viện — và một app kẹt lại ở lần build thành
-  công cuối cùng sẽ nói thứ giao thức mà các máy khác không còn trả lời.
-- **quiche cho iOS pin `IPHONEOS_DEPLOYMENT_TARGET=17.0`**: clang của boring-sys
-  trôi theo mặc định SDK trong khi rustc link theo minimum của riêng nó, và độ lệch
-  hiện ra thành `___chkstk_darwin` undefined lúc link.
-- **Hai đồng hồ, có chủ đích**: `NowUs()` là monotonic (giây uptime) cho khoảng
-  thời gian; `NowUnixSeconds()` là cái duy nhất hiện ra thành ngày tháng. Trộn lẫn
-  không kêu — một mốc monotonic đem lưu sẽ hiện thành một thời điểm nào đó trong
-  ngày 1 tháng 1 năm 1970.
-- **Tiến trình con của PTY Windows không nhận handle chuẩn nào**: khi stdout của
-  chính host bị redirect, Windows truyền redirect đó xuống con bất chấp thuộc tính
-  pseudo-console và shell nói chuyện với pipe; không đưa handle nào thì nó quay về
-  console — chính là ConPTY vừa gắn.
-- **`wxWANTS_CHARS` trên lưới terminal Windows**: thiếu nó thì điều hướng dialog
-  của frame nuốt Enter, Tab và các phím mũi tên trước khi terminal kịp thấy.
-- **TCC của macOS gắn quyền với chữ ký code**: app.app build tay (ký ad-hoc, đổi
-  chữ ký mỗi lần build) và bản dmg ký Developer ID giành nhau đúng một dòng
-  `com.deskhub.macos` — System Settings hiện đã cấp quyền trong khi bản vừa chạy bị
-  từ chối, âm thầm với Accessibility. `make reset-macos-permissions` xoá mọi quyền
-  để lần chạy sau hỏi lại.
-- **macOS là một bản desktop trong CI và một bản đã ký khi phát hành, không bao giờ
-  cả hai cùng lúc**: `build-desktop` biên dịch app với chữ ký ad-hoc ở mọi lần push,
-  nên một thay đổi Cocoa không build được sẽ fail ngay tại pull request của nó;
-  `deploy` đi tới cùng app đó qua `release-macos`, đường fastlane — Developer ID,
-  notarize, dmg — thứ tạo ra bản người dùng mở được thật. Vì vậy workflow dùng lại
-  bỏ qua job macOS của nó khi `for_release` được bật, nếu không một tag sẽ trả tiền
-  cho một macOS runner thứ hai chỉ để dựng một bundle chẳng ai ship. `build-mobile`
-  chỉ còn iOS và Android, cùng lý do và cùng cách tách.
-- **Mọi workflow lấy quiche và opus từ một action duy nhất, và cache key chính là toàn
-  bộ giao kèo**: `.github/actions/third-party` dựng cả hai thư viện cho bất kỳ tập
-  target nào job khai báo, nhờ vậy mười chín bản sao của cùng một khối cache-rồi-build
-  rút xuống còn một dòng mỗi job. Input `cache-key` của nó không phải để trang trí — đó
-  là thứ duy nhất ngăn hai job khôi phục nhầm thư viện của nhau. Hai tập target thì khác
-  nhau, mà hai runner image dựng cùng một triple cũng khác: một `libquiche.a` biên dịch
-  trên ubuntu-latest rồi khôi phục trên ubuntu-22.04 sẽ link vào đúng cái glibc mà bản
-  phát hành sinh ra để tránh. Thứ gì làm đổi kết quả build thì thuộc về key đó.
-- **Một CRT release tĩnh trên Windows, cho mọi cấu hình**: cargo build quiche với
-  CRT release tĩnh (mặc định của msvc — đừng bao giờ ép qua `RUSTFLAGS`, flag đó
-  ngấm vào proc-macro và giết cargo), và cả cây CMake pin `MultiThreaded` cho khớp
-  — cũng chính là thứ giữ app là một exe duy nhất không cần VC++ Redistributable.
-  Rust không có bản debug-CRT nên Debug cũng phải khớp: `_ITERATOR_DEBUG_LEVEL=0`,
-  `/U_DEBUG`, bỏ `/RTC1` — CRT release không có `_CrtDbgReport` lẫn hỗ trợ
-  run-time check. Lệch bất kỳ chỗ nào là dính một tràng LNK2038.
-- **Passcode = cửa tự phục vụ, approval = đường lui**: mã đã gõ luôn được kiểm;
-  không mã thì người quyết. Passcode không bao giờ qua mạng dưới bất kỳ dạng nào kẻ
-  tấn công mang về được.
-- **Bộ giả lập VT là của dự án**: không widget terminal nào có mặt trên cả năm
-  client với giấy phép dùng được, và tự sở hữu nó làm hành vi terminal test được
-  offline và giống hệt nhau mọi nơi.
-- **Mirror shell phía host được nuôi từ byte đầu tiên**: đầu ra PTY là luồng
-  một-người-đọc và huỷ khi đọc — byte đã đọc và gửi cho viewer không phát lại được —
-  nên lưới mà *Stop & attach* mở ra phải được dựng ngay khi byte đi qua, không phải
-  lúc bấm nút. Khi viewer từ xa còn gắn, phản hồi truy vấn terminal của chính mirror
-  bị vứt bỏ: màn hình của viewer đã trả lời rồi, và shell không được nghe hai câu
-  trả lời.
-- **Một cổng**: beacon, màn hình và terminal dùng chung một listener; QUIC ghép kênh
-  kết nối và stream. Cổng thứ hai ngày trước tồn tại chỉ vì đường màn hình tiền-QUIC
-  chiếm trọn socket.
-- **Một `HostLink`, bốn bắt tay ngày trước**: quay số + kiểm tra tin cậy + auth +
-  khôi phục từng được viết bốn lần ở phía client — truy vấn nguồn, viewer, bên gửi
-  file, và terminal trên một `QuicEndpoint` thô của riêng nó — và đó là lý do cửa sổ
-  gửi file biết đến chuyện key host đổi muộn hơn viewer tận ba lần sửa. Giờ
-  `HostLink` là mảnh code phía client duy nhất quay số hay auth; mỗi dịch vụ mở
-  `Chan` của nó, nhận hàng đợi inbox riêng và tự rút trên luồng của mình. Quay-số-lại
-  theo backoff của terminal chuyển vào link để mọi bề mặt bật khôi phục đều hưởng, và
-  luật tin cậy nằm ở đúng một chỗ: key đổi thì link đỗ ở `Deciding` chờ người trả lời
-  (chỉ truy vấn nguồn cho đi qua, `trustGate=false`, không ghi nhớ gì — nơi gọi nó
-  không có prompt để hiện), và chỉ passcode được host chứng minh bằng mật mã mới tự
-  ghim key.
-- **`HostLink` gửi qua `Send`, không phải `SendMessage`**: trên Windows, các header
-  hệ điều hành phía sau tầng platform định nghĩa `SendMessage` là macro thay cho
-  `SendMessageA`, và trong `HostLink.cpp` chúng vào sau phần khai báo class nhưng
-  trước phần định nghĩa method — MSVC khi đó đòi định nghĩa cho một thành viên
-  `SendMessageA` mà không header nào khai báo. Các tên API Win32 (`SendMessage`,
-  `PostMessage`, `CreateWindow`, `GetObject`, …) không bao giờ an toàn làm tên method
-  trong bất kỳ translation unit nào một header hệ điều hành với tới được; cách sửa là
-  đổi tên, không phải `#undef`.
-- **Phiên ScreenCast của portal sống chết theo một kết nối D-Bus**: GLib cache session
-  bus dùng chung bằng tham chiếu yếu, nên `g_object_unref` trên handle cuối cùng sẽ huỷ
-  luôn kết nối. `xdg-desktop-portal` khi đó bỏ phiên, compositor xoá node PipeWire, và
-  node id mà portal vừa trao lại trỏ vào hư không — luồng đi tới `paused` rồi hỏng với
-  *no target node available*. Vì vậy `PortalScreenCast` tự giữ `GDBusConnection` của nó
-  suốt thời gian phiên còn mở, thay vì mượn một kết nối cho mỗi lời gọi. Ứng dụng desktop
-  che lấp lỗi này rất lâu vì GTK giữ một tham chiếu tới session bus trong suốt vòng đời
-  tiến trình; `deskhub-cli` không liên kết GTK nên không có tham chiếu nào.
-- **Mọi icon đều được dẫn xuất, và chỉ một phần được bo góc**: `make icons` dựng lại
-  toàn bộ bộ icon từ một file gốc duy nhất `assets/icon_1024.png`. macOS, iOS, trang
-  Play Store và đường adaptive-icon của Android tự cắt artwork theo hình dạng riêng
-  của chúng, nên các asset đó giữ nguyên hình vuông tràn viền; Windows, Linux và
-  launcher Android trước API 26 vẽ đúng những gì được đưa, nên icon của chúng phải có
-  sẵn góc bo và phần trong suốt nướng vào ảnh — nếu không, app hiện ra như một ô vuông
-  xanh cứng cạnh mọi icon bo góc khác. `scripts/make-icons.py` cố ý chỉ dùng thư viện
-  chuẩn: bootstrap không cài công cụ xử lý ảnh nào.
-- **Client desktop giữ nhiều host cùng lúc; điện thoại giữ một**: trang kết nối trên
-  Windows, Linux và macOS không giữ trạng thái đã-kết-nối nào của riêng nó. Host nào trả
-  lời thì được một cửa sổ kết nối — `ConnectionFrame` trong
-  `client/windows/win32/MainFrame.cpp`, `ConnectionWindow` trong
-  `client/linux/gtk/MainWindow.cpp`, `WindowGroup` tên `connection` trong
-  `client/macos/app/swift/App.swift` — nắm địa chỉ, passcode, khả năng, danh sách nguồn và
-  ô control của riêng host đó, nhờ vậy trang kết nối luôn rảnh để gọi host tiếp theo. Cửa
-  sổ chính chỉ giữ danh sách các cửa sổ đang mở, để đưa cửa sổ cũ lên trước khi cùng một
-  host được gọi lần hai, để đẩy mỗi nhịp dò trạng thái tới đúng cửa sổ có địa chỉ khớp, và
-  để đóng hết khi thoát app. Android và iOS cố ý giữ một kết nối: màn hình điện thoại
-  không đủ chỗ cho một panel thứ hai, và phiên nó mở ra vốn đã chiếm toàn màn hình.
-  `ui::SameDeviceAddr` là định nghĩa của "cùng một host" ở mọi nơi — xem mục dưới.
-- **Một host, hai cách viết, một phép so sánh**: `ScanAddressText` bỏ cổng khi cổng là mặc
-  định, nên một dòng quét được đọc là `192.168.1.60` trong khi địa chỉ người dùng gõ và
-  kết nối lại là `192.168.1.60:47777`. So sánh hai chuỗi đó thất bại trong im lặng, và mọi
-  chỗ từng làm vậy đều mất một thứ có thật: panel đã kết nối không tìm ra dòng thiết bị
-  khớp nên không hiện ping, còn `PasscodeForDevice` không tìm ra mã đã lưu cho host được
-  chọn từ danh sách quét. Vì vậy phép so sánh địa chỉ đi qua `ui::NormalizedDeviceAddr` /
-  `ui::SameDeviceAddr` (`core/ui/Strings.h`), mở ra cho client Swift và Kotlin dưới tên
-  `dh_same_device_addr`. Đừng bao giờ so sánh hai địa chỉ thiết bị bằng `==`.
+- **Link terminal tự duy trì và tự kết nối lại.** Một terminal viewer sở hữu connection
+  QUIC riêng, tách biệt với session video, nên không keepalive nào của đường video tới
+  được nó. Khi không có thao tác tại dấu nhắc, connection này không có lưu lượng và bị
+  đóng do idle timeout 30 giây của QUIC; sau đó viewer dừng thread ở trạng thái
+  `Reattaching` mà không kết nối lại, trong khi shell vẫn được host giữ trong đủ 2 phút.
+  Hiện `TerminalViewer` gửi một packet ack-eliciting theo timer và kết nối lại với backoff,
+  sử dụng lại `TerminalClient::Reattach()` (vốn đã được viết và test trong core nhưng chưa
+  từng được gọi), nhờ đó cùng một shell được khôi phục kèm scrollback.
+  `deskhub::KeepaliveIntervalUs` và `ReconnectDelayUs` giữ các mốc thời gian trong core:
+  keepalive tối đa bằng một nửa idle timeout để chịu được việc mất một packet, và việc thử
+  lại dừng đúng tại `kTerminalReattachGraceUs`, vì sau mốc đó host đã bỏ shell và việc kết
+  nối lại chỉ tạo ra một shell mới.
+- **Một record được đưa lên stream trọn vẹn hoặc không đưa, và một client bị chậm sẽ được
+  vẽ lại thay vì nhận lại toàn bộ byte.** Mọi dữ liệu tin cậy — control, auth, output
+  terminal — đều là các record có length prefix dùng chung một QUIC stream, nên một record
+  chỉ được gửi một phần sẽ làm lệch framing ở đầu kia vĩnh viễn; `RecordStream` không có cơ
+  chế đồng bộ lại và peer đóng connection. `QuicEndpoint::SendStream` trước đây ghi phần
+  vừa đủ và bỏ phần còn lại, cách này chỉ đúng cho tới khi một lệnh như `make test` tạo ra
+  lượng output vượt khả năng của link: cửa sổ stream 1 MiB bị đầy, phần cuối của một record
+  `TermData` bị bỏ, framer của viewer fail và shell bị ngắt sau khi mở một phút. Hiện nó từ
+  chối một record khi stream không còn đủ chỗ, và đóng connection nếu vẫn xảy ra một lần
+  ghi một phần, vì một stream đã lệch framing không thể khắc phục tại chỗ. Bên trên,
+  `TerminalHost` giữ output chưa gửi trong một hàng đợi theo từng shell và thử lại ở mỗi
+  tick, nên một đợt output tạm thời vượt khả năng của link — chẳng hạn output của một lần
+  build — vẫn tới được client đầy đủ. Khi vượt `kMaxPendingBytes`, hàng đợi bị loại bỏ thay
+  vì tiếp tục tăng: mọi byte đều đã tới `Screen` mirror phía host, nên client được đồng bộ
+  bằng `deskhub::term::RenderScreen`, tức vẽ lại lưới hiện thời một lần, tối đa mỗi
+  `kRepaintIntervalUs`. Output mà người dùng không kịp đọc được bỏ qua thay vì đệm lại, nhờ
+  đó một lệnh tạo output liên tục chạy ở tốc độ của nó và vẫn để lại đúng nội dung màn hình
+  cuối. Một client đang reattach cũng nhận cùng thao tác vẽ lại, vì vị trí của nó trong
+  byte stream không còn ý nghĩa sau một khoảng gián đoạn.
+- **Một phiên share tự động chờ desktop thay vì liệt kê một lần duy nhất.** Windows đăng ký
+  autostart dưới dạng một scheduled task `ONLOGON`, chạy trước khi session có màn hình để
+  liệt kê, nên một lệnh `ListDisplays()` tại thời điểm khởi tạo trước đây trả về rỗng và
+  app báo rằng không có nội dung nào để share. `deskhub::ui::AutoShareGate` (thuộc core, có
+  unit test) chứa quy tắc thử lại — probe mỗi `kAutoShareProbeMs`, dừng sau
+  `kAutoShareGiveUpMs` — và mỗi client điều khiển nó bằng timer riêng, nên quy tắc chỉ tồn
+  tại một lần. `NextAutoShareStep` là cùng quy tắc đó ở dạng không giữ state, và đây là
+  thành phần mà client Swift sử dụng qua `dh_auto_share_step`. Một phiên share tự động
+  không mở hộp thoại modal: tại thời điểm đăng nhập, cửa sổ có thể đang ẩn trong tray, nơi
+  một hộp thoại vừa không hiển thị vừa chặn phiên share vô thời hạn, nên các trường hợp từ
+  chối được đưa vào banner ở trang Host và vào log. Các client desktop cũng làm mới danh
+  sách chọn theo tín hiệu thay đổi display của OS, nhờ đó danh sách vẫn chính xác khi một
+  màn hình được kết nối sau.
+- **Chọn quiche thay vì msquic hoặc ngtcp2.** Đây là thư viện QUIC duy nhất có bằng chứng
+  sử dụng trong môi trường production trên cả Android và iOS. Nó đi kèm BoringSSL, thành
+  phần cũng phục vụ SPAKE2 và host identity, nên không cần thư viện mật mã thứ hai.
+- **Không sử dụng connection migration.** Không thư viện ứng viên nào có hỗ trợ phía client
+  dùng được. Cơ chế reconnect và reattach (tương tự tmux, vốn đã cần thiết cho việc app di
+  động chạy nền) đã đáp ứng yêu cầu này.
+- **Sử dụng ECDSA P-256 thay vì Ed25519.** Phía server của BoringSSL không ký TLS
+  handshake bằng Ed25519 thông qua quiche. Không nên chuyển lại. Một identity Ed25519 đã
+  lưu sẽ bị thay khi load, vì nó làm fail mọi handshake với `QUICHE_ERR_TLS_FAIL` mà không
+  có thông tin giải thích trên giao diện.
+- **Verifier của passcode là một lần SHA-256, không phải một KDF tốn chi phí.** SPAKE2 đã
+  giới hạn kẻ tấn công ở một lần thử online cho mỗi connection và không để lại transcript
+  nào có thể crack offline, tức là đã đáp ứng đúng mục đích mà độ cứng của KDF hướng tới.
+- **quiche được build sẵn, không dùng FetchContent.** `scripts/build-quiche.sh` tạo một
+  thư mục cho mỗi rust target dưới `third_party/quiche/` cùng một thư mục `include/` dùng
+  chung, chứa quiche.h và các header BoringSSL do boring-sys cung cấp. Các header này được
+  sao chép ra ngoài vì Deskhub gọi trực tiếp BoringSSL cho phần host identity và cần đúng
+  một include path, không có thư viện TLS thứ hai. `DeskhubQuiche.cmake` chuyển phần này
+  thành `deskhub::quiche`; thiếu thư viện sẽ làm fail bước configure.
+- **Apple link `libplatform_bundled.a`.** Các app Xcode sử dụng archive platform từ bên
+  ngoài CMake, nơi một lần link PRIVATE tới quiche không xuất hiện trong dòng link của
+  chúng. Vì vậy một bước `libtool` gộp platform và quiche thành một archive duy nhất mà
+  `.pbxproj` link tới.
+- **Các vấn đề của toolchain Windows đã được xử lý và cần giữ nguyên trạng thái này.**
+  quiche được build với CRT tĩnh thông qua
+  `CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_RUSTFLAGS` cho phần object Rust, cùng `/MT` trong
+  `CFLAGS_x86_64_pc_windows_msvc` cho phần object BoringSSL (mặc định của msvc là runtime
+  dạng DLL, và việc truyền cờ này qua một `RUSTFLAGS` chung sẽ làm hỏng bản build cargo).
+  Toàn bộ cây pin `MultiThreaded` để khớp, nhờ đó file exe phát hành không cần VC++
+  Redistributable. wxWidgets pin lại `wxBUILD_USE_STATIC_RUNTIME` ở mỗi lần configure vì
+  `wx_option()` lưu cache vĩnh viễn. BoringSSL phải được build dưới generator Visual Studio
+  mặc định: ở đó cmake crate chỉ truyền được /MT thông qua các cờ theo từng config, nên đặt
+  `CMAKE_GENERATOR=Ninja` sẽ đưa BoringSSL về /MD và bước link cuối cùng fail với LNK2038.
+  Nếu MSBuild báo MSB6003 do đường dẫn dài, cần bật hỗ trợ long path của Windows.
+  `/usr/bin/link.exe` của Git Bash che mất linker của MSVC, cần đặt thư mục chứa `cl.exe`
+  lên trước; cơ chế viết lại đường dẫn của Git Bash làm hỏng các tham số dạng `/`, cần dùng
+  `MSYS2_ARG_CONV_EXCL`; và installer của NASM không cập nhật PATH.
+- **quiche cho Android không dùng cargo-ndk trên máy host Windows.** cargo-ndk cung cấp
+  cho boring-sys một đường dẫn `clang` không có phần mở rộng, điều mà CMake không chấp nhận
+  trên Windows. Vì vậy `build-quiche.sh` tự đặt `CC_*`, `CXX_*`, `AR_*`, linker của cargo
+  và `--target=` cho ABI tương ứng, rồi gọi cargo trực tiếp. BoringSSL vẫn cần Ninja ở đây
+  vì generator Visual Studio không nhắm được NDK, còn bindgen sử dụng libclang của Visual
+  Studio, vốn tìm `stddef.h` cạnh binary của chính nó; `BINDGEN_EXTRA_CLANG_ARGS` trỏ nó
+  tới các resource header của NDK bằng dấu gạch chéo xuôi, vì bindgen tách biến này theo
+  quy tắc shell và loại bỏ dấu gạch chéo ngược.
+- **Mọi app cross-compile đều build quiche của nó trước.** `build-android`, `build-ios`,
+  `build-macos` và `build-linux` đều phụ thuộc vào một quiche target cho ABI tương ứng,
+  giống như `debug` và `release` phụ thuộc vào ABI của host. quiche được build theo từng
+  ABI và bước configure của CMake fail nếu thiếu, nên một bản build bỏ qua bước này có biểu
+  hiện giống lỗi toolchain hơn là thiếu thư viện. Ngoài ra, một app giữ nguyên ở lần build
+  thành công trước đó sẽ sử dụng một protocol mà các máy khác không còn hỗ trợ.
+- **quiche cho iOS pin `IPHONEOS_DEPLOYMENT_TARGET=17.0`.** clang của boring-sys sử dụng
+  giá trị mặc định của SDK trong khi rustc link theo mức tối thiểu của chính nó, và sự
+  không khớp này biểu hiện thành lỗi `___chkstk_darwin` không xác định tại bước link.
+- **Hai clock, theo chủ đích.** `NowUs()` là clock monotonic (số giây kể từ khi khởi động)
+  dùng cho các khoảng thời gian; `NowUnixSeconds()` là clock duy nhất có thể hiển thị dưới
+  dạng ngày tháng. Việc dùng lẫn hai clock không gây lỗi rõ ràng: một mốc monotonic đã lưu
+  sẽ hiển thị thành một thời điểm vào ngày 1 tháng 1 năm 1970.
+- **Tiến trình con PTY trên Windows không nhận handle chuẩn nào.** Khi stdout của host bị
+  redirect, Windows chuyển tiếp redirect đó xuống dưới, vượt qua cả thuộc tính
+  pseudo-console, và shell giao tiếp với pipe. Chỉ khi không truyền handle nào, shell mới
+  quay lại sử dụng ConPTY đang gắn.
+- **Lưới terminal trên Windows cần `wxWANTS_CHARS`.** Nếu thiếu, cơ chế điều hướng hộp
+  thoại của frame sẽ nhận Enter, Tab và các phím mũi tên trước khi terminal xử lý.
+- **TCC của macOS gắn việc cấp quyền với chữ ký mã.** Một bản app.app build tại máy
+  (ad-hoc, ký lại ở mỗi lần build) và bản dmg Developer ID dùng chung một mục
+  `com.deskhub.macos`: System Settings hiển thị quyền đã được cấp trong khi bản vừa chạy
+  lại bị từ chối, và với Accessibility thì từ chối không kèm thông báo.
+  `make reset-macos-permissions` xoá toàn bộ các lần cấp để lần chạy sau hỏi lại.
+- **macOS được build ở dạng desktop trong CI và ở dạng đã ký khi release, không đồng thời
+  cả hai.** `build-desktop` compile app với chữ ký ad-hoc ở mỗi lần push, nên một thay đổi
+  Cocoa không build được sẽ fail ngay trên pull request tương ứng. `deploy` xử lý cùng app
+  đó qua `release-macos`, tức đường fastlane gồm Developer ID, notarization và dmg, tạo ra
+  bản mà người dùng mở được. Vì vậy workflow dùng chung bỏ qua job macOS khi `for_release`
+  được đặt; nếu không, một tag sẽ tiêu tốn thêm một runner macOS để tạo ra một bundle không
+  được phát hành. `build-mobile` chỉ bao gồm iOS và Android, theo cùng lý do và cùng cách
+  phân chia.
+- **Mọi workflow lấy quiche và opus từ cùng một action, và cache key là toàn bộ điều kiện
+  xác định.** `.github/actions/third-party` build cả hai thư viện cho các target mà một job
+  chỉ định, nhờ đó mười chín bản sao của cùng một khối cache và build rút xuống còn một
+  dòng cho mỗi job. Input `cache-key` của action này là thành phần duy nhất ngăn hai job
+  khôi phục nhầm thư viện của nhau. Hai tập target khác nhau là khác biệt, và hai image
+  runner cùng build một triple cũng là khác biệt: một `libquiche.a` compile trên
+  ubuntu-latest rồi khôi phục trên ubuntu-22.04 sẽ link tới đúng phiên bản glibc mà bản
+  release muốn tránh. Mọi yếu tố làm thay đổi sản phẩm build đều phải nằm trong key đó.
+- **Một CRT release tĩnh trên Windows, cho mọi configuration.** cargo build quiche với CRT
+  release tĩnh (mặc định của msvc; không nên ép qua `RUSTFLAGS`, vì giá trị này lan sang
+  proc-macro và làm hỏng cargo), và toàn bộ cây CMake pin `MultiThreaded` để khớp. Đây cũng
+  là điều giữ cho app là một file exe duy nhất không cần VC++ Redistributable. Rust không
+  cung cấp bản build với CRT debug, nên cấu hình Debug cũng phải khớp:
+  `_ITERATOR_DEBUG_LEVEL=0`, `/U_DEBUG`, loại bỏ `/RTC1`, vì CRT release không có
+  `_CrtDbgReport` và không hỗ trợ run-time check. Mọi sai lệch đều dẫn tới một loạt lỗi
+  LNK2038.
+- **Passcode là cơ chế tự phục vụ, approval là phương án dự phòng.** Mã đã nhập luôn được
+  xác minh; không có mã thì việc quyết định thuộc về người dùng. Passcode không đi qua
+  network dưới bất kỳ hình thức nào mà kẻ tấn công có thể thu thập.
+- **VT emulator do dự án tự triển khai.** Không có widget terminal nào của nền tảng vừa có
+  mặt trên cả năm client vừa đi kèm giấy phép phù hợp, và việc tự triển khai giúp hành vi
+  terminal test được offline và nhất quán trên mọi nền tảng.
+- **Bản mirror shell phía host được cập nhật từ byte đầu tiên.** Output của PTY là một
+  stream single-consumer có tính huỷ: byte đã đọc và gửi cho viewer không thể phát lại. Vì
+  vậy lưới ký tự mà *Stop & attach* mở ra phải được dựng ngay khi byte đi qua, không phải
+  tại thời điểm nhấn nút. Trong khi một viewer từ xa còn đang kết nối, các phản hồi cho
+  terminal query của bản mirror bị loại bỏ: màn hình của viewer đã trả lời chúng, và shell
+  không được nhận hai phản hồi.
+- **Một port duy nhất.** Beacon, màn hình và terminal dùng chung một listener; QUIC đảm
+  nhận việc multiplex connection và stream. Port thứ hai trước đây chỉ tồn tại vì đường
+  màn hình ở giai đoạn trước QUIC chiếm dụng socket.
+- **Một `HostLink` thay cho bốn handshake trước đây.** Dial, kiểm tra trust, auth và
+  recovery trước đây được viết bốn lần ở phía client: truy vấn source, viewer, file sender,
+  và terminal chạy trên một `QuicEndpoint` riêng. Đó là lý do phần gửi file biết về một
+  host key đã thay đổi muộn hơn viewer ba bản vá. Hiện `HostLink` là phần mã duy nhất phía
+  client thực hiện dial hoặc authenticate; mỗi service mở `Chan` của nó, nhận một hàng đợi
+  inbox riêng và xử lý trên thread của chính nó. Cơ chế kết nối lại với backoff của
+  terminal đã được chuyển vào link để mọi giao diện yêu cầu recovery đều thừa hưởng, và các
+  quy tắc trust nằm ở một vị trí duy nhất: một key đã thay đổi giữ link ở trạng thái
+  `Deciding` cho tới khi có phản hồi của người dùng (chỉ phần truy vấn source đi qua trực
+  tiếp, với `trustGate=false` và không lưu gì, vì bên gọi nó không có giao diện để hiển thị
+  hộp thoại), và chỉ một passcode mà host đã chứng minh bằng mật mã mới tự động ghim một
+  key.
+- **`HostLink` gửi dữ liệu qua `Send`, không phải `SendMessage`.** Trên Windows, các OS
+  header phía sau layer platform định nghĩa `SendMessage` thành một macro cho
+  `SendMessageA`, và trong `HostLink.cpp` chúng xuất hiện sau phần khai báo lớp nhưng trước
+  phần định nghĩa method, khiến MSVC yêu cầu định nghĩa cho một member `SendMessageA` không
+  được khai báo ở đâu cả. Các tên API Win32 (`SendMessage`, `PostMessage`, `CreateWindow`,
+  `GetObject`, …) không an toàn khi dùng làm tên method trong bất kỳ translation unit nào
+  mà một OS header có thể tới được; giải pháp là đổi tên, không phải `#undef`.
+- **Session ScreenCast của portal gắn liền với một kết nối D-Bus.** GLib cache session bus
+  dùng chung bằng weak reference, nên `g_object_unref` trên handle cuối cùng sẽ huỷ luôn
+  kết nối. Sau đó `xdg-desktop-portal` bỏ session, compositor huỷ node PipeWire, và node id
+  mà portal vừa cung cấp không còn trỏ tới đâu; stream chuyển sang trạng thái `paused` và
+  fail với thông báo *no target node available*. Vì vậy `PortalScreenCast` tự sở hữu
+  `GDBusConnection` trong suốt thời gian session mở, thay vì mượn một kết nối cho mỗi lần
+  gọi. App desktop che khuất vấn đề này trong thời gian dài vì GTK giữ một reference tới
+  session bus trong suốt vòng đời process, còn `deskhub-cli` không link GTK nên không có
+  reference đó.
+- **Mọi icon đều được sinh ra từ một nguồn, và chỉ một số được bo góc.** `make icons` dựng
+  lại toàn bộ bộ icon từ file gốc duy nhất `assets/icon_1024.png`. macOS, iOS, phần hiển
+  thị trên Play Store và pipeline adaptive-icon của Android đều tự mask hình theo hình dạng
+  riêng, nên các asset này giữ dạng vuông tràn viền. Windows, Linux và các launcher Android
+  trước API 26 hiển thị đúng hình được cung cấp, nên icon của chúng đã có sẵn góc bo tròn
+  và phần trong suốt; nếu không, app sẽ hiển thị thành một ô vuông đặc bên cạnh các icon bo
+  tròn khác. `scripts/make-icons.py` chỉ sử dụng thư viện chuẩn theo chủ đích, vì bootstrap
+  không cài công cụ xử lý ảnh nào.
+- **Một client desktop giữ nhiều host cùng lúc; một điện thoại giữ một.** Trang connect
+  trên Windows, Linux và macOS không giữ trạng thái kết nối nào. Mỗi host phản hồi sẽ nhận
+  một cửa sổ kết nối — `ConnectionFrame` trong `client/windows/win32/MainFrame.cpp`,
+  `ConnectionWindow` trong `client/linux/gtk/MainWindow.cpp`, và `WindowGroup` tên
+  `connection` trong `client/macos/app/swift/App.swift` — sở hữu địa chỉ, passcode,
+  capability, danh sách source và tuỳ chọn control của host đó, nhờ đó trang connect vẫn
+  sẵn sàng cho host tiếp theo. Cửa sổ chính chỉ giữ danh sách các cửa sổ đang mở, để đưa
+  một cửa sổ lên trước khi cùng một host được kết nối lần thứ hai, để chuyển từng lượt
+  probe status tới đúng cửa sổ có địa chỉ khớp, và để đóng toàn bộ khi thoát. Android và
+  iOS giữ mô hình một kết nối theo chủ đích: màn hình điện thoại không đủ chỗ cho một panel
+  thứ hai, và session mà nó mở vốn đã chiếm toàn màn hình. `ui::SameDeviceAddr` là định
+  nghĩa thống nhất của "cùng một host" — xem mục ngay dưới.
+- **Một host có hai cách viết địa chỉ, nhưng chỉ một phép so sánh.** `ScanAddressText` bỏ
+  phần port khi đó là port mặc định, nên một dòng kết quả scan hiển thị `192.168.1.60`
+  trong khi địa chỉ người dùng nhập và đã kết nối là `192.168.1.60:47777`. So sánh hai giá
+  trị này dưới dạng chuỗi sẽ sai mà không báo lỗi, và mọi vị trí từng làm như vậy đều mất
+  một chức năng: panel đã kết nối không tìm thấy dòng thiết bị tương ứng nên không hiển thị
+  ping, còn `PasscodeForDevice` không tìm được mã đã lưu cho một host chọn từ danh sách
+  scan. Vì vậy phép so sánh địa chỉ phải đi qua `ui::NormalizedDeviceAddr` và
+  `ui::SameDeviceAddr` (`core/ui/Strings.h`), được cung cấp cho client Swift và Kotlin dưới
+  tên `dh_same_device_addr`. Không so sánh hai địa chỉ thiết bị bằng `==`.
 
-- **Một decoder vừa mở thì chưa có khung tham chiếu nào**: `ScreenViewer` dựng lại decoder mỗi
-  khi surface đổi, và app iOS trả surface lại khi app rời khỏi màn hình — khoá máy là đủ. Bộ
-  ráp gói không hề biết chuyện đó: nó cứ tiếp tục giao những khung P như trước, decoder mới
-  không có gì để dự đoán từ đó, còn host chỉ gửi IDR khi được yêu cầu, nên hình đen suốt
-  phần còn lại của phiên. Yêu cầu đó trước đây được gửi lúc decoder *cũ* bị dẹp — đúng
-  vào lúc không còn surface nào để vẽ: IDR về tới nơi, vòng lặp decode bỏ nó đi vì thiếu
-  surface, và `CancelKeyframeRequest` xoá luôn yêu cầu đang chờ khi đi ngang. Giờ `EnsureDecoder`
-  bật cờ cho mọi decoder nó mở ra, nên keyframe được xin đúng lúc đã có chỗ để vẽ.
-  `MediaCodecDecoder` mắc lỗi đối xứng ở đầu kia: nó bật `sentCsd_` ngay ở khung đầu tiên nhận
-  được kể cả khi khung đó không mang bộ tham số nào, nên SPS/PPS của keyframe đến sau bị đưa
-  vào như dữ liệu thường và không bao giờ cấu hình được codec; giờ nó chờ đúng khung có mang
-  chúng. Ai mở decoder thì người đó xin keyframe.
+- **Một decoder vừa được mở chưa có reference frame.** `ScreenViewer` dựng lại decoder mỗi
+  khi surface thay đổi, và app iOS trả surface về khi app rời khỏi màn hình; chỉ cần khoá
+  điện thoại là đủ. Reassembler không biết điều đó: nó tiếp tục cung cấp các P-frame như
+  trước, decoder mới không có dữ liệu để dự đoán, và host chỉ gửi IDR khi được yêu cầu, nên
+  hình ảnh không hiển thị trong phần còn lại của session. Yêu cầu keyframe trước đây được
+  gửi khi decoder *cũ* bị huỷ, đúng thời điểm không có surface để vẽ: IDR tới nơi, vòng
+  decode loại bỏ nó vì thiếu surface, và `CancelKeyframeRequest` xoá yêu cầu đang chờ. Hiện
+  `EnsureDecoder` đặt cờ yêu cầu cho mọi decoder mà nó mở, nên keyframe được yêu cầu vào
+  thời điểm đã có nơi hiển thị. `MediaCodecDecoder` có lỗi tương ứng ở phía còn lại: nó đặt
+  `sentCsd_` ngay ở frame đầu tiên nhận được, kể cả khi frame đó không mang parameter set,
+  nên SPS/PPS của keyframe tiếp theo bị xếp hàng như dữ liệu thông thường và không cấu hình
+  được codec; hiện nó chờ một frame thực sự chứa chúng. Thành phần nào mở decoder thì thành
+  phần đó yêu cầu keyframe.
 
-- **Một `AVSampleBufferDisplayLayer` từng xuống nền sẽ nuốt khung hình trong im lặng**: iOS dừng
-  việc giải mã của layer khi app rời màn hình và bật `requiresFlushToResumeDecoding`; cho tới khi
-  gọi `flush`, mọi `enqueueSampleBuffer` đều được nhận rồi vứt đi. Không có gì khác nói ra điều
-  đó — `status` không phải `failed`, `isReadyForMoreMediaData` vẫn là true, và renderer không báo
-  lỗi nào — nên viewer trông vẫn khoẻ, vẫn đếm khung, và vẫn đen. `VtDecoder` kiểm tra cờ đó khi
-  mở trên một layer và kiểm lại trước mỗi khung, gọi flush, rồi cho khung đó thất bại để yêu cầu
-  keyframe đi kèm theo.
+- **Một `AVSampleBufferDisplayLayer` từng ở background sẽ loại bỏ frame mà không báo lỗi.**
+  iOS dừng việc decode của layer khi app rời khỏi màn hình và đặt
+  `requiresFlushToResumeDecoding`; cho tới khi `flush` được gọi, mọi `enqueueSampleBuffer`
+  đều được chấp nhận rồi loại bỏ. Không có dấu hiệu nào khác: `status` không phải `failed`,
+  `isReadyForMoreMediaData` vẫn là true, và renderer không báo lỗi, nên viewer hoạt động
+  bình thường về mặt số liệu nhưng không hiển thị hình. `VtDecoder` hiện kiểm tra cờ này
+  khi mở trên một layer và kiểm tra lại trước mỗi frame, thực hiện flush, và cho frame đó
+  fail để yêu cầu keyframe được gửi đi cùng lúc.
 
-- **Mỗi callback mà vòng lặp service của QUIC gọi ra đều có thể xoá chính connection nó đang
-  phục vụ**: `Service()` duyệt một bản chụp danh sách id rồi tra lại từng cái, vì
-  `cb_.onConnected`, `cb_.onStream` và `cb_.onDatagram` đều chạy code ứng dụng có thể đóng một
-  peer và xoá nó khỏi `connections_`. `DrainStreams` có kiểm lại sau mỗi callback nó gọi — các
-  guard tên `listStillIntact` sinh ra đúng để làm việc đó — nhưng nó chỉ `return` khỏi chính
-  nó, nên `Service()` rơi thẳng vào `DrainDatagrams(id, entry)` với `entry` đã bị xoá và giải
-  phóng, mà việc đầu tiên hàm đó làm là đưa `entry.conn` cho `quiche_conn_dgram_recv`. Phép
-  kiểm `Lookup(id) != &entry` lại nằm sau cả hai lần drain: muộn đúng một lời gọi. Trên CI
-  Windows nó hiện ra thành khoảng một trong ba lượt chết với `0xc0000409` hoặc `0xc0000374`, và
-  sống dai lâu như vậy vì fastfail không bao giờ tới được `SetUnhandledExceptionFilter` trong
-  `tests/integration/TestMain.cpp`, nên mỗi lượt đỏ chỉ để lại một mã thoát và không gì khác —
-  và cả hai job dựng ra để săn nó đều không thấy được, page heap thì vì khối được giải phóng là
-  của quiche, còn bản build bật Rust checks thì vì quiche không sai gì cả. Job ASan trên Windows
-  mới là thứ cuối cùng gọi tên được frame. Hãy kiểm lại entry sau mỗi lời gọi có thể chạy
-  callback, đừng kiểm một lần ở cuối khối.
+- **Mọi callback mà QUIC service loop gọi đều có thể xoá chính connection tương ứng.**
+  `Service()` duyệt một snapshot các connection id và tra cứu lại từng id, vì
+  `cb_.onConnected`, `cb_.onStream` và `cb_.onDatagram` đều chạy mã ứng dụng, vốn có thể
+  đóng một peer và xoá nó khỏi `connections_`. `DrainStreams` kiểm tra lại sau mỗi callback
+  — các guard tên `listStillIntact` tồn tại vì lý do này — nhưng nó chỉ return khỏi chính
+  nó, nên `Service()` tiếp tục chạy vào `DrainDatagrams(id, entry)` với `entry` đã bị xoá
+  và giải phóng, trong khi thao tác đầu tiên của hàm đó là truyền `entry.conn` cho
+  `quiche_conn_dgram_recv`. Phép kiểm tra `Lookup(id) != &entry` lại nằm sau cả hai lượt
+  drain, tức là muộn một bước. Trên CI Windows, lỗi này biểu hiện dưới dạng khoảng một
+  trong ba lần chạy kết thúc với `0xc0000409` hoặc `0xc0000374`, và tồn tại lâu vì một cú
+  fastfail không tới được `SetUnhandledExceptionFilter` trong
+  `tests/integration/TestMain.cpp`, nên một lượt chạy fail chỉ để lại exit code. Ngoài ra,
+  cả hai job được dựng để tìm lỗi này đều không phát hiện được: page heap không thấy vì
+  block đã giải phóng thuộc về chính quiche và phần corruption là dữ liệu mà connection đã
+  huỷ ghi sau đó; bản build Rust-checks cũng không thấy vì bên trong quiche không có lỗi.
+  Job Windows ASan là công cụ cuối cùng xác định được frame gây lỗi. Cần kiểm tra lại entry
+  sau mỗi lần gọi có thể chạy một callback, không chỉ kiểm tra một lần ở cuối khối.
 
-- **Một watchdog sống-chết chỉ đo được đối phương trong lúc vòng lặp của chính nó còn
-  chạy**: cửa sổ năm giây chờ pong của viewer đếm theo đồng hồ treo tường, nên mọi đình
-  trệ ở phía bên này sợi dây đều đọc thành một host đã câm. Trên job ASan Windows của CI,
-  một lượt tải lên 32 MB chạy cạnh luồng hình đóng băng cả tiến trình 3,7 giây — các dòng
-  log đóng dấu `t=07:46:58` và `t=07:47:00` cùng ra lúc 07:47:01, và bốn endpoint QUIC mỗi
-  cái báo khoảng trống poll nhiều giây của riêng nó ngay khoảnh khắc đó — rồi `HostLink`
-  tuyên bố mất một link hoàn toàn khỏe mạnh. Lần quay số lại đưa client sang một cổng
-  nguồn mới, kết nối cũ của host chết theo idle timeout 30 giây và kéo theo cả lô file
-  đang bay (`transfer aborted ... link-lost`), còn
-  `TestInputStaysLiveDuringABigTransfer` ngồi hết trọn 120 giây hạn của nó.
-  `LinkPulse::Tick` giờ chạy mỗi vòng của `PumpReady` và trả lại mọi phần một vòng tiêu
-  quá `kLinkWatchStepUs`: im lặng chỉ được tính khi ta còn ở thế nghe được. Bất kỳ
-  watchdog nào đo một phía ở xa bằng đồng hồ tại chỗ đều phải trừ đi khoảng thời gian nó
-  không nhìn, nếu không thứ đầu tiên nó phát hiện ra chính là cái máy của nó.
+- **Một watchdog liveness chỉ đo được đối tác khi vòng lặp của chính nó đang chạy.** Cửa sổ
+  năm giây chờ pong của viewer tính theo đồng hồ thực, nên bất kỳ khoảng dừng nào ở phía
+  này cũng được hiểu là host đã ngừng phản hồi. Trên job CI Windows ASan, một lượt upload
+  32 MB chạy song song với một stream đang hoạt động đã làm treo cả process 3,7 giây: các
+  dòng log đóng dấu `t=07:46:58` và `t=07:47:00` đều xuất hiện lúc 07:47:01, và bốn QUIC
+  endpoint đồng thời báo khoảng trống poll nhiều giây, trong khi `HostLink` kết luận rằng
+  một link hoàn toàn bình thường đã mất. Lượt kết nối lại sau đó chuyển client sang một
+  source port mới, connection cũ ở phía host bị đóng do idle timeout 30 giây và kéo theo
+  batch đang truyền (`transfer aborted ... link-lost`), khiến
+  `TestInputStaysLiveDuringABigTransfer` chờ hết toàn bộ 120 giây deadline. Hiện
+  `LinkPulse::Tick` chạy một lần mỗi vòng của `PumpReady` và trừ lại toàn bộ phần thời gian
+  một vòng vượt quá `kLinkWatchStepUs`: khoảng im lặng chỉ được tính khi phía này thực sự
+  đang theo dõi. Mọi watchdog đo một bên ở xa bằng đồng hồ cục bộ đều phải trừ đi khoảng
+  thời gian nó không quan sát, nếu không thứ đầu tiên nó phát hiện sẽ là tình trạng của
+  chính máy mình.
 
-- **Một lượt truyền sống lâu hơn kết nối của nó thì phải được báo cho biết**: `FileSender`
-  chỉ rời `Sending` khi có ack, có cancel hoặc `LinkLost()`, còn `FileUpload::Pump` coi một
-  lần gửi bị từ chối là backpressure chứ không phải thất bại. `ScreenViewer` nối
-  `LinkLost()` vào `onStreamBroken` — thứ chỉ bắn khi một stream bị reset trên kết nối vẫn
-  còn sống — và vào lúc phiên kết thúc, nhưng không nối vào `onLinkLost` của chính
-  `HostLink`. Thế nên một lần quay số lại giữa chừng để `uploading()` mãi là true trong khi
-  đầu kia không còn ai có thể trả lời: host đã hủy lô file từ trước, và bộ nhận trên kết
-  nối mới chưa từng thấy lời mời. Viewer giờ cho lượt tải lên hỏng hẳn ở `onLinkLost` với
-  `TransferReason::LinkLost`. Muốn tiếp tục qua một lần quay số lại thì phải phát lại lời
-  mời trên kết nối mới; chừng nào chưa có điều đó, kết thúc lượt truyền một cách trung
-  thực vẫn hơn một thanh tiến trình không bao giờ nhúc nhích nữa.
+- **Một phiên truyền tồn tại lâu hơn connection của nó phải được thông báo.** `FileSender`
+  chỉ rời trạng thái `Sending` khi nhận được ack, cancel hoặc `LinkLost()`, còn
+  `FileUpload::Pump` coi một lần gửi bị từ chối là backpressure chứ không phải lỗi.
+  `ScreenViewer` nối `LinkLost()` với `onStreamBroken`, sự kiện phát sinh khi một stream bị
+  reset trên một connection vẫn hoạt động, và với thời điểm session kết thúc, nhưng không
+  nối với `onLinkLost` của chính `HostLink`. Do đó một lượt kết nối lại giữa phiên truyền
+  để lại `uploading()` ở giá trị true trong khi ở đầu kia không còn thành phần nào có thể
+  phản hồi: host đã huỷ batch, còn receiver trên connection mới chưa từng nhận được đề
+  nghị. Hiện viewer cho lượt upload fail tại `onLinkLost` với `TransferReason::LinkLost`.
+  Việc tiếp tục truyền qua một lượt kết nối lại đòi hỏi phát lại đề nghị trên connection
+  mới; cho tới khi tính năng đó được bổ sung, việc kết thúc phiên truyền một cách rõ ràng
+  tốt hơn một thanh tiến độ không còn thay đổi.

@@ -2,286 +2,304 @@
 
 # Deskhub — ビルドと開発
 
-Deskhub を自分でコンパイルし、テストスイートを走らせ、リリースを切るために必要なすべて。
-アプリを*使う*だけなら、ビルド済みのものを [`INSTALL.ja.md`](INSTALL.ja.md) から取れば
-いい。
+本書は、Deskhub を自分でコンパイルし、test suite を実行し、release を作成するために
+必要な事項をまとめたものである。app を*使用する*だけであれば、
+[`INSTALL.ja.md`](INSTALL.ja.md) から build 済みのものを入手するほうがよい。
 
-本書は [`BUILD.md`](BUILD.md) の翻訳である。相違がある場合は英語版が正典となる。
+本書は [`BUILD.md`](BUILD.md) の翻訳。食い違いがある場合は英語版が正文。
 
 ```bash
 git clone --recurse-submodules https://github.com/manhpham90vn/Deskhub.git
 cd Deskhub
-make bootstrap        # 一度だけ：この OS 向けのツールチェーンと依存
-make test             # コアスイートをオフラインでビルドして実行
+make bootstrap        # 一度だけ: この OS 向けの toolchain と依存関係
+make test             # core suite を build し、オフラインで実行
 make build-linux      # または build-windows / build-macos / build-ios / build-android
 ```
 
-暗黙にビルドされるプラットフォームはない。素の `make` はターゲット一覧を表示するだけで
-何もビルドしない。すべてのターゲットは [`Makefile`](../Makefile) の先頭に完全な形で
-記されており、素の `make` が表示するのは `make/help.txt` である。
+暗黙に build されるプラットフォームはない。引数なしの `make` は target の一覧を表示
+するだけで、build は行わない。各 target は [`Makefile`](../Makefile) の冒頭に完全な
+説明がある。引数なしの `make` が表示するのは `make/help.txt` である。
 
 ---
 
-## 1. 先に必要なもの
+## 1. 事前に必要なもの
 
-`make bootstrap` は入れられるものを入れ、入れられないものを教えてくれる。走らせる前に
-これらは自分で入れておくこと：
+`make bootstrap` は自動で導入できるものを導入し、できないものは通知する。実行前に次を
+自分で用意しておく必要がある。
 
-| ホスト OS | 先に入れるもの | bootstrap がやること |
+| 手元の OS | 事前に導入するもの | bootstrap が導入するもの |
 | --- | --- | --- |
-| **Ubuntu / Debian** | apt 以外に必要なし。[Rust](https://rustup.rs) | build-essential、clang、llvm、cmake、ninja、JDK 17、GTK3 / PipeWire / VA-API / トレイの `-dev` パッケージ、VA-API ドライバ、GNOME portal、静的な最小 FFmpeg、quiche、opus |
-| **macOS** | [Homebrew](https://brew.sh)、Xcode + コマンドラインツール、[Rust](https://rustup.rs) | cmake、ninja、swiftlint、pipx、Homebrew の LLVM（Apple clang には libFuzzer ランタイムが入っていない）、Temurin JDK 17、Apple と Android 向けの quiche と opus |
-| **Windows** | winget（App Installer）、C++ ツールチェーンと *C++ Clang tools* コンポーネント入りの Visual Studio、[Rust](https://rustup.rs) | 残りは `scripts/bootstrap.ps1` が winget で入れる |
+| **Ubuntu / Debian** | apt 以外に不要。加えて [Rust](https://rustup.rs) | build-essential、clang、llvm、cmake、ninja、JDK 17、GTK3 / PipeWire / VA-API / tray の `-dev` package、VA-API driver、GNOME portal、静的な最小構成 FFmpeg、quiche、opus |
+| **macOS** | [Homebrew](https://brew.sh)、Xcode と command line tools、[Rust](https://rustup.rs) | cmake、ninja、swiftlint、pipx、Homebrew の LLVM（Apple clang には libFuzzer runtime が含まれない）、Temurin JDK 17、Apple 向けと Android 向けの quiche および opus |
+| **Windows** | winget（App Installer）、C++ toolchain と *C++ Clang tools* コンポーネントを含む Visual Studio、[Rust](https://rustup.rs) | 残りは winget 経由で、`scripts/bootstrap.ps1` が実行する |
 
-どの OS でもスタイルツールをピン留めする：clang-format、clang-tidy、ktlint、SwiftFormat
-をそれぞれ固定バージョンでチェックサム検証つきで入れる — 手で入れてはいけない。CI が
-比較するのはまさにこれらのバージョンである。
+いずれの OS でも、bootstrap は style ツールを pin する。clang-format、clang-tidy、
+ktlint、SwiftFormat がそれぞれ固定バージョンで、checksum の検証を伴う。これらを手動で
+導入してはならない。CI が突き合わせるのはこのバージョンだからである。
 
-モバイル向けはさらに要る。`build-android` には NDK 入りの Android SDK が必要で
-（`ANDROID_HOME` が cmdline-tools のインストール先を指していれば bootstrap が SDK
-パッケージを入れる）、`build-ios` にはシミュレータランタイム入りの Xcode が必要。
+モバイル向けの target には追加の要件がある。`build-android` には NDK を含む Android
+SDK が必要である（`ANDROID_HOME` が cmdline-tools のインストール先を指していれば、
+bootstrap が SDK package を導入する）。`build-ios` には Simulator runtime を含む Xcode
+が必要である。
 
-git サブモジュールは `nvenc` ヘッダだけ。クローン時の `--recurse-submodules`、または
-`git submodule update --init` で足りる。`make bootstrap` も同期してくれる。
+git submodule は `nvenc` のヘッダのみである。clone 時に `--recurse-submodules` を
+付けるか、後から `git submodule update --init` を実行すればよい。`make bootstrap` も
+これを同期する。
 
 ## 2. ツリーの構成
 
 ```
-core/       プラットフォーム非依存の C++20 — プロトコル、パケット化、FEC、セッション状態、
-            入力マッピング、ビットレート制御、VT エミュレータ。OS ヘッダなし。ユニットテスト済み。
-platform/   ひとつの共通 API の背後にある薄い OS 抽象 — ソケット、クロック、ログ、
-            乱数、ソース列挙。core に依存。
-client/     5 つのアプリ：android、ios、linux、macos、windows。
-            client/apple/ は macOS と iOS のアプリが共有する Swift で、それ自体はアプリではない。
-            client/cli/ はコマンドラインクライアント。デスクトップ 3 種で 1 バイナリ。
-third_party/  quiche（QUIC）、opus（音声）、nvenc ヘッダ、最小 FFmpeg ビルド
-make/       プラットフォームごとに 1 つの .mk。ルート Makefile が include する
-scripts/    bootstrap、パッケージング、カバレッジ、スタイル、CI 補助
-.github/    ワークフローと、それらが共用する複合ステップ actions/
+core/       プラットフォーム非依存の C++20 —— protocol、packetization、FEC、session state、
+            input mapping、bitrate control、VT emulator。OS ヘッダなし。unit test あり。
+platform/   OS 向けの薄い abstraction で、API は 1 種類 —— socket、clock、logging、
+            random、source の列挙。core に依存する。
+client/     5 つの app: android、ios、linux、macos、windows。
+            client/apple/ は macOS と iOS の app が共有する Swift であり、app ではない。
+            client/cli/ は command line client。デスクトップ 3 種を binary 1 つで担う。
+third_party/  quiche (QUIC)、opus (audio)、nvenc のヘッダ、最小構成の FFmpeg build
+make/       プラットフォームごとに .mk を 1 つ。ルートの Makefile が include する
+scripts/    bootstrap、パッケージング、coverage、style、CI 用の補助スクリプト
+.github/    workflow と、それらが共用する composite step（actions/）
 ```
 
-ロジックは一度書いて共有する。`client/*` の下に何かを足す前に、それが `core/`
-（プラットフォーム非依存）か `platform/`（OS が要るが API はどこでも同じ）に属さないかを
-確かめること。[`ARCHITECTURE.ja.md`](ARCHITECTURE.ja.md) がレイヤ、スレッドモデル、
-ワイヤプロトコルを説明し、`CLAUDE.md` がこのリポジトリで強制されるルールを定めている。
+ロジックは一度だけ記述して共有する。`client/*` の下に追加する前に、それが `core/`
+（プラットフォーム非依存）または `platform/`（OS を必要とするが API はどこでも同一）に
+属さないかを確認すること。layer の分割、threading model、wire protocol の説明は
+[`ARCHITECTURE.ja.md`](ARCHITECTURE.ja.md) にあり、この repo が強制する規則は
+`CLAUDE.md` に記載している。
 
-## 3. 日々のループ
+## 3. 日常の手順
 
 ```bash
-make test      # コアスイート。オフライン、GPU もネットワークも不要 — 数秒
-make lint      # C++、Kotlin、Swift の書式チェック。書き換えはしない
+make test      # core suite。オフラインで、GPU も network も不要 —— 数秒
+make lint      # C++・Kotlin・Swift の format を検査する。ファイルは書き換えない
 ```
 
-変更を「終わった」と見なす前に両方を走らせる。`make format` はチェックではなく書式を
-適用する — 手で整形しないこと。ツールがピン留めされているのには理由がある。
+変更を完了と判断する前に、両方を実行すること。`make format` は検査ではなく format を
+実際に適用する。手作業での整形は行わないこと。ツールのバージョンを固定しているのには
+理由がある。
 
-`core/` に新しいロジックを足したら、対応する `core/tests/` のサブディレクトリにテストが
-要る。
+`core/` に追加したロジックには、`core/tests/` の対応するサブディレクトリに test が必要
+である。
 
-## 4. アプリのビルドと実行
+## 4. app の build と実行
 
-| ターゲット | 作るもの | 必要なもの |
+| Target | 生成物 | 必要なもの |
 | --- | --- | --- |
-| `make build-windows` | `Deskhub.exe` 1 つ | Windows + MSVC |
-| `make build-macos` | macOS アプリ | macOS + Xcode |
-| `make build-linux` | `deskhub` バイナリ 1 つ | Ubuntu + `-dev` パッケージ |
-| `make build-ios` | シミュレータ向け iOS アプリ | macOS + Xcode + シミュレータランタイム |
-| `make build-android` | デバッグ APK | Android SDK + NDK、`adb` |
+| `make build-windows` | `Deskhub.exe` 1 つ | Windows と MSVC |
+| `make build-macos` | macOS app | macOS と Xcode |
+| `make build-linux` | `deskhub` binary 1 つ | Ubuntu と各 `-dev` package |
+| `make build-ios` | Simulator 向けの iOS app | macOS、Xcode、Simulator runtime |
+| `make build-android` | debug APK | Android SDK、NDK、`adb` |
 
-それぞれに `release-<os>`（最適化）と `run-<os>`（ビルドして起動）の兄弟がある。
-デスクトップアプリはコマンドラインフラグを一切解釈しない — すべては 4 つの画面上で
-選ぶ。`run-android` は adb 経由で接続中の実機かエミュレータにインストールして開き、
-`run-ios` はシミュレータで同じことをする。
+各 target には `release-<os>`（最適化）と `run-<os>`（build して起動）が対になって存在
+する。デスクトップの app は command line のフラグを一切解釈せず、選択はすべて 4 つの
+ページで行う。`run-android` は adb 経由で接続中の端末または emulator にインストールして
+起動し、`run-ios` は Simulator で同じ処理を行う。
 
-### コマンドラインクライアント
+### Command line client
 
-`client/cli/` は GUI ツールキットなしで同じ仕事をする `deskhub-cli` バイナリを 1 つ
-ビルドする。画面ではなくフラグで駆動する。SSH 越し、スクリプトの中、あるいは systemd の
-下で Deskhub を動かすならこれである。
+`client/cli/` は `deskhub-cli` という binary を 1 つ build する。同じ機能を GUI
+toolkit なしで提供し、ページではなくフラグで制御する。SSH 経由、スクリプト内、
+systemd 配下で Deskhub を動かす場合はこれを使用する。
 
 ```bash
-make build-cli                       # この OS 向けのデバッグビルド
-make release-cli                     # 最適化
-make run-cli ARGS="scan"             # ビルドしてその引数で実行
+make build-cli                       # この OS 向けの debug build
+make release-cli                     # 最適化版
+make run-cli ARGS="scan"             # build したうえで、その引数で実行
 ```
 
-`-DDESKHUB_CLI=ON`（既定はオフ）の後ろにあるので、アプリ本体もサニタイザ・カバレッジ・
-fuzz の各プリセットもこれに影響されない。オンにすると OS ごとのメディアライブラリが
-任意ではなく必須になる。キャプチャもデコードもできないクライアントはクライアントでは
-ないからである。
+この target は `-DDESKHUB_CLI=ON` の後ろにあり（既定では無効）、app および sanitizer・
+coverage・fuzz の preset には影響しない。有効にすると、OS ごとの media ライブラリが
+任意から必須に変わる。capture も decode もできない client は client として成立しない
+ためである。
 
-| コマンド | 動作 |
+| コマンド | 機能 |
 | --- | --- |
-| `share` | このマシンを共有する — 任意のディスプレイ、シェル、または両方 |
-| `connect ADDRESS` | ホストの画面をウィンドウで開いて操作する |
-| `shell ADDRESS` | いま居るターミナルの中に、ホストのシェルを開く |
-| `displays`、`scan`、`sources`、`probe` | 何が共有でき、外に誰がいるか |
-| `devices`、`trust`、`settings` | デスクトップアプリが読み書きするのと同じファイル |
+| `share` | このマシンを共有する —— 任意の display、shell、またはその両方 |
+| `connect ADDRESS` | host の画面を表示するウィンドウを開き、操作する |
+| `shell ADDRESS` | 現在の terminal 内で host 上の shell を開く |
+| `displays`、`scan`、`sources`、`probe` | 共有可能な対象と、ネットワーク上のマシン |
+| `devices`、`trust`、`settings` | デスクトップ app が読み書きするのと同じファイル |
 
-`deskhub-cli help COMMAND` がフラグを表示する。すべてのコマンドが `--json` に応じ、
-終了コードが何が悪かったかを示す：`2` フラグ不正、`3` 応答なし、`4` 拒否、`5` ホスト鍵が
-変わった、`9` このビルドではできない。
+フラグは `deskhub-cli help COMMAND` が表示する。すべてのコマンドが `--json` に対応し、
+exit code が失敗の理由を示す。`2` フラグの誤り、`3` 応答なし、`4` 拒否、`5` host key
+の変更、`9` この build では未対応。
 
-現在の OS ごとの状況：Linux はすべてできる。Windows はデスクトップアプリが既に使っている
-のと同じウィンドウコードで共有と接続をする。macOS は共有とシェルはできるが、`connect`
-にはまだ書かれていないウィンドウ層が必要で、その旨を報告する。
+OS ごとの現状は次のとおりである。Linux はすべての機能に対応する。Windows は share と
+connect に対応し、デスクトップ app 既存のウィンドウコードを再利用する。macOS は share
+と shell の起動に対応するが、`connect` には未実装の window layer が必要であり、その旨
+を報告する。
 
-`core/` と `platform/` だけを触るなら、共有 CMake ツリーのほうが速い：
+`core/` と `platform/` のみを扱う場合は、共有の CMake ツリーのほうが高速である。
 
 ```bash
-make debug        # デバッグプリセットの configure + build
-make release      # …リリースプリセット
+make debug        # debug preset を configure して build する
+make release      # …release preset を
 ```
 
-**quiche と opus は ABI ごと。** QUIC トランスポートは `third_party/quiche` にビルド
-される Rust の静的ライブラリで、これなしでは共有も接続もできない。Opus 音声コーデックは
-`third_party/opus` にビルドされる C の静的ライブラリで、これなしでは共有に音が乗らない。
-`debug`、`release`、すべての `build-*` ターゲットは必要な ABI を先にビルドし、一度
-ビルドされていれば何もしない — `make quiche`、`quiche-android`、`quiche-ios`、
-`quiche-macos` と、対応する `opus`、`opus-android`、`opus-ios`、`opus-macos` で単独に
-実行することもできる。CMake が quiche 不在のエラーで止まるなら、それは意図的である。
-決して接続できないバイナリを作ることを拒んでいる。
+**quiche と opus は ABI ごとに build する。** QUIC transport は `third_party/quiche`
+で build される Rust の静的ライブラリであり、これがないと share も connect もできない。
+Opus audio codec は `third_party/opus` で build される C の静的ライブラリであり、これが
+ないと共有に音声が含まれない。`debug`、`release`、およびすべての `build-*` target は
+必要な ABI を先に build し、既に build 済みであれば何も行わない。`make quiche`、
+`quiche-android`、`quiche-ios`、`quiche-macos`、および対応する `opus`、
+`opus-android`、`opus-ios`、`opus-macos` はこれらの工程を単独で実行する。quiche が
+ないときに CMake が停止するのは意図的である。connect できない binary の生成を拒否して
+いる。
 
 ## 5. テスト
 
-| コマンド | 実行環境 | 対象 |
+| コマンド | 実行環境 | 対象範囲 |
 | --- | --- | --- |
-| `make test` | オフライン、ソケットなし | `core/` のすべて：ワイヤフォーマット、フレーミング、FEC、セッション、VT エミュレータ、設定、文字列 |
-| `make test-platform` | ループバックソケット | 実際の QUIC ハンドシェイク、SPAKE2 のエンドツーエンド、ターミナルのホスト + ビューア、実シェルに対する PTY、ロックアウト、承認 |
-| `make test-integration` | ループバック、疑似キャプチャ/エンコード | ホスト↔クライアントの完全なセッション：ネゴシエーション、映像の伝送、入力、パスコードと承認のゲート、ゴミ耐性 |
-| `make test-all` | 3 つすべて、core が先 | |
-| `make test-ctest` | 同じテストを CTest 経由で | CI がまさにこう呼び出す |
-| `make test-asan` | 3 つすべてを ASan + UBSan の下で | clang/gcc のみ、MSVC は不可 |
-| `make test-tsan` | 3 つすべてを ThreadSanitizer の下で | clang/gcc のみ、MSVC は不可 |
-| `make test-perf` | リリースビルド、オフライン + ループバック | ホットパスを走らせるだけでなく測る：`core_perf` がパケット化/再組み立て/FEC、1080p 縮小、CRC とファイルのバッチ、VT パーサと画面、ワイヤの符号化/復号、音声ジッタバッファを、`platform_perf` がループバック上の実 QUIC を覆う |
+| `make test` | オフライン、socket なし | `core/` の全体: wire format、framing、FEC、session、VT emulator、settings、文字列 |
+| `make test-platform` | loopback socket | 実際の QUIC handshake、end-to-end の SPAKE2、ネットワーク越しの terminal host と viewer、実 shell に対する PTY、lockout、approval |
+| `make test-integration` | loopback、capture/encode は模擬実装 | host↔client の session 一式: negotiation、ネットワーク越しの video、input、passcode と approval による制御、不正データへの耐性 |
+| `make test-all` | 3 つの suite すべて。core が先 | |
+| `make test-ctest` | 同じ test を CTest 経由で実行 | CI の呼び出し方と同一 |
+| `make test-asan` | 3 つの suite を ASan と UBSan の下で実行 | clang/gcc のみ。MSVC は非対応 |
+| `make test-tsan` | 3 つの suite を ThreadSanitizer の下で実行 | clang/gcc のみ。MSVC は非対応 |
+| `make test-perf` | release build、オフラインと loopback | hot path を実測する: `core_perf` は packetize/reassemble/FEC、1080p の縮小、CRC とファイルのバッチ、VT parser と screen、wire の encode/decode、audio jitter buffer を対象とし、`platform_perf` は loopback 上の実際の QUIC を対象とする |
 
-テストスイートのどれも、対向のピアも GPU もネットワークも必要としない。
+これらの test suite には、リモートの peer、GPU、network を必要とするものはない。
 
-**カバレッジ。** `make coverage` は clang + llvm-cov で `core/` のレポートを作る。
-`scripts/check-coverage.sh` が CI と同じゲートをかける — **行 90 % 以上、分岐 80 %
-以上**。
+**Coverage。** `make coverage` は clang と llvm-cov で `core/` のレポートを生成する。
+`scripts/check-coverage.sh` は CI と同じ基準を適用する。**line ≥ 90 %、branch ≥ 80 %**
+である。
 
-**ファジング。** `make fuzz` は、ワイヤ、H.264、再組み立て、ターミナルバイト、UI テキスト
-の各パーサと、ホストおよびビューアのセッション状態機械に対して libFuzzer ターゲットを
-走らせる（clang、Linux/macOS。ターゲットごとに `FUZZ_SECONDS=N`）。各ターゲットはまず
-`core/fuzz/regressions/<target>` を再生して、直したクラッシュが戻らないことを確かめ、
-それからコミット済みのシードと辞書からファジングする。`make fuzz-coverage` はコーパスが
-実際に到達している core の行を示す。見つかったクラッシュはすべて回帰入力になる。
+**Fuzzing。** `make fuzz` は libFuzzer の target を実行する。対象は wire、H.264、
+reassembly、terminal の byte stream、UI テキストの parser、および host 側と viewer 側の
+session state machine である（clang、Linux/macOS。target ごとに `FUZZ_SECONDS=N`）。
+各 target はまず `core/fuzz/regressions/<target>` を再生し、修正済みの crash が再発しな
+いことを確認したうえで、commit 済みの seed と dictionary から fuzz を開始する。corpus
+が core のどの行まで到達しているかは `make fuzz-coverage` で確認できる。検出された
+crash はすべて regression の入力となる。
 
-**性能。** `make test-perf` はリリースプリセットで 2 つの性能バイナリをビルドして走らせる：
-`core_perf` が純 C++ のホットパスで 37 のワークロードを測り、続いて `platform_perf` が
-ループバック上の実 QUIC でさらに 6 つを測る。全体で数秒。どちらかを落とす条件は 3 つあり、
-どれも空から降ってきたミリ秒の数字ではない：
+**パフォーマンス。** `make test-perf` は release preset で perf の binary を 2 つ build
+して実行する。`core_perf` は純 C++ の hot path で 37 個の workload を測定し、続く
+`platform_perf` は loopback 上の実際の QUIC でさらに 6 個を測定する。所要時間は合計で
+数秒である。失敗の判定基準は 3 つあり、いずれも恣意的に定めたミリ秒の閾値ではない。
 
-- **単位あたりの確保回数**。グローバルな `operator new` を差し替えて厳密に数える。
-  パケットごと・フレームごとに確保し始めた経路は、どのマシンでも、どの実行でも落ちる。
-- **コストの伸び方**。`-scaling` の各行は同じ仕事を 4 倍の入力で走らせ、時間が入力より
-  はるかに速く伸びたら落とす — うっかり書いた O(n²) の形である。
-- **記録したベースラインからのずれ**。`make perf-baseline` がアイドルなマシンで
-  `out/perf/baseline.txt` を書き、以後の実行は各行の変化を報告して 25 % を超えたら
-  落ちる。このファイルはその 1 台を記述するものなので、git には入れない。
+- **単位あたりの allocation 回数。** グローバルな `operator new` を差し替えて正確に
+  計数する。packet ごと、あるいは frame ごとに allocate を始めた path は、どのマシン
+  でも毎回失敗する。
+- **コストの増え方。** `-scaling` の各行は入力を 4 倍にして同じ処理を実行し、所要時間が
+  入力よりはるかに速く増加した場合に失敗する。これは意図せず混入した O(n²) の特徴で
+  ある。
+- **記録済み baseline からの乖離。** `make perf-baseline` が負荷のないマシンで
+  `out/perf/baseline.txt` を生成し、以後の実行は行ごとに変化を報告して、25 % を超えた
+  時点で失敗する。このファイルは特定の 1 台を記述したものなので git には含めない。
 
-`DESKHUB_PERF_TOLERANCE`、`DESKHUB_PERF_REPEATS`、`DESKHUB_PERF_BASELINE`、
-`DESKHUB_PERF_WRITE` が計測側を調整する。`make test` も CI もこれらは一切走らせない。
-デバッグ、ASan、カバレッジのビルドは製品の速度について何も語らないからである。
+計測時間側の調整には `DESKHUB_PERF_TOLERANCE`、`DESKHUB_PERF_REPEATS`、
+`DESKHUB_PERF_BASELINE`、`DESKHUB_PERF_WRITE` を使用する。`make test` も CI もこの部分
+は実行しない。debug、ASan、coverage の build は production の速度を反映しないためで
+ある。
 
 ## 6. スタイルと静的解析
 
-| コマンド | 何を見るか |
+| コマンド | 検査内容 |
 | --- | --- |
-| `make format` | C++、Kotlin、Swift に書式を適用する |
-| `make lint` | 書き換えずに同じ検査 — CI が強制するもの |
-| `make lint-tidy` | `core/src` + `platform/src` に clang-tidy |
+| `make format` | C++、Kotlin、Swift に format を適用する |
+| `make lint` | 同じ検査を、ファイルを書き換えずに行う —— CI が強制するのはこちら |
+| `make lint-tidy` | `core/src` と `platform/src` に clang-tidy を適用する |
 
-単一言語版もある：`format-cpp`、`lint-cpp`、`format-kotlin`、`lint-kotlin`、
+言語単位の派生もある。`format-cpp`、`lint-cpp`、`format-kotlin`、`lint-kotlin`、
 `format-swift`、`lint-swift`。
 
-ハウスルールの要約 — 完全版は `CLAUDE.md` にある：
+プロジェクトの規約（要約。完全版は `CLAUDE.md`）:
 
-- C++20、コンパイラ拡張なし。core は `deskhub`、platform は `deskhubp`。
-- 関数と型は `PascalCase`、ローカルは `camelCase`、private メンバは末尾にアンダースコア。
-- **どこにもコメントを書かない。** 代わりに説明的な名前、小さな関数、早期 return、
-  名前付き定数を使う。失われては困る知識は、それがないと失敗する経路のエラーメッセージか
-  `ARCHITECTURE.md` に入れる。
-- 識別子とログメッセージはすべて英語。散文の文書は 4 言語 — 英語、ベトナム語、中国語、
-  日本語 — で出し、英語が正典。
+- C++20、コンパイラ拡張は使用しない。core は `deskhub`、platform は `deskhubp`。
+- 関数と型は `PascalCase`、ローカル変数は `camelCase`、private メンバは末尾に
+  アンダースコアを付ける。
+- **どこにもコメントを書かない。** 代わりに説明的な名前、小さな関数、early return、
+  名前付き定数を用いる。残す必要のある知識は、それがない場合に失敗する path のエラー
+  メッセージ、または `ARCHITECTURE.md` に記載する。
+- identifier と log メッセージはすべて英語で記述する。散文のドキュメントは 4 言語 ——
+  英語、ベトナム語、中国語、日本語 —— で公開し、英語版を正文とする。
 
 ## 7. パッケージング
 
-| コマンド | 作るもの |
+| コマンド | 生成物 |
 | --- | --- |
-| `make dist-macos` | Developer ID で署名し、公証してステープルした dmg |
-| `make verify-macos` | いまビルドしたものに対する Gatekeeper チェック |
-| `make dist-linux` | `.deb` と `.rpm`。どちらも uinput の udev 規則を入れる |
+| `make dist-macos` | Developer ID で sign し、notarize と staple を行った dmg |
+| `make verify-macos` | 直前に build した成果物に対する Gatekeeper の検査 |
+| `make dist-linux` | `.deb` と `.rpm`。いずれも uinput の udev rule を導入する |
 
-Windows と Linux のアプリはそれぞれ 1 ファイル。ビルドすべきインストーラはない。
+Windows と Linux の app はそれぞれファイル 1 つであり、build すべき installer はない。
 
 ## 8. リリース
 
-1. [`VERSION`](../VERSION) を上げる — タグとファイルが食い違うと
-   `scripts/check-version.sh` がデプロイを落とす。
-2. 変更が触れる文書を、全言語分、同じコミットで更新する。
-3. `vX.Y.Z` のタグを打って push する。`.github/workflows/deploy.yml` が全プラットフォームを
-   ビルドし、GitHub Release を作り、iOS を TestFlight へ、macOS を公証へ、Android を Play
-   の internal トラックへ送る。
+1. [`VERSION`](../VERSION) を更新する。tag とファイルが一致しない場合、
+   `scripts/check-version.sh` が deploy を失敗させる。
+2. 今回の変更が影響するドキュメントを、全言語分、同一の commit で更新する。
+3. `vX.Y.Z` の tag を作成して push する。`.github/workflows/deploy.yml` が全
+   プラットフォームを build し、GitHub Release を作成し、iOS を TestFlight へ、macOS
+   を notarization へ、Android を Play の internal track へ送る。
 
-**リリースノートは、前のタグから今回のタグまでのコミット件名から** `scripts/changelog.sh`
-が生成する。あるタグが何を生むかはローカルで確認できる：
+**Release notes は、前回の tag から今回の tag までの commit subject から生成される。**
+担当するのは `scripts/changelog.sh` である。ある tag が何を生成するかは手元で確認でき
+る。
 
 ```bash
-scripts/changelog.sh v5.0.0     # 引数なしなら HEAD のタグに対して
+scripts/changelog.sh v5.0.0     # 引数を省略すると HEAD の tag を使用する
 ```
 
-つまりコミット件名はユーザーの目に触れるものであり、その前に付く conventional-commit の
-型がどの節に入るかを決める。完全な対応表、それを上書きするルール、実例は
-[`.claude/skills/commit/SKILL.md`](../.claude/skills/commit/SKILL.md) にある — 件名を
-書く前に読むこと。空の節はリリースから省かれ、`INCLUDE_INTERNAL=1 scripts/changelog.sh`
-で省かれたコミットが見える。
+したがって commit subject は利用者が読む文章であり、その先頭に付ける
+conventional-commit の type が、どのセクションに分類されるかを決める。完全な対応表、
+それを上書きする規則、実例は
+[`.claude/skills/commit/SKILL.md`](../.claude/skills/commit/SKILL.md) にある。subject
+を書く前に参照すること。空のセクションは release に含まれず、
+`INCLUDE_INTERNAL=1 scripts/changelog.sh` で省かれた commit を確認できる。
 
-## 9. CI が守らせること
+## 9. CI が検査する内容
 
-ローカルの `make test` + `make lint` が緑でも話は終わらない。すべてのプルリクエストで：
+手元で `make test` と `make lint` が成功しても、それがすべてではない。各 pull request
+では次を実行する。
 
-- `core/src` + `platform/src` への clang-tidy、SwiftLint `--strict`、Android Lint
-- ワークフローと `scripts/*.sh` への actionlint + shellcheck
-- 3 つのスイートを ASan/UBSan と TSan の下で。さらに arm64 Linux、Android エミュレータ、
-  iOS シミュレータ向けのクロスビルド
-- 統合スイート全体を Windows でさらに 3 回。3 回に 1 回ほど現れて 1 回の実行では
-  すり抜ける、間欠的なメモリ破壊を追うため。クラッシュしたフレームは破壊の被害者であって
-  原因ではないので、Windows のジョブはどれもシンボルと一緒に完全な minidump を書き出し、
-  夜間実行では負荷テストを二通りで繰り返す。ひとつは full page heap の下で、確保領域を
-  越えた書き込みがそれを行った命令そのもので落ちる。もうひとつは Rust の debug assertion と
-  オーバーフロー検査を有効にしてビルドした quiche に対してで、ASan は Rust を計装せず page
-  heap はヒープしか見張らないため、これが quiche の内側を見られる唯一の罠になる
-- core のカバレッジが行 90 % / 分岐 80 % 以上
-- libFuzzer の各ターゲットを 30 秒ずつ（夜間は各 15 分）
-- C++/Kotlin/Swift への CodeQL、履歴全体への gitleaks、依存関係レビュー
+- `core/src` と `platform/src` への clang-tidy、SwiftLint `--strict`、Android Lint
+- workflow と `scripts/*.sh` への actionlint と shellcheck
+- 3 つの suite を ASan/UBSan と TSan の下で実行し、さらに arm64 Linux、Android
+  emulator、iOS Simulator 向けに cross-build する
+- Windows で integration suite 一式をさらに 3 回実行する。断続的に発生する memory
+  corruption を特定するためであり、この問題は 3 回に 1 回程度しか現れず、1 回の実行では
+  見落としやすい。crash が発生した frame はこの corruption の結果であって原因ではない
+  ため、各 Windows job は symbol の隣に完全な minidump を書き出す。nightly では load
+  test をさらに 2 巡する。1 巡は full page heap の下で、allocation を越える書き込みが
+  それを引き起こした instruction で直ちに fault するようにする。もう 1 巡は Rust の
+  debug assertion と overflow check を有効にして build した quiche を対象とする。
+  quiche の内部を観察できる手段はこれだけである。ASan は Rust を instrument せず、
+  page heap が保護するのは heap のみだからである
+- core の coverage が line ≥ 90 %、branch ≥ 80 % であること
+- libFuzzer の target を各 30 秒実行する（nightly は各 15 分）
+- C++/Kotlin/Swift への CodeQL、履歴全体への gitleaks、および dependency review
 
-## 10. 開発ツール
+## 10. 開発者向けツール
 
-| コマンド | 動作 |
+| コマンド | 機能 |
 | --- | --- |
-| `make icons` | `assets/icon_1024.png` から全クライアントのアイコンを再生成 |
-| `make quic-smoke` | quiche 静的ライブラリに対する単体の QUIC クライアント + サーバ |
-| `make opus-smoke` | opus 静的ライブラリに対する単体のエンコード/デコード往復 — 実ビットレート、最大パケット、DTX が効いているかを報告 |
-| `make screenshots` | macOS：iPhone/iPad シミュレータ、Android エミュレータ、macOS アプリでストア用スクリーンショットを撮り直し、`docs/imgs` を更新（一部だけなら `ARGS="ios android macos readme"`） |
-| `make setup-linux-permissions` | ソースビルドからホストするための `/dev/uinput` udev 規則 + `input` グループ |
-| `make reset-macos-permissions` | ローカルビルドとダウンロード版が同じ bundle id を取り合うときに TCC の許可を消す（`ARGS="--purge"` はビルド済みのコピーも削除） |
-| `make ffmpeg-min` | Ubuntu：アプリがリンクする静的な最小 FFmpeg（`build-linux` が自動で実行） |
-| `make opus` | ホストターゲット向けの Opus 音声コーデック（`debug`、`release`、`build-linux` が自動で実行） |
-| `make clean` | `out/` を削除 |
+| `make icons` | `assets/icon_1024.png` からすべての client のアイコンを再生成する |
+| `make quic-smoke` | quiche 静的ライブラリに対する単体の QUIC client と server |
+| `make opus-smoke` | opus 静的ライブラリに対する単体の encode/decode 往復 —— 実際の bitrate、最大 packet、DTX の作動有無を報告する |
+| `make screenshots` | macOS: iPhone/iPad simulator、Android emulator、macOS app でストア用スクリーンショットを再取得し、`docs/imgs` を更新する（一部のみの場合は `ARGS="ios android macos readme"`） |
+| `make setup-linux-permissions` | `/dev/uinput` の udev rule と `input` group。source build から host するために使用する |
+| `make reset-macos-permissions` | ローカル build とダウンロード版が同一の bundle id を共有する場合に TCC の許可を消去する（`ARGS="--purge"` は build 済みのコピーも削除する） |
+| `make ffmpeg-min` | Ubuntu: app が link する静的な最小構成 FFmpeg（`build-linux` が自動的に実行する） |
+| `make opus` | host target 用の Opus audio codec（`debug`、`release`、`build-linux` が自動的に実行する） |
+| `make clean` | `out/` を削除する |
 
-## 11. ビルドが手向かってきたら
+## 11. build の問題への対処
 
-- **CMake が quiche ライブラリ不在で止まる** — 対応する `make quiche*` ターゲットを
-  走らせる。ABI ごとに必要である。opus と `make opus*` も同じ。
-- **macOS で `make fuzz` が libFuzzer を見つけない** — Homebrew の LLVM が要る。
-  `make bootstrap` が入れる。それ以外は Xcode のツールチェーンでビルドし続ける。
-- **`make lint` がエディタと食い違う** — ピン留めしたツールが正しい。`make bootstrap` を
-  もう一度走らせて正確なバージョンを取り、`make format` する。
-- **Android ターゲットが SDK を見つけられない** — `ANDROID_HOME` を設定して
-  `make bootstrap` をやり直す。`ANDROID_NDK_VERSION=<v>` で別の NDK を選べる。
-- **ローカルビルドとダウンロード版を行き来した後、macOS の権限がおかしい** —
-  `make reset-macos-permissions`。
+- **CMake が quiche のライブラリがないとして停止する** —— 対応する `make quiche*`
+  target を実行する。ABI ごとに専用のものが必要である。opus と `make opus*` も同様で
+  ある。
+- **macOS で `make fuzz` が libFuzzer を検出しない** —— Homebrew の LLVM が必要である。
+  `make bootstrap` が導入し、それ以外は引き続き Xcode の toolchain で build される。
+- **`make lint` の結果がエディタと一致しない** —— バージョンを固定したツールが基準で
+  ある。`make bootstrap` を再実行して正確なバージョンを取得し、`make format` を実行
+  する。
+- **Android の target が SDK を検出しない** —— `ANDROID_HOME` を設定したうえで
+  `make bootstrap` を再実行する。別の NDK は `ANDROID_NDK_VERSION=<v>` で指定できる。
+- **ローカル build とダウンロード版を切り替えたあと macOS の permission が正しく動作
+  しない** —— `make reset-macos-permissions` を実行する。
 
-不具合と質問：[issues](https://github.com/manhpham90vn/Deskhub/issues)。
+バグ報告と質問: [issues](https://github.com/manhpham90vn/Deskhub/issues)。

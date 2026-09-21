@@ -2,269 +2,277 @@
 
 # Deskhub —— 构建与开发
 
-自己编译 Deskhub、跑测试套件、发布一个版本所需要的一切。如果你只想*用*这个应用，请从
-[`INSTALL.zh.md`](INSTALL.zh.md) 取预编译版本。
+本文档说明自行编译 Deskhub、运行各 test suite 以及发布 release 所需的全部内容。若只需
+*使用* app，请按 [`INSTALL.zh.md`](INSTALL.zh.md) 获取预先 build 好的版本。
 
 本文件是 [`BUILD.md`](BUILD.md) 的译本；若两者有出入，以英文版为准。
 
 ```bash
 git clone --recurse-submodules https://github.com/manhpham90vn/Deskhub.git
 cd Deskhub
-make bootstrap        # 一次：本系统的工具链 + 依赖
-make test             # 离线构建并运行核心测试套件
+make bootstrap        # 执行一次: 当前 OS 的 toolchain 与依赖
+make test             # build 并离线运行 core suite
 make build-linux      # 或 build-windows / build-macos / build-ios / build-android
 ```
 
-任何平台都不会被隐式构建：直接运行 `make` 只会打印目标列表，什么都不构建。每个目标都在
-[`Makefile`](../Makefile) 顶部有完整说明，而 `make/help.txt` 就是裸 `make` 打印的内容。
+任何平台都不会被隐式 build：不带参数的 `make` 只打印 target 列表，不执行构建。每个
+target 在 [`Makefile`](../Makefile) 开头都有完整说明，而 `make/help.txt` 即为不带参数的
+`make` 所显示的内容。
 
 ---
 
-## 1. 先要准备什么
+## 1. 前置准备
 
-`make bootstrap` 会装它能装的，并告诉你它装不了什么。跑它之前，请先自己装好这些：
+`make bootstrap` 会安装能够自动安装的部分，并提示其余部分。运行之前需先自行准备以下
+内容：
 
-| 主机系统 | 先自行安装 | bootstrap 随后会做的事 |
+| 本机 OS | 需先安装 | bootstrap 随后安装 |
 | --- | --- | --- |
-| **Ubuntu / Debian** | apt 之外无需别的；[Rust](https://rustup.rs) | build-essential、clang、llvm、cmake、ninja、JDK 17，GTK3 / PipeWire / VA-API / 托盘的 `-dev` 包，VA-API 驱动，GNOME portal，静态最小化 FFmpeg，quiche，opus |
-| **macOS** | [Homebrew](https://brew.sh)、Xcode + 命令行工具、[Rust](https://rustup.rs) | cmake、ninja、swiftlint、pipx、Homebrew LLVM（Apple clang 不带 libFuzzer 运行时）、Temurin JDK 17，以及给 Apple 和 Android 用的 quiche 与 opus |
-| **Windows** | winget（App Installer）、带 C++ 工具链和 *C++ Clang tools* 组件的 Visual Studio、[Rust](https://rustup.rs) | 其余由 `scripts/bootstrap.ps1` 驱动 winget 安装 |
+| **Ubuntu / Debian** | 除 apt 外无需其他；[Rust](https://rustup.rs) | build-essential、clang、llvm、cmake、ninja、JDK 17，GTK3 / PipeWire / VA-API / tray 的 `-dev` package，VA-API driver，GNOME portal，静态的最小化 FFmpeg，quiche，opus |
+| **macOS** | [Homebrew](https://brew.sh)、Xcode 与 command line tools、[Rust](https://rustup.rs) | cmake、ninja、swiftlint、pipx、Homebrew 的 LLVM（Apple clang 不含 libFuzzer runtime）、Temurin JDK 17，以及面向 Apple 与 Android 的 quiche 和 opus |
+| **Windows** | winget（App Installer）、含 C++ toolchain 与 *C++ Clang tools* 组件的 Visual Studio、[Rust](https://rustup.rs) | 其余通过 winget 安装，由 `scripts/bootstrap.ps1` 执行 |
 
-在每个系统上它还会锁定代码风格工具：clang-format、clang-tidy、ktlint 和 SwiftFormat，
-每个都固定版本并校验校验和 —— 千万别手动装这些，CI 比对的正是这些版本。
+在所有 OS 上，bootstrap 还会 pin 住 style 工具：clang-format、clang-tidy、ktlint 和
+SwiftFormat，各自固定版本并校验 checksum。请勿手动安装这些工具，CI 比对的正是这些确切
+版本。
 
-移动端目标还需要更多：`build-android` 需要带 NDK 的 Android SDK（只要 `ANDROID_HOME`
-指向一份 cmdline-tools 安装，bootstrap 就会装好 SDK 组件），`build-ios` 需要带模拟器
-运行时的 Xcode。
+移动端 target 另有要求：`build-android` 需要含 NDK 的 Android SDK（当 `ANDROID_HOME`
+指向一份 cmdline-tools 安装时，bootstrap 会安装相应 SDK package），`build-ios` 需要含
+Simulator runtime 的 Xcode。
 
-只有 `nvenc` 头文件是 git 子模块；克隆时加 `--recurse-submodules`，或者执行
-`git submodule update --init` 即可。`make bootstrap` 也会同步它们。
+git submodule 只有 `nvenc` 头文件一项。clone 时加 `--recurse-submodules`，或事后执行
+`git submodule update --init` 即可。`make bootstrap` 也会同步该 submodule。
 
-## 2. 目录是怎么分的
+## 2. 目录结构
 
 ```
-core/       与平台无关的 C++20 —— 协议、分包、FEC、会话状态、
-            输入映射、码率控制、VT 模拟器。不含 OS 头文件。有单元测试。
-platform/   薄薄一层 OS 抽象，对外只有一套 API —— socket、时钟、日志、
-            随机数、来源枚举。依赖 core。
-client/     五个应用：android、ios、linux、macos、windows。
-            client/apple/ 是 macOS 和 iOS 应用共用的 Swift，本身不是应用。
-            client/cli/ 是命令行客户端，一个二进制覆盖三个桌面系统。
-third_party/  quiche（QUIC）、opus（音频）、nvenc 头文件、最小化 FFmpeg 构建
-make/       每个平台一个 .mk，由根 Makefile 引入
-scripts/    bootstrap、打包、覆盖率、风格与 CI 辅助脚本
-.github/    工作流，以及它们共用的组合步骤 actions/
+core/       与平台无关的 C++20 —— protocol、packetization、FEC、session state、
+            input mapping、bitrate control、VT emulator。不含 OS 头文件。有 unit test。
+platform/   面向 OS 的薄 abstraction，对外只有一套 API —— socket、clock、logging、
+            random、source 枚举。依赖 core。
+client/     五个 app: android、ios、linux、macos、windows。
+            client/apple/ 是 macOS 与 iOS app 共用的 Swift，本身不是 app。
+            client/cli/ 是 command line client，一个 binary 覆盖三个桌面平台。
+third_party/  quiche (QUIC)、opus (audio)、nvenc 头文件、最小化的 FFmpeg build
+make/       每个平台一个 .mk，由根 Makefile include
+scripts/    bootstrap、打包、coverage、style 以及 CI 用的辅助脚本
+.github/    workflow，以及供其共用的 composite step（actions/）
 ```
 
-逻辑只写一次，然后共享：在 `client/*` 下加任何东西之前，先看它是不是该放进 `core/`
-（与平台无关）或 `platform/`（需要 OS，但各处 API 相同）。
-[`ARCHITECTURE.zh.md`](ARCHITECTURE.zh.md) 讲清了分层、线程模型和线上协议；`CLAUDE.md`
-写明了本仓库强制执行的规则。
+逻辑只编写一次并共享使用。向 `client/*` 添加代码之前，需先判断它是否属于 `core/`（与平
+台无关）或 `platform/`（需要 OS，但各平台 API 相同）。
+[`ARCHITECTURE.zh.md`](ARCHITECTURE.zh.md) 说明分层、threading model 与 wire
+protocol；`CLAUDE.md` 列出本 repo 强制执行的规则。
 
-## 3. 日常循环
+## 3. 日常流程
 
 ```bash
-make test      # 核心套件，离线，不用 GPU 也不用网络 —— 几秒钟
-make lint      # 对 C++、Kotlin 和 Swift 做格式检查，不写回文件
+make test      # core suite，离线，无需 GPU 和 network —— 数秒完成
+make lint      # 检查 C++、Kotlin 和 Swift 的 format，不写回文件
 ```
 
-在认为一处改动完成之前，两个都要跑。`make format` 会真的应用格式化而不只是检查 ——
-永远别手工排版，工具锁定版本是有原因的。
+在认定一处改动完成之前，两者都需运行。`make format` 会实际应用 format，而不仅是检查。
+请勿手动排版，工具固定版本是有意为之。
 
-`core/` 里的新逻辑需要在对应的 `core/tests/` 子目录里配一个测试。
+`core/` 中新增的逻辑，需在 `core/tests/` 对应的子目录中配套 test。
 
-## 4. 构建并运行一个应用
+## 4. 构建与运行 app
 
-| 目标 | 产出 | 需要 |
+| Target | 产物 | 要求 |
 | --- | --- | --- |
-| `make build-windows` | 一个 `Deskhub.exe` | Windows + MSVC |
-| `make build-macos` | macOS 应用 | macOS + Xcode |
-| `make build-linux` | 一个 `deskhub` 二进制 | Ubuntu + 那些 `-dev` 包 |
-| `make build-ios` | 面向模拟器的 iOS 应用 | macOS + Xcode + 模拟器运行时 |
-| `make build-android` | 一个 debug APK | Android SDK + NDK、`adb` |
+| `make build-windows` | 一个 `Deskhub.exe` | Windows 与 MSVC |
+| `make build-macos` | macOS app | macOS 与 Xcode |
+| `make build-linux` | 一个 `deskhub` binary | Ubuntu 与相应 `-dev` package |
+| `make build-ios` | 面向 Simulator 的 iOS app | macOS、Xcode 与一个 Simulator runtime |
+| `make build-android` | 一个 debug APK | Android SDK、NDK、`adb` |
 
-每个都有配套的 `release-<os>`（优化版）和 `run-<os>`（先构建，再启动）。桌面应用完全不
-解析命令行参数 —— 一切都在那四个页面上选。`run-android` 通过 adb 在连接的设备或模拟器上
-安装并打开，`run-ios` 在模拟器上做同样的事。
+每个 target 都有配套的 `release-<os>`（优化版本）与 `run-<os>`（构建后启动）。桌面 app
+不解析任何 command line 参数，所有选择均在四个页面中完成。`run-android` 通过 adb 在已
+连接的设备或 emulator 上安装并打开；`run-ios` 在 Simulator 上执行相同操作。
 
-### 命令行客户端
+### Command line client
 
-`client/cli/` 构建出一个 `deskhub-cli` 二进制，不需要图形工具包就能做同样的事，用参数
-代替页面来驱动。要通过 SSH、在脚本里或者在 systemd 下跑 Deskhub，靠的就是它。
+`client/cli/` 构建出一个 `deskhub-cli` binary，实现相同功能但不需要 GUI toolkit，通过
+flag 而非页面进行控制。需要经由 SSH、从脚本中，或在 systemd 下运行 Deskhub 时使用它。
 
 ```bash
-make build-cli                       # 本系统的 debug 构建
-make release-cli                     # 优化版
-make run-cli ARGS="scan"             # 构建后带这些参数运行
+make build-cli                       # 当前 OS 的 debug build
+make release-cli                     # 优化版本
+make run-cli ARGS="scan"             # 构建后以给定参数运行
 ```
 
-它由 `-DDESKHUB_CLI=ON` 控制（默认关闭），所以应用本身以及 sanitizer、覆盖率和 fuzz 预设
-都不受它影响。打开它之后，各系统的媒体库就从可选变成必需 —— 一个既不能采集也不能解码的
-客户端算不上客户端。
+该 target 位于 `-DDESKHUB_CLI=ON` 之后（默认关闭），因此 app 以及 sanitizer、coverage、
+fuzz 等 preset 不受影响。启用后，各 OS 的 media 库由可选变为必需，因为无法 capture 也
+无法 decode 的 client 不成其为 client。
 
-| 命令 | 作用 |
+| 命令 | 功能 |
 | --- | --- |
-| `share` | 共享这台机器 —— 任意显示器、shell，或两者 |
-| `connect ADDRESS` | 打开一个窗口显示主机画面并操控它 |
-| `shell ADDRESS` | 在你当前所在的终端里，打开主机上的一个 shell |
-| `displays`、`scan`、`sources`、`probe` | 能共享什么，以及外面有谁 |
-| `devices`、`trust`、`settings` | 与桌面应用读写的是同一批文件 |
+| `share` | 共享本机 —— 任意 display、shell，或两者 |
+| `connect ADDRESS` | 打开窗口显示 host 的屏幕并进行操作 |
+| `shell ADDRESS` | 在当前 terminal 中打开 host 上的一个 shell |
+| `displays`、`scan`、`sources`、`probe` | 可共享的内容，以及网络中存在的机器 |
+| `devices`、`trust`、`settings` | 与桌面 app 读写同一批文件 |
 
-`deskhub-cli help COMMAND` 会打印参数。每条命令都支持 `--json`，退出码说明哪里出了错：
-`2` 参数不对，`3` 没人应答，`4` 被拒绝，`5` 主机密钥变了，`9` 这个构建做不了这件事。
+`deskhub-cli help COMMAND` 会打印可用 flag。所有命令均支持 `--json`，exit code 表明失败
+原因：`2` flag 有误、`3` 无响应、`4` 被拒绝、`5` host key 已变更、`9` 当前 build 不支持。
 
-各系统当前状态：Linux 全部功能都有。Windows 共享和连接走的是桌面应用已有的同一套窗口
-代码。macOS 能共享、能开 shell，但 `connect` 需要一个尚未编写的窗口层，它会如实告知。
+各 OS 的当前状态：Linux 支持全部功能。Windows 支持 share 与 connect，复用桌面 app 已有
+的窗口代码。macOS 支持 share 与打开 shell，但 `connect` 需要尚未实现的 window layer，程
+序会据实报告。
 
-如果只想改 `core/` 和 `platform/`，用共享的 CMake 树更快：
+若只修改 `core/` 与 `platform/`，使用共享的 CMake tree 更快：
 
 ```bash
-make debug        # 配置 + 构建 debug 预设
-make release      # ……release 预设
+make debug        # configure 并 build debug preset
+make release      # ……release preset
 ```
 
-**quiche 和 opus 按 ABI 分别构建。** QUIC 传输是构建在 `third_party/quiche` 里的一个 Rust
-静态库，没有它就既不能共享也不能连接。Opus 音频编解码器是构建在 `third_party/opus` 里的
-一个 C 静态库，没有它共享出去就没有声音。`debug`、`release` 和每个 `build-*` 目标都会先
-构建自己需要的那个 ABI，构建过一次之后就是空操作 —— `make quiche`、`quiche-android`、
-`quiche-ios`、`quiche-macos` 以及对应的 `opus`、`opus-android`、`opus-ios`、`opus-macos`
-也能单独跑这些步骤。如果 CMake 因为缺少 quiche 而停下，那是故意的：它拒绝产出一个永远
-连不上的二进制。
+**quiche 与 opus 按 ABI 分别构建。** QUIC transport 是在 `third_party/quiche` 中构建的
+Rust 静态库，缺少它则无法 share 也无法 connect。Opus audio codec 是在
+`third_party/opus` 中构建的 C 静态库，缺少它则共享内容没有声音。`debug`、`release` 以及
+所有 `build-*` target 都会先构建各自所需的 ABI，已构建过则不再重复。`make quiche`、
+`quiche-android`、`quiche-ios`、`quiche-macos` 以及对应的 `opus`、`opus-android`、
+`opus-ios`、`opus-macos` 可单独执行这些步骤。CMake 因缺少 quiche 而中止是有意为之：它
+拒绝产出一个根本无法 connect 的 binary。
 
 ## 5. 测试
 
 | 命令 | 运行环境 | 覆盖内容 |
 | --- | --- | --- |
-| `make test` | 离线，不用 socket | 整个 `core/`：线格式、分帧、FEC、会话、VT 模拟器、设置、字符串 |
-| `make test-platform` | 回环 socket | 真实的 QUIC 握手、端到端 SPAKE2、终端主机 + 观看端走真实链路、对着真 shell 的 PTY、锁定、审批 |
-| `make test-integration` | 回环，假的采集/编码 | 完整的主机↔客户端会话：协商、视频过网、输入、通行码与审批门禁、抗垃圾数据 |
-| `make test-all` | 三个都跑，core 优先 | |
-| `make test-ctest` | 通过 CTest 跑同样的测试 | 与 CI 调用方式完全一致 |
-| `make test-asan` | 三个都在 ASan + UBSan 下跑 | 仅限 clang/gcc，MSVC 不行 |
-| `make test-tsan` | 三个都在 ThreadSanitizer 下跑 | 仅限 clang/gcc，MSVC 不行 |
-| `make test-perf` | release 构建，离线 + 回环 | 真正测量而不只是跑一遍热路径：`core_perf` 覆盖分包/重组/FEC、1080p 缩放、CRC 与文件批处理、VT 解析器与屏幕、线上编解码、音频抖动缓冲；`platform_perf` 覆盖回环上的真实 QUIC |
+| `make test` | 离线，不使用 socket | 整个 `core/`: wire format、framing、FEC、session、VT emulator、settings、文案 |
+| `make test-platform` | loopback socket | 真实的 QUIC handshake、端到端的 SPAKE2、经由网络的 terminal host 与 viewer、面向真实 shell 的 PTY、lockout、approval |
+| `make test-integration` | loopback，capture/encode 为模拟实现 | 完整的 host↔client session: negotiation、经网络传输的视频、input、passcode 与 approval 的准入控制、对无效数据的容错 |
+| `make test-all` | 三个 suite 全部运行，core 在先 | |
+| `make test-ctest` | 相同的 test，经由 CTest 运行 | 与 CI 的调用方式完全一致 |
+| `make test-asan` | 三个 suite 在 ASan 与 UBSan 下运行 | 仅支持 clang/gcc，不支持 MSVC |
+| `make test-tsan` | 三个 suite 在 ThreadSanitizer 下运行 | 仅支持 clang/gcc，不支持 MSVC |
+| `make test-perf` | release build，离线与 loopback | 对 hot path 进行实测: `core_perf` 覆盖 packetize/reassemble/FEC、1080p 降采样、CRC 与文件批处理、VT parser 与 screen、wire 的 encode/decode、audio jitter buffer；`platform_perf` 覆盖 loopback 上的真实 QUIC |
 
-测试套件里没有任何一项需要远端对等方、GPU 或网络。
+这些 test suite 中没有任何一项需要远端 peer、GPU 或 network。
 
-**覆盖率。** `make coverage` 用 clang + llvm-cov 生成 `core/` 的报告；
-`scripts/check-coverage.sh` 执行 CI 采用的那道门槛 —— **行 ≥ 90 %、分支 ≥ 80 %**。
+**Coverage。** `make coverage` 使用 clang 与 llvm-cov 生成 `core/` 的报告。
+`scripts/check-coverage.sh` 执行与 CI 相同的门槛：**line ≥ 90 %，branch ≥ 80 %**。
 
-**Fuzzing。** `make fuzz` 会针对线格式、H.264、重组、终端字节流和界面文本解析器，以及
-主机与观看端的会话状态机运行 libFuzzer 目标（clang，Linux/macOS；每个目标可用
-`FUZZ_SECONDS=N`）。每个目标先重放 `core/fuzz/regressions/<target>`，确保修好的崩溃不会
-复活，然后从提交进仓库的种子和字典开始 fuzz。`make fuzz-coverage` 显示语料实际覆盖到
-core 的哪些行。每找到一次崩溃，就变成一个回归输入。
+**Fuzzing。** `make fuzz` 运行各 libFuzzer target，覆盖 wire、H.264、reassembly、
+terminal byte stream 与 UI 文案的 parser，以及 host 与 viewer 两侧的 session state
+machine（clang，Linux/macOS；每个 target 通过 `FUZZ_SECONDS=N` 控制时长）。每个 target
+先重放 `core/fuzz/regressions/<target>`，确保已修复的 crash 不再出现，然后从已提交的
+seed 与 dictionary 开始 fuzz。`make fuzz-coverage` 显示 corpus 实际覆盖到 core 的哪些
+行。发现的每个 crash 都会成为一份 regression 输入。
 
-**性能。** `make test-perf` 用 release 预设构建两个性能二进制并运行它们：`core_perf`
-在纯 C++ 热路径上测 37 项负载，接着 `platform_perf` 在回环上的真实 QUIC 上再测 6 项。
-总共几秒钟。有三件事会让其中任何一个失败，而且没有一件是凭空拍出来的毫秒数：
+**性能。** `make test-perf` 使用 release preset 构建两个 perf binary 并运行。
+`core_perf` 在纯 C++ 的 hot path 上测量 37 个 workload，`platform_perf` 随后在 loopback
+的真实 QUIC 上再测量 6 个。总计数秒。有三项指标会导致失败，其中没有一项是随意设定的毫
+秒阈值：
 
-- **每单位的分配次数**，通过替换全局 `operator new` 精确计数。开始按包或按帧分配内存的
-  路径，在任何机器上、任何一次运行里都会失败。
-- **代价怎样随规模增长**：每个 `-scaling` 行会用 4 倍输入跑同样的活，当时间增长远快于
-  输入时就失败 —— 那正是意外写出 O(n²) 时的形状。
-- **相对基线的漂移**：`make perf-baseline` 会在空闲机器上写出
-  `out/perf/baseline.txt`，之后每次运行都会报告每一行的变化，超过 25 % 就失败。这个文件
-  描述的是那一台机器，所以不进 git。
+- **每单位的 allocation 次数**，通过替换全局 `operator new` 精确计数。若某条 path 开始
+  按 packet 或按 frame 进行 allocation，则在任何机器、任何一次运行中都会失败。
+- **开销随输入的增长方式**：每一行 `-scaling` 以 4 倍输入执行相同工作，当耗时的增长远
+  快于输入时即判定失败 —— 这正是无意引入 O(n²) 时的特征。
+- **相对已记录 baseline 的偏移**：`make perf-baseline` 在空闲机器上生成
+  `out/perf/baseline.txt`，此后每次运行按行报告变化，超过 25 % 即失败。该文件描述的是
+  特定的一台机器，因此不纳入 git。
 
-`DESKHUB_PERF_TOLERANCE`、`DESKHUB_PERF_REPEATS`、`DESKHUB_PERF_BASELINE` 和
-`DESKHUB_PERF_WRITE` 用来调节计时那一半。`make test` 和 CI 都不跑这些：debug、ASan 和
-覆盖率构建说明不了生产环境的速度。
+`DESKHUB_PERF_TOLERANCE`、`DESKHUB_PERF_REPEATS`、`DESKHUB_PERF_BASELINE` 与
+`DESKHUB_PERF_WRITE` 用于调整计时部分。`make test` 与 CI 均不运行这一部分：debug、ASan
+与 coverage 的 build 无法反映 production 的速度。
 
-## 6. 代码风格与静态分析
+## 6. 风格与静态分析
 
-| 命令 | 检查什么 |
+| 命令 | 检查内容 |
 | --- | --- |
-| `make format` | 对 C++、Kotlin 和 Swift 应用格式化 |
-| `make lint` | 同样的检查但不写回文件 —— CI 强制的就是这个 |
-| `make lint-tidy` | 对 `core/src` + `platform/src` 跑 clang-tidy |
+| `make format` | 为 C++、Kotlin 和 Swift 应用 format |
+| `make lint` | 相同检查但不写回文件 —— CI 强制执行的即为此项 |
+| `make lint-tidy` | 对 `core/src` 与 `platform/src` 运行 clang-tidy |
 
-也有单语言变体：`format-cpp`、`lint-cpp`、`format-kotlin`、`lint-kotlin`、
+另有按语言划分的变体：`format-cpp`、`lint-cpp`、`format-kotlin`、`lint-kotlin`、
 `format-swift`、`lint-swift`。
 
-内部规矩，简版 —— 完整版在 `CLAUDE.md`：
+项目约定的简要版本，完整内容见 `CLAUDE.md`：
 
-- C++20，不用编译器扩展。core 用 `deskhub`，platform 用 `deskhubp`。
-- 函数和类型 `PascalCase`，局部变量 `camelCase`，私有成员末尾加下划线。
-- **任何地方都不写注释。** 用有说明力的名字、小函数、提前返回和具名常量代替。必须留存的
-  知识要写进那条缺了它就会失败的路径的错误消息里，或者写进 `ARCHITECTURE.md`。
-- 所有标识符和日志消息用英文；每份散文文档都以四种语言发布 —— 英语、越南语、中文、
-  日语 —— 以英文版为准。
+- C++20，不使用编译器扩展。core 使用 `deskhub`，platform 使用 `deskhubp`。
+- 函数与类型采用 `PascalCase`，局部变量采用 `camelCase`，private 成员以下划线结尾。
+- **任何位置都不写注释。** 改用具描述性的命名、小函数、early return 与具名常量。必须
+  保留的信息应写入「缺少它即会失败」的那条 path 的错误信息，或写入 `ARCHITECTURE.md`。
+- 所有 identifier 与 log 信息使用英文。所有散文类文档以四种语言发布 —— 英语、越南语、
+  中文、日语 —— 以英文版为准。
 
 ## 7. 打包
 
-| 命令 | 产出 |
+| 命令 | 产物 |
 | --- | --- |
-| `make dist-macos` | 一个用 Developer ID 签名、经过公证并已装订的 dmg |
-| `make verify-macos` | 对刚构建出的产物做一次 Gatekeeper 检查 |
-| `make dist-linux` | `.deb` + `.rpm`，两者都会安装 uinput udev 规则 |
+| `make dist-macos` | 使用 Developer ID sign、经 notarize 并 staple 的 dmg |
+| `make verify-macos` | 对刚构建的产物执行 Gatekeeper 检查 |
+| `make dist-linux` | `.deb` 与 `.rpm`，两者均安装 uinput 的 udev rule |
 
-Windows 和 Linux 应用各自都是单个文件；没有安装程序要构建。
+Windows 与 Linux 的 app 各为单个文件，没有需要构建的 installer。
 
 ## 8. 发布
 
-1. 提升 [`VERSION`](../VERSION) —— 如果标签和文件对不上，`scripts/check-version.sh` 会
-   让部署失败。
-2. 在同一个提交里，用所有语言更新这次改动涉及的文档。
-3. 打上 `vX.Y.Z` 标签并推送。`.github/workflows/deploy.yml` 会构建每个平台、创建
-   GitHub Release、把 iOS 发到 TestFlight、把 macOS 送去公证，把 Android 发到 Play 的
-   internal 轨道。
+1. 提升 [`VERSION`](../VERSION)。当 tag 与该文件不一致时，`scripts/check-version.sh` 会
+   使 deploy 失败。
+2. 在同一个 commit 中，更新本次改动涉及的文档，包含所有语言版本。
+3. 打 `vX.Y.Z` tag 并 push。`.github/workflows/deploy.yml` 会构建所有平台、创建 GitHub
+   Release、将 iOS 发送至 TestFlight、将 macOS 送经 notarization，并将 Android 推送至
+   Play 的 internal track。
 
-**发布说明由 `scripts/changelog.sh` 从上一个标签到这个标签之间的提交标题生成。** 想看
-某个标签会产出什么，在本地跑它：
+**Release notes 由上一个 tag 到当前 tag 之间的 commit subject 生成**，由
+`scripts/changelog.sh` 负责。可在本地查看某个 tag 将生成的内容：
 
 ```bash
-scripts/changelog.sh v5.0.0     # 或者不带参数，用 HEAD 上的标签
+scripts/changelog.sh v5.0.0     # 不带参数时使用 HEAD 上的 tag
 ```
 
-也就是说，提交标题是给用户看的，而标题前面的 conventional-commit 类型决定它落在哪个
-小节。完整的映射关系、覆盖它的规则和实例都在
-[`.claude/skills/commit/SKILL.md`](../.claude/skills/commit/SKILL.md) —— 写标题之前先读
-一遍。空的小节不会出现在发布说明里，`INCLUDE_INTERNAL=1 scripts/changelog.sh` 可以看到
-被略去的提交。
+因此 commit subject 是面向用户的内容，其前缀的 conventional-commit type 决定它归入哪一
+节。完整的对应关系、覆盖这些规则的例外情形以及实例，见
+[`.claude/skills/commit/SKILL.md`](../.claude/skills/commit/SKILL.md)，撰写 subject 前
+应先阅读。空的小节不会出现在 release 中，`INCLUDE_INTERNAL=1 scripts/changelog.sh` 可
+查看被略去的 commit。
 
-## 9. CI 把什么当门槛
+## 9. CI 的检查项
 
-本地 `make test` + `make lint` 全绿并不是全部。每个 pull request 上：
+本地 `make test` 与 `make lint` 通过并不代表全部。每个 pull request 上均会执行：
 
-- 对 `core/src` + `platform/src` 跑 clang-tidy，SwiftLint `--strict`，Android Lint
-- 对工作流和 `scripts/*.sh` 跑 actionlint + shellcheck
-- 三个套件都在 ASan/UBSan 和 TSan 下跑，并交叉构建到 arm64 Linux、Android 模拟器和 iOS
-  模拟器
-- 整个集成套件在 Windows 上再多跑三遍，为的是抓那个大约三次运行才出现一次、因而单跑一次
-  会漏掉的间歇性内存破坏。崩溃所在的栈帧只是破坏的受害者，从不是原因，所以每个 Windows
-  作业都会连同符号一起写出完整的 minidump，夜间任务则把负载测试重跑两轮：一轮在 full page
-  heap 下，越界的写会在写它的那条指令上当场出错；另一轮针对开启了 Rust debug assertion 与
-  溢出检查构建的 quiche，那是唯一能看进 quiche 内部的陷阱——ASan 不插桩 Rust，而 page heap
-  只看守堆
-- core 覆盖率行 ≥ 90 % / 分支 ≥ 80 %
-- 每个 libFuzzer 目标跑 30 秒（每晚各跑 15 分钟）
-- 对 C++/Kotlin/Swift 跑 CodeQL，对整个历史做一次 gitleaks 扫描，以及依赖审查
+- 对 `core/src` 与 `platform/src` 的 clang-tidy，SwiftLint `--strict`，Android Lint
+- 对 workflow 与 `scripts/*.sh` 的 actionlint 与 shellcheck
+- 三个 suite 在 ASan/UBSan 与 TSan 下运行，并为 arm64 Linux、Android emulator 与 iOS
+  Simulator 执行 cross-build
+- 在 Windows 上将整个 integration suite 额外运行三次，用于定位一处间歇性的 memory
+  corruption。该问题约每三次运行出现一次，单次运行容易漏过。发生 crash 的 frame 是该
+  corruption 的受害者而非起因，因此每个 Windows job 都会在 symbol 旁写入完整的
+  minidump；nightly 另将 load test 重复两轮：一轮启用 full page heap，使越过 allocation
+  的写操作在触发它的 instruction 处立即 fault；另一轮针对启用 Rust debug assertion 与
+  overflow check 构建的 quiche，这是唯一能够观察 quiche 内部的手段，因为 ASan 不
+  instrument Rust，而 page heap 只保护 heap
+- core 的 coverage 达到 line ≥ 90 % 与 branch ≥ 80 %
+- 每个 libFuzzer target 运行 30 秒（nightly 为每个 15 分钟）
+- 对 C++/Kotlin/Swift 的 CodeQL，对完整历史的 gitleaks 扫描，以及一次 dependency review
 
 ## 10. 开发者工具
 
-| 命令 | 作用 |
+| 命令 | 功能 |
 | --- | --- |
-| `make icons` | 从 `assets/icon_1024.png` 重新生成每个客户端的图标 |
-| `make quic-smoke` | 一个独立的 QUIC 客户端 + 服务端，跑在 quiche 静态库上 |
-| `make opus-smoke` | 一次独立的编解码往返，跑在 opus 静态库上 —— 报告真实码率、最大包和 DTX 是否生效 |
-| `make screenshots` | macOS：在 iPhone/iPad 模拟器、Android 模拟器和 macOS 应用上重新拍商店截图，然后刷新 `docs/imgs`（`ARGS="ios android macos readme"` 可只做其中一部分） |
-| `make setup-linux-permissions` | `/dev/uinput` udev 规则 + `input` 组，用于从源码构建做主机 |
-| `make reset-macos-permissions` | 当本地构建和下载的构建为同一个 bundle id 打架时，清掉 TCC 授权（`ARGS="--purge"` 还会删掉已构建的副本） |
-| `make ffmpeg-min` | Ubuntu：应用链接的那份静态最小化 FFmpeg（由 `build-linux` 自动运行） |
-| `make opus` | 主机目标用的 Opus 音频编解码器（由 `debug`、`release` 和 `build-linux` 自动运行） |
-| `make clean` | 删掉 `out/` |
+| `make icons` | 从 `assets/icon_1024.png` 重新生成所有 client 的图标 |
+| `make quic-smoke` | 基于 quiche 静态库的独立 QUIC client 与 server |
+| `make opus-smoke` | 基于 opus 静态库的独立 encode/decode 往返测试 —— 报告实际 bitrate、最大 packet，以及 DTX 是否生效 |
+| `make screenshots` | macOS: 在 iPhone/iPad simulator、Android emulator 与 macOS app 上重新采集商店截图，随后更新 `docs/imgs`（`ARGS="ios android macos readme"` 可指定子集） |
+| `make setup-linux-permissions` | `/dev/uinput` 的 udev rule 与 `input` group，使从 source 构建的版本也能作为 host |
+| `make reset-macos-permissions` | 当本地 build 与下载版本共用同一 bundle id 时清除 TCC 授权（`ARGS="--purge"` 同时删除已构建的副本） |
+| `make ffmpeg-min` | Ubuntu: app 所 link 的静态最小化 FFmpeg（由 `build-linux` 自动执行） |
+| `make opus` | host target 所用的 Opus audio codec（由 `debug`、`release` 与 `build-linux` 自动执行） |
+| `make clean` | 删除 `out/` |
 
-## 11. 当构建跟你作对时
+## 11. 构建问题排查
 
-- **CMake 因为缺少 quiche 库而停下** —— 运行对应的 `make quiche*` 目标；每个 ABI 都要
-  自己那一份。opus 和 `make opus*` 目标同理。
-- **macOS 上 `make fuzz` 找不到 libFuzzer** —— 它需要 Homebrew LLVM；`make bootstrap`
-  会装，其余部分仍然用 Xcode 工具链构建。
-- **`make lint` 和你的编辑器意见不一致** —— 以锁定版本的工具为准。重新跑一次
-  `make bootstrap` 拉到确切版本，然后 `make format`。
-- **Android 目标找不到 SDK** —— 设置 `ANDROID_HOME`，然后重跑 `make bootstrap`；
-  `ANDROID_NDK_VERSION=<v>` 可以选别的 NDK。
-- **在本地构建和下载构建之间切换后 macOS 权限行为怪异** —— `make reset-macos-permissions`。
+- **CMake 因缺少 quiche 库而中止** —— 运行对应的 `make quiche*` target；每个 ABI 需要
+  各自的版本。opus 与 `make opus*` 同理。
+- **macOS 上 `make fuzz` 找不到 libFuzzer** —— 它需要 Homebrew 的 LLVM。
+  `make bootstrap` 会安装，其余部分仍使用 Xcode 的 toolchain 构建。
+- **`make lint` 的结果与编辑器不一致** —— 以固定版本的工具为准。重新运行
+  `make bootstrap` 获取确切版本，然后执行 `make format`。
+- **Android target 找不到 SDK** —— 设置 `ANDROID_HOME`，然后重新运行 `make bootstrap`。
+  `ANDROID_NDK_VERSION=<v>` 可选择其他 NDK。
+- **在本地 build 与下载版本之间切换后，macOS 的 permission 行为异常** —— 执行
+  `make reset-macos-permissions`。
 
-缺陷与提问：[issues](https://github.com/manhpham90vn/Deskhub/issues)。
+问题与提问：[issues](https://github.com/manhpham90vn/Deskhub/issues)。
