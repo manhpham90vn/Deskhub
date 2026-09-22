@@ -294,6 +294,11 @@ extension SharingModel {
         return true
     }
 
+    func openFilesFolder(_ row: HostRow) {
+        guard isSharing, row.files, !row.viewer else { return }
+        DeskhubShare.openFilesFolder()
+    }
+
     private func loadShareSources() async {
         guard !isSharing, !isStarting else { return }
         refreshPermissions()

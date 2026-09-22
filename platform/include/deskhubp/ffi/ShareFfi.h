@@ -80,6 +80,8 @@ void dh_share_stop_files(void);
 
 int dh_share_files_dir(char* out, int capacity);
 
+bool dh_share_open_files_folder(void);
+
 void dh_share_kick_shell(uint32_t term_id);
 
 void dh_share_stop_terminal(void);

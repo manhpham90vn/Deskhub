@@ -69,7 +69,7 @@ host、connect、打开 remote shell、查找机器，并读写与 app 完全相
 | H-1 | 选择 display | 共享前，用户勾选本机的哪些 display 对外提供。至少需选择一项。 |
 | H-2 | 共享多块 display | 可同时共享多块 display；每块成为独立的 source，供 viewer 选择。 |
 | H-3 | Source 上限 | 同时最多共享 **8** 块 display。若机器拥有更多，将提示用户仅前 8 块会被共享。 |
-| H-4 | 开始与停止共享 | 一个操作开始共享，一个操作停止。当前状态始终显示（*Not sharing* / *Starting share…* / *Sharing*）。 |
+| H-4 | 开始与停止共享 | 一个操作开始共享，一个操作停止。一旦开始共享或正在开始，就会出现一条横幅显示状态（*Starting share…* / *Sharing*）及其细节；在此之前，按钮自身的文字（*Start sharing*）就是唯一的状态提示，因此不会绘制横幅。 |
 | H-5 | 停止单块 display | 可单独停止某一块正在共享的 display，而不结束整场共享。 |
 | H-6 | 连接信息 | 共享期间，app 列出本机的 network 地址以及 viewer 需使用的 port，便于告知他人或复制。桌面端的 *Share on network*（T-9）位于 host 界面该列表旁；列表仅显示所选 network 的地址，选择 *All networks* 则显示全部。共享中或正在开始共享时该选项被锁定，需停止共享后方可更改。 |
 | H-7 | 实时 session 表 | 对每块共享中的 display，host 可见：display 名称、分辨率、viewer 数量、capture rate、send rate、占用带宽与 round-trip time。每个已连接的 viewer 在对应 display 下各占一行，若该 viewer 设置了名称（C-7）则以「名称 (ip:port)」标识，否则仅显示地址。 |
@@ -80,10 +80,10 @@ host、connect、打开 remote shell、查找机器，并读写与 app 完全相
 | H-12 | 表中的 shell session | terminal 共享期间，实时表中显示一行 *Terminal* 及其 port，每个已打开的 shell 在其下各占一行，标识方式与 viewer 相同（C-7），并带 *Disconnect*。*Terminal* 行上的 *Stop* 仅结束 terminal 共享。同时最多打开 **8** 个 shell。shell 的打开、关闭与 reattach 均连同 client 的地址、名称和 key 写入 session log（G-3）。 |
 | H-13 | shell 常驻 host | 连接丢失的 shell —— network 中断，或 client 窗口关闭 —— 会连同内容与 scrollback 一起保留在 host 上，不设时间限制。同一 client 自行 reattach：在两分钟内以逐步延长的间隔重试，重试期间明确显示正在 reattach，并接回同一个 shell。任何已准入的 client 也可询问 host 正在保留哪些 shell，并按 id reattach 其中之一，而不必打开新 shell。shell 仅在其 shell 进程退出、host 停止共享 terminal，或从 session 表中关闭时结束；关闭 client 窗口永远不会结束 shell。 任何已准入的 client 也可以从该列表按 id 结束一个被保留的 shell；当时正在其中输入的机器会被告知该 shell 已结束。 |
 | H-15 | 空闲的 shell 不视为断开 | 无流量的 terminal 连接由 client 保活，因此停留在提示符处的 shell 不会被误判为链路断开而关闭。 |
-| H-16 | File transfer source（桌面） | source 列表中另有 **File transfer — files viewers send**，在每次列表显示时重新勾选，且不会被保存。与 terminal（H-11）相同，它共用 app 的同一个 UDP port（T-4）、passcode 与 network 选择。文件写入选择框下方及共享 status 中标明的文件夹（T-25）。单个 batch 最多 **32** 个文件、单文件 **8 GiB**、合计 **32 GiB**；超出部分或无法保存的文件名将连同原因被拒绝。每个文件先以最终名称加 `.deskhub-part` 后缀写入，仅在完整到达且 checksum 匹配后改名；损坏的文件被丢弃，并终止整个 batch。不会覆盖任何文件：文件夹中已存在的同名文件将追加编号。若该文件夹不可写，host 不接收任何文件并明确告知，而非静默失败。 |
-| H-17 | 表中的传输 | file transfer 共享期间，实时表中显示一行 *File transfer* 标明文件夹，每台正在发送的机器在其下各占一行，标识方式与 viewer 相同（C-7），并显示正在接收的文件、其在 batch 中的位置与完成比例，或 batch 终止的原因。*File transfer* 行上的 *Stop* 仅结束文件传输。batch 的提出、接受、拒绝与完成均连同该机器的地址、名称和 key 写入 session log（G-3）。 |
+| H-16 | File transfer source（桌面） | source 列表中另有 **File transfer — files viewers send**，在每次列表显示时重新勾选，且不会被保存。与 terminal（H-11）相同，它共用 app 的同一个 UDP port（T-4）、passcode 与 network 选择。文件写入共享开始后实时表中 *File transfer* 行标明的文件夹（H-17、T-25）。单个 batch 最多 **32** 个文件、单文件 **8 GiB**、合计 **32 GiB**；超出部分或无法保存的文件名将连同原因被拒绝。每个文件先以最终名称加 `.deskhub-part` 后缀写入，仅在完整到达且 checksum 匹配后改名；损坏的文件被丢弃，并终止整个 batch。不会覆盖任何文件：文件夹中已存在的同名文件将追加编号。若该文件夹不可写，host 不接收任何文件并明确告知，而非静默失败。 |
+| H-17 | 表中的传输 | file transfer 共享期间，实时表中显示一行 *File transfer* 标明文件夹，旁边配一个 **Open folder** 按钮，用于在系统文件管理器中打开该文件夹，每台正在发送的机器在其下各占一行，标识方式与 viewer 相同（C-7），并显示正在接收的文件、其在 batch 中的位置与完成比例，或 batch 终止的原因。*File transfer* 行上的 *Stop* 仅结束文件传输。batch 的提出、接受、拒绝与完成均连同该机器的地址、名称和 key 写入 session log（G-3）。 |
 | H-14 | Stop & attach（桌面） | 每一行 shell，无论处于活动状态还是等待 reattach，都另有 **Stop & attach**：远端 client 被断开（其窗口报告 shell 已结束），同一个 shell 在 host 的 terminal 窗口中打开，内容与 scrollback 保持不变。此后该 shell 归属于 host：原 client 无法再 reattach，本来就没有时间限制（H-13），表中该行标记为 *attached on this machine*，关闭 host 上的窗口或点击该行的 *Stop* 即结束该 shell。此次接管同样写入 session log（G-3）。 |
-| H-18 | 清晰展示的 passcode | host 页面单独展示配对 passcode —— 数字间距拉开、字号放大、等宽字体 —— 旁边配一个 **Copy passcode** 按钮，将纯数字代码放入剪贴板。代码不再嵌在共享状态句中，该句仅保留说明。未设置 passcode 时，该区块显示 *None*，也不提供复制按钮。passcode 本身在各平台的 **Settings** 页面与其他安全设置一同编辑。 |
+| H-18 | 清晰展示的 passcode | 一旦开始共享或正在开始，host 页面就会单独展示配对 passcode —— 数字间距拉开、字号放大、等宽字体 —— 旁边配一个 **Copy passcode** 按钮，将纯数字代码放入剪贴板；在此之前没有可展示的代码，因此该区块保持隐藏。代码不再嵌在共享状态句中，该句仅保留说明。未设置 passcode 时，该区块显示 *None*，也不提供复制按钮。passcode 本身在各平台的 **Settings** 页面与其他安全设置一同编辑。 |
 
 ## 5. Connect —— 观看另一台机器
 
@@ -191,7 +191,7 @@ port（T-4）—— 同时决定 network scan 检查的 port —— 以及 clipb
 | T-16 | 后台模式 | 仅桌面。T-15 开启时，将出现 tray 或菜单栏图标，包含 *Show/Hide window*、*Start/Stop sharing* 与 *Quit*；关闭窗口将隐藏 app 而非退出，共享在后台继续。窗口在启动时总会出现，仅在用户关闭时隐藏，因此 T-13、T-11 与 T-15 同时开启时，将在登录时开始共享并保持窗口显示，直至被关闭。Windows 上左键点击 tray 图标可显示或隐藏窗口。macOS 上窗口隐藏期间 Dock 图标消失。Linux 上 tray 需要 StatusNotifier host（KDE 标配；GNOME 需要 AppIndicator 扩展）；若不具备，关闭窗口仍会退出，以确保 app 不会变为无法访问的状态。在 Windows 与 Linux 上，共享进行期间关闭窗口一律隐藏至 tray，即使 T-15 处于关闭状态（前提是存在 tray），以免断开已连接的 viewer；macOS 上关闭窗口不会退出 app，因此共享在任何情况下都会继续。 |
 | T-18 | Clipboard 同步 | T-17 开启时，session 中任一机器上复制的纯文本会在数秒内出现在其他机器上，双向均可；host 会将某个 viewer 的复制内容转发给其他 viewer。文本上限为 32 KiB，超长内容在完整字符处截断；图片、文件与格式不会传输。host 的开关决定整个 session 的行为：关闭时，host 既忽略也不发送 clipboard 数据。每台机器还需自身开关处于开启状态，才能读写本地 clipboard。Android 与 iOS 上操作系统另有限制：Android 设备仅在 Deskhub 处于前台时才能获取自身的复制内容，而接收到的文本任何时候都可写入；iOS 上的 viewer 在 Deskhub 读取新复制内容时可能出现系统粘贴提示；作为 host 的 iOS 设备不参与同步，因为其 broadcast 运行在无法访问 clipboard 的独立 process 中。 |
 | T-20 | 保持唤醒 | T-19 开启时，机器在共享或观看期间不会进入睡眠，display 也不会关闭；session 一结束即解除该限制，且不修改任何睡眠设置。在 Windows、macOS 与 Linux 上，这对 host 与 viewer 同时覆盖 display 睡眠与系统睡眠（Linux 上需要 systemd-logind，以及遵循 freedesktop screensaver 接口的桌面环境，KDE 与 GNOME 均为标配）。在操作系统强制的情形下仍以系统为准：合上笔记本上盖、按下电源键，或 macOS 使用电池供电时，机器仍可能进入睡眠。在 Android 与 iOS 上，该开关在观看 stream 时保持屏幕常亮；而手机端的共享本身在屏幕熄灭时仍可继续（P-5），因此作为 host 时不会保持屏幕常亮。 |
-| T-25 | 接收文件的存放位置 | 仅桌面。viewer 发送的文件写入本机选定的文件夹，默认为用户主目录下的 `Deskhub`。所选文件夹在共享前显示于文件传输勾选框旁，共享期间显示于共享 status 中；若不存在则自动创建，并与其他 settings 一并保存。不会向该文件夹之外写入任何内容：发送方提供的名称会被截取为路径的最后一段，并清除本地 filesystem 无法保存的字符。 |
+| T-25 | 接收文件的存放位置 | 仅桌面。viewer 发送的文件写入本机选定的文件夹，默认为用户主目录下的 `Deskhub`。所选文件夹在共享期间标注于实时表的 *File transfer* 行（H-17），旁边配一个 **Open folder** 按钮——共享开始前不显示，因为此时它还没有任何作用。该文件夹若不存在则自动创建，所选路径与其他 settings 一并保存。不会向该文件夹之外写入任何内容：发送方提供的名称会被截取为路径的最后一段，并清除本地 filesystem 无法保存的字符。 |
 | T-24 | 共享的声音内容 | T-22 开启时，host 共享其扬声器正在播放的内容，即该机器上所有应用产生的混合音频。Deskhub 不 capture microphone，也不提供双向音频。Android 是唯一涉及 permission 的平台：其 playback-capture API 位于系统标记为 *Microphone* 的 permission 之后，app 在开始共享时申请该 permission，且不作其他用途；若被拒绝，共享继续进行但没有声音。其他平台不申请 microphone permission。viewer 仅在自行开启相应选项（T-23）时才接收声音，因此开启 T-22 的 host 也不会向未开启接收的 viewer 发送数据；两个开关均自下一次 session 开始时生效。 |
 
 ## 11. 状态与故障排查

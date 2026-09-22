@@ -1,4 +1,4 @@
-﻿param(
+param(
     [switch]$Check,
     [ValidateSet('all', 'cpp', 'kotlin', 'swift')][string]$Only = 'all'
 )
@@ -8,30 +8,22 @@ $root = Resolve-Path (Join-Path $PSScriptRoot '..')
 . (Join-Path $PSScriptRoot 'pinned-tools.ps1')
 Set-Location $root
 
-function Get-VisualStudioLlvmDir {
-    $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
-    if (-not (Test-Path $vswhere)) { return @() }
-    $vs = & $vswhere -latest -products * -property installationPath
-    if (-not $vs) { return @() }
-    @(Join-Path $vs 'VC\Tools\Llvm\x64\bin')
-}
-
-function Get-PinnedClangFormat([string]$Version) {
-    $extraDirs = Get-VisualStudioLlvmDir
-    $found = Find-PinnedTool 'clang-format' $Version $extraDirs
-    if ($found) { return $found }
-    $others = Get-ToolCandidates 'clang-format' $extraDirs |
-        ForEach-Object { "$_ is $(((& $_ --version) -join ' ') -replace '^clang-format version ', '')" }
-    if (-not $others) { throw "clang-format not found - run 'make bootstrap' first." }
-    throw ("clang-format $Version not found, and reformatting with another version churns files CI then rejects " +
-        "($($others -join '; ')). Run 'make bootstrap' and put the clang-format it installs ahead of those on PATH.")
-}
-
 $fail = 0
 
 if ($Only -in @('all', 'cpp')) {
     $clangFormatVersion = Get-PinnedToolVersion 'CLANG_FORMAT_VERSION'
-    $clangFormat = Get-PinnedClangFormat $clangFormatVersion
+    $clangFormat = Resolve-LocalClangFormat
+    if (-not $clangFormat) {
+        Ensure-LocalClangTools
+        $clangFormat = Resolve-LocalClangFormat
+    }
+    if (-not $clangFormat) {
+        $others = Get-ToolCandidates 'clang-format' (Get-VisualStudioLlvmDir) |
+            ForEach-Object { "$_ is $(((& $_ --version) -join ' ') -replace '^clang-format version ', '')" }
+        if (-not $others) { throw "clang-format $clangFormatVersion not found, even after downloading to tools/." }
+        throw ("clang-format $clangFormatVersion not found, even after downloading to tools/ " +
+            "($($others -join '; ')). Run 'make bootstrap'.")
+    }
 
     $cpp = git ls-files 'core/*' 'platform/*' 'client/*' 'tests/*' | Where-Object { $_ -match '\.(h|hpp|cpp|cc|c)$' }
     Write-Host "[clang-format] $($cpp.Count) files ($clangFormat $clangFormatVersion)"
@@ -56,7 +48,10 @@ if ($Only -in @('all', 'kotlin')) {
     $java = (Get-Command java -ErrorAction SilentlyContinue).Source
     if ($java) {
         $ktlintJar = Join-Path $root 'tools\ktlint.jar'
-        if (-not (Test-Path $ktlintJar)) { throw "tools\ktlint.jar not found - run 'make bootstrap' first." }
+        if (-not (Test-Path $ktlintJar)) {
+            Ensure-LocalKtlint
+        }
+        if (-not (Test-Path $ktlintJar)) { throw "tools\ktlint.jar not found, even after downloading to tools/." }
 
         $kt = git ls-files 'client/android/*' | Where-Object { $_ -match '\.kt$' }
         Write-Host "[ktlint] $($kt.Count) files"
@@ -72,11 +67,12 @@ if ($Only -in @('all', 'kotlin')) {
 }
 
 if ($Only -in @('all', 'swift')) {
-    $swiftformat = (Get-Command swiftformat -ErrorAction SilentlyContinue).Source
+    $swiftformat = Resolve-LocalSwiftformat
     if (-not $swiftformat) {
-        $swiftformat = Join-Path $root 'tools\swiftformat.exe'
-        if (-not (Test-Path $swiftformat)) { throw "tools\swiftformat.exe not found - run 'make bootstrap' first." }
+        Ensure-LocalSwiftFormat
+        $swiftformat = Resolve-LocalSwiftformat
     }
+    if (-not $swiftformat) { throw "swiftformat not found, even after downloading to tools/." }
 
     $swift = git ls-files 'client/apple/*' 'client/ios/*' 'client/macos/*' | Where-Object { $_ -match '\.swift$' }
     Write-Host "[swiftformat] $($swift.Count) files ($swiftformat)"

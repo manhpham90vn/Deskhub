@@ -343,6 +343,7 @@ inline constexpr const char* kTransferSentHeading = "Sent from this window";
 inline constexpr const char* kTransferBusyNote =
     "One batch at a time \xE2\x80\x94 wait for this one to finish.";
 inline constexpr const char* kTransferChooseButton = "Choose files\xE2\x80\xA6";
+inline constexpr const char* kOpenFolderAction = "Open folder";
 inline constexpr const char* kTransferCancelButton = "Stop sending";
 inline constexpr const char* kTransferAcceptLabel = "Take files viewers send";
 inline constexpr const char* kMobileTakesFilesNote =

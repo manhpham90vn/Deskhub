@@ -2,10 +2,22 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+. scripts/tools.sh
+
 BUILD_DIR=${1:-out/build/x64-debug}
 DB="$BUILD_DIR/compile_commands.json"
-CLANG_TIDY=${CLANG_TIDY:-clang-tidy}
+if [ -z "${CLANG_TIDY:-}" ]; then
+    CLANG_TIDY="$(resolve_local_clang_tidy || true)"
+    if [ -z "$CLANG_TIDY" ]; then
+        ensure_local_clang_tools
+        CLANG_TIDY="$(resolve_local_clang_tidy || true)"
+    fi
+fi
 
+[ -n "${CLANG_TIDY:-}" ] || {
+    echo "clang-tidy.sh: no usable clang-tidy was found, even after downloading to tools/." >&2
+    exit 1
+}
 command -v "$CLANG_TIDY" >/dev/null 2>&1 || {
     echo "clang-tidy.sh: '$CLANG_TIDY' not found." >&2
     exit 1

@@ -22,6 +22,7 @@
 #include "deskhubp/host/FileHost.h"
 #include "deskhubp/host/TerminalHost.h"
 #include "deskhubp/system/FileStore.h"
+#include "deskhubp/system/FolderOpen.h"
 #include "deskhubp/system/UiSettingsStore.h"
 
 namespace {
@@ -49,6 +50,17 @@ ShareSource ToShareSource(const DHShareSource& s) {
     a.width = s.width;
     a.height = s.height;
     return a;
+}
+
+std::filesystem::path FilesFolder() {
+    std::filesystem::path folder;
+    {
+        std::unique_lock<std::mutex> lk(g_agentMutex, std::try_to_lock);
+        if (lk.owns_lock() && g_files) folder = g_files->Directory();
+    }
+    if (!folder.empty()) return folder;
+    const std::string chosen = deskhubp::LoadUiSettings().transferDir;
+    return chosen.empty() ? deskhubp::DefaultTransferDir() : deskhubp::FfiPath(chosen.c_str());
 }
 
 }
@@ -185,19 +197,14 @@ void dh_share_stop_files(void) {
 int dh_share_files_dir(char* out, int capacity) {
     if (!out || capacity <= 0) return 0;
     out[0] = '\0';
-    std::filesystem::path folder;
-    {
-        std::unique_lock<std::mutex> lk(g_agentMutex, std::try_to_lock);
-        if (lk.owns_lock() && g_files) folder = g_files->Directory();
-    }
-    if (folder.empty()) {
-        const std::string chosen = deskhubp::LoadUiSettings().transferDir;
-        folder = chosen.empty() ? deskhubp::DefaultTransferDir()
-                                : deskhubp::FfiPath(chosen.c_str());
-    }
+    const std::filesystem::path folder = FilesFolder();
     const std::u8string text = folder.u8string();
     deskhubp::CopyToBuf(out, size_t(capacity), std::string(text.begin(), text.end()));
     return int(std::strlen(out));
+}
+
+bool dh_share_open_files_folder(void) {
+    return deskhubp::OpenFolder(FilesFolder());
 }
 
 void dh_share_kick_shell(uint32_t term_id) {

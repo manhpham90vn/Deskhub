@@ -18,6 +18,7 @@
 #include "deskhubp/system/AppDataFile.h"
 #include "deskhubp/system/Clock.h"
 #include "deskhubp/system/FileStore.h"
+#include "deskhubp/system/FolderOpen.h"
 #include "deskhubp/system/Autostart.h"
 #include "deskhubp/system/DeviceName.h"
 #include "deskhubp/system/HostIdentity.h"
@@ -689,9 +690,6 @@ GtkWidget* MainWindow::BuildHostPage() {
     hostHintLabel_ = Hint(ui::kPickSourcesHint);
     gtk_box_pack_start(GTK_BOX(box), hostHintLabel_, FALSE, FALSE, 0);
 
-    hostFilesHint_ = Hint(std::string());
-    gtk_box_pack_start(GTK_BOX(box), hostFilesHint_, FALSE, FALSE, 0);
-
     hostPortalNote_ = Hint(ui::kPortalConfirmNote);
     gtk_box_pack_start(GTK_BOX(box), hostPortalNote_, FALSE, FALSE, 0);
 
@@ -742,12 +740,6 @@ void MainWindow::ShowHostTable(bool sharing) {
     gtk_widget_set_no_show_all(hostPortalNote_, sharing);
     gtk_widget_set_visible(hostHintLabel_, !sharing);
     gtk_widget_set_visible(hostPortalNote_, !sharing);
-
-    const bool showFolder = !sharing && FilesTicked();
-    gtk_label_set_text(GTK_LABEL(hostFilesHint_),
-        (std::string(ui::kTransferFolderLabel) + " " + deskhubp::PathText(TransferFolder())).c_str());
-    gtk_widget_set_no_show_all(hostFilesHint_, !showFolder);
-    gtk_widget_set_visible(hostFilesHint_, showFolder);
 }
 
 bool MainWindow::TerminalTicked() const {
@@ -1234,11 +1226,16 @@ std::string MainWindow::HostPortDetail() const {
 void MainWindow::ApplyHostState(HostShareState state, const std::string& detail) {
     const bool sharing = state == HostShareState::kSharing;
     const bool starting = state == HostShareState::kStarting;
+    const bool live = hosting_ || starting;
 
     gtk_label_set_text(GTK_LABEL(hostStateLabel_),
-        sharing ? ui::kShareStateOn : (starting ? ui::kStartingShare : ui::kShareStateOff));
+        sharing ? ui::kShareStateOn : ui::kStartingShare);
     gtk_label_set_text(GTK_LABEL(hostStatusLabel_), detail.c_str());
+    gtk_widget_set_no_show_all(hostBanner_, state == HostShareState::kIdle);
+    gtk_widget_set_visible(hostBanner_, state != HostShareState::kIdle);
     ShowPasscodeCard();
+    gtk_widget_set_no_show_all(hostPasscodeCard_, !live);
+    gtk_widget_set_visible(hostPasscodeCard_, live);
 
     RemoveClass(hostBanner_, "deskhub-banner-busy");
     RemoveClass(hostBanner_, "deskhub-banner-live");
@@ -1252,7 +1249,6 @@ void MainWindow::ApplyHostState(HostShareState state, const std::string& detail)
         AddClass(hostStateLabel_, "deskhub-banner-state-busy");
     }
 
-    const bool live = hosting_ || starting;
     gtk_button_set_label(GTK_BUTTON(shareButton_),
         live ? ui::kStopSharing : ui::kStartSharing);
     if (live) {
@@ -2019,6 +2015,13 @@ MainWindow::HostRowWidgets MainWindow::MakeHostRowWidgets(const ui::HostRow& ref
         g_object_set_data(G_OBJECT(widgets.attach), "deskhub-host-row",
             GINT_TO_POINTER(gint(index)));
         g_signal_connect(widgets.attach, "clicked", G_CALLBACK(OnHostRowAttachClicked), this);
+    } else if (ref.files && !ref.viewer) {
+        widgets.attach = gtk_button_new_with_label(ui::kOpenFolderAction);
+        AddClass(widgets.attach, "deskhub-row-action");
+        gtk_widget_set_size_request(widgets.attach, kHostActionWidth, kHostActionHeight);
+        gtk_widget_set_valign(widgets.attach, GTK_ALIGN_CENTER);
+        gtk_widget_set_halign(widgets.attach, GTK_ALIGN_END);
+        g_signal_connect(widgets.attach, "clicked", G_CALLBACK(OnHostRowOpenFolderClicked), this);
     }
     return widgets;
 }
@@ -2133,6 +2136,11 @@ void MainWindow::OnHostRowAttachClicked(GtkButton* b, gpointer user) {
     if (index < 0 || size_t(index) >= self->hostRows_.size()) return;
     const deskhub::ui::HostRow& row = self->hostRows_[size_t(index)];
     if (row.terminal && row.viewer) self->share_.StopAndAttachShell(row.termId);
+}
+
+void MainWindow::OnHostRowOpenFolderClicked(GtkButton*, gpointer user) {
+    auto* self = static_cast<MainWindow*>(user);
+    deskhubp::OpenFolder(self->TransferFolder());
 }
 
 gboolean MainWindow::OnDeleteEvent(GtkWidget*, GdkEvent*, gpointer user) {

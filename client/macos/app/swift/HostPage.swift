@@ -31,15 +31,20 @@ struct HostPage: View {
                 staleIp: staleBindIp ? sharing.bindIp : nil
             )
 
-            HostStatusBanner(state: shareState, detail: sharing.statusLine)
+            if shareState != .idle {
+                HostStatusBanner(state: shareState, detail: sharing.statusLine)
+            }
 
-            PasscodeCard(passcode: sharing.acceptedPasscode)
+            if sharing.isSharing || sharing.isStarting {
+                PasscodeCard(passcode: sharing.acceptedPasscode)
+            }
 
             if sharing.isSharing {
                 HostSourceTable(
                     rows: sharing.rows,
                     onAction: { sharing.runRowAction($0) },
-                    onAttach: { attachShell($0) }
+                    onAttach: { attachShell($0) },
+                    onOpenFolder: { sharing.openFilesFolder($0) }
                 )
                 .frame(minHeight: 170)
             } else {
@@ -52,10 +57,6 @@ struct HostPage: View {
                 )
                 .frame(minHeight: 170)
                 deskhubHint(DeskhubClient.string(DHStrPickSourcesHint))
-                if sharing.shareFiles, !sharing.filesFolder.isEmpty {
-                    deskhubHint(DeskhubClient.string(DHStrTransferFolderLabel)
-                        + " " + sharing.filesFolder)
-                }
             }
 
             Button {
@@ -102,7 +103,7 @@ struct HostPage: View {
     }
 }
 
-enum HostShareState {
+enum HostShareState: Equatable {
     case idle
     case starting
     case sharing
@@ -167,6 +168,7 @@ struct HostSourceTable: View {
     let rows: [HostRow]
     let onAction: (HostRow) -> Void
     let onAttach: (HostRow) -> Void
+    let onOpenFolder: (HostRow) -> Void
 
     var body: some View {
         Table(rows) {
@@ -208,6 +210,11 @@ struct HostSourceTable: View {
                 .buttonStyle(.borderedProminent)
                 .controlSize(.small)
                 .tint(DeskhubPalette.offline)
+        } else if row.files, !row.viewer {
+            Button(DeskhubClient.string(DHStrOpenFolderAction)) { onOpenFolder(row) }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+                .tint(DeskhubPalette.accent)
         }
     }
 }

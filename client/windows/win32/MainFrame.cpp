@@ -56,6 +56,7 @@
 #include "deskhubp/client/SourceQueryAsync.h"
 #include "deskhubp/host/ShareController.h"
 #include "deskhubp/system/FileStore.h"
+#include "deskhubp/system/FolderOpen.h"
 #include "deskhubp/system/AppDataFile.h"
 #include "deskhubp/system/Clock.h"
 #include "deskhubp/system/Autostart.h"
@@ -342,6 +343,7 @@ private:
     wxWindow* BuildHostTable(wxWindow* parent);
     wxButton* MakeRowAction(wxWindow* parent, const ui::HostRow& ref);
     wxButton* MakeRowAttach(wxWindow* parent, const ui::HostRow& ref);
+    wxButton* MakeRowOpenFolder(wxWindow* parent);
     void RebuildHostTable();
     void ShowHostTable(bool sharing);
     void RelayoutHostPage();
@@ -431,7 +433,6 @@ private:
     wxCheckBox* keepAwakeCtrl_ = nullptr;
     wxCheckBox* clipboardCtrl_ = nullptr;
     wxStaticText* transferDirLabel_ = nullptr;
-    wxStaticText* hostFilesHint_ = nullptr;
     DeskhubTrayIcon* trayIcon_ = nullptr;
     bool quitting_ = false;
     std::vector<std::string> bindChoices_;
@@ -731,9 +732,6 @@ wxWindow* MainFrame::BuildHostPage(wxWindow* parent) {
 
     hostHint_ = MakeHint(panel, ToWx(ui::kPickSourcesHint));
     sizer->Add(hostHint_, pad);
-
-    hostFilesHint_ = MakeHint(panel, wxString());
-    sizer->Add(hostFilesHint_, pad);
 
     shareBtn_ = new wxButton(panel, wxID_ANY, wxString());
     shareBtn_->SetMinSize(FromDIP(wxSize(-1, kPrimaryButtonH)));
@@ -1320,6 +1318,15 @@ wxButton* MainFrame::MakeRowAttach(wxWindow* parent, const ui::HostRow& ref) {
     return button;
 }
 
+wxButton* MainFrame::MakeRowOpenFolder(wxWindow* parent) {
+    auto* button = new wxButton(parent, wxID_ANY, ToWx(ui::kOpenFolderAction));
+    button->SetMinSize(FromDIP(wxSize(kHostAttachWidth, 26)));
+    PaintButton(button, kAccent);
+    button->Bind(wxEVT_BUTTON,
+        [this](wxCommandEvent&) { deskhubp::OpenFolder(TransferFolder()); });
+    return button;
+}
+
 void MainFrame::RebuildHostTable() {
     hostRowViews_.clear();
     wxSizer* rows = hostTable_->GetSizer();
@@ -1358,6 +1365,8 @@ void MainFrame::RebuildHostTable() {
         row->AddSpacer(FromDIP(kHostCellGap));
         if (CanAttachLocally(ref)) {
             row->Add(MakeRowAttach(view.panel, ref), wxSizerFlags().CentreVertical());
+        } else if (ref.files && !ref.viewer) {
+            row->Add(MakeRowOpenFolder(view.panel), wxSizerFlags().CentreVertical());
         } else {
             row->AddSpacer(FromDIP(kHostAttachWidth));
         }
@@ -1376,11 +1385,6 @@ void MainFrame::ShowHostTable(bool sharing) {
     hostPicker_->Show(!sharing);
     hostTableHolder_->Show(sharing);
     hostHint_->Show(!sharing);
-
-    const bool showFolder = !sharing && FilesTicked();
-    hostFilesHint_->SetLabel(
-        ToWx(std::string(ui::kTransferFolderLabel) + " " + deskhubp::PathText(TransferFolder())));
-    hostFilesHint_->Show(showFolder);
     RelayoutHostPage();
 }
 
@@ -1452,6 +1456,7 @@ void MainFrame::OnDeviceStatus(const deskhubp::DeviceStatus& status) {
 
 void MainFrame::ApplyHostState(HostShareState state, const wxString& detail) {
     const HostStateStyle style = StyleFor(state);
+    const bool live = hosting_ || state == HostShareState::kStarting;
 
     hostStateLabel_->SetLabel(ToWx(style.label));
     hostStateLabel_->SetForegroundColour(style.tint);
@@ -1460,14 +1465,15 @@ void MainFrame::ApplyHostState(HostShareState state, const wxString& detail) {
     hostStatusLabel_->Wrap(FromDIP(kBannerWrapWidth));
     hostStatusLabel_->Show(!detail.empty());
     hostStatusLabel_->SetBackgroundColour(style.background);
+    hostBanner_->Show(state != HostShareState::kIdle);
     ShowPasscodeCard();
+    hostPasscodePanel_->Show(live);
     hostBannerBar_->SetBackgroundColour(style.tint);
     hostBanner_->SetBackgroundColour(style.background);
     hostBanner_->Layout();
-    if (wxWindow* page = hostBanner_->GetParent()) page->Layout();
+    RelayoutHostPage();
     hostBanner_->Refresh();
 
-    const bool live = hosting_ || state == HostShareState::kStarting;
     shareBtn_->SetLabel(ToWx(live ? ui::kStopSharing : ui::kStartSharing));
     PaintButton(shareBtn_, live ? kOffline : kAccent);
     shareBtn_->Refresh();

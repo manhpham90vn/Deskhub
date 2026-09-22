@@ -1,13 +1,6 @@
-﻿$ErrorActionPreference = 'Stop'
+$ErrorActionPreference = 'Stop'
 $root = Resolve-Path (Join-Path $PSScriptRoot '..')
 . (Join-Path $PSScriptRoot 'pinned-tools.ps1')
-
-$clangFormatVersion = Get-PinnedToolVersion 'CLANG_FORMAT_VERSION'
-$clangTidyVersion = Get-PinnedToolVersion 'CLANG_TIDY_VERSION'
-$ktlintVersion = Get-PinnedToolVersion 'KTLINT_VERSION'
-$ktlintSha256 = Get-PinnedToolVersion 'KTLINT_SHA256'
-$swiftformatVersion = Get-PinnedToolVersion 'SWIFTFORMAT_VERSION'
-$swiftformatMsiSha256 = 'DDE120147AADAD9271831D37919A6567E2C9EC03B22D075DE4CC5E2F2F3D8F25'
 
 if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
     throw "winget not found. Install 'App Installer' from Microsoft Store, then re-run."
@@ -81,41 +74,7 @@ if ($nasmOnPath) {
 if (Install-IfMissing 'make' 'GnuWin32.Make' 'GNU make') { $restartNote = $true }
 if (Install-IfMissing 'java' 'EclipseAdoptium.Temurin.17.JDK' 'JDK 17 (Temurin)') { $restartNote = $true }
 
-function Install-PinnedPythonTool([string]$Cmd, [string]$Version) {
-    $found = Find-PinnedTool $Cmd $Version
-    if (-not $found) {
-        $pipx = Get-Command pipx -ErrorAction SilentlyContinue
-        $py = Get-Command py -ErrorAction SilentlyContinue
-        if ($pipx) {
-            Write-Host "[install] $Cmd $Version (pipx)..."
-            & $pipx.Source install --force "$Cmd==$Version"
-            if ($LASTEXITCODE -ne 0) { throw "pipx failed installing $Cmd (exit $LASTEXITCODE)" }
-            & $pipx.Source ensurepath
-        } elseif ($py) {
-            Write-Host "[install] $Cmd $Version (pip --user)..."
-            & $py.Source -m pip install --user --upgrade "$Cmd==$Version"
-            if ($LASTEXITCODE -ne 0) { throw "pip failed installing $Cmd (exit $LASTEXITCODE)" }
-        } else {
-            Write-Host "[action]  $Cmd $Version not found - CI enforces this exact version."
-            Write-Host "          Install Python 3 (winget install Python.Python.3.12), reopen the terminal,"
-            Write-Host "          then re-run bootstrap (or: pipx install $Cmd==$Version)."
-            return $false
-        }
-        $found = Find-PinnedTool $Cmd $Version
-        if (-not $found) {
-            throw "$Cmd $Version is still not runnable after its install - 'make lint' rejects any other version."
-        }
-    }
-    Write-Host "[ok]      $Cmd $Version ($found)"
-    if (Get-Command $Cmd -ErrorAction SilentlyContinue) { return $false }
-    $toolDir = Split-Path $found
-    $env:PATH = "$toolDir;$env:PATH"
-    Write-Host "[action]  Add '$toolDir' to your PATH - 'make lint' runs $Cmd from there."
-    return $true
-}
-
-if (Install-PinnedPythonTool 'clang-format' $clangFormatVersion) { $restartNote = $true }
-if (Install-PinnedPythonTool 'clang-tidy' $clangTidyVersion) { $restartNote = $true }
+Ensure-LocalClangTools
 
 if (Test-Path (Join-Path $root '.git')) {
     $subStatus = git -C $root submodule status
@@ -128,44 +87,8 @@ if (Test-Path (Join-Path $root '.git')) {
     }
 }
 
-$toolsDir = Join-Path $root 'tools'
-New-Item -ItemType Directory -Force -Path $toolsDir | Out-Null
-
-$ktlintJar = Join-Path $toolsDir 'ktlint.jar'
-$ktlintVerFile = Join-Path $toolsDir 'ktlint.jar.version'
-$ktlintCurrent = if (Test-Path $ktlintVerFile) { (Get-Content $ktlintVerFile -Raw).Trim() } else { '' }
-if ((Test-Path $ktlintJar) -and ($ktlintCurrent -eq $ktlintVersion)) {
-    Write-Host "[ok]      ktlint $ktlintVersion ($ktlintJar)"
-} else {
-    Write-Host "[install] ktlint $ktlintVersion..."
-    Invoke-WebRequest -Uri "https://github.com/pinterest/ktlint/releases/download/$ktlintVersion/ktlint" -OutFile $ktlintJar
-    if ((Get-FileHash $ktlintJar -Algorithm SHA256).Hash -ne $ktlintSha256) {
-        Remove-Item $ktlintJar -Force
-        throw "ktlint download failed the checksum check."
-    }
-    Set-Content -Path $ktlintVerFile -Value $ktlintVersion
-}
-
-$swiftformatExe = Join-Path $toolsDir 'swiftformat.exe'
-$sfOnPath = (Get-Command swiftformat -ErrorAction SilentlyContinue).Source
-if ($sfOnPath) {
-    Write-Host "[ok]      swiftformat ($sfOnPath)"
-} elseif (Test-Path $swiftformatExe) {
-    Write-Host "[ok]      swiftformat ($swiftformatExe)"
-} else {
-    Write-Host "[install] SwiftFormat $swiftformatVersion..."
-    $msi = Join-Path $env:TEMP 'SwiftFormat.amd64.msi'
-    $ext = Join-Path $env:TEMP 'SwiftFormatMsiExtract'
-    Invoke-WebRequest -Uri "https://github.com/nicklockwood/SwiftFormat/releases/download/$swiftformatVersion/SwiftFormat.amd64.msi" -OutFile $msi
-    if ((Get-FileHash $msi -Algorithm SHA256).Hash -ne $swiftformatMsiSha256) {
-        Remove-Item $msi -Force
-        throw "SwiftFormat download failed the checksum check."
-    }
-    Start-Process msiexec -ArgumentList "/a `"$msi`" /qn TARGETDIR=`"$ext`"" -Wait
-    Copy-Item (Join-Path $ext 'PFiles64\nicklockwood\SwiftFormat\swiftformat.exe') $swiftformatExe
-    Remove-Item $msi -Force
-    Remove-Item $ext -Recurse -Force
-}
+Ensure-LocalKtlint
+Ensure-LocalSwiftFormat
 
 $sdkPackages = @('platform-tools', 'platforms;android-37.0', 'ndk;26.1.10909125', 'cmake;3.22.1')
 

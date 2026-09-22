@@ -170,6 +170,7 @@ private:
     static void OnShareClicked(GtkButton* b, gpointer user);
     static void OnHostRowActionClicked(GtkButton* b, gpointer user);
     static void OnHostRowAttachClicked(GtkButton* b, gpointer user);
+    static void OnHostRowOpenFolderClicked(GtkButton* b, gpointer user);
     static void OnConnectClicked(GtkButton* b, gpointer user);
     static void OnAddressActivate(GtkEntry* e, gpointer user);
     static void OnCopyClicked(GtkButton* b, gpointer user);
@@ -214,7 +215,6 @@ private:
 
     GtkWidget* hostTerminalCheck_ = nullptr;
     GtkWidget* hostFilesCheck_ = nullptr;
-    GtkWidget* hostFilesHint_ = nullptr;
 
     GtkWidget* addressEntry_ = nullptr;
     GtkWidget* portEntry_ = nullptr;

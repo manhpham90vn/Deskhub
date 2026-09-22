@@ -92,6 +92,7 @@ if(WIN32)
         src/system/MemoryFootprintWin.cpp
         src/system/DeviceNameWin.cpp
         src/system/AutostartWin.cpp
+        src/system/FolderOpenWin.cpp
         src/system/KeepAwakeWin.cpp
         src/system/ConsoleWin.cpp
         src/system/EnvironmentWin.cpp
@@ -123,6 +124,14 @@ else()
         list(APPEND deskhub_platform_os src/system/AutostartMac.mm)
     else()
         list(APPEND deskhub_platform_os src/system/AutostartNone.cpp)
+    endif()
+
+    if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        list(APPEND deskhub_platform_os src/system/FolderOpenLinux.cpp)
+    elseif(APPLE AND NOT CMAKE_SYSTEM_NAME STREQUAL "iOS")
+        list(APPEND deskhub_platform_os src/system/FolderOpenMac.cpp)
+    else()
+        list(APPEND deskhub_platform_os src/system/FolderOpenNone.cpp)
     endif()
 
     if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
@@ -279,7 +288,7 @@ endif()
 
 deskhub_target_warnings(platform)
 if(WIN32)
-    target_link_libraries(platform PUBLIC ws2_32 psapi ole32)
+    target_link_libraries(platform PUBLIC ws2_32 psapi ole32 shell32)
     target_compile_options(platform PRIVATE /sdl)
 endif()
 
