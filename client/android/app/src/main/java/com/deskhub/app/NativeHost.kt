@@ -90,6 +90,7 @@ object NativeHost {
         port: Int,
         passcode: String,
         screen: Boolean,
+        files: Boolean,
     ): String
 
     private external fun nativeIdleStatus(port: Int): String
@@ -240,7 +241,8 @@ object NativeHost {
         port: Int,
         passcode: String,
         screen: Boolean,
-    ): String = nativeSharingStatus(port, passcode, screen)
+        files: Boolean,
+    ): String = nativeSharingStatus(port, passcode, screen, files)
 
     fun idleStatus(port: Int): String = nativeIdleStatus(port)
 

@@ -25,19 +25,22 @@ final class SharingModel {
             ? passcode : lastValidPasscode
     }
 
-    var statusLine: String {
+    var screenStatusLine: String {
         let port = UInt16(dh_settings_load().port)
         if status.sharing {
             return DeskhubClient.buffered(320) {
-                dh_sharing_status(port, acceptedPasscode, false, true, false, true, $0, $1)
-            }
-        }
-        if FilesHost.shared.receiving {
-            return DeskhubClient.buffered(320) {
-                dh_sharing_status(port, acceptedPasscode, false, false, false, true, $0, $1)
+                dh_sharing_status(port, acceptedPasscode, false, true, false, false, $0, $1)
             }
         }
         return DeskhubClient.buffered(160) { dh_idle_host_status(port, $0, $1) }
+    }
+
+    var filesStatusLine: String {
+        guard FilesHost.shared.receiving else { return "" }
+        let port = UInt16(dh_settings_load().port)
+        return DeskhubClient.buffered(320) {
+            dh_sharing_status(port, acceptedPasscode, false, false, false, true, $0, $1)
+        }
     }
 
     func saveBindIp() {

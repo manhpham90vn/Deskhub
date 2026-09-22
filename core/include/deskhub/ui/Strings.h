@@ -78,8 +78,7 @@ inline constexpr const char* kNotSharing = "Not sharing.";
 inline constexpr const char* kStartingShare = "Starting share...";
 inline constexpr const char* kShareStateOn = "Sharing";
 inline constexpr const char* kShareStateOff = "Not sharing";
-inline constexpr const char* kReceivingFilesState =
-    "Receiving files - the screen is not shared";
+inline constexpr const char* kReceivingFilesState = "Receiving files";
 inline constexpr const char* kStartSharing = "Start sharing";
 inline constexpr const char* kBroadcastMemoryLabel = "Broadcast memory";
 inline constexpr const char* kAllowControlLabel =

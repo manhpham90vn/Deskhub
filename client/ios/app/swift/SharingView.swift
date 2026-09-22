@@ -8,22 +8,7 @@ struct SharingView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                deskhubHeading(DeskhubClient.string(DHStrHostHeading))
-
-                let receiving = FilesHost.shared.receiving
-                let live = model.status.sharing || receiving
-                let state: DHStringId =
-                    model.status.sharing
-                        ? DHStrShareStateOn
-                        : (receiving ? DHStrReceivingFilesState : DHStrShareStateOff)
-                Text(DeskhubClient.string(state))
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(live ? DeskhubPalette.online : DeskhubPalette.muted)
-
-                Toggle(DeskhubClient.string(DHStrFilesPickerLabel), isOn: .constant(true))
-                    .disabled(true)
-
-                deskhubHint(DeskhubClient.string(DHStrMobileTakesFilesNote))
+                deskhubHeading(DeskhubClient.string(DHStrSidebarHost))
 
                 PasscodeCard(passcode: model.acceptedPasscode)
 
@@ -43,24 +28,6 @@ struct SharingView: View {
                     .disabled(model.status.sharing)
                 }
                 .onChange(of: model.bindIp) { _, _ in model.saveBindIp() }
-
-                BroadcastPickerButton(
-                    extensionBundleId: SharingModel.extensionBundleId,
-                    title: DeskhubClient.string(
-                        model.status.sharing ? DHStrStopSharing : DHStrStartSharing
-                    )
-                )
-
-                deskhubHint(model.statusLine)
-                if model.status.sharing, model.status.memoryMB > 0 {
-                    deskhubHint(
-                        "\(DeskhubClient.string(DHStrBroadcastMemoryLabel)): "
-                            + "\(model.status.memoryMB) MB"
-                    )
-                }
-                if !model.status.error.isEmpty {
-                    Text(model.status.error).foregroundStyle(DeskhubPalette.offline)
-                }
 
                 deskhubSection(DeskhubClient.string(DHStrHostIpIntro))
                 if model.addresses.isEmpty {
@@ -87,7 +54,52 @@ struct SharingView: View {
                 }
 
                 deskhubHint(DeskhubClient.string(DHStrSharingConnectHint))
-                deskhubHint(viewerLine)
+
+                let receiving = FilesHost.shared.receiving
+                deskhubSection(DeskhubClient.string(DHStrHostHeading))
+                Text(
+                    DeskhubClient.string(
+                        model.status.sharing ? DHStrShareStateOn : DHStrShareStateOff
+                    )
+                )
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(
+                    model.status.sharing ? DeskhubPalette.online : DeskhubPalette.muted
+                )
+
+                BroadcastPickerButton(
+                    extensionBundleId: SharingModel.extensionBundleId,
+                    title: DeskhubClient.string(
+                        model.status.sharing ? DHStrStopSharing : DHStrStartSharing
+                    )
+                )
+
+                deskhubHint(model.screenStatusLine)
+                if model.status.sharing, model.status.memoryMB > 0 {
+                    deskhubHint(
+                        "\(DeskhubClient.string(DHStrBroadcastMemoryLabel)): "
+                            + "\(model.status.memoryMB) MB"
+                    )
+                }
+                if !model.status.error.isEmpty {
+                    Text(model.status.error).foregroundStyle(DeskhubPalette.offline)
+                }
+                if model.status.sharing {
+                    deskhubHint(viewerLine)
+                }
+
+                Divider()
+
+                deskhubSection(DeskhubClient.string(DHStrFilesPickerLabel))
+                if receiving {
+                    Text(DeskhubClient.string(DHStrReceivingFilesState))
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(DeskhubPalette.online)
+                    if !model.filesStatusLine.isEmpty {
+                        deskhubHint(model.filesStatusLine)
+                    }
+                }
+                deskhubHint(DeskhubClient.string(DHStrMobileTakesFilesNote))
             }
             .padding()
         }

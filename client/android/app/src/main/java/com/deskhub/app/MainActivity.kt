@@ -36,10 +36,10 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -818,7 +818,7 @@ private fun HostScreen(
                 .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        Heading(NativeClient.string(NativeClient.STR_HOST_HEADING))
+        Heading(NativeClient.string(NativeClient.STR_SIDEBAR_HOST))
 
         if (!NativeHost.isSupported) {
             Text(
@@ -835,37 +835,6 @@ private fun HostScreen(
                 delay(POLL_INTERVAL_MS)
             }
         }
-
-        Text(
-            NativeClient.string(
-                when {
-                    sharing -> NativeClient.STR_SHARE_STATE_ON
-                    receiving -> NativeClient.STR_RECEIVING_FILES_STATE
-                    else -> NativeClient.STR_SHARE_STATE_OFF
-                },
-            ),
-            style = MaterialTheme.typography.titleMedium,
-            color = if (sharing || receiving) OnlineColor else MutedColor,
-        )
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Checkbox(checked = true, onCheckedChange = null, enabled = false)
-            Text(
-                NativeClient.string(NativeClient.STR_FILES_PICKER_LABEL),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MutedColor,
-            )
-        }
-
-        Text(
-            NativeClient.string(NativeClient.STR_MOBILE_TAKES_FILES_NOTE),
-            style = MaterialTheme.typography.bodySmall,
-            color = MutedColor,
-        )
 
         PasscodeCard(passcode)
 
@@ -921,6 +890,50 @@ private fun HostScreen(
             }
         }
 
+        Heading(NativeClient.string(NativeClient.STR_HOST_IP_INTRO))
+        if (addresses.isEmpty()) {
+            Text(
+                NativeClient.string(NativeClient.STR_NO_NETWORK_ADDRESS),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MutedColor,
+            )
+        } else {
+            val context = LocalContext.current
+            for (address in addresses.filter { bindIp.isEmpty() || it.ip == bindIp }) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(address.name, modifier = Modifier.weight(1f), color = MutedColor)
+                    Text(address.ip, fontWeight = FontWeight.Bold, color = HeadingColor)
+                    TextButton(onClick = { copyToClipboard(context, address.ip) }) {
+                        Text("Copy")
+                    }
+                }
+            }
+        }
+
+        Text(
+            NativeClient.string(NativeClient.STR_SHARING_CONNECT_HINT),
+            style = MaterialTheme.typography.bodySmall,
+            color = MutedColor,
+        )
+
+        SectionLabel(NativeClient.string(NativeClient.STR_HOST_HEADING))
+
+        Text(
+            NativeClient.string(
+                if (sharing) {
+                    NativeClient.STR_SHARE_STATE_ON
+                } else {
+                    NativeClient.STR_SHARE_STATE_OFF
+                },
+            ),
+            style = MaterialTheme.typography.titleMedium,
+            color = if (sharing) OnlineColor else MutedColor,
+        )
+
         Button(
             onClick = {
                 if (sharing) {
@@ -953,8 +966,8 @@ private fun HostScreen(
         }
 
         Text(
-            if (sharing || receiving) {
-                NativeHost.sharingStatus(port, passcode, sharing)
+            if (sharing) {
+                NativeHost.sharingStatus(port, passcode, true, false)
             } else {
                 NativeHost.idleStatus(port)
             },
@@ -966,37 +979,30 @@ private fun HostScreen(
             Text(error, color = MaterialTheme.colorScheme.error)
         }
 
-        Heading(NativeClient.string(NativeClient.STR_HOST_IP_INTRO))
-        if (addresses.isEmpty()) {
+        HostRowList(rows = rows, sharing = sharing)
+
+        HorizontalDivider()
+
+        SectionLabel(NativeClient.string(NativeClient.STR_FILES_PICKER_LABEL))
+
+        if (receiving) {
             Text(
-                NativeClient.string(NativeClient.STR_NO_NETWORK_ADDRESS),
+                NativeClient.string(NativeClient.STR_RECEIVING_FILES_STATE),
+                style = MaterialTheme.typography.titleMedium,
+                color = OnlineColor,
+            )
+            Text(
+                NativeHost.sharingStatus(port, passcode, false, true),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MutedColor,
             )
-        } else {
-            val context = LocalContext.current
-            for (address in addresses.filter { bindIp.isEmpty() || it.ip == bindIp }) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(address.name, modifier = Modifier.weight(1f), color = MutedColor)
-                    Text(address.ip, fontWeight = FontWeight.Bold, color = HeadingColor)
-                    TextButton(onClick = { copyToClipboard(context, address.ip) }) {
-                        Text("Copy")
-                    }
-                }
-            }
         }
 
         Text(
-            NativeClient.string(NativeClient.STR_SHARING_CONNECT_HINT),
+            NativeClient.string(NativeClient.STR_MOBILE_TAKES_FILES_NOTE),
             style = MaterialTheme.typography.bodySmall,
             color = MutedColor,
         )
-
-        HostRowList(rows = rows, sharing = sharing)
     }
 }
 

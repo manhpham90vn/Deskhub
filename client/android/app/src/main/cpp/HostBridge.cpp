@@ -214,11 +214,11 @@ JNIEXPORT jobjectArray JNICALL Java_com_deskhub_app_NativeHost_nativeHostRows(JN
 }
 
 JNIEXPORT jstring JNICALL Java_com_deskhub_app_NativeHost_nativeSharingStatus(JNIEnv* env, jobject,
-    jint port, jstring passcode, jboolean screen) {
+    jint port, jstring passcode, jboolean screen, jboolean files) {
     char buf[320];
     const std::string code = deskhubj::FromJString(env, passcode);
     dh_sharing_status(uint16_t(port), code.c_str(), false, screen == JNI_TRUE, false,
-        dh_share_files_active(), buf, int(sizeof(buf)));
+        files == JNI_TRUE, buf, int(sizeof(buf)));
     return NewString(env, buf);
 }
 
