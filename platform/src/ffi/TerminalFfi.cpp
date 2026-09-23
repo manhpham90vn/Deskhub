@@ -173,10 +173,6 @@ void dh_term_send_text(DHTermSession* s, const char* utf8) {
     if (s != nullptr && utf8 != nullptr && *utf8 != '\0') s->viewer.SendText(utf8);
 }
 
-void dh_term_paste(DHTermSession* s, const char* utf8) {
-    if (s != nullptr && utf8 != nullptr && *utf8 != '\0') s->viewer.Paste(utf8);
-}
-
 void dh_term_open_new(DHTermSession* s) {
     if (s != nullptr) s->viewer.OpenNew();
 }

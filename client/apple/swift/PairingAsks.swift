@@ -3,7 +3,6 @@ import SwiftUI
 
 struct PairingAsk: Identifiable {
     let addrPacked: UInt64
-    let shortKey: String
     let body: String
 
     var id: UInt64 { addrPacked }
@@ -43,7 +42,7 @@ final class PairingAskModel {
                 dh_pairing_request_body(name, address, shortKey, $0, $1)
             }
             asks.append(
-                PairingAsk(addrPacked: request.addrPacked, shortKey: shortKey, body: body)
+                PairingAsk(addrPacked: request.addrPacked, body: body)
             )
         }
     }

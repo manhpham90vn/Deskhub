@@ -33,14 +33,6 @@ struct FakeInjector : InputApplier<FakeInjector, uint16_t> {
     void SendButton(MouseButton button, bool down) {
         if (!down) releasedButtons.push_back(button);
     }
-
-    void SendKey(int32_t, int32_t, bool) {}
-    void SendMoveAbsolute(int32_t, int32_t) {}
-    void SendMoveRelative(int32_t, int32_t) {}
-    void SendWheel(int32_t) {}
-    void OnLocalUserTookOver() {}
-    void OnLocalUserIdle() {}
-    void ReleaseAll() {}
 };
 
 void TestReleaseAllHeldDrainsThroughTheBackend() {

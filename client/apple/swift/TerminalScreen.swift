@@ -32,7 +32,6 @@ private let termCursor = termColor(0xE0, 0xE0, 0xE0)
 
 struct TerminalScreen: View {
     @Bindable var model: TerminalModel
-    let title: String
     #if os(iOS)
         let onClose: () -> Void
     #endif

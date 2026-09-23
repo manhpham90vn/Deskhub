@@ -50,7 +50,6 @@ struct HostPage: View {
             } else {
                 SharePickerTable(
                     sources: sharing.shareSources,
-                    filesFolder: sharing.filesFolder,
                     ticked: $sharing.tickedSources,
                     terminal: $sharing.shareTerminal,
                     files: $sharing.shareFiles
@@ -221,7 +220,6 @@ struct HostSourceTable: View {
 
 struct SharePickerTable: View {
     let sources: [ShareSource]
-    let filesFolder: String
     @Binding var ticked: Set<UInt32>
     @Binding var terminal: Bool
     @Binding var files: Bool

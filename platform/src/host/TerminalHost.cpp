@@ -415,13 +415,6 @@ void TerminalHost::SendLocalKey(uint32_t termId, const deskhub::term::TermKeyEve
     WriteLocalBytes(termId, deskhub::term::EncodeKey(key, at->second.mirror->Modes()));
 }
 
-void TerminalHost::SendLocalText(uint32_t termId, std::string_view text) {
-    const std::lock_guard<std::mutex> lock(mutex_);
-    const auto at = shells_.find(termId);
-    if (at == shells_.end() || !at->second.local) return;
-    WriteLocalBytes(termId, deskhub::term::EncodeText(text, at->second.mirror->Modes()));
-}
-
 void TerminalHost::ResizeLocal(uint32_t termId, deskhub::TermSize size) {
     const deskhub::TermSize clamped = deskhub::ClampTermSize(size);
     const std::lock_guard<std::mutex> lock(mutex_);

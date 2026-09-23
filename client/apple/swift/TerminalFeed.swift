@@ -14,7 +14,6 @@ nonisolated enum TermKeyCode {
     static let end: Int32 = 10
     static let pageUp: Int32 = 11
     static let pageDown: Int32 = 12
-    static let insert: Int32 = 13
     static let delete: Int32 = 14
     static let f1: Int32 = 15
 }
@@ -25,7 +24,6 @@ struct TerminalGridSnapshot {
     var cursorRow = 0
     var cursorCol = 0
     var cursorVisible = false
-    var revision: UInt64 = 0
     var scrollbackRows = 0
     var scrollOffset = 0
     var cells: [DHTermCell] = []
@@ -56,10 +54,7 @@ struct ShellRow: Identifiable, Equatable {
         info: inout DHTermGrid
     ) -> Bool
     func sendKey(_ key: Int32, codepoint: UInt32, shift: Bool, alt: Bool, ctrl: Bool)
-    func sendText(_ text: String)
-    func paste(_ text: String)
     func resize(cols: UInt16, rows: UInt16)
-    func requestShells()
     func resumeShell(_ termId: UInt32)
     func closeShell(_ termId: UInt32)
     func openFreshShell()
@@ -69,7 +64,6 @@ struct ShellRow: Identifiable, Equatable {
 extension TerminalFeed {
     var shells: [ShellRow] { [] }
     var shellsKnown: Bool { false }
-    func requestShells() {}
     func resumeShell(_: UInt32) {}
     func closeShell(_: UInt32) {}
     func openFreshShell() {}

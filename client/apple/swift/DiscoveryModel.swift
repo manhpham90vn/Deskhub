@@ -19,10 +19,6 @@ nonisolated enum DeskhubDiscovery {
         _ = dh_scan_restart(port)
     }
 
-    static func cancelScan() {
-        dh_scan_cancel()
-    }
-
     static func refreshStatus() {
         dh_status_refresh_now()
     }
@@ -127,12 +123,6 @@ final class DiscoveryModel {
                 try? await Task.sleep(for: DiscoveryModel.pollInterval)
             }
         }
-    }
-
-    func stop() {
-        pump?.cancel()
-        pump = nil
-        DeskhubDiscovery.cancelScan()
     }
 
     func remember(address: String, passcode: String) async {

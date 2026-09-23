@@ -111,15 +111,9 @@ nonisolated enum DeskhubShare {
 
     static func attachShell(_ termId: UInt32) -> Bool { dh_share_attach_shell(termId) }
 
-    static var filesActive: Bool { dh_share_files_active() }
-
     static func stopFiles() { dh_share_stop_files() }
 
     static func openFilesFolder() { dh_share_open_files_folder() }
-
-    static var filesFolder: String {
-        DeskhubClient.buffered(1024) { dh_share_files_dir($0, $1) }
-    }
 
     static var maxSources: Int { Int(dh_max_sources()) }
 

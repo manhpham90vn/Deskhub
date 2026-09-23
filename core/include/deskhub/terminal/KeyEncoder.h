@@ -53,6 +53,5 @@ struct TermKeyEvent {
 
 std::string EncodeKey(const TermKeyEvent& event, const TerminalModes& modes);
 std::string EncodeText(std::string_view text, const TerminalModes& modes);
-std::string EncodePaste(std::string_view text, const TerminalModes& modes);
 
 }

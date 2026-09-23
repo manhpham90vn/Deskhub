@@ -32,7 +32,6 @@ final class SharingModel {
     var tickedSources: Set<UInt32> = []
     var shareTerminal = true
     var shareFiles = true
-    var filesFolder = DeskhubShare.filesFolder
     let pairing = PairingAskModel()
 
     var hasScreenRecording = false
@@ -220,7 +219,6 @@ final class SharingModel {
         sharingScreen = screen
         sharingTerminal = terminal
         sharingFiles = files
-        filesFolder = DeskhubShare.filesFolder
         startPolling()
     }
 

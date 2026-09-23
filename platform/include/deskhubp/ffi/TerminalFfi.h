@@ -134,8 +134,6 @@ void dh_term_send_key(DHTermSession* s, int32_t key, uint32_t codepoint, bool sh
 
 void dh_term_send_text(DHTermSession* s, const char* utf8);
 
-void dh_term_paste(DHTermSession* s, const char* utf8);
-
 void dh_term_resize(DHTermSession* s, uint16_t cols, uint16_t rows);
 
 #ifdef __cplusplus

@@ -354,10 +354,6 @@ void TerminalViewer::SendText(std::string_view text) {
     SendBytes(deskhub::term::EncodeText(text, CurrentModes()));
 }
 
-void TerminalViewer::Paste(std::string_view text) {
-    SendBytes(deskhub::term::EncodePaste(text, CurrentModes()));
-}
-
 void TerminalViewer::Resize(deskhub::TermSize size) {
     const deskhub::TermSize clamped = deskhub::ClampTermSize(size);
     {

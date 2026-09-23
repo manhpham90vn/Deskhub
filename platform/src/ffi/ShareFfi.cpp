@@ -189,15 +189,6 @@ void dh_share_stop_files(void) {
     if (g_files) g_files->Stop();
 }
 
-int dh_share_files_dir(char* out, int capacity) {
-    if (!out || capacity <= 0) return 0;
-    out[0] = '\0';
-    const std::filesystem::path folder = FilesFolder();
-    const std::u8string text = folder.u8string();
-    deskhubp::CopyToBuf(out, size_t(capacity), std::string(text.begin(), text.end()));
-    return int(std::strlen(out));
-}
-
 bool dh_share_open_files_folder(void) {
     return deskhubp::OpenFolder(FilesFolder());
 }
@@ -244,12 +235,6 @@ void dh_share_local_send_key(uint32_t term_id, int32_t key, uint32_t codepoint, 
     if (!deskhubp::DecodeTermKey(key, codepoint, shift, alt, ctrl, event)) return;
     std::lock_guard<std::mutex> lk(g_agentMutex);
     if (g_terminal) g_terminal->SendLocalKey(term_id, event);
-}
-
-void dh_share_local_send_text(uint32_t term_id, const char* utf8) {
-    if (utf8 == nullptr || *utf8 == '\0') return;
-    std::lock_guard<std::mutex> lk(g_agentMutex);
-    if (g_terminal) g_terminal->SendLocalText(term_id, utf8);
 }
 
 void dh_share_local_resize(uint32_t term_id, uint16_t cols, uint16_t rows) {

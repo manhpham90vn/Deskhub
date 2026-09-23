@@ -45,10 +45,7 @@ struct ContentView: View {
             }
         case .terminal:
             if let terminal = model.terminal {
-                TerminalScreen(
-                    model: terminal,
-                    title: DeskhubClient.addressHost(model.connect.address)
-                ) { model.closeShell() }
+                TerminalScreen(model: terminal) { model.closeShell() }
             }
         }
     }

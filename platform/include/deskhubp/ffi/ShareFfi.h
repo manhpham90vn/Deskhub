@@ -76,8 +76,6 @@ bool dh_share_files_active(void);
 
 void dh_share_stop_files(void);
 
-int dh_share_files_dir(char* out, int capacity);
-
 bool dh_share_open_files_folder(void);
 
 void dh_share_kick_shell(uint32_t term_id);
@@ -95,8 +93,6 @@ bool dh_share_local_grid(uint32_t term_id, uint32_t scrollOffset, DHTermCell* ce
 
 void dh_share_local_send_key(uint32_t term_id, int32_t key, uint32_t codepoint, bool shift, bool alt,
     bool ctrl);
-
-void dh_share_local_send_text(uint32_t term_id, const char* utf8);
 
 void dh_share_local_resize(uint32_t term_id, uint16_t cols, uint16_t rows);
 

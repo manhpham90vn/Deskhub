@@ -51,7 +51,6 @@ public:
     bool LocalAlive(uint32_t termId) const;
     deskhub::term::TerminalSnapshot LocalSnapshot(uint32_t termId, size_t scrollOffset) const;
     void SendLocalKey(uint32_t termId, const deskhub::term::TermKeyEvent& key);
-    void SendLocalText(uint32_t termId, std::string_view text);
     void ResizeLocal(uint32_t termId, deskhub::TermSize size);
 
 private:

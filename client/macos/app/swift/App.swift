@@ -74,19 +74,16 @@ private struct TerminalWindow: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        TerminalScreen(
-            model: model,
-            title: DeskhubClient.addressHost(request.address)
-        )
-        .navigationTitle(DeskhubClient.addressHost(request.address))
-        .frame(minWidth: 640, idealWidth: 900, maxWidth: .infinity,
-               minHeight: 400, idealHeight: 560, maxHeight: .infinity)
-        .task {
-            if !model.open(address: request.address, passcode: request.passcode) {
-                dismiss()
+        TerminalScreen(model: model)
+            .navigationTitle(DeskhubClient.addressHost(request.address))
+            .frame(minWidth: 640, idealWidth: 900, maxWidth: .infinity,
+                   minHeight: 400, idealHeight: 560, maxHeight: .infinity)
+            .task {
+                if !model.open(address: request.address, passcode: request.passcode) {
+                    dismiss()
+                }
             }
-        }
-        .onDisappear { model.stop() }
+            .onDisappear { model.stop() }
     }
 }
 
@@ -98,7 +95,7 @@ private struct LocalShellWindow: View {
     private var title: String { DeskhubClient.string(DHStrTerminalLocalWindowTitle) }
 
     var body: some View {
-        TerminalScreen(model: model, title: title)
+        TerminalScreen(model: model)
             .navigationTitle(title)
             .frame(minWidth: 640, idealWidth: 900, maxWidth: .infinity,
                    minHeight: 400, idealHeight: 560, maxHeight: .infinity)

@@ -76,16 +76,6 @@ size_t CountToHost(const std::deque<Datagram>& q, MsgType type) {
     return n;
 }
 
-struct Connected {
-    Rig rig;
-    ScreenClient pump;
-    ScreenHostSession host;
-    uint64_t now = 10'000'000;
-
-    Connected(ScreenHostCallbacks hcb, StreamParams offer)
-        : pump(rig.Callbacks(), rig.diag), host(hcb, offer) {}
-};
-
 void Exchange(Rig& r, ScreenClient& pump, ScreenHostSession& host, uint64_t now) {
     for (int guard = 0; guard < 8; ++guard) {
         if (r.toHost.empty() && r.toClient.empty()) break;

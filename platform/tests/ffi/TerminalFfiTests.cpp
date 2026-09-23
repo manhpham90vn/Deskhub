@@ -153,7 +153,6 @@ void TestNullHandlesAndBadAddressesAreHarmless() {
     Check(!dh_term_grid(nullptr, 0, nullptr, 0, &grid), "a null session draws no grid");
 
     dh_term_send_text(nullptr, "echo hi\n");
-    dh_term_paste(nullptr, "clip");
     dh_term_send_key(nullptr, DHTermKeyEnter, 0, false, false, false);
     dh_term_resize(nullptr, 80, 24);
     dh_term_accept_key(nullptr);

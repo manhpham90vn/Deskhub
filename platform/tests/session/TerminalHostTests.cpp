@@ -476,6 +476,13 @@ void TypeLocalChar(deskhubp::TerminalHost& term, uint32_t termId, char32_t ch) {
     term.SendLocalKey(termId, key);
 }
 
+void TypeLocalLine(deskhubp::TerminalHost& term, uint32_t termId, std::string_view line) {
+    for (const char ch : line) TypeLocalChar(term, termId, char32_t(ch));
+    deskhub::term::TermKeyEvent enter;
+    enter.key = deskhub::term::TermKey::Enter;
+    term.SendLocalKey(termId, enter);
+}
+
 void TestDroppedShellWaitsForItsClient() {
     std::printf("[termhost] a client that vanishes keeps its shell, and a second one picks it up...\n");
     if (!deskhubp::QuicAvailable() || deskhubp::DefaultShell().empty()) {
@@ -758,7 +765,7 @@ void TestHostStopsAndAttachesShell() {
     viewer.Type("echo deskhub-intruder\n");
     viewer.Pump(400);
 
-    host.term.SendLocalText(termId, "echo deskhub-after-take\n");
+    TypeLocalLine(host.term, termId, "echo deskhub-after-take");
     Check(WaitFor(
               [&host, termId] {
                   return LocalSnapshotHasWholeRow(host.term, termId, "deskhub-after-take");

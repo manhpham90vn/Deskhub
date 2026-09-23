@@ -37,14 +37,6 @@ final class LocalTerminalFeed: TerminalFeed {
         dh_share_local_send_key(termId, key, codepoint, shift, alt, ctrl)
     }
 
-    func sendText(_ text: String) {
-        dh_share_local_send_text(termId, text)
-    }
-
-    func paste(_ text: String) {
-        sendText(text)
-    }
-
     func resize(cols: UInt16, rows: UInt16) {
         dh_share_local_resize(termId, cols, rows)
     }

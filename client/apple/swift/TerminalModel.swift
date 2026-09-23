@@ -38,11 +38,6 @@ final class RemoteTerminalFeed: TerminalFeed {
         return rows
     }
 
-    func requestShells() {
-        guard let handle else { return }
-        dh_term_request_sessions(handle)
-    }
-
     func resumeShell(_ termId: UInt32) {
         guard let handle else { return }
         dh_term_resume(handle, termId)
@@ -100,16 +95,6 @@ final class RemoteTerminalFeed: TerminalFeed {
         dh_term_send_key(handle, key, codepoint, shift, alt, ctrl)
     }
 
-    func sendText(_ text: String) {
-        guard let handle else { return }
-        dh_term_send_text(handle, text)
-    }
-
-    func paste(_ text: String) {
-        guard let handle else { return }
-        dh_term_paste(handle, text)
-    }
-
     func resize(cols: UInt16, rows: UInt16) {
         guard let handle else { return }
         dh_term_resize(handle, cols, rows)
@@ -126,7 +111,6 @@ final class RemoteTerminalFeed: TerminalFeed {
 final class TerminalModel {
     static let deciding: Int32 = 2
     static let live: Int32 = 4
-    static let refused: Int32 = 6
     static let ended: Int32 = 8
 
     private var feed: (any TerminalFeed)?
@@ -147,8 +131,6 @@ final class TerminalModel {
     var latchCtrl = false
     var latchAlt = false
     private(set) var scrollOffset = 0
-
-    var finished: Bool { state >= TerminalModel.refused }
 
     func open(address: String, passcode: String, cols: UInt16 = 100, rows: UInt16 = 30) -> Bool {
         stop()
@@ -257,18 +239,6 @@ final class TerminalModel {
         feed?.sendKey(key, codepoint: codepoint, shift: shift, alt: alt, ctrl: ctrl)
     }
 
-    func sendText(_ text: String) {
-        guard !text.isEmpty else { return }
-        scrollToBottom()
-        feed?.sendText(text)
-    }
-
-    func paste(_ text: String) {
-        guard !text.isEmpty else { return }
-        scrollToBottom()
-        feed?.paste(text)
-    }
-
     func resize(cols: Int, rows: Int) {
         guard cols > 0, rows > 0 else { return }
         feed?.resize(cols: UInt16(clamping: cols), rows: UInt16(clamping: rows))
@@ -322,7 +292,6 @@ final class TerminalModel {
             cursorRow: Int(info.cursorRow),
             cursorCol: Int(info.cursorCol),
             cursorVisible: info.cursorVisible,
-            revision: info.revision,
             scrollbackRows: Int(info.scrollbackRows),
             scrollOffset: scrollOffset,
             cells: Array(cells.prefix(needed))

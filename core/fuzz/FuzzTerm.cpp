@@ -33,6 +33,6 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
     key.mods = TermMods{size > 2 && (data[2] & 1) != 0, size > 2 && (data[2] & 2) != 0,
         size > 2 && (data[2] & 4) != 0};
     EncodeKey(key, screen.Modes());
-    EncodePaste(std::string_view(reinterpret_cast<const char*>(data), size), screen.Modes());
+    EncodeText(std::string_view(reinterpret_cast<const char*>(data), size), screen.Modes());
     return 0;
 }

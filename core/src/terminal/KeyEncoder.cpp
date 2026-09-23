@@ -137,10 +137,4 @@ std::string EncodeText(std::string_view text, const TerminalModes&) {
     return out;
 }
 
-std::string EncodePaste(std::string_view text, const TerminalModes& modes) {
-    std::string body = EncodeText(text, modes);
-    if (!modes.bracketedPaste) return body;
-    return "\x1B[200~" + body + "\x1B[201~";
-}
-
 }

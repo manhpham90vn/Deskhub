@@ -125,18 +125,11 @@ void TestFunctionKeys() {
         "a modified F1 switches to the CSI form");
 }
 
-void TestPaste() {
-    std::printf("[keys] pasted text is newline-corrected and bracketed when asked...\n");
+void TestTypedText() {
+    std::printf("[keys] typed text is newline-corrected...\n");
     TerminalModes plain;
-    TerminalModes bracketed;
-    bracketed.bracketedPaste = true;
-
     Check(EncodeText("a\nb", plain) == "a\rb",
-        "a newline in pasted text becomes the return the shell expects");
-    Check(EncodePaste("ls\n", plain) == "ls\r", "without bracketed paste nothing is added");
-    Check(EncodePaste("ls\n", bracketed) == "\x1B[200~ls\r\x1B[201~",
-        "with it the text is wrapped so the program knows it was pasted");
-    Check(EncodePaste("", bracketed) == "\x1B[200~\x1B[201~", "an empty paste is still bracketed");
+        "a newline in the text becomes the return the shell expects");
 }
 
 void TestEveryKeyProducesSomething() {
@@ -165,6 +158,6 @@ void RunKeyEncoderTests() {
     TestNamedKeys();
     TestArrowsFollowTheMode();
     TestFunctionKeys();
-    TestPaste();
+    TestTypedText();
     TestEveryKeyProducesSomething();
 }

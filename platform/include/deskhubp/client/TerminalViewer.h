@@ -67,7 +67,6 @@ public:
 
     void SendKey(const deskhub::term::TermKeyEvent& key);
     void SendText(std::string_view text);
-    void Paste(std::string_view text);
     void Resize(deskhub::TermSize size);
     void RequestSessions();
     void OpenNew();
