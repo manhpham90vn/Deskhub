@@ -444,7 +444,9 @@ void TestABatchCrossesARealConnection() {
     Check(ReadFile(landing / "notes.txt") == small, "the small file is byte for byte");
     Check(ReadFile(landing / "payload.bin") == big, "the multi-chunk file is byte for byte");
     Check(std::filesystem::exists(landing / "nothing.dat"), "the empty file exists");
-    Check(std::filesystem::file_size(landing / "nothing.dat") == 0, "and is empty");
+    std::error_code sizeError;
+    Check(std::filesystem::file_size(landing / "nothing.dat", sizeError) == 0 && !sizeError,
+        "and is empty");
 
     viewer.Shutdown();
     host.Shutdown();

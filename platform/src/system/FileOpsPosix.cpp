@@ -11,11 +11,6 @@ namespace {
 
 constexpr mode_t kNewFileMode = 0644;
 
-bool FilesystemHasNoHardLinks(int error) {
-    return error == EPERM || error == ENOTSUP || error == EXDEV ||
-           error == ENOSYS;
-}
-
 MoveOutcome CheckThenRename(const std::filesystem::path& from,
     const std::filesystem::path& to) {
     std::error_code ec;
@@ -39,10 +34,8 @@ MoveOutcome MoveWithoutReplacing(const std::filesystem::path& from,
         ::unlink(from.c_str());
         return MoveOutcome::Moved;
     }
-    const int error = errno;
-    if (error == EEXIST) return MoveOutcome::TargetExists;
-    if (FilesystemHasNoHardLinks(error)) return CheckThenRename(from, to);
-    return MoveOutcome::Failed;
+    if (errno == EEXIST) return MoveOutcome::TargetExists;
+    return CheckThenRename(from, to);
 }
 
 }
