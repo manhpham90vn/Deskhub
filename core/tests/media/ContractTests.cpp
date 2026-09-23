@@ -10,7 +10,7 @@
 
 using namespace deskhub::media;
 
-namespace {
+namespace contract_shapes {
 
 struct D3D11Texture;
 struct LinuxFrame;
@@ -168,6 +168,8 @@ static_assert(!VideoEncoderLike<MissingFinish, void*>);
 static_assert(!VideoDecoderLike<DecoderTakingIntPts>);
 
 }
+
+using namespace contract_shapes;
 
 void RunMediaContractTests() {
     std::printf("[media] encoder/decoder signature contract for all five platforms (checked at compile time)...\n");
