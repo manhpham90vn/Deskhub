@@ -59,11 +59,6 @@ deskhub::PairedDevices LoadPairedDevices() {
     return LoadPairedDevicesLocked();
 }
 
-bool SavePairedDevices(const deskhub::PairedDevices& devices) {
-    const std::lock_guard<std::mutex> lock(PairedDevicesMutex());
-    return SavePairedDevicesLocked(devices);
-}
-
 deskhub::PairVerdict CheckPairedDevice(const deskhub::Fingerprint& fingerprint) {
     return LoadPairedDevices().Check(fingerprint);
 }
