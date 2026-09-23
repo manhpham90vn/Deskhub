@@ -20,6 +20,4 @@ private:
     uint32_t state_ = 0xFFFFFFFFu;
 };
 
-uint32_t Crc32Of(std::span<const uint8_t> bytes);
-
 }

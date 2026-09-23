@@ -52,15 +52,6 @@ typedef enum {
     DHTermKeyF12 = 26,
 } DHTermKeyCode;
 
-#define DH_TERM_ATTR_BOLD (1u << 0)
-#define DH_TERM_ATTR_DIM (1u << 1)
-#define DH_TERM_ATTR_ITALIC (1u << 2)
-#define DH_TERM_ATTR_UNDERLINE (1u << 3)
-#define DH_TERM_ATTR_BLINK (1u << 4)
-#define DH_TERM_ATTR_REVERSE (1u << 5)
-#define DH_TERM_ATTR_HIDDEN (1u << 6)
-#define DH_TERM_ATTR_STRIKE (1u << 7)
-
 typedef struct {
     uint32_t codepoint;
     uint8_t fgR, fgG, fgB;
@@ -95,7 +86,6 @@ struct DHTermSessionInfo {
     int32_t state;
     uint16_t cols;
     uint16_t rows;
-    uint64_t openedUs;
     char name[DH_TERM_NAME_LEN];
     char line[DH_TERM_LINE_LEN];
     bool resumable;
@@ -107,9 +97,6 @@ DHTermSession* dh_term_open(const char* address, const char* passcode, uint16_t 
 
 DHTermSession* dh_term_open_deferred(const char* address, const char* passcode, uint16_t cols,
     uint16_t rows, const DHTermCallbacks* callbacks);
-
-DHTermSession* dh_term_open_resumed(const char* address, const char* passcode, uint16_t cols,
-    uint16_t rows, uint32_t resumeId, const DHTermCallbacks* callbacks);
 
 void dh_term_open_new(DHTermSession* s);
 

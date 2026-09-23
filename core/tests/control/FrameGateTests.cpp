@@ -14,14 +14,13 @@ void TestUngated() {
     FrameGate gate;
     Check(gate.Admit(0, 1000), "first frame passes");
     Check(gate.Admit(0, 1001), "a frame 1us later still passes");
-    Check(!gate.hasReference(), "an ungated gate keeps no reference");
 }
 
 void TestFirstFrameAlwaysPasses() {
     std::printf("[gate] the first frame is never dropped...\n");
     FrameGate gate;
     Check(gate.Admit(30, 5'000'000), "no previous frame -> admitted");
-    Check(gate.lastAdmittedUs() == 5'000'000, "and it becomes the reference");
+    Check(!gate.Admit(30, 5'010'000), "and it becomes the reference");
 }
 
 void TestDropsTooEarly() {
@@ -29,9 +28,8 @@ void TestDropsTooEarly() {
     FrameGate gate;
     Check(gate.Admit(30, 0), "reference frame");
     Check(!gate.Admit(30, 10'000), "10ms after at 30fps (33.3ms budget) -> dropped");
-    Check(gate.lastAdmittedUs() == 0, "a dropped frame does not move the reference");
     Check(gate.Admit(30, 33'333), "a full period later -> admitted");
-    Check(gate.lastAdmittedUs() == 33'333, "the reference advances");
+    Check(!gate.Admit(30, 43'333), "the reference advances");
 }
 
 void TestJitterTolerance() {
@@ -50,7 +48,7 @@ void TestNonMonotonicTimestamps() {
     FrameGate gate;
     Check(gate.Admit(30, 1'000'000), "reference frame");
     Check(gate.Admit(30, 900'000), "an older timestamp passes instead of wedging the gate");
-    Check(gate.lastAdmittedUs() == 900'000, "and it resets the reference");
+    Check(!gate.Admit(30, 910'000), "and it resets the reference");
 }
 
 void TestReset() {
@@ -59,7 +57,6 @@ void TestReset() {
     Check(gate.Admit(30, 0), "reference frame");
     Check(!gate.Admit(30, 1'000), "next frame is too early");
     gate.Reset();
-    Check(!gate.hasReference(), "Reset clears the reference");
     Check(gate.Admit(30, 1'000), "after Reset the same frame is admitted");
 }
 
@@ -67,7 +64,6 @@ void TestZeroTimestampIsAReference() {
     std::printf("[gate] a timestamp of exactly 0 still counts as a reference...\n");
     FrameGate gate;
     Check(gate.Admit(30, 0), "the frame at t=0 is admitted");
-    Check(gate.hasReference(), "and it is remembered, not mistaken for an empty gate");
     Check(!gate.Admit(30, 1'000), "so the next frame 1ms later is dropped");
 }
 

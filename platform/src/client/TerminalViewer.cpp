@@ -193,7 +193,7 @@ void TerminalViewer::HandleLinkReady(bool resumed) {
         SetState(TerminalViewerState::Opening, deskhub::ui::kTerminalPickSession);
         return;
     }
-    client_->Open(std::string(), config_.size, config_.clientName);
+    client_->Open(config_.size, config_.clientName);
 }
 
 void TerminalViewer::ResetResumeBackoff() {
@@ -230,7 +230,7 @@ void TerminalViewer::RequestSessions() {
 void TerminalViewer::OpenNew() {
     if (!Running()) return;
     Post([this] {
-        if (client_) client_->Open(std::string(), config_.size, config_.clientName);
+        if (client_) client_->Open(config_.size, config_.clientName);
     });
     if (channel_) channel_->Kick();
 }

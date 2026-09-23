@@ -28,9 +28,5 @@ bool QuicAvailable();
 
 HostIdentity LoadHostIdentity();
 HostIdentity LoadOrCreateHostIdentity(std::string_view commonName);
-bool ForgetHostIdentity();
-
 std::optional<deskhub::Fingerprint> FingerprintOfCertDer(std::span<const uint8_t> der);
-std::optional<deskhub::Fingerprint> FingerprintOfCertPem(std::string_view pem);
-
 }

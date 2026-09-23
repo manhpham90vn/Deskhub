@@ -15,10 +15,6 @@ public:
         sources_.assign(sources.begin(), sources.end());
     }
 
-    void SetPasscode(std::string passcode) {
-        passcode_ = IsValidPasscode(passcode) ? std::move(passcode) : std::string();
-    }
-
     void SetCaps(HostCaps caps) {
         caps_ = caps;
     }
@@ -27,7 +23,6 @@ public:
 
 private:
     std::vector<SourceInfo> sources_;
-    std::string passcode_;
     HostCaps caps_{};
 };
 

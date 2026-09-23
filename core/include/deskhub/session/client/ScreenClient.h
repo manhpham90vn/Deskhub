@@ -22,12 +22,10 @@ struct ScreenClientConfig {
     uint16_t maxWidth = 0;
     uint16_t maxHeight = 0;
     uint8_t sourceId = 0;
-    uint8_t desiredFps = kDefaultClientFps;
     bool sendNacks = false;
     bool wantsAudio = false;
     bool logLossRuns = false;
     const char* statusSeparator = "  ";
-    std::string passcode{};
     std::string displayName{};
 };
 

@@ -113,7 +113,7 @@ connection chưa hoàn tất phần auth:
 
 Khi thành công, client được ghi vào `paired_devices` của host; pairing dựa trên key, không
 dựa trên địa chỉ. Ba lần nhập sai passcode sẽ khoá đường passcode trong 30 giây
-(`AuthThrottle`, dùng chung hằng số với cơ chế lockout session cũ). Đường approval không
+(`AuthThrottle`). Đường approval không
 cần throttle vì đã có người quyết định.
 
 Ở phía client, `known_hosts` (`TrustStore`) ghim key của host. Một key **đã thay đổi** sẽ
@@ -528,11 +528,16 @@ coverage của core.
   phần encode, phần chẩn đoán và các lượt gửi theo từng viewer. Khi worker không theo kịp,
   hệ quả là một lần drop được đếm (`framesRefused`), không phải hiện tượng nhiễu trong âm
   thanh của host.
-- **Âm thanh cần cả hai phía cùng bật, và client phiên bản cũ không nhận được.** Viewer
-  đặt bit 0 của `Hello.features`, host công bố `kHostSharesAudio` trong phần capability, và
-  host chỉ gửi packet tới những viewer có bit này được đặt. Đây là lý do
-  `kProtocolVersion` vẫn ở mức 2: một viewer 5.0.x gửi `features = 0`, nên một host 5.1
-  không đưa lên đường truyền message mà viewer đó không parse được.
+- **Âm thanh cần cả hai phía cùng bật.** Viewer đặt bit 0 của `Hello.features`, host công
+  bố `kHostSharesAudio` trong phần capability, và host chỉ gửi packet tới những viewer có
+  bit này được đặt.
+- **Protocol version 3 chỉ nói chuyện với chính nó.** `kProtocolVersion` lên 3 khi `Hello`,
+  `LIST_SOURCES` và `TERM_OPEN` bỏ các byte passcode mà cơ chế admission đã khiến chúng vô
+  dụng, và `Hello`/`HELLO_ACK` bỏ phần thương lượng codec mà việc chỉ stream H.264 chưa bao
+  giờ dùng tới. Mọi parser giờ đòi đủ layout hiện tại — không còn dạng ngắn kiểu cũ, không
+  còn byte đệm reserved — và `ClassifyPacket` chỉ nhận đúng version hiện tại, nên peer
+  phiên bản cũ bị loại bỏ thay vì được hiểu nửa vời. Thay đổi trên wire thì tăng version,
+  không bao giờ thêm nhánh tương thích.
 
 - **Link terminal tự duy trì và tự kết nối lại.** Một terminal viewer sở hữu connection
   QUIC riêng, tách biệt với session video, nên không keepalive nào của đường video tới
@@ -802,16 +807,16 @@ coverage của core.
 
 - **Một phiên truyền tồn tại lâu hơn connection của nó phải được thông báo.** `FileSender`
   chỉ rời trạng thái `Sending` khi nhận được ack, cancel hoặc `LinkLost()`, còn
-  `FileUpload::Pump` coi một lần gửi bị từ chối là backpressure chứ không phải lỗi.
-  `ScreenViewer` nối `LinkLost()` với `onStreamBroken`, sự kiện phát sinh khi một stream bị
-  reset trên một connection vẫn hoạt động, và với thời điểm session kết thúc, nhưng không
-  nối với `onLinkLost` của chính `HostLink`. Do đó một lượt kết nối lại giữa phiên truyền
-  để lại `uploading()` ở giá trị true trong khi ở đầu kia không còn thành phần nào có thể
-  phản hồi: host đã huỷ batch, còn receiver trên connection mới chưa từng nhận được đề
-  nghị. Hiện viewer cho lượt upload fail tại `onLinkLost` với `TransferReason::LinkLost`.
-  Việc tiếp tục truyền qua một lượt kết nối lại đòi hỏi phát lại đề nghị trên connection
-  mới; cho tới khi tính năng đó được bổ sung, việc kết thúc phiên truyền một cách rõ ràng
-  tốt hơn một thanh tiến độ không còn thay đổi.
+  `FileUpload::Pump` coi một lần gửi bị từ chối là backpressure chứ không phải lỗi. Một
+  lượt upload được nối với `onStreamBroken` và với thời điểm session kết thúc, nhưng không
+  nối với việc `HostLink` của nó mất kết nối, từng kẹt ở `Sending` sau một lượt kết nối lại
+  giữa phiên truyền trong khi ở đầu kia không còn thành phần nào có thể phản hồi: host đã
+  huỷ batch, còn receiver trên connection mới chưa từng nhận được đề nghị. Vì vậy
+  `FileTransferClient` không bao giờ kết nối lại giữa phiên truyền và cho lượt upload fail
+  với `TransferReason::LinkLost` ngay khi link rời trạng thái `Ready`. Việc tiếp tục truyền
+  qua một lượt kết nối lại đòi hỏi phát lại đề nghị trên connection mới; cho tới khi tính
+  năng đó được bổ sung, việc kết thúc phiên truyền một cách rõ ràng tốt hơn một thanh tiến
+  độ không còn thay đổi.
 
 - **Socket mà host đã nhả vẫn còn bị mọi shell nó sinh ra giữ**: `Pty::Start` dùng
   `forkpty`, nên tiến trình con thừa kế mọi descriptor đang mở, và `ChildSetup` exec shell

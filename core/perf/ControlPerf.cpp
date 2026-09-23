@@ -69,7 +69,7 @@ void RunControlPerf() {
     AudioJitterBuffer jitter;
     uint32_t audioSeq = 0;
     Measure(Workload{"audio/jitter-buffer-push-pop", "frame", 1, kAudioPayloadBytes, 3.5, [&] {
-                         const AudioPacketView packet{AudioHeader{audioSeq, audioSeq * kAudioFrameUs},
+                         const AudioPacketView packet{AudioHeader{audioSeq, audioSeq * kAudioFrameMs * 1000},
                              audioPayload};
                          jitter.Push(packet);
                          ++audioSeq;
@@ -110,7 +110,7 @@ void RunControlPerf() {
             for (uint64_t i = 0; i < units; ++i) {
                 const uint32_t seq =
                     (scalingSeq % kReorderEvery == 0) ? scalingSeq + 1 : scalingSeq;
-                const AudioPacketView packet{AudioHeader{seq, seq * kAudioFrameUs}, audioPayload};
+                const AudioPacketView packet{AudioHeader{seq, seq * kAudioFrameMs * 1000}, audioPayload};
                 scalingJitter.Push(packet);
                 ++scalingSeq;
                 const auto frame = scalingJitter.Pop();

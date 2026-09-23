@@ -34,13 +34,10 @@ std::vector<uint8_t> Built(Builder build) {
 Hello SampleHello() {
     Hello h{};
     h.clientId = 0x01020304;
-    h.codecMask = kCodecMaskH264;
     h.maxWidth = 1920;
     h.maxHeight = 1080;
-    h.desiredFps = 60;
     h.features = 0x0001;
     h.sourceId = 2;
-    h.passcode = "7391";
     h.clientName = "Tablet 01";
     return h;
 }
@@ -48,12 +45,10 @@ Hello SampleHello() {
 HelloAck SampleAck() {
     HelloAck a{};
     a.sessionId = 0x11223344;
-    a.codec = Codec::H264;
     a.width = 1280;
     a.height = 720;
     a.fps = 30;
     a.bitrateBps = 8'000'000;
-    a.timebaseUs = 0x0000000102030405ull;
     a.reason = RejectReason::None;
     return a;
 }
@@ -101,62 +96,61 @@ std::vector<Vector> AllVectors() {
     v.push_back({"HELLO", [](std::span<uint8_t> out) {
                      return BuildHello(out, SampleHello());
                  },
-        "0201000000000000010203040001078004383c00010237333931095461626c6574203031"});
+        "03010000000000000102030407800438000102095461626c6574203031"});
 
     v.push_back({"HELLO_ACK", [](std::span<uint8_t> out) {
                      return BuildHelloAck(out, SampleAck());
                  },
-        "02020000000000001122334400050002d01e007a12000000000102030405000000"});
+        "03020000000000001122334400050002d01e007a120000"});
 
     v.push_back({"START", [](std::span<uint8_t> out) {
                      return BuildStart(out, 0x11223344);
                  },
-        "0203000011223344"});
+        "0303000011223344"});
 
     v.push_back({"BYE", [](std::span<uint8_t> out) {
                      return BuildBye(out, 0x11223344);
                  },
-        "0204000011223344"});
+        "0304000011223344"});
 
     v.push_back({"LIST_SOURCES", [](std::span<uint8_t> out) {
                      return BuildListSources(out);
                  },
-        "020500000000000000000000"});
+        "0305000000000000"});
 
     v.push_back({"SOURCE_LIST", [](std::span<uint8_t> out) {
                      const auto s = SampleSources();
                      return BuildSourceList(out, s);
                  },
-        "02060000000000000200050002d009446973706c61792031010320025809446973706c61792032"});
+        "03060000000000000200050002d009446973706c61792031010320025809446973706c61792032"});
 
     v.push_back({"PING", [](std::span<uint8_t> out) {
                      PingPong p{};
                      p.pingId = 7;
                      return BuildPing(out, 0x11223344, p);
                  },
-        "0230000011223344000000070000000000000000"});
+        "0330000011223344000000070000000000000000"});
 
     v.push_back({"PONG", [](std::span<uint8_t> out) {
                      PingPong p{};
                      p.pingId = 7;
                      return BuildPong(out, 0x11223344, p);
                  },
-        "0231000011223344000000070000000000000000"});
+        "0331000011223344000000070000000000000000"});
 
     v.push_back({"FEEDBACK", [](std::span<uint8_t> out) {
                      Feedback f{};
-                     f.lostFrames = 12;
                      f.lossPct = 5;
                      f.rttMs = 40;
                      f.recvBitrateKbps = 6000;
                      return BuildFeedback(out, 0x11223344, f);
                  },
-        "0232000011223344000c05002800001770"});
+        "033200001122334405002800001770"});
 
     v.push_back({"REQUEST_KEYFRAME", [](std::span<uint8_t> out) {
                      return BuildRequestKeyframe(out, 0x11223344);
                  },
-        "0233000011223344"});
+        "0333000011223344"});
 
     v.push_back({"RECONFIG", [](std::span<uint8_t> out) {
                      Reconfig r{};
@@ -165,23 +159,23 @@ std::vector<Vector> AllVectors() {
                      r.bitrateBps = 4'000'000;
                      return BuildReconfig(out, 0x11223344, r);
                  },
-        "023400001122334403c0021c003d090000"});
+        "033400001122334403c0021c003d090000"});
 
     v.push_back({"SET_FOCUS", [](std::span<uint8_t> out) {
                      return BuildSetFocus(out, 0x11223344, true);
                  },
-        "023500001122334401"});
+        "033500001122334401"});
 
     v.push_back({"NACK", [](std::span<uint8_t> out) {
                      const uint16_t idx[] = {1, 5, 9};
                      return BuildNack(out, 0x11223344, 0x0A0B0C0D, idx);
                  },
-        "02360000112233440a0b0c0d03000100050009"});
+        "03360000112233440a0b0c0d03000100050009"});
 
     v.push_back({"INVALIDATE_REF", [](std::span<uint8_t> out) {
                      return BuildInvalidateRef(out, 0x11223344, 0x0A0B0C0D);
                  },
-        "02370000112233440a0b0c0d"});
+        "03370000112233440a0b0c0d"});
 
     v.push_back({"VIDEO_PACKET", [](std::span<uint8_t> out) {
                      VideoHeader vh{};
@@ -192,7 +186,7 @@ std::vector<Vector> AllVectors() {
                      const uint8_t payload[] = {0xDE, 0xAD, 0xBE, 0xEF};
                      return BuildVideoPacket(out, 0x11223344, vh, true, false, payload);
                  },
-        "02100101112233440a0b0c0d010203040506070800020005deadbeef"});
+        "03100101112233440a0b0c0d010203040506070800020005deadbeef"});
 
     v.push_back({"FEC_PACKET", [](std::span<uint8_t> out) {
                      FecHeader fh{};
@@ -203,7 +197,7 @@ std::vector<Vector> AllVectors() {
                      const uint8_t parity[] = {0x01, 0x02, 0x03, 0x04};
                      return BuildFecPacket(out, 0x11223344, fh, true, parity);
                  },
-        "02110101112233440a0b0c0d01020304050607080005010001020304"});
+        "03110101112233440a0b0c0d01020304050607080005010001020304"});
 
     v.push_back({"AUDIO_PACKET", [](std::span<uint8_t> out) {
                      AudioHeader ah{};
@@ -212,23 +206,22 @@ std::vector<Vector> AllVectors() {
                      const uint8_t frame[] = {0xFC, 0x11, 0x22, 0x33};
                      return BuildAudioPacket(out, 0x11223344, ah, frame);
                  },
-        "02120003112233440a0b0c0d0102030405060708fc112233"});
+        "03120003112233440a0b0c0d0102030405060708fc112233"});
 
     v.push_back({"INPUT_EVENT", [](std::span<uint8_t> out) {
                      const auto e = SampleInput();
                      return BuildInputEvents(out, 0x11223344, 0x00010203, e);
                  },
-        "02200002112233440001020303010102030405060708000000410000001e01000201020304050607090000800000004000000104010203040506070a00000000ffffff880000"});
+        "03200002112233440001020303010102030405060708000000410000001e01000201020304050607090000800000004000000104010203040506070a00000000ffffff880000"});
 
     v.push_back({"TERM_OPEN", [](std::span<uint8_t> out) {
                      TermOpen open{};
                      open.size = TermSize{120, 40};
                      open.resumeId = 0x0A0B0C0D;
-                     open.passcode = "7391";
                      open.clientName = "Tablet 01";
                      return BuildTermOpen(out, open);
                  },
-        "0250000400000000007800280a0b0c0d37333931095461626c6574203031"});
+        "0350000400000000007800280a0b0c0d095461626c6574203031"});
 
     v.push_back({"TERM_OPEN_ACK", [](std::span<uint8_t> out) {
                      TermOpenAck ack{};
@@ -237,28 +230,28 @@ std::vector<Vector> AllVectors() {
                      ack.resumed = true;
                      return BuildTermOpenAck(out, ack);
                  },
-        "0251000411223344112233440001"});
+        "0351000411223344112233440001"});
 
     v.push_back({"TERM_DATA", [](std::span<uint8_t> out) {
                      const uint8_t payload[] = {0x1B, '[', '3', '1', 'm'};
                      return BuildTermData(out, 0x11223344, payload);
                  },
-        "02520004112233441b5b33316d"});
+        "03520004112233441b5b33316d"});
 
     v.push_back({"TERM_RESIZE", [](std::span<uint8_t> out) {
                      return BuildTermResize(out, 0x11223344, TermSize{120, 40});
                  },
-        "025300041122334400780028"});
+        "035300041122334400780028"});
 
     v.push_back({"TERM_CLOSE", [](std::span<uint8_t> out) {
                      return BuildTermClose(out, 0x11223344);
                  },
-        "0254000411223344"});
+        "0354000411223344"});
 
     v.push_back({"TERM_EXIT", [](std::span<uint8_t> out) {
                      return BuildTermExit(out, 0x11223344, -1);
                  },
-        "0255000411223344ffffffff"});
+        "0355000411223344ffffffff"});
 
     v.push_back({"AUTH_START", [](std::span<uint8_t> out) {
                      AuthStart m;
@@ -267,7 +260,7 @@ std::vector<Vector> AllVectors() {
                      m.hasPasscode = true;
                      return BuildAuthStart(out, m);
                  },
-        "0260000000000000010008a1a2a3a4a5a6a7a8095461626c6574203031"});
+        "0360000000000000010008a1a2a3a4a5a6a7a8095461626c6574203031"});
 
     v.push_back({"AUTH_CHALLENGE", [](std::span<uint8_t> out) {
                      AuthChallenge m;
@@ -277,7 +270,7 @@ std::vector<Vector> AllVectors() {
                      m.spake = {0xC1, 0xC2, 0xC3, 0xC4};
                      return BuildAuthChallenge(out, m);
                  },
-        "026100000000000002"
+        "036100000000000002"
         "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
         "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
         "0004c1c2c3c4"});
@@ -288,7 +281,7 @@ std::vector<Vector> AllVectors() {
                      m.confirm.fill(0xEE);
                      return BuildAuthResponse(out, m);
                  },
-        "02620000000000000005d1d2d3d4d5"
+        "03620000000000000005d1d2d3d4d5"
         "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"});
 
     v.push_back({"AUTH_RESULT", [](std::span<uint8_t> out) {
@@ -297,7 +290,7 @@ std::vector<Vector> AllVectors() {
                      m.confirm.fill(0xEE);
                      return BuildAuthResult(out, m);
                  },
-        "026300000000000001"
+        "036300000000000001"
         "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"});
 
     v.push_back({"RECORD", [](std::span<uint8_t> out) {
@@ -306,7 +299,7 @@ std::vector<Vector> AllVectors() {
                          BuildBye(std::span<uint8_t>(inner, sizeof(inner)), 0x11223344);
                      return BuildRecord(out, std::span<const uint8_t>(inner, n));
                  },
-        "00080204000011223344"});
+        "00080304000011223344"});
 
     return v;
 }
@@ -354,15 +347,14 @@ void TestEveryVectorParsesBackToWhatWentIn() {
     Check(helloHeader && helloHeader->ver == kProtocolVersion, "and the protocol version");
     const auto hello = ParseHello(PayloadOf(std::span<const uint8_t>(buf, helloSize)));
     Check(hello && hello->clientId == 0x01020304 && hello->maxWidth == 1920 &&
-              hello->maxHeight == 1080 && hello->desiredFps == 60 && hello->sourceId == 2 &&
+              hello->maxHeight == 1080 && hello->sourceId == 2 &&
               hello->clientName == "Tablet 01",
         "every HELLO field survives the round trip");
 
     const size_t ackSize = BuildHelloAck(buf, SampleAck());
     const auto ack = ParseHelloAck(PayloadOf(std::span<const uint8_t>(buf, ackSize)));
     Check(ack && ack->sessionId == 0x11223344 && ack->width == 1280 && ack->height == 720 &&
-              ack->fps == 30 && ack->bitrateBps == 8'000'000 &&
-              ack->timebaseUs == 0x0000000102030405ull,
+              ack->fps == 30 && ack->bitrateBps == 8'000'000,
         "every HELLO_ACK field survives the round trip");
 
     const auto sources = SampleSources();

@@ -128,10 +128,6 @@ public:
         return audio_.running();
     }
 
-    const deskhub::media::AudioFormat& audioFormat() const {
-        return audio_.format();
-    }
-
     void OfferLocalClipboard(std::string text);
     std::optional<std::string> TakeRemoteClipboard();
 

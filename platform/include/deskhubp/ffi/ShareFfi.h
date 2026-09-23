@@ -72,8 +72,6 @@ void dh_share_offer_audio(const int16_t* pcm, int samples);
 
 bool dh_share_audio_running(void);
 
-bool dh_share_terminal_active(void);
-
 bool dh_share_files_active(void);
 
 void dh_share_stop_files(void);

@@ -44,7 +44,6 @@ std::vector<DHTermSessionInfo> InfosFor(const deskhub::TermSessionList& list) {
         info.state = int32_t(entry->state);
         info.cols = entry->size.cols;
         info.rows = entry->size.rows;
-        info.openedUs = entry->openedUs;
         info.resumable = row.resumable;
         info.closable = row.closable;
         CopyInto(info.name, sizeof(info.name), entry->clientName);
@@ -124,11 +123,6 @@ DHTermSession* dh_term_open(const char* address, const char* passcode, uint16_t 
 DHTermSession* dh_term_open_deferred(const char* address, const char* passcode, uint16_t cols,
     uint16_t rows, const DHTermCallbacks* callbacks) {
     return StartViewer(address, passcode, cols, rows, 0, true, callbacks);
-}
-
-DHTermSession* dh_term_open_resumed(const char* address, const char* passcode, uint16_t cols,
-    uint16_t rows, uint32_t resumeId, const DHTermCallbacks* callbacks) {
-    return StartViewer(address, passcode, cols, rows, resumeId, false, callbacks);
 }
 
 void dh_term_stop(DHTermSession* s) {

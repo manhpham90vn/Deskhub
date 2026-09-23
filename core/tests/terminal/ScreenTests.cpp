@@ -2,6 +2,7 @@
 #include "support/TestSupport.h"
 
 #include "deskhub/terminal/Screen.h"
+#include "deskhub/terminal/VtParser.h"
 
 #include <cstdio>
 #include <string>
@@ -11,6 +12,13 @@ using namespace deskhub;
 using namespace deskhub::term;
 
 namespace {
+
+std::string ScrollbackText(const Screen& s, size_t row) {
+    std::string out;
+    for (uint16_t col = 0; col < kMaxTermCols; ++col) out += EncodeUtf8(s.ScrollbackAt(row, col).ch);
+    while (!out.empty() && out.back() == ' ') out.pop_back();
+    return out;
+}
 
 const std::string kVimSession =
     "\x1B[?1049h"
@@ -159,12 +167,12 @@ void TestScrollingAndScrollback() {
     Screen s(TermSize{10, 3}, 4);
     s.Write("one\r\ntwo\r\nthree\r\nfour");
     Check(s.RowText(0) == "two" && s.RowText(2) == "four", "the window follows the newest line");
-    Check(s.ScrollbackRows() == 1 && s.ScrollbackText(0) == "one",
+    Check(s.ScrollbackRows() == 1 && ScrollbackText(s, 0) == "one",
         "the line that left the top is kept");
 
     s.Write("\r\nfive\r\nsix\r\nseven\r\neight");
     Check(s.ScrollbackRows() == 4, "the scrollback stops growing at its limit");
-    Check(s.ScrollbackText(0) == "two", "and drops its oldest line first");
+    Check(ScrollbackText(s, 0) == "two", "and drops its oldest line first");
 
     Screen r(TermSize{10, 5}, 10);
     r.Write("\x1B[2;4r");
@@ -202,7 +210,7 @@ void TestBulkScrollEqualsRepeatedSingleScroll() {
         bool same = a.ScrollbackRows() == b.ScrollbackRows();
         for (uint16_t row = 0; same && row < 6; ++row) same = a.RowText(row) == b.RowText(row);
         for (size_t row = 0; same && row < a.ScrollbackRows(); ++row)
-            same = a.ScrollbackText(row) == b.ScrollbackText(row);
+            same = ScrollbackText(a, row) == ScrollbackText(b, row);
         Check(same, what);
     };
 
@@ -241,8 +249,8 @@ void TestBulkScrollEqualsRepeatedSingleScroll() {
     cap.Write("a0\r\na1\r\na2");
     cap.Write("\x1B[1;1H\x1B[5S");
     Check(cap.ScrollbackRows() == 3, "a bulk full-window scroll still respects the limit");
-    Check(cap.ScrollbackText(0) == "a0" && cap.ScrollbackText(1) == "a1" &&
-              cap.ScrollbackText(2) == "a2",
+    Check(ScrollbackText(cap, 0) == "a0" && ScrollbackText(cap, 1) == "a1" &&
+              ScrollbackText(cap, 2) == "a2",
         "and the scrollback keeps the departed lines oldest-first");
 }
 
@@ -424,10 +432,6 @@ void TestModesAndReports() {
     huge += "\x07";
     title.Write(huge);
     Check(title.Title().size() == kMaxTitleBytes, "and a runaway title is bounded");
-
-    Screen bell = MakeScreen(10, 2);
-    bell.Write("a\x07\x07");
-    Check(bell.BellCount() == 2, "bells are counted so a client can decide what to do");
 }
 
 void TestResize() {
@@ -437,7 +441,7 @@ void TestResize() {
     s.Resize(TermSize{10, 2});
     Check(s.Size().rows == 2, "the window really shrinks");
     Check(s.RowText(1) == "four", "the newest line stays on screen");
-    Check(s.ScrollbackRows() == 2 && s.ScrollbackText(1) == "two",
+    Check(s.ScrollbackRows() == 2 && ScrollbackText(s, 1) == "two",
         "the rows pushed off the top are kept");
     Check(s.Cursor().row < 2, "and the cursor is still inside the window");
 
@@ -556,7 +560,7 @@ void TestOutOfRangeReads() {
     Check(s.At(99, 0) == Cell{} && s.At(0, 99) == Cell{},
         "a cell past the edge reads as blank");
     Check(s.RowText(99).empty(), "so does a row past the bottom");
-    Check(s.ScrollbackAt(99, 0) == Cell{} && s.ScrollbackText(99).empty(),
+    Check(s.ScrollbackAt(99, 0) == Cell{} && ScrollbackText(s, 99).empty(),
         "and a scrollback row that does not exist");
     Check(s.Text().find("abc") == 0, "the whole-screen dump starts with what we wrote");
 }

@@ -44,10 +44,6 @@ bool StdinIsTty() {
     return isatty(STDIN_FILENO) == 1;
 }
 
-bool StdoutIsTty() {
-    return isatty(STDOUT_FILENO) == 1;
-}
-
 ConsoleSize ConsoleSizeNow() {
     ConsoleSize size;
     winsize window{};

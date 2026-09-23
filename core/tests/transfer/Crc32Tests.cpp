@@ -17,6 +17,12 @@ std::span<const uint8_t> Bytes(std::string_view text) {
     return {reinterpret_cast<const uint8_t*>(text.data()), text.size()};
 }
 
+uint32_t Crc32Of(std::span<const uint8_t> bytes) {
+    Crc32 crc;
+    crc.Update(bytes);
+    return crc.Value();
+}
+
 void TestKnownVectors() {
     std::printf("[crc] the published CRC-32 vectors come out right...\n");
     Check(Crc32Of({}) == 0u, "the empty input hashes to zero");

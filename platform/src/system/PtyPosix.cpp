@@ -156,10 +156,6 @@ bool Pty::Resize(deskhub::TermSize size) {
     return ioctl(impl_->master, TIOCSWINSZ, &ws) == 0;
 }
 
-bool Pty::Exited() const {
-    return impl_->exited;
-}
-
 int Pty::ExitCode() const {
     return impl_->exitCode;
 }

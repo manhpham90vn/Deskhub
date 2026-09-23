@@ -11,17 +11,14 @@ void TerminalClient::SendOpen() {
     TermOpen open;
     open.size = size_;
     open.resumeId = termId_;
-    open.passcode = passcode_;
     open.clientName = clientName_;
     Emit(BuildTermOpen(buf_, open));
 }
 
-void TerminalClient::Open(std::string passcode, TermSize size, std::string clientName) {
-    passcode_ = std::move(passcode);
+void TerminalClient::Open(TermSize size, std::string clientName) {
     clientName_ = std::move(clientName);
     size_ = ClampTermSize(size);
     termId_ = 0;
-    reason_ = TermReason::Accepted;
     state_ = TerminalClientState::Opening;
     SendOpen();
 }
@@ -35,7 +32,6 @@ void TerminalClient::Resume(uint32_t termId) {
     if (state_ == TerminalClientState::Open) return;
     termId_ = termId;
     state_ = TerminalClientState::Reattaching;
-    reason_ = TermReason::Accepted;
     SendOpen();
 }
 
@@ -92,7 +88,6 @@ void TerminalClient::HandleMessage(std::span<const uint8_t> message) {
             if (state_ != TerminalClientState::Opening &&
                 state_ != TerminalClientState::Reattaching)
                 return;
-            reason_ = ack->reason;
             if (ack->reason != TermReason::Accepted || ack->termId == 0) {
                 const bool hostMayNotHaveNoticedTheDropYet =
                     state_ == TerminalClientState::Reattaching &&
@@ -103,7 +98,7 @@ void TerminalClient::HandleMessage(std::span<const uint8_t> message) {
                     termId_ = 0;
                     state_ = TerminalClientState::Refused;
                 }
-                if (cb_.onRefused) cb_.onRefused(reason_);
+                if (cb_.onRefused) cb_.onRefused(ack->reason);
                 return;
             }
             termId_ = ack->termId;

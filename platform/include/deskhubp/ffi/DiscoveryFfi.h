@@ -56,11 +56,9 @@ bool dh_scan_start(uint16_t port);
 bool dh_scan_restart(uint16_t port);
 void dh_scan_cancel(void);
 DHScanState dh_scan_state(void);
-int dh_scan_hits(DHScanHit* out, int capacity);
 uint32_t dh_scan_rescan_secs(void);
 
 void dh_recent_touch(const char* address, const char* passcode);
-void dh_recent_remove(const char* address);
 int dh_recent_passcode(const char* address, char* out, int capacity);
 
 void dh_status_stop(void);
@@ -70,12 +68,9 @@ DHUiSettings dh_settings_load(void);
 void dh_settings_save(uint32_t fps, uint32_t bitrate_mbps, uint32_t max_dim, uint32_t port,
     bool allow_input, bool client_control, const char* passcode);
 
-int dh_recent_rows(DHRecentRow* out, int capacity);
 int dh_device_rows(DHDeviceRow* out, int capacity);
 void dh_status_watch_recent(void);
 int dh_scan_status_text(uint16_t port, char* out, int capacity);
-int dh_recent_note(char* out, int capacity);
-int dh_ping_text(uint32_t rttMs, char* out, int capacity);
 bool dh_same_device_addr(const char* a, const char* b);
 uint16_t dh_default_port(void);
 

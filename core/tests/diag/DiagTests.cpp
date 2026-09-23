@@ -48,7 +48,6 @@ void TestCountMaxMin() {
     Check(c.TakeReset() == 0, "WindowCount: empty is 0");
     c.Add();
     c.Add(4);
-    Check(c.peek() == 5, "WindowCount: peek does not clear");
     Check(c.TakeReset() == 5, "WindowCount: accumulates correctly");
     Check(c.TakeReset() == 0, "WindowCount: read-and-clear");
 
@@ -193,7 +192,7 @@ void TestSourceDiag() {
 void TestSourceIdr() {
     std::printf("[diag] host evt=idr: latched on the Encode thread, printed on the Recv loop...\n");
     SourceDiag s;
-    char buf[SourceDiag::kIdrBufBytes];
+    char buf[SourceDiag::kSumBufBytes];
     Check(s.FormatIdr(buf, sizeof(buf), "Screen 1") == nullptr,
         "evt=idr: nothing latched means no line");
 

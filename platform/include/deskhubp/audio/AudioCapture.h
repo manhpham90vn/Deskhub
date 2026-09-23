@@ -22,9 +22,6 @@ public:
 
     bool Running() const;
 
-    uint64_t framesCaptured() const;
-    uint64_t framesPaddedWithSilence() const;
-
     static const char* BackendName();
 
 private:

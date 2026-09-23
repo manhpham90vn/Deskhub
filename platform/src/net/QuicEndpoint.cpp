@@ -833,33 +833,12 @@ bool QuicEndpoint::IsOpen() const {
     return impl_->open_;
 }
 
-bool QuicEndpoint::IsServer() const {
-    return impl_->server_;
-}
-
 bool QuicEndpoint::LastBindAddrInUse() const {
     return impl_->bindAddrInUse_;
 }
 
-size_t QuicEndpoint::ConnectionCount() const {
-    return impl_->connections_.size();
-}
-
-QuicConnId QuicEndpoint::FirstConnection() const {
-    if (impl_->connections_.empty()) return 0;
-    return impl_->connections_.begin()->first;
-}
-
 uint16_t QuicEndpoint::LocalPort() const {
     return impl_->localPort_;
-}
-
-std::vector<QuicConnId> QuicEndpoint::Connections() const {
-    std::vector<QuicConnId> out;
-    out.reserve(impl_->connections_.size());
-    for (const auto& [id, entry] : impl_->connections_) out.push_back(id);
-    std::sort(out.begin(), out.end());
-    return out;
 }
 
 }

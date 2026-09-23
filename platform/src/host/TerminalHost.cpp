@@ -40,7 +40,6 @@ bool TerminalHost::Start(SessionTransport& sock, std::string shell,
         sock_ = &sock;
         shell_ = std::move(shell);
         cb_ = std::move(callbacks);
-        sessions_.SetConnectionAuthenticated(true);
         sessions_.SetSharing(true);
     }
     {
@@ -112,7 +111,6 @@ void TerminalHost::HandleMessage(const NetAddr& from, std::span<const uint8_t> m
     const std::optional<deskhub::CommonHeader> header = deskhub::ParseCommonHeader(message);
     if (!header || header->chan != deskhub::Chan::Terminal) return;
     const std::span<const uint8_t> payload = deskhub::PayloadOf(message);
-    const uint64_t nowUs = NowUs();
 
     const std::lock_guard<std::mutex> lock(mutex_);
     if (sock_ == nullptr) return;
@@ -145,7 +143,7 @@ void TerminalHost::HandleMessage(const NetAddr& from, std::span<const uint8_t> m
         std::string peerName;
         sock_->PeerAuth(from, full.fingerprint, peerName);
 
-        deskhub::TermOpenAck ack = sessions_.Open(full, nowUs);
+        deskhub::TermOpenAck ack = sessions_.Open(full);
         if (ack.reason == deskhub::TermReason::Accepted && !ack.resumed) {
             Shell shell;
             shell.pty = std::make_unique<Pty>();

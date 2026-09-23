@@ -31,9 +31,6 @@ public:
     bool Decided() const {
         return decided_;
     }
-    AutoShareStep Decision() const {
-        return decision_;
-    }
 
 private:
     AutoShareStep Decide(AutoShareStep step);

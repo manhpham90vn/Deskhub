@@ -104,9 +104,6 @@ public:
     deskhub::AuthResultCode AuthCode() const {
         return authCode_.load(std::memory_order_acquire);
     }
-    const HostLinkConfig& Config() const {
-        return config_;
-    }
 
 private:
     enum class TrustDecision : int { Pending = 0,

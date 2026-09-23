@@ -40,15 +40,8 @@ void RunScreenViewerLoop(const ScreenViewerRecv& recv, deskhub::ScreenClient& sc
             break;
         }
         if (n > 0) {
-            const std::span<const uint8_t> message(buf, size_t(n));
-            const auto header = deskhub::ParseCommonHeader(message);
-            if (header && header->chan == deskhub::Chan::File) {
-                if (hooks.onFile) hooks.onFile(message);
-            } else {
-                screen.OnDatagram(message, now);
-            }
+            screen.OnDatagram(std::span<const uint8_t>(buf, size_t(n)), now);
         }
-        if (hooks.pumpFiles) hooks.pumpFiles();
 
         screen.PollFrames(now);
         if (hooks.afterFrames) hooks.afterFrames(screen, now);

@@ -16,9 +16,7 @@ namespace deskhubp {
 inline constexpr size_t kQuicMaxUdpPayload = 1350;
 inline constexpr uint64_t kQuicIdleTimeoutMs = 30'000;
 inline constexpr uint64_t kQuicControlStream = 0;
-inline constexpr uint64_t kQuicFirstTerminalStream = 4;
 inline constexpr uint64_t kQuicFileStream = 8;
-inline constexpr uint64_t kQuicStreamStride = 4;
 
 inline constexpr uint8_t kQuicUrgencyInteractive = 64;
 inline constexpr uint8_t kQuicUrgencyBulk = 192;
@@ -85,12 +83,8 @@ public:
     void Close();
 
     bool IsOpen() const;
-    bool IsServer() const;
     bool LastBindAddrInUse() const;
-    size_t ConnectionCount() const;
-    QuicConnId FirstConnection() const;
     uint16_t LocalPort() const;
-    std::vector<QuicConnId> Connections() const;
 
 private:
     struct Impl;

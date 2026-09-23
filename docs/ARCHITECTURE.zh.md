@@ -106,8 +106,7 @@ handshake（`AuthNegotiation`）按 connection 决定准入。transport 负责�
 | 任意 | pairing 已关闭 | **Denied**（已 pair 的机器仍走 Signature）。 |
 
 成功后 client 被写入 host 的 `paired_devices`；pairing 基于 key，而非地址。passcode 连
-续错误三次将使 passcode 通道锁定 30 秒（`AuthThrottle`，与旧的 session lockout 共用
-常量）。approval 通道无需 throttle，因为由人进行判断。
+续错误三次将使 passcode 通道锁定 30 秒（`AuthThrottle`）。approval 通道无需 throttle，因为由人进行判断。
 
 在 client 侧，`known_hosts`（`TrustStore`）固定 host 的 key。key **发生变化**时将以明确
 的警告阻止连接；未知的 key 由 handshake 本身处理 —— 已证明 passcode 的 host 会被直接
@@ -451,10 +450,13 @@ runner 上与 base commit 的 A/B 结果（偏移仅作为警告，不导致失�
   无锁槽位 ring 中并记录 capture 时间；encode、诊断与按 viewer 的发送由 worker thread
   完成。worker 处理不及时的后果是一次被计数的丢弃（`framesRefused`），而不是 host 音频
   中的异常。
-- **音频需要双方同时启用，旧版本 client 不会接收。** viewer 设置 `Hello.features` 的
-  bit 0，host 在其 capability 中声明 `kHostSharesAudio`，host 仅向设置了该位的 viewer
-  发送 packet。这正是 `kProtocolVersion` 保持为 2 的原因：5.0.x 的 viewer 发送
-  `features = 0`，因此 5.1 的 host 不会向其发送无法解析的 message。
+- **音频需要双方同时启用。** viewer 设置 `Hello.features` 的 bit 0，host 在其 capability
+  中声明 `kHostSharesAudio`，host 仅向设置了该位的 viewer 发送 packet。
+- **协议版本 3 只与自身通信。** 当 `Hello`、`LIST_SOURCES` 与 `TERM_OPEN` 去掉了因
+  admission 而失效的 passcode 字节，且 `Hello`/`HELLO_ACK` 去掉了仅推流 H.264 而从未用到的
+  codec 协商时，`kProtocolVersion` 升至 3。现在每个 parser 都要求完整的当前布局——不再
+  接受旧版的较短形式，也没有 reserved 填充字节——`ClassifyPacket` 只认当前版本，因此旧版本
+  的 peer 会被直接丢弃，而不是被部分理解。wire 格式变更时提升版本号，绝不增加兼容分支。
 
 - **terminal 的 link 自行保活并自行重连。** terminal viewer 持有独立于 video session 的
   QUIC connection，因此 video 通道的 keepalive 都不会到达它。在提示符处无操作时该
@@ -676,13 +678,12 @@ runner 上与 base commit 的 A/B 结果（偏移仅作为警告，不导致失�
 
 - **存续时间超过其 connection 的传输必须被明确告知。** `FileSender` 仅在收到 ack、
   cancel 或 `LinkLost()` 时离开 `Sending` 状态，而 `FileUpload::Pump` 将被拒绝的发送
-  视为 backpressure 而非失败。`ScreenViewer` 将 `LinkLost()` 接入了 `onStreamBroken`
-  （该事件在 connection 仍然存续而 stream 被 reset 时触发）以及 session 的结束，但未接入
-  `HostLink` 自身的 `onLinkLost`。因此传输中途的一次重连会使 `uploading()` 保持为 true，
-  而对端已没有任何组件能够作出响应：host 已中止该 batch，新 connection 上的 receiver
-  也从未收到该 offer。现在 viewer 在 `onLinkLost` 时以 `TransferReason::LinkLost` 判定
-  上传失败。跨越重连继续传输需要在新的 connection 上重放 offer；在该功能实现之前，明确
-  结束传输优于保留一个不再变化的进度条。
+  视为 backpressure 而非失败。一个接入了 `onStreamBroken` 与 session 结束、却未接入其
+  `HostLink` 断开连接的上传，曾在传输中途的一次重连后停留在 `Sending`，而对端已没有
+  任何组件能够作出响应：host 已中止该 batch，新 connection 上的 receiver 也从未收到该
+  offer。因此 `FileTransferClient` 从不在传输中途重连，并在其 link 离开 `Ready` 的瞬间
+  以 `TransferReason::LinkLost` 判定上传失败。跨越重连继续传输需要在新的 connection 上
+  重放 offer；在该功能实现之前，明确结束传输优于保留一个不再变化的进度条。
 
 - **host 放开的 socket 仍被它启动的每个 shell 占着**：`Pty::Start` 使用 `forkpty`，
   子进程因此继承所有已打开的描述符，而 `ChildSetup` 直接 exec shell，一个也没关闭。

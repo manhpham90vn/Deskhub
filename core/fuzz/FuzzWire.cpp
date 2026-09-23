@@ -18,7 +18,6 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
     ParseReconfig(pl);
     ParseSetFocus(pl);
     ParseInvalidateRef(pl);
-    ParseListSourcesPasscode(pl);
 
     SourceInfo sources[kMaxSources];
     ParseSourceList(pl, sources);

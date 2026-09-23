@@ -40,9 +40,6 @@ public:
     uint32_t TakeReset() {
         return n_.exchange(0, std::memory_order_relaxed);
     }
-    uint32_t peek() const {
-        return n_.load(std::memory_order_relaxed);
-    }
 
 private:
     std::atomic<uint32_t> n_{0};

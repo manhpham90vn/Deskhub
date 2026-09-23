@@ -145,14 +145,6 @@ bool SessionTransport::SetRecvTimeout(uint32_t ms) {
     return true;
 }
 
-void SessionTransport::SetVideoPath(VideoPath path) {
-    videoPath_ = path;
-}
-
-VideoPath SessionTransport::videoPath() const {
-    return videoPath_;
-}
-
 void SessionTransport::SetOnPeerGone(std::function<void(const NetAddr&)> fn) {
     onPeerGone_ = std::move(fn);
 }
@@ -189,12 +181,7 @@ void SessionTransport::Deliver(const NetAddr& from, std::span<const uint8_t> mes
     bool overQuic) {
     if (message.empty()) return;
 
-    if (!overQuic) {
-        const bool rawVideo = videoPath_ == VideoPath::RawUdp && CarriesVideo(message);
-        const bool beaconFromStranger =
-            IsBeaconMessage(message) && !endpoint_.Established(from.Pack());
-        if (!rawVideo && !beaconFromStranger) return;
-    }
+    if (!overQuic && !(IsBeaconMessage(message) && !endpoint_.Established(from.Pack()))) return;
 
     if (clientAuthOn_ && IsAuthMessage(message)) {
         TransportMessage queued;
@@ -477,7 +464,6 @@ bool SessionTransport::SendTo(const NetAddr& to, const uint8_t* data, size_t len
     const std::span<const uint8_t> message(data, len);
 
     if (CarriesVideo(message)) {
-        if (videoPath_ == VideoPath::RawUdp) return endpoint_.SendRaw(to, message);
         const std::lock_guard<std::mutex> lock(sendMutex_);
         return endpoint_.SendDatagram(to.Pack(), message);
     }

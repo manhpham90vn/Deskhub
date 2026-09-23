@@ -210,7 +210,7 @@ void TestPlayerRunsTheWholeReceivingSide() {
         Check(written > 0, "the frame encodes");
         if (uint32_t(f) == kLostFrame) continue;
 
-        const deskhub::AudioHeader ah{uint32_t(f), uint64_t(f) * deskhub::kAudioFrameUs};
+        const deskhub::AudioHeader ah{uint32_t(f), uint64_t(f) * deskhub::kAudioFrameMs * 1000};
         const size_t n = deskhub::BuildAudioPacket(datagram, 0x1234, ah,
             std::span<const uint8_t>(packet.data(), written));
         Check(n > 0, "and goes on the wire");

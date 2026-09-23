@@ -43,9 +43,6 @@ public:
     TransferReason Reason() const {
         return reason_;
     }
-    uint32_t BatchId() const {
-        return batchId_;
-    }
     bool Busy() const {
         return state_ == FileSenderState::Offering || state_ == FileSenderState::Sending;
     }

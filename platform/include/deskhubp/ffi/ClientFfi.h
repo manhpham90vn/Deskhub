@@ -56,15 +56,6 @@ typedef struct {
 } DHHostCaps;
 
 typedef struct {
-    bool openShell;
-    bool openFiles;
-    bool openDesktop;
-    bool showPicker;
-    uint8_t sourceId;
-    int32_t problem;
-} DHConnectPlan;
-
-typedef struct {
     double x;
     double y;
     double width;
@@ -305,10 +296,6 @@ bool dh_parse_address(const char* address);
 int dh_list_sources(const char* address, DHSourceInfo* out, int capacity, const char* passcode,
     DHHostCaps* out_caps);
 
-bool dh_host_has_terminal(const char* address, const char* passcode);
-
-bool dh_host_takes_files(const char* address, const char* passcode);
-
 bool dh_is_valid_passcode(const char* passcode);
 
 int dh_passcode_digits(void);
@@ -323,18 +310,11 @@ DHAutoShareStep dh_auto_share_step(bool displays_ready, uint32_t waited_ms);
 
 bool dh_connect_decision(const DHSourceInfo* sources, int count, uint8_t* out_source_id);
 
-DHConnectPlan dh_connect_plan(DHHostCaps caps, const DHSourceInfo* sources, int count,
-    bool want_desktop, bool want_shell, bool want_files);
-
-int dh_connect_problem_text(int32_t problem, const char* address, char* out, int capacity);
-
 int dh_connecting_to(const char* address, char* out, int capacity);
 
 int dh_could_not_connect(const char* address, char* out, int capacity);
 
 int dh_source_query_failed(const char* address, char* out, int capacity);
-
-int dh_source_query_empty(const char* address, char* out, int capacity);
 
 int dh_udp_port_line(uint32_t port, char* out, int capacity);
 

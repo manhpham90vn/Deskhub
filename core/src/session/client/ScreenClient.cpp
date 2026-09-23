@@ -55,13 +55,10 @@ void ScreenClient::Start(const ScreenClientConfig& cfg, uint64_t nowUs) {
 
     Hello hello;
     hello.clientId = cfg.clientId;
-    hello.codecMask = kCodecMaskH264;
     hello.maxWidth = cfg.maxWidth;
     hello.maxHeight = cfg.maxHeight;
-    hello.desiredFps = cfg.desiredFps;
     hello.features = cfg.wantsAudio ? kClientWantsAudio : 0;
     hello.sourceId = cfg.sourceId;
-    hello.passcode = cfg.passcode;
     hello.clientName = cfg.displayName;
     session_.Start(hello, nowUs);
 }

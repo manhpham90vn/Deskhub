@@ -97,9 +97,6 @@ public:
         return buttons_.size();
     }
 
-    bool suppressed() const {
-        return suppressed_;
-    }
     uint64_t applied() const {
         return applied_;
     }

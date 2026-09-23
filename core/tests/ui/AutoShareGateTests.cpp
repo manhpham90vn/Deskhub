@@ -51,7 +51,6 @@ void TestTheDecisionIsMadeOnlyOnce() {
     Check(gate.Advance(true) == ui::AutoShareStep::ShareNow, "a repeat probe repeats the verdict");
     Check(gate.Advance(false) == ui::AutoShareStep::ShareNow,
         "and a display vanishing afterwards does not reopen the gate");
-    Check(gate.Decision() == ui::AutoShareStep::ShareNow, "the verdict is readable after the fact");
 
     ui::AutoShareGate quick(500, 0);
     Check(quick.Advance(false) == ui::AutoShareStep::GiveUpWaiting,

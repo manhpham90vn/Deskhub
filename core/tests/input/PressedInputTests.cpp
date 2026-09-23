@@ -66,7 +66,6 @@ void TestGateLatch() {
 
     InputGate g = t.Gate(false);
     Check(g.allow && !g.justSuppressed && !g.justResumed, "idle host: input passes, no edges");
-    Check(!t.suppressed(), "and the latch stays open");
 
     g = t.Gate(true);
     Check(!g.allow && g.justSuppressed, "the first blocked event reports the transition");
@@ -74,7 +73,6 @@ void TestGateLatch() {
     Check(!g.allow && !g.justSuppressed, "the second one does not report it again");
     g = t.Gate(true);
     Check(!g.allow && !g.justSuppressed, "nor the third");
-    Check(t.suppressed(), "the latch is closed while the local user is active");
 
     g = t.Gate(false);
     Check(g.allow && g.justResumed, "going idle reports resumption once");
@@ -174,10 +172,8 @@ void TestReleaseDoesNotTouchTheGate() {
     Tracker t;
     t.SetKey(0x41, 30, true);
     t.Gate(true);
-    Check(t.suppressed(), "suppressed");
     t.TakeHeldKeys();
     t.TakeHeldButtons();
-    Check(t.suppressed(), "a release is not a resume — only an idle host reopens the gate");
     Check(t.Gate(false).justResumed, "and then it does");
 }
 

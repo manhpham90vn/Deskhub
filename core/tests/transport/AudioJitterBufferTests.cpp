@@ -14,7 +14,7 @@ void Push(AudioJitterBuffer& buf, uint32_t seq, uint8_t marker) {
     const std::vector<uint8_t> payload(8, marker);
     AudioPacketView v;
     v.hdr.seq = seq;
-    v.hdr.timestampUs = uint64_t(seq) * kAudioFrameUs;
+    v.hdr.timestampUs = uint64_t(seq) * kAudioFrameMs * 1000;
     v.payload = payload;
     buf.Push(v);
 }
@@ -37,7 +37,6 @@ void TestPrefillHoldsBeforePlaying() {
     const auto first = buf.Pop();
     Check(first && first->seq == 100 && MarkerOf(*first) == 0xA1,
         "the third frame starts play-out at the oldest packet");
-    Check(buf.playing(), "the buffer reports itself playing");
 }
 
 void TestReorderingIsUndone() {
@@ -99,7 +98,6 @@ void TestUnderrunRebuffers() {
     for (uint32_t seq = 0; seq < 3; ++seq) Check(buf.Pop()->seq == seq, "the burst plays out");
 
     Check(!buf.Pop().has_value(), "an empty buffer plays nothing");
-    Check(!buf.playing(), "the buffer stops calling itself playing");
     Check(buf.stats().underruns == 1, "the underrun is counted");
 
     Push(buf, 3, 0xE3);
@@ -129,7 +127,7 @@ void TestResyncOnSequenceJump() {
 
     Push(buf, 100000, 0xF0);
     Check(buf.stats().resyncs == 1, "the jump is treated as a new stream");
-    Check(!buf.playing() && buf.buffered() == 1, "the buffer starts filling again from scratch");
+    Check(buf.buffered() == 1, "the buffer starts filling again from scratch");
 
     Push(buf, 100001, 0xF1);
     Push(buf, 100002, 0xF2);

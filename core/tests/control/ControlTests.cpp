@@ -191,13 +191,12 @@ void TestFeedbackFromWindow() {
 
     const Feedback fb = MakeFeedback(w, 21'400);
     Check(fb.lossPct == 4, "lossPct rounds to nearest (3.6 -> 4)");
-    Check(fb.lostFrames == 2, "lostFrames carried through");
     Check(fb.rttMs == 21, "RTT converted us -> ms");
     Check(fb.recvBitrateKbps == 8500, "recv bitrate carried through");
 
     LinkWindow clean;
     const Feedback fb2 = MakeFeedback(clean, 0);
-    Check(fb2.lossPct == 0 && fb2.lostFrames == 0, "a clean window is still a valid Feedback");
+    Check(fb2.lossPct == 0, "a clean window is still a valid Feedback");
 }
 
 }

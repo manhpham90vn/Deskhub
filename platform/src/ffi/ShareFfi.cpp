@@ -179,11 +179,6 @@ bool dh_share_audio_running(void) {
     return g_audioTarget != nullptr && g_audioTarget->audioRunning();
 }
 
-bool dh_share_terminal_active(void) {
-    std::unique_lock<std::mutex> lk(g_agentMutex, std::try_to_lock);
-    return lk.owns_lock() && g_terminal && g_terminal->Running();
-}
-
 bool dh_share_files_active(void) {
     std::unique_lock<std::mutex> lk(g_agentMutex, std::try_to_lock);
     return lk.owns_lock() && g_files && g_files->Running();

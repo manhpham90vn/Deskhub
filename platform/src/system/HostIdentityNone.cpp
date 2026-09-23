@@ -24,11 +24,6 @@ std::optional<deskhub::Fingerprint> FingerprintOfCertDer(std::span<const uint8_t
     return std::nullopt;
 }
 
-std::optional<deskhub::Fingerprint> FingerprintOfCertPem(std::string_view) {
-    WarnOnce();
-    return std::nullopt;
-}
-
 HostIdentity LoadHostIdentity() {
     WarnOnce();
     return {};
@@ -37,11 +32,6 @@ HostIdentity LoadHostIdentity() {
 HostIdentity LoadOrCreateHostIdentity(std::string_view) {
     WarnOnce();
     return {};
-}
-
-bool ForgetHostIdentity() {
-    WarnOnce();
-    return false;
 }
 
 }

@@ -81,15 +81,12 @@ void GiveConnectedSession(SourcePipelineState& st) {
         return true;
     };
     st.session = std::make_unique<ScreenHostSession>(cb, StreamParams{1920, 1080, 60, kStartBps});
-    st.session->SetPasscode(kTestPasscode);
 
     uint8_t buf[kMaxDatagram];
     Hello hello{};
     hello.clientId = 0x1234;
-    hello.codecMask = deskhub::kCodecMaskH264;
     hello.maxWidth = 1920;
     hello.maxHeight = 1080;
-    hello.passcode = kTestPasscode;
     const size_t n = BuildHello(buf, hello);
     st.session->HandlePacket(std::span<const uint8_t>(buf, n), 0, 0xC0A80001'0000ULL);
     Check(st.session->viewerCount() == 1, "the rig's viewer really is admitted");
@@ -98,10 +95,8 @@ void GiveConnectedSession(SourcePipelineState& st) {
 Hello ClientHello(uint16_t w, uint16_t h) {
     Hello hello{};
     hello.clientId = 0x1234;
-    hello.codecMask = deskhub::kCodecMaskH264;
     hello.maxWidth = w;
     hello.maxHeight = h;
-    hello.desiredFps = 60;
     return hello;
 }
 

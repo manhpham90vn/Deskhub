@@ -133,7 +133,7 @@ void TestALinkAdmitsOnceAndRoutesByChannel() {
               10000),
         "the link is admitted inside the deadline");
     Check(readyCalls.load(std::memory_order_relaxed) == 1, "and says so exactly once");
-    Check(deskhubp::CheckTrustedHost(link.Config().hostLabel, identity.fingerprint) ==
+    Check(deskhubp::CheckTrustedHost(LinkConfig(kLinkPasscode).hostLabel, identity.fingerprint) ==
               deskhub::TrustVerdict::Trusted,
         "a proved passcode pins the host key");
 

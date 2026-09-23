@@ -282,13 +282,6 @@ int dh_source_query_failed(const char* address, char* out, int capacity) {
     return int(std::strlen(out));
 }
 
-int dh_source_query_empty(const char* address, char* out, int capacity) {
-    if (!out || capacity <= 0) return 0;
-    deskhubp::CopyToBuf(out, size_t(capacity),
-        deskhub::ui::SourceQueryEmpty(address ? address : ""));
-    return int(std::strlen(out));
-}
-
 int dh_udp_port_line(uint32_t port, char* out, int capacity) {
     if (!out || capacity <= 0) return 0;
     deskhubp::CopyToBuf(out, size_t(capacity), deskhub::ui::UdpPortLine(uint16_t(port)));
@@ -417,26 +410,6 @@ int dh_list_sources(const char* address, DHSourceInfo* out, int capacity, const 
     return count;
 }
 
-bool dh_host_has_terminal(const char* address, const char* passcode) {
-    NetAddr server;
-    if (!address || !ParseNetAddr(address, server)) return false;
-
-    std::vector<deskhub::SourceInfo> sources;
-    deskhub::HostCaps caps{};
-    if (!QuerySources(server, sources, passcode ? passcode : "", nullptr, &caps)) return false;
-    return caps.terminal;
-}
-
-bool dh_host_takes_files(const char* address, const char* passcode) {
-    NetAddr server;
-    if (!address || !ParseNetAddr(address, server)) return false;
-
-    std::vector<deskhub::SourceInfo> sources;
-    deskhub::HostCaps caps{};
-    if (!QuerySources(server, sources, passcode ? passcode : "", nullptr, &caps)) return false;
-    return caps.files;
-}
-
 bool dh_connect_decision(const DHSourceInfo* sources, int count, uint8_t* out_source_id) {
     std::vector<deskhub::SourceInfo> list;
     if (sources && count > 0) {
@@ -446,40 +419,6 @@ bool dh_connect_decision(const DHSourceInfo* sources, int count, uint8_t* out_so
     const deskhub::ConnectDecision d = deskhub::DecideAfterSourceQuery(list);
     if (out_source_id) *out_source_id = d.sourceId;
     return d.showPicker;
-}
-
-DHConnectPlan dh_connect_plan(DHHostCaps caps, const DHSourceInfo* sources, int count,
-    bool want_desktop, bool want_shell, bool want_files) {
-    std::vector<deskhub::SourceInfo> list;
-    if (sources && count > 0) {
-        list.resize(size_t(count));
-        for (int i = 0; i < count; ++i) list[size_t(i)].sourceId = sources[i].sourceId;
-    }
-
-    deskhub::HostCaps hostCaps;
-    hostCaps.acceptsInput = caps.acceptsInput;
-    hostCaps.terminal = caps.terminal;
-    hostCaps.audio = caps.audio;
-    hostCaps.files = caps.files;
-
-    const deskhub::ConnectPlan planned = deskhub::PlanAfterConnect(hostCaps, list,
-        deskhub::OpenChoice{want_desktop, want_shell, want_files});
-
-    DHConnectPlan out{};
-    out.openShell = planned.openShell;
-    out.openFiles = planned.openFiles;
-    out.openDesktop = planned.openDesktop;
-    out.showPicker = planned.showPicker;
-    out.sourceId = planned.sourceId;
-    out.problem = int32_t(planned.problem);
-    return out;
-}
-
-int dh_connect_problem_text(int32_t problem, const char* address, char* out, int capacity) {
-    if (!out || capacity <= 0) return 0;
-    deskhubp::CopyToBuf(out, size_t(capacity),
-        deskhub::ConnectProblemText(deskhub::ConnectProblem(problem), address ? address : ""));
-    return int(std::strlen(out));
 }
 
 int dh_hotkeys(DHHotkey* out, int capacity) {

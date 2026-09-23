@@ -28,10 +28,4 @@ void Crc32::Update(std::span<const uint8_t> bytes) {
     state_ = c;
 }
 
-uint32_t Crc32Of(std::span<const uint8_t> bytes) {
-    Crc32 crc;
-    crc.Update(bytes);
-    return crc.Value();
-}
-
 }

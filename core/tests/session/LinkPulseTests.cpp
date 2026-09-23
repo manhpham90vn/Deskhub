@@ -153,10 +153,6 @@ void TestTheReadingsTurnIntoWords() {
         "poor has its word");
     Check(std::string(ui::LinkQualityText(LinkQuality::Unknown)) == ui::kLinkNoReading,
         "no reading shows a dash, not a guess");
-    Check(ui::LinkPingText(true, 23'400) == "23 ms", "the ping rounds to whole milliseconds");
-    Check(ui::LinkPingText(true, 23'600) == "24 ms", "rounding to nearest, not down");
-    Check(ui::LinkPingText(false, 0) == ui::kLinkNoReading,
-        "and no pong yet shows the same dash");
 }
 
 }

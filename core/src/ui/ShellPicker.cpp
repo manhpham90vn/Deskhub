@@ -41,9 +41,4 @@ std::string ShellPickerLine(const ShellPickerRow& row) {
     return row.label + "  " + row.detail;
 }
 
-bool AnyShellResumable(const std::vector<ShellPickerRow>& rows) {
-    return std::any_of(rows.begin(), rows.end(),
-        [](const ShellPickerRow& row) { return row.resumable; });
-}
-
 }

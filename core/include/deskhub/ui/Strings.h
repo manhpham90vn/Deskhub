@@ -125,6 +125,7 @@ inline constexpr const char* kClientPasscodeHint =
 inline constexpr const char* kDeviceNameLabel = "Your name";
 inline constexpr const char* kConnectButton = "Connect";
 inline constexpr const char* kCopyButton = "Copy";
+inline constexpr const char* kCopiedButton = "Copied";
 inline constexpr const char* kFpsLabel = "FPS";
 inline constexpr const char* kBitrateLabel = "Bitrate (Mbps)";
 inline constexpr const char* kQualityLabel = "Quality";
@@ -160,7 +161,6 @@ inline constexpr const char* kLanDevicesHint = "Click a device to connect to it.
 inline constexpr const char* kLanDevicesNoneSharing =
     "A machine appears here only while it is sharing \xE2\x80\x94 start the share on it, then "
     "check again.";
-inline constexpr const char* kScanRescanNote = "Checking again shortly.";
 inline constexpr const char* kRefreshNow = "Refresh now";
 inline constexpr const char* kAuthWrongPasscode =
     "That passcode was not accepted \xE2\x80\x94 check the code on the machine you are "
@@ -249,15 +249,6 @@ inline constexpr const char* kAttachShellAction = "Stop & attach";
 inline constexpr const char* kTerminalLocalWindowTitle = "Terminal \xE2\x80\x94 this machine";
 inline constexpr const char* kTerminalAttachedHere =
     "Attached to the shell on this machine.";
-inline constexpr const char* kTerminalHostHeading = "Share this machine's terminal";
-inline constexpr const char* kTerminalHostHint =
-    "Anyone who knows the passcode gets a shell on this machine, running as you.";
-inline constexpr const char* kTerminalShareButton = "Share terminal";
-inline constexpr const char* kTerminalStopSharing = "Stop sharing the terminal";
-inline constexpr const char* kTerminalSharingOff = "This machine is not sharing a terminal.";
-inline constexpr const char* kTerminalNetworkLabel = "Share the terminal on:";
-inline constexpr const char* kTerminalOpenSessionsHeading = "Shells open on this machine";
-inline constexpr const char* kTerminalNoSessions = "(nobody has a shell open)";
 inline constexpr const char* kShareNoQuicLibrary =
     "This build has no QUIC library, so it cannot share anything. Build one with "
     "scripts/build-quiche.sh, then build Deskhub again.";
@@ -278,13 +269,9 @@ inline constexpr const char* kMobileHostNote =
     "A phone or tablet can only be watched: control and terminal do nothing on one.";
 inline constexpr const char* kHostHasNoTerminal =
     "That machine is not sharing a terminal \xE2\x80\x94 a phone or tablet cannot.";
-inline constexpr const char* kTerminalClientHeading = "Open a terminal on another machine";
-inline constexpr const char* kTerminalClientHint =
-    "This is separate from viewing a screen \xE2\x80\x94 you can do either, or both.";
 inline constexpr const char* kTerminalConnecting = "Connecting\xE2\x80\xA6";
 inline constexpr const char* kTerminalConnected = "Connected.";
 inline constexpr const char* kTerminalClosed = "The shell has ended.";
-inline constexpr const char* kTerminalWrongPasscode = "That passcode was not accepted.";
 inline constexpr const char* kTerminalNotShared =
     "That machine is not sharing a terminal right now.";
 inline constexpr const char* kTerminalTooManySessions =
@@ -396,16 +383,12 @@ inline constexpr const char* kTrustChangedBody =
 inline constexpr const char* kTrustFingerprintLabel = "Fingerprint:";
 inline constexpr const char* kTrustAccept = "Trust this machine";
 inline constexpr const char* kTrustReject = "Do not connect";
-inline constexpr const char* kTrustedHostsHeading = "Machines you have trusted";
-inline constexpr const char* kTrustedHostsEmpty = "(none yet)";
-inline constexpr const char* kTrustForget = "Forget";
 
 inline constexpr const char* kTerminalExtraKeysHint =
     "Ctrl and Alt latch: tap one, then a letter.";
 
 inline const char* TerminalRefusalText(TermReason reason) {
     switch (reason) {
-        case TermReason::WrongPasscode: return kTerminalWrongPasscode;
         case TermReason::TooManySessions: return kTerminalTooManySessions;
         case TermReason::NotShared: return kTerminalNotShared;
         case TermReason::NoSuchSession: return kTerminalNoSuchSession;
@@ -419,17 +402,6 @@ inline std::string TrimAscii(std::string_view s) {
     if (b == std::string_view::npos) return {};
     const size_t e = s.find_last_not_of(" \t\r\n");
     return std::string(s.substr(b, e - b + 1));
-}
-
-inline uint32_t ParsePositiveUint(std::string_view s, uint32_t fallback) {
-    if (s.empty()) return fallback;
-    uint64_t v = 0;
-    for (char c : s) {
-        if (c < '0' || c > '9') return fallback;
-        v = v * 10 + uint64_t(c - '0');
-        if (v > 0xFFFFFFFFull) return fallback;
-    }
-    return v > 0 ? uint32_t(v) : fallback;
 }
 
 inline std::string ShareClampWarning() {
@@ -502,16 +474,6 @@ inline std::string PingMs(uint32_t ms) {
     return std::to_string(ms) + " ms";
 }
 
-inline std::string LinkPingText(bool haveRtt, uint32_t rttUs) {
-    if (!haveRtt) return kLinkNoReading;
-    return PingMs((rttUs + 500) / 1000);
-}
-
-inline std::string SharingStatusLine(uint16_t port) {
-    return "Sharing on UDP port " + std::to_string(port) +
-           " - others can connect to this machine now.";
-}
-
 inline std::string ShareSummaryLine(bool screen, bool terminal, bool files, uint16_t port) {
     if (!screen && !terminal && !files) return {};
     std::string what;
@@ -560,8 +522,7 @@ inline std::string SourceQueryFailed(std::string_view address) {
 
 inline std::string SourceQueryEmpty(std::string_view address) {
     return std::string(address) +
-           " replied without any sources - check the 4-digit passcode on the host, and that it "
-           "is still sharing.";
+           " replied without any sources - it is not sharing a screen right now.";
 }
 
 inline std::string ScanningStatus(size_t probed, size_t total, uint16_t port) {
@@ -573,10 +534,6 @@ inline std::string ScanRecheckNote(uint32_t seconds) {
     return "Checking again in " + std::to_string(seconds) + "s.";
 }
 
-inline std::string StatusRecheckNote(uint32_t seconds) {
-    return "Status and ping recheck every " + std::to_string(seconds) + "s.";
-}
-
 inline std::string ScanFinishedStatus(size_t found, size_t total) {
     return std::to_string(found) + (found == 1 ? " device" : " devices") + " found after checking " +
            std::to_string(total) + " addresses.";
@@ -586,11 +543,6 @@ inline std::string LanDevicesNote(size_t found, size_t total, uint32_t rescanSec
     if (total == 0) return kScanNoLocalNetwork;
     const char* detail = found > 0 ? kLanDevicesHint : kLanDevicesNoneSharing;
     return ScanFinishedStatus(found, total) + " " + detail + " " + ScanRecheckNote(rescanSecs);
-}
-
-inline std::string RecentDevicesNote(size_t deviceCount, uint32_t recheckSecs) {
-    if (deviceCount == 0) return kRecentDevicesEmpty;
-    return std::string(kRecentDevicesHint) + " " + StatusRecheckNote(recheckSecs);
 }
 
 inline uint16_t PortOrDefault(std::string_view typed, uint16_t fallback = kDeskhubPort) {

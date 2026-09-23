@@ -86,7 +86,7 @@ struct LoopbackPair {
 };
 
 uint64_t SendOnTerminalStream(LoopbackPair& pair, std::span<const uint8_t> bytes) {
-    pair.client.SendStream(pair.clientSink.conn, kQuicFirstTerminalStream, bytes);
+    pair.client.SendStream(pair.clientSink.conn, kQuicControlStream, bytes);
     return bytes.size();
 }
 
@@ -102,7 +102,8 @@ void RunQuicPerf() {
 
     const std::string savedCert = ReadAppDataFile(kHostCertFileName);
     const std::string savedKey = ReadAppDataFile(kHostKeyFileName);
-    ForgetHostIdentity();
+    RemoveAppDataFile(kHostCertFileName);
+    RemoveAppDataFile(kHostKeyFileName);
     const HostIdentity identity = LoadOrCreateHostIdentity("deskhub-perf");
     const auto restoreIdentity = [&] {
         if (!savedCert.empty()) WriteAppDataFile(kHostCertFileName, savedCert);

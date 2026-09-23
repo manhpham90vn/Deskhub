@@ -108,7 +108,7 @@ connection whose auth has not settled:
 
 Success writes the client into the host's `paired_devices`; pairing is by key, not
 address. Three wrong passcode guesses lock the passcode path for 30 seconds
-(`AuthThrottle`, shared constants with the legacy session lockout); the approval path
+(`AuthThrottle`); the approval path
 needs no throttle — a human is the gate.
 
 Client side, `known_hosts` (`TrustStore`) pins host keys. A **changed** key blocks the
@@ -522,11 +522,16 @@ line.
   preallocated lock-free slot ring and stamps the capture time; a worker thread does
   the encode, the diagnostics and the per-viewer sends. A worker that falls behind
   costs a counted drop (`framesRefused`), never a glitch in the host's audio.
-- **Sound needs both ends to say yes, and old clients never hear it**: a viewer sets
-  bit 0 of `Hello.features`, a host advertises `kHostSharesAudio` in its capabilities,
-  and the host sends a packet only to viewers whose bit is set. That is what keeps
-  `kProtocolVersion` at 2: a 5.0.x viewer sends `features = 0`, so a 5.1 host never
-  puts a message on its wire that it cannot parse.
+- **Sound needs both ends to say yes**: a viewer sets bit 0 of `Hello.features`, a host
+  advertises `kHostSharesAudio` in its capabilities, and the host sends a packet only to
+  viewers whose bit is set.
+- **Protocol version 3 speaks only to itself**: `kProtocolVersion` went to 3 when
+  `Hello`, `LIST_SOURCES` and `TERM_OPEN` lost the passcode bytes that admission had made
+  dead, and `Hello`/`HELLO_ACK` lost the codec negotiation that H.264-only streaming never
+  used. Every parser now demands its full current layout — no shorter legacy form, no
+  reserved padding — and `ClassifyPacket` claims only the current version, so an older
+  peer is dropped rather than half understood. A wire change bumps the version; it never
+  adds a compatibility branch.
 
 - **The terminal link keeps itself alive and dials itself back**: a terminal viewer
   owns a QUIC connection of its own, separate from the video session, so none of the
@@ -798,15 +803,14 @@ line.
 
 - **A transfer that outlives its connection has to be told**: `FileSender` only leaves
   `Sending` on an ack, a cancel or `LinkLost()`, and `FileUpload::Pump` treats a refused
-  send as backpressure rather than failure. `ScreenViewer` wired `LinkLost()` to
-  `onStreamBroken`, which fires for a stream reset on a connection that is still up, and
-  to the end of the session — but not to `HostLink`'s own `onLinkLost`. So a mid-transfer
-  redial left `uploading()` true with nothing on the far side that could ever answer:
-  the host had already aborted the batch, and the new connection's receiver had never
-  seen the offer. The viewer now fails the upload on `onLinkLost` with
-  `TransferReason::LinkLost`. Resuming across a redial would need the offer replayed on
-  the new connection; until that exists, ending the transfer honestly beats a progress
-  bar that never moves again.
+  send as backpressure rather than failure. An upload wired to `onStreamBroken` and to the
+  end of its session, but not to its `HostLink` losing the connection, once sat in
+  `Sending` after a mid-transfer redial with nothing on the far side that could ever
+  answer: the host had already aborted the batch, and the new connection's receiver had
+  never seen the offer. `FileTransferClient` therefore never redials mid-transfer and
+  fails the upload with `TransferReason::LinkLost` the moment its link leaves `Ready`.
+  Resuming across a redial would need the offer replayed on the new connection; until
+  that exists, ending the transfer honestly beats a progress bar that never moves again.
 
 - **A socket the host lets go of is still held by every shell it spawned**: `Pty::Start`
   uses `forkpty`, so the child inherits every open descriptor, and `ChildSetup` execs the

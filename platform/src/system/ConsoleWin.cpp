@@ -39,11 +39,6 @@ bool StdinIsTty() {
     return GetConsoleMode(StdinHandle(), &mode) != 0;
 }
 
-bool StdoutIsTty() {
-    DWORD mode = 0;
-    return GetConsoleMode(StdoutHandle(), &mode) != 0;
-}
-
 ConsoleSize ConsoleSizeNow() {
     ConsoleSize size;
     CONSOLE_SCREEN_BUFFER_INFO info{};

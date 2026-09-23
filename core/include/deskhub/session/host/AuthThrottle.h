@@ -1,9 +1,10 @@
 #pragma once
-#include "deskhub/session/host/ScreenHostSession.h"
-
 #include <cstdint>
 
 namespace deskhub {
+
+inline constexpr uint32_t kMaxPasscodeAttempts = 3;
+inline constexpr uint64_t kPasscodeLockoutUs = 30'000'000;
 
 class AuthThrottle {
 public:

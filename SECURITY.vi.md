@@ -91,8 +91,8 @@ mở máy của bạn ra Internet.
   thông tin nhạy cảm vào trường này. Việc xoá trắng trường này không ngăn tên được gửi đi,
   mà chỉ khôi phục giá trị mặc định.
 - **Vị trí viewer tự giải phóng sau 5 giây không có dữ liệu.** Nếu viewer của bạn
-  mất kết nối, vị trí đó được mở lại và `Hello` tới tiếp theo sẽ chiếm chỗ, bất kể nguồn
-  gửi, chỉ bị ràng buộc bởi passcode.
+  mất kết nối, vị trí đó được mở lại và `Hello` tới tiếp theo sẽ chiếm chỗ, miễn là máy gửi
+  đã qua admission (pairing, passcode hoặc approval).
 - **Việc share phơi ra toàn bộ display.** Không phải một cửa sổ, mà là mọi notification,
   popup và cửa sổ trên màn hình đó. Xem [`PRIVACY.vi.md` §3.4](PRIVACY.vi.md).
 - **Host là điện thoại hoặc tablet phơi ra toàn bộ thiết bị.** Android và iOS cũng host

@@ -34,10 +34,6 @@ bool Pty::Resize(deskhub::TermSize) {
     return false;
 }
 
-bool Pty::Exited() const {
-    return true;
-}
-
 int Pty::ExitCode() const {
     return 0;
 }

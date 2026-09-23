@@ -51,7 +51,7 @@ void TestControlTravelsOnAStream() {
     }
 
     const SavedIdentity guard;
-    deskhubp::ForgetHostIdentity();
+    ForgetHostIdentity();
     const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity("deskhub-test");
     Check(identity.Valid(), "the host has an identity to present");
     if (!identity.Valid()) return;
@@ -108,7 +108,7 @@ void TestVideoRidesEncryptedDatagrams() {
     }
 
     const SavedIdentity guard;
-    deskhubp::ForgetHostIdentity();
+    ForgetHostIdentity();
     const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity("deskhub-test");
     if (!identity.Valid()) return;
 
@@ -133,8 +133,6 @@ void TestVideoRidesEncryptedDatagrams() {
     }
     if (!viewer.Established(target)) return;
 
-    Check(viewer.videoPath() == deskhubp::VideoPath::QuicDatagram,
-        "video takes the encrypted datagram path out of the box");
     Check(viewer.MaxDatagramSize(target) >= deskhub::kMaxDatagram,
         "and a QUIC datagram fits a whole video packet");
 
@@ -153,17 +151,11 @@ void TestVideoRidesEncryptedDatagrams() {
     Check(got == int(videoSize), "it arrives whole");
     Check(std::equal(video, video + videoSize, buf), "and unchanged");
 
-    viewer.SetVideoPath(deskhubp::VideoPath::RawUdp);
-    Check(viewer.SendTo(target, video, videoSize),
-        "a sender forced onto the old raw path still transmits");
+    UdpSocket plain;
+    Check(plain.Open(0, "127.0.0.1"), "a plain UDP sender opens a socket");
+    Check(plain.SendTo(target, video, videoSize), "and sends the same video packet unencrypted");
     const int refused = PumpFor(host, viewer, buf, sizeof(buf), from);
-    Check(refused == 0, "but the receiver refuses plaintext video now that the stream is encrypted");
-
-    host.SetVideoPath(deskhubp::VideoPath::RawUdp);
-    Check(viewer.SendTo(target, video, videoSize), "with both ends forced raw, in a test rig,");
-    const int legacy = PumpFor(host, viewer, buf, sizeof(buf), from);
-    Check(legacy == int(videoSize) && std::equal(video, video + videoSize, buf),
-        "the legacy path still works for A/B measurements");
+    Check(refused == 0, "the receiver refuses plaintext video");
 
     host.Close();
     viewer.Close();
@@ -174,7 +166,7 @@ void TestAStrangerIsStillAnsweredInThePlain() {
     if (!deskhubp::QuicAvailable()) return;
 
     const SavedIdentity guard;
-    deskhubp::ForgetHostIdentity();
+    ForgetHostIdentity();
     const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity("deskhub-test");
     if (!identity.Valid()) return;
 
@@ -281,7 +273,7 @@ void TestAFileBacklogNeverDelaysTheStream() {
     bool diskBusy = true;
 
     const SavedIdentity guard;
-    deskhubp::ForgetHostIdentity();
+    ForgetHostIdentity();
     const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity("deskhub-test");
     if (!identity.Valid()) return;
 
@@ -339,7 +331,7 @@ void TestTheFileLaneNeverGrowsPastItsCap() {
     }
 
     const SavedIdentity guard;
-    deskhubp::ForgetHostIdentity();
+    ForgetHostIdentity();
     const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity("deskhub-test");
     if (!identity.Valid()) return;
 
@@ -380,7 +372,7 @@ void TestSendBurstsStayBounded() {
     }
 
     const SavedIdentity guard;
-    deskhubp::ForgetHostIdentity();
+    ForgetHostIdentity();
     const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity("deskhub-test");
     if (!identity.Valid()) return;
 
@@ -421,7 +413,7 @@ void TestAudioRidesDatagramsNotTheControlStream() {
     }
 
     const SavedIdentity guard;
-    deskhubp::ForgetHostIdentity();
+    ForgetHostIdentity();
     const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity("deskhub-test");
     if (!identity.Valid()) return;
 
@@ -484,7 +476,7 @@ void TestAnIdleTransportWaitsInsteadOfSpinning() {
     }
 
     const SavedIdentity guard;
-    deskhubp::ForgetHostIdentity();
+    ForgetHostIdentity();
     const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity("deskhub-test");
     if (!identity.Valid()) return;
 

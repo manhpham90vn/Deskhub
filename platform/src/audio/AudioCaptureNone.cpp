@@ -20,14 +20,6 @@ bool AudioCapture::Running() const {
     return false;
 }
 
-uint64_t AudioCapture::framesCaptured() const {
-    return 0;
-}
-
-uint64_t AudioCapture::framesPaddedWithSilence() const {
-    return 0;
-}
-
 const char* AudioCapture::BackendName() {
     return "none";
 }

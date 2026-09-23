@@ -37,9 +37,6 @@ public:
         return format_;
     }
 
-    uint64_t framesEncoded() const {
-        return framesEncoded_.load(std::memory_order_relaxed);
-    }
     uint64_t framesRefused() const {
         return framesRefused_.load(std::memory_order_relaxed);
     }

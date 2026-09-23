@@ -82,8 +82,8 @@ This is the honest list. Nothing below is solved today:
   in it. Clearing the field does not stop a name being sent; it only restores the
   default.
 - **A viewer slot frees itself after 5 seconds of silence.** If your viewer drops off,
-  its slot reopens and the next `Hello` to arrive takes it — whoever sent it, subject
-  only to the passcode.
+  its slot reopens and the next `Hello` to arrive takes it — from any machine that has
+  passed admission (pairing, passcode or approval).
 - **Sharing exposes the entire display.** Not one window: every notification, popup and
   window on that monitor. See [`PRIVACY.md` §3.4](PRIVACY.md).
 - **A phone or tablet host exposes the whole phone.** Android and iOS can host too, and

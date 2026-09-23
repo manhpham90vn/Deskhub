@@ -21,6 +21,4 @@ std::vector<ShellPickerRow> BuildShellPickerRows(const TermSessionList& sessions
 
 std::string ShellPickerLine(const ShellPickerRow& row);
 
-bool AnyShellResumable(const std::vector<ShellPickerRow>& rows);
-
 }

@@ -25,11 +25,6 @@ bool ScreenHostSession::HandleHello(std::span<const uint8_t> payload, uint64_t n
     uint64_t fromPacked) {
     const auto m = ParseHello(payload);
     if (!m || !fromPacked) return false;
-    if (!PasscodeAllows(*m, nowUs)) return false;
-    if (!(m->codecMask & kCodecMaskH264)) {
-        SendReject(RejectReason::CodecMismatch);
-        return false;
-    }
 
     ViewerSlot* known = viewers_.Find(fromPacked);
     if (known && known->clientId != m->clientId) {
@@ -43,7 +38,7 @@ bool ScreenHostSession::HandleHello(std::span<const uint8_t> payload, uint64_t n
         viewers_.SetName(*known, m->clientName);
         viewers_.SetWantsAudio(*known, (m->features & kClientWantsAudio) != 0);
         known->lastRecvUs = nowUs;
-        SendHelloAck(nowUs);
+        SendHelloAck();
         return true;
     }
 
@@ -60,7 +55,7 @@ bool ScreenHostSession::HandleHello(std::span<const uint8_t> payload, uint64_t n
     RefreshState();
     if (firstViewer && cb_.onHello) cb_.onHello(*m);
     if (cb_.onViewerJoin) cb_.onViewerJoin(fromPacked, viewers_.viewerCount(), m->clientName);
-    SendHelloAck(nowUs);
+    SendHelloAck();
     return true;
 }
 
@@ -216,43 +211,20 @@ bool ScreenHostSession::BeginSession() {
     return true;
 }
 
-void ScreenHostSession::SendHelloAck(uint64_t nowUs) {
+void ScreenHostSession::SendHelloAck() {
     HelloAck a;
     a.sessionId = sessionId();
-    a.codec = Codec::H264;
     a.width = offer_.width;
     a.height = offer_.height;
     a.fps = offer_.fps;
     a.bitrateBps = offer_.bitrateBps;
-    a.timebaseUs = nowUs;
     const size_t n = BuildHelloAck(buf_, a);
     if (n && cb_.send) cb_.send(std::span<const uint8_t>(buf_, n));
 }
 
-bool ScreenHostSession::PasscodeAllows(const Hello& m, uint64_t nowUs) {
-    if (connectionAuthenticated_) return true;
-    if (!IsValidPasscode(passcode_)) {
-        SendReject(RejectReason::WrongPasscode);
-        return false;
-    }
-    if (nowUs < passcodeLockUntilUs_) return false;
-
-    if (m.passcode == passcode_) {
-        wrongPasscodes_ = 0;
-        return true;
-    }
-
-    if (++wrongPasscodes_ >= kMaxPasscodeAttempts) {
-        wrongPasscodes_ = 0;
-        passcodeLockUntilUs_ = nowUs + kPasscodeLockoutUs;
-    }
-    SendReject(RejectReason::WrongPasscode);
-    return false;
-}
-
 void ScreenHostSession::SendReject(RejectReason reason) {
     HelloAck a{};
-    a.codec = Codec::Rejected;
+    a.rejected = true;
     a.reason = reason;
     const size_t n = BuildHelloAck(buf_, a);
     if (n && cb_.send) cb_.send(std::span<const uint8_t>(buf_, n));

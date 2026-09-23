@@ -2,8 +2,6 @@
 
 #include <algorithm>
 
-#include "deskhub/session/host/ScreenHostSession.h"
-
 namespace deskhub {
 
 void TerminalSessions::SetSharing(bool on) {
@@ -11,41 +9,10 @@ void TerminalSessions::SetSharing(bool on) {
     if (!on) CloseAll();
 }
 
-void TerminalSessions::SetPasscode(std::string passcode) {
-    passcode_ = IsValidPasscode(passcode) ? std::move(passcode) : std::string();
-    wrongPasscodes_ = 0;
-    lockUntilUs_ = 0;
-}
-
-bool TerminalSessions::LockedOut(uint64_t nowUs) const {
-    return lockUntilUs_ != 0 && nowUs < lockUntilUs_;
-}
-
 TermOpenAck TerminalSessions::Refuse(TermReason reason) const {
     TermOpenAck ack;
     ack.reason = reason;
     return ack;
-}
-
-bool TerminalSessions::PasscodeAllows(std::string_view offered, uint64_t nowUs) {
-    if (connectionAuthenticated_) return true;
-    if (passcode_.empty()) return true;
-    if (LockedOut(nowUs)) return false;
-    if (offered == passcode_) {
-        wrongPasscodes_ = 0;
-        lockUntilUs_ = 0;
-        return true;
-    }
-    if (++wrongPasscodes_ >= kMaxPasscodeAttempts) {
-        wrongPasscodes_ = 0;
-        lockUntilUs_ = nowUs + kPasscodeLockoutUs;
-    }
-    return false;
-}
-
-size_t TerminalSessions::LiveCount() const {
-    return size_t(std::count_if(records_.begin(), records_.end(),
-        [](const TerminalRecord& r) { return r.state == TerminalState::Live; }));
 }
 
 const TerminalRecord* TerminalSessions::Find(uint32_t termId) const {
@@ -60,10 +27,8 @@ TerminalRecord* TerminalSessions::Mutable(uint32_t termId) {
     return nullptr;
 }
 
-TermOpenAck TerminalSessions::Open(const TerminalOpenRequest& request, uint64_t nowUs) {
+TermOpenAck TerminalSessions::Open(const TerminalOpenRequest& request) {
     if (!sharing_) return Refuse(TermReason::NotShared);
-    if (!PasscodeAllows(request.message.passcode, nowUs))
-        return Refuse(TermReason::WrongPasscode);
 
     const TermSize size = ClampTermSize(request.message.size);
 
@@ -92,7 +57,6 @@ TermOpenAck TerminalSessions::Open(const TerminalOpenRequest& request, uint64_t 
     record.clientName = request.message.clientName;
     record.clientEndpoint = request.endpoint;
     record.clientFingerprint = request.fingerprint;
-    record.openedUs = nowUs;
     records_.push_back(std::move(record));
 
     TermOpenAck ack;
@@ -142,7 +106,6 @@ TermSessionList TerminalSessions::List() const {
         e.termId = r.termId;
         e.state = r.state;
         e.size = r.size;
-        e.openedUs = r.openedUs;
         e.clientName = r.clientName;
         out.sessions.push_back(std::move(e));
     }

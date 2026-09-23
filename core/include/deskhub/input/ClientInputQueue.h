@@ -40,8 +40,6 @@ public:
         return wantFocus_.load(std::memory_order_acquire);
     }
 
-    size_t pendingDelayed() const;
-
 private:
     void PushLocked(const InputEvent& e);
     static InputEvent KeyEvent(int32_t vk, int32_t scan, bool down, uint64_t nowUs);

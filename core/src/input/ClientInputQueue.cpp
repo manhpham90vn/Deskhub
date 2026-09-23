@@ -135,9 +135,4 @@ void ClientInputQueue::Drain(uint64_t nowUs, std::vector<InputEvent>& out) {
     out.swap(ready_);
 }
 
-size_t ClientInputQueue::pendingDelayed() const {
-    std::lock_guard<std::mutex> lk(mutex_);
-    return delayed_.size();
-}
-
 }

@@ -130,14 +130,6 @@ const Cell& Screen::ScrollbackAt(size_t row, uint16_t col) const {
     return scrollback_[row][col];
 }
 
-std::string Screen::ScrollbackText(size_t row) const {
-    std::string out;
-    if (row >= scrollback_.size()) return out;
-    for (const Cell& c : scrollback_[row]) out += EncodeUtf8(c.ch);
-    while (!out.empty() && out.back() == ' ') out.pop_back();
-    return out;
-}
-
 std::string Screen::TakeResponse() {
     std::string out;
     out.swap(response_);
@@ -213,7 +205,7 @@ void Screen::Print(char32_t cp) {
 
 void Screen::Execute(uint8_t control) {
     switch (control) {
-        case kBel: ++bells_; return;
+        case kBel: return;
         case kBs: Backspace(); return;
         case kHt: Tab(1); return;
         case kLf:
@@ -634,7 +626,6 @@ void Screen::Reset() {
     parser_.Reset();
     scrollback_.clear();
     response_.clear();
-    bells_ = 0;
     FullReset();
     ++revision_;
 }

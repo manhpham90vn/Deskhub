@@ -19,9 +19,6 @@ public:
     bool Failed() const {
         return failed_;
     }
-    size_t Buffered() const {
-        return buffer_.size() - consumed_;
-    }
 
 private:
     void Compact();

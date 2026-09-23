@@ -75,7 +75,7 @@ Deskhub 面向可信的 network 设计。
   默认值为机器的 hostname，通常即为使用者的真实姓名。建议使用昵称，不要在该字段中填入
   敏感信息。清空该字段不会阻止名称被发送，只会恢复默认值。
 - **viewer 名额在沉默 5 秒后自动释放。** 若你的 viewer 掉线，该名额将重新开放，下一个
-  到达的 `Hello` 即可占用，不论其来源，仅受 passcode 约束。
+  到达的 `Hello` 即可占用，只要发送方已通过 admission（pairing、passcode 或 approval）。
 - **共享会暴露整块 display。** 不是单个窗口，而是该显示器上的每一条通知、每一个弹窗与
   每一个窗口。见 [`PRIVACY.zh.md` §3.4](PRIVACY.zh.md)。
 - **手机或平板作为 host 时会暴露整台设备。** Android 与 iOS 同样可以作为 host，其推送

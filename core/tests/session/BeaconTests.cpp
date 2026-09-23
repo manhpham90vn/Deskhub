@@ -24,10 +24,9 @@ void TestBeaconSourcesAndProbe() {
     s.height = 2160;
     s.name = "DELL U2723QE";
     b.SetSources(std::span<const SourceInfo>(&s, 1));
-    b.SetPasscode(kTestPasscode);
 
     uint8_t req[kMaxDatagram];
-    size_t rn = BuildListSources(req, kTestPasscode);
+    size_t rn = BuildListSources(req);
     const auto rep = Ask(b, std::span<const uint8_t>(req, rn), true);
     const auto h = ParseCommonHeader(rep);
     Check(h && h->type == MsgType::SourceList, "LIST_SOURCES -> SOURCE_LIST");
@@ -56,8 +55,8 @@ void TestBeaconSourcesAndProbe() {
         "in-session PING is not the Beacon's business");
 }
 
-void TestBeaconHidesSourcesBehindThePasscode() {
-    std::printf("[disc] Beacon: a passcode hides what is shared but not that we are alive...\n");
+void TestBeaconHidesSourcesFromStrangers() {
+    std::printf("[disc] Beacon: a stranger learns we are alive, not what is shared...\n");
     Beacon b;
     SourceInfo s;
     s.sourceId = 0;
@@ -65,7 +64,6 @@ void TestBeaconHidesSourcesBehindThePasscode() {
     s.height = 1440;
     s.name = "DELL U2723QE";
     b.SetSources(std::span<const SourceInfo>(&s, 1));
-    b.SetPasscode("4726");
 
     uint8_t req[kMaxDatagram];
     SourceInfo got[kMaxSources];
@@ -74,23 +72,11 @@ void TestBeaconHidesSourcesBehindThePasscode() {
     auto rep = Ask(b, std::span<const uint8_t>(req, rn));
     auto h = ParseCommonHeader(rep);
     Check(h && h->type == MsgType::SourceList,
-        "a query without the passcode is still answered, so the host reads as online");
+        "a query over plain UDP is still answered, so the host reads as online");
     Check(ParseSourceList(PayloadOf(rep), got) == 0,
         "but it learns nothing about the displays");
-
-    rn = BuildListSources(req, "1111");
-    Check(ParseSourceList(PayloadOf(Ask(b, std::span<const uint8_t>(req, rn))), got) == 0,
-        "a wrong passcode learns nothing either");
-
-    rn = BuildListSources(req, "4726");
-    Check(ParseSourceList(PayloadOf(Ask(b, std::span<const uint8_t>(req, rn))), got) == 0,
-        "and so does the RIGHT passcode, offered by a stranger over plain UDP");
     Check(ParseSourceList(PayloadOf(Ask(b, std::span<const uint8_t>(req, rn), true)), got) == 1,
         "the list comes back only once the asker is inside an authenticated connection");
-
-    rn = BuildListSources(req);
-    Check(ParseSourceList(PayloadOf(Ask(b, std::span<const uint8_t>(req, rn), true)), got) == 1,
-        "at which point it no longer has to carry a passcode at all");
 }
 
 void TestBeaconTellsAuthenticatedAskersWhatTheHostCanDo() {
@@ -128,7 +114,6 @@ void TestBeaconIgnoresSessionTraffic() {
 
     Hello hello{};
     hello.clientId = 5;
-    hello.codecMask = kCodecMaskH264;
     size_t rn = BuildHello(req, hello);
     Check(Ask(b, std::span<const uint8_t>(req, rn)).empty(), "HELLO belongs to ScreenHostSession");
 
@@ -144,7 +129,7 @@ void TestBeaconIgnoresSessionTraffic() {
 
 void RunBeaconTests() {
     TestBeaconSourcesAndProbe();
-    TestBeaconHidesSourcesBehindThePasscode();
+    TestBeaconHidesSourcesFromStrangers();
     TestBeaconTellsAuthenticatedAskersWhatTheHostCanDo();
     TestBeaconIgnoresSessionTraffic();
 }

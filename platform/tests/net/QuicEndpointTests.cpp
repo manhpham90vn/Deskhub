@@ -66,7 +66,7 @@ void TestHandshakeStreamAndDatagram() {
 
     const std::string savedCert = deskhubp::ReadAppDataFile(deskhubp::kHostCertFileName);
     const std::string savedKey = deskhubp::ReadAppDataFile(deskhubp::kHostKeyFileName);
-    deskhubp::ForgetHostIdentity();
+    ForgetHostIdentity();
     const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity("deskhub-test");
     Check(identity.Valid(), "the host has an identity to present");
     if (!identity.Valid()) return;
@@ -81,7 +81,7 @@ void TestHandshakeStreamAndDatagram() {
         server.endpoint.Listen(serverSettings, "127.0.0.1", kTestPort, HooksFor(server));
     Check(listening, "the host binds its own UDP port");
     if (!listening) return;
-    Check(server.endpoint.IsServer() && server.endpoint.IsOpen(), "and is open as a server");
+    Check(server.endpoint.IsOpen(), "and is open as a server");
 
     const NetAddr target{0x7F000001u, kTestPort};
     deskhubp::QuicSettings clientSettings;
@@ -95,7 +95,6 @@ void TestHandshakeStreamAndDatagram() {
     Check(client.connected && server.connected, "the TLS handshake completes over real sockets");
     if (!client.connected || !server.connected) return;
 
-    Check(server.endpoint.ConnectionCount() == 1, "the host sees exactly one client");
     Check(client.endpoint.Established(client.conn), "the client agrees it is established");
 
     const auto fingerprint = client.endpoint.PeerFingerprint(client.conn);
@@ -104,7 +103,7 @@ void TestHandshakeStreamAndDatagram() {
         "and its fingerprint is the one the host published - this is what TOFU compares");
 
     const std::string payload = "terminal: echo hello";
-    Check(client.endpoint.SendStream(client.conn, deskhubp::kQuicFirstTerminalStream,
+    Check(client.endpoint.SendStream(client.conn, deskhubp::kQuicControlStream,
               std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(payload.data()),
                   payload.size())),
         "a stream write is accepted");
@@ -149,7 +148,7 @@ void TestARefusedStreamIsResetNotTruncated() {
 
     const std::string savedCert = deskhubp::ReadAppDataFile(deskhubp::kHostCertFileName);
     const std::string savedKey = deskhubp::ReadAppDataFile(deskhubp::kHostKeyFileName);
-    deskhubp::ForgetHostIdentity();
+    ForgetHostIdentity();
     const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity("deskhub-test");
     if (!identity.Valid()) return;
 
@@ -214,7 +213,7 @@ void TestAFloodedStreamIsDrainedInBoundedSlices() {
 
     const std::string savedCert = deskhubp::ReadAppDataFile(deskhubp::kHostCertFileName);
     const std::string savedKey = deskhubp::ReadAppDataFile(deskhubp::kHostKeyFileName);
-    deskhubp::ForgetHostIdentity();
+    ForgetHostIdentity();
     const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity("deskhub-test");
     if (!identity.Valid()) return;
 
@@ -241,10 +240,10 @@ void TestAFloodedStreamIsDrainedInBoundedSlices() {
     constexpr size_t kSliceBudget = 64u << 10;
     std::string flood(kFloodBytes, '\0');
     for (size_t i = 0; i < flood.size(); ++i) flood[i] = char('a' + i % 23);
-    Check(client.endpoint.SendStream(client.conn, deskhubp::kQuicFirstTerminalStream,
+    Check(client.endpoint.SendStream(client.conn, deskhubp::kQuicControlStream,
               std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(flood.data()),
                   flood.size())),
-        "half a megabyte is accepted for the terminal stream");
+        "half a megabyte is accepted for the control stream");
 
     size_t biggestSlice = 0;
     size_t passesWithData = 0;
@@ -275,8 +274,7 @@ void TestAFloodedStreamIsDrainedInBoundedSlices() {
 void TestUnstartedEndpointIsHarmless() {
     std::printf("[quic] an endpoint that never started refuses everything quietly...\n");
     deskhubp::QuicEndpoint idle;
-    Check(!idle.IsOpen() && idle.ConnectionCount() == 0, "it holds no connections");
-    Check(idle.FirstConnection() == 0 && idle.Connections().empty(), "and names none");
+    Check(!idle.IsOpen(), "it holds no connections");
     const uint8_t byte = 1;
     Check(!idle.SendStream(0, 0, std::span<const uint8_t>(&byte, 1)), "a stream write fails");
     Check(!idle.SendDatagram(0, std::span<const uint8_t>(&byte, 1)), "a datagram write fails");

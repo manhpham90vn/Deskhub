@@ -33,7 +33,7 @@ void TestAKeyProvesTheMachineItBelongsTo() {
     }
 
     const SavedIdentity guard;
-    deskhubp::ForgetHostIdentity();
+    ForgetHostIdentity();
     const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity("deskhub-test");
     Check(identity.Valid(), "the machine has an identity");
     if (!identity.Valid()) return;
@@ -62,7 +62,7 @@ void TestAKeyProvesTheMachineItBelongsTo() {
         "nor does a signature that was altered");
     Check(!deskhubp::VerifySignature({}, message, signature), "an empty key verifies nothing");
 
-    deskhubp::ForgetHostIdentity();
+    ForgetHostIdentity();
     const deskhubp::HostIdentity other = deskhubp::LoadOrCreateHostIdentity("deskhub-test");
     const std::vector<uint8_t> otherPub = deskhubp::IdentityPublicKey(other);
     Check(!deskhubp::VerifySignature(otherPub, message, signature),

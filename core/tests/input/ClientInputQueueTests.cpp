@@ -139,14 +139,12 @@ void TestKeyTapHoldsThenReleases() {
 
     auto batch = Drain(q, kT0);
     Check(batch.size() == 1 && IsKey(batch[0], 0x41, 30, true), "only the press is ready");
-    Check(q.pendingDelayed() == 1, "the release is still pending");
 
     batch = Drain(q, kT0 + kTapHoldUs - 1);
     Check(batch.empty(), "one microsecond early is still early");
 
     batch = Drain(q, kT0 + kTapHoldUs);
     Check(batch.size() == 1 && IsKey(batch[0], 0x41, 30, false), "then the release lands");
-    Check(q.pendingDelayed() == 0, "and nothing is pending after that");
 
     Check(Drain(q, kT0 + 10 * kTapHoldUs).empty(), "a matured event is not delivered twice");
 }
@@ -198,15 +196,12 @@ void TestDelayedEventsSurviveOutOfOrderDrains() {
     q.KeyTap(0x41, 30, kT0);
     q.KeyTap(0x42, 48, kT0 + 20'000);
     Drain(q, kT0);
-    Check(q.pendingDelayed() == 2, "two releases pending");
 
     auto batch = Drain(q, kT0 + kTapHoldUs);
     Check(batch.size() == 1 && IsKey(batch[0], 0x41, 30, false), "only the first has matured");
-    Check(q.pendingDelayed() == 1, "the later one is still waiting");
 
     batch = Drain(q, kT0 + 20'000 + kTapHoldUs);
     Check(batch.size() == 1 && IsKey(batch[0], 0x42, 48, false), "then the second");
-    Check(q.pendingDelayed() == 0, "nothing left");
 }
 
 void TestTapsAreNotTrackedAsHeld() {
@@ -218,7 +213,6 @@ void TestTapsAreNotTrackedAsHeld() {
 
     q.ReleaseAll(kT0 + 1);
     Check(Drain(q, kT0 + 1).empty(), "a tap is not a held key");
-    Check(q.pendingDelayed() == 3, "and its own release is still on the way");
 }
 
 void TestPauseIsSentWithoutAScancode() {

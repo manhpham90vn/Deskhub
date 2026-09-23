@@ -24,7 +24,6 @@ public:
     bool Write(std::span<const uint8_t> bytes);
     bool Resize(deskhub::TermSize size);
 
-    bool Exited() const;
     int ExitCode() const;
 
     void Close();

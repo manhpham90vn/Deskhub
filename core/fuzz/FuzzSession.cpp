@@ -23,15 +23,13 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
     ScreenHostCallbacks hostCb;
     hostCb.randomBytes = FillPattern;
     ScreenHostSession host(std::move(hostCb), StreamParams{1280, 720, 30, 8'000'000});
-    host.SetPasscode("0417");
 
     ScreenClientSession client(ScreenClientSessionCallbacks{});
-    client.Start(Hello{7, 1, 1920, 1080, 30, 0, 0, "0417"}, 1);
+    client.Start(Hello{7, 1920, 1080, 0, 0}, 1);
 
     Beacon beacon;
     const SourceInfo sources[2] = {{0, 1280, 720, "Display 1"}, {1, 1920, 1080, "Display 2"}};
     beacon.SetSources(sources);
-    beacon.SetPasscode("0417");
 
     uint8_t reply[kMaxDatagram];
     uint64_t now = 1'000'000;

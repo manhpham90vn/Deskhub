@@ -23,32 +23,18 @@ bool ScreenClientSession::HandlePacket(std::span<const uint8_t> pkt, uint64_t no
             const auto m = ParseHelloAck(payload);
             if (!m) return false;
             if (state_ != State::Hello) return true;
-            if (m->codec == Codec::Rejected) {
-                rejectReason_ = m->reason;
-                switch (m->reason) {
-                    case RejectReason::CodecMismatch:
-                        Die("host rejected (codec mismatch)", ScreenSessionEnd::Rejected);
-                        return false;
-                    case RejectReason::Busy:
-                        Die("the host already has as many viewers as it can take",
-                            ScreenSessionEnd::Rejected);
-                        return false;
-                    case RejectReason::WrongPasscode:
-                        Die("wrong passcode — check the 4-digit code on the host",
-                            ScreenSessionEnd::Rejected);
-                        return false;
-                    default:
-                        Die("host rejected (busy or codec mismatch)", ScreenSessionEnd::Rejected);
-                        return false;
-                }
+            if (m->rejected) {
+                Die(m->reason == RejectReason::Busy
+                        ? "the host already has as many viewers as it can take"
+                        : "host rejected",
+                    ScreenSessionEnd::Rejected);
+                return false;
             }
-            rejectReason_ = RejectReason::None;
             sessionId_ = m->sessionId;
             params_.width = m->width;
             params_.height = m->height;
             params_.fps = m->fps;
             params_.bitrateBps = m->bitrateBps;
-            params_.timebaseUs = m->timebaseUs;
             state_ = State::Starting;
             lastRecvUs_ = nowUs;
             lastSentUs_ = nowUs;

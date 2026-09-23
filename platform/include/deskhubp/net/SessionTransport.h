@@ -21,11 +21,6 @@
 
 namespace deskhubp {
 
-enum class VideoPath : uint8_t {
-    RawUdp = 0,
-    QuicDatagram = 1,
-};
-
 enum class Lane : uint8_t {
     Realtime = 0,
     Interactive = 1,
@@ -81,9 +76,6 @@ public:
     void SetBulkReady(std::function<bool()> fn);
     size_t BulkQueued() const;
 
-    void SetVideoPath(VideoPath path);
-    VideoPath videoPath() const;
-
     void SetOnPeerGone(std::function<void(const NetAddr&)> fn);
     void SetOnStreamBroken(std::function<void(const NetAddr&, uint64_t streamId)> fn);
 
@@ -126,7 +118,6 @@ private:
     bool clientAuthOn_ = false;
     std::function<void(const NetAddr&)> onPeerGone_;
     std::function<void(const NetAddr&, uint64_t streamId)> onStreamBroken_;
-    VideoPath videoPath_ = VideoPath::QuicDatagram;
     std::function<bool()> bulkReady_;
     unsigned sinceBulkPop_ = 0;
     uint32_t recvWaitMs_ = 10;

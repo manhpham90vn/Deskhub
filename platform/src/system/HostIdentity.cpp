@@ -162,15 +162,6 @@ std::optional<deskhub::Fingerprint> FingerprintOfCertDer(std::span<const uint8_t
     return FingerprintOfCert(cert.get());
 }
 
-std::optional<deskhub::Fingerprint> FingerprintOfCertPem(std::string_view pem) {
-    if (pem.empty()) return std::nullopt;
-    BioPtr bio(BIO_new_mem_buf(pem.data(), int(pem.size())));
-    if (!bio) return std::nullopt;
-    X509Ptr cert(PEM_read_bio_X509(bio.get(), nullptr, nullptr, nullptr));
-    if (!cert) return std::nullopt;
-    return FingerprintOfCert(cert.get());
-}
-
 HostIdentity LoadHostIdentity() {
     return IdentityFromPem(ReadAppDataFile(kHostCertFileName), ReadAppDataFile(kHostKeyFileName));
 }
@@ -210,12 +201,6 @@ HostIdentity LoadOrCreateHostIdentity(std::string_view commonName) {
     if (created.Valid())
         LOGI("host identity: created %s", deskhub::FormatFingerprint(created.fingerprint).c_str());
     return created;
-}
-
-bool ForgetHostIdentity() {
-    RemoveAppDataFile(kHostCertFileName);
-    RemoveAppDataFile(kHostKeyFileName);
-    return ReadAppDataFile(kHostCertFileName).empty();
 }
 
 }

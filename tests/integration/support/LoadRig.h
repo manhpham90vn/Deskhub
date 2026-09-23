@@ -2,6 +2,7 @@
 #include "support/FakeDecoder.h"
 #include "support/TestSupport.h"
 
+#include "deskhubp/client/FileTransferClient.h"
 #include "deskhubp/client/ScreenViewer.h"
 #include "deskhubp/system/Clock.h"
 
@@ -46,6 +47,36 @@ inline std::vector<uint8_t> ReadBytes(const std::filesystem::path& path) {
         std::istreambuf_iterator<char>());
 }
 
+struct Upload {
+    deskhubp::FileTransferClient client{};
+
+    ~Upload() {
+        client.Stop();
+    }
+
+    bool Start(uint16_t port, const std::filesystem::path& file) {
+        deskhubp::FileTransferClientConfig config;
+        config.host = NetAddr{0x7F000001u, port};
+        config.hostLabel = config.host.ToString();
+        config.passcode = kTestPasscode;
+        config.clientName = "load-test-sender";
+        config.files = {file};
+        return client.Start(config, deskhubp::FileTransferClientCallbacks{});
+    }
+
+    bool busy() const {
+        return !client.Finished();
+    }
+
+    bool done() const {
+        return client.State() == deskhubp::FileTransferClientState::Done;
+    }
+
+    uint64_t batchBytes() const {
+        return client.Progress().batchBytes;
+    }
+};
+
 inline uint64_t DecodedFrames() {
     return uint64_t(fake::Decoded().frameCount());
 }
@@ -56,7 +87,6 @@ inline deskhubp::ScreenViewerConfig ViewerConfig(uint16_t port, bool wantsAudio)
     cfg.sourceId = 0;
     cfg.screenW = 1920;
     cfg.screenH = 1080;
-    cfg.desiredFps = 30;
     cfg.alwaysFocused = true;
     cfg.passcode = kTestPasscode;
     cfg.wantsAudio = wantsAudio;

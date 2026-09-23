@@ -260,18 +260,6 @@ void AddColumn(GtkWidget* view, const char* title, int textColumn, int colourCol
     gtk_tree_view_append_column(GTK_TREE_VIEW(view), column);
 }
 
-void AddPlainColumn(GtkWidget* view, const char* title, int textColumn, int width, float align) {
-    GtkCellRenderer* renderer = gtk_cell_renderer_text_new();
-    g_object_set(renderer, "xalign", align, nullptr);
-    GtkTreeViewColumn* column = gtk_tree_view_column_new_with_attributes(title, renderer, "text",
-        textColumn, nullptr);
-    gtk_tree_view_column_set_sizing(column, GTK_TREE_VIEW_COLUMN_FIXED);
-    gtk_tree_view_column_set_fixed_width(column, width);
-    gtk_tree_view_column_set_resizable(column, TRUE);
-    gtk_tree_view_column_set_alignment(column, align);
-    gtk_tree_view_append_column(GTK_TREE_VIEW(view), column);
-}
-
 GtkWidget* HostCell(const char* cssClass, int width, float align) {
     GtkWidget* label = StyledLabel(std::string(), cssClass);
     gtk_label_set_xalign(GTK_LABEL(label), align);
@@ -653,16 +641,31 @@ GtkWidget* MainWindow::BuildHostPage() {
 
     hostPasscodeCard_ = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
     AddClass(hostPasscodeCard_, "deskhub-passcode-card");
+    GtkWidget* passcodeSection = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
     GtkWidget* passcodeText = gtk_box_new(GTK_ORIENTATION_VERTICAL, 2);
     gtk_box_pack_start(GTK_BOX(passcodeText), Hint(ui::kPasscodeShareHeading), FALSE, FALSE, 0);
     hostPasscodeLabel_ = StyledLabel(std::string(), "deskhub-passcode-code");
     gtk_label_set_selectable(GTK_LABEL(hostPasscodeLabel_), TRUE);
     gtk_box_pack_start(GTK_BOX(passcodeText), hostPasscodeLabel_, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(hostPasscodeCard_), passcodeText, TRUE, TRUE, 0);
+    gtk_box_pack_start(GTK_BOX(passcodeSection), passcodeText, TRUE, TRUE, 0);
     hostPasscodeCopy_ = gtk_button_new_with_label(ui::kCopyPasscodeAction);
     gtk_widget_set_valign(hostPasscodeCopy_, GTK_ALIGN_CENTER);
     g_signal_connect(hostPasscodeCopy_, "clicked", G_CALLBACK(OnCopyPasscodeClicked), this);
-    gtk_box_pack_start(GTK_BOX(hostPasscodeCard_), hostPasscodeCopy_, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(passcodeSection), hostPasscodeCopy_, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(hostPasscodeCard_), passcodeSection, TRUE, TRUE, 0);
+
+    GtkWidget* portSection = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
+    GtkWidget* portText = gtk_box_new(GTK_ORIENTATION_VERTICAL, 2);
+    gtk_box_pack_start(GTK_BOX(portText), Hint(ui::kUdpPortLabel), FALSE, FALSE, 0);
+    hostPortLabel_ = StyledLabel(std::string(), "deskhub-passcode-code");
+    gtk_label_set_selectable(GTK_LABEL(hostPortLabel_), TRUE);
+    gtk_box_pack_start(GTK_BOX(portText), hostPortLabel_, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(portSection), portText, TRUE, TRUE, 0);
+    hostPortCopy_ = gtk_button_new_with_label(ui::kCopyButton);
+    gtk_widget_set_valign(hostPortCopy_, GTK_ALIGN_CENTER);
+    g_signal_connect(hostPortCopy_, "clicked", G_CALLBACK(OnCopyPortClicked), this);
+    gtk_box_pack_start(GTK_BOX(portSection), hostPortCopy_, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(hostPasscodeCard_), portSection, TRUE, TRUE, 0);
     gtk_box_pack_start(GTK_BOX(box), hostPasscodeCard_, FALSE, FALSE, 0);
 
     GtkWidget* pickerBox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 6);
@@ -956,27 +959,18 @@ GtkWidget* MainWindow::BuildDevicesPage() {
     gtk_box_pack_start(GTK_BOX(box), Heading(ui::kPairedHeading), FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(box), Hint(ui::kPairedHint), FALSE, FALSE, 0);
 
-    pairedStore_ = gtk_list_store_new(4, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING,
-        G_TYPE_STRING);
-    pairedView_ = gtk_tree_view_new_with_model(GTK_TREE_MODEL(pairedStore_));
-    g_object_unref(pairedStore_);
-    AddPlainColumn(pairedView_, ui::kPairedColumnName, 0, 200, 0.f);
-    AddPlainColumn(pairedView_, ui::kPairedColumnKey, 1, 130, 0.f);
-    AddPlainColumn(pairedView_, ui::kPairedColumnPaired, 2, 150, 0.f);
-    AddPlainColumn(pairedView_, ui::kPairedColumnLastSeen, 3, 150, 0.f);
+    pairedView_ = gtk_grid_new();
+    gtk_grid_set_column_spacing(GTK_GRID(pairedView_), 8);
+    gtk_grid_set_row_spacing(GTK_GRID(pairedView_), 4);
     gtk_box_pack_start(GTK_BOX(box), ListFrame(pairedView_, kListH), TRUE, TRUE, 0);
 
     pairedHintLabel_ = Hint(ui::kPairedEmpty);
     gtk_box_pack_start(GTK_BOX(box), pairedHintLabel_, FALSE, FALSE, 0);
 
-    GtkWidget* buttons = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
-    forgetDeviceButton_ = gtk_button_new_with_label(ui::kPairedForget);
-    g_signal_connect(forgetDeviceButton_, "clicked", G_CALLBACK(OnForgetDeviceClicked), this);
-    gtk_box_pack_start(GTK_BOX(buttons), forgetDeviceButton_, FALSE, FALSE, 0);
     GtkWidget* forgetAll = gtk_button_new_with_label(ui::kPairedForgetAll);
+    gtk_widget_set_size_request(forgetAll, -1, kPrimaryButtonH);
     g_signal_connect(forgetAll, "clicked", G_CALLBACK(OnForgetAllClicked), this);
-    gtk_box_pack_start(GTK_BOX(buttons), forgetAll, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(box), buttons, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(box), forgetAll, FALSE, FALSE, 0);
 
     gtk_box_pack_start(GTK_BOX(box), Hint(ui::kPairedForgetNote), FALSE, FALSE, 0);
 
@@ -1003,34 +997,44 @@ GtkWidget* MainWindow::BuildDevicesPage() {
 }
 
 void MainWindow::RefreshPairedDevices() {
-    if (pairedStore_ == nullptr) return;
+    if (pairedView_ == nullptr) return;
     pairedDevices_ = deskhubp::LoadPairedDevices().Devices();
 
-    gtk_list_store_clear(pairedStore_);
-    for (const deskhub::PairedDevice& device : pairedDevices_) {
-        GtkTreeIter it;
-        gtk_list_store_append(pairedStore_, &it);
-        gtk_list_store_set(pairedStore_, &it, 0,
-            device.name.empty() ? "(unnamed)" : device.name.c_str(), 1,
-            deskhub::ShortFingerprint(device.fingerprint).c_str(), 2,
-            FormatUnixMinute(device.pairedUnix).c_str(), 3,
-            FormatUnixMinute(device.lastSeenUnix).c_str(), -1);
+    GList* children = gtk_container_get_children(GTK_CONTAINER(pairedView_));
+    for (GList* child = children; child != nullptr; child = child->next)
+        gtk_widget_destroy(GTK_WIDGET(child->data));
+    g_list_free(children);
+    const auto addCell = [this](const std::string& value, int width, int column, int row,
+                             const char* cssClass) {
+        GtkWidget* label = StyledLabel(value, cssClass);
+        gtk_widget_set_size_request(label, width, -1);
+        gtk_grid_attach(GTK_GRID(pairedView_), label, column, row, 1, 1);
+    };
+    addCell(ui::kPairedColumnName, 200, 0, 0, "deskhub-row-header");
+    addCell(ui::kPairedColumnKey, 130, 1, 0, "deskhub-row-header");
+    addCell(ui::kPairedColumnPaired, 150, 2, 0, "deskhub-row-header");
+    addCell(ui::kPairedColumnLastSeen, 150, 3, 0, "deskhub-row-header");
+    for (size_t i = 0; i < pairedDevices_.size(); ++i) {
+        const deskhub::PairedDevice& device = pairedDevices_[i];
+        const int row = int(i) + 1;
+        addCell(device.name.empty() ? "(unnamed)" : device.name, 200, 0, row,
+            "deskhub-row-cell");
+        addCell(deskhub::ShortFingerprint(device.fingerprint), 130, 1, row,
+            "deskhub-row-cell");
+        addCell(FormatUnixMinute(device.pairedUnix), 150, 2, row, "deskhub-row-cell");
+        addCell(FormatUnixMinute(device.lastSeenUnix), 150, 3, row, "deskhub-row-cell");
+        GtkWidget* forget = gtk_button_new_with_label(ui::kPairedForget);
+        AddClass(forget, "deskhub-row-action");
+        AddClass(forget, "deskhub-row-action-stop");
+        gtk_widget_set_size_request(forget, kHostActionWidth, kHostActionHeight);
+        gtk_widget_set_valign(forget, GTK_ALIGN_CENTER);
+        g_object_set_data(G_OBJECT(forget), "deskhub-paired-row",
+            GINT_TO_POINTER(gint(i) + 1));
+        g_signal_connect(forget, "clicked", G_CALLBACK(OnForgetDeviceClicked), this);
+        gtk_grid_attach(GTK_GRID(pairedView_), forget, 4, row, 1, 1);
     }
+    gtk_widget_show_all(pairedView_);
     gtk_widget_set_visible(pairedHintLabel_, pairedDevices_.empty());
-    gtk_widget_set_sensitive(forgetDeviceButton_, !pairedDevices_.empty());
-}
-
-void MainWindow::ForgetSelectedDevice() {
-    GtkTreeSelection* selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(pairedView_));
-    GtkTreeModel* model = nullptr;
-    GtkTreeIter it;
-    if (!gtk_tree_selection_get_selected(selection, &model, &it)) return;
-    GtkTreePath* path = gtk_tree_model_get_path(model, &it);
-    const gint* idx = gtk_tree_path_get_indices(path);
-    const bool valid = idx && idx[0] >= 0 && size_t(idx[0]) < pairedDevices_.size();
-    if (valid) deskhubp::ForgetPairedDevice(pairedDevices_[size_t(idx[0])].fingerprint);
-    gtk_tree_path_free(path);
-    if (valid) RefreshPairedDevices();
 }
 
 void MainWindow::ForgetEveryDevice() {
@@ -1047,8 +1051,13 @@ void MainWindow::ForgetEveryDevice() {
     RefreshPairedDevices();
 }
 
-void MainWindow::OnForgetDeviceClicked(GtkButton*, gpointer user) {
-    static_cast<MainWindow*>(user)->ForgetSelectedDevice();
+void MainWindow::OnForgetDeviceClicked(GtkButton* button, gpointer user) {
+    auto* self = static_cast<MainWindow*>(user);
+    const int row = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(button), "deskhub-paired-row")) - 1;
+    if (row < 0 || size_t(row) >= self->pairedDevices_.size()) return;
+    const deskhub::Fingerprint fingerprint = self->pairedDevices_[size_t(row)].fingerprint;
+    deskhubp::ForgetPairedDevice(fingerprint);
+    self->RefreshPairedDevices();
 }
 
 void MainWindow::OnForgetAllClicked(GtkButton*, gpointer user) {
@@ -1277,6 +1286,9 @@ void MainWindow::ShowPasscodeCard() {
     const std::string& code = ShownPasscode();
     gtk_label_set_text(GTK_LABEL(hostPasscodeLabel_), ui::PasscodeDisplay(code).c_str());
     gtk_button_set_label(GTK_BUTTON(hostPasscodeCopy_), ui::kCopyPasscodeAction);
+    gtk_label_set_text(GTK_LABEL(hostPortLabel_),
+        std::to_string(hosting_ ? sharePort_ : Port()).c_str());
+    gtk_button_set_label(GTK_BUTTON(hostPortCopy_), ui::kCopyButton);
     gtk_widget_set_no_show_all(hostPasscodeCopy_, code.empty());
     gtk_widget_set_visible(hostPasscodeCopy_, !code.empty());
 }
@@ -1294,6 +1306,15 @@ void MainWindow::OnCopyPasscodeClicked(GtkButton* b, gpointer user) {
     if (code.empty()) return;
     gtk_clipboard_set_text(gtk_clipboard_get(GDK_SELECTION_CLIPBOARD), code.c_str(), -1);
     gtk_button_set_label(b, ui::kPasscodeCopied);
+    if (self->copiedRevertId_) g_source_remove(self->copiedRevertId_);
+    self->copiedRevertId_ = g_timeout_add(kCopiedRevertMs, OnCopiedRevertTimer, self);
+}
+
+void MainWindow::OnCopyPortClicked(GtkButton* b, gpointer user) {
+    MainWindow* self = static_cast<MainWindow*>(user);
+    const char* port = gtk_label_get_text(GTK_LABEL(self->hostPortLabel_));
+    gtk_clipboard_set_text(gtk_clipboard_get(GDK_SELECTION_CLIPBOARD), port, -1);
+    gtk_button_set_label(b, ui::kCopiedButton);
     if (self->copiedRevertId_) g_source_remove(self->copiedRevertId_);
     self->copiedRevertId_ = g_timeout_add(kCopiedRevertMs, OnCopiedRevertTimer, self);
 }

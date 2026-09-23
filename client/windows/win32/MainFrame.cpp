@@ -306,7 +306,6 @@ private:
     wxWindow* BuildSettingsPage(wxWindow* parent);
     void RefreshPairedDevices();
     bool AskPairing(const PairingRequest& request);
-    void ForgetSelectedDevice();
     void ForgetEveryDevice();
     static wxTextCtrl* MakePasscodeCtrl(wxWindow* parent);
 
@@ -354,6 +353,7 @@ private:
     void ShowPasscodeCard();
     const std::string& ShownPasscode() const;
     void CopySharePasscode();
+    void CopySharePort();
 
     void StartConnect(const std::string& addr);
     void OpenShell(const NetAddr& server, const std::string& passcode);
@@ -397,10 +397,10 @@ private:
     wxWindow* addressForm_ = nullptr;
     wxWindow* devicesPanel_ = nullptr;
     std::vector<ConnectionFrame*> connections_;
-    wxListCtrl* pairedList_ = nullptr;
+    wxScrolledWindow* pairedList_ = nullptr;
+    wxBoxSizer* pairedRows_ = nullptr;
     wxStaticText* pairedHint_ = nullptr;
     wxCheckBox* allowPairingCtrl_ = nullptr;
-    wxButton* forgetDeviceBtn_ = nullptr;
     std::vector<deskhub::PairedDevice> pairedDevices_;
     wxPanel* hostAddrPanel_ = nullptr;
     wxPanel* hostBanner_ = nullptr;
@@ -408,8 +408,11 @@ private:
     wxStaticText* hostStateLabel_ = nullptr;
     wxStaticText* hostStatusLabel_ = nullptr;
     wxPanel* hostPasscodePanel_ = nullptr;
+    wxPanel* hostPortPanel_ = nullptr;
     wxStaticText* hostPasscodeLabel_ = nullptr;
+    wxStaticText* hostPortLabel_ = nullptr;
     wxButton* hostPasscodeCopyBtn_ = nullptr;
+    wxButton* hostPortCopyBtn_ = nullptr;
     wxStaticText* hostHint_ = nullptr;
     wxListCtrl* hostPicker_ = nullptr;
     wxWindow* hostTableHolder_ = nullptr;
@@ -687,6 +690,7 @@ wxWindow* MainFrame::BuildHostPage(wxWindow* parent) {
     hostBanner_->SetSizer(bannerRow);
     sizer->Add(hostBanner_, wxSizerFlags().Expand().Border(wxLEFT | wxRIGHT | wxTOP, FromDIP(16)));
 
+    auto* shareDetails = new wxBoxSizer(wxHORIZONTAL);
     hostPasscodePanel_ = new wxPanel(panel);
     hostPasscodePanel_->SetBackgroundColour(kPasscodeCardBg);
     auto* passcodeRow = new wxBoxSizer(wxHORIZONTAL);
@@ -709,7 +713,27 @@ wxWindow* MainFrame::BuildHostPage(wxWindow* parent) {
         wxSizerFlags().CentreVertical().Border(wxRIGHT, FromDIP(10)));
 
     hostPasscodePanel_->SetSizer(passcodeRow);
-    sizer->Add(hostPasscodePanel_,
+    shareDetails->Add(hostPasscodePanel_, wxSizerFlags(1).Expand());
+
+    hostPortPanel_ = new wxPanel(panel);
+    hostPortPanel_->SetBackgroundColour(kPasscodeCardBg);
+    auto* portRow = new wxBoxSizer(wxHORIZONTAL);
+    auto* portText = new wxBoxSizer(wxVERTICAL);
+    auto* portHeading = new wxStaticText(hostPortPanel_, wxID_ANY, ToWx(ui::kUdpPortLabel));
+    portHeading->SetForegroundColour(kMutedText);
+    portText->Add(portHeading);
+    hostPortLabel_ = new wxStaticText(hostPortPanel_, wxID_ANY, wxString());
+    hostPortLabel_->SetFont(passcodeFont);
+    portText->Add(hostPortLabel_, wxSizerFlags().Border(wxTOP, FromDIP(2)));
+    portRow->Add(portText, wxSizerFlags(1).Expand().Border(wxALL, FromDIP(10)));
+    hostPortCopyBtn_ = new wxButton(hostPortPanel_, wxID_ANY, ToWx(ui::kCopyButton));
+    hostPortCopyBtn_->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { CopySharePort(); });
+    portRow->Add(hostPortCopyBtn_,
+        wxSizerFlags().CentreVertical().Border(wxRIGHT, FromDIP(10)));
+    hostPortPanel_->SetSizer(portRow);
+    shareDetails->Add(hostPortPanel_,
+        wxSizerFlags(1).Expand().Border(wxLEFT, FromDIP(10)));
+    sizer->Add(shareDetails,
         wxSizerFlags().Expand().Border(wxLEFT | wxRIGHT | wxTOP, FromDIP(16)));
 
     hostPicker_ = new wxListCtrl(panel, wxID_ANY, wxDefaultPosition, wxDefaultSize,
@@ -920,13 +944,11 @@ wxWindow* MainFrame::BuildDevicesPage(wxWindow* parent) {
     sizer->Add(MakeHeading(panel, ui::kPairedHeading), pad);
     sizer->Add(MakeHint(panel, ToWx(ui::kPairedHint)), pad);
 
-    pairedList_ = new wxListCtrl(panel, wxID_ANY, wxDefaultPosition, wxDefaultSize,
-        wxLC_REPORT | wxLC_SINGLE_SEL);
-    pairedList_->InsertColumn(0, ToWx(ui::kPairedColumnName), wxLIST_FORMAT_LEFT, FromDIP(200));
-    pairedList_->InsertColumn(1, ToWx(ui::kPairedColumnKey), wxLIST_FORMAT_LEFT, FromDIP(130));
-    pairedList_->InsertColumn(2, ToWx(ui::kPairedColumnPaired), wxLIST_FORMAT_LEFT, FromDIP(150));
-    pairedList_->InsertColumn(3, ToWx(ui::kPairedColumnLastSeen), wxLIST_FORMAT_LEFT,
-        FromDIP(150));
+    pairedList_ = new wxScrolledWindow(panel, wxID_ANY, wxDefaultPosition, wxDefaultSize,
+        wxVSCROLL | wxHSCROLL | wxBORDER_SIMPLE);
+    pairedList_->SetScrollRate(FromDIP(10), FromDIP(10));
+    pairedRows_ = new wxBoxSizer(wxVERTICAL);
+    pairedList_->SetSizer(pairedRows_);
     pairedList_->SetMinSize(FromDIP(wxSize(-1, kListMinH)));
     sizer->Add(pairedList_, wxSizerFlags(1).Expand().Border(wxLEFT | wxRIGHT | wxTOP,
                                 FromDIP(16)));
@@ -934,17 +956,12 @@ wxWindow* MainFrame::BuildDevicesPage(wxWindow* parent) {
     pairedHint_ = MakeHint(panel, ToWx(ui::kPairedEmpty));
     sizer->Add(pairedHint_, pad);
 
-    auto* buttons = new wxBoxSizer(wxHORIZONTAL);
-    forgetDeviceBtn_ = new wxButton(panel, wxID_ANY, ToWx(ui::kPairedForget));
-    forgetDeviceBtn_->SetName("forget-device");
-    forgetDeviceBtn_->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { ForgetSelectedDevice(); });
-    buttons->Add(forgetDeviceBtn_);
     auto* forgetAll = new wxButton(panel, wxID_ANY, ToWx(ui::kPairedForgetAll));
     forgetAll->SetName("forget-all-devices");
+    forgetAll->SetMinSize(FromDIP(wxSize(-1, kPrimaryButtonH)));
     forgetAll->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { ForgetEveryDevice(); });
-    buttons->AddSpacer(FromDIP(8));
-    buttons->Add(forgetAll);
-    sizer->Add(buttons, pad);
+    sizer->Add(forgetAll,
+        wxSizerFlags().Expand().Border(wxLEFT | wxRIGHT | wxTOP, FromDIP(16)));
 
     sizer->Add(MakeHint(panel, ToWx(ui::kPairedForgetNote)), pad);
 
@@ -982,18 +999,62 @@ void MainFrame::RefreshPairedDevices() {
     if (pairedList_ == nullptr) return;
     pairedDevices_ = deskhubp::LoadPairedDevices().Devices();
 
-    pairedList_->DeleteAllItems();
-    for (size_t i = 0; i < pairedDevices_.size(); ++i) {
-        const deskhub::PairedDevice& device = pairedDevices_[i];
-        const long row = pairedList_->InsertItem(long(i),
-            ToWx(device.name.empty() ? std::string("(unnamed)") : device.name));
-        pairedList_->SetItem(row, 1, ToWx(deskhub::ShortFingerprint(device.fingerprint)));
-        pairedList_->SetItem(row, 2, ToWx(FormatUnixMinute(device.pairedUnix)));
-        pairedList_->SetItem(row, 3, ToWx(FormatUnixMinute(device.lastSeenUnix)));
+    pairedRows_->Clear(true);
+    const wxSize actionSize = FromDIP(wxSize(120, 32));
+    const auto addCell = [this](wxWindow* parent, wxBoxSizer* row, const wxString& value,
+                             int width, bool heading) {
+        auto* label = new wxStaticText(parent, wxID_ANY, value, wxDefaultPosition,
+            FromDIP(wxSize(width, -1)), wxST_ELLIPSIZE_END | wxST_NO_AUTORESIZE);
+        if (heading) {
+            label->SetForegroundColour(kMutedText);
+            label->SetFont(label->GetFont().Bold().Scaled(0.85f));
+        }
+        row->Add(label, wxSizerFlags().CentreVertical().Border(wxRIGHT, FromDIP(8)));
+    };
+    auto* headerPanel = new wxPanel(pairedList_);
+    headerPanel->SetBackgroundColour(kBannerIdleBg);
+    auto* header = new wxBoxSizer(wxHORIZONTAL);
+    addCell(headerPanel, header, ToWx(ui::kPairedColumnName), 200, true);
+    addCell(headerPanel, header, ToWx(ui::kPairedColumnKey), 130, true);
+    addCell(headerPanel, header, ToWx(ui::kPairedColumnPaired), 150, true);
+    addCell(headerPanel, header, ToWx(ui::kPairedColumnLastSeen), 150, true);
+    header->AddSpacer(actionSize.x);
+    auto* headerSizer = new wxBoxSizer(wxVERTICAL);
+    headerSizer->Add(header, wxSizerFlags(1).Expand().Border(wxALL, FromDIP(8)));
+    headerPanel->SetSizer(headerSizer);
+    headerPanel->SetMinSize(headerSizer->GetMinSize());
+    pairedRows_->Add(headerPanel, wxSizerFlags().Expand());
+    for (const deskhub::PairedDevice& device : pairedDevices_) {
+        auto* rowPanel = new wxPanel(pairedList_);
+        rowPanel->SetBackgroundColour(*wxWHITE);
+        auto* row = new wxBoxSizer(wxHORIZONTAL);
+        addCell(rowPanel, row,
+            ToWx(device.name.empty() ? std::string("(unnamed)") : device.name), 200, false);
+        addCell(rowPanel, row, ToWx(deskhub::ShortFingerprint(device.fingerprint)), 130, false);
+        addCell(rowPanel, row, ToWx(FormatUnixMinute(device.pairedUnix)), 150, false);
+        addCell(rowPanel, row, ToWx(FormatUnixMinute(device.lastSeenUnix)), 150, false);
+        auto* forget = new wxButton(rowPanel, wxID_ANY, ToWx(ui::kPairedForget));
+        forget->SetName("forget-device");
+        forget->SetMinSize(actionSize);
+        PaintButton(forget, kOffline);
+        const deskhub::Fingerprint fingerprint = device.fingerprint;
+        forget->Bind(wxEVT_BUTTON, [this, fingerprint](wxCommandEvent&) {
+            deskhubp::ForgetPairedDevice(fingerprint);
+            RefreshPairedDevices();
+        });
+        row->Add(forget, wxSizerFlags().CentreVertical());
+        auto* rowSizer = new wxBoxSizer(wxVERTICAL);
+        rowSizer->Add(row, wxSizerFlags(1).Expand().Border(wxALL, FromDIP(8)));
+        rowPanel->SetSizer(rowSizer);
+        rowPanel->SetMinSize(rowSizer->GetMinSize());
+        pairedRows_->Add(rowPanel, wxSizerFlags().Expand());
     }
-    SetHintLabel(pairedHint_, ToWx(ui::kPairedEmpty));
+    pairedList_->FitInside();
+    pairedList_->Layout();
     pairedHint_->Show(pairedDevices_.empty());
-    forgetDeviceBtn_->Enable(!pairedDevices_.empty());
+    auto* page = static_cast<wxScrolledWindow*>(pairedList_->GetParent());
+    page->Layout();
+    page->FitInside();
 }
 
 bool MainFrame::AskPairing(const PairingRequest& request) {
@@ -1005,13 +1066,6 @@ bool MainFrame::AskPairing(const PairingRequest& request) {
     const bool allowed = dialog.ShowModal() == wxID_YES;
     if (allowed) RefreshPairedDevices();
     return allowed;
-}
-
-void MainFrame::ForgetSelectedDevice() {
-    const long row = pairedList_->GetNextItem(-1, wxLIST_NEXT_ALL, wxLIST_STATE_SELECTED);
-    if (row < 0 || size_t(row) >= pairedDevices_.size()) return;
-    deskhubp::ForgetPairedDevice(pairedDevices_[size_t(row)].fingerprint);
-    RefreshPairedDevices();
 }
 
 void MainFrame::ForgetEveryDevice() {
@@ -1468,6 +1522,7 @@ void MainFrame::ApplyHostState(HostShareState state, const wxString& detail) {
     hostBanner_->Show(state != HostShareState::kIdle);
     ShowPasscodeCard();
     hostPasscodePanel_->Show(live);
+    hostPortPanel_->Show(live);
     hostBannerBar_->SetBackgroundColour(style.tint);
     hostBanner_->SetBackgroundColour(style.background);
     hostBanner_->Layout();
@@ -1496,13 +1551,22 @@ void MainFrame::ShowPasscodeCard() {
     hostPasscodeLabel_->SetLabel(ToWx(ui::PasscodeDisplay(ShownPasscode())));
     hostPasscodeCopyBtn_->SetLabel(ToWx(ui::kCopyPasscodeAction));
     hostPasscodeCopyBtn_->Show(!ShownPasscode().empty());
+    hostPortLabel_->SetLabel(ToWx(std::to_string(hosting_ ? sharePort_ : settings_.port)));
+    hostPortCopyBtn_->SetLabel(ToWx(ui::kCopyButton));
     hostPasscodePanel_->Layout();
+    hostPortPanel_->Layout();
 }
 
 void MainFrame::CopySharePasscode() {
     if (ShownPasscode().empty()) return;
     CopyTextToClipboard(HWND(GetHandle()), ToWx(ShownPasscode()));
     hostPasscodeCopyBtn_->SetLabel(ToWx(ui::kPasscodeCopied));
+    copiedTimer_.StartOnce(kCopiedRevertMs);
+}
+
+void MainFrame::CopySharePort() {
+    CopyTextToClipboard(HWND(GetHandle()), hostPortLabel_->GetLabel());
+    hostPortCopyBtn_->SetLabel(ToWx(ui::kCopiedButton));
     copiedTimer_.StartOnce(kCopiedRevertMs);
 }
 

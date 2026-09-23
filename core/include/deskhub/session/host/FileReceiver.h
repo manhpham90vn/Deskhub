@@ -58,16 +58,10 @@ public:
     TransferReason Reason() const {
         return reason_;
     }
-    uint32_t BatchId() const {
-        return batchId_;
-    }
     bool Busy() const {
         return state_ == FileReceiverState::Receiving;
     }
     TransferProgress Progress() const;
-    const std::vector<std::string>& Stored() const {
-        return stored_;
-    }
 
 private:
     void OnOffer(std::span<const uint8_t> payload);

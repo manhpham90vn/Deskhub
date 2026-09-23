@@ -38,7 +38,6 @@ deskhubp::ScreenViewerConfig ViewerConfig(uint16_t port, uint8_t sourceId) {
     cfg.sourceId = sourceId;
     cfg.screenW = 1920;
     cfg.screenH = 1080;
-    cfg.desiredFps = 30;
     cfg.alwaysFocused = true;
     cfg.passcode = kTestPasscode;
     return cfg;

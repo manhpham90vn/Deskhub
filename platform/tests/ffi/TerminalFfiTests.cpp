@@ -177,7 +177,7 @@ void RunTerminalFfiTests() {
     const std::string savedKey = deskhubp::ReadAppDataFile(deskhubp::kHostKeyFileName);
     const std::string savedTrust = deskhubp::ReadAppDataFile(deskhubp::kTrustStoreFileName);
     const std::string savedPaired = deskhubp::ReadAppDataFile(deskhubp::kPairedDevicesFileName);
-    deskhubp::ForgetHostIdentity();
+    ForgetHostIdentity();
     deskhubp::RemoveAppDataFile(deskhubp::kTrustStoreFileName);
     deskhubp::ForgetAllPairedDevices();
 

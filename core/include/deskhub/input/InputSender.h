@@ -27,9 +27,6 @@ public:
 
     void Reset();
 
-    uint32_t nextSeq() const {
-        return nextSeq_;
-    }
     bool pending() const {
         return unsent_ > 0;
     }

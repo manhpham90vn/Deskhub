@@ -58,13 +58,12 @@ struct AudioCapture::Impl {
     std::thread thread;
     std::atomic<bool> quit{false};
     std::atomic<bool> opened{false};
-    std::atomic<uint64_t> frames{0};
-    std::atomic<uint64_t> padded{0};
+    bool emittedAny = false;
     HANDLE ready = nullptr;
 
     void Emit() {
         if (onFrame) onFrame(staging);
-        frames.fetch_add(1, std::memory_order_relaxed);
+        emittedAny = true;
         staged = 0;
     }
 
@@ -89,7 +88,6 @@ struct AudioCapture::Impl {
     void PadWithSilence() {
         std::fill(staging.begin() + std::ptrdiff_t(staged), staging.end(), int16_t(0));
         staged = staging.size();
-        padded.fetch_add(1, std::memory_order_relaxed);
         Emit();
     }
 
@@ -161,7 +159,7 @@ void AudioCapture::Impl::Run() {
 
         const uint64_t nowUs = NowUs();
         if (nowUs >= nextDueUs) {
-            if (staged > 0 || frames.load(std::memory_order_relaxed) > 0) PadWithSilence();
+            if (staged > 0 || emittedAny) PadWithSilence();
             nextDueUs = nowUs + frameUs;
         } else {
             Sleep(kPollMs);
@@ -213,14 +211,6 @@ void AudioCapture::Stop() {
 
 bool AudioCapture::Running() const {
     return impl_ != nullptr;
-}
-
-uint64_t AudioCapture::framesCaptured() const {
-    return impl_ ? impl_->frames.load(std::memory_order_relaxed) : 0;
-}
-
-uint64_t AudioCapture::framesPaddedWithSilence() const {
-    return impl_ ? impl_->padded.load(std::memory_order_relaxed) : 0;
 }
 
 const char* AudioCapture::BackendName() {

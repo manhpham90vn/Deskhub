@@ -230,11 +230,6 @@ bool Pty::Resize(deskhub::TermSize size) {
     return SUCCEEDED(ResizePseudoConsole(impl_->console, ToCoord(size)));
 }
 
-bool Pty::Exited() const {
-    impl_->Poll();
-    return impl_->exited;
-}
-
 int Pty::ExitCode() const {
     return impl_->exitCode;
 }

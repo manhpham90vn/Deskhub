@@ -23,7 +23,6 @@ struct NegotiatedParams {
     uint16_t height = 0;
     uint8_t fps = 60;
     uint32_t bitrateBps = 0;
-    uint64_t timebaseUs = 0;
 };
 
 enum class ScreenSessionEnd : uint8_t { HostBye = 0,
@@ -51,10 +50,6 @@ public:
     explicit ScreenClientSession(ScreenClientSessionCallbacks cb) : cb_(std::move(cb)) {}
 
     void Start(const Hello& hello, uint64_t nowUs);
-
-    RejectReason rejectReason() const {
-        return rejectReason_;
-    }
 
     bool HandlePacket(std::span<const uint8_t> pkt, uint64_t nowUs);
 
@@ -120,7 +115,6 @@ private:
     uint32_t nextPingId_ = 1;
     uint32_t lastRttUs_ = 0;
     bool keyframeWanted_ = false;
-    RejectReason rejectReason_ = RejectReason::None;
 
     uint8_t buf_[kMaxDatagram] = {};
 };

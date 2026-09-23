@@ -56,7 +56,6 @@ enum class ExitCode {
     Refused = 4,
     KeyChanged = 5,
     NothingToShare = 6,
-    PermissionMissing = 7,
     BindFailed = 8,
     Unsupported = 9,
     Interrupted = 130,

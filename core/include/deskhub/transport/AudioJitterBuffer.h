@@ -9,7 +9,6 @@
 namespace deskhub {
 
 inline constexpr uint32_t kAudioFrameMs = 20;
-inline constexpr uint64_t kAudioFrameUs = kAudioFrameMs * 1000ull;
 inline constexpr uint32_t kDefaultAudioDelayMs = 60;
 
 class AudioJitterBuffer {
@@ -46,10 +45,6 @@ public:
 
     size_t buffered() const {
         return held_.size();
-    }
-
-    bool playing() const {
-        return playing_;
     }
 
     const Stats& stats() const {

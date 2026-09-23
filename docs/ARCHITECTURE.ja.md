@@ -112,7 +112,7 @@ certificate を使用する。TLS の上位では、アプリケーション層�
 
 成功すると client は host の `paired_devices` に記録される。pairing は key に基づくもの
 であり、アドレスには基づかない。passcode を 3 回誤ると passcode の経路が 30 秒間
-ロックされる（`AuthThrottle`。旧来の session lockout と定数を共有する）。approval の
+ロックされる（`AuthThrottle`）。approval の
 経路に throttle は不要である。判断を行うのが人であるためだ。
 
 client 側では `known_hosts`（`TrustStore`）が host の key を固定する。key が**変化した**
@@ -529,11 +529,16 @@ scaling の 2 つの判定とともに実行する（共有 runner には時間�
   スロット ring へコピーし、capture 時刻を記録するのみである。encode、診断、viewer ごと
   の送信は worker thread が担う。worker が処理しきれない場合の影響は計数される破棄
   （`framesRefused`）であり、host の音声の乱れではない。
-- **音声は双方が有効にした場合にのみ流れ、旧バージョンの client では受信されない。**
-  viewer が `Hello.features` の bit 0 を設定し、host は capability に
-  `kHostSharesAudio` を提示し、host は当該ビットが設定されている viewer にのみ packet
-  を送信する。`kProtocolVersion` が 2 のままである理由はここにある。5.0.x の viewer は
-  `features = 0` を送るため、5.1 の host は解析できない message を送信しない。
+- **音声は双方が有効にした場合にのみ流れる。** viewer が `Hello.features` の bit 0 を
+  設定し、host は capability に `kHostSharesAudio` を提示し、host は当該ビットが設定されて
+  いる viewer にのみ packet を送信する。
+- **プロトコルバージョン 3 は自分自身としか通信しない。** admission によって無意味になった
+  passcode のバイトを `Hello`・`LIST_SOURCES`・`TERM_OPEN` から取り除き、H.264 のみの配信
+  では一度も使われなかった codec ネゴシエーションを `Hello`/`HELLO_ACK` から取り除いた際に、
+  `kProtocolVersion` は 3 に上がった。現在はすべての parser が現行のレイアウト全体を要求
+  する。旧来の短い形式も reserved の詰め物もない。`ClassifyPacket` は現行バージョンのみを
+  自分のものとみなすため、旧バージョンの peer は中途半端に解釈されることなく破棄される。
+  wire を変更する際はバージョンを上げ、互換用の分岐は決して追加しない。
 
 - **terminal の link は自身で維持し、自身で再接続する。** terminal viewer は video の
   session とは別に独自の QUIC connection を保持するため、video 側の keepalive はいずれ
@@ -816,15 +821,14 @@ scaling の 2 つの判定とともに実行する（共有 runner には時間�
 - **connection より長く存続する転送には、その旨を通知しなければならない。**
   `FileSender` が `Sending` 状態を離れるのは ack、cancel、`LinkLost()` を受け取った場合
   のみであり、`FileUpload::Pump` は拒否された送信を失敗ではなく backpressure として
-  扱う。`ScreenViewer` は `LinkLost()` を `onStreamBroken`（connection が存続したまま
-  stream が reset された場合に発生する）および session の終了に接続していたが、
-  `HostLink` 自身の `onLinkLost` には接続していなかった。そのため転送の途中での再接続に
-  より `uploading()` は true のまま残り、対向側には応答できる構成要素が存在しなかった。
-  host は既に batch を中止しており、新しい connection の receiver はその offer を受け
-  取っていない。現在 viewer は `onLinkLost` において `TransferReason::LinkLost` として
-  upload を失敗させる。再接続をまたいで転送を継続するには、新しい connection で offer を
-  再送する必要がある。その機能が実装されるまでは、転送を明示的に終了するほうが、変化
-  しない進捗バーを残すより適切である。
+  扱う。`onStreamBroken` と session の終了には接続されていたが、自身の `HostLink` が
+  接続を失ったことには接続されていなかった upload は、転送の途中での再接続の後に
+  `Sending` のまま残り、対向側には応答できる構成要素が存在しなかった。host は既に batch
+  を中止しており、新しい connection の receiver はその offer を受け取っていない。そのため
+  `FileTransferClient` は転送の途中で再接続せず、link が `Ready` を離れた時点で
+  `TransferReason::LinkLost` として upload を失敗させる。再接続をまたいで転送を継続する
+  には、新しい connection で offer を再送する必要がある。その機能が実装されるまでは、
+  転送を明示的に終了するほうが、変化しない進捗バーを残すより適切である。
 
 - **host が手放した socket を、それが生んだ shell がなお抛えている**：`Pty::Start` は
   `forkpty` を使うため、子プロセスは開いている記述子をすべて引き継ぎ、`ChildSetup` は

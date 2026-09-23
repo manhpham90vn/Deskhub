@@ -72,7 +72,6 @@ void TestSecondStartIsRefused() {
     Send(pty, "exit\r");
     deskhub::term::Screen screen(deskhub::TermSize{80, 24});
     DrainUntil(pty, screen, {}, kMaxReads);
-    Check(pty.Exited(), "once the shell exits we notice");
     Check(pty.ExitCode() >= 0, "and can report its exit code to the client");
 }
 

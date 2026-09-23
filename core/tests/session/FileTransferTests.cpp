@@ -250,7 +250,6 @@ void TestACollidingNameIsRenamed() {
     Check(rig.disk.stored["photo.png"] == std::vector<uint8_t>({1, 2, 3}),
         "the file already there is untouched");
     Check(rig.Landed("photo (2).png", 0), "and the arrival is stored beside it");
-    Check(rig.receiver.Stored()[0] == "photo (2).png", "the receiver reports the stored name");
 }
 
 void TestACorruptFileIsDiscarded() {

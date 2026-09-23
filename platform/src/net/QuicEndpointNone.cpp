@@ -89,28 +89,12 @@ bool QuicEndpoint::IsOpen() const {
     return false;
 }
 
-bool QuicEndpoint::IsServer() const {
-    return false;
-}
-
 bool QuicEndpoint::LastBindAddrInUse() const {
     return false;
 }
 
-size_t QuicEndpoint::ConnectionCount() const {
-    return 0;
-}
-
-QuicConnId QuicEndpoint::FirstConnection() const {
-    return 0;
-}
-
 uint16_t QuicEndpoint::LocalPort() const {
     return 0;
-}
-
-std::vector<QuicConnId> QuicEndpoint::Connections() const {
-    return {};
 }
 
 }

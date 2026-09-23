@@ -284,10 +284,10 @@ void TestHostSharesAShell() {
     const std::string savedPaired =
         deskhubp::ReadAppDataFile(deskhubp::kPairedDevicesFileName);
     deskhubp::ForgetAllPairedDevices();
-    deskhubp::ForgetHostIdentity();
+    ForgetHostIdentity();
     const deskhubp::HostIdentity clientIdentity =
         deskhubp::LoadOrCreateHostIdentity("deskhub-client");
-    deskhubp::ForgetHostIdentity();
+    ForgetHostIdentity();
     const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity("deskhub-test");
     Check(identity.Valid() && clientIdentity.Valid(), "the host has an identity to present");
     if (!identity.Valid()) return;
@@ -322,7 +322,7 @@ void TestHostSharesAShell() {
             "a wrong code is settled by the host");
         Check(stranger.authCode == deskhub::AuthResultCode::WrongPasscode,
             "and named as the reason");
-        stranger.client->Open(std::string(), deskhub::TermSize{80, 24}, "test-client");
+        stranger.client->Open(deskhub::TermSize{80, 24}, "test-client");
         stranger.Pump(200);
         Check(host.SessionCount() == 0, "asking for a shell anyway starts nothing");
     }
@@ -333,7 +333,7 @@ void TestHostSharesAShell() {
         silent.endpoint.Connect(deskhubp::QuicSettings{}, NetAddr{0x7F000001u, kTestPort},
             "deskhub-test", silent.Hooks());
         silent.PumpUntil([&silent] { return silent.connected; }, kMaxRounds);
-        silent.client->Open(std::string(), deskhub::TermSize{80, 24}, "test-client");
+        silent.client->Open(deskhub::TermSize{80, 24}, "test-client");
         silent.Pump(200);
         Check(host.SessionCount() == 0,
             "a connection that never proved itself gets no shell, however it asks");
@@ -343,7 +343,7 @@ void TestHostSharesAShell() {
     Check(viewer.PumpUntil([&viewer] { return viewer.Allowed(); }, kMaxRounds),
         "the right code proves the machine, without the code ever being sent");
 
-    viewer.client->Open(std::string(), deskhub::TermSize{80, 24}, "test-client");
+    viewer.client->Open(deskhub::TermSize{80, 24}, "test-client");
     Check(viewer.PumpUntil([&viewer] { return viewer.opens == 1; }, kMaxRounds),
         "and the shell opens with no passcode in the request at all");
     if (viewer.opens != 1) {
@@ -390,7 +390,7 @@ void TestHostSharesAShell() {
     Check(viewer.PumpUntil([&host] { return host.SessionCount() == 0; }, kMaxRounds),
         "closing the shell from the client ends the session on the host");
 
-    viewer.client->Open(std::string(), deskhub::TermSize{80, 24}, "test-client");
+    viewer.client->Open(deskhub::TermSize{80, 24}, "test-client");
     if (viewer.PumpUntil([&viewer] { return viewer.opens == 2; }, kMaxRounds)) {
         const std::vector<deskhub::TerminalRecord> open = host.Sessions();
         Check(open.size() == 1, "a second shell opens after the first one ended");
@@ -488,10 +488,10 @@ void TestDroppedShellWaitsForItsClient() {
     const std::string savedPaired =
         deskhubp::ReadAppDataFile(deskhubp::kPairedDevicesFileName);
     deskhubp::ForgetAllPairedDevices();
-    deskhubp::ForgetHostIdentity();
+    ForgetHostIdentity();
     const deskhubp::HostIdentity clientIdentity =
         deskhubp::LoadOrCreateHostIdentity("deskhub-client");
-    deskhubp::ForgetHostIdentity();
+    ForgetHostIdentity();
     const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity("deskhub-test");
     Check(identity.Valid() && clientIdentity.Valid(), "the host has an identity to present");
     if (!identity.Valid()) return;
@@ -517,7 +517,7 @@ void TestDroppedShellWaitsForItsClient() {
         host.Stop();
         return;
     }
-    first.client->Open(std::string(), deskhub::TermSize{80, 24}, "first-client");
+    first.client->Open(deskhub::TermSize{80, 24}, "first-client");
     if (!first.PumpUntil([&first] { return first.opens == 1; }, kMaxRounds)) {
         Check(false, "and opens a shell");
         host.Stop();
@@ -602,10 +602,10 @@ void TestAnotherClientClosesAShell() {
     const std::string savedPaired =
         deskhubp::ReadAppDataFile(deskhubp::kPairedDevicesFileName);
     deskhubp::ForgetAllPairedDevices();
-    deskhubp::ForgetHostIdentity();
+    ForgetHostIdentity();
     const deskhubp::HostIdentity clientIdentity =
         deskhubp::LoadOrCreateHostIdentity("deskhub-client");
-    deskhubp::ForgetHostIdentity();
+    ForgetHostIdentity();
     const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity("deskhub-test");
     Check(identity.Valid() && clientIdentity.Valid(), "the host has an identity to present");
     if (!identity.Valid()) return;
@@ -631,7 +631,7 @@ void TestAnotherClientClosesAShell() {
         host.Stop();
         return;
     }
-    owner.client->Open(std::string(), deskhub::TermSize{80, 24}, "owner-client");
+    owner.client->Open(deskhub::TermSize{80, 24}, "owner-client");
     if (!owner.PumpUntil([&owner] { return owner.opens == 1; }, kMaxRounds)) {
         Check(false, "and opens a shell");
         host.Stop();
@@ -705,10 +705,10 @@ void TestHostStopsAndAttachesShell() {
     const std::string savedPaired =
         deskhubp::ReadAppDataFile(deskhubp::kPairedDevicesFileName);
     deskhubp::ForgetAllPairedDevices();
-    deskhubp::ForgetHostIdentity();
+    ForgetHostIdentity();
     const deskhubp::HostIdentity clientIdentity =
         deskhubp::LoadOrCreateHostIdentity("deskhub-client");
-    deskhubp::ForgetHostIdentity();
+    ForgetHostIdentity();
     const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity("deskhub-test");
     if (!identity.Valid() || !clientIdentity.Valid()) return;
 
@@ -725,7 +725,7 @@ void TestHostStopsAndAttachesShell() {
     viewer.PumpUntil([&viewer] { return viewer.connected; }, kMaxRounds);
     viewer.BeginAuth(clientIdentity, identity.fingerprint, kTestPasscode);
     viewer.PumpUntil([&viewer] { return viewer.Allowed(); }, kMaxRounds);
-    viewer.client->Open(std::string(), deskhub::TermSize{80, 24}, "test-client");
+    viewer.client->Open(deskhub::TermSize{80, 24}, "test-client");
     if (!viewer.PumpUntil([&viewer] { return viewer.opens == 1; }, kMaxRounds)) {
         Check(false, "the shell opens for the remote client");
         host.Stop();
@@ -832,7 +832,7 @@ void TestViewerTrustsThenRunsAShell() {
     const std::string savedCert = deskhubp::ReadAppDataFile(deskhubp::kHostCertFileName);
     const std::string savedKey = deskhubp::ReadAppDataFile(deskhubp::kHostKeyFileName);
     const std::string savedTrust = deskhubp::ReadAppDataFile(deskhubp::kTrustStoreFileName);
-    deskhubp::ForgetHostIdentity();
+    ForgetHostIdentity();
     deskhubp::RemoveAppDataFile(deskhubp::kTrustStoreFileName);
 
     const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity("deskhub-test");
@@ -944,7 +944,7 @@ void TestTheTwoCasesAPasscodeCannotSettle() {
     const std::string savedKey = deskhubp::ReadAppDataFile(deskhubp::kHostKeyFileName);
     const std::string savedTrust = deskhubp::ReadAppDataFile(deskhubp::kTrustStoreFileName);
     const std::string savedPaired = deskhubp::ReadAppDataFile(deskhubp::kPairedDevicesFileName);
-    deskhubp::ForgetHostIdentity();
+    ForgetHostIdentity();
     deskhubp::RemoveAppDataFile(deskhubp::kTrustStoreFileName);
     deskhubp::ForgetAllPairedDevices();
 
@@ -1071,10 +1071,10 @@ void TestWrongGuessesLockTheHost() {
     const std::string savedKey = deskhubp::ReadAppDataFile(deskhubp::kHostKeyFileName);
     const std::string savedPaired = deskhubp::ReadAppDataFile(deskhubp::kPairedDevicesFileName);
     deskhubp::ForgetAllPairedDevices();
-    deskhubp::ForgetHostIdentity();
+    ForgetHostIdentity();
     const deskhubp::HostIdentity clientIdentity =
         deskhubp::LoadOrCreateHostIdentity("deskhub-client");
-    deskhubp::ForgetHostIdentity();
+    ForgetHostIdentity();
     const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity("deskhub-test");
     if (!identity.Valid() || !clientIdentity.Valid()) return;
 
@@ -1130,10 +1130,10 @@ void TestAFloodOfOutputNeverTearsTheStream() {
     const std::string savedPaired =
         deskhubp::ReadAppDataFile(deskhubp::kPairedDevicesFileName);
     deskhubp::ForgetAllPairedDevices();
-    deskhubp::ForgetHostIdentity();
+    ForgetHostIdentity();
     const deskhubp::HostIdentity clientIdentity =
         deskhubp::LoadOrCreateHostIdentity("deskhub-client");
-    deskhubp::ForgetHostIdentity();
+    ForgetHostIdentity();
     const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity("deskhub-test");
 
     const uint16_t port = uint16_t(kTestPort + 5);
@@ -1147,7 +1147,7 @@ void TestAFloodOfOutputNeverTearsTheStream() {
         viewer.PumpUntil([&viewer] { return viewer.connected; }, kMaxRounds);
         viewer.BeginAuth(clientIdentity, identity.fingerprint, kTestPasscode);
         viewer.PumpUntil([&viewer] { return viewer.Allowed(); }, kMaxRounds);
-        viewer.client->Open(std::string(), deskhub::TermSize{80, 24}, "test-client");
+        viewer.client->Open(deskhub::TermSize{80, 24}, "test-client");
 
         if (viewer.PumpUntil([&viewer] { return viewer.opens == 1; }, kMaxRounds)) {
             viewer.PumpUntil([] { return false; }, 400);

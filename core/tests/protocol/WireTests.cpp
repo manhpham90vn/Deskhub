@@ -16,44 +16,29 @@ void TestWireRoundtrip() {
     std::printf("[wire] round-trip HELLO / HELLO_ACK / PING / REQUEST_KEYFRAME...\n");
     uint8_t buf[kMaxDatagram];
 
-    Hello h{0xDEADBEEF, kCodecMaskH264, 2560, 1440, 120, 0x0001};
-    h.passcode = "0417";
+    Hello h{0xDEADBEEF, 2560, 1440, 0x0001};
     size_t n = BuildHello(buf, h);
-    Check(n == kCommonHeaderSize + 14 + kPasscodeDigits + 1, "HELLO size");
+    Check(n == kCommonHeaderSize + 12, "HELLO size");
     auto ch = ParseCommonHeader(std::span<const uint8_t>(buf, n));
     Check(ch && ch->type == MsgType::Hello && ch->sessionId == 0, "HELLO header");
     auto hp = ParseHello(PayloadOf(std::span<const uint8_t>(buf, n)));
-    Check(hp && hp->clientId == h.clientId && hp->codecMask == h.codecMask &&
+    Check(hp && hp->clientId == h.clientId &&
               hp->maxWidth == h.maxWidth && hp->maxHeight == h.maxHeight &&
-              hp->desiredFps == h.desiredFps && hp->features == h.features,
+              hp->features == h.features,
         "HELLO payload");
-    Check(hp && hp->passcode == "0417", "HELLO carries the passcode with leading zero");
     Check(hp && hp->clientName.empty(), "HELLO without a name parses as empty");
 
-    h.passcode.clear();
-    n = BuildHello(buf, h);
-    hp = ParseHello(PayloadOf(std::span<const uint8_t>(buf, n)));
-    Check(hp && hp->passcode.empty(), "HELLO without a passcode parses as empty");
-
-    h.passcode = "12ab";
-    n = BuildHello(buf, h);
-    hp = ParseHello(PayloadOf(std::span<const uint8_t>(buf, n)));
-    Check(hp && hp->passcode.empty(), "an invalid passcode is never put on the wire");
-
-    h.passcode = "0417";
     h.clientName =
         "Ph\xC3\xB2ng kh\xC3\xA1"
         "ch";
     n = BuildHello(buf, h);
-    Check(n == kCommonHeaderSize + 14 + kPasscodeDigits + 1 + h.clientName.size(),
+    Check(n == kCommonHeaderSize + 12 + h.clientName.size(),
         "HELLO size grows by the name bytes");
     hp = ParseHello(PayloadOf(std::span<const uint8_t>(buf, n)));
     Check(hp && hp->clientName == h.clientName, "HELLO carries the UTF-8 client name");
-    Check(hp && hp->passcode == "0417", "the passcode still parses in front of the name");
 
-    hp = ParseHello(PayloadOf(std::span<const uint8_t>(buf, kCommonHeaderSize + 18)));
-    Check(hp && hp->clientName.empty() && hp->passcode == "0417",
-        "a legacy 18-byte HELLO parses with an empty name");
+    hp = ParseHello(PayloadOf(std::span<const uint8_t>(buf, kCommonHeaderSize + 12)));
+    Check(hp && hp->clientName.empty(), "a name longer than the datagram is dropped");
 
     std::string longName;
     while (longName.size() < kMaxClientNameBytes + 20) longName += "\xE1\xBA\xA1";
@@ -86,12 +71,12 @@ void TestWireRoundtrip() {
         Check(IsValidPasscode(PasscodeFromRandom(seed * 2654435761u)),
             "every generated passcode passes validation");
 
-    HelloAck a{0xCAFE0001, Codec::H264, 1920, 1080, 60, 20'000'000, 123'456'789'012ull};
+    HelloAck a{0xCAFE0001, 1920, 1080, 60, 20'000'000};
     n = BuildHelloAck(buf, a);
     auto ap = ParseHelloAck(PayloadOf(std::span<const uint8_t>(buf, n)));
-    Check(ap && ap->sessionId == a.sessionId && ap->codec == a.codec &&
+    Check(ap && ap->sessionId == a.sessionId && !ap->rejected &&
               ap->width == a.width && ap->height == a.height && ap->fps == a.fps &&
-              ap->bitrateBps == a.bitrateBps && ap->timebaseUs == a.timebaseUs,
+              ap->bitrateBps == a.bitrateBps,
         "HELLO_ACK payload");
 
     PingPong p{7, 999'999'999'999ull};
@@ -160,15 +145,13 @@ void TestSourceListWire() {
               !HostCapsOfFlags(ch->flags).terminal,
         "a host that says nothing promises nothing");
 
-    Hello h{0xDEADBEEF, kCodecMaskH264, 2560, 1440, 120, 0, 5};
+    Hello h{0xDEADBEEF, 2560, 1440, 0, 5};
     n = BuildHello(buf, h);
     auto hp = ParseHello(PayloadOf(std::span<const uint8_t>(buf, n)));
     Check(hp && hp->sourceId == 5, "HELLO carries sourceId");
 
-    const uint8_t legacy13[13] = {0xDE, 0xAD, 0xBE, 0xEF, 0x00, 0x01, 0x0A, 0x00,
-        0x05, 0xA0, 120, 0x00, 0x00};
-    auto old = ParseHello(std::span<const uint8_t>(legacy13, sizeof(legacy13)));
-    Check(old && old->sourceId == 0, "13-byte HELLO still parses as source 0");
+    Check(!ParseHello(PayloadOf(std::span<const uint8_t>(buf, n - 1))).has_value(),
+        "a HELLO cut before its name length is refused");
 }
 
 void TestOversizedPacketsRejected() {
@@ -314,19 +297,19 @@ void TestWireCoverage() {
     }
     Check(PayloadOf(std::span<const uint8_t>(buf, 4)).empty(), "PayloadOf on short datagram = empty");
 
-    Check(!ParseHello(std::span<const uint8_t>(buf, 12)).has_value(), "short HELLO");
-    Check(!ParseHelloAck(std::span<const uint8_t>(buf, 21)).has_value(), "short HELLO_ACK");
+    Check(!ParseHello(std::span<const uint8_t>(buf, 11)).has_value(), "short HELLO");
+    Check(!ParseHelloAck(std::span<const uint8_t>(buf, 14)).has_value(), "short HELLO_ACK");
     Check(!ParsePingPong(std::span<const uint8_t>(buf, 11)).has_value(), "short PING");
-    Check(!ParseFeedback(std::span<const uint8_t>(buf, 8)).has_value(), "short FEEDBACK");
+    Check(!ParseFeedback(std::span<const uint8_t>(buf, 6)).has_value(), "short FEEDBACK");
     Check(!ParseReconfig(std::span<const uint8_t>(buf, 7)).has_value(), "short RECONFIG");
     Check(!ParseSetFocus(std::span<const uint8_t>(buf, 0)).has_value(), "empty SET_FOCUS");
     SourceInfo so[kMaxSources];
     Check(ParseSourceList(std::span<const uint8_t>(buf, 0), so) == 0,
         "empty SOURCE_LIST -> 0");
 
-    size_t n = BuildFeedback(buf, 7, Feedback{10, 5, 33, 1234});
+    size_t n = BuildFeedback(buf, 7, Feedback{5, 33, 1234});
     auto fb = ParseFeedback(PayloadOf(std::span<const uint8_t>(buf, n)));
-    Check(fb && fb->lostFrames == 10 && fb->lossPct == 5 && fb->rttMs == 33 &&
+    Check(fb && fb->lossPct == 5 && fb->rttMs == 33 &&
               fb->recvBitrateKbps == 1234,
         "FEEDBACK round-trip");
 
@@ -335,13 +318,8 @@ void TestWireCoverage() {
     Check(rc && rc->width == 1280 && rc->height == 720 && rc->bitrateBps == 5'000'000 &&
               rc->fps == 30,
         "RECONFIG round-trip (with fps)");
-
-    {
-        const uint8_t legacy[8] = {0x05, 0x00, 0x02, 0xD0, 0x00, 0x4C, 0x4B, 0x40};
-        auto old = ParseReconfig(std::span<const uint8_t>(legacy, 8));
-        Check(old && old->width == 0x0500 && old->height == 0x02D0 && old->fps == 0,
-            "8-byte RECONFIG from an old host still parses, fps = 0 = unspecified");
-    }
+    Check(!ParseReconfig(PayloadOf(std::span<const uint8_t>(buf, n - 1))).has_value(),
+        "a RECONFIG without its fps byte is refused");
 
     n = BuildSetFocus(buf, 7, true);
     auto sf = ParseSetFocus(PayloadOf(std::span<const uint8_t>(buf, n)));
@@ -468,31 +446,34 @@ void TestSourceListTruncation() {
 }
 
 void TestHelloAckReserved() {
-    std::printf("[wire] HELLO_ACK: reserved bytes stay, reason keeps its offset...\n");
+    std::printf("[wire] HELLO_ACK: a rejection carries its reason...\n");
     uint8_t buf[kMaxDatagram];
 
     HelloAck a{};
     a.sessionId = 0x1234;
-    a.codec = Codec::H264;
     a.width = 2560;
     a.height = 1600;
     a.fps = 60;
     a.bitrateBps = 20'000'000;
-    a.timebaseUs = 0x1122334455667788ull;
+    a.rejected = true;
     a.reason = RejectReason::Busy;
     const size_t n = BuildHelloAck(buf, a);
     const auto pl = PayloadOf(std::span<const uint8_t>(buf, n));
-    Check(pl.size() == 25, "HELLO_ACK is still 25 bytes");
-    Check(pl[22] == 0 && pl[23] == 0, "the reserved bytes go out as zero");
-    Check(pl[24] == uint8_t(RejectReason::Busy), "reason still sits at offset 24");
+    Check(pl.size() == 15, "HELLO_ACK is 15 bytes");
+    Check(pl[4] == 1, "the rejected flag sits at offset 4");
+    Check(pl[14] == uint8_t(RejectReason::Busy), "and the reason at offset 14");
 
     const auto got = ParseHelloAck(pl);
-    Check(got && got->timebaseUs == a.timebaseUs, "the fields before the reserved bytes survive");
-    Check(got && got->reason == RejectReason::Busy, "reason round-trip");
+    Check(got && got->bitrateBps == a.bitrateBps, "every field survives");
+    Check(got && got->rejected && got->reason == RejectReason::Busy, "reason round-trip");
 
-    const auto old = ParseHelloAck(pl.first(22));
-    Check(old.has_value(), "a 22-byte HELLO_ACK still parses");
-    Check(old && old->reason == RejectReason::None, "a host too old to say why is read as None");
+    Check(!ParseHelloAck(pl.first(14)).has_value(), "a HELLO_ACK without its reason is refused");
+    std::vector<uint8_t> bad(pl.begin(), pl.end());
+    bad[4] = 2;
+    Check(!ParseHelloAck(bad).has_value(), "a rejected flag other than 0 or 1 is refused");
+    bad[4] = 1;
+    bad[14] = uint8_t(RejectReason::Busy) + 1;
+    Check(!ParseHelloAck(bad).has_value(), "and so is a reason this version does not know");
 }
 
 void TestParseGarbage() {
@@ -601,10 +582,11 @@ void TestPacketClassification() {
               PacketKind::Unknown,
         "a Deskhub packet too short for a header is not claimed either");
 
-    const uint8_t legacy[kCommonHeaderSize] = {1, uint8_t(MsgType::ListSources)};
-    Check(ClassifyPacket(legacy) == PacketKind::Deskhub,
-        "a 4.x packet still classifies as ours so it can be answered with a version error");
-    Check(!ParseCommonHeader(legacy).has_value(), "...but it does not parse as version 2");
+    const uint8_t older[kCommonHeaderSize] = {kProtocolVersion - 1,
+        uint8_t(MsgType::ListSources)};
+    Check(ClassifyPacket(older) == PacketKind::Unknown,
+        "an older version is not claimed as ours either");
+    Check(!ParseCommonHeader(older).has_value(), "and does not parse");
 
     for (int i = 0; i < 2000; ++i) {
         std::vector<uint8_t> d(1 + Rnd() % 64);
@@ -624,23 +606,15 @@ void TestTerminalWire() {
     TermOpen open;
     open.size = TermSize{120, 40};
     open.resumeId = 0;
-    open.passcode = "0417";
     open.clientName = "Pixel 9";
     size_t n = BuildTermOpen(buf, open);
     auto h = ParseCommonHeader(std::span<const uint8_t>(buf, n));
     Check(h && h->type == MsgType::TermOpen && h->chan == Chan::Terminal,
         "TERM_OPEN rides the terminal channel");
     auto op = ParseTermOpen(PayloadOf(std::span<const uint8_t>(buf, n)));
-    Check(op && op->size == open.size && op->passcode == "0417" &&
-              op->clientName == "Pixel 9" && op->resumeId == 0,
+    Check(op && op->size == open.size && op->clientName == "Pixel 9" && op->resumeId == 0,
         "TERM_OPEN round-trip");
 
-    open.passcode = "abcd";
-    n = BuildTermOpen(buf, open);
-    op = ParseTermOpen(PayloadOf(std::span<const uint8_t>(buf, n)));
-    Check(op && op->passcode.empty(), "an invalid passcode never goes on the wire");
-
-    open.passcode = "0417";
     open.resumeId = 0xABCD1234;
     n = BuildTermOpen(buf, open);
     op = ParseTermOpen(PayloadOf(std::span<const uint8_t>(buf, n)));
@@ -698,7 +672,7 @@ void TestTerminalWire() {
               BuildTermExit(tiny, 1, 0) == 0,
         "every terminal builder refuses a buffer too small to hold it");
 
-    Check(!ParseTermOpen(std::span<const uint8_t>(buf, 12)).has_value(), "short TERM_OPEN");
+    Check(!ParseTermOpen(std::span<const uint8_t>(buf, 8)).has_value(), "short TERM_OPEN");
     Check(!ParseTermOpenAck(std::span<const uint8_t>(buf, 5)).has_value(), "short TERM_OPEN_ACK");
     Check(!ParseTermResize(std::span<const uint8_t>(buf, 3)).has_value(), "short TERM_RESIZE");
     Check(!ParseTermExit(std::span<const uint8_t>(buf, 3)).has_value(), "short TERM_EXIT");
@@ -727,7 +701,6 @@ void TestTerminalWire() {
     kept.termId = 7;
     kept.state = TerminalState::Detached;
     kept.size = TermSize{80, 24};
-    kept.openedUs = 123456;
     kept.clientName = "Pixel 9";
     offered.sessions.push_back(kept);
     TermSessionEntry live;
@@ -743,11 +716,11 @@ void TestTerminalWire() {
     Check(parsed && parsed->sessions[0].termId == 7 &&
               parsed->sessions[0].state == TerminalState::Detached &&
               parsed->sessions[0].size == TermSize{80, 24} &&
-              parsed->sessions[0].openedUs == 123456 && parsed->sessions[0].clientName == "Pixel 9",
-        "a kept shell round-trips with its state, size, age and owner");
+              parsed->sessions[0].clientName == "Pixel 9",
+        "a kept shell round-trips with its state, size and owner");
     Check(parsed && parsed->sessions[1].termId == 9 &&
               parsed->sessions[1].state == TerminalState::Live &&
-              parsed->sessions[1].openedUs == 0 && parsed->sessions[1].clientName.empty(),
+              parsed->sessions[1].clientName.empty(),
         "and a fresh one keeps its defaults");
 
     const size_t lq = BuildTermList(buf);
@@ -771,14 +744,6 @@ void TestTerminalWire() {
 }
 
 namespace {
-
-void TestStateEventClassification() {
-    std::printf("[wire] only keys and mouse buttons carry pressed state...\n");
-    Check(IsStateEvent(InputType::Key), "a key press is a state event");
-    Check(IsStateEvent(InputType::MouseButton), "a mouse button is a state event");
-    Check(!IsStateEvent(InputType::MouseMove), "a mouse move is not");
-    Check(!IsStateEvent(InputType::MouseWheel), "a wheel tick is not");
-}
 
 }
 
@@ -958,12 +923,12 @@ void TestAudioWire() {
     Check(!HostCapsOfFlags(uint8_t(kHostAcceptsInput | kHostSharesTerminal)).audio,
         "a 5.0.x host that knows no audio decodes as silent");
 
-    Hello wantsAudio{7, kCodecMaskH264, 1920, 1080, 60, kClientWantsAudio};
+    Hello wantsAudio{7, 1920, 1080, kClientWantsAudio};
     n = BuildHello(buf, wantsAudio);
     const auto back = ParseHello(PayloadOf(std::span<const uint8_t>(buf, n)));
     Check(back && (back->features & kClientWantsAudio) != 0,
         "a viewer asking for sound says so in the features it already sends");
-    Hello silent{7, kCodecMaskH264, 1920, 1080, 60, 0};
+    Hello silent{7, 1920, 1080, 0};
     n = BuildHello(buf, silent);
     const auto quiet = ParseHello(PayloadOf(std::span<const uint8_t>(buf, n)));
     Check(quiet && (quiet->features & kClientWantsAudio) == 0,
@@ -977,7 +942,7 @@ void TestFileWire() {
     FileOffer offer;
     offer.batchId = 77;
     offer.files.push_back(TransferFile{0, "empty.bin"});
-    offer.files.push_back(TransferFile{1234567, "Ảnh.png"});
+    offer.files.push_back(TransferFile{1234567, "áº¢nh.png"});
     size_t n = BuildFileOffer(buf, offer);
     Check(n > 0, "an offer is built");
     auto header = ParseCommonHeader(std::span<const uint8_t>(buf, n));
@@ -986,7 +951,7 @@ void TestFileWire() {
     const auto backOffer = ParseFileOffer(PayloadOf(std::span<const uint8_t>(buf, n)));
     Check(backOffer && backOffer->batchId == 77 && backOffer->files.size() == 2,
         "the offer parses back");
-    Check(backOffer->files[1].size == 1234567 && backOffer->files[1].name == "Ảnh.png",
+    Check(backOffer->files[1].size == 1234567 && backOffer->files[1].name == "áº¢nh.png",
         "with sizes and UTF-8 names intact");
 
     Check(BuildFileOffer(buf, FileOffer{1, {}}) == 0, "an empty batch is not built");
@@ -1061,7 +1026,6 @@ void TestFileWire() {
 
 void RunWireTests() {
     TestWireRoundtrip();
-    TestStateEventClassification();
     TestSourceListWire();
     TestOversizedPacketsRejected();
     TestNackWire();

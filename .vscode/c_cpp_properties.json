@@ -6,16 +6,17 @@
             "includePath": [
                 "${workspaceFolder}/client/ios/broadcast/cpp",
                 "${workspaceFolder}/core/include",
-                "${workspaceFolder}/platform/include"
+                "${workspaceFolder}/platform/include",
+                "${env:LOCALAPPDATA}/Android/Sdk/ndk/26.1.10909125/toolchains/llvm/prebuilt/windows-x86_64/sysroot/usr/include"
             ],
             "compileCommands": "${workspaceFolder}/out/build/x64-debug/compile_commands.json"
         },
         {
             "name": "android-arm64",
-            "compilerPath": "${env:ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/windows-x86_64/bin/clang++.exe",
+            "compilerPath": "${env:LOCALAPPDATA}/Android/Sdk/ndk/26.1.10909125/toolchains/llvm/prebuilt/windows-x86_64/bin/clang++.exe",
             "compilerArgs": [
                 "--target=aarch64-none-linux-android26",
-                "--sysroot=${env:ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/windows-x86_64/sysroot"
+                "--sysroot=${env:LOCALAPPDATA}/Android/Sdk/ndk/26.1.10909125/toolchains/llvm/prebuilt/windows-x86_64/sysroot"
             ],
             "cppStandard": "c++20",
             "includePath": [
@@ -23,14 +24,15 @@
                 "${workspaceFolder}/core/include",
                 "${workspaceFolder}/platform/include"
             ],
-            "compileCommands": "${workspaceFolder}/client/android/app/.cxx/Debug/502yz5m5/arm64-v8a/compile_commands.json"
+            "compileCommands": "${workspaceFolder}/client/android/app/.cxx/tools/debug/arm64-v8a/compile_commands.json"
         },
         {
             "name": "x64-debug",
             "cppStandard": "c++20",
             "includePath": [
                 "${workspaceFolder}/core/include",
-                "${workspaceFolder}/platform/include"
+                "${workspaceFolder}/platform/include",
+                "${env:LOCALAPPDATA}/Android/Sdk/ndk/26.1.10909125/toolchains/llvm/prebuilt/windows-x86_64/sysroot/usr/include"
             ],
             "compileCommands": "${workspaceFolder}/out/build/x64-debug/compile_commands.json"
         }

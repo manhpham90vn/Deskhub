@@ -12,7 +12,6 @@
 #include "deskhubp/diag/LogFile.h"
 #include "deskhubp/client/ScreenViewerLoop.h"
 #include "deskhubp/audio/AudioPlayer.h"
-#include "deskhubp/client/FileUpload.h"
 #include "deskhubp/client/HostLink.h"
 #include "deskhubp/system/Clock.h"
 #include "deskhubp/system/HostIdentity.h"
@@ -49,7 +48,6 @@ struct ScreenViewerConfig {
     uint8_t sourceId = 0;
     uint32_t screenW = 0;
     uint32_t screenH = 0;
-    uint8_t desiredFps = 60;
     bool sendNacks = true;
     bool logLossRuns = true;
     bool alwaysFocused = false;
@@ -94,13 +92,7 @@ public:
         cfg_ = cfg;
         if (!channel_)
             channel_ = link_.Open({deskhub::Chan::Control, deskhub::Chan::Video,
-                deskhub::Chan::Audio, deskhub::Chan::File});
-
-        FileUploadCallbacks uploadHooks;
-        uploadHooks.send = [this](std::span<const uint8_t> message) {
-            return link_.SendRecordOn(kQuicFileStream, message);
-        };
-        upload_ = std::make_unique<FileUpload>(std::move(uploadHooks));
+                deskhub::Chan::Audio});
 
         HostLinkConfig linkConfig;
         linkConfig.host = cfg_.server;
@@ -122,14 +114,8 @@ public:
                                      std::string_view fingerprint) {
             if (cfg_.onTrustAsked) cfg_.onTrustAsked(verdict, fingerprint);
         };
-        linkHooks.onStreamBroken = [this](uint64_t stream) {
-            if (stream == kQuicFileStream && upload_) upload_->LinkLost();
-        };
         linkHooks.onReady = [this](bool resumed) {
             if (resumed) relink_.store(true, std::memory_order_release);
-        };
-        linkHooks.onLinkLost = [this] {
-            if (upload_) upload_->LinkLost();
         };
 
         quit_.store(false);
@@ -304,23 +290,6 @@ public:
 
     bool audioRunning() const {
         return player_.running();
-    }
-
-    bool SendFiles(const std::vector<std::filesystem::path>& paths) {
-        if (!upload_) return false;
-        return upload_->Begin(paths);
-    }
-
-    bool uploading() const {
-        return upload_ && upload_->Busy();
-    }
-
-    deskhub::FileSenderState uploadState() const {
-        return upload_ ? upload_->State() : deskhub::FileSenderState::Idle;
-    }
-
-    deskhub::TransferProgress uploadProgress() const {
-        return upload_ ? upload_->Progress() : deskhub::TransferProgress{};
     }
 
 private:
@@ -605,12 +574,10 @@ private:
         pcfg.maxWidth = uint16_t(cfg_.screenW);
         pcfg.maxHeight = uint16_t(cfg_.screenH);
         pcfg.sourceId = cfg_.sourceId;
-        pcfg.desiredFps = cfg_.desiredFps;
         pcfg.sendNacks = cfg_.sendNacks;
         pcfg.wantsAudio = cfg_.wantsAudio;
         pcfg.logLossRuns = cfg_.logLossRuns;
         pcfg.statusSeparator = cfg_.statusSeparator;
-        pcfg.passcode = cfg_.passcode;
         pcfg.displayName = cfg_.displayName;
         screen.Start(pcfg, NowUs());
 
@@ -618,12 +585,6 @@ private:
 
         ScreenViewerLoopHooks hooks;
         hooks.stopped = [this] { return quit_.load(); };
-        hooks.onFile = [this](std::span<const uint8_t> message) {
-            if (upload_) upload_->HandleMessage(message);
-        };
-        hooks.pumpFiles = [this] {
-            if (upload_) upload_->Pump();
-        };
         hooks.afterFrames = [this](deskhub::ScreenClient& p, uint64_t now) {
             if (decoderOpened_.exchange(false, std::memory_order_acq_rel))
                 p.RequestKeyframe("dec_open", now);
@@ -679,7 +640,6 @@ private:
             },
             screen, hooks);
 
-        if (upload_) upload_->LinkLost();
         quit_.store(true);
         decCv_.notify_all();
         std::string reason;
@@ -702,7 +662,6 @@ private:
     ScreenViewerConfig cfg_{};
     HostLink link_;
     std::shared_ptr<HostLinkChannel> channel_;
-    std::unique_ptr<FileUpload> upload_;
 
     std::thread netThread_;
     std::thread decodeThread_;

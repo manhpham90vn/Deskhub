@@ -31,7 +31,7 @@ class TerminalClient {
 public:
     explicit TerminalClient(TerminalClientCallbacks cb) : cb_(std::move(cb)) {}
 
-    void Open(std::string passcode, TermSize size, std::string clientName);
+    void Open(TermSize size, std::string clientName);
     void Reattach();
     void Resume(uint32_t termId);
     void RequestList();
@@ -51,9 +51,6 @@ public:
     TermSize Size() const {
         return size_;
     }
-    TermReason LastReason() const {
-        return reason_;
-    }
     const TermSessionList& Sessions() const {
         return sessions_;
     }
@@ -67,10 +64,8 @@ private:
 
     TerminalClientCallbacks cb_;
     TerminalClientState state_ = TerminalClientState::Idle;
-    TermReason reason_ = TermReason::Accepted;
     uint32_t termId_ = 0;
     TermSize size_{};
-    std::string passcode_{};
     std::string clientName_{};
     std::vector<uint8_t> buf_ = std::vector<uint8_t>(kMaxRecordSize);
     TermSessionList sessions_{};

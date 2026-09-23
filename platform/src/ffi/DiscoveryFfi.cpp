@@ -230,19 +230,6 @@ DHScanState dh_scan_state(void) {
     return state;
 }
 
-int dh_scan_hits(DHScanHit* out, int capacity) {
-    if (!out || capacity <= 0) return 0;
-    std::lock_guard<std::mutex> lk(g_mutex);
-    const int count = int(g_hits.size()) < capacity ? int(g_hits.size()) : capacity;
-    for (int i = 0; i < count; ++i) {
-        const deskhubp::ScanHit& hit = g_hits[size_t(i)];
-        const std::optional<deskhubp::DeviceStatus> status = StatusForLocked(hit.addr);
-        deskhubp::CopyToBuf(out[i].addr, sizeof(out[i].addr), hit.addr);
-        out[i].rttMs = status && status->online ? status->rttMs : hit.rttMs;
-    }
-    return count;
-}
-
 void dh_recent_touch(const char* address, const char* passcode) {
     if (!address || !*address) return;
     std::vector<std::string> polled;
@@ -250,18 +237,6 @@ void dh_recent_touch(const char* address, const char* passcode) {
         std::lock_guard<std::mutex> lk(g_mutex);
         ui::TouchRecentDevice(Recent(), address, int64_t(std::time(nullptr)),
             passcode ? passcode : "");
-        SaveRecent();
-        polled = PolledAddressesLocked();
-    }
-    g_poller.SetAddresses(std::move(polled));
-}
-
-void dh_recent_remove(const char* address) {
-    if (!address || !*address) return;
-    std::vector<std::string> polled;
-    {
-        std::lock_guard<std::mutex> lk(g_mutex);
-        ui::RemoveRecentDevice(Recent(), address);
         SaveRecent();
         polled = PolledAddressesLocked();
     }
@@ -314,30 +289,6 @@ void dh_settings_save(uint32_t fps, uint32_t bitrate_mbps, uint32_t max_dim, uin
     deskhubp::SaveUiSettings(out);
 }
 
-int dh_recent_rows(DHRecentRow* out, int capacity) {
-    if (!out || capacity <= 0) return 0;
-    std::lock_guard<std::mutex> lk(g_mutex);
-    const std::vector<ui::RecentDevice>& devices = Recent();
-    const int count = int(devices.size()) < capacity ? int(devices.size()) : capacity;
-    for (int i = 0; i < count; ++i) {
-        const ui::RecentDevice& device = devices[size_t(i)];
-        const std::optional<deskhubp::DeviceStatus> found = StatusForLocked(device.addr);
-        const bool known = found.has_value();
-        const bool online = known && found->online;
-
-        deskhubp::CopyToBuf(out[i].addr, sizeof(out[i].addr), device.addr);
-        deskhubp::CopyToBuf(out[i].passcode, sizeof(out[i].passcode), device.passcode);
-        deskhubp::CopyToBuf(out[i].status, sizeof(out[i].status),
-            !known ? ui::kStatusChecking : (online ? ui::kStatusOnline : ui::kStatusOffline));
-        deskhubp::CopyToBuf(out[i].ping, sizeof(out[i].ping),
-            online ? ui::PingMs(found->rttMs) : std::string("-"));
-        deskhubp::CopyToBuf(out[i].lastConnected, sizeof(out[i].lastConnected),
-            LocalTimeText(device.lastConnectedUnix));
-        out[i].online = online;
-    }
-    return count;
-}
-
 int dh_device_rows(DHDeviceRow* out, int capacity) {
     if (!out || capacity <= 0) return 0;
     std::lock_guard<std::mutex> lk(g_mutex);
@@ -386,10 +337,6 @@ void dh_status_watch_recent(void) {
         std::lock_guard<std::mutex> lk(g_mutex);
         RememberStatusLocked(status);
     });
-}
-
-int dh_ping_text(uint32_t rttMs, char* out, int capacity) {
-    return FillText(out, capacity, ui::PingMs(rttMs));
 }
 
 bool dh_same_device_addr(const char* a, const char* b) {
@@ -547,12 +494,6 @@ int dh_scan_status_text(uint16_t port, char* out, int capacity) {
     if (!g_scanFinished) return FillText(out, capacity, ui::kLanDevicesEmpty);
     return FillText(out, capacity,
         ui::LanDevicesNote(g_hits.size(), g_progress.total, deskhubp::kLanRescanSecs));
-}
-
-int dh_recent_note(char* out, int capacity) {
-    std::lock_guard<std::mutex> lk(g_mutex);
-    return FillText(out, capacity,
-        ui::RecentDevicesNote(Recent().size(), deskhubp::kDeviceStatusRoundSecs));
 }
 
 int dh_paired_devices(DHPairedDevice* out, int capacity) {

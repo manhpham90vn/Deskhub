@@ -175,8 +175,7 @@ void TestInputMultiBatchAndTrim() {
     sender.Flush(20'000, send);
     for (const auto& d : wire) receiver.HandlePacket(PayloadOf(d), apply);
     Check(applied.size() == 90, "history trim loses and duplicates nothing");
-    Check(receiver.stats().lost == 0 && sender.nextSeq() == 90,
-        "seq stays contiguous through the trim");
+    Check(receiver.stats().lost == 0, "seq stays contiguous through the trim");
 }
 
 void TestInputReset() {
@@ -188,7 +187,7 @@ void TestInputReset() {
     sender.Queue(MakeKey('A', 0x1E, true));
     sender.Flush(10'000, send);
     sender.Reset();
-    Check(sender.nextSeq() == 0 && !sender.pending(), "sender reset clears seq and queue");
+    Check(!sender.pending(), "sender reset clears the queue");
     Check(sender.Flush(20'000, send) == 0, "nothing to send after reset");
 
     sender.Queue(MakeKey('B', 0x30, true));

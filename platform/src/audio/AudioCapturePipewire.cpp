@@ -3,7 +3,6 @@
 #include "deskhubp/audio/AudioCapture.h"
 
 #include <algorithm>
-#include <atomic>
 #include <cstring>
 #include <vector>
 
@@ -15,7 +14,6 @@ struct AudioCapture::Impl {
 
     std::vector<int16_t> staging;
     size_t staged = 0;
-    std::atomic<uint64_t> frames{0};
 
     void Feed(const int16_t* samples, size_t count) {
         while (count > 0) {
@@ -27,7 +25,6 @@ struct AudioCapture::Impl {
             count -= take;
             if (staged < staging.size()) return;
             if (onFrame) onFrame(staging);
-            frames.fetch_add(1, std::memory_order_relaxed);
             staged = 0;
         }
     }
@@ -96,14 +93,6 @@ void AudioCapture::Stop() {
 
 bool AudioCapture::Running() const {
     return impl_ != nullptr;
-}
-
-uint64_t AudioCapture::framesCaptured() const {
-    return impl_ ? impl_->frames.load(std::memory_order_relaxed) : 0;
-}
-
-uint64_t AudioCapture::framesPaddedWithSilence() const {
-    return 0;
 }
 
 const char* AudioCapture::BackendName() {

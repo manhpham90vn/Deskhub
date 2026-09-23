@@ -143,13 +143,8 @@ public:
         return scrollback_.size();
     }
     const Cell& ScrollbackAt(size_t row, uint16_t col) const;
-    std::string ScrollbackText(size_t row) const;
-
     uint64_t Revision() const {
         return revision_;
-    }
-    uint32_t BellCount() const {
-        return bells_;
     }
     std::string TakeResponse();
 
@@ -222,7 +217,6 @@ private:
     std::string title_{};
     std::string response_{};
     uint64_t revision_ = 0;
-    uint32_t bells_ = 0;
 };
 
 char32_t DecSpecialGraphic(char32_t cp);

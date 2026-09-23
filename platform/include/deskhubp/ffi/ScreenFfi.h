@@ -69,11 +69,6 @@ void dh_screen_snapshot(DHScreen* s, DHScreenState* out);
 void dh_screen_link_health(DHScreen* s, DHLinkHealth* out);
 
 DHPhase dh_screen_phase(DHScreen* s);
-const char* dh_screen_status_line(DHScreen* s);
-const char* dh_screen_end_reason(DHScreen* s);
-uint32_t dh_screen_video_width(DHScreen* s);
-uint32_t dh_screen_video_height(DHScreen* s);
-
 #ifdef __cplusplus
 }
 #endif

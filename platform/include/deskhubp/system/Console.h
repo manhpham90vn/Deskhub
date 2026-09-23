@@ -9,8 +9,6 @@ struct ConsoleSize {
 };
 
 bool StdinIsTty();
-bool StdoutIsTty();
-
 ConsoleSize ConsoleSizeNow();
 
 bool ConsoleResized();

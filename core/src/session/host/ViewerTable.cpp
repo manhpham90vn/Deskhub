@@ -172,7 +172,6 @@ Feedback WorstCaseFeedback(std::span<const ViewerSlot> slots) {
             any = true;
             continue;
         }
-        if (s.feedback.lostFrames > worst.lostFrames) worst.lostFrames = s.feedback.lostFrames;
         if (s.feedback.lossPct > worst.lossPct) worst.lossPct = s.feedback.lossPct;
         if (s.feedback.rttMs > worst.rttMs) worst.rttMs = s.feedback.rttMs;
         if (s.feedback.recvBitrateKbps < worst.recvBitrateKbps)

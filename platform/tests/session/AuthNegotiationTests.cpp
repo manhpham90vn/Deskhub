@@ -39,9 +39,9 @@ struct TwoMachines {
     deskhubp::HostIdentity client{};
 
     bool Make() {
-        deskhubp::ForgetHostIdentity();
+        ForgetHostIdentity();
         client = deskhubp::LoadOrCreateHostIdentity("deskhub-client");
-        deskhubp::ForgetHostIdentity();
+        ForgetHostIdentity();
         host = deskhubp::LoadOrCreateHostIdentity("deskhub-host");
         return client.Valid() && host.Valid() && !(client.fingerprint == host.fingerprint);
     }

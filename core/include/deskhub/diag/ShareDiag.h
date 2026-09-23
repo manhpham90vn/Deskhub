@@ -38,7 +38,6 @@ class SourceDiag {
 public:
     static constexpr size_t kSumBufBytes = 384;
     static constexpr size_t kStatusBufBytes = 384;
-    static constexpr size_t kIdrBufBytes = 160;
 
     explicit SourceDiag(ShareDiagCaps caps = {}) : caps_(caps) {}
 

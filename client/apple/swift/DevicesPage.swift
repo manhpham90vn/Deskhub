@@ -14,7 +14,6 @@ struct DevicesPage: View {
     @State private var devices: [PairedDeviceRow] = []
     @State private var allowPairing = dh_allow_pairing()
     @State private var confirmForgetAll = false
-    @State private var selection: PairedDeviceRow.ID?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -22,7 +21,7 @@ struct DevicesPage: View {
             deskhubHint(DeskhubClient.string(DHStrPairedHint))
 
             #if os(macOS)
-                Table(devices, selection: $selection) {
+                Table(devices) {
                     TableColumn(DeskhubClient.string(DHStrPairedColumnName)) { device in
                         Text(device.name.isEmpty ? "(unnamed)" : device.name)
                     }
@@ -39,6 +38,13 @@ struct DevicesPage: View {
                         Text(Self.dateText($0.lastSeenUnix))
                     }
                     .width(150)
+                    TableColumn("") { device in
+                        Button(DeskhubClient.string(DHStrPairedForget)) {
+                            forget(device)
+                        }
+                        .controlSize(.small)
+                    }
+                    .width(90)
                 }
                 .frame(minHeight: 130)
 
@@ -46,16 +52,15 @@ struct DevicesPage: View {
                     deskhubHint(DeskhubClient.string(DHStrPairedEmpty))
                 }
 
-                HStack(spacing: 8) {
-                    Button(DeskhubClient.string(DHStrPairedForget)) {
-                        forgetSelected()
-                    }
-                    .disabled(selection == nil)
-                    Button(DeskhubClient.string(DHStrPairedForgetAll)) {
-                        confirmForgetAll = true
-                    }
-                    .disabled(devices.isEmpty)
+                Button {
+                    confirmForgetAll = true
+                } label: {
+                    Text(DeskhubClient.string(DHStrPairedForgetAll))
+                        .frame(maxWidth: .infinity)
                 }
+                .buttonStyle(.bordered)
+                .controlSize(.large)
+                .disabled(devices.isEmpty)
             #else
                 if devices.isEmpty {
                     deskhubHint(DeskhubClient.string(DHStrPairedEmpty))
@@ -71,9 +76,9 @@ struct DevicesPage: View {
                             }
                             Spacer(minLength: 0)
                             Button(DeskhubClient.string(DHStrPairedForget)) {
-                                _ = dh_paired_forget(device.fingerprint)
-                                refresh()
+                                forget(device)
                             }
+                            .controlSize(.small)
                         }
                         .padding(.vertical, 2)
                     }
@@ -110,12 +115,8 @@ struct DevicesPage: View {
         }
     }
 
-    private func forgetSelected() {
-        guard let selection,
-              let device = devices.first(where: { $0.id == selection })
-        else { return }
+    private func forget(_ device: PairedDeviceRow) {
         _ = dh_paired_forget(device.fingerprint)
-        self.selection = nil
         refresh()
     }
 

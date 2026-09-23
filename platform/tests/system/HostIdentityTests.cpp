@@ -19,7 +19,7 @@ struct SavedIdentity {
         : cert(deskhubp::ReadAppDataFile(deskhubp::kHostCertFileName)),
           key(deskhubp::ReadAppDataFile(deskhubp::kHostKeyFileName)),
           trust(deskhubp::ReadAppDataFile(deskhubp::kTrustStoreFileName)) {
-        deskhubp::ForgetHostIdentity();
+        ForgetHostIdentity();
     }
 
     ~SavedIdentity() {
@@ -67,15 +67,10 @@ void TestIdentityIsCreatedOnceAndKept() {
               deskhub::kFingerprintPrefix.size() + deskhub::kFingerprintTextBytes,
         "the fingerprint is the fixed-width text a user can read out loud");
 
-    const auto fromPem = deskhubp::FingerprintOfCertPem(first.certPem);
-    Check(fromPem && *fromPem == first.fingerprint,
-        "the same fingerprint comes back out of the certificate alone");
-    Check(!deskhubp::FingerprintOfCertPem("not a certificate").has_value(),
-        "junk in place of a certificate has no fingerprint");
     Check(!deskhubp::FingerprintOfCertDer(std::span<const uint8_t>()).has_value(),
         "and neither does an empty one");
 
-    Check(deskhubp::ForgetHostIdentity(), "the identity can be thrown away");
+    Check(ForgetHostIdentity(), "the identity can be thrown away");
     Check(!deskhubp::LoadHostIdentity().Valid(), "after which the machine has none again");
 
     const deskhubp::HostIdentity replacement = deskhubp::LoadOrCreateHostIdentity("deskhub-test");
@@ -99,8 +94,6 @@ void TestUnusableStoredKeyIsReplaced() {
 
     deskhubp::WriteAppDataFile(deskhubp::kHostCertFileName, kEd25519Cert);
     deskhubp::WriteAppDataFile(deskhubp::kHostKeyFileName, "-----BEGIN PRIVATE KEY-----\n");
-    Check(deskhubp::FingerprintOfCertPem(kEd25519Cert).has_value(),
-        "the old certificate still parses, so this is not a parse failure");
     Check(!deskhubp::LoadHostIdentity().Valid(),
         "but it is refused rather than presented to a peer that cannot use it");
 

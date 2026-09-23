@@ -25,17 +25,4 @@ inline std::string ViewerCountLabel(uint32_t viewerCount) {
     return std::to_string(viewerCount) + " viewers";
 }
 
-inline std::string SharedSourceLabel(std::string_view name, uint32_t width, uint32_t height,
-    uint32_t viewerCount) {
-    std::string label(name);
-    label += "  (";
-    label += SourceSizeLabel(width, height);
-    if (viewerCount) {
-        label += ", ";
-        label += ViewerCountLabel(viewerCount);
-    }
-    label += ")";
-    return label;
-}
-
 }

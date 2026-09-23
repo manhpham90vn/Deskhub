@@ -13,15 +13,6 @@ public:
         nextDueUs_.store(0, std::memory_order_relaxed);
     }
 
-    bool hasReference() const {
-        return lastUs_.load(std::memory_order_relaxed) != 0;
-    }
-
-    uint64_t lastAdmittedUs() const {
-        const uint64_t stamped = lastUs_.load(std::memory_order_relaxed);
-        return stamped ? stamped - 1 : 0;
-    }
-
 private:
     static constexpr uint64_t kJitterToleranceUs = 500;
 

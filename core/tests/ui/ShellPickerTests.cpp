@@ -23,7 +23,6 @@ TermSessionEntry MakeEntry(uint32_t termId, TerminalState state, std::string cli
 void TestEmptyList() {
     std::printf("[shellpicker] a host keeping nothing offers nothing to pick...\n");
     Check(ui::BuildShellPickerRows(TermSessionList{}).empty(), "no sessions, no rows");
-    Check(!ui::AnyShellResumable({}), "and nothing to reattach");
 }
 
 void TestRowsDescribeEachShell() {
@@ -65,24 +64,10 @@ void TestUnnamedAndSkipped() {
         "the one-line form is the label and the detail");
 }
 
-void TestAnyResumable() {
-    std::printf("[shellpicker] the picker knows whether anything can be picked up...\n");
-    TermSessionList busy;
-    busy.sessions.push_back(MakeEntry(1, TerminalState::Live, "a"));
-    busy.sessions.push_back(MakeEntry(2, TerminalState::Local, "b"));
-    Check(!ui::AnyShellResumable(ui::BuildShellPickerRows(busy)),
-        "shells in use and shells held at the host leave nothing to reattach");
-
-    busy.sessions.push_back(MakeEntry(3, TerminalState::Detached, "c"));
-    Check(ui::AnyShellResumable(ui::BuildShellPickerRows(busy)),
-        "one detached shell is enough");
-}
-
 }
 
 void RunShellPickerTests() {
     TestEmptyList();
     TestRowsDescribeEachShell();
     TestUnnamedAndSkipped();
-    TestAnyResumable();
 }

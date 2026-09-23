@@ -14,9 +14,6 @@ namespace deskhub {
 
 inline constexpr uint64_t kSessionTimeoutUs = 5'000'000;
 
-inline constexpr uint32_t kMaxPasscodeAttempts = 3;
-inline constexpr uint64_t kPasscodeLockoutUs = 30'000'000;
-
 struct StreamParams {
     uint16_t width = 0;
     uint16_t height = 0;
@@ -57,14 +54,6 @@ public:
 
     void SetOffer(const StreamParams& p) {
         offer_ = p;
-    }
-
-    void SetPasscode(std::string passcode) {
-        passcode_ = IsValidPasscode(passcode) ? std::move(passcode) : std::string();
-    }
-
-    void SetConnectionAuthenticated(bool authenticated) {
-        connectionAuthenticated_ = authenticated;
     }
 
     void SetClipboardEnabled(bool on) {
@@ -112,14 +101,12 @@ private:
     void ApplyInput(std::span<const uint8_t> payload, ViewerSlot& viewer, uint64_t nowUs);
     void HandOverControl(uint64_t addrPacked);
 
-    void SendHelloAck(uint64_t nowUs);
+    void SendHelloAck();
     void SendReject(RejectReason reason);
     bool BeginSession();
     void DropViewer(ViewerSlot& viewer);
     void RefreshState();
     void Disconnect();
-
-    bool PasscodeAllows(const Hello& m, uint64_t nowUs);
 
     ScreenHostCallbacks cb_;
     StreamParams offer_;
@@ -128,11 +115,7 @@ private:
     std::atomic<uint32_t> sessionId_{0};
     std::atomic<uint64_t> inputDenied_{0};
     uint64_t controllingAddr_ = 0;
-    std::string passcode_;
-    bool connectionAuthenticated_ = false;
     bool clipboardEnabled_ = false;
-    uint32_t wrongPasscodes_ = 0;
-    uint64_t passcodeLockUntilUs_ = 0;
     uint8_t buf_[kMaxDatagram] = {};
 };
 

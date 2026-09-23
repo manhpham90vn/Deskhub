@@ -12,7 +12,7 @@
 
 namespace deskhub {
 
-inline constexpr uint8_t kProtocolVersion = 2;
+inline constexpr uint8_t kProtocolVersion = 3;
 inline constexpr size_t kMaxDatagram = 1200;
 inline constexpr size_t kCommonHeaderSize = 8;
 inline constexpr size_t kVideoHeaderSize = 16;
@@ -98,10 +98,6 @@ enum class MsgType : uint8_t {
 inline constexpr uint8_t kVideoFlagIdr = 1u << 0;
 inline constexpr uint8_t kVideoFlagFrameEnd = 1u << 1;
 
-inline constexpr uint16_t kCodecMaskH264 = 1u << 0;
-enum class Codec : uint8_t { H264 = 0,
-    Rejected = 0xFF };
-
 struct CommonHeader {
     uint8_t ver;
     MsgType type;
@@ -172,31 +168,25 @@ inline std::string PasscodeFromRandom(uint32_t value) {
 
 struct Hello {
     uint32_t clientId;
-    uint16_t codecMask;
     uint16_t maxWidth;
     uint16_t maxHeight;
-    uint8_t desiredFps;
     uint16_t features;
     uint8_t sourceId = 0;
-    std::string passcode{};
     std::string clientName{};
 };
 
 enum class RejectReason : uint8_t {
     None = 0,
     Busy = 1,
-    CodecMismatch = 2,
-    WrongPasscode = 3,
 };
 
 struct HelloAck {
     uint32_t sessionId;
-    Codec codec;
     uint16_t width;
     uint16_t height;
     uint8_t fps;
     uint32_t bitrateBps;
-    uint64_t timebaseUs;
+    bool rejected = false;
     RejectReason reason = RejectReason::None;
 };
 
@@ -251,7 +241,6 @@ struct PingPong {
 };
 
 struct Feedback {
-    uint16_t lostFrames;
     uint8_t lossPct;
     uint16_t rttMs;
     uint32_t recvBitrateKbps;
@@ -287,10 +276,6 @@ struct InputEvent {
     uint8_t state = 0;
     uint8_t absolute = 0;
 };
-
-inline constexpr bool IsStateEvent(InputType t) {
-    return t == InputType::Key || t == InputType::MouseButton;
-}
 
 struct VideoHeader {
     uint32_t frameId;
@@ -343,7 +328,7 @@ size_t BuildAuthChallenge(std::span<uint8_t> out, const AuthChallenge& m);
 size_t BuildAuthResponse(std::span<uint8_t> out, const AuthResponse& m);
 size_t BuildAuthResult(std::span<uint8_t> out, const AuthResult& m);
 size_t BuildStart(std::span<uint8_t> out, uint32_t sessionId);
-size_t BuildListSources(std::span<uint8_t> out, std::string_view passcode = {});
+size_t BuildListSources(std::span<uint8_t> out);
 size_t BuildSourceList(std::span<uint8_t> out, std::span<const SourceInfo> sources,
     HostCaps caps = {});
 size_t BuildBye(std::span<uint8_t> out, uint32_t sessionId);
@@ -371,7 +356,6 @@ std::optional<CommonHeader> ParseCommonHeader(std::span<const uint8_t> datagram)
 std::span<const uint8_t> PayloadOf(std::span<const uint8_t> datagram);
 
 std::optional<Hello> ParseHello(std::span<const uint8_t> payload);
-std::string ParseListSourcesPasscode(std::span<const uint8_t> payload);
 size_t ParseSourceList(std::span<const uint8_t> payload, std::span<SourceInfo> out);
 std::optional<HelloAck> ParseHelloAck(std::span<const uint8_t> payload);
 std::optional<AuthStart> ParseAuthStart(std::span<const uint8_t> payload);
@@ -442,7 +426,6 @@ struct TermSessionEntry {
     uint32_t termId = 0;
     TerminalState state = TerminalState::Live;
     TermSize size{};
-    uint64_t openedUs = 0;
     std::string clientName{};
 };
 
@@ -458,16 +441,14 @@ TermSize ClampTermSize(TermSize size);
 struct TermOpen {
     TermSize size{};
     uint32_t resumeId = 0;
-    std::string passcode{};
     std::string clientName{};
 };
 
 enum class TermReason : uint8_t {
     Accepted = 0,
-    WrongPasscode = 1,
-    TooManySessions = 2,
-    NotShared = 3,
-    NoSuchSession = 4,
+    TooManySessions = 1,
+    NotShared = 2,
+    NoSuchSession = 3,
 };
 
 struct TermOpenAck {

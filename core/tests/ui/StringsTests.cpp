@@ -36,7 +36,7 @@ void TestEveryLabelSaysSomething() {
         ui::kPasscodeLabel, ui::kClientPasscodePrompt, ui::kClientPasscodeHint,
         ui::kClientIpPlaceholder, ui::kUdpPortLabel, ui::kPasscodeInvalid, ui::kLanDevicesHeading,
         ui::kLanDevicesEmpty, ui::kLanDevicesHint, ui::kLanDevicesNoneSharing,
-        ui::kScanRescanNote, ui::kScanNoLocalNetwork,
+        ui::kScanNoLocalNetwork,
         ui::kConnectPromptTitle, ui::kAppVersion, ui::kProjectUrl, ui::kProjectLinkLabel,
         ui::kRefreshNow, ui::kBindInterfaceLabel, ui::kBindAllInterfaces,
         ui::kBindNotConnectedNote, ui::kAutostartLabel,
@@ -99,8 +99,6 @@ void TestQueryFailureExplainsWhatToCheck() {
 
     const std::string empty = ui::SourceQueryEmpty("192.168.1.10:47777");
     Check(Contains(empty, "192.168.1.10:47777"), "the user can see which machine held back");
-    Check(Contains(empty, "passcode"),
-        "a host that answers with nothing is guarding against a wrong passcode");
     Check(Contains(empty, "sharing"), "or it simply stopped sharing in the meantime");
 }
 
@@ -129,8 +127,6 @@ void TestThePortIsNeverHardcodedTwice() {
         "a terminal-only share reads the same way");
     Check(ui::ShareSummaryLine(false, false, 50123).empty(),
         "and nothing shared is nothing said");
-    Check(Contains(ui::SharingStatusLine(50123), "50123"),
-        "the sharing banner quotes the port actually bound");
     Check(Contains(ui::InvalidAddressHint(), port), "so does the bad-address hint");
     Check(Contains(ui::InvalidAddressHint(), "192.168.1.10"),
         "the hint shows an example, so the user knows what shape to type");
@@ -198,15 +194,6 @@ void TestTrimStripsOnlyTheEdges() {
     Check(ui::TrimAscii("").empty(), "empty stays empty");
 }
 
-void TestParsePositiveUintIsStrict() {
-    std::printf("[strings] numeric entry fields fall back instead of guessing...\n");
-    Check(ui::ParsePositiveUint("60", 30) == 60, "a plain number parses");
-    Check(ui::ParsePositiveUint("0", 30) == 30, "zero is not a usable fps/bitrate");
-    Check(ui::ParsePositiveUint("", 30) == 30, "empty falls back");
-    Check(ui::ParsePositiveUint("6x", 30) == 30, "trailing junk falls back, not truncates");
-    Check(ui::ParsePositiveUint("99999999999", 30) == 30, "overflow falls back");
-}
-
 void TestPingLabelQuotesTheMeasurement() {
     std::printf("[strings] the ping label shows the measured number with its unit...\n");
     Check(ui::PingMs(12) == "12 ms", "a normal rtt renders as-is");
@@ -236,8 +223,6 @@ void TestScanStatusCountsWhatWasChecked() {
 void TestRecheckNotesQuoteTheRealInterval() {
     std::printf("[strings] the user is told how often a list refreshes itself...\n");
     Check(Contains(ui::ScanRecheckNote(45), "45"), "the rescan note quotes the caller's delay");
-    Check(Contains(ui::StatusRecheckNote(30), "30"),
-        "the status note quotes the poller's own round gap");
     Check(!Contains(ui::ScanRecheckNote(45), "shortly"),
         "no vague wording survives where a number is available");
 }
@@ -260,12 +245,6 @@ void TestDeviceListNotesReadTheSameOnEveryClient() {
         "once devices are listed the user is told to click one, and when the list refreshes");
     Check(!Contains(found, ui::kLanDevicesNoneSharing),
         "the missing-machine explanation is dropped once the list has something in it");
-
-    Check(ui::RecentDevicesNote(0, 30) == ui::kRecentDevicesEmpty,
-        "an empty history explains what will fill it");
-    const std::string recent = ui::RecentDevicesNote(3, 30);
-    Check(Contains(recent, ui::kRecentDevicesHint) && Contains(recent, "30"),
-        "a populated history says it is clickable and how often status is rechecked");
 }
 
 void TestTerminalRefusalsNameTheirOwnCause() {
@@ -330,7 +309,6 @@ void RunStringsTests() {
     TestThePortFieldFallsBackToTheDefault();
     TestTheAddressAndPortFieldsComposeOneAddress();
     TestTrimStripsOnlyTheEdges();
-    TestParsePositiveUintIsStrict();
     TestPingLabelQuotesTheMeasurement();
     TestTheAboutLineNamesTheBuild();
     TestScanStatusCountsWhatWasChecked();

@@ -153,6 +153,8 @@ struct TerminalPeer {
 };
 
 struct CrossSession {
+    uint16_t port = 0;
+    load::Upload upload{};
     fake::SharingHost host{};
     deskhubp::TerminalHost terminals{};
     deskhubp::FileHost files{};
@@ -163,6 +165,7 @@ struct CrossSession {
     std::filesystem::path file{};
 
     ~CrossSession() {
+        upload.client.Stop();
         term.viewer.Stop();
         viewer.Stop();
         files.Stop();
@@ -175,7 +178,7 @@ struct CrossSession {
         fake::Decoded().Reset();
         deskhubp::ForgetAllPairedDevices();
 
-        const uint16_t port = NextTestPort();
+        port = NextTestPort();
         if (!host.Start({fake::Source("Display 1", 1280, 720, 1)}, port)) {
             Check(false, "the host could not start");
             return false;
@@ -299,12 +302,12 @@ void TestTheTerminalStaysLiveDuringABigTransfer() {
     if (!s.Open("term-echo", true)) return;
     if (!s.term.ProveShellAnswers()) return;
 
-    Check(s.viewer.SendFiles({s.file}), "the batch is offered");
-    Check(WaitFor([&s] { return s.viewer.uploadProgress().batchBytes > kTransferBytes / 8; },
+    Check(s.upload.Start(s.port, s.file), "the batch is offered");
+    Check(WaitFor([&s] { return s.upload.batchBytes() > kTransferBytes / 8; },
               kTransferTimeoutMs),
         "the transfer is well under way");
 
-    const bool stillRunning = s.viewer.uploading();
+    const bool stillRunning = s.upload.busy();
     const uint64_t sentUs = NowUs();
     s.term.viewer.SendText(kEchoCommand);
     const bool echoed = WaitFor([&s] { return s.term.Saw(kEchoMarker); }, kEchoTimeoutMs);
@@ -320,9 +323,9 @@ void TestTheTerminalStaysLiveDuringABigTransfer() {
         "and promptly, so the interactive terminal lane is not queued behind however many "
         "file chunks are in front of it");
 
-    Check(WaitFor([&s] { return !s.viewer.uploading(); }, kTransferTimeoutMs),
+    Check(WaitFor([&s] { return !s.upload.busy(); }, kTransferTimeoutMs),
         "the transfer still finishes");
-    Check(s.viewer.uploadState() == deskhub::FileSenderState::Done, "as done");
+    Check(s.upload.done(), "as done");
     Check(s.LandedWhole(), "with the file intact");
 }
 

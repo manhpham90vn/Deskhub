@@ -49,12 +49,9 @@ struct Recorder {
 Datagram HelloFrom(uint32_t clientId, std::string clientName = {}) {
     uint8_t buf[kMaxDatagram];
     Hello h{};
-    h.passcode = kTestPasscode;
     h.clientId = clientId;
-    h.codecMask = kCodecMaskH264;
     h.maxWidth = 1920;
     h.maxHeight = 1080;
-    h.desiredFps = 60;
     h.clientName = std::move(clientName);
     const size_t n = BuildHello(buf, h);
     return Datagram(buf, buf + n);
@@ -96,7 +93,6 @@ Datagram KeyPressFrom(uint32_t sessionId, InputSender& sender, int32_t scancode)
 std::unique_ptr<ScreenHostSession> MakeSession(Recorder& rec) {
     auto session = std::make_unique<ScreenHostSession>(rec.Callbacks(),
         StreamParams{1920, 1080, 60, 20'000'000});
-    session->SetPasscode(kTestPasscode);
     return session;
 }
 
@@ -141,7 +137,7 @@ void TestOneViewerTooManyIsRejectedAsBusy() {
 
     Check(rec.sent.size() == 1, "a rejection went back");
     const auto ack = ParseHelloAck(PayloadOf(rec.sent[0]));
-    Check(ack && ack->codec == Codec::Rejected && ack->reason == RejectReason::Busy,
+    Check(ack && ack->rejected && ack->reason == RejectReason::Busy,
         "and it says busy");
 }
 
@@ -151,9 +147,7 @@ void TestTheHostBudgetIsSharedAcrossSources() {
     ViewerBudget budget;
     Recorder recA, recB;
     ScreenHostSession a(recA.Callbacks(), StreamParams{1920, 1080, 60, 20'000'000}, &budget);
-    a.SetPasscode(kTestPasscode);
     ScreenHostSession b(recB.Callbacks(), StreamParams{1920, 1080, 60, 20'000'000}, &budget);
-    b.SetPasscode(kTestPasscode);
 
     for (uint32_t i = 0; i < 3; ++i)
         a.HandlePacket(HelloFrom(i + 1), kT0, kAlice + i);
@@ -182,7 +176,6 @@ void TestASourceGivesItsViewersBackWhenItStops() {
     Recorder rec;
     {
         ScreenHostSession s(rec.Callbacks(), StreamParams{1920, 1080, 60, 20'000'000}, &budget);
-        s.SetPasscode(kTestPasscode);
         s.HandlePacket(HelloFrom(1), kT0, kAlice);
         s.HandlePacket(HelloFrom(2), kT0, kBob);
         Check(budget.taken() == 2, "two seats are taken while it is shared");
@@ -381,14 +374,13 @@ void TestFeedbackTakesTheWorstLink() {
     JoinAndStart(*s, 1, kAlice);
     JoinAndStart(*s, 2, kBob);
 
-    s->HandlePacket(FeedbackFor(s->sessionId(), Feedback{1, 2, 30, 9000}), kT0, kAlice);
-    s->HandlePacket(FeedbackFor(s->sessionId(), Feedback{7, 25, 12, 4000}), kT0, kBob);
+    s->HandlePacket(FeedbackFor(s->sessionId(), Feedback{2, 30, 9000}), kT0, kAlice);
+    s->HandlePacket(FeedbackFor(s->sessionId(), Feedback{25, 12, 4000}), kT0, kBob);
 
     Check(rec.feedback.size() == 2, "both reports were taken");
     const Feedback& merged = rec.feedback.back();
     Check(merged.lossPct == 25, "the worst loss wins");
     Check(merged.rttMs == 30, "the worst RTT wins");
-    Check(merged.lostFrames == 7, "the worst frame loss wins");
     Check(merged.recvBitrateKbps == 4000, "and the lowest received rate wins");
 }
 
@@ -397,11 +389,11 @@ void TestWorstCaseFeedbackIgnoresSilentViewers() {
     ViewerSlot slots[3];
     slots[0].active = true;
     slots[0].haveFeedback = true;
-    slots[0].feedback = Feedback{2, 5, 20, 8000};
+    slots[0].feedback = Feedback{5, 20, 8000};
     slots[1].active = true;
     slots[2].active = true;
     slots[2].haveFeedback = true;
-    slots[2].feedback = Feedback{1, 9, 10, 12000};
+    slots[2].feedback = Feedback{9, 10, 12000};
 
     const Feedback worst = WorstCaseFeedback(std::span<const ViewerSlot>(slots, 3));
     Check(worst.lossPct == 9 && worst.rttMs == 20, "only reported links are merged");
@@ -461,7 +453,6 @@ void TestNonsenseFromAViewerIsIgnored() {
     uint8_t buf[kMaxDatagram];
     HelloAck ack{};
     ack.sessionId = s->sessionId();
-    ack.codec = Codec::H264;
     const size_t n = BuildHelloAck(buf, ack);
     Check(!s->HandlePacket(std::span<const uint8_t>(buf, n), kT0, kAlice),
         "a message only a host may send is refused");
@@ -513,27 +504,6 @@ void TestViewerNamesReachTheHost() {
     Check(roamedNamed, "the name follows a viewer whose address moves");
 }
 
-void TestAClientWithoutH264IsTurnedAway() {
-    std::printf("[viewers] a viewer that cannot decode H.264 is told why...\n");
-    Recorder rec;
-    auto s = MakeSession(rec);
-
-    uint8_t buf[kMaxDatagram];
-    Hello h{};
-    h.passcode = kTestPasscode;
-    h.clientId = 5;
-    h.codecMask = 0;
-    h.maxWidth = 1920;
-    h.maxHeight = 1080;
-    const size_t n = BuildHello(buf, h);
-    Check(!s->HandlePacket(std::span<const uint8_t>(buf, n), kT0, kAlice), "the HELLO is refused");
-    Check(s->viewerCount() == 0, "and no slot is taken");
-
-    Check(rec.sent.size() == 1, "a rejection went back");
-    const auto ack = ParseHelloAck(PayloadOf(rec.sent[0]));
-    Check(ack && ack->reason == RejectReason::CodecMismatch, "naming the codec as the reason");
-}
-
 }
 
 void RunViewerTableTests() {
@@ -557,5 +527,4 @@ void RunViewerTableTests() {
     TestANewClientOnAnOldAddressTakesTheSlotOver();
     TestNonsenseFromAViewerIsIgnored();
     TestViewerNamesReachTheHost();
-    TestAClientWithoutH264IsTurnedAway();
 }

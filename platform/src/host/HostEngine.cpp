@@ -127,7 +127,6 @@ void HostEngine::AttachSession(HostSource& st) {
     const deskhub::ScreenHostCallbacks cb = MakeScreenHostCallbacks(st, std::move(hooks));
 
     st.session = std::make_unique<deskhub::ScreenHostSession>(cb, st.offer, &viewerBudget_);
-    st.session->SetConnectionAuthenticated(true);
     st.session->SetClipboardEnabled(opt_.clipboardSync);
     st.netReady.store(true, std::memory_order_release);
 }
@@ -433,8 +432,6 @@ void HostEngine::StartAudio() {
 }
 
 void HostEngine::RecvLoop() {
-    beacon_.SetPasscode(opt_.passcode);
-
     HostNetLoopHooks loop;
     loop.fallbackFps = opt_.fps;
     loop.stopped = [this] { return quit_.load(); };

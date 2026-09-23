@@ -21,11 +21,26 @@ uint64_t Hold(QualityLadder& q, uint32_t bps, int seconds, uint64_t t0) {
     return t;
 }
 
+uint32_t RequiredBps(const QualityLadder& q) {
+    uint32_t low = 0;
+    uint32_t high = 500'000'000;
+    while (low + 1 < high) {
+        const uint32_t mid = low + (high - low) / 2;
+        QualityLadder probe = q;
+        probe.Update(mid, 0);
+        if (probe.rung() > q.rung())
+            low = mid;
+        else
+            high = mid;
+    }
+    return high;
+}
+
 void TestTopRungOnAHealthyLink() {
     std::printf("[quality] good link -> exactly the ceiling the user set...\n");
     QualityLadder q(kW, kH, kFps);
     Check(q.current() == QualityStep{kW, kH, kFps}, "starts at the ceiling rung");
-    const uint32_t need = q.requiredBps();
+    const uint32_t need = RequiredBps(q);
     Check(need < 20'000'000u, "the ceiling rung needs under 20 Mbps (the host default)");
     Hold(q, 20'000'000, 30, 0);
     Check(q.current() == QualityStep{kW, kH, kFps}, "20 Mbps: nothing changes");
@@ -34,7 +49,7 @@ void TestTopRungOnAHealthyLink() {
 void TestFpsGoesFirst() {
     std::printf("[quality] drop fps FIRST, keep the pixels...\n");
     QualityLadder q(kW, kH, kFps);
-    q.Update(q.requiredBps() - 1, 1'000'000);
+    q.Update(RequiredBps(q) - 1, 1'000'000);
     const QualityStep s = q.current();
     Check(s.width == kW && s.height == kH, "resolution unchanged");
     Check(s.fps < kFps, "fps went down");
@@ -67,7 +82,7 @@ void TestDownIsImmediate() {
     QualityLadder q(kW, kH, kFps);
     Check(q.Update(1'500'000, 1'000'000), "a single Update already drops");
     Check(q.rung() > 0, "left the ceiling rung");
-    Check(q.requiredBps() <= 1'500'000, "the new rung fits what the link can carry");
+    Check(RequiredBps(q) <= 1'500'000, "the new rung fits what the link can carry");
 
     const int mid = q.rung();
     Check(q.Update(400'000, 2'000'000), "the next drop is immediate too");
@@ -80,7 +95,7 @@ void TestUpNeedsHeadroom() {
     q.Update(1'500'000, 1'000'000);
     const int low = q.rung();
 
-    Hold(q, q.requiredBps(), 60, 1'000'000);
+    Hold(q, RequiredBps(q), 60, 1'000'000);
     Check(q.rung() == low, "exactly enough, no headroom -> stays on the rung");
 }
 

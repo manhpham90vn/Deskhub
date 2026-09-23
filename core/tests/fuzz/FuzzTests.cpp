@@ -34,11 +34,9 @@ bool ExerciseWireParsers(std::span<const uint8_t> d) {
     const auto pl = PayloadOf(d);
 
     if (const auto hello = ParseHello(pl))
-        ok = ok && (hello->passcode.empty() || IsValidPasscode(hello->passcode));
+        ok = ok && hello->clientName.size() <= kMaxClientNameBytes;
     if (const auto ack = ParseHelloAck(pl))
-        ok = ok && uint8_t(ack->reason) <= uint8_t(RejectReason::WrongPasscode);
-    const std::string code = ParseListSourcesPasscode(pl);
-    ok = ok && (code.empty() || IsValidPasscode(code));
+        ok = ok && uint8_t(ack->reason) <= uint8_t(RejectReason::Busy);
 
     SourceInfo sources[kMaxSources];
     const size_t nSources = ParseSourceList(pl, sources);
@@ -120,15 +118,13 @@ Datagram BuildRandomValidDatagram() {
     size_t n = 0;
     switch (Rnd() % 22) {
         case 0: {
-            Hello m{Rnd(), uint16_t(Rnd()), uint16_t(Rnd()), uint16_t(Rnd()),
-                uint8_t(Rnd()), uint16_t(Rnd()), uint8_t(Rnd()), PasscodeFromRandom(Rnd())};
+            Hello m{Rnd(), uint16_t(Rnd()), uint16_t(Rnd()), uint16_t(Rnd()), uint8_t(Rnd())};
             n = BuildHello(buf, m);
             break;
         }
         case 1: {
-            HelloAck m{Rnd(), (Rnd() % 2) ? Codec::H264 : Codec::Rejected, uint16_t(Rnd()),
-                uint16_t(Rnd()), uint8_t(Rnd()), Rnd(),
-                (uint64_t(Rnd()) << 32) | Rnd(), RejectReason(Rnd() % 4)};
+            HelloAck m{Rnd(), uint16_t(Rnd()), uint16_t(Rnd()), uint8_t(Rnd()), Rnd(),
+                Rnd() % 2 != 0, RejectReason(Rnd() % 2)};
             n = BuildHelloAck(buf, m);
             break;
         }
@@ -139,7 +135,7 @@ Datagram BuildRandomValidDatagram() {
             n = BuildBye(buf, Rnd());
             break;
         case 4:
-            n = BuildListSources(buf, PasscodeFromRandom(Rnd()));
+            n = BuildListSources(buf);
             break;
         case 5: {
             const auto sources = RandomSources();
@@ -154,7 +150,7 @@ Datagram BuildRandomValidDatagram() {
             break;
         case 8:
             n = BuildFeedback(buf, Rnd(),
-                Feedback{uint16_t(Rnd()), uint8_t(Rnd()), uint16_t(Rnd()), Rnd()});
+                Feedback{uint8_t(Rnd()), uint16_t(Rnd()), Rnd()});
             break;
         case 9:
             n = BuildRequestKeyframe(buf, Rnd());
@@ -316,37 +312,32 @@ void TestWireRandomRoundTrips() {
 
     bool ok = true;
     for (int i = 0; i < 300; ++i) {
-        const Hello m{Rnd(), uint16_t(Rnd()), uint16_t(Rnd()), uint16_t(Rnd()),
-            uint8_t(Rnd()), uint16_t(Rnd()), uint8_t(Rnd()), PasscodeFromRandom(Rnd())};
+        const Hello m{Rnd(), uint16_t(Rnd()), uint16_t(Rnd()), uint16_t(Rnd()), uint8_t(Rnd())};
         const size_t n = BuildHello(buf, m);
         const auto p = ParseHello(PayloadOf(std::span<const uint8_t>(buf, n)));
-        ok = ok && p && p->clientId == m.clientId && p->codecMask == m.codecMask &&
-             p->maxWidth == m.maxWidth && p->maxHeight == m.maxHeight &&
-             p->desiredFps == m.desiredFps && p->features == m.features &&
-             p->sourceId == m.sourceId && p->passcode == m.passcode;
+        ok = ok && p && p->clientId == m.clientId && p->maxWidth == m.maxWidth &&
+             p->maxHeight == m.maxHeight && p->features == m.features && p->sourceId == m.sourceId;
     }
     Check(ok, "HELLO random round-trip");
 
     ok = true;
     for (int i = 0; i < 300; ++i) {
-        const HelloAck m{Rnd(), (Rnd() % 2) ? Codec::H264 : Codec::Rejected, uint16_t(Rnd()),
-            uint16_t(Rnd()), uint8_t(Rnd()), Rnd(), (uint64_t(Rnd()) << 32) | Rnd(),
-            RejectReason(Rnd() % 4)};
+        const HelloAck m{Rnd(), uint16_t(Rnd()), uint16_t(Rnd()), uint8_t(Rnd()), Rnd(),
+            Rnd() % 2 != 0, RejectReason(Rnd() % 2)};
         const size_t n = BuildHelloAck(buf, m);
         const auto p = ParseHelloAck(PayloadOf(std::span<const uint8_t>(buf, n)));
-        ok = ok && p && p->sessionId == m.sessionId && p->codec == m.codec &&
+        ok = ok && p && p->sessionId == m.sessionId && p->rejected == m.rejected &&
              p->width == m.width && p->height == m.height && p->fps == m.fps &&
-             p->bitrateBps == m.bitrateBps && p->timebaseUs == m.timebaseUs &&
-             p->reason == m.reason;
+             p->bitrateBps == m.bitrateBps && p->reason == m.reason;
     }
     Check(ok, "HELLO_ACK random round-trip");
 
     ok = true;
     for (int i = 0; i < 300; ++i) {
-        const Feedback m{uint16_t(Rnd()), uint8_t(Rnd()), uint16_t(Rnd()), Rnd()};
+        const Feedback m{uint8_t(Rnd()), uint16_t(Rnd()), Rnd()};
         const size_t n = BuildFeedback(buf, Rnd(), m);
         const auto p = ParseFeedback(PayloadOf(std::span<const uint8_t>(buf, n)));
-        ok = ok && p && p->lostFrames == m.lostFrames && p->lossPct == m.lossPct &&
+        ok = ok && p && p->lossPct == m.lossPct &&
              p->rttMs == m.rttMs && p->recvBitrateKbps == m.recvBitrateKbps;
     }
     Check(ok, "FEEDBACK random round-trip");
@@ -777,7 +768,7 @@ bool ValidOutbound(std::span<const uint8_t> d) {
 
 Datagram BuildKnownHello(uint32_t clientId) {
     uint8_t buf[kMaxDatagram];
-    const Hello m{clientId, 1, 1920, 1080, 30, 0, 0, kTestPasscode};
+    const Hello m{clientId, 1920, 1080, 0, 0};
     return Taken(buf, BuildHello(buf, m));
 }
 
@@ -794,18 +785,16 @@ void TestSessionChaosFuzz() {
         hostCb.sendTo = [&](uint64_t, std::span<const uint8_t> d) { witness(d); };
         hostCb.randomBytes = TestRandomBytes;
         ScreenHostSession host(std::move(hostCb), StreamParams{1280, 720, 30, 8'000'000});
-        host.SetPasscode(kTestPasscode);
 
         ScreenClientSessionCallbacks clientCb;
         clientCb.send = witness;
         ScreenClientSession client(std::move(clientCb));
-        client.Start(Hello{1, 1, 1920, 1080, 30, 0, 0, kTestPasscode}, 1);
+        client.Start(Hello{1, 1920, 1080, 0, 0}, 1);
 
         Beacon beacon;
         const SourceInfo sources[2] = {
             {0, 1280, 720, "Display 1"}, {1, 1920, 1080, "Display 2"}};
         beacon.SetSources(sources);
-        beacon.SetPasscode(kTestPasscode);
 
         uint8_t reply[kMaxDatagram];
         uint64_t now = 1'000'000;

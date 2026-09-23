@@ -7,6 +7,12 @@ namespace deskhub {
 
 namespace {
 
+constexpr size_t kHelloFixedBytes = 12;
+constexpr size_t kHelloAckBytes = 15;
+constexpr size_t kReconfigBytes = 9;
+constexpr size_t kFeedbackBytes = 7;
+constexpr size_t kTermListEntryFixedBytes = 10;
+
 size_t WriteCommon(std::span<uint8_t> out, MsgType type, uint8_t flags, Chan chan,
     uint32_t sessionId, size_t payloadSize) {
     const size_t total = kCommonHeaderSize + payloadSize;
@@ -45,22 +51,17 @@ size_t BuildPingPongImpl(std::span<uint8_t> out, MsgType type, uint32_t sessionI
 
 size_t BuildHello(std::span<uint8_t> out, const Hello& m) {
     const size_t nameLen = Utf8TruncLen(m.clientName, kMaxClientNameBytes);
-    const size_t kPayload = 14 + kPasscodeDigits + 1 + nameLen;
-    const size_t total = WriteCommon(out, MsgType::Hello, 0, Chan::Control, 0, kPayload);
+    const size_t total =
+        WriteCommon(out, MsgType::Hello, 0, Chan::Control, 0, kHelloFixedBytes + nameLen);
     if (!total) return 0;
     uint8_t* p = out.data() + kCommonHeaderSize;
     PutU32(p, m.clientId);
-    PutU16(p + 4, m.codecMask);
-    PutU16(p + 6, m.maxWidth);
-    PutU16(p + 8, m.maxHeight);
-    p[10] = m.desiredFps;
-    PutU16(p + 11, m.features);
-    p[13] = m.sourceId;
-    const bool hasPasscode = IsValidPasscode(m.passcode);
-    for (size_t i = 0; i < kPasscodeDigits; ++i)
-        p[14 + i] = hasPasscode ? uint8_t(m.passcode[i]) : 0;
-    p[14 + kPasscodeDigits] = uint8_t(nameLen);
-    if (nameLen) std::memcpy(p + 14 + kPasscodeDigits + 1, m.clientName.data(), nameLen);
+    PutU16(p + 4, m.maxWidth);
+    PutU16(p + 6, m.maxHeight);
+    PutU16(p + 8, m.features);
+    p[10] = m.sourceId;
+    p[11] = uint8_t(nameLen);
+    if (nameLen) std::memcpy(p + kHelloFixedBytes, m.clientName.data(), nameLen);
     return total;
 }
 
@@ -122,15 +123,8 @@ size_t BuildAuthResult(std::span<uint8_t> out, const AuthResult& m) {
     return total;
 }
 
-size_t BuildListSources(std::span<uint8_t> out, std::string_view passcode) {
-    const size_t total = WriteCommon(out, MsgType::ListSources, 0, Chan::Control, 0,
-        kPasscodeDigits);
-    if (!total) return 0;
-    uint8_t* p = out.data() + kCommonHeaderSize;
-    const bool hasPasscode = IsValidPasscode(passcode);
-    for (size_t i = 0; i < kPasscodeDigits; ++i)
-        p[i] = hasPasscode ? uint8_t(passcode[i]) : 0;
-    return total;
+size_t BuildListSources(std::span<uint8_t> out) {
+    return BuildEmpty(out, MsgType::ListSources, 0);
 }
 
 size_t BuildSourceList(std::span<uint8_t> out, std::span<const SourceInfo> sources,
@@ -162,19 +156,17 @@ size_t BuildSourceList(std::span<uint8_t> out, std::span<const SourceInfo> sourc
 }
 
 size_t BuildHelloAck(std::span<uint8_t> out, const HelloAck& m) {
-    constexpr size_t kFixed = 24;
-    const size_t total = WriteCommon(out, MsgType::HelloAck, 0, Chan::Control, 0, kFixed + 1);
+    const size_t total =
+        WriteCommon(out, MsgType::HelloAck, 0, Chan::Control, 0, kHelloAckBytes);
     if (!total) return 0;
     uint8_t* p = out.data() + kCommonHeaderSize;
     PutU32(p, m.sessionId);
-    p[4] = uint8_t(m.codec);
+    p[4] = m.rejected ? 1 : 0;
     PutU16(p + 5, m.width);
     PutU16(p + 7, m.height);
     p[9] = m.fps;
     PutU32(p + 10, m.bitrateBps);
-    PutU64(p + 14, m.timebaseUs);
-    PutU16(p + 22, 0);
-    p[24] = uint8_t(m.reason);
+    p[14] = uint8_t(m.reason);
     return total;
 }
 
@@ -195,14 +187,13 @@ size_t BuildPong(std::span<uint8_t> out, uint32_t sessionId, const PingPong& m) 
 }
 
 size_t BuildFeedback(std::span<uint8_t> out, uint32_t sessionId, const Feedback& m) {
-    constexpr size_t kPayload = 9;
-    const size_t total = WriteCommon(out, MsgType::Feedback, 0, Chan::Control, sessionId, kPayload);
+    const size_t total =
+        WriteCommon(out, MsgType::Feedback, 0, Chan::Control, sessionId, kFeedbackBytes);
     if (!total) return 0;
     uint8_t* p = out.data() + kCommonHeaderSize;
-    PutU16(p, m.lostFrames);
-    p[2] = m.lossPct;
-    PutU16(p + 3, m.rttMs);
-    PutU32(p + 5, m.recvBitrateKbps);
+    p[0] = m.lossPct;
+    PutU16(p + 1, m.rttMs);
+    PutU32(p + 3, m.recvBitrateKbps);
     return total;
 }
 
@@ -242,8 +233,8 @@ size_t BuildInvalidateRef(std::span<uint8_t> out, uint32_t sessionId, uint32_t f
 }
 
 size_t BuildReconfig(std::span<uint8_t> out, uint32_t sessionId, const Reconfig& m) {
-    constexpr size_t kPayload = 9;
-    const size_t total = WriteCommon(out, MsgType::Reconfig, 0, Chan::Control, sessionId, kPayload);
+    const size_t total =
+        WriteCommon(out, MsgType::Reconfig, 0, Chan::Control, sessionId, kReconfigBytes);
     if (!total) return 0;
     uint8_t* p = out.data() + kCommonHeaderSize;
     PutU16(p, m.width);
@@ -421,39 +412,24 @@ std::optional<AuthResult> ParseAuthResult(std::span<const uint8_t> payload) {
 }
 
 std::optional<Hello> ParseHello(std::span<const uint8_t> payload) {
-    if (payload.size() < 13) return std::nullopt;
+    if (payload.size() < kHelloFixedBytes) return std::nullopt;
     const uint8_t* p = payload.data();
     Hello m;
     m.clientId = GetU32(p);
-    m.codecMask = GetU16(p + 4);
-    m.maxWidth = GetU16(p + 6);
-    m.maxHeight = GetU16(p + 8);
-    m.desiredFps = p[10];
-    m.features = GetU16(p + 11);
-    m.sourceId = payload.size() >= 14 ? p[13] : 0;
-    if (payload.size() >= 14 + kPasscodeDigits) {
-        const std::string_view code(reinterpret_cast<const char*>(p + 14), kPasscodeDigits);
-        if (IsValidPasscode(code)) m.passcode = code;
-    }
-    constexpr size_t nameLenOff = 14 + kPasscodeDigits;
-    if (payload.size() > nameLenOff) {
-        size_t nameLen = p[nameLenOff];
-        if (nameLen > kMaxClientNameBytes) nameLen = 0;
-        if (nameLen && payload.size() >= nameLenOff + 1 + nameLen) {
-            m.clientName.reserve(nameLen);
-            for (size_t i = 0; i < nameLen; ++i) {
-                const uint8_t c = p[nameLenOff + 1 + i];
-                if (c >= 0x20 && c != 0x7F) m.clientName.push_back(char(c));
-            }
+    m.maxWidth = GetU16(p + 4);
+    m.maxHeight = GetU16(p + 6);
+    m.features = GetU16(p + 8);
+    m.sourceId = p[10];
+    size_t nameLen = p[11];
+    if (nameLen > kMaxClientNameBytes) nameLen = 0;
+    if (nameLen && payload.size() >= kHelloFixedBytes + nameLen) {
+        m.clientName.reserve(nameLen);
+        for (size_t i = 0; i < nameLen; ++i) {
+            const uint8_t c = p[kHelloFixedBytes + i];
+            if (c >= 0x20 && c != 0x7F) m.clientName.push_back(char(c));
         }
     }
     return m;
-}
-
-std::string ParseListSourcesPasscode(std::span<const uint8_t> payload) {
-    if (payload.size() < kPasscodeDigits) return {};
-    const std::string_view code(reinterpret_cast<const char*>(payload.data()), kPasscodeDigits);
-    return IsValidPasscode(code) ? std::string(code) : std::string();
 }
 
 size_t ParseSourceList(std::span<const uint8_t> payload, std::span<SourceInfo> out) {
@@ -483,20 +459,17 @@ size_t ParseSourceList(std::span<const uint8_t> payload, std::span<SourceInfo> o
 }
 
 std::optional<HelloAck> ParseHelloAck(std::span<const uint8_t> payload) {
-    if (payload.size() < 22) return std::nullopt;
+    if (payload.size() < kHelloAckBytes) return std::nullopt;
     const uint8_t* p = payload.data();
+    if (p[4] > 1 || p[14] > uint8_t(RejectReason::Busy)) return std::nullopt;
     HelloAck m;
     m.sessionId = GetU32(p);
-    if (p[4] != uint8_t(Codec::H264) && p[4] != uint8_t(Codec::Rejected)) return std::nullopt;
-    m.codec = Codec(p[4]);
+    m.rejected = p[4] != 0;
     m.width = GetU16(p + 5);
     m.height = GetU16(p + 7);
     m.fps = p[9];
     m.bitrateBps = GetU32(p + 10);
-    m.timebaseUs = GetU64(p + 14);
-
-    if (payload.size() >= 25 && p[24] <= uint8_t(RejectReason::WrongPasscode))
-        m.reason = RejectReason(p[24]);
+    m.reason = RejectReason(p[14]);
     return m;
 }
 
@@ -507,21 +480,19 @@ std::optional<PingPong> ParsePingPong(std::span<const uint8_t> payload) {
 }
 
 std::optional<Feedback> ParseFeedback(std::span<const uint8_t> payload) {
-    if (payload.size() < 9) return std::nullopt;
+    if (payload.size() < kFeedbackBytes) return std::nullopt;
     const uint8_t* p = payload.data();
     Feedback m;
-    m.lostFrames = GetU16(p);
-    m.lossPct = p[2];
-    m.rttMs = GetU16(p + 3);
-    m.recvBitrateKbps = GetU32(p + 5);
+    m.lossPct = p[0];
+    m.rttMs = GetU16(p + 1);
+    m.recvBitrateKbps = GetU32(p + 3);
     return m;
 }
 
 std::optional<Reconfig> ParseReconfig(std::span<const uint8_t> payload) {
-    if (payload.size() < 8) return std::nullopt;
+    if (payload.size() < kReconfigBytes) return std::nullopt;
     const uint8_t* p = payload.data();
-    const uint8_t fps = payload.size() >= 9 ? p[8] : 0;
-    return Reconfig{GetU16(p), GetU16(p + 2), GetU32(p + 4), fps};
+    return Reconfig{GetU16(p), GetU16(p + 2), GetU32(p + 4), p[8]};
 }
 
 std::optional<bool> ParseSetFocus(std::span<const uint8_t> payload) {
@@ -666,7 +637,7 @@ PacketKind ClassifyPacket(std::span<const uint8_t> datagram) {
     if (datagram.empty()) return PacketKind::Unknown;
     constexpr uint8_t kQuicHeaderBits = 0xC0;
     if ((datagram[0] & kQuicHeaderBits) != 0) return PacketKind::Quic;
-    if (datagram[0] == 0 || datagram[0] > kProtocolVersion) return PacketKind::Unknown;
+    if (datagram[0] != kProtocolVersion) return PacketKind::Unknown;
     if (datagram.size() < kCommonHeaderSize) return PacketKind::Unknown;
     return PacketKind::Deskhub;
 }
@@ -686,7 +657,7 @@ TermSize ClampTermSize(TermSize size) {
 }
 
 size_t BuildTermOpen(std::span<uint8_t> out, const TermOpen& m) {
-    constexpr size_t kFixed = 13;
+    constexpr size_t kFixed = 9;
     const size_t nameLen = Utf8TruncLen(m.clientName, kMaxClientNameBytes);
     const size_t total = WriteCommon(out, MsgType::TermOpen, 0, Chan::Terminal, 0,
         kFixed + nameLen);
@@ -696,10 +667,7 @@ size_t BuildTermOpen(std::span<uint8_t> out, const TermOpen& m) {
     PutU16(p, size.cols);
     PutU16(p + 2, size.rows);
     PutU32(p + 4, m.resumeId);
-    const bool hasPasscode = IsValidPasscode(m.passcode);
-    for (size_t i = 0; i < kPasscodeDigits; ++i)
-        p[8 + i] = hasPasscode ? uint8_t(m.passcode[i]) : 0;
-    p[12] = uint8_t(nameLen);
+    p[8] = uint8_t(nameLen);
     if (nameLen) std::memcpy(p + kFixed, m.clientName.data(), nameLen);
     return total;
 }
@@ -747,7 +715,7 @@ size_t BuildTermExit(std::span<uint8_t> out, uint32_t termId, int32_t exitCode) 
 }
 
 std::optional<TermOpen> ParseTermOpen(std::span<const uint8_t> payload) {
-    constexpr size_t kFixed = 13;
+    constexpr size_t kFixed = 9;
     if (payload.size() < kFixed) return std::nullopt;
     const uint8_t* p = payload.data();
     TermOpen m;
@@ -755,9 +723,7 @@ std::optional<TermOpen> ParseTermOpen(std::span<const uint8_t> payload) {
     m.size.rows = GetU16(p + 2);
     if (!IsValidTermSize(m.size)) return std::nullopt;
     m.resumeId = GetU32(p + 4);
-    const std::string_view code(reinterpret_cast<const char*>(p + 8), kPasscodeDigits);
-    if (IsValidPasscode(code)) m.passcode = code;
-    size_t nameLen = p[12];
+    size_t nameLen = p[8];
     if (nameLen > kMaxClientNameBytes) nameLen = 0;
     if (nameLen && payload.size() >= kFixed + nameLen) {
         m.clientName.reserve(nameLen);
@@ -796,7 +762,8 @@ size_t BuildTermListAck(std::span<uint8_t> out, const TermSessionList& m) {
         m.sessions.size() < kMaxTermListEntries ? m.sessions.size() : kMaxTermListEntries;
     size_t payload = 2;
     for (size_t i = 0; i < count; ++i)
-        payload += 18 + Utf8TruncLen(m.sessions[i].clientName, kMaxClientNameBytes);
+        payload += kTermListEntryFixedBytes +
+                   Utf8TruncLen(m.sessions[i].clientName, kMaxClientNameBytes);
     const size_t total = WriteCommon(out, MsgType::TermListAck, 0, Chan::Terminal, 0, payload);
     if (!total) return 0;
     uint8_t* p = out.data() + kCommonHeaderSize;
@@ -810,10 +777,9 @@ size_t BuildTermListAck(std::span<uint8_t> out, const TermSessionList& m) {
         p[4] = uint8_t(e.state > TerminalState::Local ? TerminalState::Live : e.state);
         PutU16(p + 5, size.cols);
         PutU16(p + 7, size.rows);
-        PutU64(p + 9, e.openedUs);
-        p[17] = uint8_t(nameLen);
-        std::memcpy(p + 18, e.clientName.data(), nameLen);
-        p += 18 + nameLen;
+        p[9] = uint8_t(nameLen);
+        std::memcpy(p + kTermListEntryFixedBytes, e.clientName.data(), nameLen);
+        p += kTermListEntryFixedBytes + nameLen;
     }
     return total;
 }
@@ -826,20 +792,21 @@ std::optional<TermSessionList> ParseTermListAck(std::span<const uint8_t> payload
     m.sessions.reserve(count);
     std::span<const uint8_t> rest = payload.subspan(2);
     for (size_t i = 0; i < count; ++i) {
-        if (rest.size() < 18) return std::nullopt;
+        if (rest.size() < kTermListEntryFixedBytes) return std::nullopt;
         if (rest[4] > uint8_t(TerminalState::Local)) return std::nullopt;
         const TermSize size{GetU16(rest.data() + 5), GetU16(rest.data() + 7)};
         if (!IsValidTermSize(size)) return std::nullopt;
-        const size_t nameLen = rest[17];
-        if (nameLen > kMaxClientNameBytes || nameLen > rest.size() - 18) return std::nullopt;
+        const size_t nameLen = rest[9];
+        if (nameLen > kMaxClientNameBytes || nameLen > rest.size() - kTermListEntryFixedBytes)
+            return std::nullopt;
         TermSessionEntry e;
         e.termId = GetU32(rest.data());
         e.state = TerminalState(rest[4]);
         e.size = size;
-        e.openedUs = GetU64(rest.data() + 9);
-        e.clientName.assign(reinterpret_cast<const char*>(rest.data() + 18), nameLen);
+        e.clientName.assign(
+            reinterpret_cast<const char*>(rest.data() + kTermListEntryFixedBytes), nameLen);
         m.sessions.push_back(std::move(e));
-        rest = rest.subspan(18 + nameLen);
+        rest = rest.subspan(kTermListEntryFixedBytes + nameLen);
     }
     return m;
 }

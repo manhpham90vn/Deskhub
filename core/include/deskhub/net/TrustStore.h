@@ -53,7 +53,6 @@ public:
     void Clear();
 
     std::optional<TrustedHost> Find(std::string_view endpoint) const;
-    std::vector<std::string> EndpointsFor(const Fingerprint& fp) const;
     const std::vector<TrustedHost>& Hosts() const {
         return hosts_;
     }

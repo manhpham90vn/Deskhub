@@ -91,8 +91,6 @@ void TestRememberAndForget() {
     Check(again && again->firstSeenUnix == 100, "but the first meeting is not rewritten");
 
     store.Remember("c:1", "", MakeFingerprint(1), 600);
-    const auto shared = store.EndpointsFor(MakeFingerprint(1));
-    Check(shared.size() == 2, "one key can be reached at more than one address");
 
     Check(!store.Forget("nothing:1"), "forgetting a stranger reports nothing happened");
     Check(store.Forget("a:1") && store.Size() == 2, "forgetting a machine removes exactly it");

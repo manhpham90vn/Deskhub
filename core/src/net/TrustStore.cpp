@@ -139,14 +139,6 @@ std::optional<TrustedHost> TrustStore::Find(std::string_view endpoint) const {
     return std::nullopt;
 }
 
-std::vector<std::string> TrustStore::EndpointsFor(const Fingerprint& fp) const {
-    std::vector<std::string> out;
-    if (IsZero(fp)) return out;
-    for (const TrustedHost& h : hosts_)
-        if (h.fingerprint == fp) out.push_back(h.endpoint);
-    return out;
-}
-
 TrustStore ParseTrustStore(std::string_view text) {
     TrustStore store;
     size_t pos = 0;

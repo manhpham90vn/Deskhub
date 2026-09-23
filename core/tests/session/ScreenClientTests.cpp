@@ -15,9 +15,8 @@ using namespace deskhub;
 namespace {
 
 ScreenClientConfig TestPumpCfg(uint32_t clientId, uint16_t maxWidth, uint16_t maxHeight,
-    uint8_t sourceId, uint8_t desiredFps) {
-    ScreenClientConfig cfg{clientId, maxWidth, maxHeight, sourceId, desiredFps};
-    cfg.passcode = kTestPasscode;
+    uint8_t sourceId) {
+    ScreenClientConfig cfg{clientId, maxWidth, maxHeight, sourceId};
     return cfg;
 }
 
@@ -112,10 +111,9 @@ void TestHandshakeAndParams() {
     hcb.send = [&](std::span<const uint8_t> d) { r.toClient.emplace_back(d.begin(), d.end()); };
     hcb.randomBytes = TestRandomBytes;
     ScreenHostSession host(hcb, StreamParams{1920, 1080, 60, 20'000'000});
-    host.SetPasscode(kTestPasscode);
 
     uint64_t now = 10'000'000;
-    ScreenClientConfig cfg = TestPumpCfg(0x11223344, 2560, 1440, 0, 60);
+    ScreenClientConfig cfg = TestPumpCfg(0x11223344, 2560, 1440, 0);
     cfg.displayName = "Anh's laptop";
     pump.Start(cfg, now);
     Check(CountToHost(r.toHost, MsgType::Hello) == 1, "Start() puts a HELLO on the wire");
@@ -140,10 +138,9 @@ void TestVideoReachesTheFrameSink() {
     hcb.send = [&](std::span<const uint8_t> d) { r.toClient.emplace_back(d.begin(), d.end()); };
     hcb.randomBytes = TestRandomBytes;
     ScreenHostSession host(hcb, StreamParams{1920, 1080, 60, 20'000'000});
-    host.SetPasscode(kTestPasscode);
 
     uint64_t now = 10'000'000;
-    pump.Start(TestPumpCfg(1, 1920, 1080, 0, 60), now);
+    pump.Start(TestPumpCfg(1, 1920, 1080, 0), now);
     Exchange(r, pump, host, now);
 
     Packetizer pk;
@@ -170,10 +167,9 @@ void TestKeyframeRequestsAreLoggedOnce() {
     bool hostSawRequest = false;
     hcb.onKeyframeRequest = [&] { hostSawRequest = true; };
     ScreenHostSession host(hcb, StreamParams{1920, 1080, 60, 20'000'000});
-    host.SetPasscode(kTestPasscode);
 
     uint64_t now = 10'000'000;
-    pump.Start(TestPumpCfg(1, 1920, 1080, 0, 60), now);
+    pump.Start(TestPumpCfg(1, 1920, 1080, 0), now);
     Exchange(r, pump, host, now);
 
     Packetizer pk;
@@ -212,10 +208,9 @@ void TestReportRunsOncePerWindow() {
         ++feedbacks;
     };
     ScreenHostSession host(hcb, StreamParams{1920, 1080, 60, 20'000'000});
-    host.SetPasscode(kTestPasscode);
 
     uint64_t now = 10'000'000;
-    pump.Start(TestPumpCfg(1, 1920, 1080, 0, 60), now);
+    pump.Start(TestPumpCfg(1, 1920, 1080, 0), now);
     Exchange(r, pump, host, now);
 
     Packetizer pk;
@@ -253,11 +248,9 @@ void TestStatusSeparatorIsConfigurable() {
     hcb.send = [&](std::span<const uint8_t> d) { r.toClient.emplace_back(d.begin(), d.end()); };
     hcb.randomBytes = TestRandomBytes;
     ScreenHostSession host(hcb, StreamParams{1920, 1080, 60, 20'000'000});
-    host.SetPasscode(kTestPasscode);
 
     uint64_t now = 10'000'000;
-    ScreenClientConfig cfg{1, 1920, 1080, 0, 60};
-    cfg.passcode = kTestPasscode;
+    ScreenClientConfig cfg{1, 1920, 1080, 0};
     cfg.statusSeparator = " | ";
     pump.Start(cfg, now);
     Exchange(r, pump, host, now);
@@ -277,10 +270,9 @@ void TestDisconnectEndsTheLoop() {
     hcb.send = [&](std::span<const uint8_t> d) { r.toClient.emplace_back(d.begin(), d.end()); };
     hcb.randomBytes = TestRandomBytes;
     ScreenHostSession host(hcb, StreamParams{1920, 1080, 60, 20'000'000});
-    host.SetPasscode(kTestPasscode);
 
     uint64_t now = 10'000'000;
-    pump.Start(TestPumpCfg(1, 1920, 1080, 0, 60), now);
+    pump.Start(TestPumpCfg(1, 1920, 1080, 0), now);
     Exchange(r, pump, host, now);
     Check(r.ended.empty(), "still connected");
 
@@ -297,7 +289,7 @@ void TestLoopBusyWarning() {
     std::printf("[pump] a slow loop iteration is counted and warned about...\n");
     Rig r;
     ScreenClient pump(r.Callbacks(), r.diag);
-    pump.Start(TestPumpCfg(1, 1920, 1080, 0, 60), 10'000'000);
+    pump.Start(TestPumpCfg(1, 1920, 1080, 0), 10'000'000);
     r.logs.clear();
 
     pump.CountLoopBusy(10'000'000, 10'001'000);
@@ -316,10 +308,9 @@ void TestStrayTrafficIsIgnored() {
     hcb.send = [&](std::span<const uint8_t> d) { r.toClient.emplace_back(d.begin(), d.end()); };
     hcb.randomBytes = TestRandomBytes;
     ScreenHostSession host(hcb, StreamParams{1920, 1080, 60, 20'000'000});
-    host.SetPasscode(kTestPasscode);
 
     uint64_t now = 10'000'000;
-    pump.Start(TestPumpCfg(1, 1920, 1080, 0, 60), now);
+    pump.Start(TestPumpCfg(1, 1920, 1080, 0), now);
     Exchange(r, pump, host, now);
 
     Packetizer stray;
@@ -345,10 +336,9 @@ void TestReconfigIsAppliedMidStream() {
     Rig r;
     ScreenClient pump(r.Callbacks(), r.diag);
     ScreenHostSession host(HostSendTo(r), StreamParams{1920, 1080, 60, 20'000'000});
-    host.SetPasscode(kTestPasscode);
 
     uint64_t now = 10'000'000;
-    pump.Start(TestPumpCfg(1, 1920, 1080, 0, 60), now);
+    pump.Start(TestPumpCfg(1, 1920, 1080, 0), now);
     Exchange(r, pump, host, now);
 
     uint8_t msg[64];
@@ -376,10 +366,9 @@ void TestOfferWithoutFpsFallsBackToDefault() {
     Rig r;
     ScreenClient pump(r.Callbacks(), r.diag);
     ScreenHostSession host(HostSendTo(r), StreamParams{1920, 1080, 0, 20'000'000});
-    host.SetPasscode(kTestPasscode);
 
     uint64_t now = 10'000'000;
-    pump.Start(TestPumpCfg(1, 1920, 1080, 0, 60), now);
+    pump.Start(TestPumpCfg(1, 1920, 1080, 0), now);
     Exchange(r, pump, host, now);
 
     Packetizer pk;
@@ -401,10 +390,9 @@ void TestFecRecoversALostPacket() {
     Rig r;
     ScreenClient pump(r.Callbacks(), r.diag);
     ScreenHostSession host(HostSendTo(r), StreamParams{1920, 1080, 60, 20'000'000});
-    host.SetPasscode(kTestPasscode);
 
     uint64_t now = 10'000'000;
-    pump.Start(TestPumpCfg(1, 1920, 1080, 0, 60), now);
+    pump.Start(TestPumpCfg(1, 1920, 1080, 0), now);
     Exchange(r, pump, host, now);
 
     Packetizer pk;
@@ -440,14 +428,12 @@ void TestNackGoesOutForAHole() {
         nackIdx.assign(idx.begin(), idx.end());
     };
     ScreenHostSession host(hcb, StreamParams{1920, 1080, 60, 20'000'000});
-    host.SetPasscode(kTestPasscode);
 
     uint64_t now = 10'000'000;
     pump.PlanNacks(now);
     Check(r.toHost.empty(), "NACKs stay off unless the config asks for them");
 
-    ScreenClientConfig cfg{1, 1920, 1080, 0, 60};
-    cfg.passcode = kTestPasscode;
+    ScreenClientConfig cfg{1, 1920, 1080, 0};
     cfg.sendNacks = true;
     pump.Start(cfg, now);
     Exchange(r, pump, host, now);
@@ -476,10 +462,9 @@ void TestLossAsksForAKeyframe() {
     Rig r;
     ScreenClient pump(r.Callbacks(), r.diag);
     ScreenHostSession host(HostSendTo(r), StreamParams{1920, 1080, 60, 20'000'000});
-    host.SetPasscode(kTestPasscode);
 
     uint64_t now = 10'000'000;
-    pump.Start(TestPumpCfg(1, 1920, 1080, 0, 60), now);
+    pump.Start(TestPumpCfg(1, 1920, 1080, 0), now);
     Exchange(r, pump, host, now);
 
     Packetizer pk;
@@ -513,11 +498,9 @@ void TestLossRunsLineIsPrinted() {
     Rig r;
     ScreenClient pump(r.Callbacks(), r.diag);
     ScreenHostSession host(HostSendTo(r), StreamParams{1920, 1080, 60, 20'000'000});
-    host.SetPasscode(kTestPasscode);
 
     uint64_t now = 10'000'000;
-    ScreenClientConfig cfg{1, 1920, 1080, 0, 60};
-    cfg.passcode = kTestPasscode;
+    ScreenClientConfig cfg{1, 1920, 1080, 0};
     cfg.logLossRuns = true;
     pump.Start(cfg, now);
     Exchange(r, pump, host, now);
@@ -551,10 +534,9 @@ void TestFocusInputByeAndRtt() {
     hcb.onInput = [&](const InputEvent&) { ++inputs; };
     hcb.onDisconnect = [&] { hostEnded = true; };
     ScreenHostSession host(hcb, StreamParams{1920, 1080, 60, 20'000'000});
-    host.SetPasscode(kTestPasscode);
 
     uint64_t now = 10'000'000;
-    pump.Start(TestPumpCfg(1, 1920, 1080, 0, 60), now);
+    pump.Start(TestPumpCfg(1, 1920, 1080, 0), now);
     Exchange(r, pump, host, now);
 
     Packetizer pk;
@@ -617,10 +599,9 @@ void TestAudioOnlyFlowsWhenAskedFor() {
         hcb.send = [&](std::span<const uint8_t> d) { r.toClient.emplace_back(d.begin(), d.end()); };
         hcb.randomBytes = TestRandomBytes;
         ScreenHostSession host(hcb, StreamParams{1920, 1080, 60, 20'000'000});
-        host.SetPasscode(kTestPasscode);
 
         const uint64_t now = 10'000'000;
-        ScreenClientConfig cfg = TestPumpCfg(2, 1920, 1080, 0, 60);
+        ScreenClientConfig cfg = TestPumpCfg(2, 1920, 1080, 0);
         cfg.wantsAudio = wantsAudio;
         pump.Start(cfg, now);
 

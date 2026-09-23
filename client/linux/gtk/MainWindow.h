@@ -79,7 +79,6 @@ private:
 
     void RefreshPairedDevices();
     bool AskPairing(const PairingRequest& request);
-    void ForgetSelectedDevice();
     void ForgetEveryDevice();
 
     bool Sharing() const;
@@ -175,6 +174,7 @@ private:
     static void OnAddressActivate(GtkEntry* e, gpointer user);
     static void OnCopyClicked(GtkButton* b, gpointer user);
     static void OnCopyPasscodeClicked(GtkButton* b, gpointer user);
+    static void OnCopyPortClicked(GtkButton* b, gpointer user);
     static gboolean OnCopiedRevertTimer(gpointer user);
     static void OnSettingChanged(GtkWidget* w, gpointer user);
     static void OnBindChanged(GtkWidget* w, gpointer user);
@@ -201,6 +201,8 @@ private:
     GtkWidget* hostPasscodeCard_ = nullptr;
     GtkWidget* hostPasscodeLabel_ = nullptr;
     GtkWidget* hostPasscodeCopy_ = nullptr;
+    GtkWidget* hostPortLabel_ = nullptr;
+    GtkWidget* hostPortCopy_ = nullptr;
     guint copiedRevertId_ = 0;
     GtkWidget* hostHintLabel_ = nullptr;
     GtkWidget* hostPortalNote_ = nullptr;
@@ -227,9 +229,7 @@ private:
     std::vector<ConnectionWindow*> connections_;
 
     GtkWidget* pairedView_ = nullptr;
-    GtkListStore* pairedStore_ = nullptr;
     GtkWidget* pairedHintLabel_ = nullptr;
-    GtkWidget* forgetDeviceButton_ = nullptr;
     GtkWidget* allowPairingCheck_ = nullptr;
     std::vector<deskhub::PairedDevice> pairedDevices_;
     GtkWidget* deviceHintLabel_ = nullptr;

@@ -40,6 +40,8 @@ using load::ViewerConfig;
 using load::WriteBytes;
 
 struct Session {
+    uint16_t port = 0;
+    load::Upload upload{};
     fake::SharingHost host{};
     deskhubp::FileHost files{};
     Viewer viewer{};
@@ -49,6 +51,7 @@ struct Session {
     std::filesystem::path file{};
 
     ~Session() {
+        upload.client.Stop();
         viewer.Stop();
         files.Stop();
         host.Stop();
@@ -64,7 +67,7 @@ struct Session {
         payload = Pattern(kTransferBytes);
         file = WriteBytes(source, "bulk.bin", payload);
 
-        const uint16_t port = NextTestPort();
+        port = NextTestPort();
         if (!host.Start({fake::Source("Display 1", 1280, 720, 1)}, port, 30, 1920,
                 kTestPasscode, true, audio)) {
             Check(false, "the host could not start");
@@ -118,7 +121,7 @@ void TestABigTransferNeverStallsTheStream() {
     Continuity busy(DecodedFrames);
     busy.Begin();
     const uint64_t startedUs = NowUs();
-    Check(s.viewer.SendFiles({s.file}), "the viewer offers the batch mid-session");
+    Check(s.upload.Start(s.port, s.file), "the viewer offers the batch mid-session");
 
     bool finished = false;
     size_t deepestLane = 0;
@@ -127,7 +130,7 @@ void TestABigTransferNeverStallsTheStream() {
         busy.Sample();
         const size_t depth = s.host.socket().BulkQueued();
         if (depth > deepestLane) deepestLane = depth;
-        if (!s.viewer.uploading()) {
+        if (!s.upload.busy()) {
             finished = true;
             break;
         }
@@ -143,7 +146,7 @@ void TestABigTransferNeverStallsTheStream() {
         static_cast<unsigned long long>(spentMs), deepestLane);
 
     Check(finished, "the transfer settles inside the deadline");
-    Check(s.viewer.uploadState() == deskhub::FileSenderState::Done, "and settles as done");
+    Check(s.upload.done(), "and settles as done");
     Check(s.LandedWhole(), "every byte of the file reached the host, unchanged");
 
     Check(busy.moved() > 0, "frames kept arriving while the file was crossing");
@@ -163,12 +166,12 @@ void TestInputStaysLiveDuringABigTransfer() {
     Session s;
     if (!s.Open("input", false)) return;
 
-    Check(s.viewer.SendFiles({s.file}), "the batch is offered");
-    Check(WaitFor([&s] { return s.viewer.uploadProgress().batchBytes > kTransferBytes / 8; },
+    Check(s.upload.Start(s.port, s.file), "the batch is offered");
+    Check(WaitFor([&s] { return s.upload.batchBytes() > kTransferBytes / 8; },
               kTransferTimeoutMs),
         "the transfer is well under way");
 
-    const bool stillRunning = s.viewer.uploading();
+    const bool stillRunning = s.upload.busy();
     fake::Host().Reset();
 
     const uint64_t sentUs = NowUs();
@@ -190,9 +193,9 @@ void TestInputStaysLiveDuringABigTransfer() {
         "and did so promptly, so input is not queued behind however many file chunks are "
         "in front of it");
 
-    Check(WaitFor([&s] { return !s.viewer.uploading(); }, kTransferTimeoutMs),
+    Check(WaitFor([&s] { return !s.upload.busy(); }, kTransferTimeoutMs),
         "the transfer still finishes");
-    Check(s.viewer.uploadState() == deskhub::FileSenderState::Done, "as done");
+    Check(s.upload.done(), "as done");
     Check(s.LandedWhole(), "with the file intact");
 }
 
@@ -213,13 +216,13 @@ void TestAudioKeepsFlowingDuringABigTransfer() {
 
     Continuity audio(received);
     audio.Begin();
-    Check(s.viewer.SendFiles({s.file}), "the batch is offered");
+    Check(s.upload.Start(s.port, s.file), "the batch is offered");
 
     bool finished = false;
     for (uint32_t waited = 0; waited < kTransferTimeoutMs * 1000 / kSampleUs; ++waited) {
         SleepUs(kSampleUs);
         audio.Sample();
-        if (!s.viewer.uploading()) {
+        if (!s.upload.busy()) {
             finished = true;
             break;
         }

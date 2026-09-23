@@ -30,10 +30,6 @@ public:
         return step_;
     }
 
-    uint32_t requiredBps() const {
-        return RequiredBps(rung_);
-    }
-
     int rungCount() const {
         return count_;
     }
