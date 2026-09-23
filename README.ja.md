@@ -110,9 +110,13 @@ passcode 自体は送信されない —— または host 側の利用者が承
 package manager を使えば、インストールとその後の更新を任せられる —— Windows、macOS、Ubuntu / Debian / Mint：
 
 ```bash
-winget install ManhPham.Deskhub                  # Windows
-brew install --cask manhpham90vn/tap/deskhub     # macOS
+winget install ManhPham.Deskhub                  # Windows · app
+winget install ManhPham.DeskhubCLI               # Windows · deskhub-cli
+brew install --cask manhpham90vn/tap/deskhub     # macOS · app
+brew install manhpham90vn/tap/deskhub-cli        # macOS · deskhub-cli
 ```
+
+Ubuntu / Debian / Mint では、`deskhub` package が app と `deskhub-cli` の両方をインストールする。
 
 ```bash
 sudo install -d /etc/apt/keyrings
@@ -122,7 +126,14 @@ echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/deskhub.gpg] https://manhpham9
 sudo apt update && sudo apt install deskhub
 ```
 
-全プラットフォームのダウンロード、command-line client、モバイルの beta：[INSTALL.ja.md](docs/INSTALL.ja.md)。
+その他のプラットフォームは [Releases](https://github.com/manhpham90vn/Deskhub/releases) から：
+
+- **Fedora / openSUSE** —— `sudo dnf install ./deskhub-v*-x86_64.rpm`（または `zypper install`）
+- **Arch、その他の Linux** —— portable 版 `deskhub-v*-linux-x86_64` を `chmod +x` して実行
+- **Android** —— `deskhub-v*-android.apk`、または [Play の beta](https://play.google.com/apps/testing/com.manhpham.deskhub)
+- **iOS** —— [TestFlight](https://testflight.apple.com/join/7qY7wgpd)
+
+プラットフォームごとの詳細と必要な権限：[INSTALL.ja.md](docs/INSTALL.ja.md)。
 
 ## ✨ 中身
 

@@ -107,9 +107,13 @@ network you trust or a VPN, and **never port-forward UDP 47777**. Full threat mo
 Through a package manager, which also keeps it up to date — Windows, macOS, and Ubuntu / Debian / Mint:
 
 ```bash
-winget install ManhPham.Deskhub                  # Windows
-brew install --cask manhpham90vn/tap/deskhub     # macOS
+winget install ManhPham.Deskhub                  # Windows · app
+winget install ManhPham.DeskhubCLI               # Windows · deskhub-cli
+brew install --cask manhpham90vn/tap/deskhub     # macOS · app
+brew install manhpham90vn/tap/deskhub-cli        # macOS · deskhub-cli
 ```
+
+On Ubuntu / Debian / Mint, the `deskhub` package brings both the app and `deskhub-cli`:
 
 ```bash
 sudo install -d /etc/apt/keyrings
@@ -119,7 +123,14 @@ echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/deskhub.gpg] https://manhpham9
 sudo apt update && sudo apt install deskhub
 ```
 
-Downloads for every platform, the command-line client and the mobile betas: [INSTALL.md](docs/INSTALL.md).
+Everything else is on [Releases](https://github.com/manhpham90vn/Deskhub/releases):
+
+- **Fedora / openSUSE** — `sudo dnf install ./deskhub-v*-x86_64.rpm` (or `zypper install`)
+- **Arch, other Linux** — portable `deskhub-v*-linux-x86_64`, just `chmod +x` and run
+- **Android** — `deskhub-v*-android.apk`, or the [Play beta](https://play.google.com/apps/testing/com.manhpham.deskhub)
+- **iOS** — [TestFlight](https://testflight.apple.com/join/7qY7wgpd)
+
+Details and permissions per platform: [INSTALL.md](docs/INSTALL.md).
 
 ## ✨ What's inside
 

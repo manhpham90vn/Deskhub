@@ -108,9 +108,13 @@ UDP 47777**. Threat model đầy đủ nằm trong [`SECURITY.vi.md`](SECURITY.v
 Cài qua package manager, vừa cài vừa được tự cập nhật — Windows, macOS, và Ubuntu / Debian / Mint:
 
 ```bash
-winget install ManhPham.Deskhub                  # Windows
-brew install --cask manhpham90vn/tap/deskhub     # macOS
+winget install ManhPham.Deskhub                  # Windows · app
+winget install ManhPham.DeskhubCLI               # Windows · deskhub-cli
+brew install --cask manhpham90vn/tap/deskhub     # macOS · app
+brew install manhpham90vn/tap/deskhub-cli        # macOS · deskhub-cli
 ```
+
+Trên Ubuntu / Debian / Mint, package `deskhub` cài cả app lẫn `deskhub-cli`:
 
 ```bash
 sudo install -d /etc/apt/keyrings
@@ -120,7 +124,14 @@ echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/deskhub.gpg] https://manhpham9
 sudo apt update && sudo apt install deskhub
 ```
 
-File tải về cho mọi nền tảng, command-line client và bản beta mobile: [INSTALL.vi.md](docs/INSTALL.vi.md).
+Các nền tảng còn lại lấy trên [Releases](https://github.com/manhpham90vn/Deskhub/releases):
+
+- **Fedora / openSUSE** — `sudo dnf install ./deskhub-v*-x86_64.rpm` (hoặc `zypper install`)
+- **Arch, Linux khác** — bản portable `deskhub-v*-linux-x86_64`, `chmod +x` rồi chạy
+- **Android** — `deskhub-v*-android.apk`, hoặc [bản beta trên Play](https://play.google.com/apps/testing/com.manhpham.deskhub)
+- **iOS** — [TestFlight](https://testflight.apple.com/join/7qY7wgpd)
+
+Chi tiết và quyền cần cấp trên từng nền tảng: [INSTALL.vi.md](docs/INSTALL.vi.md).
 
 ## ✨ Bên trong có gì
 

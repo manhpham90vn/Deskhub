@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Deskhub apt repository</title>
+<style>
+:root {
+  --bg: #ffffff;
+  --fg: #1f2328;
+  --muted: #59636e;
+  --code-bg: #f6f8fa;
+  --border: #d1d9e0;
+  --link: #0969da;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117;
+    --fg: #e6edf3;
+    --muted: #9198a1;
+    --code-bg: #161b22;
+    --border: #30363d;
+    --link: #4493f8;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font: 16px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+main { max-width: 760px; margin: 0 auto; padding: 48px 16px; }
+h1 { font-size: 1.75rem; margin: 0 0 8px; }
+h2 { font-size: 1.1rem; margin: 32px 0 8px; }
+p { margin: 8px 0; }
+.muted { color: var(--muted); }
+a { color: var(--link); }
+pre {
+  background: var(--code-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+  overflow-x: auto;
+  font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+</style>
+</head>
+<body>
+<main>
+<h1>Deskhub apt repository</h1>
+<p class="muted">Signed packages of <a href="https://github.com/manhpham90vn/Deskhub">Deskhub</a>, the LAN remote desktop, for Ubuntu 22.04+ and Debian 12+ on amd64.</p>
+
+<h2>Install</h2>
+<pre>sudo install -d /etc/apt/keyrings
+curl -fsSL https://manhpham90vn.github.io/Deskhub/apt/deskhub.gpg | sudo tee /etc/apt/keyrings/deskhub.gpg &gt;/dev/null
+echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/deskhub.gpg] https://manhpham90vn.github.io/Deskhub/apt stable main" \
+  | sudo tee /etc/apt/sources.list.d/deskhub.list
+sudo apt update &amp;&amp; sudo apt install deskhub</pre>
+<p>The <code>deskhub</code> package installs both the app and <code>deskhub-cli</code>. Later releases arrive with <code>sudo apt upgrade</code>.</p>
+
+<h2>Remove</h2>
+<pre>sudo apt remove deskhub
+sudo rm -f /etc/apt/sources.list.d/deskhub.list /etc/apt/keyrings/deskhub.gpg</pre>
+
+<h2>Signing key</h2>
+<p><a href="deskhub.gpg">deskhub.gpg</a> (binary) · <a href="deskhub.asc">deskhub.asc</a> (armored) — fingerprint <code>@FINGERPRINT@</code></p>
+
+<p class="muted">Every platform and the full guide: <a href="https://github.com/manhpham90vn/Deskhub/blob/main/docs/INSTALL.md">INSTALL.md</a></p>
+</main>
+</body>
+</html>

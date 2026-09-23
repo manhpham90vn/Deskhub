@@ -74,6 +74,7 @@ sign --armor --detach-sign --output "$OUT/dists/$SUITE/Release.gpg" "$OUT/dists/
 gpg --export "$KEY_FPR" > "$OUT/deskhub.gpg"
 gpg --armor --export "$KEY_FPR" > "$OUT/deskhub.asc"
 touch "$OUT/.nojekyll"
+sed "s/@FINGERPRINT@/$KEY_FPR/" packaging/apt/index.html > "$OUT/index.html"
 
 gpgv --keyring "$OUT/deskhub.gpg" "$OUT/dists/$SUITE/InRelease" 2>/dev/null || {
     echo "build-apt-repo.sh: InRelease does not verify against the exported deskhub.gpg." >&2

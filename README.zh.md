@@ -107,9 +107,13 @@ VPN，并且**不要对 UDP 47777 做 port-forward**。完整的 threat model �
 通过 package manager 安装，并由它保持更新 —— Windows、macOS，以及 Ubuntu / Debian / Mint：
 
 ```bash
-winget install ManhPham.Deskhub                  # Windows
-brew install --cask manhpham90vn/tap/deskhub     # macOS
+winget install ManhPham.Deskhub                  # Windows · app
+winget install ManhPham.DeskhubCLI               # Windows · deskhub-cli
+brew install --cask manhpham90vn/tap/deskhub     # macOS · app
+brew install manhpham90vn/tap/deskhub-cli        # macOS · deskhub-cli
 ```
+
+在 Ubuntu / Debian / Mint 上，`deskhub` package 同时安装 app 与 `deskhub-cli`：
 
 ```bash
 sudo install -d /etc/apt/keyrings
@@ -119,7 +123,14 @@ echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/deskhub.gpg] https://manhpham9
 sudo apt update && sudo apt install deskhub
 ```
 
-各平台的下载文件、command-line client 与移动端 beta：[INSTALL.zh.md](docs/INSTALL.zh.md)。
+其余平台请从 [Releases](https://github.com/manhpham90vn/Deskhub/releases) 获取：
+
+- **Fedora / openSUSE** —— `sudo dnf install ./deskhub-v*-x86_64.rpm`（或 `zypper install`）
+- **Arch 及其他 Linux** —— 免安装的 `deskhub-v*-linux-x86_64`，`chmod +x` 后运行
+- **Android** —— `deskhub-v*-android.apk`，或 [Play beta](https://play.google.com/apps/testing/com.manhpham.deskhub)
+- **iOS** —— [TestFlight](https://testflight.apple.com/join/7qY7wgpd)
+
+各平台的详细说明与所需权限：[INSTALL.zh.md](docs/INSTALL.zh.md)。
 
 ## ✨ 里面有什么
 
