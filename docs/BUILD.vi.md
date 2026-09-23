@@ -265,12 +265,14 @@ trước khi viết subject. Các mục rỗng không xuất hiện trong bản 
 
 ### Package manager
 
-Khi GitHub Release đã có, ba job nữa trong `deploy.yml` sẽ publish nó:
+Khi GitHub Release đã có, `deploy.yml` chuyển tag cho `publish-packages.yml`, và các job trong
+đó sẽ publish nó. Muốn publish lại một tag mà không tạo release mới — chẳng hạn sau khi sửa
+một trong các script này — chạy tay: `gh workflow run publish-packages.yml -f tag=vX.Y.Z`.
 
 | Job | Publish | Secret trong environment `stg` |
 | --- | --- | --- |
-| `publish-winget` | pull request vào `microsoft/winget-pkgs` cho `ManhPham.Deskhub` và `ManhPham.DeskhubCLI`, qua [komac](https://github.com/russellbanks/Komac) (pin trong `scripts/pinned-versions.txt`) | `WINGET_TOKEN` — classic PAT có `public_repo` |
-| `publish-homebrew` | `Casks/deskhub.rb` và `Formula/deskhub-cli.rb` trong `manhpham90vn/homebrew-tap`, sinh từ `packaging/homebrew/` | `HOMEBREW_TAP_TOKEN` — fine-grained PAT, Contents: write trên tap |
+| `winget` | pull request vào `microsoft/winget-pkgs` cho `ManhPham.Deskhub` và `ManhPham.DeskhubCLI`, qua [komac](https://github.com/russellbanks/Komac) (pin trong `scripts/pinned-versions.txt`) | `WINGET_TOKEN` — classic PAT có `public_repo` |
+| `homebrew` | `Casks/deskhub.rb` và `Formula/deskhub-cli.rb` trong `manhpham90vn/homebrew-tap`, sinh từ `packaging/homebrew/` | `HOMEBREW_TAP_TOKEN` — fine-grained PAT, Contents: write trên tap |
 | `build-apt-repo` → `deploy-apt-repo` | apt repository đã ký, chứa deb của ba release gần nhất, trên GitHub Pages tại `/apt` (`scripts/build-apt-repo.sh`) | `APT_GPG_PRIVATE_KEY`, `APT_GPG_PASSPHRASE` |
 
 Mỗi job cần thiết lập một lần trước tag đầu tiên chạy nó:

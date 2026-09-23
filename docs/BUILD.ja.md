@@ -271,12 +271,14 @@ conventional-commit の type が、どのセクションに分類されるかを
 
 ### Package manager
 
-GitHub Release の作成後、`deploy.yml` のさらに 3 つの job がそれを公開する。
+GitHub Release の作成後、`deploy.yml` は tag を `publish-packages.yml` に渡し、その job が
+公開を行う。新しい release を作らずに同じ tag を公開し直すには（これらの script を修正した
+後など）、手動で `gh workflow run publish-packages.yml -f tag=vX.Y.Z` を実行する。
 
 | Job | 公開先 | `stg` environment の secret |
 | --- | --- | --- |
-| `publish-winget` | [komac](https://github.com/russellbanks/Komac)（`scripts/pinned-versions.txt` で pin）経由で、`ManhPham.Deskhub` と `ManhPham.DeskhubCLI` の pull request を `microsoft/winget-pkgs` に出す | `WINGET_TOKEN` —— `public_repo` を持つ classic PAT |
-| `publish-homebrew` | `manhpham90vn/homebrew-tap` の `Casks/deskhub.rb` と `Formula/deskhub-cli.rb`。`packaging/homebrew/` から生成する | `HOMEBREW_TAP_TOKEN` —— tap に Contents: write を持つ fine-grained PAT |
+| `winget` | [komac](https://github.com/russellbanks/Komac)（`scripts/pinned-versions.txt` で pin）経由で、`ManhPham.Deskhub` と `ManhPham.DeskhubCLI` の pull request を `microsoft/winget-pkgs` に出す | `WINGET_TOKEN` —— `public_repo` を持つ classic PAT |
+| `homebrew` | `manhpham90vn/homebrew-tap` の `Casks/deskhub.rb` と `Formula/deskhub-cli.rb`。`packaging/homebrew/` から生成する | `HOMEBREW_TAP_TOKEN` —— tap に Contents: write を持つ fine-grained PAT |
 | `build-apt-repo` → `deploy-apt-repo` | 直近 3 つの release の deb を収めた署名付き apt repository。GitHub Pages の `/apt` に置く（`scripts/build-apt-repo.sh`） | `APT_GPG_PRIVATE_KEY`、`APT_GPG_PASSPHRASE` |
 
 いずれも、それを実行する最初の tag より前に一度だけ設定が必要である。

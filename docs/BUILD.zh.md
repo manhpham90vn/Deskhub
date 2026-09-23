@@ -246,12 +246,14 @@ scripts/changelog.sh v5.0.0     # 不带参数时使用 HEAD 上的 tag
 
 ### Package manager
 
-GitHub Release 创建后，`deploy.yml` 中另有三个 job 负责发布：
+GitHub Release 创建后，`deploy.yml` 将 tag 交给 `publish-packages.yml`，由其中的 job 负责发布。
+若要在不创建新 release 的情况下重新发布某个 tag（例如修复了其中某个 script 之后），可手动
+运行：`gh workflow run publish-packages.yml -f tag=vX.Y.Z`。
 
 | Job | 发布内容 | `stg` environment 中的 secret |
 | --- | --- | --- |
-| `publish-winget` | 通过 [komac](https://github.com/russellbanks/Komac)（版本 pin 在 `scripts/pinned-versions.txt`）向 `microsoft/winget-pkgs` 提交 `ManhPham.Deskhub` 与 `ManhPham.DeskhubCLI` 的 pull request | `WINGET_TOKEN` —— 带 `public_repo` 的 classic PAT |
-| `publish-homebrew` | `manhpham90vn/homebrew-tap` 中的 `Casks/deskhub.rb` 与 `Formula/deskhub-cli.rb`，由 `packaging/homebrew/` 生成 | `HOMEBREW_TAP_TOKEN` —— 对该 tap 有 Contents: write 的 fine-grained PAT |
+| `winget` | 通过 [komac](https://github.com/russellbanks/Komac)（版本 pin 在 `scripts/pinned-versions.txt`）向 `microsoft/winget-pkgs` 提交 `ManhPham.Deskhub` 与 `ManhPham.DeskhubCLI` 的 pull request | `WINGET_TOKEN` —— 带 `public_repo` 的 classic PAT |
+| `homebrew` | `manhpham90vn/homebrew-tap` 中的 `Casks/deskhub.rb` 与 `Formula/deskhub-cli.rb`，由 `packaging/homebrew/` 生成 | `HOMEBREW_TAP_TOKEN` —— 对该 tap 有 Contents: write 的 fine-grained PAT |
 | `build-apt-repo` → `deploy-apt-repo` | 已签名的 apt repository，包含最近三个 release 的 deb，位于 GitHub Pages 的 `/apt`（`scripts/build-apt-repo.sh`） | `APT_GPG_PRIVATE_KEY`、`APT_GPG_PASSPHRASE` |
 
 每个 job 在首次运行它的 tag 之前都需要一次性设置：

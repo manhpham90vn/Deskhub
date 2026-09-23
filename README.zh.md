@@ -102,6 +102,25 @@ VPN，并且**不要对 UDP 47777 做 port-forward**。完整的 threat model �
 | **iOS** | ✅ | ✅ | Client：video 与 input（trackpad、keyboard）。Host：通过 Broadcast Upload Extension 实现 view-only 屏幕共享（ReplayKit + VideoToolbox）—— 正在 TestFlight 上测试 |
 | **Linux** | ✅ | ✅ | 两个角色均可运行（PipeWire + VA-API + uinput + GTK3）—— 支持 Ubuntu、Debian、Mint、Fedora、openSUSE、Arch，通过 deb / rpm / 免安装 binary 提供；已在两台机器间通过 LAN 验证 |
 
+## 📦 安装
+
+通过 package manager 安装，并由它保持更新 —— Windows、macOS，以及 Ubuntu / Debian / Mint：
+
+```bash
+winget install ManhPham.Deskhub                  # Windows
+brew install --cask manhpham90vn/tap/deskhub     # macOS
+```
+
+```bash
+sudo install -d /etc/apt/keyrings
+curl -fsSL https://manhpham90vn.github.io/Deskhub/apt/deskhub.gpg | sudo tee /etc/apt/keyrings/deskhub.gpg >/dev/null
+echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/deskhub.gpg] https://manhpham90vn.github.io/Deskhub/apt stable main" \
+  | sudo tee /etc/apt/sources.list.d/deskhub.list
+sudo apt update && sudo apt install deskhub
+```
+
+各平台的下载文件、command-line client 与移动端 beta：[INSTALL.zh.md](docs/INSTALL.zh.md)。
+
 ## ✨ 里面有什么
 
 - **全程 zero-copy** —— capture 直接进入 VRAM → NVENC → hardware decode → render。hot path 不经过 CPU。

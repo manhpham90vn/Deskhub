@@ -105,6 +105,25 @@ passcode 自体は送信されない —— または host 側の利用者が承
 | **iOS** | ✅ | ✅ | Client: video と input（trackpad、keyboard）。Host: Broadcast Upload Extension による view-only の画面共有（ReplayKit + VideoToolbox）—— TestFlight でテスト中 |
 | **Linux** | ✅ | ✅ | 両方の役割が動作（PipeWire + VA-API + uinput + GTK3）—— Ubuntu、Debian、Mint、Fedora、openSUSE、Arch に deb / rpm / portable binary で提供。2 台間の LAN で検証済み |
 
+## 📦 インストール
+
+package manager を使えば、インストールとその後の更新を任せられる —— Windows、macOS、Ubuntu / Debian / Mint：
+
+```bash
+winget install ManhPham.Deskhub                  # Windows
+brew install --cask manhpham90vn/tap/deskhub     # macOS
+```
+
+```bash
+sudo install -d /etc/apt/keyrings
+curl -fsSL https://manhpham90vn.github.io/Deskhub/apt/deskhub.gpg | sudo tee /etc/apt/keyrings/deskhub.gpg >/dev/null
+echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/deskhub.gpg] https://manhpham90vn.github.io/Deskhub/apt stable main" \
+  | sudo tee /etc/apt/sources.list.d/deskhub.list
+sudo apt update && sudo apt install deskhub
+```
+
+全プラットフォームのダウンロード、command-line client、モバイルの beta：[INSTALL.ja.md](docs/INSTALL.ja.md)。
+
 ## ✨ 中身
 
 - **端から端まで zero-copy** —— capture が直接 VRAM へ入り、NVENC → hardware decode → render と進む。hot path は CPU を経由しない。

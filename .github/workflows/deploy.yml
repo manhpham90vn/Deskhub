@@ -264,65 +264,14 @@ jobs:
         with:
           files: deskhub-${{ github.ref_name }}-android.apk
 
-  publish-winget:
-    needs: github-release
-    if: startsWith(github.ref, 'refs/tags/v')
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    environment: stg
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Open the winget-pkgs pull requests
-        env:
-          WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
-        run: scripts/publish-winget.sh "$GITHUB_REF_NAME"
-
-  publish-homebrew:
+  publish-packages:
     needs: [github-release, release-macos]
     if: startsWith(github.ref, 'refs/tags/v')
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    environment: stg
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Update the Homebrew tap
-        env:
-          GH_TOKEN: ${{ github.token }}
-          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
-        run: scripts/publish-homebrew.sh "$GITHUB_REF_NAME"
-
-  build-apt-repo:
-    needs: github-release
-    if: startsWith(github.ref, 'refs/tags/v')
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    environment: stg
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Build and sign the apt repository
-        env:
-          GH_TOKEN: ${{ github.token }}
-          APT_GPG_PRIVATE_KEY: ${{ secrets.APT_GPG_PRIVATE_KEY }}
-          APT_GPG_PASSPHRASE: ${{ secrets.APT_GPG_PASSPHRASE }}
-        run: scripts/build-apt-repo.sh out/pages/apt
-
-      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
-        with:
-          path: out/pages
-
-  deploy-apt-repo:
-    needs: build-apt-repo
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
     permissions:
+      contents: read
       pages: write
       id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}apt/
-    steps:
-      - id: deployment
-        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
+    uses: ./.github/workflows/publish-packages.yml
+    with:
+      tag: ${{ github.ref_name }}
+    secrets: inherit

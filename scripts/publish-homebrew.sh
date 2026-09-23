@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
+source scripts/tools.sh
 
 TAG=${1:?usage: publish-homebrew.sh vX.Y.Z}
 VERSION=${TAG#v}
@@ -23,8 +24,8 @@ render() {
     sed -e "s/@VERSION@/$VERSION/g" -e "s/@SHA256@/$2/g" "packaging/homebrew/$1"
 }
 
-gh release download "$TAG" --repo manhpham90vn/Deskhub --dir "$WORK/assets" \
-    --pattern "$DMG" --pattern "$CLI"
+deskhub_release_asset "$TAG" "$DMG" "$WORK/assets"
+deskhub_release_asset "$TAG" "$CLI" "$WORK/assets"
 
 git clone --depth 1 "https://x-access-token:$HOMEBREW_TAP_TOKEN@github.com/$TAP_REPO.git" "$WORK/tap"
 mkdir -p "$WORK/tap/Casks" "$WORK/tap/Formula"

@@ -102,6 +102,25 @@ network you trust or a VPN, and **never port-forward UDP 47777**. Full threat mo
 | **iOS** | ✅ | ✅ | Client: video + input (trackpad, keyboard). Host: view-only screen share via a Broadcast Upload Extension (ReplayKit + VideoToolbox) — testing via TestFlight |
 | **Linux** | ✅ | ✅ | Both roles working (PipeWire + VA-API + uinput + GTK3) — Ubuntu, Debian, Mint, Fedora, openSUSE, Arch via deb / rpm / portable binary; verified between two machines over LAN |
 
+## 📦 Install
+
+Through a package manager, which also keeps it up to date — Windows, macOS, and Ubuntu / Debian / Mint:
+
+```bash
+winget install ManhPham.Deskhub                  # Windows
+brew install --cask manhpham90vn/tap/deskhub     # macOS
+```
+
+```bash
+sudo install -d /etc/apt/keyrings
+curl -fsSL https://manhpham90vn.github.io/Deskhub/apt/deskhub.gpg | sudo tee /etc/apt/keyrings/deskhub.gpg >/dev/null
+echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/deskhub.gpg] https://manhpham90vn.github.io/Deskhub/apt stable main" \
+  | sudo tee /etc/apt/sources.list.d/deskhub.list
+sudo apt update && sudo apt install deskhub
+```
+
+Downloads for every platform, the command-line client and the mobile betas: [INSTALL.md](docs/INSTALL.md).
+
 ## ✨ What's inside
 
 - **Zero-copy end to end** — capture straight into VRAM → NVENC → HW decode → render; the hot path never touches the CPU.

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
+source scripts/tools.sh
 
 OUT=${1:?usage: build-apt-repo.sh OUT_DIR}
 KEEP_RELEASES=${APT_KEEP_RELEASES:-3}
@@ -32,8 +33,7 @@ fetch_debs() {
     gh release list --repo "$REPO" --exclude-drafts --exclude-pre-releases \
         --limit "$KEEP_RELEASES" --json tagName --jq '.[].tagName' |
         while read -r tag; do
-            gh release download "$tag" --repo "$REPO" --dir "$pool" \
-                --pattern "deskhub-$tag-$ARCH.deb" ||
+            deskhub_release_asset "$tag" "deskhub-$tag-$ARCH.deb" "$pool" ||
                 echo "::warning::$tag has no deskhub-$tag-$ARCH.deb - left out of the apt repo"
         done
     compgen -G "$pool/*.deb" >/dev/null || {

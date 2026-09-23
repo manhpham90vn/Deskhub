@@ -257,12 +257,14 @@ worked examples live in [`.claude/skills/commit/SKILL.md`](../.claude/skills/com
 
 ### Package managers
 
-Once the GitHub Release exists, three more jobs in `deploy.yml` publish it:
+Once the GitHub Release exists, `deploy.yml` hands the tag to `publish-packages.yml`, whose jobs
+publish it. To publish a tag again without a new release — after a fix to one of these
+scripts, say — run it by hand: `gh workflow run publish-packages.yml -f tag=vX.Y.Z`.
 
 | Job | Publishes | Secret in the `stg` environment |
 | --- | --- | --- |
-| `publish-winget` | pull requests to `microsoft/winget-pkgs` for `ManhPham.Deskhub` and `ManhPham.DeskhubCLI`, through [komac](https://github.com/russellbanks/Komac) (pinned in `scripts/pinned-versions.txt`) | `WINGET_TOKEN` — classic PAT with `public_repo` |
-| `publish-homebrew` | `Casks/deskhub.rb` and `Formula/deskhub-cli.rb` in `manhpham90vn/homebrew-tap`, rendered from `packaging/homebrew/` | `HOMEBREW_TAP_TOKEN` — fine-grained PAT, Contents: write on the tap |
+| `winget` | pull requests to `microsoft/winget-pkgs` for `ManhPham.Deskhub` and `ManhPham.DeskhubCLI`, through [komac](https://github.com/russellbanks/Komac) (pinned in `scripts/pinned-versions.txt`) | `WINGET_TOKEN` — classic PAT with `public_repo` |
+| `homebrew` | `Casks/deskhub.rb` and `Formula/deskhub-cli.rb` in `manhpham90vn/homebrew-tap`, rendered from `packaging/homebrew/` | `HOMEBREW_TAP_TOKEN` — fine-grained PAT, Contents: write on the tap |
 | `build-apt-repo` → `deploy-apt-repo` | a signed apt repository holding the debs of the last three releases, on GitHub Pages under `/apt` (`scripts/build-apt-repo.sh`) | `APT_GPG_PRIVATE_KEY`, `APT_GPG_PASSPHRASE` |
 
 Each needs a one-time setup before the first tag that runs it:

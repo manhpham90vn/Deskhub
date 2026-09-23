@@ -103,6 +103,25 @@ UDP 47777**. Threat model đầy đủ nằm trong [`SECURITY.vi.md`](SECURITY.v
 | **iOS** | ✅ | ✅ | Client: video và input (trackpad, keyboard). Host: share màn hình view-only qua Broadcast Upload Extension (ReplayKit + VideoToolbox) — đang thử nghiệm qua TestFlight |
 | **Linux** | ✅ | ✅ | Cả hai vai trò đều hoạt động (PipeWire + VA-API + uinput + GTK3) — Ubuntu, Debian, Mint, Fedora, openSUSE, Arch qua deb / rpm / binary chạy trực tiếp; đã kiểm chứng giữa hai máy trong LAN |
 
+## 📦 Cài đặt
+
+Cài qua package manager, vừa cài vừa được tự cập nhật — Windows, macOS, và Ubuntu / Debian / Mint:
+
+```bash
+winget install ManhPham.Deskhub                  # Windows
+brew install --cask manhpham90vn/tap/deskhub     # macOS
+```
+
+```bash
+sudo install -d /etc/apt/keyrings
+curl -fsSL https://manhpham90vn.github.io/Deskhub/apt/deskhub.gpg | sudo tee /etc/apt/keyrings/deskhub.gpg >/dev/null
+echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/deskhub.gpg] https://manhpham90vn.github.io/Deskhub/apt stable main" \
+  | sudo tee /etc/apt/sources.list.d/deskhub.list
+sudo apt update && sudo apt install deskhub
+```
+
+File tải về cho mọi nền tảng, command-line client và bản beta mobile: [INSTALL.vi.md](docs/INSTALL.vi.md).
+
 ## ✨ Bên trong có gì
 
 - **Zero-copy từ đầu đến cuối** — capture trực tiếp vào VRAM → NVENC → hardware decode → render. Hot path không đi qua CPU.
