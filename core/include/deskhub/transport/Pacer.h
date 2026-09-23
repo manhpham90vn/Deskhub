@@ -15,10 +15,6 @@ public:
         if (!rateBps_) nextUs_ = 0;
     }
 
-    uint64_t rateBps() const {
-        return rateBps_;
-    }
-
     void Reset() {
         nextUs_ = 0;
     }

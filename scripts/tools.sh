@@ -169,6 +169,8 @@ ensure_local_style_tools() {
     ensure_local_clang_tools
     ensure_local_ktlint
     ensure_local_swiftformat
+    ensure_local_cppcheck
+    ensure_local_detekt
 }
 
 resolve_local_clang_format() {
@@ -215,4 +217,131 @@ resolve_local_swiftformat() {
         return 0
     fi
     return 1
+}
+
+deskhub_is_windows() {
+    case "$(uname -s)" in
+    MINGW* | MSYS* | CYGWIN* | Windows_NT) return 0 ;;
+    *) return 1 ;;
+    esac
+}
+
+deskhub_cppcheck_candidates() {
+    command -v cppcheck 2>/dev/null || true
+    printf '%s\n' "$(deskhub_tools_dir)/cppcheck/bin/cppcheck"
+    if deskhub_is_windows; then printf '%s\n' "/c/Program Files/Cppcheck/cppcheck.exe"; fi
+}
+
+resolve_local_cppcheck() {
+    local version candidate
+    version="$(deskhub_pinned_value CPPCHECK_VERSION)"
+    while IFS= read -r candidate; do
+        [ -n "$candidate" ] && [ -x "$candidate" ] || continue
+        if "$candidate" --version 2>/dev/null | grep -qxF "Cppcheck $version"; then
+            printf '%s' "$candidate"
+            return 0
+        fi
+    done <<<"$(deskhub_cppcheck_candidates)"
+    return 1
+}
+
+ensure_local_cppcheck() {
+    local version sha tools src found
+    version="$(deskhub_pinned_value CPPCHECK_VERSION)"
+    found="$(resolve_local_cppcheck || true)"
+    if [ -n "$found" ]; then
+        echo "[ok]      cppcheck $version ($found)"
+        return 0
+    fi
+    if deskhub_is_windows; then
+        echo "[install] cppcheck $version (winget)..."
+        winget.exe install --id Cppcheck.Cppcheck --exact --version "$version" \
+            --accept-source-agreements --accept-package-agreements --silent
+        found="$(resolve_local_cppcheck || true)"
+        [ -n "$found" ] || {
+            echo "tools.sh: cppcheck $version is still missing after its winget install." >&2
+            return 1
+        }
+        echo "[ok]      cppcheck $version ($found)"
+        return 0
+    fi
+    echo "[install] cppcheck $version (built from source into tools/cppcheck)..."
+    sha="$(deskhub_pinned_value CPPCHECK_SRC_SHA256)"
+    tools="$(deskhub_tools_dir)"
+    src="$tools/cppcheck-src"
+    ensure_local_tools_dir
+    curl -fsSL --retry 5 --retry-all-errors -o "$tools/cppcheck.tar.gz" \
+        "https://github.com/cppcheck-opensource/cppcheck/archive/refs/tags/$version.tar.gz"
+    deskhub_verify_sha256 "$tools/cppcheck.tar.gz" "$sha" || {
+        echo "tools.sh: the cppcheck source archive failed the checksum check." >&2
+        rm -f "$tools/cppcheck.tar.gz"
+        return 1
+    }
+    rm -rf "$src"
+    mkdir -p "$src"
+    tar -xzf "$tools/cppcheck.tar.gz" -C "$src" --strip-components=1
+    cmake -S "$src" -B "$src/build" -G Ninja -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_PREFIX="$tools/cppcheck" -DBUILD_TESTING=OFF -DBUILD_GUI=OFF >/dev/null
+    cmake --build "$src/build"
+    cmake --install "$src/build" >/dev/null
+    rm -rf "$src" "$tools/cppcheck.tar.gz"
+    found="$(resolve_local_cppcheck || true)"
+    [ -n "$found" ] || {
+        echo "tools.sh: cppcheck $version built but does not report its pinned version." >&2
+        return 1
+    }
+    echo "[ok]      cppcheck $version ($found)"
+}
+
+ensure_local_detekt() {
+    local tools version sha jar current
+    tools="$(deskhub_tools_dir)"
+    version="$(deskhub_pinned_value DETEKT_VERSION)"
+    sha="$(deskhub_pinned_value DETEKT_SHA256)"
+    jar="$tools/detekt-cli.jar"
+    current="$(cat "$tools/detekt-cli.jar.version" 2>/dev/null || true)"
+    if [ -f "$jar" ] && [ "$current" = "$version" ]; then
+        echo "[ok]      detekt $version ($jar)"
+        return 0
+    fi
+    echo "[install] detekt $version..."
+    ensure_local_tools_dir
+    curl -fsSL --retry 5 --retry-all-errors -o "$jar" \
+        "https://github.com/detekt/detekt/releases/download/v$version/detekt-cli-$version-all.jar"
+    deskhub_verify_sha256 "$jar" "$sha" || {
+        echo "tools.sh: detekt download failed the checksum check." >&2
+        rm -f "$jar" "$tools/detekt-cli.jar.version"
+        return 1
+    }
+    printf '%s' "$version" >"$tools/detekt-cli.jar.version"
+    echo "[ok]      detekt $version ($jar)"
+}
+
+ensure_local_periphery() {
+    local tools version sha dir current
+    tools="$(deskhub_tools_dir)"
+    version="$(deskhub_pinned_value PERIPHERY_VERSION)"
+    sha="$(deskhub_pinned_value PERIPHERY_SHA256)"
+    dir="$tools/periphery"
+    current="$(cat "$dir/.version" 2>/dev/null || true)"
+    if [ -x "$dir/periphery" ] && [ "$current" = "$version" ]; then
+        echo "[ok]      periphery $version ($dir/periphery)"
+        return 0
+    fi
+    echo "[install] periphery $version..."
+    ensure_local_tools_dir
+    curl -fsSL --retry 5 --retry-all-errors -o "$tools/periphery.zip" \
+        "https://github.com/peripheryapp/periphery/releases/download/$version/periphery-$version.zip"
+    deskhub_verify_sha256 "$tools/periphery.zip" "$sha" || {
+        echo "tools.sh: periphery download failed the checksum check." >&2
+        rm -f "$tools/periphery.zip"
+        return 1
+    }
+    rm -rf "$dir"
+    mkdir -p "$dir"
+    unzip -o -q -d "$dir" "$tools/periphery.zip"
+    chmod +x "$dir/periphery"
+    rm -f "$tools/periphery.zip"
+    printf '%s' "$version" >"$dir/.version"
+    echo "[ok]      periphery $version ($dir/periphery)"
 }

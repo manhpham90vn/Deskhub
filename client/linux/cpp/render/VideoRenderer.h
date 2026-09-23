@@ -32,9 +32,6 @@ public:
     uint64_t lastRenderedPtsUs() const override {
         return counters_.lastRenderedPtsUs();
     }
-    bool hasFrame() const {
-        return hasFrame_.load(std::memory_order_acquire);
-    }
     uint64_t FrameSerial() const {
         return frameSerial_.load(std::memory_order_acquire);
     }
@@ -48,7 +45,6 @@ private:
     bool dmabuf_ = false;
     VADRMPRIMESurfaceDescriptor desc_{};
     uint64_t ptsUs_ = 0;
-    std::atomic<bool> hasFrame_{false};
     std::atomic<uint64_t> frameSerial_{0};
     uint64_t uploadedSerial_ = 0;
 

@@ -89,7 +89,9 @@ make test-ctest      # same tests through CTest, as CI runs them
 make coverage        # core coverage report (clang + llvm-cov)
 make debug           # configure + build the debug preset of the shared CMake tree
 make format          # format C++ / Kotlin / Swift
-make lint            # check formatting without writing (what CI enforces)
+make lint            # check formatting without writing, then lint-dead (what CI enforces)
+make lint-dead       # dead code as an error: cppcheck + FFI/string-id/Kotlin checks + detekt
+make lint-dead-swift # Periphery over both Apple apps (macOS + Xcode)
 make lint-tidy       # clang-tidy over core/src + platform/src, the same gate CI runs
 ```
 
@@ -107,6 +109,8 @@ CI gates a good deal more than those two:
 - SwiftLint `--strict` (runs in `make lint` only where swiftlint is installed) and
   Android Lint
 - actionlint + shellcheck on the workflows and `scripts/*.sh`
+- dead code (`scripts/dead-code.sh` + Periphery): a function only tests call is dead too;
+  keep one only with a `name: reason` line in `scripts/dead-code-allow.txt`
 - core coverage ≥ 90% lines / 80% branches (`scripts/check-coverage.sh`, checked
   after `make coverage`)
 - all three suites under ASan/UBSan and TSan, and cross-built for arm64 Linux, an

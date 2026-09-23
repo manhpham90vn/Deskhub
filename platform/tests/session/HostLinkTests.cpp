@@ -2,7 +2,6 @@
 #include "support/TestSupport.h"
 
 #include "deskhub/protocol/Wire.h"
-#include "deskhub/session/LinkPulse.h"
 #include "deskhub/session/host/Beacon.h"
 #include "deskhub/ui/Strings.h"
 #include "deskhubp/net/SessionTransport.h"
@@ -47,6 +46,7 @@ struct LinkHostRig {
     std::atomic<bool> stop{false};
     std::atomic<bool> answerPings{true};
     std::atomic<int> terminalSeen{0};
+    std::atomic<int> pongsSent{0};
 
     ~LinkHostRig() {
         Shutdown();
@@ -82,8 +82,11 @@ struct LinkHostRig {
                     continue;
                 }
                 if (!answerPings.load(std::memory_order_acquire)) continue;
-                if (const size_t rn = beacon.Reply(reply, message, sock.Authenticated(from)); rn)
-                    sock.SendTo(from, reply, rn);
+                const size_t rn = beacon.Reply(reply, message, sock.Authenticated(from));
+                if (!rn) continue;
+                sock.SendTo(from, reply, rn);
+                if (header->type == deskhub::MsgType::Ping)
+                    pongsSent.fetch_add(1, std::memory_order_relaxed);
             }
         });
         return true;
@@ -269,26 +272,17 @@ void TestALinkRecoversAndSaysItResumed() {
     host->Shutdown();
 }
 
-void TestTheLinkTakesItsOwnPulse() {
-    std::printf("[hostlink] the link pings on its own and reads out rtt and quality...\n");
+void TestTheLinkPingsOnItsOwn() {
+    std::printf("[hostlink] the link keeps pinging the host on its own...\n");
     const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity("link-test-host");
     LinkHostRig host;
     Check(host.Start(identity), "the host rig listens");
 
-    std::atomic<bool> pulseSeen{false};
     deskhubp::HostLink link;
-    deskhubp::HostLinkCallbacks hooks;
-    hooks.onPulse = [&pulseSeen](const deskhub::LinkPulseView& view) {
-        if (view.haveRtt) pulseSeen.store(true, std::memory_order_release);
-    };
-    Check(link.Start(LinkConfig(kLinkPasscode), std::move(hooks)), "the link starts");
-    Check(WaitUntil([&pulseSeen] { return pulseSeen.load(std::memory_order_acquire); }, 10000),
-        "a pong turns into a reading inside the deadline");
-
-    const deskhub::LinkPulseView view = link.Pulse();
-    Check(view.haveRtt, "the accessor hands out the same reading");
-    Check(view.quality != deskhub::LinkQuality::Unknown, "and a verdict on the quality");
-    Check(view.rttUs < 1'000'000, "loopback reads as under a second");
+    Check(link.Start(LinkConfig(kLinkPasscode), deskhubp::HostLinkCallbacks{}), "the link starts");
+    Check(WaitUntil([&host] { return host.pongsSent.load(std::memory_order_relaxed) >= 2; },
+              10000),
+        "pings keep arriving and the host answers each one");
 
     link.Stop();
     host.Shutdown();
@@ -338,20 +332,16 @@ void TestAHostThatStopsAnsweringPingsReadsAsLost() {
     config.recoverLink = true;
     config.recoverGraceUs = uint64_t{30} * 1000 * 1000;
 
-    std::atomic<bool> pulseSeen{false};
     std::atomic<bool> lostSeen{false};
     std::atomic<bool> resumedSeen{false};
     deskhubp::HostLink link;
     deskhubp::HostLinkCallbacks hooks;
-    hooks.onPulse = [&pulseSeen](const deskhub::LinkPulseView& view) {
-        if (view.haveRtt) pulseSeen.store(true, std::memory_order_release);
-    };
     hooks.onLinkLost = [&lostSeen] { lostSeen.store(true, std::memory_order_release); };
     hooks.onReady = [&resumedSeen](bool resumed) {
         if (resumed) resumedSeen.store(true, std::memory_order_release);
     };
     Check(link.Start(config, std::move(hooks)), "the link starts");
-    Check(WaitUntil([&pulseSeen] { return pulseSeen.load(std::memory_order_acquire); }, 10000),
+    Check(WaitUntil([&host] { return host.pongsSent.load(std::memory_order_relaxed) > 0; }, 10000),
         "pongs are flowing first");
 
     host.answerPings.store(false, std::memory_order_release);
@@ -374,7 +364,7 @@ void RunHostLinkTests() {
     TestALinkStopsOnAChangedKeyUntilAccepted();
     TestALinkReportsARefusal();
     TestALinkRecoversAndSaysItResumed();
-    TestTheLinkTakesItsOwnPulse();
+    TestTheLinkPingsOnItsOwn();
     TestARequestedRedialResumes();
     TestAHostThatStopsAnsweringPingsReadsAsLost();
 }

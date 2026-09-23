@@ -394,8 +394,6 @@ private:
     wxStaticText* clientStatus_ = nullptr;
     wxListCtrl* deviceList_ = nullptr;
     wxStaticText* deviceHint_ = nullptr;
-    wxWindow* addressForm_ = nullptr;
-    wxWindow* devicesPanel_ = nullptr;
     std::vector<ConnectionFrame*> connections_;
     wxScrolledWindow* pairedList_ = nullptr;
     wxBoxSizer* pairedRows_ = nullptr;
@@ -849,7 +847,6 @@ wxWindow* MainFrame::BuildClientPage(wxWindow* parent) {
     auto* form = new wxPanel(panel);
     form->SetBackgroundColour(*wxWHITE);
     auto* formSizer = new wxBoxSizer(wxVERTICAL);
-    addressForm_ = form;
 
     auto* grid = new wxFlexGridSizer(2, FromDIP(wxSize(12, 12)));
 
@@ -907,7 +904,6 @@ wxWindow* MainFrame::BuildClientPage(wxWindow* parent) {
     auto* devices = new wxPanel(panel);
     devices->SetBackgroundColour(*wxWHITE);
     auto* devicesSizer = new wxBoxSizer(wxVERTICAL);
-    devicesPanel_ = devices;
 
     devicesSizer->Add(MakeHeadingRow(devices, ui::kDevicesHeading, ToWx(ui::kRefreshNow),
                           [this] { RefreshDevicesNow(); }),

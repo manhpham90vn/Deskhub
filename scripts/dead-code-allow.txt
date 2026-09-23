@@ -1,0 +1,9 @@
+BulkQueued: SessionTransportTests and TransferUnderLoadTests prove the host's file lane never grows past kMaxBulkQueued however hard a sender floods it, so a slow disk can never turn into unbounded memory; nothing production does exposes that depth
+Files: FileTransferTests prove the sender strips directory parts from a hostile name such as ../../.ssh/authorized_keys before it offers the file; the stored list is the only place that cleaned name is visible
+audioStats: TransferUnderLoadTests measure that audio frames keep arriving while a 32 MB upload crosses the same link; the player's frame counter is the only signal that audio is still flowing
+entries: ScancodeTableTests walk every entry to prove each one survives a native -> Windows -> native round trip; without the list a broken row would only surface as a wrong key on some keyboard
+fecEnabled: ControlTests, ScreenClientTests and SourcePipelineStateTests check the FEC hysteresis of BitrateController and the switch on Packetizer between decisions, where no decision is returned to read it from
+pending: DiagTests check the keyframe request log marks and clears a pending request, and InputTests check a reset empties InputSender's queue; both states are internal until the next send
+rung: QualityLadderTests follow the ladder one rung at a time to prove it steps down on a thin link and climbs back exactly one rung per dwell
+taken: ViewerTableTests prove the per-host viewer budget is spent by each viewer and handed back when one leaves or a source goes away
+targetDelayMs: AudioJitterBufferTests prove a requested play-out delay is clamped to something playable, from one frame up to half a second

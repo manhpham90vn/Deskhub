@@ -249,12 +249,6 @@ int dh_recent_passcode(const char* address, char* out, int capacity) {
     return FillText(out, capacity, ui::PasscodeForDevice(Recent(), address));
 }
 
-void dh_status_stop(void) {
-    g_poller.Stop();
-    std::lock_guard<std::mutex> lk(g_mutex);
-    g_pollerStarted = false;
-}
-
 void dh_status_refresh_now(void) {
     {
         std::lock_guard<std::mutex> lk(g_mutex);

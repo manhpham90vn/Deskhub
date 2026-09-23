@@ -28,9 +28,6 @@ struct ComScope {
     ~ComScope() {
         if (SUCCEEDED(hr)) CoUninitialize();
     }
-    bool owned() const {
-        return SUCCEEDED(hr);
-    }
 };
 
 WAVEFORMATEX MakeWaveFormat(const deskhub::media::AudioFormat& format) {

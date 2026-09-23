@@ -83,7 +83,6 @@ bool HostLink::Start(const HostLinkConfig& config, HostLinkCallbacks callbacks) 
         fingerprint_ = deskhub::Fingerprint{};
         verdict_ = deskhub::TrustVerdict::Unknown;
         message_.clear();
-        pulseView_ = deskhub::LinkPulseView{};
     }
     keepaliveIntervalUs_ = deskhub::KeepaliveIntervalUs(QuicSettings{}.idleTimeoutMs);
     linkLostAtUs_ = 0;
@@ -126,11 +125,6 @@ void HostLink::RejectFingerprint() {
 
 void HostLink::RequestRedial() {
     redial_.store(true, std::memory_order_release);
-}
-
-deskhub::LinkPulseView HostLink::Pulse() const {
-    const std::lock_guard<std::mutex> lock(mutex_);
-    return pulseView_;
 }
 
 bool HostLink::Send(std::span<const uint8_t> message) {
@@ -189,16 +183,6 @@ void HostLink::SendLinkPing(uint64_t nowUs) {
     uint8_t buf[deskhub::kMaxDatagram];
     const size_t n = deskhub::BuildPing(buf, 0, pulse_.MakePing(nowUs));
     if (n) Send(std::span<const uint8_t>(buf, n));
-    PublishPulse(nowUs);
-}
-
-void HostLink::PublishPulse(uint64_t nowUs) {
-    const deskhub::LinkPulseView view = pulse_.View(nowUs);
-    {
-        const std::lock_guard<std::mutex> lock(mutex_);
-        pulseView_ = view;
-    }
-    if (cb_.onPulse) cb_.onPulse(view);
 }
 
 void HostLink::Loop() {
@@ -212,7 +196,6 @@ void HostLink::Loop() {
         redialAttempts_ = 0;
         redial_.store(false, std::memory_order_release);
         pulse_.Reset();
-        PublishPulse(NowUs());
         if (cb_.onReady) cb_.onReady(resumed);
 
         PumpReady();
@@ -414,7 +397,7 @@ void HostLink::Route(std::span<const uint8_t> message) {
     if (!header || size_t(header->chan) >= deskhub::kChanCount) return;
     if (header->type == deskhub::MsgType::Pong && header->sessionId == 0) {
         const auto pong = deskhub::ParsePingPong(deskhub::PayloadOf(message));
-        if (pong && pulse_.OnPong(*pong, NowUs())) PublishPulse(NowUs());
+        if (pong) pulse_.OnPong(*pong, NowUs());
         return;
     }
     const std::lock_guard<std::mutex> lock(routeMutex_);

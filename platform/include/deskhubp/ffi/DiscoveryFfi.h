@@ -61,7 +61,6 @@ uint32_t dh_scan_rescan_secs(void);
 void dh_recent_touch(const char* address, const char* passcode);
 int dh_recent_passcode(const char* address, char* out, int capacity);
 
-void dh_status_stop(void);
 void dh_status_refresh_now(void);
 
 DHUiSettings dh_settings_load(void);

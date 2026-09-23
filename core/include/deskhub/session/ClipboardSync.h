@@ -31,10 +31,6 @@ public:
 
     void Reset();
 
-    uint32_t revision() const {
-        return revision_;
-    }
-
 private:
     size_t SendAllChunks(const SendFn& send);
     static uint64_t HashText(std::string_view text);

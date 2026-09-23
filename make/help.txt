@@ -46,8 +46,10 @@ Deskhub - no platform is built by default, name the one you want:
 
   Style - C++ + Kotlin + Swift, or one at a time:
     make format          apply formatting in place
-    make lint            check without fixing, what CI enforces
+    make lint            check without fixing, what CI enforces (includes lint-dead)
     make format-cpp      lint-cpp / format-kotlin / lint-kotlin / format-swift / lint-swift
+    make lint-dead       unused C++ functions, FFI functions, string ids, Kotlin code
+    make lint-dead-swift unused Swift code via Periphery (macOS + Xcode)
     make lint-tidy       clang-tidy over core/src + platform/src, the same gate CI runs
 
   Distribution:

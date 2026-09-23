@@ -90,6 +90,16 @@ if (Test-Path (Join-Path $root '.git')) {
 Ensure-LocalKtlint
 Ensure-LocalSwiftFormat
 
+$cppcheckVersion = Get-PinnedToolVersion 'CPPCHECK_VERSION'
+$cppcheckExe = 'C:\Program Files\Cppcheck\cppcheck.exe'
+if ((Test-Path $cppcheckExe) -and (((& $cppcheckExe --version) -join ' ') -eq "Cppcheck $cppcheckVersion")) {
+    Write-Host "[ok]      cppcheck $cppcheckVersion ($cppcheckExe)"
+} else {
+    Write-Host "[install] cppcheck $cppcheckVersion (Cppcheck.Cppcheck)..."
+    & winget install --id Cppcheck.Cppcheck --exact --version $cppcheckVersion --accept-source-agreements --accept-package-agreements
+    if ($LASTEXITCODE -ne 0) { throw "winget failed installing cppcheck $cppcheckVersion (exit $LASTEXITCODE)" }
+}
+
 $sdkPackages = @('platform-tools', 'platforms;android-37.0', 'ndk;26.1.10909125', 'cmake;3.22.1')
 
 function Find-CmdlineTool([string]$SdkRoot, [string]$Name) {

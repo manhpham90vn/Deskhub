@@ -125,12 +125,6 @@ final class ScreenSession: @unchecked Sendable {
         Phase(rawValue: Int(dh_screen_phase(handle).rawValue)) ?? .idle
     }
 
-    func linkHealth() -> DHLinkHealth {
-        var raw = DHLinkHealth()
-        dh_screen_link_health(handle, &raw)
-        return raw
-    }
-
     func offerClipboard(_ text: String) {
         guard !text.isEmpty else { return }
         dh_screen_clip_offer(handle, text)

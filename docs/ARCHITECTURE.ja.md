@@ -202,14 +202,10 @@ HostLink（開いている画面ごとに 1 インスタンス）
 
 受け入れが完了すると、link は自身の状態を監視する（`core/session/LinkPulse`）。session
 id が 0 の `Ping` datagram を毎秒送信し、host の beacon が同一 connection 上で session
-を必要とせずに応答する。返された timestamp は平滑化された RTT となり、返らなかった
-pong の id は損失率を構成する。`ClassifyLinkQuality` はこの 2 つを Good / Fair / Poor
-にまとめ、デバイス一覧と、host の応答を受け取ったパネル（デスクトップでは専用の
-ウィンドウ、Android と iOS では connect ページ）に提供する。session のウィンドウはこの
-指標を保持しなくなり、`HostLink` が `onPulse` と `Pulse()` を通じて提供する。ping は
-ack-eliciting であるため keepalive も兼ねており、通常の keepalive タイマーは link が
-`Deciding` 状態にある間にのみ意味を持つ。session-0 の ping に応答できない古い host では
-この指標は Unknown のままとなり、他に影響はない。復旧中の link では、この pulse が
+を必要とせずに応答する。ping は ack-eliciting であるため keepalive も兼ねており、通常の
+keepalive タイマーは link が `Deciding` 状態にある間にのみ意味を持つ。session-0 の ping
+に応答できない古い host は最初の pong を返さないため、無音によって判定されることはなく、
+他に影響はない。復旧中の link では、この pulse が
 liveness の確認も兼ねる。5 秒間 pong を受信しない場合（ただし最初の pong によって host
 が応答することが確認された後に限る）、connection は既存の再接続の経路に入る。この 5 秒
 は、link のループが実際に監視していた時間で計算する。`LinkPulse::Tick` は

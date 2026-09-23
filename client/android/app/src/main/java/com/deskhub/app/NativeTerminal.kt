@@ -3,11 +3,9 @@ package com.deskhub.app
 object NativeTerminal {
     const val STATE_IDLE = 0
     const val STATE_DECIDING = 2
-    const val STATE_LIVE = 4
     const val STATE_REATTACHING = 5
     const val STATE_REFUSED = 6
     const val STATE_FAILED = 7
-    const val STATE_ENDED = 8
 
     const val KEY_CHAR = 0
     const val KEY_ENTER = 1

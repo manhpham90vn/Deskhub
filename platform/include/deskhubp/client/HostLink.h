@@ -52,7 +52,6 @@ struct HostLinkCallbacks {
     std::function<void(bool resumed)> onReady;
     std::function<void()> onLinkLost;
     std::function<void(uint64_t streamId)> onStreamBroken;
-    std::function<void(const deskhub::LinkPulseView&)> onPulse;
 };
 
 class HostLinkChannel {
@@ -86,7 +85,6 @@ public:
     void RejectFingerprint();
 
     void RequestRedial();
-    deskhub::LinkPulseView Pulse() const;
 
     bool Send(std::span<const uint8_t> message);
     bool SendRecordOn(uint64_t streamId, std::span<const uint8_t> message);
@@ -121,7 +119,6 @@ private:
     void Fail(HostLinkState state, std::string_view message);
     void NoteSent();
     void SendLinkPing(uint64_t nowUs);
-    void PublishPulse(uint64_t nowUs);
 
     HostLinkConfig config_{};
     HostLinkCallbacks cb_{};
@@ -148,7 +145,6 @@ private:
     uint64_t linkLostAtUs_ = 0;
     uint32_t redialAttempts_ = 0;
     deskhub::LinkPulse pulse_{};
-    deskhub::LinkPulseView pulseView_{};
 };
 
 }

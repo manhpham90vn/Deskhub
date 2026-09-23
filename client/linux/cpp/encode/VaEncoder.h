@@ -49,12 +49,6 @@ public:
     const char* BackendName() const {
         return "VA-API (hardware)";
     }
-    bool lastFrameWasDmaBuf() const {
-        return lastDmaBuf_;
-    }
-    int currentQp() const {
-        return cqpMode_ ? qp_ : 0;
-    }
 
 private:
     bool CreateContexts();
@@ -110,7 +104,6 @@ private:
     size_t lastIdrBytes_ = 0;
 
     bool packedHeaders_ = false;
-    bool lastDmaBuf_ = false;
     bool haveSource_ = false;
     std::vector<uint8_t> sps_, pps_;
     uint32_t spsBits_ = 0, ppsBits_ = 0;

@@ -1,6 +1,5 @@
 #pragma once
 #include "deskhub/protocol/Wire.h"
-#include "deskhub/session/LinkPulse.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -23,9 +22,7 @@ inline constexpr const char* kNoNetworkAddress = "(no network address found)";
 inline constexpr const char* kClientIpPrompt = "Host machine IP address:";
 inline constexpr const char* kPickerTitle = "What do you want to view?";
 inline constexpr const char* kPickerEachWindow = "Each one you pick opens its own window.";
-inline constexpr const char* kShareButton = "Share...  (pick the display to share)";
 inline constexpr const char* kSharingTitle = "Deskhub - sharing";
-inline constexpr const char* kSharingSourcesIntro = "Sources currently being shared:";
 inline constexpr const char* kSharingConnectHint =
     "Others connect by entering this machine's IP address.";
 inline constexpr const char* kNothingShared = "(nothing is being shared)";
@@ -40,20 +37,6 @@ inline constexpr const char* kConnectionEndedTitle = "Connection ended";
 inline constexpr const char* kDisconnected = "disconnected";
 inline constexpr const char* kSessionEnded = "Session ended";
 inline constexpr const char* kDisconnectButton = "Disconnect";
-inline constexpr const char* kLinkQualityGood = "Good";
-inline constexpr const char* kLinkQualityFair = "Fair";
-inline constexpr const char* kLinkQualityPoor = "Poor";
-inline constexpr const char* kLinkNoReading = "\xE2\x80\x94";
-
-inline const char* LinkQualityText(LinkQuality quality) {
-    switch (quality) {
-        case LinkQuality::Good: return kLinkQualityGood;
-        case LinkQuality::Fair: return kLinkQualityFair;
-        case LinkQuality::Poor: return kLinkQualityPoor;
-        case LinkQuality::Unknown: break;
-    }
-    return kLinkNoReading;
-}
 inline constexpr const char* kScreenRecordingRequired =
     "Screen Recording permission is required. Grant it in System Settings, then quit and "
     "reopen Deskhub.";
@@ -68,9 +51,6 @@ inline constexpr const char* kClientSettingsHeading = "Connection settings";
 inline constexpr const char* kClientSettingsHint =
     "The device scan looks for sharing machines on this UDP port. Match it to the port in the "
     "host's Share settings.";
-inline constexpr const char* kRecentDevicesHeading = "Recent devices";
-inline constexpr const char* kRecentDevicesHint = "Click a device to connect to it again.";
-inline constexpr const char* kRecentDevicesEmpty = "Devices you connect to will appear here.";
 inline constexpr const char* kStatusOnline = "Online";
 inline constexpr const char* kStatusOffline = "Offline";
 inline constexpr const char* kStatusChecking = "Checking...";
@@ -86,7 +66,6 @@ inline constexpr const char* kAllowControlLabel =
 inline constexpr const char* kRequestControlLabel =
     "Control the remote machine (untick to just watch)";
 inline constexpr const char* kViewOnlyNote = "View-only: viewers can watch but not control.";
-inline constexpr const char* kPickDisplaysHint = "Tick the displays to share, then press Share.";
 inline constexpr const char* kPickSourcesHint =
     "Tick what to share \xE2\x80\x94 displays, the terminal, file transfer \xE2\x80\x94 then "
     "press Share. Nothing is shared until you press it.";
@@ -100,8 +79,6 @@ inline constexpr const char* kWaitingForDisplays =
     "\xE2\x80\xA6";
 inline constexpr const char* kCaptureUnavailableTitle = "Screen capture is not available";
 inline constexpr const char* kNoDisplayTicked = "Tick at least one display to share.";
-inline constexpr const char* kStopSelectedDisplay = "Stop selected display";
-inline constexpr const char* kDisconnectSelectedViewer = "Disconnect selected viewer";
 inline constexpr const char* kStopDisplayAction = "Stop";
 inline constexpr const char* kDisconnectViewerAction = "Disconnect";
 inline constexpr const char* kPasscodeLabel = "Pairing passcode (4 digits, optional)";
@@ -155,7 +132,6 @@ inline constexpr const char* kCloseToTrayLabel =
 inline constexpr const char* kTrayShowWindow = "Show Deskhub";
 inline constexpr const char* kTrayHideWindow = "Hide window";
 inline constexpr const char* kTrayQuit = "Quit Deskhub";
-inline constexpr const char* kLanDevicesHeading = "Machines sharing on this network";
 inline constexpr const char* kLanDevicesEmpty = "Looking for devices that are sharing\xE2\x80\xA6";
 inline constexpr const char* kLanDevicesHint = "Click a device to connect to it.";
 inline constexpr const char* kLanDevicesNoneSharing =
@@ -254,21 +230,12 @@ inline constexpr const char* kShareNoQuicLibrary =
     "scripts/build-quiche.sh, then build Deskhub again.";
 inline constexpr const char* kShareNoHostIdentity =
     "This machine could not create the key it identifies itself with, so it cannot share.";
-inline constexpr const char* kOpenChoiceGroup = "What to open on that machine";
 inline constexpr const char* kConnectedPickSession =
     "Connected \xE2\x80\x94 choose what to open.";
-inline constexpr const char* kConnectFirstHint =
-    "Connect first \xE2\x80\x94 each button lights up only with what that machine shares.";
 inline constexpr const char* kOpenDesktopLabel = "Remote desktop \xE2\x80\x94 view its screen";
 inline constexpr const char* kOpenShellLabel = "Terminal \xE2\x80\x94 open a shell";
-inline constexpr const char* kOpenNothingTicked =
-    "Tick the remote desktop, a terminal, or both before connecting.";
-inline constexpr const char* kOpenChoiceHint =
-    "This applies to the Connect button and to the devices listed below.";
 inline constexpr const char* kMobileHostNote =
     "A phone or tablet can only be watched: control and terminal do nothing on one.";
-inline constexpr const char* kHostHasNoTerminal =
-    "That machine is not sharing a terminal \xE2\x80\x94 a phone or tablet cannot.";
 inline constexpr const char* kTerminalConnecting = "Connecting\xE2\x80\xA6";
 inline constexpr const char* kTerminalConnected = "Connected.";
 inline constexpr const char* kTerminalClosed = "The shell has ended.";
@@ -322,20 +289,15 @@ inline constexpr const char* kOpenFilesLabel =
     "File transfer \xE2\x80\x94 send files to it";
 inline constexpr const char* kFilesPickerLabel =
     "File transfer \xE2\x80\x94 files viewers send";
-inline constexpr const char* kTransferHeading = "Files viewers send";
 inline constexpr const char* kTransferSendHeading = "Send files to this machine";
 inline constexpr const char* kTransferNoneChosen = "No file chosen yet.";
 inline constexpr const char* kTransferSentHeading = "Sent from this window";
-inline constexpr const char* kTransferBusyNote =
-    "One batch at a time \xE2\x80\x94 wait for this one to finish.";
 inline constexpr const char* kTransferChooseButton = "Choose files\xE2\x80\xA6";
 inline constexpr const char* kOpenFolderAction = "Open folder";
 inline constexpr const char* kTransferCancelButton = "Stop sending";
-inline constexpr const char* kTransferAcceptLabel = "Take files viewers send";
 inline constexpr const char* kMobileTakesFilesNote =
     "Always on: files viewers send are taken even when the screen is not shared.";
 inline constexpr const char* kTransferArrivedTitle = "Files received";
-inline constexpr const char* kTransferStopTakingButton = "Stop taking files";
 inline constexpr const char* kTransferFolderLabel = "Store them in";
 
 inline std::string TransferFolderNote(std::string_view folder) {

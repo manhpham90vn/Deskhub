@@ -839,8 +839,6 @@ bool VaEncoder::Encode(const LinuxFrameInfo& fi, uint64_t timestampUs, bool forc
 
     const bool idr = forceKeyframe || !haveRef_;
 
-    lastDmaBuf_ = fi.memory == FrameMemory::DmaBuf;
-
     VASurfaceID rgb = VA_INVALID_SURFACE;
     bool imported = false;
     if (fi.memory == FrameMemory::DmaBuf) {

@@ -184,13 +184,10 @@ HostLink（每个打开的界面一个实例）
 ```
 
 准入完成后，link 自行监测自身状态（`core/session/LinkPulse`）：每秒发送一个 session id
-为 0 的 `Ping` datagram，host 的 beacon 在同一条 connection 上应答且无需 session，回传
-的时间戳形成平滑后的 RTT，而未返回的 pong 的 id 构成丢包率。`ClassifyLinkQuality` 将两
-者归纳为 Good / Fair / Poor，供设备列表以及接收 host 应答的面板使用 —— 桌面端为独立
-窗口，Android 与 iOS 为 connect 页。session 窗口不再显示该指标，`HostLink` 通过
-`onPulse` 与 `Pulse()` 对外提供。由于 ping 是 ack-eliciting 的，它同时充当 keepalive；
-普通的 keepalive 定时器仅在 link 处于 `Deciding` 状态时仍有意义。过旧的 host 无法应答
-session-0 的 ping，此时该指标保持为 Unknown，不产生其他影响。在恢复中的 link 上，该
+为 0 的 `Ping` datagram，host 的 beacon 在同一条 connection 上应答且无需 session。由于
+ping 是 ack-eliciting 的，它同时充当 keepalive；普通的 keepalive 定时器仅在 link 处于
+`Deciding` 状态时仍有意义。过旧的 host 无法应答 session-0 的 ping，因而从不发出首个
+pong，也就从不会因静默而被判定，不产生其他影响。在恢复中的 link 上，该
 pulse 同时用作 liveness 检查：连续五秒未收到 pong（且仅在首个 pong 已确认 host 会应答
 之后计算），即将 connection 转入既有的重连流程。这五秒按 link 循环实际处于监测状态的
 时间计算：`LinkPulse::Tick` 在 `HostLink::PumpReady` 每轮执行一次，某一轮中超出

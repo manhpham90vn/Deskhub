@@ -143,7 +143,6 @@ void VideoRenderer::ClearSlotLocked() {
         av_frame_free(&f);
         frame_ = nullptr;
     }
-    hasFrame_.store(false, std::memory_order_release);
 }
 
 void VideoRenderer::DropFrames() {
@@ -196,7 +195,6 @@ void VideoRenderer::SubmitFrame(void* avFrame, uint64_t ptsUs) {
     dmabuf_ = isDma;
     desc_ = desc;
     ptsUs_ = ptsUs;
-    hasFrame_.store(true, std::memory_order_release);
     frameSerial_.fetch_add(1, std::memory_order_release);
 }
 

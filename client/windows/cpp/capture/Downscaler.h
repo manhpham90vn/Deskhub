@@ -21,13 +21,6 @@ public:
 
     ID3D11Texture2D* Scale(ID3D11Texture2D* src);
 
-    uint32_t dstWidth() const {
-        return dstW_;
-    }
-    uint32_t dstHeight() const {
-        return dstH_;
-    }
-
 private:
     void Reset();
 

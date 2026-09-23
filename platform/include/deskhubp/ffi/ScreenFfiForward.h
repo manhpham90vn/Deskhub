@@ -58,17 +58,6 @@
             engineOf(s).EndReason());                                               \
     }                                                                               \
                                                                                     \
-    void dh_screen_link_health(DHScreen* s, DHLinkHealth* out) {                    \
-        if (!out) return;                                                           \
-        *out = DHLinkHealth{};                                                      \
-        if (!s) return;                                                             \
-        const deskhub::LinkPulseView view = engineOf(s).LinkHealth();               \
-        out->haveRtt = view.haveRtt;                                                \
-        out->rttMs = (view.rttUs + 500) / 1000;                                     \
-        out->lossPct = view.lossPct;                                                \
-        out->quality = DHLinkQuality(int(view.quality));                            \
-    }                                                                               \
-                                                                                    \
     DHPhase dh_screen_phase(DHScreen* s) {                                          \
         if (!s) return DHPhaseIdle;                                                 \
         return DHPhase(int(engineOf(s).phase()));                                   \

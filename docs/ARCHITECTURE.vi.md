@@ -200,16 +200,12 @@ HostLink (mỗi giao diện đang mở một instance)
 ```
 
 Sau khi được chấp nhận, link tự theo dõi tình trạng của chính nó
-(`core/session/LinkPulse`): một datagram `Ping` với session id 0 được gửi mỗi giây, beacon
-của host trả lời trên cùng connection mà không cần session, và timestamp phản hồi trở
-thành RTT đã làm mượt, còn id của các pong không quay lại tạo thành tỷ lệ mất gói.
-`ClassifyLinkQuality` tổng hợp hai giá trị này thành Good / Fair / Poor cho danh sách
-thiết bị và cho panel đã nhận phản hồi của host — một cửa sổ riêng trên desktop, trang
-connect trên Android và iOS. Các cửa sổ session không còn hiển thị chỉ số này; `HostLink`
-cung cấp nó qua `onPulse` và `Pulse()`. Vì một ping là ack-eliciting nên nó đồng thời đóng
-vai trò keepalive; timer keepalive thông thường chỉ còn ý nghĩa khi link đang ở trạng thái
-`Deciding`. Host phiên bản cũ không trả lời được ping session-0 sẽ để chỉ số ở mức
-Unknown, không gây ảnh hưởng nào khác. Trên một link đang phục hồi, pulse cũng là phép
+(`core/session/LinkPulse`): một datagram `Ping` với session id 0 được gửi mỗi giây, và beacon
+của host trả lời trên cùng connection mà không cần session. Vì một ping là ack-eliciting nên
+nó đồng thời đóng vai trò keepalive; timer keepalive thông thường chỉ còn ý nghĩa khi link
+đang ở trạng thái `Deciding`. Host phiên bản cũ không trả lời được ping session-0 sẽ không
+bao giờ gửi pong đầu tiên, nên không bao giờ bị đánh giá theo sự im lặng của nó, không gây
+ảnh hưởng nào khác. Trên một link đang phục hồi, pulse cũng là phép
 kiểm tra liveness: năm giây không nhận được pong, và chỉ tính sau khi đã có một pong đầu
 tiên xác nhận host có phản hồi, sẽ đưa connection vào đường kết nối lại sẵn có. Năm giây
 này được tính theo thời gian mà vòng lặp link thực sự theo dõi: `LinkPulse::Tick` chạy một

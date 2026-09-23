@@ -31,9 +31,10 @@ yourself before running it:
 | **macOS** | [Homebrew](https://brew.sh), Xcode + command line tools, [Rust](https://rustup.rs) | cmake, ninja, swiftlint, pipx, Homebrew LLVM (Apple clang ships no libFuzzer runtime), Temurin JDK 17, quiche and opus for Apple and Android |
 | **Windows** | winget (App Installer), Visual Studio with the C++ toolchain and the *C++ Clang tools* component, [Rust](https://rustup.rs) | the rest via winget, driven by `scripts/bootstrap.ps1` |
 
-On every OS it also pins the style tools: clang-format, clang-tidy, ktlint and
-SwiftFormat, each at a fixed version with a checksum check — never install these by hand,
-CI compares against exactly these versions.
+On every OS it also pins the style and analysis tools: clang-format, clang-tidy, ktlint,
+SwiftFormat, cppcheck and detekt, each at a fixed version with a checksum check — never
+install these by hand, CI compares against exactly these versions. Periphery, the Swift
+dead-code tool, is fetched the same way the first time `make lint-dead-swift` runs.
 
 Mobile targets need more: `build-android` needs the Android SDK with the NDK (bootstrap
 installs the SDK packages once `ANDROID_HOME` points at a cmdline-tools install), and
@@ -189,11 +190,27 @@ debug, ASan and coverage builds say nothing about production speed.
 | Command | Checks |
 | --- | --- |
 | `make format` | applies formatting to C++, Kotlin and Swift |
-| `make lint` | the same checks without writing — what CI enforces |
+| `make lint` | the same checks without writing, then `lint-dead` — what CI enforces |
+| `make lint-dead` | dead code: C++ functions, FFI functions, string ids and Kotlin code nothing uses |
+| `make lint-dead-swift` | dead Swift code in both Apple apps, via Periphery (macOS + Xcode) |
 | `make lint-tidy` | clang-tidy over `core/src` + `platform/src` |
 
 Single-language variants exist too: `format-cpp`, `lint-cpp`, `format-kotlin`,
 `lint-kotlin`, `format-swift`, `lint-swift`.
+
+Dead code is an error, the way Rust's `dead_code` lint makes it one. `make lint-dead`
+runs cppcheck over every C++ file production builds and fails on any function nothing
+there calls — tests, fuzzers and benchmarks do not count, so a function only a test calls
+is dead too. Calls from Swift, Kotlin and Objective-C++ count as use. The same script
+fails on an FFI function no app calls, a `DHStr*` string id neither app shows, and a Kotlin
+constant nobody reads, and detekt fails on unused private Kotlin code, imports and
+parameters. When a test genuinely cannot observe a behaviour any other way, keep the
+accessor and add `name: which test needs it and what it proves` to
+`scripts/dead-code-allow.txt`; a line without a reason, or one whose function production
+has started calling, fails the check too. `make lint-dead-swift` builds both Apple apps to
+index them and runs Periphery over the result. Beyond these, clang builds warn on unused
+member functions, templates and exception parameters, which CI's `-Werror` turns into
+errors.
 
 House rules, in short — the full version is in `CLAUDE.md`:
 
@@ -244,6 +261,8 @@ A green local `make test` + `make lint` is not the whole story. On every pull re
 
 - clang-tidy over `core/src` + `platform/src`, SwiftLint `--strict`, Android Lint
 - actionlint + shellcheck over the workflows and `scripts/*.sh`
+- dead code: `scripts/dead-code.sh` (cppcheck, the FFI / string-id / Kotlin-constant checks
+  and detekt) and Periphery over both Apple apps
 - all three suites under ASan/UBSan and TSan, and cross-built for arm64 Linux, an Android
   emulator and the iOS Simulator
 - the whole integration suite three more times on Windows, hunting an intermittent memory

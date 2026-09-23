@@ -20,10 +20,6 @@ public:
     EchoOff(const EchoOff&) = delete;
     EchoOff& operator=(const EchoOff&) = delete;
 
-    bool active() const {
-        return active_;
-    }
-
 private:
     bool active_ = false;
 };
@@ -39,10 +35,6 @@ public:
     ~RawConsole();
     RawConsole(const RawConsole&) = delete;
     RawConsole& operator=(const RawConsole&) = delete;
-
-    bool active() const {
-        return active_;
-    }
 
 private:
     bool active_ = false;

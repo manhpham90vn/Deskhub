@@ -33,14 +33,6 @@ nonisolated enum DeskhubClient {
         dh_is_zoomed(zoom)
     }
 
-    static func linkQualityText(_ quality: DHLinkQuality) -> String {
-        buffered(64) { dh_link_quality_text(quality, $0, $1) }
-    }
-
-    static func linkPingText(haveRtt: Bool, rttMs: UInt32) -> String {
-        buffered(32) { dh_link_ping_text(haveRtt, rttMs, $0, $1) }
-    }
-
     static func text(of field: inout some Any) -> String {
         withUnsafeBytes(of: &field) { raw in
             guard let base = raw.baseAddress else { return "" }

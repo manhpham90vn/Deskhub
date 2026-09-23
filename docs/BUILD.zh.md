@@ -32,9 +32,10 @@ target 在 [`Makefile`](../Makefile) 开头都有完整说明，而 `make/help.t
 | **macOS** | [Homebrew](https://brew.sh)、Xcode 与 command line tools、[Rust](https://rustup.rs) | cmake、ninja、swiftlint、pipx、Homebrew 的 LLVM（Apple clang 不含 libFuzzer runtime）、Temurin JDK 17，以及面向 Apple 与 Android 的 quiche 和 opus |
 | **Windows** | winget（App Installer）、含 C++ toolchain 与 *C++ Clang tools* 组件的 Visual Studio、[Rust](https://rustup.rs) | 其余通过 winget 安装，由 `scripts/bootstrap.ps1` 执行 |
 
-在所有 OS 上，bootstrap 还会 pin 住 style 工具：clang-format、clang-tidy、ktlint 和
-SwiftFormat，各自固定版本并校验 checksum。请勿手动安装这些工具，CI 比对的正是这些确切
-版本。
+在所有 OS 上，bootstrap 还会 pin 住 style 与分析工具：clang-format、clang-tidy、ktlint、
+SwiftFormat、cppcheck 和 detekt，各自固定版本并校验 checksum。请勿手动安装这些工具，CI
+比对的正是这些确切版本。Swift 无用代码工具 Periphery 会在首次运行
+`make lint-dead-swift` 时以同样方式获取。
 
 移动端 target 另有要求：`build-android` 需要含 NDK 的 Android SDK（当 `ANDROID_HOME`
 指向一份 cmdline-tools 安装时，bootstrap 会安装相应 SDK package），`build-ios` 需要含
@@ -182,11 +183,25 @@ seed 与 dictionary 开始 fuzz。`make fuzz-coverage` 显示 corpus 实际覆�
 | 命令 | 检查内容 |
 | --- | --- |
 | `make format` | 为 C++、Kotlin 和 Swift 应用 format |
-| `make lint` | 相同检查但不写回文件 —— CI 强制执行的即为此项 |
+| `make lint` | 相同检查但不写回文件，随后运行 `lint-dead` —— CI 强制执行的即为此项 |
+| `make lint-dead` | 无用代码：没有任何地方使用的 C++ 函数、FFI 函数、字符串 id 与 Kotlin 代码 |
+| `make lint-dead-swift` | 两个 Apple app 中的无用 Swift 代码，通过 Periphery 检查（macOS + Xcode） |
 | `make lint-tidy` | 对 `core/src` 与 `platform/src` 运行 clang-tidy |
 
 另有按语言划分的变体：`format-cpp`、`lint-cpp`、`format-kotlin`、`lint-kotlin`、
 `format-swift`、`lint-swift`。
+
+无用代码即错误，与 Rust 的 `dead_code` lint 的做法一致。`make lint-dead` 对 production
+构建的每个 C++ 文件运行 cppcheck，只要有函数在其中无人调用即失败 —— test、fuzzer 与
+benchmark 不计入，因此只被 test 调用的函数同样算作无用代码。来自 Swift、Kotlin 与
+Objective-C++ 的调用计为使用。同一脚本还会在以下情况失败：没有 app 调用的 FFI 函数、两个
+app 都不显示的 `DHStr*` 字符串 id、无人读取的 Kotlin 常量；detekt 则在出现未使用的 private
+Kotlin 代码、import 与参数时失败。当某个 test 确实无法以其他方式观察某一行为时，保留该
+accessor，并在 `scripts/dead-code-allow.txt` 中加入 `名称: 哪个 test 需要它以及它证明了
+什么`；缺少理由的行，或其函数已被 production 调用的行，同样会使检查失败。
+`make lint-dead-swift` 先构建两个 Apple app 以生成 index，再对结果运行 Periphery。此外，
+clang 构建会对未使用的 member function、template 与 exception 参数发出警告，CI 的
+`-Werror` 会将其变为错误。
 
 项目约定的简要版本，完整内容见 `CLAUDE.md`：
 
@@ -235,6 +250,8 @@ scripts/changelog.sh v5.0.0     # 不带参数时使用 HEAD 上的 tag
 
 - 对 `core/src` 与 `platform/src` 的 clang-tidy，SwiftLint `--strict`，Android Lint
 - 对 workflow 与 `scripts/*.sh` 的 actionlint 与 shellcheck
+- 无用代码：`scripts/dead-code.sh`（cppcheck、FFI / 字符串 id / Kotlin 常量检查与
+  detekt），以及对两个 Apple app 的 Periphery
 - 三个 suite 在 ASan/UBSan 与 TSan 下运行，并为 arm64 Linux、Android emulator 与 iOS
   Simulator 执行 cross-build
 - 在 Windows 上将整个 integration suite 额外运行三次，用于定位一处间歇性的 memory

@@ -54,33 +54,24 @@ const char* dh_string(DHStringId id) {
         case DHStrHostIpIntro: return deskhub::ui::kHostIpIntro;
         case DHStrNoNetworkAddress: return deskhub::ui::kNoNetworkAddress;
         case DHStrClientIpPrompt: return deskhub::ui::kClientIpPrompt;
-        case DHStrPickerTitle: return deskhub::ui::kPickerTitle;
         case DHStrPickerEachWindow: return deskhub::ui::kPickerEachWindow;
-        case DHStrShareButton: return deskhub::ui::kShareButton;
         case DHStrSharingTitle: return deskhub::ui::kSharingTitle;
-        case DHStrSharingSourcesIntro: return deskhub::ui::kSharingSourcesIntro;
         case DHStrSharingConnectHint: return deskhub::ui::kSharingConnectHint;
         case DHStrNothingShared: return deskhub::ui::kNothingShared;
         case DHStrStopSharing: return deskhub::ui::kStopSharing;
         case DHStrQueryingSources: return deskhub::ui::kQueryingSources;
         case DHStrViewerOpenFailed: return deskhub::ui::kViewerOpenFailed;
         case DHStrConnectionEndedTitle: return deskhub::ui::kConnectionEndedTitle;
-        case DHStrDisconnected: return deskhub::ui::kDisconnected;
         case DHStrClientPasscodePrompt: return deskhub::ui::kClientPasscodePrompt;
         case DHStrClientPasscodeHint: return deskhub::ui::kClientPasscodeHint;
         case DHStrPasscodeInvalid: return deskhub::ui::kPasscodeInvalid;
         case DHStrPasscodeLabel: return deskhub::ui::kPasscodeLabel;
         case DHStrPasscodeShareHeading: return deskhub::ui::kPasscodeShareHeading;
-        case DHStrPasscodeNoneSet: return deskhub::ui::kPasscodeNoneSet;
         case DHStrCopyPasscodeAction: return deskhub::ui::kCopyPasscodeAction;
         case DHStrPasscodeCopied: return deskhub::ui::kPasscodeCopied;
         case DHStrReceivingFilesState: return deskhub::ui::kReceivingFilesState;
         case DHStrMobileTakesFilesNote: return deskhub::ui::kMobileTakesFilesNote;
         case DHStrOpenFolderAction: return deskhub::ui::kOpenFolderAction;
-        case DHStrLanDevicesHeading: return deskhub::ui::kLanDevicesHeading;
-        case DHStrRecentDevicesHeading: return deskhub::ui::kRecentDevicesHeading;
-        case DHStrRecentDevicesHint: return deskhub::ui::kRecentDevicesHint;
-        case DHStrRecentDevicesEmpty: return deskhub::ui::kRecentDevicesEmpty;
         case DHStrSidebarHost: return deskhub::ui::kSidebarHost;
         case DHStrSidebarClient: return deskhub::ui::kSidebarClient;
         case DHStrSidebarSettings: return deskhub::ui::kSidebarSettings;
@@ -97,10 +88,7 @@ const char* dh_string(DHStringId id) {
         case DHStrRequestControlLabel: return deskhub::ui::kRequestControlLabel;
         case DHStrClientIpPlaceholder: return deskhub::ui::kClientIpPlaceholder;
         case DHStrConnectPromptTitle: return deskhub::ui::kConnectPromptTitle;
-        case DHStrPickDisplaysHint: return deskhub::ui::kPickDisplaysHint;
         case DHStrNoDisplayTicked: return deskhub::ui::kNoDisplayTicked;
-        case DHStrStopSelectedDisplay: return deskhub::ui::kStopSelectedDisplay;
-        case DHStrDisconnectSelectedViewer: return deskhub::ui::kDisconnectSelectedViewer;
         case DHStrShareStateOn: return deskhub::ui::kShareStateOn;
         case DHStrShareStateOff: return deskhub::ui::kShareStateOff;
         case DHStrStartSharing: return deskhub::ui::kStartSharing;
@@ -108,7 +96,6 @@ const char* dh_string(DHStringId id) {
         case DHStrRefreshNow: return deskhub::ui::kRefreshNow;
         case DHStrStopDisplayAction: return deskhub::ui::kStopDisplayAction;
         case DHStrDisconnectViewerAction: return deskhub::ui::kDisconnectViewerAction;
-        case DHStrLanDevicesHint: return deskhub::ui::kLanDevicesHint;
         case DHStrNotSharing: return deskhub::ui::kNotSharing;
         case DHStrLanDevicesEmpty: return deskhub::ui::kLanDevicesEmpty;
         case DHStrBroadcastMemoryLabel: return deskhub::ui::kBroadcastMemoryLabel;
@@ -155,44 +142,26 @@ const char* dh_string(DHStringId id) {
         case DHStrTrustFingerprintLabel: return deskhub::ui::kTrustFingerprintLabel;
         case DHStrTrustAccept: return deskhub::ui::kTrustAccept;
         case DHStrTrustReject: return deskhub::ui::kTrustReject;
-        case DHStrTerminalSourceName: return deskhub::ui::kTerminalSourceName;
         case DHStrTerminalPickerLabel: return deskhub::ui::kTerminalPickerLabel;
-        case DHStrFilesSourceName: return deskhub::ui::kFilesSourceName;
         case DHStrFilesPickerLabel: return deskhub::ui::kFilesPickerLabel;
-        case DHStrTransferHeading: return deskhub::ui::kTransferHeading;
         case DHStrTransferChooseButton: return deskhub::ui::kTransferChooseButton;
         case DHStrTransferCancelButton: return deskhub::ui::kTransferCancelButton;
-        case DHStrTransferFolderLabel: return deskhub::ui::kTransferFolderLabel;
         case DHStrTransferSending: return deskhub::ui::kTransferSending;
-        case DHStrTransferDone: return deskhub::ui::kTransferDone;
-        case DHStrTransferHostNotTaking: return deskhub::ui::kTransferHostNotTaking;
         case DHStrTransferSendHeading: return deskhub::ui::kTransferSendHeading;
         case DHStrTransferNoneChosen: return deskhub::ui::kTransferNoneChosen;
-        case DHStrTransferBusyNote: return deskhub::ui::kTransferBusyNote;
         case DHStrTransferTooManyFiles: return deskhub::ui::kTransferTooManyFiles;
         case DHStrOpenFilesLabel: return deskhub::ui::kOpenFilesLabel;
         case DHStrTransferSentHeading: return deskhub::ui::kTransferSentHeading;
-        case DHStrTransferAcceptLabel: return deskhub::ui::kTransferAcceptLabel;
         case DHStrTransferArrivedTitle: return deskhub::ui::kTransferArrivedTitle;
-        case DHStrTransferStopTakingButton: return deskhub::ui::kTransferStopTakingButton;
         case DHStrConnectedPickSession: return deskhub::ui::kConnectedPickSession;
-        case DHStrConnectFirstHint: return deskhub::ui::kConnectFirstHint;
         case DHStrDisconnectButton: return deskhub::ui::kDisconnectButton;
-        case DHStrLinkQualityGood: return deskhub::ui::kLinkQualityGood;
-        case DHStrLinkQualityFair: return deskhub::ui::kLinkQualityFair;
-        case DHStrLinkQualityPoor: return deskhub::ui::kLinkQualityPoor;
-        case DHStrLinkNoReading: return deskhub::ui::kLinkNoReading;
         case DHStrLinkReattaching: return deskhub::ui::kTerminalReattaching;
-        case DHStrOpenChoiceGroup: return deskhub::ui::kOpenChoiceGroup;
         case DHStrOpenDesktopLabel: return deskhub::ui::kOpenDesktopLabel;
         case DHStrOpenShellLabel: return deskhub::ui::kOpenShellLabel;
-        case DHStrOpenNothingTicked: return deskhub::ui::kOpenNothingTicked;
         case DHStrTerminalExtraKeysHint: return deskhub::ui::kTerminalExtraKeysHint;
         case DHStrPickSourcesHint: return deskhub::ui::kPickSourcesHint;
         case DHStrPairedForgetNote: return deskhub::ui::kPairedForgetNote;
-        case DHStrOpenChoiceHint: return deskhub::ui::kOpenChoiceHint;
         case DHStrMobileHostNote: return deskhub::ui::kMobileHostNote;
-        case DHStrHostHasNoTerminal: return deskhub::ui::kHostHasNoTerminal;
         case DHStrWaitingForDisplays: return deskhub::ui::kWaitingForDisplays;
         case DHStrNoDisplayFound: return deskhub::ui::kNoDisplayFound;
         case DHStrPasscodeHint: return deskhub::ui::kPasscodeHint;
@@ -210,17 +179,12 @@ const char* dh_string(DHStringId id) {
         case DHStrTerminalClosed: return deskhub::ui::kTerminalClosed;
         case DHStrShellPickerTitle: return deskhub::ui::kShellPickerTitle;
         case DHStrShellPickerEmpty: return deskhub::ui::kShellPickerEmpty;
-        case DHStrShellPickerResume: return deskhub::ui::kShellPickerResume;
         case DHStrShellPickerNew: return deskhub::ui::kShellPickerNew;
         case DHStrShellPickerClose: return deskhub::ui::kShellPickerClose;
         case DHStrShellPickerCloseAsk: return deskhub::ui::kShellPickerCloseAsk;
         case DHStrShareClampWarning: {
             static const std::string warning = deskhub::ui::ShareClampWarning();
             return warning.c_str();
-        }
-        case DHStrUdpPortLine: {
-            static const std::string line = deskhub::ui::UdpPortLine();
-            return line.c_str();
         }
         case DHStrSessionEnded: return deskhub::ui::kSessionEnded;
         case DHStrShareStartFailed: return deskhub::ui::kShareStartFailed;
@@ -251,20 +215,6 @@ int dh_pairing_request_body(const char* name, const char* address, const char* s
 int dh_connecting_to(const char* address, char* out, int capacity) {
     if (!out || capacity <= 0) return 0;
     deskhubp::CopyToBuf(out, size_t(capacity), deskhub::ui::ConnectingTo(address ? address : ""));
-    return int(std::strlen(out));
-}
-
-int dh_link_quality_text(DHLinkQuality quality, char* out, int capacity) {
-    if (!out || capacity <= 0) return 0;
-    deskhubp::CopyToBuf(out, size_t(capacity),
-        deskhub::ui::LinkQualityText(deskhub::LinkQuality(quality)));
-    return int(std::strlen(out));
-}
-
-int dh_link_ping_text(bool haveRtt, uint32_t rttMs, char* out, int capacity) {
-    if (!out || capacity <= 0) return 0;
-    deskhubp::CopyToBuf(out, size_t(capacity),
-        haveRtt ? deskhub::ui::PingMs(rttMs) : std::string(deskhub::ui::kLinkNoReading));
     return int(std::strlen(out));
 }
 

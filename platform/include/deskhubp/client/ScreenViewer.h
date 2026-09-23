@@ -224,10 +224,6 @@ public:
         return statusLine_;
     }
 
-    deskhub::LinkPulseView LinkHealth() const {
-        return link_.Pulse();
-    }
-
     std::string EndReason() {
         std::lock_guard<std::mutex> lk(textMutex_);
         return endReason_;
@@ -278,10 +274,6 @@ public:
         if (!ptsUs) return;
         clockOffset_.AddSample(ptsUs, shownUs);
         lastE2eUs_.store(clockOffset_.LatencyUs(diag_.minRttUs.value() / 2));
-    }
-
-    deskhub::diag::ScreenClientDiag& diag() {
-        return diag_;
     }
 
     AudioPlayer::Stats audioStats() const {

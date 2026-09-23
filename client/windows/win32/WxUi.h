@@ -7,8 +7,6 @@ inline constexpr int kHintWrapDip = 620;
 
 inline const wxColour kHeadingText(17, 24, 39);
 inline const wxColour kMutedText(107, 114, 128);
-inline const wxColour kWarnText(180, 60, 0);
-inline const wxColour kWarnBg(255, 246, 230);
 
 inline wxString ToWx(const std::string& s) {
     return wxString::FromUTF8(s.c_str(), s.size());

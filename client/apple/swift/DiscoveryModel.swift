@@ -63,10 +63,6 @@ nonisolated enum DeskhubDiscovery {
     static func watchRecent() {
         dh_status_watch_recent()
     }
-
-    static func stopWatching() {
-        dh_status_stop()
-    }
 }
 
 @MainActor @Observable

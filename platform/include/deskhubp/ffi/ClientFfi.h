@@ -24,20 +24,6 @@ typedef enum {
     DHPhaseReattaching = 5,
 } DHPhase;
 
-typedef enum {
-    DHLinkQualityUnknown = 0,
-    DHLinkQualityGood = 1,
-    DHLinkQualityFair = 2,
-    DHLinkQualityPoor = 3,
-} DHLinkQuality;
-
-typedef struct {
-    bool haveRtt;
-    uint32_t rttMs;
-    uint8_t lossPct;
-    DHLinkQuality quality;
-} DHLinkHealth;
-
 typedef struct {
     uint8_t sourceId;
     uint16_t width;
@@ -104,19 +90,14 @@ typedef enum {
     DHStrHostIpIntro = 1,
     DHStrNoNetworkAddress = 2,
     DHStrClientIpPrompt = 3,
-    DHStrPickerTitle = 4,
     DHStrPickerEachWindow = 5,
-    DHStrShareButton = 6,
     DHStrSharingTitle = 7,
-    DHStrSharingSourcesIntro = 8,
     DHStrSharingConnectHint = 9,
     DHStrNothingShared = 10,
     DHStrStopSharing = 11,
     DHStrQueryingSources = 12,
     DHStrViewerOpenFailed = 13,
     DHStrConnectionEndedTitle = 14,
-    DHStrDisconnected = 15,
-    DHStrUdpPortLine = 16,
     DHStrInvalidAddressHint = 17,
     DHStrSessionEnded = 18,
     DHStrShareStartFailed = 19,
@@ -125,10 +106,6 @@ typedef enum {
     DHStrClientPasscodeHint = 22,
     DHStrPasscodeInvalid = 23,
     DHStrPasscodeLabel = 24,
-    DHStrLanDevicesHeading = 25,
-    DHStrRecentDevicesHeading = 26,
-    DHStrRecentDevicesHint = 27,
-    DHStrRecentDevicesEmpty = 28,
     DHStrSidebarHost = 29,
     DHStrSidebarClient = 30,
     DHStrSidebarSettings = 31,
@@ -142,10 +119,7 @@ typedef enum {
     DHStrRequestControlLabel = 39,
     DHStrClientIpPlaceholder = 40,
     DHStrConnectPromptTitle = 41,
-    DHStrPickDisplaysHint = 42,
     DHStrNoDisplayTicked = 43,
-    DHStrStopSelectedDisplay = 44,
-    DHStrDisconnectSelectedViewer = 45,
     DHStrShareClampWarning = 46,
     DHStrShareStateOn = 47,
     DHStrShareStateOff = 48,
@@ -154,7 +128,6 @@ typedef enum {
     DHStrRefreshNow = 51,
     DHStrStopDisplayAction = 52,
     DHStrDisconnectViewerAction = 53,
-    DHStrLanDevicesHint = 54,
     DHStrNotSharing = 55,
     DHStrLanDevicesEmpty = 56,
     DHStrClientSettingsHeading = 57,
@@ -202,16 +175,12 @@ typedef enum {
     DHStrTrustFingerprintLabel = 99,
     DHStrTrustAccept = 100,
     DHStrTrustReject = 101,
-    DHStrTerminalSourceName = 102,
     DHStrTerminalPickerLabel = 103,
-    DHStrOpenChoiceGroup = 104,
     DHStrOpenDesktopLabel = 105,
     DHStrOpenShellLabel = 106,
-    DHStrOpenNothingTicked = 107,
     DHStrTerminalExtraKeysHint = 108,
     DHStrPickSourcesHint = 109,
     DHStrPairedForgetNote = 110,
-    DHStrOpenChoiceHint = 111,
     DHStrPasscodeHint = 112,
     DHStrDevicesHeading = 113,
     DHStrDeviceColumnWhere = 114,
@@ -226,55 +195,35 @@ typedef enum {
     DHStrTerminalAttachedHere = 124,
     DHStrTerminalClosed = 125,
     DHStrMobileHostNote = 126,
-    DHStrHostHasNoTerminal = 127,
     DHStrWaitingForDisplays = 128,
     DHStrNoDisplayFound = 129,
     DHStrShareAudioLabel = 130,
     DHStrPlayAudioLabel = 131,
-    DHStrFilesSourceName = 132,
     DHStrFilesPickerLabel = 133,
-    DHStrTransferHeading = 134,
     DHStrTransferChooseButton = 135,
     DHStrTransferCancelButton = 136,
-    DHStrTransferFolderLabel = 137,
     DHStrTransferSending = 138,
-    DHStrTransferDone = 139,
-    DHStrTransferHostNotTaking = 140,
     DHStrTransferSendHeading = 141,
     DHStrTransferNoneChosen = 142,
-    DHStrTransferBusyNote = 143,
     DHStrTransferTooManyFiles = 144,
     DHStrOpenFilesLabel = 145,
     DHStrTransferSentHeading = 146,
-    DHStrTransferAcceptLabel = 147,
     DHStrTransferArrivedTitle = 148,
-    DHStrTransferStopTakingButton = 149,
     DHStrConnectedPickSession = 150,
-    DHStrConnectFirstHint = 151,
     DHStrDisconnectButton = 152,
-    DHStrLinkQualityGood = 153,
-    DHStrLinkQualityFair = 154,
-    DHStrLinkQualityPoor = 155,
-    DHStrLinkNoReading = 156,
     DHStrLinkReattaching = 157,
     DHStrShellPickerTitle = 158,
     DHStrShellPickerEmpty = 159,
-    DHStrShellPickerResume = 160,
     DHStrShellPickerNew = 161,
     DHStrShellPickerClose = 162,
     DHStrShellPickerCloseAsk = 163,
     DHStrPasscodeShareHeading = 164,
-    DHStrPasscodeNoneSet = 165,
     DHStrCopyPasscodeAction = 166,
     DHStrPasscodeCopied = 167,
     DHStrReceivingFilesState = 168,
     DHStrMobileTakesFilesNote = 169,
     DHStrOpenFolderAction = 170,
 } DHStringId;
-
-int dh_link_quality_text(DHLinkQuality quality, char* out, int capacity);
-
-int dh_link_ping_text(bool haveRtt, uint32_t rttMs, char* out, int capacity);
 
 const char* dh_string(DHStringId id);
 

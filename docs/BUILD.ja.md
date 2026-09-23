@@ -33,9 +33,11 @@ make build-linux      # または build-windows / build-macos / build-ios / buil
 | **macOS** | [Homebrew](https://brew.sh)、Xcode と command line tools、[Rust](https://rustup.rs) | cmake、ninja、swiftlint、pipx、Homebrew の LLVM（Apple clang には libFuzzer runtime が含まれない）、Temurin JDK 17、Apple 向けと Android 向けの quiche および opus |
 | **Windows** | winget（App Installer）、C++ toolchain と *C++ Clang tools* コンポーネントを含む Visual Studio、[Rust](https://rustup.rs) | 残りは winget 経由で、`scripts/bootstrap.ps1` が実行する |
 
-いずれの OS でも、bootstrap は style ツールを pin する。clang-format、clang-tidy、
-ktlint、SwiftFormat がそれぞれ固定バージョンで、checksum の検証を伴う。これらを手動で
-導入してはならない。CI が突き合わせるのはこのバージョンだからである。
+いずれの OS でも、bootstrap は style と解析のツールを pin する。clang-format、
+clang-tidy、ktlint、SwiftFormat、cppcheck、detekt がそれぞれ固定バージョンで、checksum
+の検証を伴う。これらを手動で導入してはならない。CI が突き合わせるのはこのバージョンだから
+である。Swift の不要コードを探す Periphery は、`make lint-dead-swift` を初めて実行した
+ときに同じ方法で取得される。
 
 モバイル向けの target には追加の要件がある。`build-android` には NDK を含む Android
 SDK が必要である（`ANDROID_HOME` が cmdline-tools のインストール先を指していれば、
@@ -200,11 +202,27 @@ crash はすべて regression の入力となる。
 | コマンド | 検査内容 |
 | --- | --- |
 | `make format` | C++、Kotlin、Swift に format を適用する |
-| `make lint` | 同じ検査を、ファイルを書き換えずに行う —— CI が強制するのはこちら |
+| `make lint` | 同じ検査を、ファイルを書き換えずに行い、続けて `lint-dead` を実行する —— CI が強制するのはこちら |
+| `make lint-dead` | 不要コード：どこからも使われない C++ 関数、FFI 関数、文字列 id、Kotlin コード |
+| `make lint-dead-swift` | 両 Apple アプリの不要な Swift コードを Periphery で検出する（macOS + Xcode） |
 | `make lint-tidy` | `core/src` と `platform/src` に clang-tidy を適用する |
 
 言語単位の派生もある。`format-cpp`、`lint-cpp`、`format-kotlin`、`lint-kotlin`、
 `format-swift`、`lint-swift`。
+
+不要コードはエラーとして扱う。Rust の `dead_code` lint と同じ考え方である。
+`make lint-dead` は production がビルドするすべての C++ ファイルに cppcheck を適用し、
+そこから一度も呼ばれない関数があれば失敗する。test、fuzzer、benchmark は数えないため、
+test からしか呼ばれない関数も不要コードとなる。Swift、Kotlin、Objective-C++ からの呼び出し
+は使用として数える。同じスクリプトは、どのアプリも呼ばない FFI 関数、どちらのアプリも表示
+しない `DHStr*` 文字列 id、誰も読まない Kotlin 定数でも失敗し、detekt は使われていない
+private な Kotlin コード、import、引数で失敗する。ある振る舞いを test が他の方法では
+どうしても観察できない場合に限り、その accessor を残し、`scripts/dead-code-allow.txt` に
+`名前: どの test が必要とし、何を証明するか` を追記する。理由のない行や、production が
+すでに呼ぶようになった関数の行も、検査を失敗させる。`make lint-dead-swift` は両 Apple
+アプリをビルドして index を作り、その結果に Periphery を適用する。これらに加え、clang の
+ビルドは使われない member function、template、exception 引数を警告し、CI の `-Werror`
+がそれをエラーにする。
 
 プロジェクトの規約（要約。完全版は `CLAUDE.md`）:
 
@@ -258,6 +276,8 @@ conventional-commit の type が、どのセクションに分類されるかを
 
 - `core/src` と `platform/src` への clang-tidy、SwiftLint `--strict`、Android Lint
 - workflow と `scripts/*.sh` への actionlint と shellcheck
+- 不要コード：`scripts/dead-code.sh`（cppcheck、FFI / 文字列 id / Kotlin 定数の検査、
+  detekt）と、両 Apple アプリへの Periphery
 - 3 つの suite を ASan/UBSan と TSan の下で実行し、さらに arm64 Linux、Android
   emulator、iOS Simulator 向けに cross-build する
 - Windows で integration suite 一式をさらに 3 回実行する。断続的に発生する memory

@@ -17,7 +17,6 @@ void TestDisabledByDefault() {
     Pacer p;
     Check(p.Gate(1500, kStartUs) == 0, "a fresh pacer lets the first send through");
     Check(p.Gate(1500, kStartUs) == 0, "and every send after it, however fast they come");
-    Check(p.rateBps() == 0, "the rate stays zero until someone sets it");
 }
 
 void TestEmptySendIsFree() {

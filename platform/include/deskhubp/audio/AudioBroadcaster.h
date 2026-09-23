@@ -37,10 +37,6 @@ public:
         return format_;
     }
 
-    uint64_t framesRefused() const {
-        return framesRefused_.load(std::memory_order_relaxed);
-    }
-
 private:
     static constexpr uint64_t kReportIntervalUs = 2'000'000;
     static constexpr size_t kQueueDepth = 8;

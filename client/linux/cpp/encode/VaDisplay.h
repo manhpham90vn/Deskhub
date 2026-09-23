@@ -16,9 +16,6 @@ public:
         return dpy_ != nullptr;
     }
 
-    const std::string& devicePath() const {
-        return devicePath_;
-    }
     const std::string& driverName() const {
         return driverName_;
     }
@@ -38,7 +35,7 @@ private:
     VADisplay dpy_ = nullptr;
     int drmFd_ = -1;
     VAEntrypoint encEntrypoint_ = VAEntrypointEncSlice;
-    std::string devicePath_, driverName_, lastError_;
+    std::string driverName_, lastError_;
 };
 
 bool VaHasEntrypoint(VADisplay dpy, VAProfile profile, VAEntrypoint entrypoint);

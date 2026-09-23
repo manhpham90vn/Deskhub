@@ -81,7 +81,6 @@ bool VaDisplay::Open() {
 
             dpy_ = dpy;
             drmFd_ = fd;
-            devicePath_ = path;
             encEntrypoint_ = ep;
             const char* vendor = vaQueryVendorString(dpy);
             driverName_ = vendor ? vendor : "?";

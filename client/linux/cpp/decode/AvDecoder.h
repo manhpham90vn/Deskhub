@@ -25,10 +25,6 @@ public:
 
     uint64_t lastRenderedPtsUs() const;
 
-    bool hardware() const {
-        return hwDevice_ != nullptr;
-    }
-
 private:
     void* ctx_ = nullptr;
     void* packet_ = nullptr;

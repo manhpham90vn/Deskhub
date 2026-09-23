@@ -9,9 +9,6 @@ class Table {
 public:
     void Row(std::vector<std::string> cells);
     void Print() const;
-    bool Empty() const {
-        return rows_.empty();
-    }
 
 private:
     std::vector<std::vector<std::string>> rows_{};

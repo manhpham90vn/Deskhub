@@ -49,11 +49,7 @@ object NativeClient {
     const val STR_PROJECT_LINK_LABEL = 37
     const val STR_CLIENT_HEADING = 33
     const val STR_REQUEST_CONTROL_LABEL = 39
-    const val STR_LAN_DEVICES_HEADING = 25
-    const val STR_RECENT_DEVICES_HEADING = 26
     const val STR_DEVICES_HEADING = 113
-    const val STR_RECENT_DEVICES_HINT = 27
-    const val STR_RECENT_DEVICES_EMPTY = 28
     const val STR_SIDEBAR_CLIENT = 30
     const val STR_SIDEBAR_SETTINGS = 31
     const val STR_SIDEBAR_HOST = 29
@@ -119,7 +115,6 @@ object NativeClient {
 
     const val TRUST_CHANGED = 2
 
-    const val STR_TRANSFER_CHOOSE_BUTTON = 135
     const val STR_TRANSFER_CANCEL_BUTTON = 136
     const val STR_TRANSFER_SENDING = 138
     const val STR_TRANSFER_SEND_HEADING = 141
@@ -132,7 +127,6 @@ object NativeClient {
     const val STR_LINK_REATTACHING = 157
     const val STR_SHELL_PICKER_TITLE = 158
     const val STR_SHELL_PICKER_EMPTY = 159
-    const val STR_SHELL_PICKER_RESUME = 160
     const val STR_SHELL_PICKER_NEW = 161
     const val STR_SHELL_PICKER_CLOSE = 162
     const val STR_SHELL_PICKER_CLOSE_ASK = 163

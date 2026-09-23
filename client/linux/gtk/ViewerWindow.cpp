@@ -170,7 +170,7 @@ bool ViewerWindow::Build(const NetAddr& server, uint8_t sourceId, const std::str
         return false;
     }
 
-    tickId_ = gtk_widget_add_tick_callback(glArea_, OnTick, this, nullptr);
+    gtk_widget_add_tick_callback(glArea_, OnTick, this, nullptr);
 
     clipboardSync_ = deskhubp::LoadUiSettings().clipboardSync;
     if (clipboardSync_) clipTimerId_ = g_timeout_add(1000, OnClipboardTimer, this);
@@ -463,7 +463,6 @@ void ViewerWindow::OnDisconnectClicked(GtkWidget*, gpointer user) {
 
 void ViewerWindow::OnDestroy(GtkWidget*, gpointer user) {
     auto* self = static_cast<ViewerWindow*>(user);
-    self->tickId_ = 0;
     if (self->clipTimerId_) {
         g_source_remove(self->clipTimerId_);
         self->clipTimerId_ = 0;

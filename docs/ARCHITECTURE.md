@@ -197,16 +197,11 @@ HostLink (one per open surface)
 ```
 
 Once admitted, the link takes its own pulse (`core/session/LinkPulse`): a
-`Ping` datagram with session id 0 goes out once a second, the host's beacon answers
-it over the same connection with no session required, and the echoed timestamp
-becomes a smoothed RTT while the ids of pongs that never came back become a loss
-percentage. `ClassifyLinkQuality` folds the two into Good / Fair / Poor for the
-device list and the panel that answered the host — a window of its own on desktop, the
-connect page on Android and iOS — the session windows no longer carry it —
-`HostLink` hands the reading out through `onPulse` and `Pulse()`, and
-because a ping is ack-eliciting it doubles as the keepalive; the plain keepalive
-timer only still matters while the link is parked in `Deciding`. A host too old to
-answer session-0 pings simply leaves the reading at Unknown — nothing regresses.
+`Ping` datagram with session id 0 goes out once a second, and the host's beacon answers
+it over the same connection with no session required. Because a ping is ack-eliciting it
+doubles as the keepalive; the plain keepalive timer only still matters while the link is
+parked in `Deciding`. A host too old to answer session-0 pings never sends a first pong,
+so it is never judged by its silence — nothing regresses.
 On a recovering link the pulse is also the liveness check: five seconds without a
 pong (only ever after a first pong proved the host answers) drops the connection
 into the existing redial path. Those five seconds are counted in time the link

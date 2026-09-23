@@ -13,14 +13,6 @@ public:
         return count_ <= 0;
     }
 
-    bool none() const {
-        return count_ <= 0;
-    }
-
-    int count() const {
-        return count_;
-    }
-
 private:
     int count_ = 0;
 };

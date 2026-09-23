@@ -13,7 +13,6 @@ final class StreamModel {
     var phase: Phase = .connecting
     var statusLine = ""
     var endReason = ""
-    var linkHealth = DHLinkHealth()
     var videoWidth: UInt32 = 0
     var videoHeight: UInt32 = 0
     var failedToStart = false
@@ -26,7 +25,7 @@ final class StreamModel {
 
     private var session: ScreenSession?
     private var layer: AVSampleBufferDisplayLayer?
-    private var healthTimer: Timer?
+    private var phaseTimer: Timer?
 
     var reattaching: Bool { phase == .reattaching }
 
@@ -58,12 +57,12 @@ final class StreamModel {
         session = opened
         opened.setLayer(layer)
         refresh()
-        startHealthPolling()
+        startPhasePolling()
     }
 
     func switchSource(to newSourceId: UInt8, name: String) async {
         guard newSourceId != sourceId else { return }
-        stopHealthPolling()
+        stopPhasePolling()
         session?.stop()
         session = nil
         sourceId = newSourceId
@@ -72,19 +71,17 @@ final class StreamModel {
         statusLine = ""
         videoWidth = 0
         videoHeight = 0
-        linkHealth = DHLinkHealth()
         phase = .connecting
         await start()
     }
 
     func disconnect() {
-        stopHealthPolling()
+        stopPhasePolling()
         mouseLocked = false
         session?.stop()
         session = nil
         phase = .idle
         statusLine = ""
-        linkHealth = DHLinkHealth()
     }
 
     func setLayer(_ newLayer: AVSampleBufferDisplayLayer?) {
@@ -166,30 +163,29 @@ final class StreamModel {
         }
     }
 
-    private func startHealthPolling() {
-        healthTimer?.invalidate()
-        healthTimer = Timer.scheduledTimer(
+    private func startPhasePolling() {
+        phaseTimer?.invalidate()
+        phaseTimer = Timer.scheduledTimer(
             withTimeInterval: 1, repeats: true
         ) { [weak self] _ in
-            Task { @MainActor in self?.pollHealth() }
+            Task { @MainActor in self?.pollPhase() }
         }
     }
 
-    private func stopHealthPolling() {
-        healthTimer?.invalidate()
-        healthTimer = nil
+    private func stopPhasePolling() {
+        phaseTimer?.invalidate()
+        phaseTimer = nil
     }
 
-    private func pollHealth() {
+    private func pollPhase() {
         guard let session, phase != .ended else {
-            stopHealthPolling()
+            stopPhasePolling()
             return
         }
         let livePhase = session.phase()
         if livePhase != .ended, livePhase != phase {
             phase = livePhase
         }
-        linkHealth = session.linkHealth()
     }
 
     private func makeHandlers() -> ScreenSessionHandlers {
@@ -212,7 +208,7 @@ final class StreamModel {
             onClosed: { [weak self] reason in
                 Task { @MainActor in
                     guard let self else { return }
-                    self.stopHealthPolling()
+                    self.stopPhasePolling()
                     self.phase = .ended
                     self.endReason = reason
                     self.mouseLocked = false

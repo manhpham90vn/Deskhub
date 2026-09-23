@@ -56,7 +56,6 @@ private:
     GtkWidget* window_ = nullptr;
     GtkWidget* glArea_ = nullptr;
     GtkWidget* linkLabel_ = nullptr;
-    guint tickId_ = 0;
     uint64_t queuedFrameSerial_ = 0;
     guint clipTimerId_ = 0;
     guint linkTimerId_ = 0;

@@ -26,8 +26,4 @@ bool Interrupted() {
     return g_interrupts.load(std::memory_order_acquire) > 0;
 }
 
-bool InterruptedTwice() {
-    return g_interrupts.load(std::memory_order_acquire) > 1;
-}
-
 }

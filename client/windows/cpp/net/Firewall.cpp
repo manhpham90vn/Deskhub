@@ -161,19 +161,6 @@ bool AddOwnRule(INetFwRules* rules, const std::wstring& exe) {
 
 }
 
-bool HostFirewallRulePresent() {
-    const std::wstring exe = SelfExePath();
-    if (exe.empty()) return false;
-    ComScope com;
-    if (!com.ok()) return false;
-    INetFwPolicy2* policy = nullptr;
-    INetFwRules* rules = OpenRules(&policy);
-    if (!rules) return false;
-    const int state = InspectOwnRule(rules, exe);
-    ReleaseRules(rules, policy);
-    return state == 2;
-}
-
 bool EnsureHostFirewallRule() {
     const std::wstring exe = SelfExePath();
     if (exe.empty()) return false;

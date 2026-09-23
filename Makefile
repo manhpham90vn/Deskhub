@@ -121,11 +121,17 @@
 #
 # Format/lint — all three languages, or one at a time:
 #   make format         apply formatting in place for C++ + Kotlin + Swift
-#   make lint           check style for all three without fixing (run before pushing to match CI)
+#   make lint           check style for all three without fixing, then run lint-dead
+#                       (run before pushing to match CI)
 #   make format-cpp     / lint-cpp      C++ only (clang-format: core/ platform/ client/)
 #   make format-kotlin  / lint-kotlin   Kotlin only (ktlint: client/android)
 #   make format-swift   / lint-swift    Swift only (swiftformat + swiftlint --strict:
 #                                       client/apple + client/ios + client/macos)
+#   make lint-dead      dead code as an error, like Rust's dead_code: cppcheck finds C++
+#                       functions production never calls (test-only counts as dead unless
+#                       scripts/dead-code-allow.txt says why), plus unused FFI functions,
+#                       string ids and Kotlin constants, and detekt's unused Kotlin rules
+#   make lint-dead-swift  Periphery over both Apple apps (macOS + Xcode; builds them first)
 #   make lint-tidy      clang-tidy over core/src + platform/src, the same gate CI runs.
 #                       Configures the debug preset first for the compile database, so it
 #                       needs quiche; `make bootstrap` installs the pinned clang-tidy

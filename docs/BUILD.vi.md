@@ -34,9 +34,11 @@ còn lại. Cần cài sẵn các mục sau trước khi chạy lệnh này:
 | **macOS** | [Homebrew](https://brew.sh), Xcode và command line tools, [Rust](https://rustup.rs) | cmake, ninja, swiftlint, pipx, LLVM của Homebrew (Apple clang không kèm runtime libFuzzer), Temurin JDK 17, quiche và opus cho Apple và Android |
 | **Windows** | winget (App Installer), Visual Studio kèm C++ toolchain và component *C++ Clang tools*, [Rust](https://rustup.rs) | phần còn lại qua winget, do `scripts/bootstrap.ps1` thực hiện |
 
-Trên mọi OS, bootstrap cũng pin các style tool: clang-format, clang-tidy, ktlint và
-SwiftFormat, mỗi công cụ ở một phiên bản cố định kèm kiểm tra checksum. Không nên cài thủ
-công các công cụ này, vì CI đối chiếu đúng những phiên bản đó.
+Trên mọi OS, bootstrap cũng pin các công cụ style và phân tích: clang-format, clang-tidy,
+ktlint, SwiftFormat, cppcheck và detekt, mỗi công cụ ở một phiên bản cố định kèm kiểm tra
+checksum. Không nên cài thủ công các công cụ này, vì CI đối chiếu đúng những phiên bản đó.
+Periphery, công cụ tìm code Swift thừa, được tải theo cùng cách vào lần đầu chạy
+`make lint-dead-swift`.
 
 Các target mobile có yêu cầu bổ sung: `build-android` cần Android SDK kèm NDK (bootstrap
 sẽ cài các package SDK khi `ANDROID_HOME` trỏ tới thư mục cài cmdline-tools), còn
@@ -194,11 +196,27 @@ phần này: bản debug, ASan và coverage không phản ánh tốc độ của
 | Lệnh | Nội dung kiểm tra |
 | --- | --- |
 | `make format` | áp dụng format cho C++, Kotlin và Swift |
-| `make lint` | cùng các kiểm tra đó nhưng không ghi lại file — đúng phần CI yêu cầu |
+| `make lint` | cùng các kiểm tra đó nhưng không ghi lại file, rồi chạy `lint-dead` — đúng phần CI yêu cầu |
+| `make lint-dead` | code thừa: hàm C++, hàm FFI, mã chuỗi và code Kotlin không ai dùng |
+| `make lint-dead-swift` | code Swift thừa trong cả hai app Apple, qua Periphery (macOS + Xcode) |
 | `make lint-tidy` | clang-tidy trên `core/src` và `platform/src` |
 
 Có cả biến thể cho từng ngôn ngữ: `format-cpp`, `lint-cpp`, `format-kotlin`,
 `lint-kotlin`, `format-swift`, `lint-swift`.
+
+Code thừa là lỗi, giống cách lint `dead_code` của Rust coi nó là lỗi. `make lint-dead`
+chạy cppcheck trên mọi file C++ mà bản production build, và báo lỗi với bất kỳ hàm nào
+không có gì trong đó gọi tới — test, fuzzer và benchmark không được tính, nên một hàm chỉ
+test gọi cũng là code thừa. Lời gọi từ Swift, Kotlin và Objective-C++ được tính là có dùng.
+Cùng script đó báo lỗi với hàm FFI không app nào gọi, mã chuỗi `DHStr*` không app nào hiển
+thị, và hằng Kotlin không ai đọc; detekt báo lỗi với code Kotlin private, import và tham số
+không dùng. Khi một test thực sự không có cách nào khác để quan sát một hành vi, hãy giữ
+accessor đó và thêm dòng `tên: test nào cần nó và nó chứng minh điều gì` vào
+`scripts/dead-code-allow.txt`; dòng thiếu lý do, hoặc dòng có hàm mà production đã bắt đầu
+gọi, cũng làm kiểm tra thất bại. `make lint-dead-swift` build cả hai app Apple để lập index
+rồi chạy Periphery trên kết quả. Ngoài ra, các bản build bằng clang cảnh báo về member
+function, template và tham số exception không dùng, và `-Werror` trong CI biến chúng thành
+lỗi.
 
 Quy ước của dự án, bản rút gọn; bản đầy đủ nằm trong `CLAUDE.md`:
 
@@ -252,6 +270,8 @@ request, CI thực hiện:
 
 - clang-tidy trên `core/src` và `platform/src`, SwiftLint `--strict`, Android Lint
 - actionlint và shellcheck trên các workflow cùng `scripts/*.sh`
+- code thừa: `scripts/dead-code.sh` (cppcheck, các kiểm tra FFI / mã chuỗi / hằng Kotlin
+  và detekt) cùng Periphery trên cả hai app Apple
 - cả ba suite dưới ASan/UBSan và TSan, cùng cross-build cho Linux arm64, Android
   emulator và iOS Simulator
 - chạy lại toàn bộ integration suite thêm ba lần trên Windows để tìm một lỗi memory
