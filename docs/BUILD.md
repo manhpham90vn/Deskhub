@@ -255,6 +255,40 @@ worked examples live in [`.claude/skills/commit/SKILL.md`](../.claude/skills/com
 — read it before writing a subject. Empty sections are left out of the release, and
 `INCLUDE_INTERNAL=1 scripts/changelog.sh` shows the commits that were omitted.
 
+### Package managers
+
+Once the GitHub Release exists, three more jobs in `deploy.yml` publish it:
+
+| Job | Publishes | Secret in the `stg` environment |
+| --- | --- | --- |
+| `publish-winget` | pull requests to `microsoft/winget-pkgs` for `ManhPham.Deskhub` and `ManhPham.DeskhubCLI`, through [komac](https://github.com/russellbanks/Komac) (pinned in `scripts/pinned-versions.txt`) | `WINGET_TOKEN` — classic PAT with `public_repo` |
+| `publish-homebrew` | `Casks/deskhub.rb` and `Formula/deskhub-cli.rb` in `manhpham90vn/homebrew-tap`, rendered from `packaging/homebrew/` | `HOMEBREW_TAP_TOKEN` — fine-grained PAT, Contents: write on the tap |
+| `build-apt-repo` → `deploy-apt-repo` | a signed apt repository holding the debs of the last three releases, on GitHub Pages under `/apt` (`scripts/build-apt-repo.sh`) | `APT_GPG_PRIVATE_KEY`, `APT_GPG_PASSPHRASE` |
+
+Each needs a one-time setup before the first tag that runs it:
+
+- **winget** — the job only updates packages that already exist, so submit the first
+  version of each by hand and pick `deskhub` / `deskhub-cli` as the portable command alias
+  when komac asks. Until Microsoft merges that pull request the job warns and skips.
+
+  ```bash
+  komac new ManhPham.Deskhub --version X.Y.Z --urls https://github.com/manhpham90vn/Deskhub/releases/download/vX.Y.Z/deskhub-vX.Y.Z-windows.exe
+  ```
+
+  Repeat with `ManhPham.DeskhubCLI` and the `deskhub-cli-vX.Y.Z-windows.exe` URL.
+- **Homebrew** — create the public repository `manhpham90vn/homebrew-tap`; the job fills it.
+- **apt** — generate the signing key once, store the file as `APT_GPG_PRIVATE_KEY` and keep
+  an offline backup. Every user trusts this key: replacing it breaks their `apt update`.
+
+  ```bash
+  gpg --quick-gen-key "Deskhub APT <manhpv151090@gmail.com>" rsa4096 sign 5y
+  gpg --armor --export-secret-keys "Deskhub APT" > deskhub-apt.key
+  ```
+
+  In *Settings → Pages* set the source to **GitHub Actions**, and in *Settings →
+  Environments → github-pages* allow tags matching `v*` — otherwise Pages refuses a deploy
+  from a tag.
+
 ## 9. What CI gates
 
 A green local `make test` + `make lint` is not the whole story. On every pull request:

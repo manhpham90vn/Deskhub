@@ -23,12 +23,23 @@ distributed by TestFlight and Google Play.
 There is also `deskhub-cli`, the same client with no window of its own — see
 [Command line](#-command-line).
 
+**Package managers** keep Deskhub up to date on their own: `winget install ManhPham.Deskhub` on
+Windows, `brew install --cask manhpham90vn/tap/deskhub` on macOS, and an
+[apt repository](#-linux) for Ubuntu, Kubuntu, Debian and Mint.
+
 ---
 
 ## 🪟 Windows
 
 Download `deskhub-v*-windows.exe` and run it. There is no installer, no background
 service and no account — the whole app is that one file.
+
+Or let winget fetch the same file and keep it current — `winget upgrade` brings each new
+release and `winget uninstall ManhPham.Deskhub` removes it:
+
+```powershell
+winget install ManhPham.Deskhub
+```
 
 Two things happen the first time you use it:
 
@@ -44,6 +55,12 @@ until you delete that folder too.
 Download `deskhub-v*-macos.dmg`, open it, drag the app into *Applications*. The dmg is
 signed with a Developer ID and notarized by Apple, so it opens without a Gatekeeper
 warning.
+
+Or through Homebrew, which `brew upgrade` then keeps current:
+
+```bash
+brew install --cask manhpham90vn/tap/deskhub
+```
 
 Hosting a screen needs two macOS permissions, both requested from the **Settings** page
 in the app, which also shows their live state and a button straight to the matching
@@ -70,6 +87,18 @@ openSUSE 15.5, any current Arch).
 
 The deb and the rpm also install `deskhub-cli` as `/usr/bin/deskhub-cli` — see
 [Command line](#-command-line) below.
+
+On Ubuntu, Kubuntu, Debian and Mint, the Deskhub apt repository installs the same deb and
+lets `sudo apt upgrade` bring every later release. It serves Ubuntu 22.04 and newer, and
+Debian 12 and newer:
+
+```bash
+sudo install -d /etc/apt/keyrings
+curl -fsSL https://manhpham90vn.github.io/Deskhub/apt/deskhub.gpg | sudo tee /etc/apt/keyrings/deskhub.gpg >/dev/null
+echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/deskhub.gpg] https://manhpham90vn.github.io/Deskhub/apt stable main" \
+  | sudo tee /etc/apt/sources.list.d/deskhub.list
+sudo apt update && sudo apt install deskhub
+```
 
 **To share this machine's screen**, three more things must be in place.
 
@@ -151,6 +180,7 @@ sudo firewall-cmd --add-port=47777/udp --permanent        # Fedora / openSUSE
 ```bash
 sudo apt remove deskhub      # or: sudo dnf remove deskhub / sudo zypper remove deskhub
 rm -rf ~/.deskhub            # settings, keys and paired machines
+sudo rm -f /etc/apt/sources.list.d/deskhub.list /etc/apt/keyrings/deskhub.gpg   # the apt repository, if you added it
 ```
 
 The portable binary is a single file — delete it.
@@ -203,6 +233,11 @@ The macOS and Linux files arrive without the executable bit, so `chmod +x` them 
 Neither is signed or notarized the way the dmg is: on macOS the first run needs
 `xattr -d com.apple.quarantine deskhub-cli-v*-macos`, or *Open Anyway* in System Settings
 → Privacy & Security.
+
+None of that applies through a package manager, which also puts it on `PATH`:
+`winget install ManhPham.DeskhubCLI` on Windows, `brew install manhpham90vn/tap/deskhub-cli`
+on macOS — Homebrew installs it without the quarantine flag. The apt repository ships it
+inside the `deskhub` package.
 
 On Linux it shares a screen through the same portal and VA-API driver the app needs, and
 relies on the same `/dev/uinput` rule for remote input, so everything under

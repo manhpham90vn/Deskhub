@@ -26,12 +26,23 @@ bản chuẩn.
 Ngoài ra còn có `deskhub-cli`: vẫn client đó, chỉ khác là không có cửa sổ riêng. Xem
 [Command line](#-command-line).
 
+**Package manager** tự cập nhật Deskhub cho bạn: `winget install ManhPham.Deskhub` trên
+Windows, `brew install --cask manhpham90vn/tap/deskhub` trên macOS, và
+[apt repository](#-linux) cho Ubuntu, Kubuntu, Debian và Mint.
+
 ---
 
 ## 🪟 Windows
 
 Tải `deskhub-v*-windows.exe` và chạy. Không installer, không background service, không
 tài khoản — toàn bộ app nằm gọn trong file đó.
+
+Hoặc để winget tải đúng file đó và giữ nó luôn mới: `winget upgrade` lấy bản release mới,
+`winget uninstall ManhPham.Deskhub` gỡ nó đi:
+
+```powershell
+winget install ManhPham.Deskhub
+```
 
 Lần sử dụng đầu tiên có hai điểm cần lưu ý:
 
@@ -46,6 +57,12 @@ Lần sử dụng đầu tiên có hai điểm cần lưu ý:
 
 Tải `deskhub-v*-macos.dmg`, mở và kéo app vào *Applications*. File dmg được sign bằng
 Developer ID và do Apple notarize, nên mở lên không bị Gatekeeper cảnh báo.
+
+Hoặc cài qua Homebrew, sau đó `brew upgrade` sẽ giữ nó luôn mới:
+
+```bash
+brew install --cask manhpham90vn/tap/deskhub
+```
 
 Để host màn hình cần hai permission của macOS. Cả hai đều xin được ngay trên trang
 **Settings** của app; trang này cũng hiển thị trạng thái hiện thời của chúng, kèm nút mở
@@ -72,6 +89,18 @@ openSUSE 15.5, Arch bản hiện tại).
 
 Bản deb và rpm cũng cài `deskhub-cli` vào `/usr/bin/deskhub-cli`. Xem
 [Command line](#-command-line) bên dưới.
+
+Trên Ubuntu, Kubuntu, Debian và Mint, apt repository của Deskhub cài đúng bản deb đó và
+để `sudo apt upgrade` mang về mọi bản release sau này. Repository hỗ trợ Ubuntu 22.04 trở
+lên và Debian 12 trở lên:
+
+```bash
+sudo install -d /etc/apt/keyrings
+curl -fsSL https://manhpham90vn.github.io/Deskhub/apt/deskhub.gpg | sudo tee /etc/apt/keyrings/deskhub.gpg >/dev/null
+echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/deskhub.gpg] https://manhpham90vn.github.io/Deskhub/apt stable main" \
+  | sudo tee /etc/apt/sources.list.d/deskhub.list
+sudo apt update && sudo apt install deskhub
+```
 
 **Để share màn hình của máy này**, cần thêm ba điều kiện.
 
@@ -152,6 +181,7 @@ sudo firewall-cmd --add-port=47777/udp --permanent        # Fedora / openSUSE
 ```bash
 sudo apt remove deskhub      # hoặc: sudo dnf remove deskhub / sudo zypper remove deskhub
 rm -rf ~/.deskhub            # settings, key và danh sách máy đã pair
+sudo rm -f /etc/apt/sources.list.d/deskhub.list /etc/apt/keyrings/deskhub.gpg   # apt repository, nếu đã thêm
 ```
 
 Bản portable chỉ gồm một file; xoá file đó là gỡ xong.
@@ -204,6 +234,11 @@ File macOS và Linux tải về không có executable bit, cần `chmod +x` mộ
 Cả hai đều không được sign và notarize như file dmg. Trên macOS, lần chạy đầu tiên cần
 `xattr -d com.apple.quarantine deskhub-cli-v*-macos`, hoặc chọn *Open Anyway* trong System
 Settings → Privacy & Security.
+
+Cài qua package manager thì không cần các bước trên, và lệnh còn được đưa sẵn vào `PATH`:
+`winget install ManhPham.DeskhubCLI` trên Windows, `brew install manhpham90vn/tap/deskhub-cli`
+trên macOS — Homebrew cài mà không gắn cờ quarantine. apt repository đã kèm nó trong package
+`deskhub`.
 
 Trên Linux, `deskhub-cli` share màn hình qua cùng portal và VA-API driver mà app cần, đồng
 thời dựa vào cùng rule `/dev/uinput` cho remote input, nên toàn bộ mục [Linux](#-linux) áp

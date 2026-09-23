@@ -269,6 +269,42 @@ conventional-commit の type が、どのセクションに分類されるかを
 を書く前に参照すること。空のセクションは release に含まれず、
 `INCLUDE_INTERNAL=1 scripts/changelog.sh` で省かれた commit を確認できる。
 
+### Package manager
+
+GitHub Release の作成後、`deploy.yml` のさらに 3 つの job がそれを公開する。
+
+| Job | 公開先 | `stg` environment の secret |
+| --- | --- | --- |
+| `publish-winget` | [komac](https://github.com/russellbanks/Komac)（`scripts/pinned-versions.txt` で pin）経由で、`ManhPham.Deskhub` と `ManhPham.DeskhubCLI` の pull request を `microsoft/winget-pkgs` に出す | `WINGET_TOKEN` —— `public_repo` を持つ classic PAT |
+| `publish-homebrew` | `manhpham90vn/homebrew-tap` の `Casks/deskhub.rb` と `Formula/deskhub-cli.rb`。`packaging/homebrew/` から生成する | `HOMEBREW_TAP_TOKEN` —— tap に Contents: write を持つ fine-grained PAT |
+| `build-apt-repo` → `deploy-apt-repo` | 直近 3 つの release の deb を収めた署名付き apt repository。GitHub Pages の `/apt` に置く（`scripts/build-apt-repo.sh`） | `APT_GPG_PRIVATE_KEY`、`APT_GPG_PASSPHRASE` |
+
+いずれも、それを実行する最初の tag より前に一度だけ設定が必要である。
+
+- **winget** —— job は既存の package しか更新しないため、各 package の最初の版は手動で
+  提出し、komac に聞かれたら portable command alias に `deskhub` / `deskhub-cli` を選ぶ。
+  Microsoft がその pull request を merge するまで、job は警告を出してスキップする。
+
+  ```bash
+  komac new ManhPham.Deskhub --version X.Y.Z --urls https://github.com/manhpham90vn/Deskhub/releases/download/vX.Y.Z/deskhub-vX.Y.Z-windows.exe
+  ```
+
+  `ManhPham.DeskhubCLI` と `deskhub-cli-vX.Y.Z-windows.exe` の URL でも同様に行う。
+- **Homebrew** —— public repository `manhpham90vn/homebrew-tap` を作成する。中身は job が
+  書き込む。
+- **apt** —— signing key を一度だけ生成し、そのファイルを `APT_GPG_PRIVATE_KEY` として
+  保存し、オフラインのバックアップも残す。全ユーザーがこの key を信頼しているため、
+  差し替えると各ユーザーの `apt update` が失敗する。
+
+  ```bash
+  gpg --quick-gen-key "Deskhub APT <manhpv151090@gmail.com>" rsa4096 sign 5y
+  gpg --armor --export-secret-keys "Deskhub APT" > deskhub-apt.key
+  ```
+
+  *Settings → Pages* で source を **GitHub Actions** にし、*Settings → Environments →
+  github-pages* で `v*` に一致する tag を許可する。許可しないと Pages は tag からの
+  deploy を拒否する。
+
 ## 9. CI が検査する内容
 
 手元で `make test` と `make lint` が成功しても、それがすべてではない。各 pull request

@@ -263,6 +263,40 @@ nằm trong [`.claude/skills/commit/SKILL.md`](../.claude/skills/commit/SKILL.md
 trước khi viết subject. Các mục rỗng không xuất hiện trong bản release, và
 `INCLUDE_INTERNAL=1 scripts/changelog.sh` hiển thị những commit đã bị bỏ qua.
 
+### Package manager
+
+Khi GitHub Release đã có, ba job nữa trong `deploy.yml` sẽ publish nó:
+
+| Job | Publish | Secret trong environment `stg` |
+| --- | --- | --- |
+| `publish-winget` | pull request vào `microsoft/winget-pkgs` cho `ManhPham.Deskhub` và `ManhPham.DeskhubCLI`, qua [komac](https://github.com/russellbanks/Komac) (pin trong `scripts/pinned-versions.txt`) | `WINGET_TOKEN` — classic PAT có `public_repo` |
+| `publish-homebrew` | `Casks/deskhub.rb` và `Formula/deskhub-cli.rb` trong `manhpham90vn/homebrew-tap`, sinh từ `packaging/homebrew/` | `HOMEBREW_TAP_TOKEN` — fine-grained PAT, Contents: write trên tap |
+| `build-apt-repo` → `deploy-apt-repo` | apt repository đã ký, chứa deb của ba release gần nhất, trên GitHub Pages tại `/apt` (`scripts/build-apt-repo.sh`) | `APT_GPG_PRIVATE_KEY`, `APT_GPG_PASSPHRASE` |
+
+Mỗi job cần thiết lập một lần trước tag đầu tiên chạy nó:
+
+- **winget** — job chỉ cập nhật package đã tồn tại, nên bản đầu tiên của mỗi package phải
+  gửi bằng tay, và chọn `deskhub` / `deskhub-cli` làm portable command alias khi komac hỏi.
+  Trước khi Microsoft merge pull request đó, job chỉ cảnh báo rồi bỏ qua.
+
+  ```bash
+  komac new ManhPham.Deskhub --version X.Y.Z --urls https://github.com/manhpham90vn/Deskhub/releases/download/vX.Y.Z/deskhub-vX.Y.Z-windows.exe
+  ```
+
+  Làm lại với `ManhPham.DeskhubCLI` và URL `deskhub-cli-vX.Y.Z-windows.exe`.
+- **Homebrew** — tạo repository public `manhpham90vn/homebrew-tap`; job sẽ tự điền nội dung.
+- **apt** — tạo signing key một lần, lưu file đó làm `APT_GPG_PRIVATE_KEY` và giữ một bản
+  backup offline. Mọi người dùng đều trust key này: thay key sẽ làm hỏng `apt update` của họ.
+
+  ```bash
+  gpg --quick-gen-key "Deskhub APT <manhpv151090@gmail.com>" rsa4096 sign 5y
+  gpg --armor --export-secret-keys "Deskhub APT" > deskhub-apt.key
+  ```
+
+  Trong *Settings → Pages* đặt source là **GitHub Actions**, và trong *Settings →
+  Environments → github-pages* cho phép tag khớp `v*` — nếu không, Pages từ chối deploy từ
+  một tag.
+
 ## 9. Những gì CI kiểm tra
 
 `make test` và `make lint` chạy thành công tại máy chưa phải là toàn bộ. Trên mỗi pull

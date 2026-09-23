@@ -244,6 +244,40 @@ scripts/changelog.sh v5.0.0     # 不带参数时使用 HEAD 上的 tag
 应先阅读。空的小节不会出现在 release 中，`INCLUDE_INTERNAL=1 scripts/changelog.sh` 可
 查看被略去的 commit。
 
+### Package manager
+
+GitHub Release 创建后，`deploy.yml` 中另有三个 job 负责发布：
+
+| Job | 发布内容 | `stg` environment 中的 secret |
+| --- | --- | --- |
+| `publish-winget` | 通过 [komac](https://github.com/russellbanks/Komac)（版本 pin 在 `scripts/pinned-versions.txt`）向 `microsoft/winget-pkgs` 提交 `ManhPham.Deskhub` 与 `ManhPham.DeskhubCLI` 的 pull request | `WINGET_TOKEN` —— 带 `public_repo` 的 classic PAT |
+| `publish-homebrew` | `manhpham90vn/homebrew-tap` 中的 `Casks/deskhub.rb` 与 `Formula/deskhub-cli.rb`，由 `packaging/homebrew/` 生成 | `HOMEBREW_TAP_TOKEN` —— 对该 tap 有 Contents: write 的 fine-grained PAT |
+| `build-apt-repo` → `deploy-apt-repo` | 已签名的 apt repository，包含最近三个 release 的 deb，位于 GitHub Pages 的 `/apt`（`scripts/build-apt-repo.sh`） | `APT_GPG_PRIVATE_KEY`、`APT_GPG_PASSPHRASE` |
+
+每个 job 在首次运行它的 tag 之前都需要一次性设置：
+
+- **winget** —— 该 job 只更新已存在的 package，因此每个 package 的第一个版本需手动提交，
+  komac 询问时将 portable command alias 设为 `deskhub` / `deskhub-cli`。在 Microsoft merge
+  该 pull request 之前，job 只会警告并跳过。
+
+  ```bash
+  komac new ManhPham.Deskhub --version X.Y.Z --urls https://github.com/manhpham90vn/Deskhub/releases/download/vX.Y.Z/deskhub-vX.Y.Z-windows.exe
+  ```
+
+  再对 `ManhPham.DeskhubCLI` 和 `deskhub-cli-vX.Y.Z-windows.exe` 的 URL 执行一次。
+- **Homebrew** —— 创建 public repository `manhpham90vn/homebrew-tap`，由 job 填充内容。
+- **apt** —— 生成一次 signing key，将该文件存为 `APT_GPG_PRIVATE_KEY`，并保留离线备份。
+  所有用户都信任这把 key：更换它会让他们的 `apt update` 失败。
+
+  ```bash
+  gpg --quick-gen-key "Deskhub APT <manhpv151090@gmail.com>" rsa4096 sign 5y
+  gpg --armor --export-secret-keys "Deskhub APT" > deskhub-apt.key
+  ```
+
+  在 *Settings → Pages* 中将 source 设为 **GitHub Actions**，并在 *Settings →
+  Environments → github-pages* 中允许匹配 `v*` 的 tag —— 否则 Pages 会拒绝来自 tag 的
+  deploy。
+
 ## 9. CI 的检查项
 
 本地 `make test` 与 `make lint` 通过并不代表全部。每个 pull request 上均会执行：

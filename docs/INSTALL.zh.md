@@ -25,12 +25,23 @@ TestFlight 和 Google Play 分发。
 此外还提供 `deskhub-cli`，它是同一个 client，只是没有自己的窗口。见
 [Command line](#-command-line)。
 
+**Package manager** 会自动保持 Deskhub 为最新版本：Windows 上用
+`winget install ManhPham.Deskhub`，macOS 上用 `brew install --cask manhpham90vn/tap/deskhub`，
+Ubuntu、Kubuntu、Debian、Mint 则使用 [apt repository](#-linux)。
+
 ---
 
 ## 🪟 Windows
 
 下载 `deskhub-v*-windows.exe` 并运行。没有 installer，没有 background service，也不需要
 账号：整个 app 就是这一个文件。
+
+也可以让 winget 获取同一个文件并保持更新：`winget upgrade` 获取每个新 release，
+`winget uninstall ManhPham.Deskhub` 将其移除：
+
+```powershell
+winget install ManhPham.Deskhub
+```
 
 首次使用时会发生两件事：
 
@@ -44,6 +55,12 @@ TestFlight 和 Google Play 分发。
 
 下载 `deskhub-v*-macos.dmg`，打开后将 app 拖入 *Applications*。该 dmg 已使用 Developer
 ID 进行 sign 并通过 Apple 的 notarize，因此打开时不会出现 Gatekeeper 警告。
+
+也可以通过 Homebrew 安装，之后由 `brew upgrade` 保持更新：
+
+```bash
+brew install --cask manhpham90vn/tap/deskhub
+```
 
 Host 一块屏幕需要两个 macOS permission。两者均可从 app 的 **Settings** 页申请；该页同时
 显示它们的当前状态，并提供直接跳转到对应 System Settings 面板的按钮。
@@ -68,6 +85,18 @@ deb 与 rpm 内容一致，选择系统 package manager 支持的一种即可。
 
 deb 与 rpm 还会将 `deskhub-cli` 安装为 `/usr/bin/deskhub-cli`。见下文
 [Command line](#-command-line)。
+
+在 Ubuntu、Kubuntu、Debian 和 Mint 上，Deskhub 的 apt repository 安装的是同一个 deb，
+并让 `sudo apt upgrade` 获取之后的每个 release。它支持 Ubuntu 22.04 及以上、Debian 12
+及以上：
+
+```bash
+sudo install -d /etc/apt/keyrings
+curl -fsSL https://manhpham90vn.github.io/Deskhub/apt/deskhub.gpg | sudo tee /etc/apt/keyrings/deskhub.gpg >/dev/null
+echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/deskhub.gpg] https://manhpham90vn.github.io/Deskhub/apt stable main" \
+  | sudo tee /etc/apt/sources.list.d/deskhub.list
+sudo apt update && sudo apt install deskhub
+```
 
 **若需共享本机屏幕**，还需满足三个条件。
 
@@ -145,6 +174,7 @@ sudo firewall-cmd --add-port=47777/udp --permanent        # Fedora / openSUSE
 ```bash
 sudo apt remove deskhub      # 或: sudo dnf remove deskhub / sudo zypper remove deskhub
 rm -rf ~/.deskhub            # settings、key 与已 pair 的机器
+sudo rm -f /etc/apt/sources.list.d/deskhub.list /etc/apt/keyrings/deskhub.gpg   # apt repository（若已添加）
 ```
 
 免安装 binary 只是一个文件，删除即可。
@@ -194,6 +224,11 @@ macOS 与 Linux 的文件下载后不带 executable 位，需执行一次 `chmod
 那样进行 sign 和 notarize：在 macOS 上首次运行需要
 `xattr -d com.apple.quarantine deskhub-cli-v*-macos`，或在 System Settings → Privacy &
 Security 中选择 *Open Anyway*。
+
+通过 package manager 安装则无需上述步骤，并且会直接放入 `PATH`：Windows 上用
+`winget install ManhPham.DeskhubCLI`，macOS 上用 `brew install manhpham90vn/tap/deskhub-cli`
+—— Homebrew 安装时不会附加 quarantine 标记。apt repository 已将它包含在 `deskhub`
+package 中。
 
 在 Linux 上，它通过 app 所需的同一个 portal 和 VA-API driver 共享屏幕，remote input 也
 依赖同一条 `/dev/uinput` rule，因此 [Linux](#-linux) 一节同样适用。在 macOS 上它可以共享

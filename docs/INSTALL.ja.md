@@ -26,12 +26,23 @@ build は TestFlight と Google Play から配布している。
 このほかに `deskhub-cli` がある。同じ client で、自前のウィンドウを持たない点だけが
 異なる。[Command line](#-command-line) を参照。
 
+**Package manager** を使えば Deskhub は自動で最新に保たれる。Windows では
+`winget install ManhPham.Deskhub`、macOS では `brew install --cask manhpham90vn/tap/deskhub`、
+Ubuntu、Kubuntu、Debian、Mint では [apt repository](#-linux) を使う。
+
 ---
 
 ## 🪟 Windows
 
 `deskhub-v*-windows.exe` をダウンロードして実行する。installer、background service、
 アカウントのいずれも不要で、app 全体がこのファイル 1 つである。
+
+winget に同じファイルを取得させ、最新に保つこともできる。`winget upgrade` で新しい release
+を取得し、`winget uninstall ManhPham.Deskhub` で削除する。
+
+```powershell
+winget install ManhPham.Deskhub
+```
 
 初回の使用時には次の 2 点が発生する。
 
@@ -47,6 +58,12 @@ Deskhub を削除するには exe を消す。Settings と key は、フォル�
 `deskhub-v*-macos.dmg` をダウンロードして開き、app を *Applications* にドラッグする。
 この dmg は Developer ID で sign され、Apple の notarize も通っているため、Gatekeeper
 の警告は表示されない。
+
+Homebrew からもインストールでき、以後は `brew upgrade` で最新に保たれる。
+
+```bash
+brew install --cask manhpham90vn/tap/deskhub
+```
 
 画面を host するには macOS の permission が 2 つ必要である。いずれも app の
 **Settings** ページから要求でき、同ページには現在の状態と、対応する System Settings の
@@ -73,6 +90,18 @@ Fedora 36、openSUSE 15.5、現行の Arch）。
 
 deb と rpm は `deskhub-cli` も `/usr/bin/deskhub-cli` としてインストールする。下記の
 [Command line](#-command-line) を参照。
+
+Ubuntu、Kubuntu、Debian、Mint では、Deskhub の apt repository が同じ deb をインストール
+し、以後の release は `sudo apt upgrade` で届く。対応するのは Ubuntu 22.04 以降と
+Debian 12 以降である。
+
+```bash
+sudo install -d /etc/apt/keyrings
+curl -fsSL https://manhpham90vn.github.io/Deskhub/apt/deskhub.gpg | sudo tee /etc/apt/keyrings/deskhub.gpg >/dev/null
+echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/deskhub.gpg] https://manhpham90vn.github.io/Deskhub/apt stable main" \
+  | sudo tee /etc/apt/sources.list.d/deskhub.list
+sudo apt update && sudo apt install deskhub
+```
 
 **このマシンの画面を共有する**には、さらに 3 つの条件が必要である。
 
@@ -155,6 +184,7 @@ sudo firewall-cmd --add-port=47777/udp --permanent        # Fedora / openSUSE
 ```bash
 sudo apt remove deskhub      # または: sudo dnf remove deskhub / sudo zypper remove deskhub
 rm -rf ~/.deskhub            # settings、key、pair 済みマシン
+sudo rm -f /etc/apt/sources.list.d/deskhub.list /etc/apt/keyrings/deskhub.gpg   # apt repository を追加した場合
 ```
 
 portable binary はファイル 1 つであり、削除すればよい。
@@ -207,6 +237,11 @@ macOS と Linux のファイルは executable ビットが付いていないた�
 実行する。どちらも dmg のような sign と notarize は行っていない。macOS では初回の実行に
 `xattr -d com.apple.quarantine deskhub-cli-v*-macos`、または System Settings →
 Privacy & Security の *Open Anyway* が必要である。
+
+package manager 経由であれば上記はいずれも不要で、`PATH` にも配置される。Windows では
+`winget install ManhPham.DeskhubCLI`、macOS では `brew install manhpham90vn/tap/deskhub-cli`
+を使う。Homebrew は quarantine フラグを付けずにインストールする。apt repository では
+`deskhub` package に同梱されている。
 
 Linux では app と同じ portal および VA-API driver で画面を共有し、remote input も同じ
 `/dev/uinput` rule に依存するため、[Linux](#-linux) の節がそのまま当てはまる。macOS で
