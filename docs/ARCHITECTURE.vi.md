@@ -112,9 +112,16 @@ connection chưa hoàn tất phần auth:
 | bất kỳ | pairing đã tắt | **Denied** (máy đã pair vẫn đi theo đường Signature). |
 
 Khi thành công, client được ghi vào `paired_devices` của host; pairing dựa trên key, không
-dựa trên địa chỉ. Ba lần nhập sai passcode sẽ khoá đường passcode trong 30 giây
-(`AuthThrottle`). Đường approval không
-cần throttle vì đã có người quyết định.
+dựa trên địa chỉ. Ba lần nhập sai passcode sẽ khoá đường passcode trong 30 giây, và mỗi
+lần khoá liên tiếp sau đó dài gấp đôi, tối đa một giờ, cho tới khi có một passcode đúng
+đặt lại bộ đếm (`AuthThrottle`). Đường approval không cần throttle vì đã có người quyết định.
+
+Việc được chấp nhận gắn với một QUIC connection, không gắn với địa chỉ. Nó bị huỷ ngay khi
+connection đó đóng, nên connection tiếp theo từ cùng địa chỉ và port phải chứng minh lại từ
+đầu. Một `AuthStart` thứ hai trên connection đã bắt đầu handshake sẽ khiến connection bị
+đóng: danh tính đã xác lập không thể bị tráo bằng một danh tính chưa từng được chứng minh,
+và một passcode bị từ chối không thể được thử lại ngay trên connection đó. Forget một máy
+trên trang Devices cũng đóng mọi connection mà máy đó đang mở.
 
 Ở phía client, `known_hosts` (`TrustStore`) ghim key của host. Một key **đã thay đổi** sẽ
 chặn kết nối kèm cảnh báo rõ ràng; một key chưa biết được chính handshake xử lý — host đã

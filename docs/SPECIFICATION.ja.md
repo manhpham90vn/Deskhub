@@ -154,7 +154,7 @@ app と同一の settings、pair 済みマシン一覧、trust 済み host key �
 | S-1 | Encrypt | session は encrypt された transport（QUIC/TLS）の上で動作する。session が運ぶすべての内容 —— video、control、input、clipboard、terminal のトラフィック —— は 2 台の間で encrypt される。Discovery beacon が平文であるのは設計上の意図であり、機密情報は含まない。当該 port に到達するそれ以外の未 encrypt な packet はすべて破棄される。詳細は [`SECURITY.ja.md`](../SECURITY.ja.md) を参照。 |
 | S-2 | pairing による受け入れ制御 | マシンが初めて connect した際、受け入れの可否は host が判断する。host の passcode を提示できるマシンは、そのコードを知っていることを暗号的に証明したことになり、コード自体は network を通過しない。コードを提示しないマシン、および host がコードを設定していない場合は、host 側の利用者に判断が委ねられる。*Let this machine in?* に対して **Allow** と **Deny** が提示され、1 回の回答がそのマシンが開こうとしている対象（画面と shell の双方）すべてに適用される。受け入れは 2 台を **pair** することを意味し、以後そのマシンは key によって識別され、forget されるまで passcode なしで connect できる。ただし入力されたコードは常に検証される。pair 済みのマシンであっても、誤ったコードを提示した場合は拒否される。 |
 | S-3 | passcode は任意、pair 済み一覧 | passcode は任意であり既定では空である。空の場合、host 側の利用者が承認しない限り、いかなるマシンも受け入れられない。pair 済みのマシンは **Devices** ページに、名前、key、pair した時刻、最後に確認された時刻とともに一覧表示され、*Forget* と *Forget every machine*、オフにすると pair 済みのマシンのみを受け入れる *allow new pairings* スイッチ、および照合用に本マシン自身の key が提供される。host は共有内容を、受け入れたマシンにのみ開示する。 |
-| S-4 | 連続失敗時のロックアウト | passcode を **3** 回誤ると、host の pairing は **30 秒間**ロックされ、試行中のマシンには待機するよう通知される。pair 済みのマシンは影響を受けない。 |
+| S-4 | 連続失敗時のロックアウト | passcode を **3** 回誤ると、host の pairing は **30 秒間**ロックされ、試行中のマシンには待機するよう通知される。ロックが続くたびに時間は前回の 2 倍になり、最長 **1 時間**に達する。正しい passcode が入力されると 30 秒に戻る。pair 済みのマシンは影響を受けない。 |
 | S-5 | control のスイッチ | host は *viewers can control this machine* を無効にしたまま共有でき、この場合 viewer の要求内容にかかわらず、すべての session が view-only となる。 |
 | S-6 | capture への同意 | それを要求するプラットフォームでは、OS 自身の permission プロンプトと画面選択ダイアログを使用する。利用者が許可しない限り Deskhub は capture できない。 |
 | S-7 | 明示的な共有のみ | 利用者が共有を開始するまで、いかなる内容も共有されない。app を閉じるか共有を停止すると、すべての session が終了する。 |

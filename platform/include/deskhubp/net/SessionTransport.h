@@ -102,6 +102,9 @@ private:
     bool HandleHostAuth(const NetAddr& from, std::span<const uint8_t> message);
     void SendAuth(const NetAddr& to, std::span<const uint8_t> message);
     void SettleHostAuth(const NetAddr& peer, HostAuth& auth, const deskhub::AuthResult& result);
+    void ForgetPeerAuth(const NetAddr& peer);
+    void DropQueuedFrom(const NetAddr& peer);
+    void RevokeForgottenPeers();
 
     QuicEndpoint endpoint_;
     std::map<uint64_t, deskhub::RecordStream> framers_;
@@ -116,6 +119,7 @@ private:
     TransportAuthCallbacks authCallbacks_{};
     bool hostAuthOn_ = false;
     bool clientAuthOn_ = false;
+    uint64_t pairedGenerationSeen_ = 0;
     std::function<void(const NetAddr&)> onPeerGone_;
     std::function<void(const NetAddr&, uint64_t streamId)> onStreamBroken_;
     std::function<bool()> bulkReady_;

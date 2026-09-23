@@ -107,9 +107,16 @@ connection whose auth has not settled:
 | anything | pairing switched off | **Denied** (paired machines still get Signature). |
 
 Success writes the client into the host's `paired_devices`; pairing is by key, not
-address. Three wrong passcode guesses lock the passcode path for 30 seconds
-(`AuthThrottle`); the approval path
-needs no throttle — a human is the gate.
+address. Three wrong passcode guesses lock the passcode path for 30 seconds, and each
+further lockout in a row doubles, up to one hour, until a correct passcode resets it
+(`AuthThrottle`); the approval path needs no throttle — a human is the gate.
+
+Admission belongs to one QUIC connection, not to an address. It is dropped the moment
+that connection closes, so the next connection from the same address and port has to
+prove itself again. A second `AuthStart` on a connection that already began its
+handshake closes the connection: a settled identity cannot be swapped for one that was
+never proved, and a refused passcode cannot be retried in place. Forgetting a machine
+on the Devices page also closes any connection it has open at that moment.
 
 Client side, `known_hosts` (`TrustStore`) pins host keys. A **changed** key blocks the
 connection behind a loud warning; an unknown key is settled by the handshake itself

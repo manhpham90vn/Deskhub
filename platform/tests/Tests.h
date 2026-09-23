@@ -19,6 +19,7 @@ void RunAppDataFileTests();
 void RunHostIdentityTests();
 void RunQuicEndpointTests();
 void RunSessionTransportTests();
+void RunTransportAdmissionTests();
 void RunAuthProofTests();
 void RunAuthNegotiationTests();
 void RunHostLinkTests();

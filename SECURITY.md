@@ -39,7 +39,7 @@ machine to the Internet.
 | Someone reading your traffic | Every session runs inside QUIC/TLS — video frames, keystrokes, clipboard text and terminal bytes are all encrypted between the two machines. A packet capture yields traffic volume and timing, not content. Unencrypted packets arriving at the port are dropped unless they are discovery probes. |
 | A remote viewer fighting you for the machine | "Host wins": the moment you touch the real mouse or keyboard, remote input is paused (Windows, macOS and Linux hosts alike). |
 | Keys left stuck down | Any key the remote side is holding is released automatically when the session ends or the viewer switches away. |
-| A stranger connecting uninvited | Admission is a pairing handshake. An unknown machine must prove the host's passcode via SPAKE2 — the code never travels, an eavesdropper takes nothing home to crack, and each connection allows exactly one guess — or, when no passcode is set, wait for the person at the host to answer *Let this machine in?*. Three wrong guesses lock pairing for 30 seconds. Once admitted, a machine is paired: recognised by its cryptographic key, listed on the host's Devices page, and revocable there. The discovery beacon no longer confirms a guessed code — a stranger's probe gets an empty list no matter what it contains, so the old brute-force oracle is gone. |
+| A stranger connecting uninvited | Admission is a pairing handshake. An unknown machine must prove the host's passcode via SPAKE2 — the code never travels, an eavesdropper takes nothing home to crack, and each connection allows exactly one guess — or, when no passcode is set, wait for the person at the host to answer *Let this machine in?*. Three wrong guesses lock pairing for 30 seconds, and each further lockout in a row doubles, up to an hour. Once admitted, a machine is paired: recognised by its cryptographic key, listed on the host's Devices page, and revocable there — forgetting it also closes any connection it has open. Admission lasts only as long as the connection that earned it. The discovery beacon no longer confirms a guessed code — a stranger's probe gets an empty list no matter what it contains, so the old brute-force oracle is gone. |
 | A machine-in-the-middle on later visits | Every machine has a key. A client remembers the key of each host it has paired with and refuses to reconnect over a changed key until the user explicitly accepts it. The passcode proof is bound to the host key the client actually saw, so a relayed proof does not verify. |
 | Viewers fighting each other for the mouse | Up to 5 viewers may watch one host, but only one drives input: the earliest to have joined wins, and a later viewer's input is dropped until the earlier one has been idle for a second. A 6th viewer is rejected as `Busy`. |
 | A viewer you only want to show the screen to | View-only sharing, available on every host, drops input packets at the host before anything is injected — it is not enforced by asking the client to behave. Android and iOS hosts are view-only unconditionally. |
@@ -135,8 +135,9 @@ running, they can:
    list, but the machine still answers, so it still gives itself away.
 2. Try to get in. They can no longer read the passcode off the wire — it never travels.
    What is left is guessing it online (one guess per connection, three wrong guesses
-   lock pairing for 30 seconds) or, on a host with no passcode, hoping the person at the
-   host clicks **Allow** on the approval prompt.
+   lock pairing for 30 seconds, and every further lockout doubles up to an hour, so
+   working through all 10,000 codes takes months) or, on a host with no passcode, hoping
+   the person at the host clicks **Allow** on the approval prompt.
 3. Watch the traffic without getting in — and learn only volume and timing. The
    session's content, video included, is encrypted; a capture no longer reconstructs
    the screen or the keystrokes.
@@ -213,7 +214,8 @@ whole session — video, input, clipboard and terminal alike — with unencrypte
 dropped unless they are discovery probes; SPAKE2 pairing so the passcode never travels
 and cannot be harvested or brute-forced offline; the approval prompt on the host; a
 paired-machines list with revocation; machine keys with a key-change warning on the
-client; and a 3-strikes / 30-second lockout on wrong passcode guesses.
+client; and a 3-strikes lockout on wrong passcode guesses that starts at 30 seconds and
+doubles up to an hour.
 
 This list is a statement of intent, not a schedule. Deskhub is maintained by one person
 in their spare time. Treat the current state as the state, not the plan.

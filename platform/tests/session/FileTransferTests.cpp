@@ -224,6 +224,63 @@ void TestFileStoreNeverOverwritesOrLeavesScraps() {
     Check(scraps == 0, "and no half-written part file is left behind");
 }
 
+void TestTwoSendersNeverShareAPartFile() {
+    std::printf("[store] two machines sending the same name at once each get their own file...\n");
+    const std::filesystem::path dir = Scratch("store-two-senders");
+    deskhubp::FileStore first;
+    deskhubp::FileStore second;
+    Check(first.SetDirectory(dir) && second.SetDirectory(dir), "both stores share one folder");
+
+    const std::vector<uint8_t> a = Pattern(4000, 11);
+    const std::vector<uint8_t> b = Pattern(3000, 29);
+    const std::string nameA = first.Open(0, "report.pdf", a.size());
+    const std::string nameB = second.Open(0, "report.pdf", b.size());
+    Check(nameA == "report.pdf", "the first arrival keeps the name");
+    Check(!nameB.empty() && nameB != nameA,
+        "the second sees the first one's part file and takes another name");
+
+    Check(first.Write(0, a) && second.Write(0, b), "both write their bytes");
+    Check(second.Close(0, true), "the second lands");
+    Check(first.Close(0, true), "and so does the first");
+    Check(ReadFile(dir / nameA) == a, "each file holds exactly what its sender sent");
+    Check(ReadFile(dir / nameB) == b, "with no bytes from the other");
+}
+
+void TestALeftoverPartFileIsNeverWrittenOver() {
+    std::printf("[store] a part file already in the folder is left as it was...\n");
+    const std::filesystem::path dir = Scratch("store-leftover");
+    const std::vector<uint8_t> leftover = Pattern(64, 5);
+    WriteFile(dir, std::string("photo.jpg") + deskhubp::kTransferPartSuffix, leftover);
+
+    deskhubp::FileStore store;
+    Check(store.SetDirectory(dir), "the folder is taken");
+    const std::string name = store.Open(0, "photo.jpg", 16);
+    Check(!name.empty() && name != "photo.jpg",
+        "the arrival steers around the name a leftover part file still holds");
+    Check(store.Write(0, Pattern(16, 9)), "and writes");
+    Check(store.Close(0, true), "and lands");
+    Check(ReadFile(dir / (std::string("photo.jpg") + deskhubp::kTransferPartSuffix)) == leftover,
+        "the leftover is untouched");
+}
+
+void TestAFileThatAppearsLateIsNotOverwritten() {
+    std::printf("[store] a file that shows up under the name mid-transfer survives it...\n");
+    const std::filesystem::path dir = Scratch("store-late-arrival");
+    deskhubp::FileStore store;
+    Check(store.SetDirectory(dir), "the folder is taken");
+
+    const std::vector<uint8_t> incoming = Pattern(200, 2);
+    Check(store.Open(0, "draft.txt", incoming.size()) == "draft.txt", "the name is free");
+    Check(store.Write(0, incoming), "bytes arrive");
+
+    const std::vector<uint8_t> local = Pattern(50, 77);
+    WriteFile(dir, "draft.txt", local);
+    Check(store.Close(0, true), "the transfer still lands");
+    Check(ReadFile(dir / "draft.txt") == local,
+        "the file someone saved meanwhile is not replaced");
+    Check(ReadFile(dir / "draft (2).txt") == incoming, "the arrival sits beside it instead");
+}
+
 void TestTheDiskQueueIsBoundedAndOffTheLoop() {
     std::printf("[store] writes leave the caller's thread, and the queue has a ceiling...\n");
     const std::filesystem::path landing = Scratch("disk-queue");
@@ -648,6 +705,9 @@ void TestBeginRefusesWhatItCannotSend() {
 
 void RunFileTransferPlatformTests() {
     TestFileStoreNeverOverwritesOrLeavesScraps();
+    TestTwoSendersNeverShareAPartFile();
+    TestALeftoverPartFileIsNeverWrittenOver();
+    TestAFileThatAppearsLateIsNotOverwritten();
     TestTheDiskQueueIsBoundedAndOffTheLoop();
     TestTheUploadRingKeepsTheLoopOffTheDisk();
     TestBeginRefusesWhatItCannotSend();

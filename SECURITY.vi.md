@@ -44,7 +44,7 @@ mở máy của bạn ra Internet.
 | Việc đọc trộm lưu lượng | Mọi session đều chạy bên trong QUIC/TLS: frame video, phím gõ, văn bản clipboard và byte terminal đều được encrypt giữa hai máy. Việc bắt gói chỉ cho biết khối lượng và thời điểm, không cho biết nội dung. Packet chưa encrypt tới port đều bị loại bỏ, trừ các probe discovery. |
 | Viewer từ xa tranh quyền điều khiển | Host được ưu tiên: ngay khi bạn thao tác với mouse hoặc keyboard thật, remote input bị tạm dừng. Điều này áp dụng cho host trên Windows, macOS và Linux. |
 | Phím bị kẹt | Mọi phím mà phía từ xa đang giữ đều được nhả tự động khi session kết thúc hoặc viewer chuyển sang cửa sổ khác. |
-| Người lạ kết nối không được phép | Việc chấp nhận kết nối dựa trên pairing handshake. Một máy chưa biết phải chứng minh passcode của host qua SPAKE2 — mã không đi qua đường truyền, kẻ nghe lén không thu được dữ liệu nào để crack, và mỗi connection chỉ được thử một lần — hoặc, khi không đặt passcode, phải chờ người dùng tại host trả lời *Let this machine in?*. Ba lần thử sai sẽ khoá pairing trong 30 giây. Sau khi được chấp nhận, máy ở trạng thái đã pair: được nhận diện qua key mật mã, xuất hiện trên trang Devices của host, và có thể thu hồi tại đó. Discovery beacon không còn xác nhận một mã đoán đúng hay sai: probe của máy lạ luôn nhận về danh sách rỗng, nên cơ chế dò mã trước đây không còn. |
+| Người lạ kết nối không được phép | Việc chấp nhận kết nối dựa trên pairing handshake. Một máy chưa biết phải chứng minh passcode của host qua SPAKE2 — mã không đi qua đường truyền, kẻ nghe lén không thu được dữ liệu nào để crack, và mỗi connection chỉ được thử một lần — hoặc, khi không đặt passcode, phải chờ người dùng tại host trả lời *Let this machine in?*. Ba lần thử sai sẽ khoá pairing trong 30 giây, và mỗi lần khoá liên tiếp sau đó dài gấp đôi, tối đa một giờ. Sau khi được chấp nhận, máy ở trạng thái đã pair: được nhận diện qua key mật mã, xuất hiện trên trang Devices của host, và có thể thu hồi tại đó; forget máy đó cũng đóng mọi connection nó đang mở. Việc được chấp nhận chỉ kéo dài bằng đúng connection đã giành được nó. Discovery beacon không còn xác nhận một mã đoán đúng hay sai: probe của máy lạ luôn nhận về danh sách rỗng, nên cơ chế dò mã trước đây không còn. |
 | Tấn công xen giữa ở các lần kết nối sau | Mỗi máy có một key. Client lưu key của từng host đã pair và từ chối kết nối lại khi key thay đổi, cho tới khi người dùng chấp nhận một cách tường minh. Phần chứng minh passcode được ràng buộc với đúng host key mà client nhận được, nên một bản chứng minh bị relay sẽ không hợp lệ. |
 | Nhiều viewer tranh quyền điều khiển mouse | Tối đa 5 viewer cùng xem một host, nhưng chỉ một viewer điều khiển input: viewer tham gia sớm hơn được ưu tiên, và input của viewer tới sau bị loại bỏ cho tới khi viewer trước không thao tác trong một giây. Viewer thứ 6 bị từ chối với trạng thái `Busy`. |
 | Viewer chỉ được phép xem | Chế độ share view-only, có trên mọi host, loại bỏ các packet input ngay tại host trước khi bất cứ thao tác nào được inject; cơ chế này không dựa vào việc client tự tuân thủ. Host trên Android và iOS luôn ở chế độ view-only. |
@@ -143,8 +143,9 @@ Nếu một người ở cùng LAN với máy đang share màn hình và Deskhub
    sách rỗng, nhưng máy vẫn phản hồi nên vẫn bị phát hiện.
 2. Thử kết nối. Họ không đọc được passcode trên đường truyền vì mã không đi qua đó. Các
    phương án còn lại là thử trực tiếp (một lần cho mỗi connection, ba lần sai thì khoá
-   pairing 30 giây), hoặc với host không đặt passcode, chờ người dùng tại host nhấn
-   **Allow** trên prompt phê duyệt.
+   pairing 30 giây, mỗi lần khoá tiếp theo dài gấp đôi tới tối đa một giờ, nên thử hết
+   10.000 mã mất nhiều tháng), hoặc với host không đặt passcode, chờ người dùng tại host
+   nhấn **Allow** trên prompt phê duyệt.
 3. Quan sát lưu lượng mà không kết nối, và chỉ thu được thông tin về khối lượng và thời
    điểm. Nội dung của session, bao gồm video, đều được encrypt; việc bắt gói không dựng
    lại được màn hình hay các phím đã gõ.
@@ -220,7 +221,8 @@ cho toàn bộ session, bao gồm video, input, clipboard và terminal, cùng vi
 liệu chưa encrypt trừ các probe discovery; pairing bằng SPAKE2 để passcode không đi qua
 đường truyền và không thể bị thu thập hay brute-force offline; prompt phê duyệt tại host;
 danh sách máy đã pair kèm khả năng thu hồi; key cho từng máy cùng cảnh báo khi key thay
-đổi ở phía client; và cơ chế khoá 30 giây sau 3 lần nhập sai passcode.
+đổi ở phía client; và cơ chế khoá sau 3 lần nhập sai passcode, bắt đầu từ 30 giây và
+tăng gấp đôi tới tối đa một giờ.
 
 Danh sách này là tuyên bố về định hướng, không phải lịch trình. Deskhub do một người bảo
 trì trong thời gian rảnh. Hãy đánh giá theo hiện trạng, không theo kế hoạch.

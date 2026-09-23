@@ -13,6 +13,9 @@ namespace {
 
 constexpr uint32_t kEstablishPollMs = 5;
 constexpr uint32_t kAuthPollMs = 2;
+constexpr uint64_t kCloseBadFraming = 1;
+constexpr uint64_t kCloseAuthRestarted = 2;
+constexpr uint64_t kCloseDeviceForgotten = 3;
 
 uint64_t StreamKey(QuicConnId conn, uint64_t stream) {
     return conn ^ (stream << 48);
@@ -98,6 +101,7 @@ QuicCallbacks SessionTransport::MakeCallbacks() {
             else
                 ++it;
         }
+        ForgetPeerAuth(peer);
         if (onPeerGone_) onPeerGone_(peer);
     };
     return hooks;
@@ -173,7 +177,7 @@ void SessionTransport::OnStream(QuicConnId conn, uint64_t stream,
     if (framer.Failed()) {
         LOGW("transport: %s sent a malformed record stream, closing it",
             NetAddr::Unpack(conn).ToString().c_str());
-        endpoint_.CloseConnection(conn, 1, "bad framing");
+        endpoint_.CloseConnection(conn, kCloseBadFraming, "bad framing");
     }
 }
 
@@ -248,6 +252,16 @@ bool SessionTransport::HandleHostAuth(const NetAddr& from, std::span<const uint8
     const std::span<const uint8_t> payload = deskhub::PayloadOf(message);
 
     if (header->type == deskhub::MsgType::AuthStart) {
+        if (hostAuth_.contains(key)) {
+            LOGW(
+                "transport: %s restarted authentication on a connection that already began "
+                "it, closing the connection: one connection gets one handshake, so a settled "
+                "identity cannot be swapped and a refused passcode cannot be retried in place",
+                from.ToString().c_str());
+            ForgetPeerAuth(from);
+            endpoint_.CloseConnection(key, kCloseAuthRestarted, "auth restarted");
+            return false;
+        }
         const std::optional<deskhub::AuthStart> start = deskhub::ParseAuthStart(payload);
         if (!start) return false;
 
@@ -318,6 +332,41 @@ void SessionTransport::SettleHostAuth(const NetAddr& peer, HostAuth& auth,
     }
     LOGW("transport: %s was turned away", peer.ToString().c_str());
     if (authCallbacks_.onRefused) authCallbacks_.onRefused(peer, result.code);
+}
+
+void SessionTransport::ForgetPeerAuth(const NetAddr& peer) {
+    hostAuth_.erase(peer.Pack());
+    authenticated_.erase(peer.Pack());
+}
+
+void SessionTransport::DropQueuedFrom(const NetAddr& peer) {
+    for (std::deque<TransportMessage>& lane : inbox_)
+        std::erase_if(lane, [&](const TransportMessage& m) { return m.from == peer; });
+    bulkDepth_.store(inbox_[size_t(Lane::Bulk)].size(), std::memory_order_relaxed);
+}
+
+void SessionTransport::RevokeForgottenPeers() {
+    if (!hostAuthOn_) return;
+    const uint64_t generation = PairedDevicesGeneration();
+    if (generation == pairedGenerationSeen_) return;
+    pairedGenerationSeen_ = generation;
+
+    std::vector<NetAddr> revoked;
+    for (const auto& [key, admitted] : authenticated_) {
+        if (!admitted) continue;
+        const auto at = hostAuth_.find(key);
+        if (at == hostAuth_.end()) continue;
+        if (CheckPairedDevice(at->second->PeerFingerprint()) == deskhub::PairVerdict::Paired)
+            continue;
+        revoked.push_back(NetAddr::Unpack(key));
+    }
+    for (const NetAddr& peer : revoked) {
+        LOGW("transport: %s was forgotten on the Devices page, closing its connection",
+            peer.ToString().c_str());
+        ForgetPeerAuth(peer);
+        DropQueuedFrom(peer);
+        endpoint_.CloseConnection(peer.Pack(), kCloseDeviceForgotten, "device forgotten");
+    }
 }
 
 void SessionTransport::SendAuth(const NetAddr& to, std::span<const uint8_t> message) {
@@ -476,6 +525,10 @@ bool SessionTransport::SendTo(const NetAddr& to, const uint8_t* data, size_t len
 
 int SessionTransport::RecvFrom(uint8_t* buf, size_t cap, NetAddr& from) {
     if (!endpoint_.IsOpen()) return -1;
+    {
+        const std::lock_guard<std::mutex> lock(sendMutex_);
+        RevokeForgottenPeers();
+    }
     if (!AnythingServable()) {
         endpoint_.WaitReadable(recvWaitMs_);
         const std::lock_guard<std::mutex> lock(sendMutex_);

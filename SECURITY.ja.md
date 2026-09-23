@@ -43,7 +43,7 @@ encrypt されていることは、Internet に公開してよいことを意味
 | トラフィックの盗聴 | すべての session は QUIC/TLS の内部で動作する。video の frame、キー入力、clipboard のテキスト、terminal のバイト列は 2 台の間で encrypt される。パケットキャプチャから得られるのは通信量と時刻であり、内容ではない。port に到達する未 encrypt の packet は、discovery の探索を除きすべて破棄される。 |
 | リモートの viewer との操作の競合 | host を優先する。実際の mouse または keyboard を操作した時点で remote input は停止する。これは Windows、macOS、Linux の host に共通である。 |
 | キーの押下状態の残留 | リモート側が押している状態のキーは、session の終了時、または viewer が切り替わった時点で自動的に解放される。 |
-| 許可のない第三者の接続 | 受け入れは pairing handshake によって制御する。未知のマシンは SPAKE2 により host の passcode を証明する必要がある。コードはネットワークを通過せず、盗聴者はオフラインで解析できるデータを取得できず、connection ごとの試行は 1 回に限られる。passcode が未設定の場合は、host 側の利用者が *Let this machine in?* に回答するまで待機する。3 回失敗すると pairing は 30 秒間ロックされる。受け入れられたマシンは pair 済みとなり、暗号 key によって識別され、host の Devices ページに表示され、そこから取り消せる。discovery beacon は推測されたコードの正否を示さない。未知のマシンの探索には常に空の一覧が返るため、以前の探索によるコード推測の手段は存在しない。 |
+| 許可のない第三者の接続 | 受け入れは pairing handshake によって制御する。未知のマシンは SPAKE2 により host の passcode を証明する必要がある。コードはネットワークを通過せず、盗聴者はオフラインで解析できるデータを取得できず、connection ごとの試行は 1 回に限られる。passcode が未設定の場合は、host 側の利用者が *Let this machine in?* に回答するまで待機する。3 回失敗すると pairing は 30 秒間ロックされ、ロックが続くたびに時間は倍になり、最長 1 時間に達する。受け入れられたマシンは pair 済みとなり、暗号 key によって識別され、host の Devices ページに表示され、そこから取り消せる。Forget すると、そのマシンが開いている connection も閉じられる。受け入れは、それを得た connection が続く間だけ有効である。discovery beacon は推測されたコードの正否を示さない。未知のマシンの探索には常に空の一覧が返るため、以前の探索によるコード推測の手段は存在しない。 |
 | 以降の接続における中間者攻撃 | 各マシンは key を持つ。client は pair した各 host の key を保持し、key が変化した場合は利用者が明示的に受け入れるまで再接続を拒否する。passcode の証明は client が実際に受け取った host key に束縛されるため、relay された証明は検証を通らない。 |
 | viewer 同士による mouse の競合 | 1 つの host を最大 5 viewer が閲覧できるが、input を操作できるのは 1 つのみである。先に参加した viewer が優先され、後から参加した viewer の input は、先行する viewer が 1 秒間無操作になるまで破棄される。6 番目の viewer は `Busy` として拒否される。 |
 | 閲覧のみを許可したい viewer | view-only の共有はすべての host で利用でき、何らかの操作が inject される前に host 側で input の packet を破棄する。client の自主的な遵守には依存しない。Android と iOS の host は常に view-only である。 |
@@ -141,7 +141,8 @@ profile を対象とするため、バインドを限定しても firewall は�
    一覧が返るが、マシン自体は応答するため、存在は把握される。
 2. 接続を試みる。passcode をネットワーク上から読み取ることはできない。コードが通過しな
    いためである。残る手段は、オンラインでの試行（connection ごとに 1 回、3 回失敗すると
-   pairing が 30 秒ロックされる）か、passcode を設定していない host において、host 側の
+   pairing が 30 秒ロックされ、以後ロックのたびに時間が倍になり最長 1 時間に達するため、
+   10,000 通りすべてを試すには数か月かかる）か、passcode を設定していない host において、host 側の
    利用者が承認プロンプトで **Allow** を押すのを待つことである。
 3. 接続せずにトラフィックを観察する。ただし得られるのは通信量と時刻のみである。video を
    含む session の内容は encrypt されており、キャプチャから画面やキー入力を再構成する
@@ -218,7 +219,7 @@ passcode は固定の XOR key で難読化され、そのままでは読み取�
 除く未 encrypt データの破棄。passcode がネットワークを通過せず、収集もオフラインの
 brute-force もできない SPAKE2 による pairing。host 側の承認プロンプト。取り消し可能な
 pair 済みマシンの一覧。マシンごとの key と、client 側での key 変更の警告。passcode の
-誤入力に対する 3 回 / 30 秒の lockout。
+誤入力に対する 3 回での lockout（30 秒から始まり、最長 1 時間まで倍増する）。
 
 本一覧は方針の表明であり、スケジュールではない。Deskhub は 1 名が余暇に保守している。
 計画ではなく現状に基づいて判断していただきたい。

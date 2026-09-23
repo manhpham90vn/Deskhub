@@ -48,6 +48,18 @@ void TestWindowsHostilityIsDefused() {
     Check(SafeFileName("lpt9.log") == "_lpt9.log", "a numbered printer name is caught");
     Check(SafeFileName("console.txt") == "console.txt", "a longer word is not a device name");
     Check(SafeFileName("com10.txt") == "com10.txt", "a two-digit port is not a device name");
+    Check(SafeFileName("CONIN$") == "_CONIN$", "the console input device is caught");
+    Check(SafeFileName("conout$.txt") == "_conout$.txt", "and so is the console output one");
+    Check(SafeFileName("COM\xC2\xB9") == "_COM\xC2\xB9",
+        "a superscript-numbered serial port is caught");
+    Check(SafeFileName("lpt\xC2\xB3.log") == "_lpt\xC2\xB3.log",
+        "and a superscript-numbered printer too");
+    Check(SafeFileName("com\xE2\x81\xB4.txt") == "com\xE2\x81\xB4.txt",
+        "a superscript Windows never reserved is left alone");
+    Check(SafeFileName("nul .txt") == "_nul .txt",
+        "a reserved stem followed by spaces before the dot is still caught");
+    Check(SafeFileName("company.txt") == "company.txt",
+        "a word that merely starts like a port is not a device name");
 }
 
 void TestControlCharactersAreRemoved() {

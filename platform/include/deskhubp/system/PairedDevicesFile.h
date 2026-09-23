@@ -2,6 +2,8 @@
 #include "deskhub/net/PairedDevices.h"
 #include "deskhubp/system/AuthProof.h"
 
+#include <cstdint>
+
 namespace deskhubp {
 
 inline constexpr const char* kPairedDevicesFileName = "paired_devices";
@@ -19,5 +21,6 @@ bool TouchPairedDevice(const deskhub::Fingerprint& fingerprint, std::string_view
     int64_t nowUnix);
 bool ForgetPairedDevice(const deskhub::Fingerprint& fingerprint);
 bool ForgetAllPairedDevices();
+uint64_t PairedDevicesGeneration();
 
 }

@@ -81,6 +81,9 @@ int main() {
     std::printf("--- net: the session transport the host and viewer loops speak through ---\n");
     RunSessionTransportTests();
 
+    std::printf("--- net: admission lives and dies with its connection ---\n");
+    RunTransportAdmissionTests();
+
     std::printf("--- session: the one link every client surface shares ---\n");
     RunHostLinkTests();
 

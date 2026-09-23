@@ -39,7 +39,7 @@ Deskhub 面向可信的 network 设计。
 | 流量被读取 | 每个 session 都运行在 QUIC/TLS 之内：video frame、按键、clipboard 文本与 terminal 字节在两台机器之间均为 encrypt 状态。抓包只能得到流量规模与时间信息，得不到内容。到达该 port 的未 encrypt packet 一律丢弃，discovery 探测除外。 |
 | 远端 viewer 争夺机器的控制权 | host 优先：一旦操作真实的 mouse 或 keyboard，remote input 即被暂停。该行为在 Windows、macOS 与 Linux 的 host 上一致。 |
 | 按键滞留 | 远端仍处于按下状态的按键，会在 session 结束或 viewer 切换时自动释放。 |
-| 陌生机器未经允许接入 | 接入由 pairing handshake 控制。未知机器必须通过 SPAKE2 证明 host 的 passcode —— 该码不经过网络，窃听者无法获得可离线破解的数据，每条 connection 仅允许一次尝试 —— 或者在未设置 passcode 时，等待 host 前的用户回答 *Let this machine in?*。连续三次尝试失败将使 pairing 锁定 30 秒。接入之后机器处于已 pair 状态：通过密码学 key 识别，列在 host 的 Devices 页上，并可在该页撤销。discovery beacon 不再确认所猜测的码：陌生机器的探测始终得到空列表，因此此前的探测式猜码手段已不存在。 |
+| 陌生机器未经允许接入 | 接入由 pairing handshake 控制。未知机器必须通过 SPAKE2 证明 host 的 passcode —— 该码不经过网络，窃听者无法获得可离线破解的数据，每条 connection 仅允许一次尝试 —— 或者在未设置 passcode 时，等待 host 前的用户回答 *Let this machine in?*。连续三次尝试失败将使 pairing 锁定 30 秒，此后每次连续锁定的时长翻倍，最长一小时。接入之后机器处于已 pair 状态：通过密码学 key 识别，列在 host 的 Devices 页上，并可在该页撤销；Forget 该机器也会关闭它当前打开的所有 connection。接入资格仅在赢得它的那条 connection 存续期间有效。discovery beacon 不再确认所猜测的码：陌生机器的探测始终得到空列表，因此此前的探测式猜码手段已不存在。 |
 | 后续连接中的中间人攻击 | 每台机器都有一个 key。client 保存已 pair 的每个 host 的 key，key 变化时拒绝重新连接，直到用户明确接受。passcode 的证明绑定到 client 实际收到的 host key，因此经 relay 的证明无法通过验证。 |
 | 多个 viewer 争夺 mouse | 最多 5 个 viewer 观看同一 host，但只有一个 viewer 控制 input：先加入者优先，后加入者的 input 会被丢弃，直到前者持续一秒无操作。第 6 个 viewer 以 `Busy` 状态被拒绝。 |
 | 仅允许观看的 viewer | view-only 共享在所有 host 上可用，它在 host 侧、在任何操作被 inject 之前即丢弃 input packet，并不依赖 client 自觉遵守。Android 与 iOS 的 host 始终为 view-only。 |
@@ -117,7 +117,8 @@ Deskhub 面向可信的 network 设计。
 1. 通过扫描 UDP 47777 发现该机器。未 pair 机器的探测得到的是空列表，但机器仍会回应，
    因此其存在仍会暴露。
 2. 尝试接入。他们无法从线上读取 passcode，因为该码不经过网络。可用的方式是在线尝试
-   （每条 connection 一次，三次错误将使 pairing 锁定 30 秒），或在未设置 passcode 的
+   （每条 connection 一次，三次错误将使 pairing 锁定 30 秒，此后每次锁定翻倍，最长一小时，
+   因此试遍全部 10,000 个码需要数月），或在未设置 passcode 的
    host 上，等待 host 前的用户在批准提示上点击 **Allow**。
 3. 在不接入的情况下观察流量，但只能得到规模与时间信息。session 的内容（包括 video）
    均已 encrypt，抓包无法重建屏幕或按键。
@@ -182,7 +183,7 @@ Documents / Downloads 文件夹，卸载 app 后仍会保留。请将送达该�
 涵盖 video、input、clipboard 与 terminal，并丢弃未 encrypt 的数据（discovery 探测
 除外）；采用 SPAKE2 pairing，使 passcode 不经过网络，无法被收集或离线 brute-force；
 host 侧的批准提示；带撤销功能的已 pair 机器列表；机器 key 以及 client 侧的 key 变更
-警告；以及 passcode 错误三次锁定 30 秒的机制。
+警告；以及 passcode 错误三次即锁定的机制，锁定时长从 30 秒起逐次翻倍，最长一小时。
 
 本清单说明的是实施意向，而非时间表。Deskhub 由一人在业余时间维护。请以当前状态为准，
 而非以计划为准。

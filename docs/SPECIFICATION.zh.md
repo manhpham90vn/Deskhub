@@ -150,7 +150,7 @@ host、connect、打开 remote shell、查找机器，并读写与 app 完全相
 | S-1 | Encrypt | session 运行在已 encrypt 的 transport（QUIC/TLS）之上。session 承载的全部内容 —— video、control、input、clipboard 与 terminal 流量 —— 在两台机器之间均为 encrypt 状态。Discovery beacon 采用明文属于既定设计，且不携带任何机密；到达该 port 的其他未 encrypt packet 一律丢弃。完整说明见 [`SECURITY.zh.md`](../SECURITY.zh.md)。 |
 | S-2 | 由 pairing 控制准入 | 机器首次 connect 时，由 host 决定是否接受。能够提供 host passcode 的机器，即以密码学方式证明了自己知道该码，而该码本身不经过 network。不提供码的机器，或 host 未设置码的情形，则转由 host 前的用户决定：*Let this machine in?*，提供 **Allow** 与 **Deny** 两项，一次回答适用于该机器正在打开的全部内容，包括屏幕与 shell。接受即意味着将两台机器 **pair**：此后该机器通过 key 被识别，无需 passcode 即可 connect，直至被 forget。但填入的码始终会被校验：即便是已 pair 的机器，提供错误的码同样会被拒绝。 |
 | S-3 | passcode 可选，已 pair 列表 | passcode 为可选项，默认留空；留空时，未经 host 前用户批准，任何机器都无法接入。已 pair 的机器列在 **Devices** 页，包含名称、key、pair 时间与最后出现时间，并提供 *Forget* 与 *Forget every machine*、一个 *allow new pairings* 开关（关闭后仅接受已 pair 的机器），以及本机自身的 key 供核对。host 仅向已接受的机器透露其共享内容。 |
-| S-4 | 连续失败后锁定 | passcode 连续错误 **3** 次将使 host 的 pairing 锁定 **30 秒**，并告知正在尝试的机器等待。已 pair 的机器不受影响。 |
+| S-4 | 连续失败后锁定 | passcode 连续错误 **3** 次将使 host 的 pairing 锁定 **30 秒**，并告知正在尝试的机器等待。此后每次连续锁定的时长为上一次的两倍，最长 **1 小时**；输入正确的 passcode 后恢复为 30 秒。已 pair 的机器不受影响。 |
 | S-5 | control 开关 | host 可在关闭 *viewers can control this machine* 的状态下共享，此时无论 viewer 请求什么，所有 session 均为 view-only。 |
 | S-6 | capture 的同意 | 在有此要求的平台上，使用操作系统自身的 permission 提示与屏幕选择对话框；未获用户授予时 Deskhub 无法 capture。 |
 | S-7 | 仅在明确要求时共享 | 在用户开始共享之前不共享任何内容。关闭或停止即结束所有 session。 |

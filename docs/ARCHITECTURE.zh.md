@@ -106,7 +106,14 @@ handshake（`AuthNegotiation`）按 connection 决定准入。transport 负责�
 | 任意 | pairing 已关闭 | **Denied**（已 pair 的机器仍走 Signature）。 |
 
 成功后 client 被写入 host 的 `paired_devices`；pairing 基于 key，而非地址。passcode 连
-续错误三次将使 passcode 通道锁定 30 秒（`AuthThrottle`）。approval 通道无需 throttle，因为由人进行判断。
+续错误三次将使 passcode 通道锁定 30 秒，此后每次连续锁定的时长翻倍，最长一小时，直到输入正确的
+passcode 才重置（`AuthThrottle`）。approval 通道无需 throttle，因为由人进行判断。
+
+接入资格属于单条 QUIC connection，而非某个地址。该 connection 一旦关闭，资格即被撤销，因此来自同
+一地址和 port 的下一条 connection 必须重新证明自己。在已开始 handshake 的 connection 上再次发送
+`AuthStart` 会导致该 connection 被关闭：已确立的身份不能被替换为从未证明过的身份，被拒绝的
+passcode 也不能在原 connection 上重试。在 Devices 页上 Forget 一台机器，也会关闭它当时打开的所有
+connection。
 
 在 client 侧，`known_hosts`（`TrustStore`）固定 host 的 key。key **发生变化**时将以明确
 的警告阻止连接；未知的 key 由 handshake 本身处理 —— 已证明 passcode 的 host 会被直接

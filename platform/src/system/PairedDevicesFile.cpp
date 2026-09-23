@@ -1,10 +1,28 @@
 #include "deskhubp/system/PairedDevicesFile.h"
 
+#include <atomic>
 #include <cstring>
 
 #include "deskhubp/system/AppDataFile.h"
 
 namespace deskhubp {
+
+namespace {
+
+std::atomic<uint64_t>& Generation() {
+    static std::atomic<uint64_t> generation{0};
+    return generation;
+}
+
+void MarkPairedDevicesChanged() {
+    Generation().fetch_add(1, std::memory_order_acq_rel);
+}
+
+}
+
+uint64_t PairedDevicesGeneration() {
+    return Generation().load(std::memory_order_acquire);
+}
 
 AuthSalt LoadOrCreateAuthSalt() {
     const std::string stored = ReadAppDataFile(kAuthSaltFileName);
@@ -24,7 +42,10 @@ deskhub::PairedDevices LoadPairedDevices() {
 }
 
 bool SavePairedDevices(const deskhub::PairedDevices& devices) {
-    return WriteAppDataFile(kPairedDevicesFileName, deskhub::SerializePairedDevices(devices));
+    const bool saved =
+        WriteAppDataFile(kPairedDevicesFileName, deskhub::SerializePairedDevices(devices));
+    MarkPairedDevicesChanged();
+    return saved;
 }
 
 deskhub::PairVerdict CheckPairedDevice(const deskhub::Fingerprint& fingerprint) {
@@ -54,6 +75,7 @@ bool ForgetPairedDevice(const deskhub::Fingerprint& fingerprint) {
 bool ForgetAllPairedDevices() {
     const bool had = LoadPairedDevices().Size() != 0;
     RemoveAppDataFile(kPairedDevicesFileName);
+    MarkPairedDevicesChanged();
     return had;
 }
 

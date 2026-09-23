@@ -3,6 +3,7 @@
 #include "deskhub/transfer/SafeName.h"
 #include "deskhubp/diag/Log.h"
 #include "deskhubp/system/Environment.h"
+#include "deskhubp/system/FileOps.h"
 
 #include <system_error>
 #include <utility>
@@ -10,6 +11,8 @@
 namespace deskhubp {
 
 namespace {
+
+constexpr size_t kMaxPlacementRetries = 8;
 
 std::filesystem::path HomePath() {
 #ifdef _WIN32
@@ -146,6 +149,7 @@ uint64_t FileStore::FreeBytes() const {
 bool FileStore::Claimed(const std::string& name) const {
     std::error_code ec;
     if (std::filesystem::exists(dir_ / Utf8Path(name), ec)) return true;
+    if (std::filesystem::exists(dir_ / Utf8Path(name + kTransferPartSuffix), ec)) return true;
     for (const auto& [index, slot] : open_)
         if (slot.name == name) return true;
     return false;
@@ -176,6 +180,13 @@ std::string FileStore::Open(uint16_t index, const std::string& safeName, uint64_
     slot.name = name;
     slot.target = dir_ / Utf8Path(name);
     slot.part = dir_ / Utf8Path(name + kTransferPartSuffix);
+    if (!CreateNewFile(slot.part)) {
+        LOGE(
+            "transfer: could not create %s as a new file; it is never opened over something "
+            "already there, so this file is refused",
+            Utf8Of(slot.part).c_str());
+        return {};
+    }
     slot.out.open(slot.part, std::ios::binary | std::ios::trunc);
     if (!slot.out) {
         LOGE("transfer: could not open %s for writing", Utf8Of(slot.part).c_str());
@@ -226,18 +237,17 @@ bool FileStore::Close(uint16_t index, bool keep) {
     }
 
     std::filesystem::path target = slot.target;
-    if (std::filesystem::exists(target, ec)) {
+    MoveOutcome moved = MoveWithoutReplacing(slot.part, target);
+    for (size_t attempt = 0; moved == MoveOutcome::TargetExists && attempt < kMaxPlacementRetries;
+        ++attempt) {
         const std::string fresh = deskhub::UniqueFileName(slot.name,
             [this](const std::string& candidate) { return Claimed(candidate); });
-        if (fresh.empty()) {
-            std::filesystem::remove(slot.part, ec);
-            return false;
-        }
+        if (fresh.empty()) break;
         target = dir_ / Utf8Path(fresh);
+        moved = MoveWithoutReplacing(slot.part, target);
     }
 
-    std::filesystem::rename(slot.part, target, ec);
-    if (ec) {
+    if (moved != MoveOutcome::Moved) {
         LOGE(
             "transfer: could not put %s in place, so the part file is dropped and the batch "
             "fails; the sender is told the write failed rather than being left to believe a "

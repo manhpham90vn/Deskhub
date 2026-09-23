@@ -52,8 +52,9 @@ void TestGuessingWhileLockedPushesTheReopeningOut() {
     for (uint32_t i = 0; i < kMaxPasscodeAttempts; ++i) throttle.RecordFailure(midLockUs);
     Check(throttle.Locked(kStartUs + kPasscodeLockoutUs),
         "the door does not reopen at the original time");
-    Check(!throttle.Locked(midLockUs + kPasscodeLockoutUs),
-        "it reopens a full window after the last run of guesses");
+    Check(throttle.Locked(midLockUs + 2 * kPasscodeLockoutUs - 1),
+        "it stays shut for the doubled window counted from the last run of guesses");
+    Check(!throttle.Locked(midLockUs + 2 * kPasscodeLockoutUs), "and reopens after it");
 }
 
 void TestALockoutOutlivesASuccess() {
@@ -64,6 +65,51 @@ void TestALockoutOutlivesASuccess() {
     Check(throttle.Locked(kStartUs + kPasscodeLockoutUs - 1),
         "the window still has to be served in full");
     Check(!throttle.Locked(kStartUs + kPasscodeLockoutUs), "and still ends on time");
+}
+
+void LockOnce(AuthThrottle& throttle, uint64_t nowUs) {
+    for (uint32_t i = 0; i < kMaxPasscodeAttempts; ++i) throttle.RecordFailure(nowUs);
+}
+
+void TestEachLockoutDoublesTheNext() {
+    std::printf("[throttle] every lockout in a row is twice as long as the one before...\n");
+    AuthThrottle throttle;
+    uint64_t nowUs = kStartUs;
+    uint64_t expectedUs = kPasscodeLockoutUs;
+    for (int round = 0; round < 4; ++round) {
+        LockOnce(throttle, nowUs);
+        Check(throttle.Locked(nowUs + expectedUs - 1), "the door stays shut for the whole window");
+        Check(!throttle.Locked(nowUs + expectedUs), "and opens exactly when it ends");
+        nowUs += expectedUs;
+        expectedUs *= 2;
+    }
+}
+
+void TestTheLockoutStopsGrowingAtTheCeiling() {
+    std::printf("[throttle] a determined guesser is held to one window per hour at most...\n");
+    AuthThrottle throttle;
+    uint64_t nowUs = kStartUs;
+    for (int round = 0; round < 40; ++round) {
+        LockOnce(throttle, nowUs);
+        nowUs += kMaxPasscodeLockoutUs;
+    }
+    LockOnce(throttle, nowUs);
+    Check(throttle.Locked(nowUs + kMaxPasscodeLockoutUs - 1),
+        "a long run of lockouts ends at the ceiling");
+    Check(!throttle.Locked(nowUs + kMaxPasscodeLockoutUs), "and never grows past it");
+}
+
+void TestSuccessResetsTheEscalation() {
+    std::printf("[throttle] a correct passcode brings the lockout back to its first length...\n");
+    AuthThrottle throttle;
+    LockOnce(throttle, kStartUs);
+    LockOnce(throttle, kStartUs + kPasscodeLockoutUs);
+    throttle.RecordSuccess();
+
+    const uint64_t laterUs = kStartUs + 10 * kPasscodeLockoutUs;
+    LockOnce(throttle, laterUs);
+    Check(!throttle.Locked(laterUs + kPasscodeLockoutUs),
+        "the next lockout is the short one again");
 }
 
 void TestSuccessResetsTheCount() {
@@ -89,4 +135,7 @@ void RunAuthThrottleTests() {
     TestGuessingWhileLockedPushesTheReopeningOut();
     TestALockoutOutlivesASuccess();
     TestSuccessResetsTheCount();
+    TestEachLockoutDoublesTheNext();
+    TestTheLockoutStopsGrowingAtTheCeiling();
+    TestSuccessResetsTheEscalation();
 }

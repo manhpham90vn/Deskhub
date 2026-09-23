@@ -12,8 +12,12 @@ namespace {
 inline constexpr std::string_view kIllegalOnWindows = "<>:\"|?*";
 inline constexpr size_t kMaxPreservedExtension = 32;
 
-constexpr std::array<std::string_view, 4> kReservedStems = {"con", "prn", "aux", "nul"};
+constexpr std::array<std::string_view, 6> kReservedStems = {
+    "con", "prn", "aux", "nul", "conin$", "conout$"};
 constexpr std::array<std::string_view, 2> kReservedPrefixes = {"com", "lpt"};
+constexpr size_t kReservedPrefixLength = 3;
+constexpr std::array<std::string_view, 3> kSuperscriptDigits = {
+    "\xC2\xB9", "\xC2\xB2", "\xC2\xB3"};
 
 std::string_view BaseName(std::string_view name) {
     const size_t cut = name.find_last_of("/\\");
@@ -47,16 +51,23 @@ size_t StemLength(std::string_view name) {
     return dot == std::string_view::npos ? name.size() : dot;
 }
 
+bool IsPortNumber(std::string_view text) {
+    if (text.size() == 1) return text[0] >= '0' && text[0] <= '9';
+    return std::find(kSuperscriptDigits.begin(), kSuperscriptDigits.end(), text) !=
+           kSuperscriptDigits.end();
+}
+
 bool IsReservedDeviceName(std::string_view name) {
-    const std::string stem = LowerAscii(name.substr(0, StemLength(name)));
+    std::string stem = LowerAscii(name.substr(0, StemLength(name)));
+    while (!stem.empty() && stem.back() == ' ') stem.pop_back();
     if (std::find(kReservedStems.begin(), kReservedStems.end(), stem) != kReservedStems.end())
         return true;
-    if (stem.size() != 4) return false;
-    const std::string_view head(stem.data(), 3);
+    if (stem.size() <= kReservedPrefixLength) return false;
+    const std::string_view head(stem.data(), kReservedPrefixLength);
     if (std::find(kReservedPrefixes.begin(), kReservedPrefixes.end(), head) ==
         kReservedPrefixes.end())
         return false;
-    return stem[3] >= '0' && stem[3] <= '9';
+    return IsPortNumber(std::string_view(stem).substr(kReservedPrefixLength));
 }
 
 size_t Utf8TruncLen(std::string_view text, size_t limit) {

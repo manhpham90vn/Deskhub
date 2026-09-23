@@ -112,8 +112,16 @@ certificate を使用する。TLS の上位では、アプリケーション層�
 
 成功すると client は host の `paired_devices` に記録される。pairing は key に基づくもの
 であり、アドレスには基づかない。passcode を 3 回誤ると passcode の経路が 30 秒間
-ロックされる（`AuthThrottle`）。approval の
-経路に throttle は不要である。判断を行うのが人であるためだ。
+ロックされ、その後ロックが続くたびに時間は倍になり、最長 1 時間に達する。正しい passcode
+が入力されるとリセットされる（`AuthThrottle`）。approval の経路に throttle は不要である。
+判断を行うのが人であるためだ。
+
+受け入れは 1 本の QUIC connection に属するものであり、アドレスに属するものではない。その
+connection が閉じた時点で受け入れは取り消されるため、同じアドレスと port からの次の
+connection は改めて証明を行う必要がある。handshake を開始済みの connection で 2 回目の
+`AuthStart` を送ると、その connection は閉じられる。確立済みの身元を証明されていない身元に
+差し替えることはできず、拒否された passcode を同じ connection 上で再試行することもできない。
+Devices ページでマシンを Forget すると、その時点でそのマシンが開いている connection も閉じられる。
 
 client 側では `known_hosts`（`TrustStore`）が host の key を固定する。key が**変化した**
 場合は明確な警告とともに接続を拒否する。未知の key は handshake 自体が処理し、passcode

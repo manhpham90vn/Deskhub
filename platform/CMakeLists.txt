@@ -96,6 +96,7 @@ if(WIN32)
         src/system/KeepAwakeWin.cpp
         src/system/ConsoleWin.cpp
         src/system/EnvironmentWin.cpp
+        src/system/FileOpsWin.cpp
     )
 else()
     set(deskhub_platform_os
@@ -104,6 +105,7 @@ else()
         src/system/DeviceNamePosix.cpp
         src/system/ConsolePosix.cpp
         src/system/EnvironmentPosix.cpp
+        src/system/FileOpsPosix.cpp
     )
     if(APPLE)
         list(APPEND deskhub_platform_os src/system/MemoryFootprintApple.cpp)
@@ -330,6 +332,7 @@ if(DESKHUB_PLATFORM_TESTS)
         tests/system/PtyTests.cpp
         tests/net/QuicEndpointTests.cpp
         tests/net/SessionTransportTests.cpp
+        tests/net/TransportAdmissionTests.cpp
         tests/session/SharingHostTests.cpp
         tests/session/ScreenHostCallbackTests.cpp
         tests/session/AuthNegotiationTests.cpp
