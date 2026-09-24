@@ -52,6 +52,7 @@ final class SharingModel {
     var shareAudio = dh_share_audio()
     var playAudio = dh_play_audio()
     var keepAwake = dh_keep_awake()
+    var transferFolder = DeskhubShare.filesFolder
     var didAutoShare = false
     var autoShareWaitNote = ""
     private var sharingScreen = false
@@ -290,6 +291,19 @@ extension SharingModel {
         guard DeskhubShare.attachShell(row.termId) else { return false }
         rows = DeskhubShare.hostRows()
         return true
+    }
+
+    func chooseTransferFolder() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
+        panel.canCreateDirectories = true
+        panel.directoryURL = URL(fileURLWithPath: transferFolder, isDirectory: true)
+        panel.prompt = DeskhubClient.string(DHStrTransferChooseButton)
+        guard panel.runModal() == .OK, let picked = panel.url else { return }
+        DeskhubShare.setFilesFolder(picked.path)
+        transferFolder = DeskhubShare.filesFolder
     }
 
     func openFilesFolder(_ row: HostRow) {

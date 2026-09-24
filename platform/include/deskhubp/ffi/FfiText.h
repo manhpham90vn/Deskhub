@@ -13,6 +13,12 @@ inline void CopyToBuf(char* dst, size_t cap, const std::string& s) {
     dst[n] = '\0';
 }
 
+inline int FillText(char* out, int capacity, const std::string& text) {
+    if (!out || capacity <= 0) return int(text.size());
+    CopyToBuf(out, size_t(capacity), text);
+    return int(std::strlen(out));
+}
+
 inline std::filesystem::path FfiPath(const char* utf8) {
     if (!utf8) return {};
     const std::string text(utf8);

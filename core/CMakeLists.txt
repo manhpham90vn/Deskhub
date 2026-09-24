@@ -85,6 +85,8 @@ add_library(core STATIC
     src/ui/UiSettings.cpp
     src/ui/AutostartConfig.cpp
     src/ui/AutoShareGate.cpp
+    src/ui/Theme.cpp
+    src/ui/SettingsLayout.cpp
 
     src/cli/Command.cpp
     src/cli/Json.cpp
@@ -198,6 +200,8 @@ if(DESKHUB_CORE_TESTS)
         tests/ui/UiSettingsTests.cpp
         tests/ui/AutostartConfigTests.cpp
         tests/ui/AutoShareGateTests.cpp
+        tests/ui/ThemeTests.cpp
+        tests/ui/SettingsLayoutTests.cpp
 
         tests/cli/CommandTests.cpp
         tests/cli/JsonTests.cpp

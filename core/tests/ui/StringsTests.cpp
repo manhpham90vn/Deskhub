@@ -23,7 +23,7 @@ void TestEveryLabelSaysSomething() {
         ui::kStopSharing, ui::kShareStartFailed, ui::kQueryingSources, ui::kViewerOpenFailed,
         ui::kConnectionEndedTitle, ui::kDisconnected, ui::kSessionEnded, ui::kSidebarHost,
         ui::kSidebarClient, ui::kSidebarSettings, ui::kHostHeading, ui::kClientHeading,
-        ui::kSettingsHeading, ui::kSettingsHint, ui::kClientSettingsHeading,
+        ui::kSettingsHint, ui::kSettingsGeneralArea, ui::kClientSettingsHeading,
         ui::kClientSettingsHint, ui::kStatusOnline, ui::kStatusOffline,
         ui::kStatusChecking, ui::kNotSharing, ui::kStartingShare, ui::kShareStateOn,
         ui::kShareStateOff, ui::kReceivingFilesState, ui::kMobileTakesFilesNote,

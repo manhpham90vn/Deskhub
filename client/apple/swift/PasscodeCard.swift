@@ -14,21 +14,12 @@ struct PasscodeCard: View {
     @State private var portCopied = false
 
     var body: some View {
-        HStack(spacing: 14) {
-            passcodeContent
+        HStack(spacing: 10) {
+            card(passcodeContent)
             if let port {
-                portContent(port)
+                card(portContent(port))
             }
         }
-        .padding(14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 10).fill(DeskhubPalette.accent.opacity(0.12))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 10)
-                .stroke(DeskhubPalette.accent.opacity(0.35), lineWidth: 1)
-        )
         .task(id: copied) {
             guard copied else { return }
             try? await Task.sleep(for: .seconds(1.5))
@@ -85,6 +76,15 @@ struct PasscodeCard: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func card(_ content: some View) -> some View {
+        content
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 10).fill(DeskhubPalette.passcodeCard)
+            )
     }
 
     private var copyLabel: String {

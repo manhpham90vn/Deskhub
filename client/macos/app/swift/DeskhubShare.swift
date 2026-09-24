@@ -115,6 +115,12 @@ nonisolated enum DeskhubShare {
 
     static func openFilesFolder() { dh_share_open_files_folder() }
 
+    static var filesFolder: String {
+        DeskhubClient.buffered(1024) { dh_share_files_folder($0, $1) }
+    }
+
+    static func setFilesFolder(_ path: String) { dh_set_transfer_dir(path) }
+
     static var maxSources: Int { Int(dh_max_sources()) }
 
     static func hostRows() -> [HostRow] {

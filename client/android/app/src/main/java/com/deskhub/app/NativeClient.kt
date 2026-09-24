@@ -72,6 +72,13 @@ object NativeClient {
     const val STR_DISCONNECT_VIEWER_ACTION = 53
     const val STR_NOT_SHARING = 55
     const val STR_CLIENT_SETTINGS_HEADING = 57
+    const val THEME_ACCENT = 4
+    const val THEME_HEADING = 7
+    const val THEME_MUTED = 8
+    const val THEME_ONLINE = 10
+    const val THEME_OFFLINE = 11
+    const val THEME_PAGE = 15
+    const val THEME_PASSCODE_CARD = 25
     const val STR_CLIENT_SETTINGS_HINT = 58
     const val STR_REFRESH_NOW = 51
     const val STR_UDP_PORT_LABEL = 59
@@ -196,6 +203,16 @@ object NativeClient {
     private external fun nativeIsZoomed(zoom: Float): Boolean
 
     fun string(id: Int): String = nativeString(id)
+
+    private external fun nativeThemeColor(
+        id: Int,
+        dark: Boolean,
+    ): Int
+
+    fun themeColor(
+        id: Int,
+        dark: Boolean,
+    ): Int = nativeThemeColor(id, dark)
 
     fun parseAddress(addr: String): Boolean = nativeParseAddress(addr)
 

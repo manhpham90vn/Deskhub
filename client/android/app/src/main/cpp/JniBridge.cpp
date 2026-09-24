@@ -130,6 +130,11 @@ Java_com_deskhub_app_NativeClient_nativeString(JNIEnv* env, jobject, jint id) {
     return env->NewStringUTF(dh_string(DHStringId(id)));
 }
 
+JNIEXPORT jint JNICALL
+Java_com_deskhub_app_NativeClient_nativeThemeColor(JNIEnv*, jobject, jint id, jboolean dark) {
+    return jint(dh_theme_color(DHThemeColor(id), dark == JNI_TRUE));
+}
+
 JNIEXPORT jboolean JNICALL
 Java_com_deskhub_app_NativeClient_nativeParseAddress(JNIEnv* env, jobject, jstring addrStr) {
     return dh_parse_address(FromJString(env, addrStr).c_str()) ? JNI_TRUE : JNI_FALSE;

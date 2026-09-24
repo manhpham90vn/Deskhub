@@ -3,10 +3,17 @@
 
 #include <string>
 
+#include "deskhub/ui/Theme.h"
+
 inline constexpr int kHintWrapDip = 620;
 
-inline const wxColour kHeadingText(17, 24, 39);
-inline const wxColour kMutedText(107, 114, 128);
+inline wxColour ThemeColour(deskhub::ui::ThemeColor color) {
+    const deskhub::ui::Rgb rgb = deskhub::ui::ThemeRgb(color, deskhub::ui::ThemeMode::Light);
+    return wxColour(rgb.r, rgb.g, rgb.b);
+}
+
+inline const wxColour kHeadingText = ThemeColour(deskhub::ui::ThemeColor::Heading);
+inline const wxColour kMutedText = ThemeColour(deskhub::ui::ThemeColor::Muted);
 
 inline wxString ToWx(const std::string& s) {
     return wxString::FromUTF8(s.c_str(), s.size());

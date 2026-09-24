@@ -76,7 +76,7 @@ struct ConnectionWindow: View {
                 Spacer(minLength: 0)
                 Button(DeskhubClient.string(DHStrDisconnectButton)) { dismiss() }
                     .buttonStyle(.borderedProminent)
-                    .tint(DeskhubPalette.accent)
+                    .tint(DeskhubPalette.offline)
             }
 
             HStack(spacing: 8) {
@@ -101,6 +101,7 @@ struct ConnectionWindow: View {
         VStack(alignment: .leading, spacing: 8) {
             Button(action: openDesktopSession) {
                 Text(DeskhubClient.string(DHStrOpenDesktopLabel))
+                    .frame(maxWidth: .infinity)
             }
             .disabled(request.sources.isEmpty)
             Toggle(DeskhubClient.string(DHStrRequestControlLabel), isOn: $control)
@@ -115,10 +116,12 @@ struct ConnectionWindow: View {
                 }
             Button(action: openTerminalSession) {
                 Text(DeskhubClient.string(DHStrOpenShellLabel))
+                    .frame(maxWidth: .infinity)
             }
             .disabled(!request.caps.terminal)
             Button(action: openFilesSession) {
                 Text(DeskhubClient.string(DHStrOpenFilesLabel))
+                    .frame(maxWidth: .infinity)
             }
             .disabled(!request.caps.files)
             deskhubHint(DeskhubClient.string(DHStrMobileHostNote))

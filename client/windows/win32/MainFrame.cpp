@@ -43,6 +43,7 @@
 #include "deskhub/ui/DeviceRows.h"
 #include "deskhub/ui/HostRows.h"
 #include "deskhub/ui/RecentDevices.h"
+#include "deskhub/ui/SettingsLayout.h"
 #include "deskhub/ui/Strings.h"
 #include "deskhub/ui/UiSettings.h"
 #include "deskhubp/diag/Log.h"
@@ -94,20 +95,20 @@ enum Page { kPageHost = 0,
 const char* const kPageLabels[kPageCount] = {ui::kSidebarHost, ui::kSidebarClient,
     ui::kSidebarDevices, ui::kSidebarSettings};
 
-const wxColour kSidebarBg(31, 41, 55);
-const wxColour kSidebarHover(55, 65, 81);
-const wxColour kAccent(37, 99, 235);
-const wxColour kNavText(209, 213, 219);
-const wxColour kSidebarFootnote(148, 163, 184);
-const wxColour kOnline(0, 145, 60);
-const wxColour kOffline(200, 40, 40);
-const wxColour kWarning(202, 108, 8);
-const wxColour kRowLine(229, 231, 235);
-const wxColour kViewerRowBg(249, 250, 251);
-const wxColour kBannerIdleBg(243, 244, 246);
-const wxColour kBannerLiveBg(232, 250, 239);
-const wxColour kBannerBusyBg(235, 243, 255);
-const wxColour kPasscodeCardBg(239, 244, 255);
+const wxColour kSidebarBg = ThemeColour(ui::ThemeColor::Sidebar);
+const wxColour kSidebarHover = ThemeColour(ui::ThemeColor::SidebarHover);
+const wxColour kAccent = ThemeColour(ui::ThemeColor::Accent);
+const wxColour kNavText = ThemeColour(ui::ThemeColor::NavText);
+const wxColour kSidebarFootnote = ThemeColour(ui::ThemeColor::Footnote);
+const wxColour kOnline = ThemeColour(ui::ThemeColor::Online);
+const wxColour kOffline = ThemeColour(ui::ThemeColor::Offline);
+const wxColour kWarning = ThemeColour(ui::ThemeColor::Warning);
+const wxColour kRowLine = ThemeColour(ui::ThemeColor::RowLine);
+const wxColour kViewerRowBg = ThemeColour(ui::ThemeColor::ViewerRow);
+const wxColour kBannerIdleBg = ThemeColour(ui::ThemeColor::PanelIdle);
+const wxColour kBannerLiveBg = ThemeColour(ui::ThemeColor::PanelLive);
+const wxColour kBannerBusyBg = ThemeColour(ui::ThemeColor::PanelBusy);
+const wxColour kPasscodeCardBg = ThemeColour(ui::ThemeColor::PasscodeCard);
 
 enum class HostShareState { kIdle,
     kStarting,
@@ -122,27 +123,13 @@ struct HostStateStyle {
     wxColour background;
 };
 
-struct HostColumn {
-    const char* title;
-    int width;
-    long align;
-    bool mono;
-};
-
-constexpr int kHostColumnCount = 8;
-constexpr int kHostCellGap = 8;
-constexpr int kHostActionWidth = 104;
-constexpr int kHostAttachWidth = 104;
-constexpr int kHostActionsWidth = kHostActionWidth + kHostCellGap + kHostAttachWidth;
-constexpr int kHostRowHeight = 32;
+constexpr int kHostColumnCount = int(ui::kHostColumns.size());
+constexpr int kHostActionsWidth = ui::kHostActionWidth + ui::kHostCellGap + ui::kHostActionWidth;
 constexpr int kPasscodePointSize = 26;
-constexpr int kHostRowBarWidth = 3;
 
-const HostColumn kHostColumns[kHostColumnCount] = {{"Source", 168, wxALIGN_LEFT, false},
-    {"Size", 88, wxALIGN_LEFT, false}, {"Viewers", 58, wxALIGN_RIGHT, true},
-    {"Client", 132, wxALIGN_LEFT, false}, {"Capture", 60, wxALIGN_RIGHT, true},
-    {"Send", 52, wxALIGN_RIGHT, true}, {"Mbps", 56, wxALIGN_RIGHT, true},
-    {"RTT", 54, wxALIGN_RIGHT, true}};
+long WxAlign(ui::ColumnAlign align) {
+    return align == ui::ColumnAlign::Trailing ? wxALIGN_RIGHT : wxALIGN_LEFT;
+}
 
 struct HostRowView {
     wxPanel* panel = nullptr;
@@ -197,6 +184,39 @@ wxSizer* MakeHeadingRow(wxWindow* parent, const char* heading, const wxString& a
         [onClick = std::move(onClick)](wxCommandEvent&) { onClick(); });
     row->Add(button, wxSizerFlags().CentreVertical());
     return row;
+}
+
+struct SettingsArea {
+    wxPanel* card = nullptr;
+    wxPanel* body = nullptr;
+    wxBoxSizer* sizer = nullptr;
+};
+
+SettingsArea MakeSettingsArea(wxWindow* parent, const char* title) {
+    SettingsArea area;
+    area.card = new wxPanel(parent);
+    area.card->SetBackgroundColour(kRowLine);
+    area.body = new wxPanel(area.card);
+    area.body->SetBackgroundColour(*wxWHITE);
+
+    auto* row = new wxBoxSizer(wxHORIZONTAL);
+    auto* bar = new wxWindow(area.body, wxID_ANY, wxDefaultPosition,
+        area.body->FromDIP(wxSize(ui::kSettingsAreaBarWidth, -1)));
+    bar->SetBackgroundColour(kAccent);
+    row->Add(bar, wxSizerFlags().Expand());
+
+    area.sizer = new wxBoxSizer(wxVERTICAL);
+    auto* heading = MakeSection(area.body, title);
+    heading->SetFont(heading->GetFont().Scaled(1.15f));
+    area.sizer->Add(heading, wxSizerFlags().Border(wxLEFT | wxRIGHT | wxTOP,
+                                 area.body->FromDIP(16)));
+    row->Add(area.sizer, wxSizerFlags(1).Expand().Border(wxBOTTOM, area.body->FromDIP(16)));
+    area.body->SetSizer(row);
+
+    auto* cardSizer = new wxBoxSizer(wxVERTICAL);
+    cardSizer->Add(area.body, wxSizerFlags(1).Expand().Border(wxALL, area.body->FromDIP(1)));
+    area.card->SetSizer(cardSizer);
+    return area;
 }
 
 void CopyTextToClipboard(HWND owner, const wxString& text) {
@@ -304,6 +324,11 @@ private:
     wxWindow* BuildClientPage(wxWindow* parent);
     wxWindow* BuildDevicesPage(wxWindow* parent);
     wxWindow* BuildSettingsPage(wxWindow* parent);
+    void AddSetting(const SettingsArea& area, const ui::SettingsEntry& entry,
+        wxFlexGridSizer*& grid);
+    void AddLabelledSetting(const SettingsArea& area, wxFlexGridSizer*& grid, const char* label,
+        wxWindow* control);
+    wxSizer* MakeTransferFolderRow(wxWindow* area, const char* label);
     void RefreshPairedDevices();
     bool AskPairing(const PairingRequest& request);
     void ForgetEveryDevice();
@@ -423,16 +448,9 @@ private:
     wxSpinCtrl* bitrateCtrl_ = nullptr;
     wxSpinCtrl* portCtrl_ = nullptr;
     wxChoice* qualityChoice_ = nullptr;
-    wxCheckBox* allowInputCtrl_ = nullptr;
     wxTextCtrl* passcodeCtrl_ = nullptr;
     wxChoice* bindChoice_ = nullptr;
-    wxCheckBox* autoShareCtrl_ = nullptr;
-    wxCheckBox* autostartCtrl_ = nullptr;
-    wxCheckBox* startHiddenCtrl_ = nullptr;
-    wxCheckBox* shareAudioCtrl_ = nullptr;
-    wxCheckBox* playAudioCtrl_ = nullptr;
-    wxCheckBox* keepAwakeCtrl_ = nullptr;
-    wxCheckBox* clipboardCtrl_ = nullptr;
+    std::map<ui::SettingField, wxCheckBox*> settingChecks_;
     wxStaticText* transferDirLabel_ = nullptr;
     DeskhubTrayIcon* trayIcon_ = nullptr;
     bool quitting_ = false;
@@ -1073,6 +1091,90 @@ void MainFrame::ForgetEveryDevice() {
     RefreshPairedDevices();
 }
 
+void MainFrame::AddLabelledSetting(const SettingsArea& area, wxFlexGridSizer*& grid,
+    const char* label, wxWindow* control) {
+    if (grid == nullptr) {
+        grid = new wxFlexGridSizer(2, FromDIP(wxSize(14, 10)));
+        area.sizer->Add(grid, wxSizerFlags().Border(wxLEFT | wxRIGHT | wxTOP, FromDIP(16)));
+    }
+    grid->Add(new wxStaticText(area.body, wxID_ANY, ToWx(label)), wxSizerFlags().CentreVertical());
+    grid->Add(control);
+}
+
+wxSizer* MainFrame::MakeTransferFolderRow(wxWindow* area, const char* label) {
+    auto* folderRow = new wxBoxSizer(wxHORIZONTAL);
+    folderRow->Add(new wxStaticText(area, wxID_ANY, ToWx(label)), wxSizerFlags().CentreVertical());
+    transferDirLabel_ = new wxStaticText(area, wxID_ANY, ToWx(deskhubp::PathText(TransferFolder())),
+        wxDefaultPosition, wxDefaultSize, wxST_ELLIPSIZE_MIDDLE);
+    transferDirLabel_->SetForegroundColour(kMutedText);
+    folderRow->Add(transferDirLabel_, wxSizerFlags(1).CentreVertical().Border(wxLEFT, FromDIP(8)));
+    auto* folderBtn = new wxButton(area, wxID_ANY, ToWx(ui::kTransferChooseButton));
+    folderBtn->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { ChooseTransferFolder(); });
+    folderRow->Add(folderBtn, wxSizerFlags().CentreVertical().Border(wxLEFT, FromDIP(8)));
+    return folderRow;
+}
+
+void MainFrame::AddSetting(const SettingsArea& area, const ui::SettingsEntry& entry,
+    wxFlexGridSizer*& grid) {
+    const wxSizerFlags pad = wxSizerFlags().Border(wxLEFT | wxRIGHT | wxTOP, FromDIP(16));
+    wxWindow* parent = area.body;
+    switch (entry.field) {
+        case ui::SettingField::Fps:
+            fpsCtrl_ = new wxSpinCtrl(parent, wxID_ANY, wxString(), wxDefaultPosition,
+                wxDefaultSize, wxSP_ARROW_KEYS, 1, int(ui::kMaxSettingsFps), int(settings_.fps));
+            AddLabelledSetting(area, grid, entry.text, fpsCtrl_);
+            return;
+        case ui::SettingField::Bitrate:
+            bitrateCtrl_ = new wxSpinCtrl(parent, wxID_ANY, wxString(), wxDefaultPosition,
+                wxDefaultSize, wxSP_ARROW_KEYS, 1, int(ui::kMaxSettingsBitrateMbps),
+                int(settings_.bitrateMbps));
+            AddLabelledSetting(area, grid, entry.text, bitrateCtrl_);
+            return;
+        case ui::SettingField::Quality:
+            qualityChoice_ = new wxChoice(parent, wxID_ANY);
+            for (const auto& preset : deskhub::media::kQualityPresets)
+                qualityChoice_->Append(ToWx(preset.label));
+            qualityChoice_->SetSelection(
+                int(deskhub::media::QualityPresetIndex(settings_.maxDim)));
+            AddLabelledSetting(area, grid, entry.text, qualityChoice_);
+            return;
+        case ui::SettingField::Port:
+            portCtrl_ = new wxSpinCtrl(parent, wxID_ANY, wxString(), wxDefaultPosition,
+                wxDefaultSize, wxSP_ARROW_KEYS, 1, int(ui::kMaxSettingsPort), int(settings_.port));
+            AddLabelledSetting(area, grid, entry.text, portCtrl_);
+            return;
+        case ui::SettingField::Passcode:
+            passcodeCtrl_ = MakePasscodeCtrl(parent);
+            passcodeCtrl_->SetValue(ToWx(settings_.passcode));
+            AddLabelledSetting(area, grid, entry.text, passcodeCtrl_);
+            return;
+        case ui::SettingField::TransferFolder:
+            grid = nullptr;
+            area.sizer->Add(MakeTransferFolderRow(parent, entry.text),
+                wxSizerFlags().Expand().Border(wxLEFT | wxRIGHT | wxTOP, FromDIP(16)));
+            return;
+        case ui::SettingField::None:
+        case ui::SettingField::Permissions:
+        case ui::SettingField::Count: return;
+        case ui::SettingField::AllowInput:
+        case ui::SettingField::ShareAudio:
+        case ui::SettingField::AutoShare:
+        case ui::SettingField::PlayAudio:
+        case ui::SettingField::ClipboardSync:
+        case ui::SettingField::KeepAwake:
+        case ui::SettingField::Autostart:
+        case ui::SettingField::CloseToTray: break;
+    }
+    grid = nullptr;
+    auto* check = new wxCheckBox(parent, wxID_ANY, ToWx(entry.text));
+    const bool* flag = ui::SettingFlag(settings_, entry.field);
+    check->SetValue(entry.field == ui::SettingField::Autostart ? deskhubp::AutostartEnabled()
+                                                               : flag != nullptr && *flag);
+    check->Bind(wxEVT_CHECKBOX, [this](wxCommandEvent&) { SaveSettings(); });
+    settingChecks_[entry.field] = check;
+    area.sizer->Add(check, pad);
+}
+
 wxWindow* MainFrame::BuildSettingsPage(wxWindow* parent) {
     auto* panel = new wxScrolledWindow(parent);
     panel->SetBackgroundColour(*wxWHITE);
@@ -1080,101 +1182,31 @@ wxWindow* MainFrame::BuildSettingsPage(wxWindow* parent) {
     auto* sizer = new wxBoxSizer(wxVERTICAL);
     const wxSizerFlags pad = wxSizerFlags().Border(wxLEFT | wxRIGHT | wxTOP, FromDIP(16));
 
-    sizer->Add(MakeHeading(panel, ui::kSettingsHeading), pad);
-    sizer->Add(MakeHint(panel, ToWx(ui::kSettingsHint)), pad);
+    sizer->Add(MakeHeading(panel, ui::kSidebarSettings), pad);
 
-    sizer->AddSpacer(FromDIP(8));
-    sizer->Add(MakeSection(panel, ui::kSettingsSectionVideo), pad);
-    auto* videoGrid = new wxFlexGridSizer(2, FromDIP(wxSize(14, 10)));
-
-    videoGrid->Add(new wxStaticText(panel, wxID_ANY, ToWx(ui::kFpsLabel)),
-        wxSizerFlags().CentreVertical());
-    fpsCtrl_ = new wxSpinCtrl(panel, wxID_ANY, wxString(), wxDefaultPosition, wxDefaultSize,
-        wxSP_ARROW_KEYS, 1, int(ui::kMaxSettingsFps), int(settings_.fps));
-    videoGrid->Add(fpsCtrl_);
-
-    videoGrid->Add(new wxStaticText(panel, wxID_ANY, ToWx(ui::kBitrateLabel)),
-        wxSizerFlags().CentreVertical());
-    bitrateCtrl_ = new wxSpinCtrl(panel, wxID_ANY, wxString(), wxDefaultPosition, wxDefaultSize,
-        wxSP_ARROW_KEYS, 1, int(ui::kMaxSettingsBitrateMbps), int(settings_.bitrateMbps));
-    videoGrid->Add(bitrateCtrl_);
-
-    videoGrid->Add(new wxStaticText(panel, wxID_ANY, ToWx(ui::kQualityLabel)),
-        wxSizerFlags().CentreVertical());
-    qualityChoice_ = new wxChoice(panel, wxID_ANY);
-    for (const auto& preset : deskhub::media::kQualityPresets)
-        qualityChoice_->Append(ToWx(preset.label));
-    qualityChoice_->SetSelection(int(deskhub::media::QualityPresetIndex(settings_.maxDim)));
-    videoGrid->Add(qualityChoice_);
-
-    sizer->Add(videoGrid, wxSizerFlags().Border(wxLEFT | wxRIGHT | wxTOP, FromDIP(16)));
-
-    sizer->AddSpacer(FromDIP(12));
-    sizer->Add(MakeSection(panel, ui::kSettingsSectionConnection), pad);
-    auto* netGrid = new wxFlexGridSizer(2, FromDIP(wxSize(14, 10)));
-
-    netGrid->Add(new wxStaticText(panel, wxID_ANY, ToWx(ui::kUdpPortLabel)),
-        wxSizerFlags().CentreVertical());
-    portCtrl_ = new wxSpinCtrl(panel, wxID_ANY, wxString(), wxDefaultPosition, wxDefaultSize,
-        wxSP_ARROW_KEYS, 1, int(ui::kMaxSettingsPort), int(settings_.port));
-    netGrid->Add(portCtrl_);
-
-    sizer->Add(netGrid, wxSizerFlags().Border(wxLEFT | wxRIGHT | wxTOP, FromDIP(16)));
-
-    sizer->AddSpacer(FromDIP(12));
-    sizer->Add(MakeSection(panel, ui::kSettingsSectionSecurity), pad);
-    auto* securityGrid = new wxFlexGridSizer(2, FromDIP(wxSize(14, 10)));
-    securityGrid->Add(new wxStaticText(panel, wxID_ANY, ToWx(ui::kPasscodeLabel)),
-        wxSizerFlags().CentreVertical());
-    passcodeCtrl_ = MakePasscodeCtrl(panel);
-    passcodeCtrl_->SetValue(ToWx(settings_.passcode));
-    securityGrid->Add(passcodeCtrl_);
-    sizer->Add(securityGrid, wxSizerFlags().Border(wxLEFT | wxRIGHT | wxTOP, FromDIP(16)));
-    sizer->Add(MakeHint(panel, ToWx(ui::kPasscodeHint)),
-        wxSizerFlags().Border(wxLEFT | wxRIGHT | wxTOP, FromDIP(16)));
-    allowInputCtrl_ = new wxCheckBox(panel, wxID_ANY, ToWx(ui::kAllowControlLabel));
-    allowInputCtrl_->SetValue(settings_.allowInput);
-    sizer->Add(allowInputCtrl_, wxSizerFlags().Border(wxLEFT | wxRIGHT | wxTOP, FromDIP(16)));
-
-    sizer->AddSpacer(FromDIP(12));
-    sizer->Add(MakeSection(panel, ui::kSettingsSectionSession), pad);
-    clipboardCtrl_ = new wxCheckBox(panel, wxID_ANY, ToWx(ui::kClipboardSyncLabel));
-    clipboardCtrl_->SetValue(settings_.clipboardSync);
-    sizer->Add(clipboardCtrl_, wxSizerFlags().Border(wxLEFT | wxRIGHT | wxTOP, FromDIP(16)));
-    shareAudioCtrl_ = new wxCheckBox(panel, wxID_ANY, ToWx(ui::kShareAudioLabel));
-    shareAudioCtrl_->SetValue(settings_.shareAudio);
-    sizer->Add(shareAudioCtrl_, wxSizerFlags().Border(wxLEFT | wxRIGHT | wxTOP, FromDIP(16)));
-    playAudioCtrl_ = new wxCheckBox(panel, wxID_ANY, ToWx(ui::kPlayAudioLabel));
-    playAudioCtrl_->SetValue(settings_.playAudio);
-    sizer->Add(playAudioCtrl_, wxSizerFlags().Border(wxLEFT | wxRIGHT | wxTOP, FromDIP(16)));
-    keepAwakeCtrl_ = new wxCheckBox(panel, wxID_ANY, ToWx(ui::kKeepAwakeLabel));
-    keepAwakeCtrl_->SetValue(settings_.keepAwake);
-    sizer->Add(keepAwakeCtrl_, wxSizerFlags().Border(wxLEFT | wxRIGHT | wxTOP, FromDIP(16)));
-
-    auto* folderRow = new wxBoxSizer(wxHORIZONTAL);
-    folderRow->Add(new wxStaticText(panel, wxID_ANY, ToWx(ui::kTransferFolderLabel)),
-        wxSizerFlags().CentreVertical());
-    transferDirLabel_ = new wxStaticText(panel, wxID_ANY, ToWx(deskhubp::PathText(TransferFolder())),
-        wxDefaultPosition, wxDefaultSize, wxST_ELLIPSIZE_MIDDLE);
-    transferDirLabel_->SetForegroundColour(kMutedText);
-    folderRow->Add(transferDirLabel_, wxSizerFlags(1).CentreVertical().Border(wxLEFT,
-                                          FromDIP(8)));
-    auto* folderBtn = new wxButton(panel, wxID_ANY, ToWx(ui::kTransferChooseButton));
-    folderBtn->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { ChooseTransferFolder(); });
-    folderRow->Add(folderBtn, wxSizerFlags().CentreVertical().Border(wxLEFT, FromDIP(8)));
-    sizer->Add(folderRow, wxSizerFlags().Expand().Border(wxLEFT | wxRIGHT | wxTOP, FromDIP(16)));
-
-    sizer->AddSpacer(FromDIP(12));
-    sizer->Add(MakeSection(panel, ui::kSettingsSectionLaunch), pad);
-    autostartCtrl_ = new wxCheckBox(panel, wxID_ANY, ToWx(ui::kAutostartLabel));
-    autostartCtrl_->SetValue(deskhubp::AutostartEnabled());
-    sizer->Add(autostartCtrl_, wxSizerFlags().Border(wxLEFT | wxRIGHT | wxTOP, FromDIP(16)));
-    autoShareCtrl_ = new wxCheckBox(panel, wxID_ANY, ToWx(ui::kAutoShareLabel));
-    autoShareCtrl_->SetValue(settings_.autoShare);
-    sizer->Add(autoShareCtrl_, wxSizerFlags().Border(wxLEFT | wxRIGHT | wxTOP, FromDIP(16)));
-    startHiddenCtrl_ = new wxCheckBox(panel, wxID_ANY, ToWx(ui::kCloseToTrayLabel));
-    startHiddenCtrl_->SetValue(settings_.startHidden);
-    sizer->Add(startHiddenCtrl_, wxSizerFlags().Border(wxALL, FromDIP(16)));
+    SettingsArea area;
+    wxFlexGridSizer* grid = nullptr;
+    for (const ui::SettingsEntry& entry : ui::DesktopSettingsLayout()) {
+        switch (entry.kind) {
+            case ui::SettingsEntryKind::Area:
+                area = MakeSettingsArea(panel, entry.text);
+                sizer->Add(area.card,
+                    wxSizerFlags().Expand().Border(wxLEFT | wxRIGHT | wxTOP, FromDIP(16)));
+                grid = nullptr;
+                break;
+            case ui::SettingsEntryKind::Hint:
+                grid = nullptr;
+                area.sizer->Add(MakeHint(area.body, ToWx(entry.text)), pad);
+                break;
+            case ui::SettingsEntryKind::Section:
+                grid = nullptr;
+                area.sizer->AddSpacer(FromDIP(8));
+                area.sizer->Add(MakeSection(area.body, entry.text), pad);
+                break;
+            case ui::SettingsEntryKind::Setting: AddSetting(area, entry, grid); break;
+        }
+    }
+    sizer->AddSpacer(FromDIP(16));
 
     fpsCtrl_->Bind(wxEVT_SPINCTRL, [this](wxSpinEvent&) { SaveSettings(); });
     fpsCtrl_->Bind(wxEVT_TEXT, [this](wxCommandEvent&) { SaveSettings(); });
@@ -1183,12 +1215,6 @@ wxWindow* MainFrame::BuildSettingsPage(wxWindow* parent) {
     portCtrl_->Bind(wxEVT_SPINCTRL, [this](wxSpinEvent&) { SaveSettings(); });
     portCtrl_->Bind(wxEVT_TEXT, [this](wxCommandEvent&) { SaveSettings(); });
     qualityChoice_->Bind(wxEVT_CHOICE, [this](wxCommandEvent&) { SaveSettings(); });
-    allowInputCtrl_->Bind(wxEVT_CHECKBOX, [this](wxCommandEvent&) { SaveSettings(); });
-    clipboardCtrl_->Bind(wxEVT_CHECKBOX, [this](wxCommandEvent&) { SaveSettings(); });
-    keepAwakeCtrl_->Bind(wxEVT_CHECKBOX, [this](wxCommandEvent&) { SaveSettings(); });
-    autoShareCtrl_->Bind(wxEVT_CHECKBOX, [this](wxCommandEvent&) { SaveSettings(); });
-    autostartCtrl_->Bind(wxEVT_CHECKBOX, [this](wxCommandEvent&) { SaveSettings(); });
-    startHiddenCtrl_->Bind(wxEVT_CHECKBOX, [this](wxCommandEvent&) { SaveSettings(); });
     passcodeCtrl_->Bind(wxEVT_TEXT, [this](wxCommandEvent&) { SaveSettings(); });
 
     panel->SetSizer(sizer);
@@ -1280,14 +1306,14 @@ wxWindow* MainFrame::BuildHostTable(wxWindow* parent) {
     header->SetBackgroundColour(kBannerIdleBg);
     header->SetMinSize(FromDIP(wxSize(-1, 30)));
     auto* headerRow = new wxBoxSizer(wxHORIZONTAL);
-    headerRow->AddSpacer(FromDIP(kHostRowBarWidth + kHostCellGap));
-    for (const HostColumn& column : kHostColumns) {
+    headerRow->AddSpacer(FromDIP(ui::kHostRowBarWidth + ui::kHostCellGap));
+    for (const ui::HostColumn& column : ui::kHostColumns) {
         auto* title = new wxStaticText(header, wxID_ANY, ToWx(column.title),
-            wxDefaultPosition, FromDIP(wxSize(column.width, -1)), column.align);
+            wxDefaultPosition, FromDIP(wxSize(column.width, -1)), WxAlign(column.align));
         title->SetForegroundColour(kMutedText);
         title->SetFont(title->GetFont().Bold().Scaled(0.85f));
         headerRow->Add(title, wxSizerFlags().CentreVertical().Border(wxRIGHT,
-                                  FromDIP(kHostCellGap)));
+                                  FromDIP(ui::kHostCellGap)));
     }
     headerRow->AddSpacer(FromDIP(kHostActionsWidth));
     header->SetSizer(headerRow);
@@ -1321,7 +1347,7 @@ wxButton* MainFrame::MakeRowAction(wxWindow* parent, const ui::HostRow& ref) {
     const bool viewer = ref.viewer;
     if (ref.files) {
         auto* stop = new wxButton(parent, wxID_ANY, ToWx(ui::kStopDisplayAction));
-        stop->SetMinSize(FromDIP(wxSize(kHostActionWidth, 26)));
+        stop->SetMinSize(FromDIP(wxSize(ui::kHostActionWidth, ui::kHostActionHeight)));
         PaintButton(stop, kOffline);
         stop->Bind(wxEVT_BUTTON,
             [this](wxCommandEvent&) { share_.StopFilesRow(screenSharing_); });
@@ -1331,7 +1357,7 @@ wxButton* MainFrame::MakeRowAction(wxWindow* parent, const ui::HostRow& ref) {
     const bool remoteRow = viewer && !IsAttachedLocally(ref);
     auto* button = new wxButton(parent, wxID_ANY,
         ToWx(remoteRow ? ui::kDisconnectViewerAction : ui::kStopDisplayAction));
-    button->SetMinSize(FromDIP(wxSize(kHostActionWidth, 26)));
+    button->SetMinSize(FromDIP(wxSize(ui::kHostActionWidth, ui::kHostActionHeight)));
     PaintButton(button, remoteRow ? kWarning : kOffline);
 
     if (ref.terminal) {
@@ -1360,7 +1386,7 @@ wxButton* MainFrame::MakeRowAction(wxWindow* parent, const ui::HostRow& ref) {
 
 wxButton* MainFrame::MakeRowAttach(wxWindow* parent, const ui::HostRow& ref) {
     auto* button = new wxButton(parent, wxID_ANY, ToWx(ui::kAttachShellAction));
-    button->SetMinSize(FromDIP(wxSize(kHostAttachWidth, 26)));
+    button->SetMinSize(FromDIP(wxSize(ui::kHostActionWidth, ui::kHostActionHeight)));
     PaintButton(button, kOffline);
     const uint32_t termId = ref.termId;
     button->Bind(wxEVT_BUTTON,
@@ -1370,7 +1396,7 @@ wxButton* MainFrame::MakeRowAttach(wxWindow* parent, const ui::HostRow& ref) {
 
 wxButton* MainFrame::MakeRowOpenFolder(wxWindow* parent) {
     auto* button = new wxButton(parent, wxID_ANY, ToWx(ui::kOpenFolderAction));
-    button->SetMinSize(FromDIP(wxSize(kHostAttachWidth, 26)));
+    button->SetMinSize(FromDIP(wxSize(ui::kHostActionWidth, ui::kHostActionHeight)));
     PaintButton(button, kAccent);
     button->Bind(wxEVT_BUTTON,
         [this](wxCommandEvent&) { deskhubp::OpenFolder(TransferFolder()); });
@@ -1393,34 +1419,34 @@ void MainFrame::RebuildHostTable() {
         HostRowView view;
         view.panel = new wxPanel(hostTable_);
         view.panel->SetBackgroundColour(ref.viewer ? kViewerRowBg : *wxWHITE);
-        view.panel->SetMinSize(FromDIP(wxSize(-1, kHostRowHeight)));
+        view.panel->SetMinSize(FromDIP(wxSize(-1, ui::kHostRowHeight)));
 
         auto* row = new wxBoxSizer(wxHORIZONTAL);
         view.bar = new wxWindow(view.panel, wxID_ANY, wxDefaultPosition,
-            FromDIP(wxSize(kHostRowBarWidth, -1)));
+            FromDIP(wxSize(ui::kHostRowBarWidth, -1)));
         row->Add(view.bar, wxSizerFlags().Expand());
-        row->AddSpacer(FromDIP(kHostCellGap));
+        row->AddSpacer(FromDIP(ui::kHostCellGap));
 
         for (int c = 0; c < kHostColumnCount; ++c) {
-            const HostColumn& column = kHostColumns[c];
+            const ui::HostColumn& column = ui::kHostColumns[size_t(c)];
             view.cells[c] = new wxStaticText(view.panel, wxID_ANY, wxString(), wxDefaultPosition,
-                FromDIP(wxSize(column.width, -1)), column.align);
+                FromDIP(wxSize(column.width, -1)), WxAlign(column.align));
             if (column.mono) view.cells[c]->SetFont(MonoFont(view.cells[c]));
             if (c == 0 && !ref.viewer)
                 view.cells[c]->SetFont(view.cells[c]->GetFont().Bold());
             row->Add(view.cells[c], wxSizerFlags().CentreVertical().Border(wxRIGHT,
-                                        FromDIP(kHostCellGap)));
+                                        FromDIP(ui::kHostCellGap)));
         }
         row->Add(MakeRowAction(view.panel, ref), wxSizerFlags().CentreVertical());
-        row->AddSpacer(FromDIP(kHostCellGap));
+        row->AddSpacer(FromDIP(ui::kHostCellGap));
         if (CanAttachLocally(ref)) {
             row->Add(MakeRowAttach(view.panel, ref), wxSizerFlags().CentreVertical());
         } else if (ref.files && !ref.viewer) {
             row->Add(MakeRowOpenFolder(view.panel), wxSizerFlags().CentreVertical());
         } else {
-            row->AddSpacer(FromDIP(kHostAttachWidth));
+            row->AddSpacer(FromDIP(ui::kHostActionWidth));
         }
-        row->AddSpacer(FromDIP(kHostCellGap));
+        row->AddSpacer(FromDIP(ui::kHostCellGap));
         view.panel->SetSizer(row);
 
         rows->Add(view.panel, wxSizerFlags().Expand());
@@ -2093,11 +2119,9 @@ void MainFrame::SaveSettings() {
     settings_.fps = uint32_t(fpsCtrl_->GetValue());
     settings_.bitrateMbps = uint32_t(bitrateCtrl_->GetValue());
     settings_.port = uint32_t(portCtrl_->GetValue());
-    settings_.allowInput = allowInputCtrl_->GetValue();
-    settings_.clipboardSync = clipboardCtrl_->GetValue();
-    settings_.shareAudio = shareAudioCtrl_->GetValue();
-    settings_.playAudio = playAudioCtrl_->GetValue();
-    settings_.keepAwake = keepAwakeCtrl_->GetValue();
+    const bool autostartWas = settings_.autostart;
+    for (const auto& [field, check] : settingChecks_)
+        if (bool* flag = ui::SettingFlag(settings_, field)) *flag = check->GetValue();
     const std::string passcode(passcodeCtrl_->GetValue().utf8_str());
     if (passcode.empty() || deskhub::IsValidPasscode(passcode)) settings_.passcode = passcode;
     const int quality = qualityChoice_->GetSelection();
@@ -2107,14 +2131,11 @@ void MainFrame::SaveSettings() {
     const int bindSel = bindChoice_->GetSelection();
     if (bindSel != wxNOT_FOUND && size_t(bindSel) < bindChoices_.size())
         settings_.bindIp = bindChoices_[size_t(bindSel)];
-    settings_.autoShare = autoShareCtrl_->GetValue();
-    settings_.startHidden = startHiddenCtrl_->GetValue();
     ApplyTrayMode();
-    const bool autostart = autostartCtrl_->GetValue();
-    if (autostart != settings_.autostart) {
-        deskhubp::SetAutostartEnabled(autostart);
+    if (settings_.autostart != autostartWas) {
+        deskhubp::SetAutostartEnabled(settings_.autostart);
         settings_.autostart = deskhubp::AutostartEnabled();
-        autostartCtrl_->SetValue(settings_.autostart);
+        settingChecks_[ui::SettingField::Autostart]->SetValue(settings_.autostart);
     }
     deskhubp::SaveUiSettings(settings_);
     if (!Sharing()) ShowIdleHostState();

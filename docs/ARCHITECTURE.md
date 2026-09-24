@@ -302,6 +302,17 @@ line.
 
 ## 9. Decisions worth remembering
 
+- **What a desktop screen shows is data in `core/ui`, not code in each app**: the colour
+  theme (`Theme.h`, a light and a dark value per colour), the live host table's columns
+  and sizes (`HostRows.h`) and the Settings page's boxes, sections and order
+  (`SettingsLayout.h`) are defined once. Windows reads them directly, macOS through
+  `dh_theme_color`, `dh_host_columns` and `dh_settings_layout`, Android through
+  `dh_theme_color`. An app only decides which control draws a given `SettingField`.
+  Before this, every app kept its own copy of the same hex values and page order, and
+  they drifted: a button red on Windows was grey on macOS, and a setting present on two
+  desktops was missing from the third. The layout tests check that every stored setting
+  appears exactly once, so an app can no longer silently drop one.
+
 - **A capability probe that returns false can switch off a whole control loop**: the
   Media Foundation encoder answered `SetBitrate` with `false` whenever the MFT did not
   expose `CODECAPI_AVEncCommonMeanBitRate`, and `ApplyFeedback` correctly treats a refusal

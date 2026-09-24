@@ -42,7 +42,9 @@ struct DevicesPage: View {
                         Button(DeskhubClient.string(DHStrPairedForget)) {
                             forget(device)
                         }
+                        .buttonStyle(.borderedProminent)
                         .controlSize(.small)
+                        .tint(DeskhubPalette.offline)
                     }
                     .width(90)
                 }

@@ -52,20 +52,9 @@ constexpr int kPrimaryButtonH = 46;
 constexpr guint kRescanDelayMs = deskhubp::kLanRescanSecs * 1000;
 constexpr guint kCopiedRevertMs = 1500;
 
-constexpr int kHostActionWidth = 104;
-constexpr int kHostActionHeight = 26;
-constexpr int kHostCellGap = 8;
-constexpr int kHostRowGap = 6;
-
-struct HostColumn {
-    const char* title;
-    int width;
-    float align;
-};
-
-const HostColumn kHostColumns[] = {{"Source", 140, 0.f}, {"Size", 80, 0.f},
-    {"Viewers", 58, 1.f}, {"Client", 120, 0.f}, {"Capture", 58, 1.f}, {"Send", 50, 1.f},
-    {"Mbps", 55, 1.f}, {"RTT", 55, 1.f}};
+float GtkAlign(ui::ColumnAlign align) {
+    return align == ui::ColumnAlign::Trailing ? 1.f : 0.f;
+}
 
 constexpr const char* kOnlineColour = "#00913c";
 constexpr const char* kOfflineColour = "#c82828";
@@ -89,6 +78,9 @@ const char* const kStyleSheet =
     ".deskhub-heading { font-weight: bold; font-size: 1.35em; color: #111827; }"
     ".deskhub-section { font-weight: bold; font-size: 1.1em; color: #111827; }"
     ".deskhub-hint { color: #6b7280; }"
+    ".deskhub-settings-area { padding: 16px; border: 1px solid #e5e7eb;"
+    " border-left: 4px solid #2563eb; }"
+    ".deskhub-settings-area-title { font-weight: bold; font-size: 1.25em; color: #111827; }"
     ".deskhub-status-error { color: #c82828; }"
     ".deskhub-status-online { color: #00913c; font-weight: bold; }"
     ".deskhub-status-offline { color: #c82828; font-weight: bold; }"
@@ -121,12 +113,24 @@ const char* const kStyleSheet =
     ".deskhub-row-action-stop { background-color: #c82828; }"
     ".deskhub-row-action-stop:hover { background-color: #c82828; }"
     ".deskhub-row-action-stop:active { background-color: #a51f1f; }"
+    ".deskhub-row-action-open { background-color: #2563eb; }"
+    ".deskhub-row-action-open:hover { background-color: #2563eb; }"
+    ".deskhub-row-action-open:active { background-color: #1d4ed8; }"
     ".deskhub-row-action-kick { background-color: #ca6c08; }"
     ".deskhub-row-action-kick:hover { background-color: #ca6c08; }"
     ".deskhub-row-action-kick:active { background-color: #a85a06; }"
     ".deskhub-row-header { color: #6b7280; font-weight: bold; font-size: 0.85em; }"
     ".deskhub-row-cell { color: #111827; }"
-    ".deskhub-row-cell-online { color: #00913c; }"
+    ".deskhub-host-header { background-color: #f3f4f6; }"
+    ".deskhub-host-row { background-color: #ffffff; }"
+    ".deskhub-host-row-viewer { background-color: #f9fafb; }"
+    ".deskhub-host-row-bar { background-color: #e5e7eb; }"
+    ".deskhub-host-row-bar-online { background-color: #00913c; }"
+    ".deskhub-host-rule { background-color: #e5e7eb; min-height: 1px; }"
+    ".deskhub-host-cell { color: #6b7280; }"
+    ".deskhub-host-cell-online { color: #111827; }"
+    ".deskhub-host-cell-mono { font-family: monospace; }"
+    ".deskhub-host-cell-source { font-weight: bold; }"
     "window { background-color: #ffffff; color: #111827; }"
     "viewport { background-color: #ffffff; }"
     "entry { background-color: #ffffff; color: #111827; caret-color: #111827;"
@@ -201,6 +205,14 @@ GtkWidget* Section(const char* text) {
     return StyledLabel(text, "deskhub-section");
 }
 
+GtkWidget* SettingsArea(const char* title) {
+    GtkWidget* area = gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
+    AddClass(area, "deskhub-settings-area");
+    gtk_box_pack_start(GTK_BOX(area), StyledLabel(title, "deskhub-settings-area-title"), FALSE,
+        FALSE, 0);
+    return area;
+}
+
 GtkWidget* HeadingRow(const char* heading, GCallback onRefresh, gpointer user) {
     GtkWidget* row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
     gtk_box_pack_start(GTK_BOX(row), Heading(heading), FALSE, FALSE, 0);
@@ -266,6 +278,38 @@ GtkWidget* HostCell(const char* cssClass, int width, float align) {
     gtk_label_set_ellipsize(GTK_LABEL(label), PANGO_ELLIPSIZE_END);
     gtk_widget_set_size_request(label, width, -1);
     return label;
+}
+
+GtkWidget* HostRowBox(const char* cssClass, int height) {
+    GtkWidget* row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, ui::kHostCellGap);
+    AddClass(row, cssClass);
+    gtk_widget_set_size_request(row, -1, height);
+    return row;
+}
+
+GtkWidget* HostRowBar(GtkWidget* row) {
+    GtkWidget* bar = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+    AddClass(bar, "deskhub-host-row-bar");
+    gtk_widget_set_size_request(bar, ui::kHostRowBarWidth, -1);
+    gtk_box_pack_start(GTK_BOX(row), bar, FALSE, FALSE, 0);
+    return bar;
+}
+
+GtkWidget* HostRowButton(const char* label, const char* cssClass) {
+    GtkWidget* button = gtk_button_new_with_label(label);
+    AddClass(button, "deskhub-row-action");
+    AddClass(button, cssClass);
+    gtk_widget_set_size_request(button, ui::kHostActionWidth, ui::kHostActionHeight);
+    gtk_widget_set_valign(button, GTK_ALIGN_CENTER);
+    return button;
+}
+
+GtkWidget* HostRule(int margin) {
+    GtkWidget* rule = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+    AddClass(rule, "deskhub-host-rule");
+    gtk_widget_set_margin_top(rule, margin);
+    gtk_widget_set_margin_bottom(rule, margin);
+    return rule;
 }
 
 GtkWidget* ListFrame(GtkWidget* view, int height) {
@@ -397,6 +441,8 @@ private:
         gtk_box_pack_start(GTK_BOX(addressRow), StyledLabel(address_, "deskhub-section"), TRUE,
             TRUE, 0);
         GtkWidget* disconnect = gtk_button_new_with_label(ui::kDisconnectButton);
+        AddClass(disconnect, "deskhub-primary");
+        AddClass(disconnect, "deskhub-primary-stop");
         g_signal_connect(disconnect, "clicked", G_CALLBACK(OnDisconnect), this);
         gtk_box_pack_end(GTK_BOX(addressRow), disconnect, FALSE, FALSE, 0);
         gtk_box_pack_start(GTK_BOX(box), addressRow, FALSE, FALSE, 0);
@@ -639,9 +685,10 @@ GtkWidget* MainWindow::BuildHostPage() {
     gtk_box_pack_start(GTK_BOX(hostBanner_), hostStatusLabel_, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(box), hostBanner_, FALSE, FALSE, 0);
 
-    hostPasscodeCard_ = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
-    AddClass(hostPasscodeCard_, "deskhub-passcode-card");
+    hostPasscodeCard_ = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+    gtk_box_set_homogeneous(GTK_BOX(hostPasscodeCard_), TRUE);
     GtkWidget* passcodeSection = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
+    AddClass(passcodeSection, "deskhub-passcode-card");
     GtkWidget* passcodeText = gtk_box_new(GTK_ORIENTATION_VERTICAL, 2);
     gtk_box_pack_start(GTK_BOX(passcodeText), Hint(ui::kPasscodeShareHeading), FALSE, FALSE, 0);
     hostPasscodeLabel_ = StyledLabel(std::string(), "deskhub-passcode-code");
@@ -655,6 +702,7 @@ GtkWidget* MainWindow::BuildHostPage() {
     gtk_box_pack_start(GTK_BOX(hostPasscodeCard_), passcodeSection, TRUE, TRUE, 0);
 
     GtkWidget* portSection = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
+    AddClass(portSection, "deskhub-passcode-card");
     GtkWidget* portText = gtk_box_new(GTK_ORIENTATION_VERTICAL, 2);
     gtk_box_pack_start(GTK_BOX(portText), Hint(ui::kUdpPortLabel), FALSE, FALSE, 0);
     hostPortLabel_ = StyledLabel(std::string(), "deskhub-passcode-code");
@@ -682,12 +730,10 @@ GtkWidget* MainWindow::BuildHostPage() {
     hostPickerFrame_ = ListFrame(pickerBox, kListH + 40);
     gtk_box_pack_start(GTK_BOX(box), hostPickerFrame_, TRUE, TRUE, 0);
 
-    hostGrid_ = gtk_grid_new();
-    gtk_grid_set_column_spacing(GTK_GRID(hostGrid_), kHostCellGap);
-    gtk_grid_set_row_spacing(GTK_GRID(hostGrid_), kHostRowGap);
-    gtk_widget_set_valign(hostGrid_, GTK_ALIGN_START);
-    hostGridFrame_ = ListFrame(hostGrid_, kListH + 40);
-    gtk_box_pack_start(GTK_BOX(box), hostGridFrame_, TRUE, TRUE, 0);
+    hostTable_ = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+    gtk_widget_set_valign(hostTable_, GTK_ALIGN_START);
+    hostTableFrame_ = ListFrame(hostTable_, kListH + 40);
+    gtk_box_pack_start(GTK_BOX(box), hostTableFrame_, TRUE, TRUE, 0);
     RebuildHostRowWidgets();
 
     hostHintLabel_ = Hint(ui::kPickSourcesHint);
@@ -733,8 +779,8 @@ void MainWindow::RefreshDisplayChoices() {
 }
 
 void MainWindow::ShowHostTable(bool sharing) {
-    GtkWidget* shown = sharing ? hostGridFrame_ : hostPickerFrame_;
-    GtkWidget* hidden = sharing ? hostPickerFrame_ : hostGridFrame_;
+    GtkWidget* shown = sharing ? hostTableFrame_ : hostPickerFrame_;
+    GtkWidget* hidden = sharing ? hostPickerFrame_ : hostTableFrame_;
     gtk_widget_set_no_show_all(hidden, TRUE);
     gtk_widget_set_no_show_all(shown, FALSE);
     gtk_widget_hide(hidden);
@@ -1026,7 +1072,7 @@ void MainWindow::RefreshPairedDevices() {
         GtkWidget* forget = gtk_button_new_with_label(ui::kPairedForget);
         AddClass(forget, "deskhub-row-action");
         AddClass(forget, "deskhub-row-action-stop");
-        gtk_widget_set_size_request(forget, kHostActionWidth, kHostActionHeight);
+        gtk_widget_set_size_request(forget, ui::kHostActionWidth, ui::kHostActionHeight);
         gtk_widget_set_valign(forget, GTK_ALIGN_CENTER);
         g_object_set_data(G_OBJECT(forget), "deskhub-paired-row",
             GINT_TO_POINTER(gint(i) + 1));
@@ -1105,13 +1151,10 @@ bool MainWindow::AskPairing(const PairingRequest& request) {
     return allowed;
 }
 
-GtkWidget* MainWindow::BuildSettingsPage() {
-    GtkWidget* box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
+void MainWindow::BuildHostSettings(GtkWidget* host) {
+    gtk_box_pack_start(GTK_BOX(host), Hint(ui::kSettingsHint), FALSE, FALSE, 0);
 
-    gtk_box_pack_start(GTK_BOX(box), Heading(ui::kSettingsHeading), FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(box), Hint(ui::kSettingsHint), FALSE, FALSE, 0);
-
-    gtk_box_pack_start(GTK_BOX(box), Section(ui::kSettingsSectionVideo), FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(host), Section(ui::kSettingsSectionVideo), FALSE, FALSE, 0);
     GtkWidget* videoGrid = gtk_grid_new();
     gtk_grid_set_row_spacing(GTK_GRID(videoGrid), 10);
     gtk_grid_set_column_spacing(GTK_GRID(videoGrid), 14);
@@ -1131,18 +1174,9 @@ GtkWidget* MainWindow::BuildSettingsPage() {
     gtk_combo_box_set_active(GTK_COMBO_BOX(qualityCombo_),
         gint(deskhub::media::QualityPresetIndex(settings_.maxDim)));
     gtk_grid_attach(GTK_GRID(videoGrid), qualityCombo_, 1, 2, 1, 1);
-    gtk_box_pack_start(GTK_BOX(box), videoGrid, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(host), videoGrid, FALSE, FALSE, 0);
 
-    gtk_box_pack_start(GTK_BOX(box), Section(ui::kSettingsSectionConnection), FALSE, FALSE, 0);
-    GtkWidget* netGrid = gtk_grid_new();
-    gtk_grid_set_row_spacing(GTK_GRID(netGrid), 10);
-    gtk_grid_set_column_spacing(GTK_GRID(netGrid), 14);
-    gtk_grid_attach(GTK_GRID(netGrid), Label(ui::kUdpPortLabel), 0, 0, 1, 1);
-    portSpin_ = Spin(settings_.port, ui::kMaxSettingsPort);
-    gtk_grid_attach(GTK_GRID(netGrid), portSpin_, 1, 0, 1, 1);
-    gtk_box_pack_start(GTK_BOX(box), netGrid, FALSE, FALSE, 0);
-
-    gtk_box_pack_start(GTK_BOX(box), Section(ui::kSettingsSectionSecurity), FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(host), Section(ui::kSettingsSectionSecurity), FALSE, FALSE, 0);
     GtkWidget* securityGrid = gtk_grid_new();
     gtk_grid_set_row_spacing(GTK_GRID(securityGrid), 10);
     gtk_grid_set_column_spacing(GTK_GRID(securityGrid), 14);
@@ -1150,25 +1184,16 @@ GtkWidget* MainWindow::BuildSettingsPage() {
     hostPasscodeEntry_ = PasscodeEntry(settings_.passcode);
     gtk_widget_set_halign(hostPasscodeEntry_, GTK_ALIGN_START);
     gtk_grid_attach(GTK_GRID(securityGrid), hostPasscodeEntry_, 1, 0, 1, 1);
-    gtk_box_pack_start(GTK_BOX(box), securityGrid, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(box), Hint(ui::kPasscodeHint), FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(host), securityGrid, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(host), Hint(ui::kPasscodeHint), FALSE, FALSE, 0);
     allowInputCheck_ = gtk_check_button_new_with_label(ui::kAllowControlLabel);
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(allowInputCheck_), settings_.allowInput);
-    gtk_box_pack_start(GTK_BOX(box), allowInputCheck_, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(host), allowInputCheck_, FALSE, FALSE, 0);
 
-    gtk_box_pack_start(GTK_BOX(box), Section(ui::kSettingsSectionSession), FALSE, FALSE, 0);
-    clipboardCheck_ = gtk_check_button_new_with_label(ui::kClipboardSyncLabel);
-    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(clipboardCheck_), settings_.clipboardSync);
-    gtk_box_pack_start(GTK_BOX(box), clipboardCheck_, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(host), Section(ui::kSettingsSectionSession), FALSE, FALSE, 0);
     shareAudioCheck_ = gtk_check_button_new_with_label(ui::kShareAudioLabel);
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(shareAudioCheck_), settings_.shareAudio);
-    gtk_box_pack_start(GTK_BOX(box), shareAudioCheck_, FALSE, FALSE, 0);
-    playAudioCheck_ = gtk_check_button_new_with_label(ui::kPlayAudioLabel);
-    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(playAudioCheck_), settings_.playAudio);
-    gtk_box_pack_start(GTK_BOX(box), playAudioCheck_, FALSE, FALSE, 0);
-    keepAwakeCheck_ = gtk_check_button_new_with_label(ui::kKeepAwakeLabel);
-    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(keepAwakeCheck_), settings_.keepAwake);
-    gtk_box_pack_start(GTK_BOX(box), keepAwakeCheck_, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(host), shareAudioCheck_, FALSE, FALSE, 0);
 
     GtkWidget* folderRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
     gtk_box_pack_start(GTK_BOX(folderRow), Label(ui::kTransferFolderLabel), FALSE, FALSE, 0);
@@ -1178,19 +1203,60 @@ GtkWidget* MainWindow::BuildSettingsPage() {
     GtkWidget* folderButton = gtk_button_new_with_label(ui::kTransferChooseButton);
     g_signal_connect(folderButton, "clicked", G_CALLBACK(OnTransferDirClicked), this);
     gtk_box_pack_end(GTK_BOX(folderRow), folderButton, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(box), folderRow, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(host), folderRow, FALSE, FALSE, 0);
 
-    gtk_box_pack_start(GTK_BOX(box), Section(ui::kSettingsSectionLaunch), FALSE, FALSE, 0);
+    autoShareCheck_ = gtk_check_button_new_with_label(ui::kAutoShareLabel);
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(autoShareCheck_), settings_.autoShare);
+    gtk_box_pack_start(GTK_BOX(host), autoShareCheck_, FALSE, FALSE, 0);
+}
+
+void MainWindow::BuildGeneralSettings(GtkWidget* general) {
+    gtk_box_pack_start(GTK_BOX(general), Section(ui::kSettingsSectionConnection), FALSE, FALSE,
+        0);
+    GtkWidget* netGrid = gtk_grid_new();
+    gtk_grid_set_row_spacing(GTK_GRID(netGrid), 10);
+    gtk_grid_set_column_spacing(GTK_GRID(netGrid), 14);
+    gtk_grid_attach(GTK_GRID(netGrid), Label(ui::kUdpPortLabel), 0, 0, 1, 1);
+    portSpin_ = Spin(settings_.port, ui::kMaxSettingsPort);
+    gtk_grid_attach(GTK_GRID(netGrid), portSpin_, 1, 0, 1, 1);
+    gtk_box_pack_start(GTK_BOX(general), netGrid, FALSE, FALSE, 0);
+
+    gtk_box_pack_start(GTK_BOX(general), Section(ui::kSettingsSectionSession), FALSE, FALSE, 0);
+    clipboardCheck_ = gtk_check_button_new_with_label(ui::kClipboardSyncLabel);
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(clipboardCheck_), settings_.clipboardSync);
+    gtk_box_pack_start(GTK_BOX(general), clipboardCheck_, FALSE, FALSE, 0);
+    keepAwakeCheck_ = gtk_check_button_new_with_label(ui::kKeepAwakeLabel);
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(keepAwakeCheck_), settings_.keepAwake);
+    gtk_box_pack_start(GTK_BOX(general), keepAwakeCheck_, FALSE, FALSE, 0);
+
+    gtk_box_pack_start(GTK_BOX(general), Section(ui::kSettingsSectionLaunch), FALSE, FALSE, 0);
     autostartCheck_ = gtk_check_button_new_with_label(ui::kAutostartLabel);
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(autostartCheck_),
         deskhubp::AutostartEnabled());
-    gtk_box_pack_start(GTK_BOX(box), autostartCheck_, FALSE, FALSE, 0);
-    autoShareCheck_ = gtk_check_button_new_with_label(ui::kAutoShareLabel);
-    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(autoShareCheck_), settings_.autoShare);
-    gtk_box_pack_start(GTK_BOX(box), autoShareCheck_, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(general), autostartCheck_, FALSE, FALSE, 0);
     startHiddenCheck_ = gtk_check_button_new_with_label(ui::kCloseToTrayLabel);
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(startHiddenCheck_), settings_.startHidden);
-    gtk_box_pack_start(GTK_BOX(box), startHiddenCheck_, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(general), startHiddenCheck_, FALSE, FALSE, 0);
+}
+
+GtkWidget* MainWindow::BuildSettingsPage() {
+    GtkWidget* box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
+
+    gtk_box_pack_start(GTK_BOX(box), Heading(ui::kSidebarSettings), FALSE, FALSE, 0);
+
+    GtkWidget* host = SettingsArea(ui::kSidebarHost);
+    gtk_box_pack_start(GTK_BOX(box), host, FALSE, FALSE, 0);
+    BuildHostSettings(host);
+
+    GtkWidget* client = SettingsArea(ui::kSidebarClient);
+    gtk_box_pack_start(GTK_BOX(box), client, FALSE, FALSE, 0);
+    playAudioCheck_ = gtk_check_button_new_with_label(ui::kPlayAudioLabel);
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(playAudioCheck_), settings_.playAudio);
+    gtk_box_pack_start(GTK_BOX(client), playAudioCheck_, FALSE, FALSE, 0);
+
+    GtkWidget* general = SettingsArea(ui::kSettingsGeneralArea);
+    gtk_box_pack_start(GTK_BOX(box), general, FALSE, FALSE, 0);
+    BuildGeneralSettings(general);
 
     g_signal_connect(fpsSpin_, "value-changed", G_CALLBACK(OnSettingChanged), this);
     g_signal_connect(bitrateSpin_, "value-changed", G_CALLBACK(OnSettingChanged), this);
@@ -2005,78 +2071,71 @@ gboolean MainWindow::OnHostTimer(gpointer user) {
 
 MainWindow::HostRowWidgets MainWindow::MakeHostRowWidgets(const ui::HostRow& ref, size_t index) {
     HostRowWidgets widgets{};
+    widgets.row = HostRowBox(ref.viewer ? "deskhub-host-row-viewer" : "deskhub-host-row",
+        ui::kHostRowHeight);
+    widgets.bar = HostRowBar(widgets.row);
     for (int i = 0; i < kHostColumnCount; ++i) {
-        widgets.cells[i] = HostCell("deskhub-row-cell", kHostColumns[i].width,
-            kHostColumns[i].align);
+        const ui::HostColumn& column = ui::kHostColumns[size_t(i)];
+        widgets.cells[i] = HostCell("deskhub-host-cell", column.width, GtkAlign(column.align));
+        if (column.mono) AddClass(widgets.cells[i], "deskhub-host-cell-mono");
+        gtk_box_pack_start(GTK_BOX(widgets.row), widgets.cells[i], FALSE, FALSE, 0);
     }
+    if (!ref.viewer) AddClass(widgets.cells[0], "deskhub-host-cell-source");
 
     if (ref.files && ref.viewer) return widgets;
 
     const bool localShell =
         ref.terminal && ref.viewer && ref.shellState == deskhub::TerminalState::Local;
     const bool remoteRow = ref.viewer && !localShell;
-    widgets.action = gtk_button_new_with_label(
-        remoteRow ? ui::kDisconnectViewerAction : ui::kStopDisplayAction);
-    AddClass(widgets.action, "deskhub-row-action");
-    AddClass(widgets.action, remoteRow ? "deskhub-row-action-kick" : "deskhub-row-action-stop");
-    gtk_widget_set_size_request(widgets.action, kHostActionWidth, kHostActionHeight);
-    gtk_widget_set_valign(widgets.action, GTK_ALIGN_CENTER);
-    gtk_widget_set_halign(widgets.action, GTK_ALIGN_END);
+    widgets.action = HostRowButton(
+        remoteRow ? ui::kDisconnectViewerAction : ui::kStopDisplayAction,
+        remoteRow ? "deskhub-row-action-kick" : "deskhub-row-action-stop");
     g_object_set_data(G_OBJECT(widgets.action), "deskhub-host-row",
         GINT_TO_POINTER(gint(index)));
     g_signal_connect(widgets.action, "clicked", G_CALLBACK(OnHostRowActionClicked), this);
+    gtk_box_pack_start(GTK_BOX(widgets.row), widgets.action, FALSE, FALSE, 0);
 
     if (ref.terminal && ref.viewer && !localShell) {
-        widgets.attach = gtk_button_new_with_label(ui::kAttachShellAction);
-        AddClass(widgets.attach, "deskhub-row-action");
-        AddClass(widgets.attach, "deskhub-row-action-stop");
-        gtk_widget_set_size_request(widgets.attach, kHostActionWidth, kHostActionHeight);
-        gtk_widget_set_valign(widgets.attach, GTK_ALIGN_CENTER);
-        gtk_widget_set_halign(widgets.attach, GTK_ALIGN_END);
+        widgets.attach = HostRowButton(ui::kAttachShellAction, "deskhub-row-action-stop");
         g_object_set_data(G_OBJECT(widgets.attach), "deskhub-host-row",
             GINT_TO_POINTER(gint(index)));
         g_signal_connect(widgets.attach, "clicked", G_CALLBACK(OnHostRowAttachClicked), this);
     } else if (ref.files && !ref.viewer) {
-        widgets.attach = gtk_button_new_with_label(ui::kOpenFolderAction);
-        AddClass(widgets.attach, "deskhub-row-action");
-        gtk_widget_set_size_request(widgets.attach, kHostActionWidth, kHostActionHeight);
-        gtk_widget_set_valign(widgets.attach, GTK_ALIGN_CENTER);
-        gtk_widget_set_halign(widgets.attach, GTK_ALIGN_END);
+        widgets.attach = HostRowButton(ui::kOpenFolderAction, "deskhub-row-action-open");
         g_signal_connect(widgets.attach, "clicked", G_CALLBACK(OnHostRowOpenFolderClicked), this);
     }
+    if (widgets.attach) gtk_box_pack_start(GTK_BOX(widgets.row), widgets.attach, FALSE, FALSE, 0);
     return widgets;
 }
 
 void MainWindow::RebuildHostRowWidgets() {
-    GList* children = gtk_container_get_children(GTK_CONTAINER(hostGrid_));
+    GList* children = gtk_container_get_children(GTK_CONTAINER(hostTable_));
     for (GList* child = children; child; child = child->next) {
         gtk_widget_destroy(GTK_WIDGET(child->data));
     }
     g_list_free(children);
 
-    for (int i = 0; i < kHostColumnCount; ++i) {
-        GtkWidget* title = HostCell("deskhub-row-header", kHostColumns[i].width,
-            kHostColumns[i].align);
-        gtk_label_set_text(GTK_LABEL(title), kHostColumns[i].title);
-        gtk_grid_attach(GTK_GRID(hostGrid_), title, i, 0, 1, 1);
+    GtkWidget* header = HostRowBox("deskhub-host-header", ui::kHostHeaderHeight);
+    GtkWidget* headerBar = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+    gtk_widget_set_size_request(headerBar, ui::kHostRowBarWidth, -1);
+    gtk_box_pack_start(GTK_BOX(header), headerBar, FALSE, FALSE, 0);
+    for (const ui::HostColumn& column : ui::kHostColumns) {
+        GtkWidget* title = HostCell("deskhub-row-header", column.width, GtkAlign(column.align));
+        gtk_label_set_text(GTK_LABEL(title), column.title);
+        gtk_box_pack_start(GTK_BOX(header), title, FALSE, FALSE, 0);
     }
+    gtk_box_pack_start(GTK_BOX(hostTable_), header, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(hostTable_), HostRule(0), FALSE, FALSE, 0);
 
     hostRowWidgets_.clear();
     hostRowWidgets_.reserve(hostRows_.size());
     for (size_t i = 0; i < hostRows_.size(); ++i) {
+        if (!hostRows_[i].viewer && i > 0)
+            gtk_box_pack_start(GTK_BOX(hostTable_), HostRule(ui::kHostRuleMargin), FALSE, FALSE, 0);
         hostRowWidgets_.push_back(MakeHostRowWidgets(hostRows_[i], i));
-        const HostRowWidgets& widgets = hostRowWidgets_[i];
-        const gint row = gint(i) + 1;
-        for (int c = 0; c < kHostColumnCount; ++c) {
-            gtk_grid_attach(GTK_GRID(hostGrid_), widgets.cells[c], c, row, 1, 1);
-        }
-        if (widgets.action)
-            gtk_grid_attach(GTK_GRID(hostGrid_), widgets.action, kHostColumnCount, row, 1, 1);
-        if (widgets.attach)
-            gtk_grid_attach(GTK_GRID(hostGrid_), widgets.attach, kHostColumnCount + 1, row, 1,
-                1);
+        gtk_box_pack_start(GTK_BOX(hostTable_), hostRowWidgets_.back().row, FALSE, FALSE, 0);
     }
-    gtk_widget_show_all(hostGrid_);
+    gtk_widget_show_all(hostTable_);
 }
 
 void MainWindow::ClearHostRows() {
@@ -2090,10 +2149,15 @@ void MainWindow::FillHostRow(const HostRowWidgets& widgets, const ui::HostRowCel
     for (int i = 0; i < kHostColumnCount; ++i) {
         gtk_label_set_text(GTK_LABEL(widgets.cells[i]), text[i]->c_str());
         if (cells.online) {
-            AddClass(widgets.cells[i], "deskhub-row-cell-online");
+            AddClass(widgets.cells[i], "deskhub-host-cell-online");
         } else {
-            RemoveClass(widgets.cells[i], "deskhub-row-cell-online");
+            RemoveClass(widgets.cells[i], "deskhub-host-cell-online");
         }
+    }
+    if (cells.online) {
+        AddClass(widgets.bar, "deskhub-host-row-bar-online");
+    } else {
+        RemoveClass(widgets.bar, "deskhub-host-row-bar-online");
     }
 }
 

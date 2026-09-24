@@ -4,6 +4,12 @@ struct PaletteRgb {
     let red: Double
     let green: Double
     let blue: Double
+
+    init(packed: UInt32) {
+        red = Double((packed >> 16) & 0xFF) / 255
+        green = Double((packed >> 8) & 0xFF) / 255
+        blue = Double(packed & 0xFF) / 255
+    }
 }
 
 #if os(macOS)
@@ -27,32 +33,29 @@ struct PaletteRgb {
 #endif
 
 enum DeskhubPalette {
-    static let sidebar = Color(red: 0.122, green: 0.161, blue: 0.216)
-    static let sidebarHover = Color(red: 0.216, green: 0.255, blue: 0.318)
-    static let accent = Color(red: 0.145, green: 0.388, blue: 0.922)
-    static let navText = Color(red: 0.820, green: 0.835, blue: 0.859)
-    static let footnote = Color(red: 0.580, green: 0.639, blue: 0.722)
+    static let sidebar = theme(DHThemeSidebar)
+    static let sidebarHover = theme(DHThemeSidebarHover)
+    static let accent = theme(DHThemeAccent)
+    static let navText = theme(DHThemeNavText)
+    static let footnote = theme(DHThemeFootnote)
+    static let heading = theme(DHThemeHeading)
+    static let muted = theme(DHThemeMuted)
+    static let online = theme(DHThemeOnline)
+    static let offline = theme(DHThemeOffline)
+    static let warning = theme(DHThemeWarning)
+    static let rowLine = theme(DHThemeRowLine)
+    static let viewerRow = theme(DHThemeViewerRow)
+    static let panelIdle = theme(DHThemePanelIdle)
+    static let panelBusy = theme(DHThemePanelBusy)
+    static let panelLive = theme(DHThemePanelLive)
+    static let passcodeCard = theme(DHThemePasscodeCard)
 
-    static let heading = adaptiveColor(
-        light: PaletteRgb(red: 0.067, green: 0.094, blue: 0.153),
-        dark: PaletteRgb(red: 0.898, green: 0.906, blue: 0.922)
-    )
-    static let muted = adaptiveColor(
-        light: PaletteRgb(red: 0.420, green: 0.447, blue: 0.502),
-        dark: PaletteRgb(red: 0.612, green: 0.639, blue: 0.686)
-    )
-    static let online = adaptiveColor(
-        light: PaletteRgb(red: 0.0, green: 0.569, blue: 0.235),
-        dark: PaletteRgb(red: 0.290, green: 0.871, blue: 0.502)
-    )
-    static let offline = adaptiveColor(
-        light: PaletteRgb(red: 0.784, green: 0.157, blue: 0.157),
-        dark: PaletteRgb(red: 0.973, green: 0.443, blue: 0.443)
-    )
-    static let warning = adaptiveColor(
-        light: PaletteRgb(red: 0.792, green: 0.424, blue: 0.031),
-        dark: PaletteRgb(red: 0.984, green: 0.749, blue: 0.141)
-    )
+    private static func theme(_ color: DHThemeColor) -> Color {
+        adaptiveColor(
+            light: PaletteRgb(packed: dh_theme_color(color, false)),
+            dark: PaletteRgb(packed: dh_theme_color(color, true))
+        )
+    }
 }
 
 enum DeviceRowStyle {

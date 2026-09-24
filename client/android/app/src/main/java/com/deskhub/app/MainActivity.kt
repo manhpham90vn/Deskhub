@@ -209,19 +209,24 @@ class MainActivity : ComponentActivity() {
 private const val POLL_INTERVAL_MS = 1000L
 private const val PORT_SETTLE_MS = 600L
 
-private val AccentColor = Color(0xFF2563EB)
-private val HeadingColor = Color(0xFFE5E7EB)
-private val MutedColor = Color(0xFF9CA3AF)
-private val OnlineColor = Color(0xFF4ADE80)
-private val OfflineColor = Color(0xFFF87171)
-private val PasscodeCardColor = Color(0xFF111827)
+private const val OPAQUE_ALPHA = 0xFF000000.toInt()
+
+private fun darkThemeColor(id: Int) = Color(OPAQUE_ALPHA or NativeClient.themeColor(id, dark = true))
+
+private val AccentColor = darkThemeColor(NativeClient.THEME_ACCENT)
+private val HeadingColor = darkThemeColor(NativeClient.THEME_HEADING)
+private val MutedColor = darkThemeColor(NativeClient.THEME_MUTED)
+private val OnlineColor = darkThemeColor(NativeClient.THEME_ONLINE)
+private val OfflineColor = darkThemeColor(NativeClient.THEME_OFFLINE)
+private val PasscodeCardColor = darkThemeColor(NativeClient.THEME_PASSCODE_CARD)
+private val PageColor = darkThemeColor(NativeClient.THEME_PAGE)
 
 private val DeskhubDarkColors =
     darkColorScheme(
         primary = AccentColor,
         onPrimary = Color.White,
-        background = Color.Black,
-        surface = Color.Black,
+        background = PageColor,
+        surface = PageColor,
     )
 
 private fun tabIcon(pathData: String): ImageVector =

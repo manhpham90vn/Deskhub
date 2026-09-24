@@ -3,6 +3,7 @@
 #include "deskhub/session/FileTransfer.h"
 #include "deskhub/session/TerminalSession.h"
 
+#include <array>
 #include <cstdint>
 #include <string>
 #include <string_view>
@@ -15,6 +16,37 @@ inline constexpr const char* kShellRowLabel = "    \xE2\x86\xB3 shell";
 inline constexpr const char* kSendingRowLabel = "    \xE2\x86\xB3 sending";
 inline constexpr uint8_t kTerminalSourceId = 0xFF;
 inline constexpr uint8_t kFilesSourceId = 0xFE;
+
+enum class ColumnAlign : uint8_t {
+    Leading,
+    Trailing,
+};
+
+struct HostColumn {
+    const char* title;
+    int width;
+    ColumnAlign align;
+    bool mono;
+};
+
+inline constexpr std::array<HostColumn, 8> kHostColumns{{
+    {"Source", 168, ColumnAlign::Leading, false},
+    {"Size", 88, ColumnAlign::Leading, false},
+    {"Viewers", 58, ColumnAlign::Trailing, true},
+    {"Client", 132, ColumnAlign::Leading, false},
+    {"Capture", 60, ColumnAlign::Trailing, true},
+    {"Send", 52, ColumnAlign::Trailing, true},
+    {"Mbps", 56, ColumnAlign::Trailing, true},
+    {"RTT", 54, ColumnAlign::Trailing, true},
+}};
+
+inline constexpr int kHostCellGap = 8;
+inline constexpr int kHostRowHeight = 32;
+inline constexpr int kHostHeaderHeight = 30;
+inline constexpr int kHostRowBarWidth = 3;
+inline constexpr int kHostActionWidth = 104;
+inline constexpr int kHostActionHeight = 26;
+inline constexpr int kHostRuleMargin = 4;
 
 struct HostRow {
     bool viewer = false;

@@ -9,6 +9,8 @@
 #include <map>
 #include <mutex>
 #include <optional>
+#include <iterator>
+#include <span>
 #include <string>
 #include <thread>
 #include <vector>
@@ -17,6 +19,7 @@
 #include "deskhub/protocol/Wire.h"
 #include "deskhub/ui/DeviceRows.h"
 #include "deskhub/ui/RecentDevices.h"
+#include "deskhub/ui/SettingsLayout.h"
 #include "deskhub/ui/Strings.h"
 #include "deskhub/ui/UiSettings.h"
 #include "deskhubp/ffi/FfiText.h"
@@ -85,11 +88,57 @@ std::string LocalTimeText(int64_t unixTime) {
     return std::string(buf);
 }
 
-int FillText(char* out, int capacity, const std::string& text) {
-    if (!out || capacity <= 0) return int(text.size());
-    deskhubp::CopyToBuf(out, size_t(capacity), text);
-    return int(std::strlen(out));
+using deskhubp::FillText;
+
+struct KindPair {
+    DHSettingsEntryKind ffi;
+    ui::SettingsEntryKind core;
+};
+
+struct FieldPair {
+    DHSettingField ffi;
+    ui::SettingField core;
+};
+
+constexpr KindPair kKindPairs[] = {
+    KindPair{DHSettingsEntryArea, ui::SettingsEntryKind::Area},
+    KindPair{DHSettingsEntryHint, ui::SettingsEntryKind::Hint},
+    KindPair{DHSettingsEntrySection, ui::SettingsEntryKind::Section},
+    KindPair{DHSettingsEntrySetting, ui::SettingsEntryKind::Setting},
+};
+
+constexpr FieldPair kFieldPairs[] = {
+    FieldPair{DHSettingNone, ui::SettingField::None},
+    FieldPair{DHSettingFps, ui::SettingField::Fps},
+    FieldPair{DHSettingBitrate, ui::SettingField::Bitrate},
+    FieldPair{DHSettingQuality, ui::SettingField::Quality},
+    FieldPair{DHSettingPasscode, ui::SettingField::Passcode},
+    FieldPair{DHSettingAllowInput, ui::SettingField::AllowInput},
+    FieldPair{DHSettingShareAudio, ui::SettingField::ShareAudio},
+    FieldPair{DHSettingTransferFolder, ui::SettingField::TransferFolder},
+    FieldPair{DHSettingAutoShare, ui::SettingField::AutoShare},
+    FieldPair{DHSettingPermissions, ui::SettingField::Permissions},
+    FieldPair{DHSettingPlayAudio, ui::SettingField::PlayAudio},
+    FieldPair{DHSettingPort, ui::SettingField::Port},
+    FieldPair{DHSettingClipboardSync, ui::SettingField::ClipboardSync},
+    FieldPair{DHSettingKeepAwake, ui::SettingField::KeepAwake},
+    FieldPair{DHSettingAutostart, ui::SettingField::Autostart},
+    FieldPair{DHSettingCloseToTray, ui::SettingField::CloseToTray},
+};
+
+static_assert(std::size(kFieldPairs) == size_t(ui::SettingField::Count),
+    "DHSettingField must name every ui::SettingField");
+
+constexpr bool FfiSettingsLayoutMirrorsCore() {
+    for (const KindPair& pair : kKindPairs)
+        if (int(pair.ffi) != int(pair.core)) return false;
+    for (const FieldPair& pair : kFieldPairs)
+        if (int(pair.ffi) != int(pair.core)) return false;
+    return true;
 }
+
+static_assert(FfiSettingsLayoutMirrorsCore(),
+    "each DHSettingsEntryKind and DHSettingField must carry its core value");
 
 uint32_t IpOf(const std::string& addr) {
     NetAddr parsed{};
@@ -255,6 +304,24 @@ void dh_status_refresh_now(void) {
         g_status.clear();
     }
     g_poller.RefreshNow();
+}
+
+int dh_settings_layout(DHSettingsEntry* out, int capacity) {
+    const std::span<const ui::SettingsEntry> layout = ui::DesktopSettingsLayout();
+    const int count = int(layout.size());
+    if (!out || capacity <= 0) return count;
+    const int filled = capacity < count ? capacity : count;
+    for (int i = 0; i < filled; ++i) {
+        const ui::SettingsEntry& entry = layout[size_t(i)];
+        out[i].kind = DHSettingsEntryKind(entry.kind);
+        out[i].field = DHSettingField(entry.field);
+        deskhubp::CopyToBuf(out[i].text, sizeof(out[i].text), entry.text);
+    }
+    return filled;
+}
+
+int dh_settings_area_bar_width(void) {
+    return ui::kSettingsAreaBarWidth;
 }
 
 DHUiSettings dh_settings_load(void) {

@@ -13,18 +13,66 @@
 #include "deskhub/session/client/OpenViewers.h"
 #include "deskhub/ui/AutoShareGate.h"
 #include "deskhub/ui/Strings.h"
+#include "deskhub/ui/Theme.h"
 #include "deskhubp/diag/Log.h"
 #include "deskhubp/diag/LogFile.h"
 #include "deskhubp/ffi/FfiText.h"
 #include "deskhubp/input/NativeKeyMap.h"
 #include "deskhubp/client/SourceQuery.h"
 
+#include <cstddef>
 #include <cstdio>
+#include <iterator>
 #include <cstring>
 #include <string>
 #include <vector>
 
 namespace {
+
+struct ThemePair {
+    DHThemeColor ffi;
+    deskhub::ui::ThemeColor core;
+};
+
+constexpr ThemePair kThemePairs[] = {
+    ThemePair{DHThemeSidebar, deskhub::ui::ThemeColor::Sidebar},
+    ThemePair{DHThemeSidebarHover, deskhub::ui::ThemeColor::SidebarHover},
+    ThemePair{DHThemeNavText, deskhub::ui::ThemeColor::NavText},
+    ThemePair{DHThemeFootnote, deskhub::ui::ThemeColor::Footnote},
+    ThemePair{DHThemeAccent, deskhub::ui::ThemeColor::Accent},
+    ThemePair{DHThemeAccentPressed, deskhub::ui::ThemeColor::AccentPressed},
+    ThemePair{DHThemeAccentDisabled, deskhub::ui::ThemeColor::AccentDisabled},
+    ThemePair{DHThemeHeading, deskhub::ui::ThemeColor::Heading},
+    ThemePair{DHThemeMuted, deskhub::ui::ThemeColor::Muted},
+    ThemePair{DHThemeDisabled, deskhub::ui::ThemeColor::Disabled},
+    ThemePair{DHThemeOnline, deskhub::ui::ThemeColor::Online},
+    ThemePair{DHThemeOffline, deskhub::ui::ThemeColor::Offline},
+    ThemePair{DHThemeOfflinePressed, deskhub::ui::ThemeColor::OfflinePressed},
+    ThemePair{DHThemeWarning, deskhub::ui::ThemeColor::Warning},
+    ThemePair{DHThemeWarningPressed, deskhub::ui::ThemeColor::WarningPressed},
+    ThemePair{DHThemePage, deskhub::ui::ThemeColor::Page},
+    ThemePair{DHThemeBorder, deskhub::ui::ThemeColor::Border},
+    ThemePair{DHThemeControl, deskhub::ui::ThemeColor::Control},
+    ThemePair{DHThemeControlHover, deskhub::ui::ThemeColor::ControlHover},
+    ThemePair{DHThemeControlPressed, deskhub::ui::ThemeColor::ControlPressed},
+    ThemePair{DHThemeRowLine, deskhub::ui::ThemeColor::RowLine},
+    ThemePair{DHThemeViewerRow, deskhub::ui::ThemeColor::ViewerRow},
+    ThemePair{DHThemePanelIdle, deskhub::ui::ThemeColor::PanelIdle},
+    ThemePair{DHThemePanelBusy, deskhub::ui::ThemeColor::PanelBusy},
+    ThemePair{DHThemePanelLive, deskhub::ui::ThemeColor::PanelLive},
+    ThemePair{DHThemePasscodeCard, deskhub::ui::ThemeColor::PasscodeCard},
+};
+
+static_assert(std::size(kThemePairs) == size_t(deskhub::ui::ThemeColor::Count),
+    "DHThemeColor must name every ui::ThemeColor");
+
+constexpr bool FfiThemeMirrorsCore() {
+    for (const ThemePair& pair : kThemePairs)
+        if (int(pair.ffi) != int(pair.core)) return false;
+    return true;
+}
+
+static_assert(FfiThemeMirrorsCore(), "each DHThemeColor must carry its ui::ThemeColor's value");
 
 deskhub::ViewRect ToRect(DHViewRect r) {
     return {r.x, r.y, r.width, r.height};
@@ -47,6 +95,12 @@ DHPointerLockEffect ApplyPointerLock(DHPointerLock* state, Fn&& step) {
 }
 
 extern "C" {
+
+uint32_t dh_theme_color(DHThemeColor color, bool dark) {
+    const deskhub::ui::ThemeMode mode =
+        dark ? deskhub::ui::ThemeMode::Dark : deskhub::ui::ThemeMode::Light;
+    return deskhub::ui::PackRgb(deskhub::ui::ThemeRgb(deskhub::ui::ThemeColor(color), mode));
+}
 
 const char* dh_string(DHStringId id) {
     switch (id) {
@@ -77,14 +131,11 @@ const char* dh_string(DHStringId id) {
         case DHStrSidebarSettings: return deskhub::ui::kSidebarSettings;
         case DHStrHostHeading: return deskhub::ui::kHostHeading;
         case DHStrClientHeading: return deskhub::ui::kClientHeading;
-        case DHStrSettingsHeading: return deskhub::ui::kSettingsHeading;
-        case DHStrSettingsHint: return deskhub::ui::kSettingsHint;
         case DHStrClientSettingsHeading: return deskhub::ui::kClientSettingsHeading;
         case DHStrClientSettingsHint: return deskhub::ui::kClientSettingsHint;
         case DHStrUdpPortLabel: return deskhub::ui::kUdpPortLabel;
         case DHStrProjectUrl: return deskhub::ui::kProjectUrl;
         case DHStrProjectLinkLabel: return deskhub::ui::kProjectLinkLabel;
-        case DHStrAllowControlLabel: return deskhub::ui::kAllowControlLabel;
         case DHStrRequestControlLabel: return deskhub::ui::kRequestControlLabel;
         case DHStrClientIpPlaceholder: return deskhub::ui::kClientIpPlaceholder;
         case DHStrConnectPromptTitle: return deskhub::ui::kConnectPromptTitle;
@@ -101,21 +152,16 @@ const char* dh_string(DHStringId id) {
         case DHStrBroadcastMemoryLabel: return deskhub::ui::kBroadcastMemoryLabel;
         case DHStrBindInterfaceLabel: return deskhub::ui::kBindInterfaceLabel;
         case DHStrBindAllInterfaces: return deskhub::ui::kBindAllInterfaces;
-        case DHStrAutostartLabel: return deskhub::ui::kAutostartLabel;
-        case DHStrAutoShareLabel: return deskhub::ui::kAutoShareLabel;
         case DHStrClipboardSyncLabel: return deskhub::ui::kClipboardSyncLabel;
         case DHStrShareAudioLabel: return deskhub::ui::kShareAudioLabel;
         case DHStrPlayAudioLabel: return deskhub::ui::kPlayAudioLabel;
-        case DHStrCloseToTrayLabel: return deskhub::ui::kCloseToTrayLabel;
         case DHStrTrayShowWindow: return deskhub::ui::kTrayShowWindow;
         case DHStrTrayHideWindow: return deskhub::ui::kTrayHideWindow;
         case DHStrTrayQuit: return deskhub::ui::kTrayQuit;
         case DHStrBindNotConnectedNote: return deskhub::ui::kBindNotConnectedNote;
-        case DHStrSettingsSectionVideo: return deskhub::ui::kSettingsSectionVideo;
         case DHStrSettingsSectionConnection: return deskhub::ui::kSettingsSectionConnection;
         case DHStrSettingsSectionSecurity: return deskhub::ui::kSettingsSectionSecurity;
         case DHStrSettingsSectionSession: return deskhub::ui::kSettingsSectionSession;
-        case DHStrSettingsSectionLaunch: return deskhub::ui::kSettingsSectionLaunch;
         case DHStrKeepAwakeLabel: return deskhub::ui::kKeepAwakeLabel;
         case DHStrPairingRequestTitle: return deskhub::ui::kPairingRequestTitle;
         case DHStrPairingAllow: return deskhub::ui::kPairingAllow;
@@ -170,9 +216,6 @@ const char* dh_string(DHStringId id) {
         case DHStrDeviceNameLabel: return deskhub::ui::kDeviceNameLabel;
         case DHStrConnectButton: return deskhub::ui::kConnectButton;
         case DHStrCopyButton: return deskhub::ui::kCopyButton;
-        case DHStrFpsLabel: return deskhub::ui::kFpsLabel;
-        case DHStrBitrateLabel: return deskhub::ui::kBitrateLabel;
-        case DHStrQualityLabel: return deskhub::ui::kQualityLabel;
         case DHStrAttachShellAction: return deskhub::ui::kAttachShellAction;
         case DHStrTerminalLocalWindowTitle: return deskhub::ui::kTerminalLocalWindowTitle;
         case DHStrTerminalAttachedHere: return deskhub::ui::kTerminalAttachedHere;

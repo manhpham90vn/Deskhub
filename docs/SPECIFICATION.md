@@ -166,6 +166,11 @@ port the network scan knocks on — clipboard sync (T-17) and keep awake (T-19),
 passcode (T-5) and the network to share on (T-9) on their sharing screen; they host with
 the built-in defaults for everything else.
 
+On the desktops the Settings page groups them into three boxes: **Host** for what only
+sharing uses (T-1 – T-3, T-5, T-6, T-11, T-22 and the folder of T-25), **Client** for what
+only watching uses (T-23), and **General** for what both sides use (T-4, T-13, T-15, T-17,
+T-19).
+
 | ID | Setting | Range | Default |
 | --- | --- | --- | --- |
 | T-1 | Frame rate | 1 – 240 fps | 60 |

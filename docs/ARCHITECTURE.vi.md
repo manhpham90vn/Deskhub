@@ -303,6 +303,17 @@ coverage của core.
 
 ## 9. Những quyết định cần ghi nhớ
 
+- **Những gì một màn hình desktop hiển thị là dữ liệu trong `core/ui`, không phải code
+  riêng của từng app**: bộ màu (`Theme.h`, mỗi màu có một giá trị sáng và một giá trị tối),
+  các cột và kích thước của bảng host (`HostRows.h`), cùng các khung, section và thứ tự của
+  trang Settings (`SettingsLayout.h`) chỉ được định nghĩa một lần. Windows đọc trực tiếp,
+  macOS đọc qua `dh_theme_color`, `dh_host_columns` và `dh_settings_layout`, Android đọc qua
+  `dh_theme_color`. Mỗi app chỉ quyết định control nào vẽ một `SettingField`. Trước đây mỗi
+  app giữ một bản sao riêng của cùng các mã màu và thứ tự trang, nên chúng lệch dần: một
+  nút đỏ trên Windows lại xám trên macOS, một setting có trên hai desktop lại thiếu trên
+  desktop thứ ba. Test của layout kiểm tra mỗi setting được lưu xuất hiện đúng một lần, nên
+  không app nào còn lặng lẽ bỏ sót được nữa.
+
 - **Một capability probe trả về false có thể vô hiệu hoá cả một vòng điều khiển.** Encoder
   Media Foundation trả về `false` cho `SetBitrate` mỗi khi MFT không cung cấp
   `CODECAPI_AVEncCommonMeanBitRate`, và `ApplyFeedback` xử lý việc từ chối này đúng theo

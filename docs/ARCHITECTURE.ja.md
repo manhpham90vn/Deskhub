@@ -304,6 +304,17 @@ scaling の 2 つの判定とともに実行する（共有 runner には時間�
 
 ## 9. 記録しておくべき設計判断
 
+- **デスクトップ画面に何を表示するかは各アプリのコードではなく `core/ui` のデータで決まる**：
+  配色（`Theme.h`。各色にライトとダークの値を持つ）、ホストのライブ表の列とサイズ
+  （`HostRows.h`）、Settings ページの枠・セクション・並び順（`SettingsLayout.h`）は一度だけ
+  定義する。Windows は直接読み、macOS は `dh_theme_color`・`dh_host_columns`・
+  `dh_settings_layout` 経由で、Android は `dh_theme_color` 経由で読む。アプリが決めるのは、
+  ある `SettingField` をどのコントロールで描くかだけである。以前は各アプリが同じ色の値と
+  ページ順を個別に持っていたため、次第にずれていった。Windows で赤いボタンが macOS では
+  灰色になり、二つのデスクトップにある設定が三つ目では欠けていた。レイアウトのテストは保存
+  される各設定がちょうど一度だけ現れることを確かめるので、アプリが設定を黙って落とすことは
+  もうできない。
+
 - **false を返す capability probe が制御ループ全体を無効化しうる。** MFT が
   `CODECAPI_AVEncCommonMeanBitRate` を提供しない場合、Media Foundation の encoder は
   `SetBitrate` に `false` を返し、`ApplyFeedback` はこの拒否を「何も適用されていない」

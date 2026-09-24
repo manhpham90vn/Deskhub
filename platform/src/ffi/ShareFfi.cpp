@@ -65,6 +65,26 @@ std::filesystem::path FilesFolder() {
 
 }
 
+int dh_host_columns(DHHostColumn* out, int capacity) {
+    const int count = int(deskhub::ui::kHostColumns.size());
+    if (!out || capacity <= 0) return count;
+    const int filled = capacity < count ? capacity : count;
+    for (int i = 0; i < filled; ++i) {
+        const deskhub::ui::HostColumn& column = deskhub::ui::kHostColumns[size_t(i)];
+        deskhubp::CopyToBuf(out[i].title, sizeof(out[i].title), column.title);
+        out[i].width = column.width;
+        out[i].trailing = column.align == deskhub::ui::ColumnAlign::Trailing;
+        out[i].mono = column.mono;
+    }
+    return filled;
+}
+
+DHHostTableMetrics dh_host_table_metrics(void) {
+    return DHHostTableMetrics{deskhub::ui::kHostCellGap, deskhub::ui::kHostRowHeight,
+        deskhub::ui::kHostHeaderHeight, deskhub::ui::kHostRowBarWidth,
+        deskhub::ui::kHostActionWidth, deskhub::ui::kHostRuleMargin};
+}
+
 DHShareDefaults dh_share_default_options(void) {
     const ShareOptions defaults;
     return DHShareDefaults{defaults.fps, defaults.bitrateMbps, defaults.maxDim};
@@ -187,6 +207,10 @@ bool dh_share_files_active(void) {
 void dh_share_stop_files(void) {
     std::lock_guard<std::mutex> lk(g_agentMutex);
     if (g_files) g_files->Stop();
+}
+
+int dh_share_files_folder(char* out, int capacity) {
+    return deskhubp::FillText(out, capacity, deskhubp::PathText(FilesFolder()));
 }
 
 bool dh_share_open_files_folder(void) {

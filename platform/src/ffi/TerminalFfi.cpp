@@ -8,19 +8,14 @@
 
 #include "deskhub/ui/ShellPicker.h"
 #include "deskhub/ui/Strings.h"
+#include "deskhubp/ffi/FfiText.h"
 #include "deskhubp/ffi/TermGridFill.h"
 #include "deskhubp/client/TerminalViewer.h"
 #include "deskhubp/system/UiSettingsStore.h"
 
 namespace {
 
-int FillText(char* out, int capacity, const std::string& text) {
-    if (out == nullptr || capacity <= 0) return int(text.size());
-    const size_t take = std::min(size_t(capacity - 1), text.size());
-    std::memcpy(out, text.data(), take);
-    out[take] = '\0';
-    return int(take);
-}
+using deskhubp::FillText;
 
 void CopyInto(char* out, size_t capacity, const std::string& text) {
     const size_t take = std::min(capacity - 1, text.size());

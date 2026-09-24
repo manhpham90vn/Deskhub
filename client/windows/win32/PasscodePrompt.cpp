@@ -5,6 +5,7 @@
 #include <string>
 
 #include "PasscodePrompt.h"
+#include "WxUi.h"
 
 #include "deskhub/protocol/Wire.h"
 #include "deskhub/ui/Strings.h"
@@ -56,7 +57,7 @@ public:
         sizer->Add(row, pad);
 
         auto* hint = new wxStaticText(this, wxID_ANY, ToWx(ui::kClientPasscodeHint));
-        hint->SetForegroundColour(wxColour(107, 114, 128));
+        hint->SetForegroundColour(kMutedText);
         sizer->Add(hint, pad);
 
         if (auto* buttons = CreateStdDialogButtonSizer(wxOK | wxCANCEL)) {

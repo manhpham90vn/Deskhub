@@ -48,9 +48,11 @@ private:
     enum class ShareTrigger { kUser,
         kAutomatic };
 
-    static constexpr int kHostColumnCount = 8;
+    static constexpr int kHostColumnCount = int(deskhub::ui::kHostColumns.size());
 
     struct HostRowWidgets {
+        GtkWidget* row = nullptr;
+        GtkWidget* bar = nullptr;
         GtkWidget* cells[kHostColumnCount] = {};
         GtkWidget* action = nullptr;
         GtkWidget* attach = nullptr;
@@ -75,6 +77,8 @@ private:
     GtkWidget* BuildClientPage();
     GtkWidget* BuildDevicesPage();
     GtkWidget* BuildSettingsPage();
+    void BuildHostSettings(GtkWidget* host);
+    void BuildGeneralSettings(GtkWidget* general);
     void SelectPage(int page);
 
     void RefreshPairedDevices();
@@ -206,8 +210,8 @@ private:
     guint copiedRevertId_ = 0;
     GtkWidget* hostHintLabel_ = nullptr;
     GtkWidget* hostPortalNote_ = nullptr;
-    GtkWidget* hostGrid_ = nullptr;
-    GtkWidget* hostGridFrame_ = nullptr;
+    GtkWidget* hostTable_ = nullptr;
+    GtkWidget* hostTableFrame_ = nullptr;
     GtkWidget* hostPickerFrame_ = nullptr;
     GtkWidget* displayChecksBox_ = nullptr;
     std::vector<GtkWidget*> displayChecks_;

@@ -63,6 +63,42 @@ int dh_recent_passcode(const char* address, char* out, int capacity);
 
 void dh_status_refresh_now(void);
 
+typedef enum {
+    DHSettingsEntryArea = 0,
+    DHSettingsEntryHint = 1,
+    DHSettingsEntrySection = 2,
+    DHSettingsEntrySetting = 3,
+} DHSettingsEntryKind;
+
+typedef enum {
+    DHSettingNone = 0,
+    DHSettingFps = 1,
+    DHSettingBitrate = 2,
+    DHSettingQuality = 3,
+    DHSettingPasscode = 4,
+    DHSettingAllowInput = 5,
+    DHSettingShareAudio = 6,
+    DHSettingTransferFolder = 7,
+    DHSettingAutoShare = 8,
+    DHSettingPermissions = 9,
+    DHSettingPlayAudio = 10,
+    DHSettingPort = 11,
+    DHSettingClipboardSync = 12,
+    DHSettingKeepAwake = 13,
+    DHSettingAutostart = 14,
+    DHSettingCloseToTray = 15,
+} DHSettingField;
+
+typedef struct {
+    DHSettingsEntryKind kind;
+    DHSettingField field;
+    char text[512];
+} DHSettingsEntry;
+
+int dh_settings_layout(DHSettingsEntry* out, int capacity);
+
+int dh_settings_area_bar_width(void);
+
 DHUiSettings dh_settings_load(void);
 void dh_settings_save(uint32_t fps, uint32_t bitrate_mbps, uint32_t max_dim, uint32_t port,
     bool allow_input, bool client_control, const char* passcode);

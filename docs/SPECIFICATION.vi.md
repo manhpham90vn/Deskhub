@@ -169,6 +169,11 @@ network scan kiểm tra — cùng clipboard sync (T-17) và keep awake (T-19), t
 (T-5) và network dùng để share (T-9) trên màn hình share. Các thiết lập còn lại sử dụng
 giá trị mặc định dựng sẵn.
 
+Trên desktop, trang Settings chia chúng thành ba khung: **Host** cho những gì chỉ việc share
+dùng tới (T-1 – T-3, T-5, T-6, T-11, T-22 và thư mục của T-25), **Client** cho những gì chỉ
+việc xem dùng tới (T-23), và **General** cho những gì cả hai phía đều dùng (T-4, T-13, T-15,
+T-17, T-19).
+
 | ID | Setting | Khoảng giá trị | Mặc định |
 | --- | --- | --- | --- |
 | T-1 | Frame rate | 1 – 240 fps | 60 |

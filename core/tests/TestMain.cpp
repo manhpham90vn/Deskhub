@@ -231,6 +231,12 @@ int main() {
     std::printf("--- ui: passcodes stored on disk ---\n");
     RunSecretTextTests();
 
+    std::printf("--- ui: one colour theme for every app ---\n");
+    RunThemeTests();
+
+    std::printf("--- ui: one settings page layout for every desktop ---\n");
+    RunSettingsLayoutTests();
+
     std::printf("--- cli: the command line every desktop shares ---\n");
     RunCliCommandTests();
     RunCliJsonTests();

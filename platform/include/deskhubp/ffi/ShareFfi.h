@@ -52,6 +52,26 @@ typedef struct {
     uint32_t maxDim;
 } DHQualityPreset;
 
+typedef struct {
+    char title[16];
+    int32_t width;
+    bool trailing;
+    bool mono;
+} DHHostColumn;
+
+typedef struct {
+    int32_t cellGap;
+    int32_t rowHeight;
+    int32_t headerHeight;
+    int32_t barWidth;
+    int32_t actionWidth;
+    int32_t ruleMargin;
+} DHHostTableMetrics;
+
+int dh_host_columns(DHHostColumn* out, int capacity);
+
+DHHostTableMetrics dh_host_table_metrics(void);
+
 DHShareDefaults dh_share_default_options(void);
 
 int dh_share_quality_presets(DHQualityPreset* out, int capacity);
@@ -75,6 +95,8 @@ bool dh_share_audio_running(void);
 bool dh_share_files_active(void);
 
 void dh_share_stop_files(void);
+
+int dh_share_files_folder(char* out, int capacity);
 
 bool dh_share_open_files_folder(void);
 

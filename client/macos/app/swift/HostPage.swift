@@ -129,6 +129,14 @@ enum HostShareState: Equatable {
         case .sharing: DeskhubPalette.online
         }
     }
+
+    var background: Color {
+        switch self {
+        case .idle: DeskhubPalette.panelIdle
+        case .starting: DeskhubPalette.panelBusy
+        case .sharing: DeskhubPalette.panelLive
+        }
+    }
 }
 
 struct HostStatusBanner: View {
@@ -150,16 +158,10 @@ struct HostStatusBanner: View {
         }
         .padding(12)
         .padding(.leading, 4)
-        .background(
-            RoundedRectangle(cornerRadius: 10).fill(state.tint.opacity(0.12))
-        )
+        .background(state.background)
         .overlay(alignment: .leading) {
             Rectangle().fill(state.tint).frame(width: 4)
         }
-        .clipShape(RoundedRectangle(cornerRadius: 10))
-        .overlay(
-            RoundedRectangle(cornerRadius: 10).stroke(state.tint.opacity(0.35), lineWidth: 1)
-        )
     }
 }
 
@@ -169,52 +171,132 @@ struct HostSourceTable: View {
     let onAttach: (HostRow) -> Void
     let onOpenFolder: (HostRow) -> Void
 
-    var body: some View {
-        Table(rows) {
-            TableColumn("Source") { cell($0, $0.source) }.width(min: 96, ideal: 120)
-            TableColumn("Size") { cell($0, $0.size) }.width(min: 60, ideal: 70)
-            TableColumn("Viewers") { cell($0, $0.viewers) }.width(min: 44, ideal: 50)
-            TableColumn("Client") { cell($0, $0.client) }.width(min: 80, ideal: 100)
-            TableColumn("Capture") { cell($0, $0.capture) }.width(min: 46, ideal: 50)
-            TableColumn("Send") { cell($0, $0.send) }.width(min: 42, ideal: 44)
-            TableColumn("Mbps") { cell($0, $0.mbps) }.width(min: 44, ideal: 48)
-            TableColumn("RTT") { cell($0, $0.rtt) }.width(min: 42, ideal: 48)
-            TableColumn("") { action($0) }.width(92)
-            TableColumn("") { attach($0) }.width(110)
-        }
+    private struct Column {
+        let title: String
+        let width: CGFloat
+        let alignment: Alignment
+        let mono: Bool
     }
 
-    private func cell(_ row: HostRow, _ text: String) -> some View {
-        Text(text).foregroundStyle(row.online ? DeskhubPalette.online : DeskhubPalette.heading)
-    }
+    private static let metrics = dh_host_table_metrics()
+    private static let cellGap = CGFloat(metrics.cellGap)
+    private static let barWidth = CGFloat(metrics.barWidth)
+    private static let rowHeight = CGFloat(metrics.rowHeight)
+    private static let headerHeight = CGFloat(metrics.headerHeight)
+    private static let actionWidth = CGFloat(metrics.actionWidth)
+    private static let ruleMargin = CGFloat(metrics.ruleMargin)
 
-    private func action(_ row: HostRow) -> some View {
-        let remoteRow = row.viewer && !row.attachedLocally
-        return Button(
-            DeskhubClient.string(
-                remoteRow ? DHStrDisconnectViewerAction : DHStrStopDisplayAction
+    private static let columns = DeskhubClient.ffiList(
+        16, DHHostColumn(), { dh_host_columns($0, $1) },
+        { raw in
+            Column(
+                title: DeskhubClient.cString(raw.title),
+                width: CGFloat(raw.width),
+                alignment: raw.trailing ? .trailing : .leading,
+                mono: raw.mono
             )
-        ) {
-            onAction(row)
         }
-        .buttonStyle(.borderedProminent)
-        .controlSize(.small)
-        .tint(remoteRow ? DeskhubPalette.warning : DeskhubPalette.offline)
+    )
+
+    var body: some View {
+        VStack(spacing: 0) {
+            header
+            Rectangle().fill(DeskhubPalette.rowLine).frame(height: 1)
+            ScrollView([.vertical, .horizontal]) {
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
+                        if !row.viewer, index > 0 {
+                            Rectangle().fill(DeskhubPalette.rowLine).frame(height: 1)
+                                .padding(.vertical, HostSourceTable.ruleMargin)
+                        }
+                        rowView(row)
+                    }
+                }
+            }
+        }
+        .overlay(Rectangle().stroke(DeskhubPalette.rowLine, lineWidth: 1))
+    }
+
+    private var header: some View {
+        HStack(spacing: HostSourceTable.cellGap) {
+            Color.clear.frame(width: HostSourceTable.barWidth)
+            ForEach(HostSourceTable.columns, id: \.title) { column in
+                Text(column.title)
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(DeskhubPalette.muted)
+                    .frame(width: column.width, alignment: column.alignment)
+            }
+            Spacer(minLength: 0)
+        }
+        .frame(height: HostSourceTable.headerHeight)
+        .background(DeskhubPalette.panelIdle)
+    }
+
+    private func rowView(_ row: HostRow) -> some View {
+        let texts = [row.source, row.size, row.viewers, row.client, row.capture, row.send,
+                     row.mbps, row.rtt]
+        return HStack(spacing: HostSourceTable.cellGap) {
+            Rectangle()
+                .fill(row.online ? DeskhubPalette.online : DeskhubPalette.rowLine)
+                .frame(width: HostSourceTable.barWidth)
+            ForEach(Array(HostSourceTable.columns.enumerated()), id: \.offset) { index, column in
+                cell(texts[index], column: column, bold: index == 0 && !row.viewer,
+                     online: row.online)
+            }
+            action(row)
+            attach(row)
+            Spacer(minLength: 0)
+        }
+        .frame(height: HostSourceTable.rowHeight)
+        .background(row.viewer ? DeskhubPalette.viewerRow : Color.clear)
+    }
+
+    private func cell(_ text: String, column: Column, bold: Bool, online: Bool) -> some View {
+        Text(text)
+            .font(column.mono ? .system(.body, design: .monospaced) : .body)
+            .fontWeight(bold ? .bold : .regular)
+            .foregroundStyle(online ? DeskhubPalette.heading : DeskhubPalette.muted)
+            .lineLimit(1)
+            .truncationMode(.tail)
+            .frame(width: column.width, alignment: column.alignment)
+    }
+
+    @ViewBuilder
+    private func action(_ row: HostRow) -> some View {
+        if row.files, row.viewer {
+            Color.clear.frame(width: HostSourceTable.actionWidth)
+        } else {
+            let remoteRow = row.viewer && !row.attachedLocally
+            let title = remoteRow ? DHStrDisconnectViewerAction : DHStrStopDisplayAction
+            rowButton(
+                DeskhubClient.string(title),
+                tint: remoteRow ? DeskhubPalette.warning : DeskhubPalette.offline
+            ) { onAction(row) }
+        }
     }
 
     @ViewBuilder
     private func attach(_ row: HostRow) -> some View {
         if row.canAttachLocally {
-            Button(DeskhubClient.string(DHStrAttachShellAction)) { onAttach(row) }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.small)
-                .tint(DeskhubPalette.offline)
+            rowButton(DeskhubClient.string(DHStrAttachShellAction), tint: DeskhubPalette.offline) {
+                onAttach(row)
+            }
         } else if row.files, !row.viewer {
-            Button(DeskhubClient.string(DHStrOpenFolderAction)) { onOpenFolder(row) }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.small)
-                .tint(DeskhubPalette.accent)
+            rowButton(DeskhubClient.string(DHStrOpenFolderAction), tint: DeskhubPalette.accent) {
+                onOpenFolder(row)
+            }
         }
+    }
+
+    private func rowButton(_ title: String, tint: Color, action: @escaping () -> Void)
+        -> some View
+    {
+        Button(action: action) {
+            Text(title).frame(width: HostSourceTable.actionWidth - 16)
+        }
+        .buttonStyle(.borderedProminent)
+        .controlSize(.small)
+        .tint(tint)
     }
 }
 

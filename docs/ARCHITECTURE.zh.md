@@ -271,6 +271,15 @@ runner 上与 base commit 的 A/B 结果（偏移仅作为警告，不导致失�
 
 ## 9. 需要记录的设计决策
 
+- **桌面界面显示什么，由 `core/ui` 中的数据决定，而不是各个应用各写一份代码**：配色
+  （`Theme.h`，每种颜色有浅色和深色两个值）、主机实时表格的列与尺寸（`HostRows.h`），以及
+  Settings 页面的区域、分节与顺序（`SettingsLayout.h`）都只定义一次。Windows 直接读取，
+  macOS 通过 `dh_theme_color`、`dh_host_columns` 和 `dh_settings_layout` 读取，Android 通过
+  `dh_theme_color` 读取。应用只决定用哪个控件绘制某个 `SettingField`。此前每个应用各自保存
+  同一批颜色值和页面顺序的副本，久而久之彼此偏离：Windows 上的红色按钮在 macOS 上是灰色，
+  两个桌面上都有的设置在第三个桌面上缺失。布局测试会检查每个已保存的设置恰好出现一次，
+  因此应用再也无法悄悄漏掉某个设置。
+
 - **返回 false 的 capability probe 可能使整个控制环失效。** 当 MFT 未提供
   `CODECAPI_AVEncCommonMeanBitRate` 时，Media Foundation 的 encoder 会对 `SetBitrate`
   返回 `false`，而 `ApplyFeedback` 正确地将该拒绝理解为「未应用任何变更」。在报告
