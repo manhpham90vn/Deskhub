@@ -12,7 +12,6 @@ inline constexpr const char* kAuthSaltFileName = "auth_salt";
 AuthSalt LoadOrCreateAuthSalt();
 
 deskhub::PairedDevices LoadPairedDevices();
-bool SavePairedDevices(const deskhub::PairedDevices& devices);
 
 deskhub::PairVerdict CheckPairedDevice(const deskhub::Fingerprint& fingerprint);
 bool RememberPairedDevice(const deskhub::Fingerprint& fingerprint, std::string_view name,
