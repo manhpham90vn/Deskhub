@@ -158,12 +158,12 @@ const char* const kStyleSheet =
     "button.combo { background-color: #ffffff; }"
     "button.titlebutton { background-color: transparent; border: none; }"
     "button.titlebutton:hover { background-color: transparent; }"
-    "headerbar.deskhub-headerbar { background-image: none; background-color: #f3f4f6; color: #111827;"
+    "headerbar { background-image: none; background-color: #f3f4f6; color: #111827;"
     " border-bottom: 1px solid #d1d5db; }"
-    "headerbar.deskhub-headerbar label { color: #111827; }"
-    "headerbar.deskhub-headerbar button.titlebutton { background-image: none; background-color: #ffffff;"
+    "headerbar label { color: #111827; }"
+    "headerbar button.titlebutton { background-image: none; background-color: #ffffff;"
     " border: 1px solid #d1d5db; color: #111827; }"
-    "headerbar.deskhub-headerbar button.titlebutton:hover { background-color: #e5e7eb; }"
+    "headerbar button.titlebutton:hover { background-color: #e5e7eb; }"
     "menu { background-color: #ffffff; }"
     "menuitem { color: #111827; }"
     "menuitem:hover { background-color: #2563eb; color: #ffffff; }"
@@ -571,7 +571,6 @@ void MainWindow::Build(GtkApplication* app) {
     gtk_header_bar_set_title(GTK_HEADER_BAR(titlebar), ui::kAppTitle);
     gtk_header_bar_set_has_subtitle(GTK_HEADER_BAR(titlebar), FALSE);
     gtk_header_bar_set_show_close_button(GTK_HEADER_BAR(titlebar), TRUE);
-    AddClass(titlebar, "deskhub-headerbar");
     gtk_window_set_titlebar(GTK_WINDOW(window_), titlebar);
     gtk_window_set_default_size(GTK_WINDOW(window_), kWindowW, kWindowH);
     gtk_window_set_position(GTK_WINDOW(window_), GTK_WIN_POS_CENTER);
