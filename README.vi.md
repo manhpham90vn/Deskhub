@@ -20,11 +20,48 @@ không làm được.**
 [![codeql](https://github.com/manhpham90vn/Deskhub/actions/workflows/codeql.yml/badge.svg)](https://github.com/manhpham90vn/Deskhub/actions/workflows/codeql.yml)
 [![nightly](https://github.com/manhpham90vn/Deskhub/actions/workflows/nightly.yml/badge.svg)](https://github.com/manhpham90vn/Deskhub/actions/workflows/nightly.yml)
 
-**[Cài đặt](docs/INSTALL.vi.md)** · [Build từ source](docs/BUILD.vi.md) ·
+**[Cài đặt](#install)** · [Build từ source](docs/BUILD.vi.md) ·
 [Spec](docs/SPECIFICATION.vi.md) · [Architecture](docs/ARCHITECTURE.vi.md) ·
 [Security](SECURITY.vi.md)
 
 </div>
+
+**Mục lục:** [Cài đặt](#install) · [Demo](#demo) · [Giới thiệu](#about) · [Vì sao](#why) · [Nền tảng](#platforms) ·
+[Bên trong có gì](#features) · [Tài liệu](#docs) · [License](#license)
+
+<a id="install"></a>
+
+## 📦 Cài đặt
+
+Cài qua package manager, vừa cài vừa được tự cập nhật — Windows, macOS, và Ubuntu / Debian / Mint:
+
+```bash
+winget install ManhPham.Deskhub                  # Windows · app
+winget install ManhPham.DeskhubCLI               # Windows · deskhub-cli
+brew install --cask manhpham90vn/tap/deskhub     # macOS · app
+brew install manhpham90vn/tap/deskhub-cli        # macOS · deskhub-cli
+```
+
+Trên Ubuntu / Debian / Mint, package `deskhub` cài cả app lẫn `deskhub-cli`:
+
+```bash
+sudo install -d /etc/apt/keyrings
+curl -fsSL https://manhpham90vn.github.io/Deskhub/apt/deskhub.gpg | sudo tee /etc/apt/keyrings/deskhub.gpg >/dev/null
+echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/deskhub.gpg] https://manhpham90vn.github.io/Deskhub/apt stable main" \
+  | sudo tee /etc/apt/sources.list.d/deskhub.list
+sudo apt update && sudo apt install deskhub
+```
+
+Các nền tảng còn lại lấy trên [Releases](https://github.com/manhpham90vn/Deskhub/releases):
+
+- **Fedora / openSUSE** — `sudo dnf install ./deskhub-v*-x86_64.rpm` (hoặc `zypper install`)
+- **Arch, Linux khác** — bản portable `deskhub-v*-linux-x86_64`, `chmod +x` rồi chạy
+- **Android** — `deskhub-v*-android.apk`, hoặc [bản beta trên Play](https://play.google.com/apps/testing/com.manhpham.deskhub)
+- **iOS** — [TestFlight](https://testflight.apple.com/join/7qY7wgpd)
+
+Chi tiết và quyền cần cấp trên từng nền tảng: [INSTALL.vi.md](docs/INSTALL.vi.md).
+
+<a id="demo"></a>
 
 ## 👀 Demo
 
@@ -69,6 +106,8 @@ không làm được.**
 </p>
 <p align="center"><sub><b>Android</b> — vẫn bốn trang đó, theo Material Design. Khi làm host, Android 10+ chỉ share màn hình ở chế độ view-only.</sub></p>
 
+<a id="about"></a>
+
 ## 📖 Giới thiệu
 
 Một **core C++20** duy nhất chạy trên mọi nền tảng, từ Windows đến iPhone, không phải viết
@@ -86,12 +125,16 @@ minh được mình biết passcode của host — thông qua **SPAKE2**, nên p
 ngắn nằm trên port đang mở: hãy dùng network tin cậy hoặc VPN, và **không port-forward
 UDP 47777**. Threat model đầy đủ nằm trong [`SECURITY.vi.md`](SECURITY.vi.md).
 
+<a id="why"></a>
+
 ## 💡 Vì sao
 
 - 💻 **Công việc** — chạy Claude Code, VS Code hoặc build trên PC ở nhà, từ một laptop cấu hình thấp hoặc từ iPad.
 - 🌐 **Mọi thứ** — điều khiển Chrome, Office hoặc phần mềm chỉ chạy trên PC, từ bất kỳ thiết bị nào.
 - 🎮 **Game** — 60 fps, relative mouse và scancode DirectInput, pointer lock bằng `F9`.
 - 🖥️ **Nhiều display** — share một hoặc nhiều display, mỗi display là một session riêng.
+
+<a id="platforms"></a>
 
 ## 🚦 Nền tảng
 
@@ -103,35 +146,7 @@ UDP 47777**. Threat model đầy đủ nằm trong [`SECURITY.vi.md`](SECURITY.v
 | **iOS** | ✅ | ✅ | Client: video và input (trackpad, keyboard). Host: share màn hình view-only qua Broadcast Upload Extension (ReplayKit + VideoToolbox) — đang thử nghiệm qua TestFlight |
 | **Linux** | ✅ | ✅ | Cả hai vai trò đều hoạt động (PipeWire + VA-API + uinput + GTK3) — Ubuntu, Debian, Mint, Fedora, openSUSE, Arch qua deb / rpm / binary chạy trực tiếp; đã kiểm chứng giữa hai máy trong LAN |
 
-## 📦 Cài đặt
-
-Cài qua package manager, vừa cài vừa được tự cập nhật — Windows, macOS, và Ubuntu / Debian / Mint:
-
-```bash
-winget install ManhPham.Deskhub                  # Windows · app
-winget install ManhPham.DeskhubCLI               # Windows · deskhub-cli
-brew install --cask manhpham90vn/tap/deskhub     # macOS · app
-brew install manhpham90vn/tap/deskhub-cli        # macOS · deskhub-cli
-```
-
-Trên Ubuntu / Debian / Mint, package `deskhub` cài cả app lẫn `deskhub-cli`:
-
-```bash
-sudo install -d /etc/apt/keyrings
-curl -fsSL https://manhpham90vn.github.io/Deskhub/apt/deskhub.gpg | sudo tee /etc/apt/keyrings/deskhub.gpg >/dev/null
-echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/deskhub.gpg] https://manhpham90vn.github.io/Deskhub/apt stable main" \
-  | sudo tee /etc/apt/sources.list.d/deskhub.list
-sudo apt update && sudo apt install deskhub
-```
-
-Các nền tảng còn lại lấy trên [Releases](https://github.com/manhpham90vn/Deskhub/releases):
-
-- **Fedora / openSUSE** — `sudo dnf install ./deskhub-v*-x86_64.rpm` (hoặc `zypper install`)
-- **Arch, Linux khác** — bản portable `deskhub-v*-linux-x86_64`, `chmod +x` rồi chạy
-- **Android** — `deskhub-v*-android.apk`, hoặc [bản beta trên Play](https://play.google.com/apps/testing/com.manhpham.deskhub)
-- **iOS** — [TestFlight](https://testflight.apple.com/join/7qY7wgpd)
-
-Chi tiết và quyền cần cấp trên từng nền tảng: [INSTALL.vi.md](docs/INSTALL.vi.md).
+<a id="features"></a>
 
 ## ✨ Bên trong có gì
 
@@ -142,6 +157,8 @@ Chi tiết và quyền cần cấp trên từng nền tảng: [INSTALL.vi.md](do
 - **Core dùng chung** — protocol, FEC và bitrate control nằm trong `core/`, được compile vào mọi client.
 - **Có cả command line** — `deskhub-cli` share màn hình, mở remote shell và điều khiển host từ script hoặc qua SSH, không cần GUI toolkit. Xem [Build](docs/BUILD.vi.md#command-line-client).
 - **Được kiểm thử kỹ** — core có unit test chạy offline. CI chạy thêm ASan, UBSan và TSan. Bảy libFuzzer target kiểm tra wire format, phần parse H.264, reassembly, byte stream của terminal, chuỗi UI và các session state machine mỗi đêm. Mỗi crash phát hiện được bổ sung thành một regression test.
+
+<a id="docs"></a>
 
 ## 📚 Tài liệu
 
@@ -160,6 +177,8 @@ Mọi tài liệu đều được xuất bản bằng tiếng Anh, kèm bản d�
 
 Báo lỗi và góp ý: [issues](https://github.com/manhpham90vn/Deskhub/issues) — vui lòng ghi
 kèm model thiết bị.
+
+<a id="license"></a>
 
 ## 📄 License
 

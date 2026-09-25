@@ -20,11 +20,48 @@ remote desktop —— 通常のリモートデスクトップでは実現でき�
 [![codeql](https://github.com/manhpham90vn/Deskhub/actions/workflows/codeql.yml/badge.svg)](https://github.com/manhpham90vn/Deskhub/actions/workflows/codeql.yml)
 [![nightly](https://github.com/manhpham90vn/Deskhub/actions/workflows/nightly.yml/badge.svg)](https://github.com/manhpham90vn/Deskhub/actions/workflows/nightly.yml)
 
-**[インストール](docs/INSTALL.ja.md)** · [source から build](docs/BUILD.ja.md) ·
+**[インストール](#install)** · [source から build](docs/BUILD.ja.md) ·
 [Spec](docs/SPECIFICATION.ja.md) · [Architecture](docs/ARCHITECTURE.ja.md) ·
 [Security](SECURITY.ja.md)
 
 </div>
+
+**目次:** [インストール](#install) · [デモ](#demo) · [概要](#about) · [用途](#why) · [対応プラットフォーム](#platforms) ·
+[中身](#features) · [ドキュメント](#docs) · [ライセンス](#license)
+
+<a id="install"></a>
+
+## 📦 インストール
+
+package manager を使えば、インストールとその後の更新を任せられる —— Windows、macOS、Ubuntu / Debian / Mint：
+
+```bash
+winget install ManhPham.Deskhub                  # Windows · app
+winget install ManhPham.DeskhubCLI               # Windows · deskhub-cli
+brew install --cask manhpham90vn/tap/deskhub     # macOS · app
+brew install manhpham90vn/tap/deskhub-cli        # macOS · deskhub-cli
+```
+
+Ubuntu / Debian / Mint では、`deskhub` package が app と `deskhub-cli` の両方をインストールする。
+
+```bash
+sudo install -d /etc/apt/keyrings
+curl -fsSL https://manhpham90vn.github.io/Deskhub/apt/deskhub.gpg | sudo tee /etc/apt/keyrings/deskhub.gpg >/dev/null
+echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/deskhub.gpg] https://manhpham90vn.github.io/Deskhub/apt stable main" \
+  | sudo tee /etc/apt/sources.list.d/deskhub.list
+sudo apt update && sudo apt install deskhub
+```
+
+その他のプラットフォームは [Releases](https://github.com/manhpham90vn/Deskhub/releases) から：
+
+- **Fedora / openSUSE** —— `sudo dnf install ./deskhub-v*-x86_64.rpm`（または `zypper install`）
+- **Arch、その他の Linux** —— portable 版 `deskhub-v*-linux-x86_64` を `chmod +x` して実行
+- **Android** —— `deskhub-v*-android.apk`、または [Play の beta](https://play.google.com/apps/testing/com.manhpham.deskhub)
+- **iOS** —— [TestFlight](https://testflight.apple.com/join/7qY7wgpd)
+
+プラットフォームごとの詳細と必要な権限：[INSTALL.ja.md](docs/INSTALL.ja.md)。
+
+<a id="demo"></a>
 
 ## 👀 デモ
 
@@ -69,6 +106,8 @@ remote desktop —— 通常のリモートデスクトップでは実現でき�
 </p>
 <p align="center"><sub><b>Android</b> —— 同じ 4 ページを Material Design で構成している。host としては、Android 10+ で view-only の画面共有のみを行う。</sub></p>
 
+<a id="about"></a>
+
 ## 📖 概要
 
 一つの **C++20 core** が、Windows から iPhone まですべてのプラットフォームで動作し、
@@ -88,12 +127,16 @@ passcode 自体は送信されない —— または host 側の利用者が承
 使用し、**UDP 47777 を port-forward しないこと**。完全な threat model は
 [`SECURITY.ja.md`](SECURITY.ja.md) を参照。
 
+<a id="why"></a>
+
 ## 💡 用途
 
 - 💻 **作業** —— 性能の低いノート PC や iPad から、自宅 PC の Claude Code、VS Code、build を実行する。
 - 🌐 **汎用** —— Chrome、Office、PC 専用ソフトウェアを任意の端末から操作する。
 - 🎮 **ゲーム** —— 60 fps、relative mouse と DirectInput scancode、`F9` による pointer lock。
 - 🖥️ **マルチ display** —— display を 1 つまたは複数共有し、それぞれが独立した session となる。
+
+<a id="platforms"></a>
 
 ## 🚦 対応プラットフォーム
 
@@ -105,35 +148,7 @@ passcode 自体は送信されない —— または host 側の利用者が承
 | **iOS** | ✅ | ✅ | Client: video と input（trackpad、keyboard）。Host: Broadcast Upload Extension による view-only の画面共有（ReplayKit + VideoToolbox）—— TestFlight でテスト中 |
 | **Linux** | ✅ | ✅ | 両方の役割が動作（PipeWire + VA-API + uinput + GTK3）—— Ubuntu、Debian、Mint、Fedora、openSUSE、Arch に deb / rpm / portable binary で提供。2 台間の LAN で検証済み |
 
-## 📦 インストール
-
-package manager を使えば、インストールとその後の更新を任せられる —— Windows、macOS、Ubuntu / Debian / Mint：
-
-```bash
-winget install ManhPham.Deskhub                  # Windows · app
-winget install ManhPham.DeskhubCLI               # Windows · deskhub-cli
-brew install --cask manhpham90vn/tap/deskhub     # macOS · app
-brew install manhpham90vn/tap/deskhub-cli        # macOS · deskhub-cli
-```
-
-Ubuntu / Debian / Mint では、`deskhub` package が app と `deskhub-cli` の両方をインストールする。
-
-```bash
-sudo install -d /etc/apt/keyrings
-curl -fsSL https://manhpham90vn.github.io/Deskhub/apt/deskhub.gpg | sudo tee /etc/apt/keyrings/deskhub.gpg >/dev/null
-echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/deskhub.gpg] https://manhpham90vn.github.io/Deskhub/apt stable main" \
-  | sudo tee /etc/apt/sources.list.d/deskhub.list
-sudo apt update && sudo apt install deskhub
-```
-
-その他のプラットフォームは [Releases](https://github.com/manhpham90vn/Deskhub/releases) から：
-
-- **Fedora / openSUSE** —— `sudo dnf install ./deskhub-v*-x86_64.rpm`（または `zypper install`）
-- **Arch、その他の Linux** —— portable 版 `deskhub-v*-linux-x86_64` を `chmod +x` して実行
-- **Android** —— `deskhub-v*-android.apk`、または [Play の beta](https://play.google.com/apps/testing/com.manhpham.deskhub)
-- **iOS** —— [TestFlight](https://testflight.apple.com/join/7qY7wgpd)
-
-プラットフォームごとの詳細と必要な権限：[INSTALL.ja.md](docs/INSTALL.ja.md)。
+<a id="features"></a>
 
 ## ✨ 中身
 
@@ -144,6 +159,8 @@ sudo apt update && sudo apt install deskhub
 - **共有された core** —— protocol、FEC、bitrate control は `core/` にあり、すべての client にコンパイルされる。
 - **command line も提供** —— `deskhub-cli` は画面の共有、remote shell の起動、スクリプトや SSH 経由での host の操作を行う。GUI toolkit は不要。[Build](docs/BUILD.ja.md#command-line-client) を参照。
 - **十分にテストされている** —— core にはオフラインで動作する unit test がある。CI では ASan、UBSan、TSan も実行する。7 つの libFuzzer target が、wire format、H.264 の parse、reassembly、terminal の byte stream、UI の文字列、session state machine を毎晩検査する。検出された crash はいずれも regression test として追加される。
+
+<a id="docs"></a>
 
 ## 📚 ドキュメント
 
@@ -162,6 +179,8 @@ sudo apt update && sudo apt install deskhub
 
 バグ報告と意見: [issues](https://github.com/manhpham90vn/Deskhub/issues) —— 端末の機種名
 を添えてほしい。
+
+<a id="license"></a>
 
 ## 📄 ライセンス
 

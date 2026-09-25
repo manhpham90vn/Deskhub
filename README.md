@@ -19,11 +19,48 @@ enough to actually play games remotely, which ordinary remote desktop tools can'
 [![codeql](https://github.com/manhpham90vn/Deskhub/actions/workflows/codeql.yml/badge.svg)](https://github.com/manhpham90vn/Deskhub/actions/workflows/codeql.yml)
 [![nightly](https://github.com/manhpham90vn/Deskhub/actions/workflows/nightly.yml/badge.svg)](https://github.com/manhpham90vn/Deskhub/actions/workflows/nightly.yml)
 
-**[Install](docs/INSTALL.md)** · [Build from source](docs/BUILD.md) ·
+**[Install](#install)** · [Build from source](docs/BUILD.md) ·
 [Spec](docs/SPECIFICATION.md) · [Architecture](docs/ARCHITECTURE.md) ·
 [Security](SECURITY.md)
 
 </div>
+
+**Contents:** [Install](#install) · [Demo](#demo) · [About](#about) · [Why](#why) · [Platforms](#platforms) ·
+[What's inside](#features) · [Docs](#docs) · [License](#license)
+
+<a id="install"></a>
+
+## 📦 Install
+
+Through a package manager, which also keeps it up to date — Windows, macOS, and Ubuntu / Debian / Mint:
+
+```bash
+winget install ManhPham.Deskhub                  # Windows · app
+winget install ManhPham.DeskhubCLI               # Windows · deskhub-cli
+brew install --cask manhpham90vn/tap/deskhub     # macOS · app
+brew install manhpham90vn/tap/deskhub-cli        # macOS · deskhub-cli
+```
+
+On Ubuntu / Debian / Mint, the `deskhub` package brings both the app and `deskhub-cli`:
+
+```bash
+sudo install -d /etc/apt/keyrings
+curl -fsSL https://manhpham90vn.github.io/Deskhub/apt/deskhub.gpg | sudo tee /etc/apt/keyrings/deskhub.gpg >/dev/null
+echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/deskhub.gpg] https://manhpham90vn.github.io/Deskhub/apt stable main" \
+  | sudo tee /etc/apt/sources.list.d/deskhub.list
+sudo apt update && sudo apt install deskhub
+```
+
+Everything else is on [Releases](https://github.com/manhpham90vn/Deskhub/releases):
+
+- **Fedora / openSUSE** — `sudo dnf install ./deskhub-v*-x86_64.rpm` (or `zypper install`)
+- **Arch, other Linux** — portable `deskhub-v*-linux-x86_64`, just `chmod +x` and run
+- **Android** — `deskhub-v*-android.apk`, or the [Play beta](https://play.google.com/apps/testing/com.manhpham.deskhub)
+- **iOS** — [TestFlight](https://testflight.apple.com/join/7qY7wgpd)
+
+Details and permissions per platform: [INSTALL.md](docs/INSTALL.md).
+
+<a id="demo"></a>
 
 ## 👀 Demo
 
@@ -68,6 +105,8 @@ enough to actually play games remotely, which ordinary remote desktop tools can'
 </p>
 <p align="center"><sub><b>Android</b> — the same four pages in Material dress. Hosting is a view-only screen share on Android 10+.</sub></p>
 
+<a id="about"></a>
+
 ## 📖 About
 
 One **C++20 core** runs everywhere — Windows to iPhone — with zero protocol rewrites.
@@ -85,12 +124,16 @@ by proving it knows the host's passcode — via **SPAKE2**, so the code itself n
 network you trust or a VPN, and **never port-forward UDP 47777**. Full threat model in
 [`SECURITY.md`](SECURITY.md).
 
+<a id="why"></a>
+
 ## 💡 Why
 
 - 💻 **Work** — run Claude Code, VS Code, or builds on your home PC from a weak laptop or an iPad at a café.
 - 🌐 **Anything** — drive Chrome, Office, or PC-only software from any device.
 - 🎮 **Games** — 60 fps, relative mouse + DirectInput scancodes, `F9` pointer lock.
 - 🖥️ **Multi-monitor** — share one or several displays, each as its own session.
+
+<a id="platforms"></a>
 
 ## 🚦 Platforms
 
@@ -102,35 +145,7 @@ network you trust or a VPN, and **never port-forward UDP 47777**. Full threat mo
 | **iOS** | ✅ | ✅ | Client: video + input (trackpad, keyboard). Host: view-only screen share via a Broadcast Upload Extension (ReplayKit + VideoToolbox) — testing via TestFlight |
 | **Linux** | ✅ | ✅ | Both roles working (PipeWire + VA-API + uinput + GTK3) — Ubuntu, Debian, Mint, Fedora, openSUSE, Arch via deb / rpm / portable binary; verified between two machines over LAN |
 
-## 📦 Install
-
-Through a package manager, which also keeps it up to date — Windows, macOS, and Ubuntu / Debian / Mint:
-
-```bash
-winget install ManhPham.Deskhub                  # Windows · app
-winget install ManhPham.DeskhubCLI               # Windows · deskhub-cli
-brew install --cask manhpham90vn/tap/deskhub     # macOS · app
-brew install manhpham90vn/tap/deskhub-cli        # macOS · deskhub-cli
-```
-
-On Ubuntu / Debian / Mint, the `deskhub` package brings both the app and `deskhub-cli`:
-
-```bash
-sudo install -d /etc/apt/keyrings
-curl -fsSL https://manhpham90vn.github.io/Deskhub/apt/deskhub.gpg | sudo tee /etc/apt/keyrings/deskhub.gpg >/dev/null
-echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/deskhub.gpg] https://manhpham90vn.github.io/Deskhub/apt stable main" \
-  | sudo tee /etc/apt/sources.list.d/deskhub.list
-sudo apt update && sudo apt install deskhub
-```
-
-Everything else is on [Releases](https://github.com/manhpham90vn/Deskhub/releases):
-
-- **Fedora / openSUSE** — `sudo dnf install ./deskhub-v*-x86_64.rpm` (or `zypper install`)
-- **Arch, other Linux** — portable `deskhub-v*-linux-x86_64`, just `chmod +x` and run
-- **Android** — `deskhub-v*-android.apk`, or the [Play beta](https://play.google.com/apps/testing/com.manhpham.deskhub)
-- **iOS** — [TestFlight](https://testflight.apple.com/join/7qY7wgpd)
-
-Details and permissions per platform: [INSTALL.md](docs/INSTALL.md).
+<a id="features"></a>
 
 ## ✨ What's inside
 
@@ -141,6 +156,8 @@ Details and permissions per platform: [INSTALL.md](docs/INSTALL.md).
 - **One shared core** — protocol, FEC, and bitrate control live in `core/`, compiled into every client.
 - **A command line too** — `deskhub-cli` shares a screen, opens a remote shell and drives a host from a script or over SSH, with no GUI toolkit at all. See [Build](docs/BUILD.md#the-command-line-client).
 - **Beaten up on purpose** — the core is unit-tested offline, runs under ASan, UBSan and TSan in CI, and seven libFuzzer targets hammer the wire format, H.264 parsing, reassembly, terminal bytes, UI text and the session state machines every night; every crash found becomes a regression test.
+
+<a id="docs"></a>
 
 ## 📚 Docs
 
@@ -160,6 +177,8 @@ authoritative one.
 
 Bugs and feedback: [issues](https://github.com/manhpham90vn/Deskhub/issues) — include your
 device model.
+
+<a id="license"></a>
 
 ## 📄 License
 

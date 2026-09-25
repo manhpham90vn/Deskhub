@@ -19,11 +19,48 @@
 [![codeql](https://github.com/manhpham90vn/Deskhub/actions/workflows/codeql.yml/badge.svg)](https://github.com/manhpham90vn/Deskhub/actions/workflows/codeql.yml)
 [![nightly](https://github.com/manhpham90vn/Deskhub/actions/workflows/nightly.yml/badge.svg)](https://github.com/manhpham90vn/Deskhub/actions/workflows/nightly.yml)
 
-**[安装](docs/INSTALL.zh.md)** · [从 source 构建](docs/BUILD.zh.md) ·
+**[安装](#install)** · [从 source 构建](docs/BUILD.zh.md) ·
 [Spec](docs/SPECIFICATION.zh.md) · [Architecture](docs/ARCHITECTURE.zh.md) ·
 [Security](SECURITY.zh.md)
 
 </div>
+
+**目录:** [安装](#install) · [演示](#demo) · [关于](#about) · [为什么](#why) · [平台](#platforms) ·
+[里面有什么](#features) · [文档](#docs) · [许可证](#license)
+
+<a id="install"></a>
+
+## 📦 安装
+
+通过 package manager 安装，并由它保持更新 —— Windows、macOS，以及 Ubuntu / Debian / Mint：
+
+```bash
+winget install ManhPham.Deskhub                  # Windows · app
+winget install ManhPham.DeskhubCLI               # Windows · deskhub-cli
+brew install --cask manhpham90vn/tap/deskhub     # macOS · app
+brew install manhpham90vn/tap/deskhub-cli        # macOS · deskhub-cli
+```
+
+在 Ubuntu / Debian / Mint 上，`deskhub` package 同时安装 app 与 `deskhub-cli`：
+
+```bash
+sudo install -d /etc/apt/keyrings
+curl -fsSL https://manhpham90vn.github.io/Deskhub/apt/deskhub.gpg | sudo tee /etc/apt/keyrings/deskhub.gpg >/dev/null
+echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/deskhub.gpg] https://manhpham90vn.github.io/Deskhub/apt stable main" \
+  | sudo tee /etc/apt/sources.list.d/deskhub.list
+sudo apt update && sudo apt install deskhub
+```
+
+其余平台请从 [Releases](https://github.com/manhpham90vn/Deskhub/releases) 获取：
+
+- **Fedora / openSUSE** —— `sudo dnf install ./deskhub-v*-x86_64.rpm`（或 `zypper install`）
+- **Arch 及其他 Linux** —— 免安装的 `deskhub-v*-linux-x86_64`，`chmod +x` 后运行
+- **Android** —— `deskhub-v*-android.apk`，或 [Play beta](https://play.google.com/apps/testing/com.manhpham.deskhub)
+- **iOS** —— [TestFlight](https://testflight.apple.com/join/7qY7wgpd)
+
+各平台的详细说明与所需权限：[INSTALL.zh.md](docs/INSTALL.zh.md)。
+
+<a id="demo"></a>
 
 ## 👀 演示
 
@@ -68,6 +105,8 @@
 </p>
 <p align="center"><sub><b>Android</b> —— 同样的四个页面，采用 Material Design。作为 host 时，Android 10+ 仅支持 view-only 的屏幕共享。</sub></p>
 
+<a id="about"></a>
+
 ## 📖 关于
 
 一份 **C++20 core** 运行于所有平台，从 Windows 到 iPhone，无需重写 protocol。共享一块
@@ -85,12 +124,16 @@ host 前的用户批准。即便如此，这仍然是一个开放 port 上的短
 VPN，并且**不要对 UDP 47777 做 port-forward**。完整的 threat model 见
 [`SECURITY.zh.md`](SECURITY.zh.md)。
 
+<a id="why"></a>
+
 ## 💡 为什么
 
 - 💻 **工作** —— 用配置较低的笔记本或 iPad，运行家中 PC 上的 Claude Code、VS Code 或 build。
 - 🌐 **任何用途** —— 从任意设备操作 Chrome、Office 或仅在 PC 上提供的软件。
 - 🎮 **游戏** —— 60 fps，relative mouse 与 DirectInput scancode，`F9` 触发 pointer lock。
 - 🖥️ **多 display** —— 共享一块或多块 display，每块各自构成一个 session。
+
+<a id="platforms"></a>
 
 ## 🚦 平台
 
@@ -102,35 +145,7 @@ VPN，并且**不要对 UDP 47777 做 port-forward**。完整的 threat model �
 | **iOS** | ✅ | ✅ | Client：video 与 input（trackpad、keyboard）。Host：通过 Broadcast Upload Extension 实现 view-only 屏幕共享（ReplayKit + VideoToolbox）—— 正在 TestFlight 上测试 |
 | **Linux** | ✅ | ✅ | 两个角色均可运行（PipeWire + VA-API + uinput + GTK3）—— 支持 Ubuntu、Debian、Mint、Fedora、openSUSE、Arch，通过 deb / rpm / 免安装 binary 提供；已在两台机器间通过 LAN 验证 |
 
-## 📦 安装
-
-通过 package manager 安装，并由它保持更新 —— Windows、macOS，以及 Ubuntu / Debian / Mint：
-
-```bash
-winget install ManhPham.Deskhub                  # Windows · app
-winget install ManhPham.DeskhubCLI               # Windows · deskhub-cli
-brew install --cask manhpham90vn/tap/deskhub     # macOS · app
-brew install manhpham90vn/tap/deskhub-cli        # macOS · deskhub-cli
-```
-
-在 Ubuntu / Debian / Mint 上，`deskhub` package 同时安装 app 与 `deskhub-cli`：
-
-```bash
-sudo install -d /etc/apt/keyrings
-curl -fsSL https://manhpham90vn.github.io/Deskhub/apt/deskhub.gpg | sudo tee /etc/apt/keyrings/deskhub.gpg >/dev/null
-echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/deskhub.gpg] https://manhpham90vn.github.io/Deskhub/apt stable main" \
-  | sudo tee /etc/apt/sources.list.d/deskhub.list
-sudo apt update && sudo apt install deskhub
-```
-
-其余平台请从 [Releases](https://github.com/manhpham90vn/Deskhub/releases) 获取：
-
-- **Fedora / openSUSE** —— `sudo dnf install ./deskhub-v*-x86_64.rpm`（或 `zypper install`）
-- **Arch 及其他 Linux** —— 免安装的 `deskhub-v*-linux-x86_64`，`chmod +x` 后运行
-- **Android** —— `deskhub-v*-android.apk`，或 [Play beta](https://play.google.com/apps/testing/com.manhpham.deskhub)
-- **iOS** —— [TestFlight](https://testflight.apple.com/join/7qY7wgpd)
-
-各平台的详细说明与所需权限：[INSTALL.zh.md](docs/INSTALL.zh.md)。
+<a id="features"></a>
 
 ## ✨ 里面有什么
 
@@ -141,6 +156,8 @@ sudo apt update && sudo apt install deskhub
 - **共享的 core** —— protocol、FEC 和 bitrate control 位于 `core/`，编译进每一个 client。
 - **提供 command line** —— `deskhub-cli` 可共享屏幕、打开 remote shell，并从脚本或通过 SSH 操作 host，不需要 GUI toolkit。见 [Build](docs/BUILD.zh.md#command-line-client)。
 - **经过充分测试** —— core 具备离线运行的 unit test。CI 另外运行 ASan、UBSan 和 TSan。七个 libFuzzer target 每晚检查 wire format、H.264 parse、reassembly、terminal 的 byte stream、UI 文案以及各个 session state machine。每个发现的 crash 都会补充为一个 regression test。
+
+<a id="docs"></a>
 
 ## 📚 文档
 
@@ -158,6 +175,8 @@ sudo apt update && sudo apt install deskhub
 | [`THIRD_PARTY_NOTICES.zh.md`](THIRD_PARTY_NOTICES.zh.md) ([en](THIRD_PARTY_NOTICES.md) · [vi](THIRD_PARTY_NOTICES.vi.md) · [ja](THIRD_PARTY_NOTICES.ja.md)) | 第三方组件与 license |
 
 问题反馈：[issues](https://github.com/manhpham90vn/Deskhub/issues) —— 请附上设备型号。
+
+<a id="license"></a>
 
 ## 📄 许可证
 
