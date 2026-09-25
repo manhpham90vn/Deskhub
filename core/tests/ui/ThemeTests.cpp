@@ -56,12 +56,11 @@ void TestDarkModeFlipsTheTextNotTheBrand() {
         "the sidebar is dark in both");
 }
 
-void TestColoursTravelAsHexAndPackedValues() {
-    std::printf("[theme] a colour reaches CSS and the FFI unchanged...\n");
+void TestColoursTravelAsPackedValues() {
+    std::printf("[theme] a colour reaches the FFI unchanged...\n");
     const ui::Rgb accent = ui::ThemeRgb(ui::ThemeColor::Accent, ui::ThemeMode::Light);
-    Check(ui::CssHex(accent) == "#2563eb", "CSS gets a lowercase #rrggbb");
     Check(ui::PackRgb(accent) == 0x2563EBu, "the FFI gets 0xRRGGBB");
-    Check(ui::CssHex(ui::Rgb{0, 0, 0}) == "#000000", "leading zeros are kept");
+    Check(ui::PackRgb(ui::Rgb{0, 0, 0}) == 0u, "zero channels stay zero");
 }
 
 void TestAnUnknownColourIsBlackNotACrash() {
@@ -75,6 +74,6 @@ void TestAnUnknownColourIsBlackNotACrash() {
 void RunThemeTests() {
     TestTextStaysReadableInBothModes();
     TestDarkModeFlipsTheTextNotTheBrand();
-    TestColoursTravelAsHexAndPackedValues();
+    TestColoursTravelAsPackedValues();
     TestAnUnknownColourIsBlackNotACrash();
 }

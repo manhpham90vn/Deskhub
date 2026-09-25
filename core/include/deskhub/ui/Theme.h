@@ -1,6 +1,5 @@
 #pragma once
 #include <cstdint>
-#include <string>
 
 namespace deskhub::ui {
 
@@ -50,7 +49,5 @@ enum class ThemeMode : uint8_t {
 Rgb ThemeRgb(ThemeColor color, ThemeMode mode);
 
 uint32_t PackRgb(Rgb color);
-
-std::string CssHex(Rgb color);
 
 }

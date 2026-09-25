@@ -2,7 +2,6 @@
 
 #include <array>
 #include <cstddef>
-#include <cstdio>
 
 namespace deskhub::ui {
 
@@ -74,12 +73,6 @@ Rgb ThemeRgb(ThemeColor color, ThemeMode mode) {
 
 uint32_t PackRgb(Rgb color) {
     return uint32_t(color.r) << 16 | uint32_t(color.g) << 8 | uint32_t(color.b);
-}
-
-std::string CssHex(Rgb color) {
-    char text[8] = {};
-    std::snprintf(text, sizeof(text), "#%02x%02x%02x", color.r, color.g, color.b);
-    return text;
 }
 
 }
