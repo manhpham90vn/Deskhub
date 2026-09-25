@@ -26,8 +26,16 @@ không làm được.**
 
 </div>
 
-**Mục lục:** [Cài đặt](#install) · [Demo](#demo) · [Giới thiệu](#about) · [Vì sao](#why) · [Nền tảng](#platforms) ·
-[Bên trong có gì](#features) · [Tài liệu](#docs) · [License](#license)
+**Mục lục:**
+
+- [Cài đặt](#install)
+- [Demo](#demo)
+- [Giới thiệu](#about)
+- [Vì sao](#why)
+- [Nền tảng](#platforms)
+- [Bên trong có gì](#features)
+- [Tài liệu](#docs)
+- [License](#license)
 
 <a id="install"></a>
 

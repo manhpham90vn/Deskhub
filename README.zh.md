@@ -25,8 +25,16 @@
 
 </div>
 
-**目录:** [安装](#install) · [演示](#demo) · [关于](#about) · [为什么](#why) · [平台](#platforms) ·
-[里面有什么](#features) · [文档](#docs) · [许可证](#license)
+**目录:**
+
+- [安装](#install)
+- [演示](#demo)
+- [关于](#about)
+- [为什么](#why)
+- [平台](#platforms)
+- [里面有什么](#features)
+- [文档](#docs)
+- [许可证](#license)
 
 <a id="install"></a>
 

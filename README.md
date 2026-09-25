@@ -25,8 +25,16 @@ enough to actually play games remotely, which ordinary remote desktop tools can'
 
 </div>
 
-**Contents:** [Install](#install) · [Demo](#demo) · [About](#about) · [Why](#why) · [Platforms](#platforms) ·
-[What's inside](#features) · [Docs](#docs) · [License](#license)
+**Contents:**
+
+- [Install](#install)
+- [Demo](#demo)
+- [About](#about)
+- [Why](#why)
+- [Platforms](#platforms)
+- [What's inside](#features)
+- [Docs](#docs)
+- [License](#license)
 
 <a id="install"></a>
 

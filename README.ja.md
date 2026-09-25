@@ -26,8 +26,16 @@ remote desktop —— 通常のリモートデスクトップでは実現でき�
 
 </div>
 
-**目次:** [インストール](#install) · [デモ](#demo) · [概要](#about) · [用途](#why) · [対応プラットフォーム](#platforms) ·
-[中身](#features) · [ドキュメント](#docs) · [ライセンス](#license)
+**目次:**
+
+- [インストール](#install)
+- [デモ](#demo)
+- [概要](#about)
+- [用途](#why)
+- [対応プラットフォーム](#platforms)
+- [中身](#features)
+- [ドキュメント](#docs)
+- [ライセンス](#license)
 
 <a id="install"></a>
 
