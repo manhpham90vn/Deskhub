@@ -52,7 +52,7 @@ constexpr int kPrimaryButtonH = 46;
 constexpr guint kRescanDelayMs = deskhubp::kLanRescanSecs * 1000;
 constexpr guint kCopiedRevertMs = 1500;
 
-float GtkAlign(ui::ColumnAlign align) {
+float ColumnXAlign(ui::ColumnAlign align) {
     return align == ui::ColumnAlign::Trailing ? 1.f : 0.f;
 }
 
@@ -68,9 +68,11 @@ const char* const kStyleSheet =
     ".deskhub-sidebar-title { color: #ffffff; font-weight: bold; font-size: 1.6em; }"
     ".deskhub-nav { background-image: none; background-color: transparent; border: none;"
     " box-shadow: none; color: #d1d5db; font-size: 1.1em; padding: 0 16px; border-radius: 8px; }"
+    ".deskhub-nav label { color: #d1d5db; }"
     ".deskhub-nav:hover { background-color: #374151; }"
     ".deskhub-nav:active { background-color: #374151; }"
     ".deskhub-nav-selected { background-color: #2563eb; color: #ffffff; font-weight: bold; }"
+    ".deskhub-nav-selected label { color: #ffffff; }"
     ".deskhub-nav-selected:hover { background-color: #2563eb; }"
     ".deskhub-nav-selected:active { background-color: #2563eb; }"
     ".deskhub-page { background-color: #ffffff; }"
@@ -81,12 +83,15 @@ const char* const kStyleSheet =
     ".deskhub-settings-area { padding: 16px; border: 1px solid #e5e7eb;"
     " border-left: 4px solid #2563eb; }"
     ".deskhub-settings-area-title { font-weight: bold; font-size: 1.25em; color: #111827; }"
-    ".deskhub-status-error { color: #c82828; }"
-    ".deskhub-status-online { color: #00913c; font-weight: bold; }"
-    ".deskhub-status-offline { color: #c82828; font-weight: bold; }"
+    "label.deskhub-status-error { color: #a51f1f; }"
+    "label.deskhub-status-online { color: #075e2b; background-color: #e8faef;"
+    " font-weight: bold; border-radius: 4px; padding: 2px 6px; }"
+    "label.deskhub-status-offline { color: #a51f1f; background-color: #fff0f0;"
+    " font-weight: bold; border-radius: 4px; padding: 2px 6px; }"
     ".deskhub-picker { padding: 8px; }"
     ".deskhub-footnote { color: #94a3b8; }"
     ".deskhub-link { color: #d1d5db; background-color: transparent; border: none; }"
+    ".deskhub-link label { color: #d1d5db; }"
     ".deskhub-link:hover { background-color: transparent; }"
     ".deskhub-link:active { background-color: transparent; }"
     ".deskhub-banner { padding: 10px; border-left: 4px solid #6b7280;"
@@ -94,14 +99,15 @@ const char* const kStyleSheet =
     ".deskhub-banner-busy { border-left-color: #2563eb; background-color: #ebf3ff; }"
     ".deskhub-banner-live { border-left-color: #00913c; background-color: #e8faef; }"
     ".deskhub-banner-state { font-weight: bold; font-size: 1.1em; color: #6b7280; }"
-    ".deskhub-banner-state-busy { color: #2563eb; }"
-    ".deskhub-banner-state-live { color: #00913c; }"
+    "label.deskhub-banner-state-busy { color: #1d4ed8; }"
+    "label.deskhub-banner-state-live { color: #075e2b; }"
     ".deskhub-passcode-card { padding: 10px; border-radius: 8px;"
     " background-color: #eff4ff; }"
     ".deskhub-passcode-code { font-family: monospace; font-weight: bold; font-size: 2.2em;"
     " letter-spacing: 4px; color: #111827; }"
     ".deskhub-primary { font-weight: bold; color: #ffffff; background-image: none;"
     " background-color: #2563eb; border: none; }"
+    ".deskhub-primary label, .deskhub-row-action label { color: #ffffff; }"
     ".deskhub-primary:hover { background-color: #2563eb; }"
     ".deskhub-primary:active { background-color: #1d4ed8; }"
     ".deskhub-primary:disabled { background-color: #93c5fd; color: #ffffff; }"
@@ -145,12 +151,19 @@ const char* const kStyleSheet =
     " border: none; }"
     "button { background-color: #f9fafb; color: #111827; background-image: none;"
     " border: 1px solid #d1d5db; border-radius: 6px; box-shadow: none; text-shadow: none; }"
+    "button label { color: #111827; }"
     "button:hover { background-color: #f3f4f6; }"
     "button:active { background-color: #e5e7eb; }"
     "button:disabled { color: #9ca3af; }"
     "button.combo { background-color: #ffffff; }"
     "button.titlebutton { background-color: transparent; border: none; }"
     "button.titlebutton:hover { background-color: transparent; }"
+    "headerbar.deskhub-headerbar { background-image: none; background-color: #f3f4f6; color: #111827;"
+    " border-bottom: 1px solid #d1d5db; }"
+    "headerbar.deskhub-headerbar label { color: #111827; }"
+    "headerbar.deskhub-headerbar button.titlebutton { background-image: none; background-color: #ffffff;"
+    " border: 1px solid #d1d5db; color: #111827; }"
+    "headerbar.deskhub-headerbar button.titlebutton:hover { background-color: #e5e7eb; }"
     "menu { background-color: #ffffff; }"
     "menuitem { color: #111827; }"
     "menuitem:hover { background-color: #2563eb; color: #ffffff; }"
@@ -554,6 +567,12 @@ void MainWindow::Build(GtkApplication* app) {
 
     window_ = gtk_application_window_new(app);
     gtk_window_set_title(GTK_WINDOW(window_), ui::kAppTitle);
+    GtkWidget* titlebar = gtk_header_bar_new();
+    gtk_header_bar_set_title(GTK_HEADER_BAR(titlebar), ui::kAppTitle);
+    gtk_header_bar_set_has_subtitle(GTK_HEADER_BAR(titlebar), FALSE);
+    gtk_header_bar_set_show_close_button(GTK_HEADER_BAR(titlebar), TRUE);
+    AddClass(titlebar, "deskhub-headerbar");
+    gtk_window_set_titlebar(GTK_WINDOW(window_), titlebar);
     gtk_window_set_default_size(GTK_WINDOW(window_), kWindowW, kWindowH);
     gtk_window_set_position(GTK_WINDOW(window_), GTK_WIN_POS_CENTER);
     g_signal_connect(window_, "delete-event", G_CALLBACK(OnDeleteEvent), this);
@@ -1006,6 +1025,7 @@ GtkWidget* MainWindow::BuildDevicesPage() {
     gtk_box_pack_start(GTK_BOX(box), Hint(ui::kPairedHint), FALSE, FALSE, 0);
 
     pairedView_ = gtk_grid_new();
+    gtk_container_set_border_width(GTK_CONTAINER(pairedView_), 12);
     gtk_grid_set_column_spacing(GTK_GRID(pairedView_), 8);
     gtk_grid_set_row_spacing(GTK_GRID(pairedView_), 4);
     gtk_box_pack_start(GTK_BOX(box), ListFrame(pairedView_, kListH), TRUE, TRUE, 0);
@@ -1307,10 +1327,16 @@ void MainWindow::ApplyHostState(HostShareState state, const std::string& detail)
         sharing ? ui::kShareStateOn : ui::kStartingShare);
     gtk_label_set_text(GTK_LABEL(hostStatusLabel_), detail.c_str());
     gtk_widget_set_no_show_all(hostBanner_, state == HostShareState::kIdle);
-    gtk_widget_set_visible(hostBanner_, state != HostShareState::kIdle);
+    if (state == HostShareState::kIdle)
+        gtk_widget_hide(hostBanner_);
+    else
+        gtk_widget_show_all(hostBanner_);
     ShowPasscodeCard();
     gtk_widget_set_no_show_all(hostPasscodeCard_, !live);
-    gtk_widget_set_visible(hostPasscodeCard_, live);
+    if (live)
+        gtk_widget_show_all(hostPasscodeCard_);
+    else
+        gtk_widget_hide(hostPasscodeCard_);
 
     RemoveClass(hostBanner_, "deskhub-banner-busy");
     RemoveClass(hostBanner_, "deskhub-banner-live");
@@ -2076,7 +2102,7 @@ MainWindow::HostRowWidgets MainWindow::MakeHostRowWidgets(const ui::HostRow& ref
     widgets.bar = HostRowBar(widgets.row);
     for (int i = 0; i < kHostColumnCount; ++i) {
         const ui::HostColumn& column = ui::kHostColumns[size_t(i)];
-        widgets.cells[i] = HostCell("deskhub-host-cell", column.width, GtkAlign(column.align));
+        widgets.cells[i] = HostCell("deskhub-host-cell", column.width, ColumnXAlign(column.align));
         if (column.mono) AddClass(widgets.cells[i], "deskhub-host-cell-mono");
         gtk_box_pack_start(GTK_BOX(widgets.row), widgets.cells[i], FALSE, FALSE, 0);
     }
@@ -2120,7 +2146,7 @@ void MainWindow::RebuildHostRowWidgets() {
     gtk_widget_set_size_request(headerBar, ui::kHostRowBarWidth, -1);
     gtk_box_pack_start(GTK_BOX(header), headerBar, FALSE, FALSE, 0);
     for (const ui::HostColumn& column : ui::kHostColumns) {
-        GtkWidget* title = HostCell("deskhub-row-header", column.width, GtkAlign(column.align));
+        GtkWidget* title = HostCell("deskhub-row-header", column.width, ColumnXAlign(column.align));
         gtk_label_set_text(GTK_LABEL(title), column.title);
         gtk_box_pack_start(GTK_BOX(header), title, FALSE, FALSE, 0);
     }

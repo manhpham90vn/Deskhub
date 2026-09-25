@@ -35,7 +35,8 @@ install_cargo_ndk() {
     fi
 }
 
-ANDROID_SDK_PACKAGES="platform-tools platforms;android-37.0 ndk;26.1.10909125 cmake;3.22.1"
+ANDROID_NDK_VERSION="${ANDROID_NDK_VERSION:-26.1.10909125}"
+ANDROID_SDK_PACKAGES="platform-tools platforms;android-37.0 ndk;$ANDROID_NDK_VERSION cmake;3.22.1"
 
 missing_android_packages() {
     for pkg in $ANDROID_SDK_PACKAGES; do
@@ -123,13 +124,13 @@ Darwin)
     ensure_local_style_tools
     install_android_packages "$HOME/Library/Android/sdk"
 
-    ANDROID_NDK_HOME="$(ls -d "$HOME"/Library/Android/sdk/ndk/* 2>/dev/null | tail -1)"
-    if [ -n "$ANDROID_NDK_HOME" ]; then
+    ANDROID_NDK_HOME="${ANDROID_NDK_HOME:-${ANDROID_HOME:-$HOME/Library/Android/sdk}/ndk/$ANDROID_NDK_VERSION}"
+    if [ -d "$ANDROID_NDK_HOME" ]; then
         export ANDROID_NDK_HOME
         scripts/build-quiche.sh android
         scripts/build-opus.sh android
     else
-        echo "[skip]    quiche and opus for Android (no NDK under ~/Library/Android/sdk/ndk)"
+        echo "[skip]    quiche and opus for Android (no NDK at $ANDROID_NDK_HOME)"
     fi
     ;;
 
@@ -160,13 +161,13 @@ Linux)
     ensure_local_style_tools
     install_android_packages "$HOME/Android/Sdk"
 
-    ANDROID_NDK_HOME="$(ls -d "$HOME"/Android/Sdk/ndk/* 2>/dev/null | tail -1)"
-    if [ -n "$ANDROID_NDK_HOME" ]; then
+    ANDROID_NDK_HOME="${ANDROID_NDK_HOME:-${ANDROID_HOME:-$HOME/Android/Sdk}/ndk/$ANDROID_NDK_VERSION}"
+    if [ -d "$ANDROID_NDK_HOME" ]; then
         export ANDROID_NDK_HOME
         scripts/build-quiche.sh android
         scripts/build-opus.sh android
     else
-        echo "[skip]    quiche and opus for Android (no NDK under ~/Android/Sdk/ndk)"
+        echo "[skip]    quiche and opus for Android (no NDK at $ANDROID_NDK_HOME)"
     fi
     ;;
 

@@ -251,7 +251,7 @@ build_target() {
         return 0
     fi
 
-    rustup target add "$target" >/dev/null 2>&1 || true
+    rustup target add "$target" >/dev/null
     if is_msvc_target "$target"; then
         prefer_msvc_tools
         prefer_nasm
