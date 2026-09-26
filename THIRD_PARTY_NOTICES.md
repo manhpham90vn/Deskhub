@@ -4,9 +4,9 @@
 
 Deskhub itself is distributed under the MIT License — see [`LICENSE`](LICENSE).
 
-This file lists the third-party components Deskhub links against, and the obligations
-that come with them. Nothing here is licensed under the GPL, and no component restricts
-redistribution of Deskhub under the MIT License.
+This file lists the third-party components used by Deskhub, how they are linked and the
+licence obligations that apply. Deskhub's own source remains under the MIT License;
+each listed component retains its own licence.
 
 ## Linux app (`client/linux`)
 
@@ -51,18 +51,19 @@ bundled or modified; users may replace the system libraries freely.
 
 ## Command-line client (`client/cli`)
 
-The command-line client links the same libraries as the desktop app of the system it is
-built for, minus the GUI toolkit — no GTK on Linux, no wxWidgets on Windows. It draws a
-remote screen in a window of its own, which on Linux adds two libraries the app does not
-need:
+The command-line client does not use the desktop app's GUI toolkit: there is no GTK
+dependency on Linux or wxWidgets dependency on Windows. The `connect` command opens a
+remote-screen window on those two platforms. On Linux, that window needs two libraries
+the desktop app does not use:
 
 | Component | License | Linkage |
 | --- | --- | --- |
 | [libX11](https://gitlab.freedesktop.org/xorg/lib/libx11) | MIT | dynamic (Linux) |
 | [libXfixes](https://gitlab.freedesktop.org/xorg/lib/libxfixes) | MIT | dynamic (Linux) |
 
-On Windows it reuses the app's own Win32 viewer window, so it adds nothing. On macOS it
-uses AppKit and ScreenCaptureKit from the Apple SDK, the same as the app.
+On Windows it reuses the app's Win32 viewer window, so it adds no new library. On macOS,
+the CLI uses AppKit and ScreenCaptureKit from the Apple SDK but does not offer a
+remote-screen viewer.
 
 ## Windows app (`client/windows`)
 

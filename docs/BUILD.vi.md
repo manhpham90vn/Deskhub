@@ -2,9 +2,8 @@
 
 # Deskhub — Build và phát triển
 
-Tài liệu này mô tả mọi thứ cần thiết để tự compile Deskhub, chạy các test suite và phát
-hành một bản release. Nếu chỉ cần *sử dụng* app, hãy lấy bản build sẵn theo hướng dẫn ở
-[`INSTALL.vi.md`](INSTALL.vi.md).
+Hướng dẫn này dành cho việc build Deskhub, chạy test và chuẩn bị release. Nếu chỉ muốn
+cài app để sử dụng, hãy bắt đầu từ [`INSTALL.vi.md`](INSTALL.vi.md).
 
 Đây là bản dịch của [`BUILD.md`](BUILD.md). Nếu hai bản có khác biệt, bản tiếng Anh là bản
 chuẩn.
@@ -17,9 +16,9 @@ make test             # build và chạy core suite ở chế độ offline
 make build-linux      # hoặc build-windows / build-macos / build-ios / build-android
 ```
 
-Không nền tảng nào được build ngầm: chạy `make` không kèm tham số thì nó chỉ in danh
-sách target chứ không build gì. Mọi target được mô tả đầy đủ ở đầu
-[`Makefile`](../Makefile), còn `make/help.txt` chính là nội dung mà `make` in ra.
+Hãy chọn rõ target cho nền tảng cần build. Chạy `make` không kèm tham số chỉ in danh sách
+target từ `make/help.txt`, không build app. Mỗi target đều được mô tả trong
+[`Makefile`](../Makefile).
 
 ---
 
@@ -76,8 +75,8 @@ make test      # core suite, offline, không cần GPU và network — vài giâ
 make lint      # kiểm tra format C++, Kotlin và Swift, không ghi lại file
 ```
 
-Cần chạy cả hai trước khi coi một thay đổi là hoàn tất. `make format` áp dụng format thay
-vì chỉ kiểm tra. Không nên format thủ công; các công cụ được pin phiên bản có chủ đích.
+Hãy chạy cả hai trước khi hoàn tất một thay đổi. Khi cần áp dụng format, dùng `make format`;
+`make lint` chỉ kiểm tra. Repo dùng các phiên bản formatter cố định giống CI.
 
 Logic mới trong `core/` cần có test trong thư mục con tương ứng ở `core/tests/`.
 
@@ -98,9 +97,9 @@ giao diện. `run-android` cài và mở app trên thiết bị hoặc emulator 
 
 ### Command line client
 
-`client/cli/` build ra một binary `deskhub-cli` thực hiện cùng chức năng nhưng không cần
-GUI toolkit, điều khiển bằng cờ thay vì bằng giao diện. Đây là cách chạy Deskhub qua SSH,
-từ một script, hoặc dưới systemd.
+`client/cli/` build ra `deskhub-cli`, dùng lệnh thay cho các trang của app. Bạn có thể
+chạy qua SSH, từ script hoặc dưới systemd. Lệnh `connect` mở cửa sổ viewer trên Windows
+và Linux; bản macOS chưa hỗ trợ lệnh đó.
 
 ```bash
 make build-cli                       # bản debug cho OS hiện tại
@@ -116,8 +115,9 @@ client.
 | Lệnh | Chức năng |
 | --- | --- |
 | `share` | share máy này — display bất kỳ, shell, hoặc cả hai |
-| `connect ADDRESS` | mở cửa sổ hiển thị màn hình host và điều khiển host đó |
+| `connect ADDRESS` | mở cửa sổ xem và điều khiển màn hình host (Windows và Linux) |
 | `shell ADDRESS` | mở một shell trên host, ngay trong terminal hiện tại |
+| `send ADDRESS FILE...` | gửi file tới host đang nhận file |
 | `displays`, `scan`, `sources`, `probe` | những gì share được, và các máy đang hiện diện |
 | `devices`, `trust`, `settings` | cùng những file mà app desktop đọc và ghi |
 
@@ -125,9 +125,9 @@ client.
 nguyên nhân lỗi: `2` sai cờ, `3` không có phản hồi, `4` bị từ chối, `5` host key đã thay
 đổi, `9` bản build này không hỗ trợ.
 
-Tình trạng theo từng OS hiện tại: Linux hỗ trợ đầy đủ. Windows share và connect được,
-dùng lại phần mã cửa sổ của app desktop. macOS share và mở shell được, nhưng `connect`
-cần một window layer chưa được viết và sẽ báo lỗi tương ứng.
+Linux hỗ trợ mọi lệnh trong bảng. Trên Windows, `connect` dùng lại mã cửa sổ của app
+desktop. Trên macOS, bạn có thể share và mở remote shell; lệnh `connect` sẽ báo rằng bản
+build này chưa xem được màn hình.
 
 Khi chỉ làm việc với `core/` và `platform/`, cây CMake dùng chung sẽ nhanh hơn:
 
@@ -346,8 +346,8 @@ request, CI thực hiện:
   cần bản riêng. Với opus và các target `make opus*` cũng vậy.
 - **`make fuzz` trên macOS không tìm thấy libFuzzer** — nó cần LLVM của Homebrew.
   `make bootstrap` cài thành phần này, phần còn lại vẫn build bằng toolchain của Xcode.
-- **`make lint` cho kết quả khác với editor** — các công cụ đã pin phiên bản là chuẩn.
-  Chạy lại `make bootstrap` để lấy đúng phiên bản, sau đó chạy `make format`.
+- **`make lint` cho kết quả khác với editor** — chạy lại `make bootstrap` để lấy đúng
+  phiên bản công cụ mà CI sử dụng, rồi chạy `make format`.
 - **Các target Android không tìm thấy SDK** — đặt `ANDROID_HOME`, sau đó chạy lại
   `make bootstrap`. `ANDROID_NDK_VERSION=<v>` chọn một NDK khác.
 - **Permission trên macOS hoạt động không đúng sau khi chuyển qua lại giữa bản build tại

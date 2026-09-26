@@ -2,21 +2,20 @@
 
 # Deskhub —— Architecture
 
-本文档描述 Deskhub **是如何构建的**：layer 的划分、process 与 thread、wire protocol，
-以及其背后的设计决策。产品在用户视角下的行为见
-[`SPECIFICATION.zh.md`](SPECIFICATION.zh.md)；threat model 见
-[`SECURITY.zh.md`](../SECURITY.zh.md)。
+本文档面向修改 Deskhub 代码的人，介绍 layer、process、thread 和 wire protocol，
+并说明背后的设计决策。产品行为见 [`SPECIFICATION.zh.md`](SPECIFICATION.zh.md)，
+安全边界见 [`SECURITY.zh.md`](../SECURITY.zh.md)。
 
 本文件是 [`ARCHITECTURE.md`](ARCHITECTURE.md) 的译本；若两者有出入，以英文版为准。
 
 - **状态：** 描述当前代码。
-- **读者：** 需要修改此代码的人员。
+- **读者：** 参与实现工作的贡献者。
 
 ---
 
 ## 1. Layer
 
-整体结构遵循一条原则：逻辑只编写一次，由所有 client 共享。
+整体结构遵循一条原则：通用逻辑只写一次，供所有 client 使用。
 
 ```
 core/       纯 C++20，不含 OS 头文件与第三方代码，离线进行 unit test

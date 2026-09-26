@@ -2,20 +2,20 @@
 
 # Deskhub — Cài đặt
 
-Toàn bộ các nền tảng gói trong một trang. Không bước nào ở đây cần checkout source: mọi bản release
-đều đã được build sẵn. Để tự compile, xem [`BUILD.vi.md`](BUILD.vi.md).
+Chọn nền tảng của bạn bên dưới để cài bản release đã build sẵn. Bạn không cần checkout
+source. Nếu muốn tự compile Deskhub, xem [`BUILD.vi.md`](BUILD.vi.md).
 
-Toàn bộ file tải về nằm trên
-[trang Releases](https://github.com/manhpham90vn/Deskhub/releases). Bản mobile được phát
-hành qua TestFlight và Google Play.
+Bộ cài desktop và file APK Android nằm trên
+[trang Releases](https://github.com/manhpham90vn/Deskhub/releases). Bản beta mobile cũng
+có trên TestFlight và Google Play.
 
 Đây là bản dịch của [`INSTALL.md`](INSTALL.md). Nếu hai bản có khác biệt, bản tiếng Anh là
 bản chuẩn.
 
-| Nền tảng | File | Lệnh cài |
+| Nền tảng | File | Cách cài |
 | --- | --- | --- |
 | 🪟 Windows | `deskhub-v*-windows-setup.exe` | Tải và cài; mở DeskHub từ Start hoặc Desktop |
-| 🍎 macOS | `deskhub-v*-macos.dmg` | Mở dmg, kéo app vào Applications |
+| 🍎 macOS | `deskhub-v*-macos.dmg` | Mở dmg rồi kéo Deskhub vào Applications |
 | 🐧 Ubuntu, Kubuntu, Debian, Mint | `deskhub-v*-amd64.deb` | `sudo apt install ./deskhub-v*-amd64.deb` |
 | 🐧 Fedora (Workstation và KDE spin) | `deskhub-v*-x86_64.rpm` | `sudo dnf install ./deskhub-v*-x86_64.rpm` |
 | 🐧 openSUSE | `deskhub-v*-x86_64.rpm` | `sudo zypper install ./deskhub-v*-x86_64.rpm` |
@@ -23,12 +23,12 @@ bản chuẩn.
 | 🤖 Android | `deskhub-v*-android.apk` | Cài apk, hoặc tham gia bản beta trên Play |
 | 📱 iOS | — | [TestFlight](https://testflight.apple.com/join/7qY7wgpd) |
 
-Ngoài ra còn có `deskhub-cli`: vẫn client đó, chỉ khác là không có cửa sổ riêng. Xem
-[Command line](#-command-line).
+Bạn cũng có thể dùng `deskhub-cli` cho các lệnh terminal và script. Trên Windows và
+Linux, CLI vẫn có thể mở cửa sổ xem màn hình từ xa. Xem [Command line](#-command-line).
 
-**Package manager** tự cập nhật Deskhub cho bạn: `winget install ManhPham.Deskhub` trên
-Windows, `brew install --cask manhpham90vn/tap/deskhub` trên macOS, và
-[apt repository](#-linux) cho Ubuntu, Kubuntu, Debian và Mint.
+Bạn có thể cài qua `winget` trên Windows, Homebrew trên macOS hoặc
+[apt repository](#-linux) trên Ubuntu, Kubuntu, Debian và Mint. Khi muốn lên bản mới,
+hãy dùng lệnh nâng cấp của package manager tương ứng.
 
 ---
 
@@ -82,9 +82,9 @@ Nếu chỉ xem máy khác thì không cần permission nào.
 
 ## 🐧 Linux
 
-**Nếu chỉ cần connect và xem, cài xong là dùng được.** App chỉ link tới GTK3, PipeWire và
-libva — các thư viện có sẵn trên mọi desktop mặc định. H.264 decoder được compile trực
-tiếp vào app, nên không phụ thuộc package FFmpeg nào.
+**Nếu chỉ cần connect và xem, hãy bắt đầu bằng gói app.** H.264 decoder đã nằm trong app,
+nên bạn không phải cài thêm gói FFmpeg. Distro của bạn vẫn cần cung cấp các thư viện mà
+app sử dụng, gồm GTK3, PipeWire và libva.
 
 Bản deb và rpm có nội dung giống nhau; chọn bản mà package manager của hệ thống hỗ trợ.
 Cả hai đều cài udev rule cho `/dev/uinput` mô tả ở mục 3 bên dưới, nên remote input hoạt
@@ -228,10 +228,10 @@ cho phép app inject input vào chính thiết bị đang chạy nó.
 
 ## 💻 Command line
 
-`deskhub-cli` chính là client đó, chỉ khác là không có cửa sổ riêng. Nó share màn hình, mở
-remote shell và điều khiển host từ script hoặc qua SSH. Chạy `deskhub-cli help` để xem danh sách
-lệnh. Mọi dữ liệu nó đọc và ghi — settings, danh sách máy đã pair, các host key đã trust —
-đều dùng chung với app, nên hai bên luôn thống nhất.
+`deskhub-cli` cung cấp lệnh để share màn hình, mở remote shell và chạy từ script hoặc qua
+SSH. Trên Windows và Linux, `connect` mở cửa sổ xem màn hình từ xa; trên macOS, hãy dùng
+app desktop để xem màn hình. Chạy `deskhub-cli help` để xem danh sách lệnh. CLI và app dùng
+chung settings, danh sách máy đã pair và các host key đã trust.
 
 | Nền tảng | File |
 | --- | --- |
@@ -276,10 +276,10 @@ chứng minh được mình biết passcode của host thông qua **SPAKE2** (pa
 được truyền đi, và mỗi connection chỉ được thử một lần), hoặc chờ người dùng tại host trả
 lời *Let this machine in?*.
 
-Đã encrypt không đồng nghĩa với an toàn khi phơi ra Internet. Port vẫn trả lời các probe
-discovery, và lần pair đầu tiên với một máy chưa từng biết vẫn dựa trên tin cậy ban đầu.
-Hãy ưu tiên **network tin cậy** hoặc **VPN**: cài [Tailscale](https://tailscale.com) trên
-cả hai máy và connect tới địa chỉ `100.x.y.z`. **Không port-forward UDP 47777.**
+Hãy dùng Deskhub trên **network tin cậy** hoặc qua **VPN**. **Không port-forward UDP
+47777.** Encrypt giúp bảo vệ nội dung session, nhưng port vẫn trả lời các probe discovery;
+lần pair đầu tiên cũng chưa có danh tính đã biết để đối chiếu. Để truy cập từ xa, bạn có
+thể cài [Tailscale](https://tailscale.com) trên cả hai máy và connect tới địa chỉ `100.x.y.z`.
 
 [`SECURITY.vi.md`](../SECURITY.vi.md) mô tả đầy đủ threat model, phạm vi được bảo vệ và
 cách báo lỗ hổng.

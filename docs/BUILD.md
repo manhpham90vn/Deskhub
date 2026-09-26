@@ -2,9 +2,8 @@
 
 # Deskhub — Building and developing
 
-Everything needed to compile Deskhub yourself, run the test suites, and cut a release. If
-you only want to *use* the app, take a prebuilt one from [`INSTALL.md`](INSTALL.md)
-instead.
+This guide covers building Deskhub, running its tests and preparing a release. If you
+want to install the app without building it, start with [`INSTALL.md`](INSTALL.md).
 
 ```bash
 git clone --recurse-submodules https://github.com/manhpham90vn/Deskhub.git
@@ -14,9 +13,9 @@ make test             # build and run the core suite offline
 make build-linux      # or build-windows / build-macos / build-ios / build-android
 ```
 
-No platform is ever built implicitly: a bare `make` prints the target list and builds
-nothing. Every target is documented in full at the top of the
-[`Makefile`](../Makefile), and `make/help.txt` is what a bare `make` shows.
+Run a platform target explicitly. A bare `make` only prints the target list from
+`make/help.txt`; it does not build an app. The [`Makefile`](../Makefile) documents each
+target.
 
 ---
 
@@ -71,8 +70,8 @@ make test      # core suite, offline, no GPU and no network — a few seconds
 make lint      # formatting check across C++, Kotlin and Swift, without writing
 ```
 
-Run both before considering a change done. `make format` applies the formatting instead
-of just checking it — never hand-format, the tools are pinned for a reason.
+Run both before finishing a change. Use `make format` to apply formatting when needed;
+`make lint` only checks it. The repository pins the formatter versions used in CI.
 
 New logic in `core/` needs a test in the matching `core/tests/` subdirectory.
 
@@ -86,16 +85,16 @@ New logic in `core/` needs a test in the matching `core/tests/` subdirectory.
 | `make build-ios` | the iOS app for the Simulator | macOS + Xcode + a Simulator runtime |
 | `make build-android` | a debug APK | Android SDK + NDK, `adb` |
 
-Each has a `release-<os>` (optimized) and a `run-<os>` (build, then launch) sibling.
-The desktop apps parse no command-line flags at all — everything is chosen on their four
-pages. `run-android` installs and opens on the connected device or emulator through adb,
-and `run-ios` does the same on the Simulator.
+Each platform also has `release-<os>` to build an optimized version and `run-<os>` to
+build and launch it. Choose desktop app settings on its four pages; the desktop apps do
+not accept command-line flags. `run-android` installs and opens the app on a connected
+device or emulator through adb. `run-ios` does the same on the Simulator.
 
 ### The command-line client
 
-`client/cli/` builds one `deskhub-cli` binary that does the same job without a GUI
-toolkit, driven by flags instead of pages. It is the way to run Deskhub over SSH, from a
-script, or under systemd.
+`client/cli/` builds `deskhub-cli`, which uses commands instead of the app's pages. Use
+it over SSH, from a script or under systemd. The `connect` command opens a viewer window
+on Windows and Linux; macOS does not support that command yet.
 
 ```bash
 make build-cli                       # debug build for this OS
@@ -111,8 +110,9 @@ not a client.
 | Command | Does |
 | --- | --- |
 | `share` | share this machine — any display, the shell, or both |
-| `connect ADDRESS` | open a window on a host's screen and drive it |
+| `connect ADDRESS` | open a window on a host's screen and control it (Windows and Linux) |
 | `shell ADDRESS` | open a shell on a host, in the terminal you are already in |
+| `send ADDRESS FILE...` | send files to a host that accepts them |
 | `displays`, `scan`, `sources`, `probe` | what can be shared, and who is out there |
 | `devices`, `trust`, `settings` | the same files the desktop app reads and writes |
 
@@ -120,9 +120,9 @@ not a client.
 code says what went wrong: `2` bad flags, `3` nobody answered, `4` refused, `5` the host
 key changed, `9` this build cannot do it.
 
-Per-OS state today: Linux does all of it. Windows shares and connects through the same
-window code the desktop app already uses. macOS shares and opens shells, but `connect`
-needs a window layer that is not written yet, and reports so.
+Linux supports all the listed commands. Windows uses the desktop app's window code for
+`connect`. macOS supports sharing and remote shells; `connect` reports that screen
+viewing is unavailable in this build.
 
 To work on `core/` and `platform/` alone, the shared CMake tree is faster:
 
@@ -331,14 +331,14 @@ A green local `make test` + `make lint` is not the whole story. On every pull re
 | `make opus` | the Opus audio codec for the host target (run automatically by `debug`, `release` and `build-linux`) |
 | `make clean` | removes `out/` |
 
-## 11. When the build fights back
+## 11. Troubleshooting builds
 
 - **CMake stops on a missing quiche library** — run the matching `make quiche*` target;
   each ABI needs its own. The same holds for opus and the `make opus*` targets.
 - **`make fuzz` on macOS finds no libFuzzer** — it needs Homebrew LLVM; `make bootstrap`
   installs it, while the rest keeps building with the Xcode toolchain.
-- **`make lint` disagrees with your editor** — the pinned tools win. Run `make bootstrap`
-  again to pull the exact versions, then `make format`.
+- **`make lint` disagrees with your editor** — run `make bootstrap` to get the tool
+  versions used by CI, then run `make format`.
 - **Android targets can't find the SDK** — set `ANDROID_HOME`, then re-run
   `make bootstrap`; `ANDROID_NDK_VERSION=<v>` selects a different NDK.
 - **macOS permissions behave oddly after switching between a local and a downloaded

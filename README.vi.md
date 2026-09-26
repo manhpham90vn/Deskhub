@@ -4,11 +4,10 @@
 
 # 🖥️ Deskhub
 
-### Máy của bạn, trên mọi màn hình bạn có.
+### Dùng máy tính của bạn, dù đang ở thiết bị nào.
 
-**Open-source. Native. Đa nền tảng. Remote desktop cho cảm giác như đang dùng máy tại chỗ
-— nhanh tới mức chơi được game từ xa, điều mà các công cụ remote desktop thông thường
-không làm được.**
+**Deskhub giúp bạn xem và điều khiển máy tính từ một thiết bị khác. App mã nguồn mở,
+chạy native trên năm nền tảng và hướng tới trải nghiệm mượt mà khi làm việc hoặc chơi game.**
 
 [![Release](https://img.shields.io/github/v/release/manhpham90vn/Deskhub?label=release&color=2563eb)](https://github.com/manhpham90vn/Deskhub/releases)
 [![License: MIT](https://img.shields.io/github/license/manhpham90vn/Deskhub?color=2563eb)](LICENSE)
@@ -41,7 +40,7 @@ không làm được.**
 
 ## 📦 Cài đặt
 
-Cài qua package manager, vừa cài vừa được tự cập nhật — Windows, macOS, và Ubuntu / Debian / Mint:
+Có thể cài Deskhub qua package manager trên Windows, macOS, Ubuntu, Debian hoặc Mint:
 
 ```bash
 winget install ManhPham.Deskhub                  # Windows · app
@@ -129,14 +128,14 @@ Chi tiết và quyền cần cấp trên từng nền tảng: [INSTALL.vi.md](do
 
 ## 📖 Giới thiệu
 
-Một **core C++20** duy nhất chạy trên mọi nền tảng, từ Windows đến iPhone, không phải viết
-lại protocol. Share một display, nhập IP trên máy còn lại là có thể điều khiển máy đó. Bốn
-trang giống nhau trên mọi nền tảng — **Host**, **Client**, **Devices**, **Settings** —
-nên khi đã quen trên macOS thì dùng được ngay app Android.
+Chọn màn hình cần share trên một thiết bị, rồi nhập địa chỉ IP để connect từ thiết bị khác.
+Bốn trang **Host**, **Client**, **Devices** và **Settings** có mặt trên mọi nền tảng, nên
+cách dùng vẫn quen thuộc khi chuyển từ Mac sang PC hoặc điện thoại. Một **core C++20** dùng
+chung xử lý protocol cho cả năm nền tảng.
 
 | ⚡ Nhanh | 📦 Dễ cài đặt | 🎛️ Đơn giản |
 | ------ | ---------- | --------- |
-| **~3.5 ms** từ capture đến khi hiển thị, 60 fps. Pipeline zero-copy nằm hoàn toàn trong VRAM; hot path không đi qua CPU. | Bộ cài Windows tạo shortcut trong Start Menu và Desktop; bản exe portable vẫn có sẵn. Không cần background service hay tài khoản. | **Share** một display hoặc **Connect** tới một IP. Máy desktop share thêm được một **shell** và nhận **file** do viewer gửi. Điện thoại cũng host được nhưng chỉ view-only, vì không OS di động nào cho phép app inject input. |
+| Stream ở 60 fps trên phần cứng phù hợp. Đường xử lý video dùng bộ nhớ GPU khi có thể. | Cài qua package manager hoặc tải bản release. Không cần tài khoản hay background service. | **Share** một display hoặc **Connect** tới một IP. Máy desktop còn share được **shell** và nhận **file**; điện thoại share màn hình ở chế độ view-only. |
 
 Session được encrypt end-to-end trên **QUIC/TLS**. Máy lạ chỉ được chấp nhận khi chứng
 minh được mình biết passcode của host — thông qua **SPAKE2**, nên passcode không bao giờ
@@ -149,7 +148,7 @@ UDP 47777**. Threat model đầy đủ nằm trong [`SECURITY.vi.md`](SECURITY.v
 ## 💡 Vì sao
 
 - 💻 **Công việc** — chạy Claude Code, VS Code hoặc build trên PC ở nhà, từ một laptop cấu hình thấp hoặc từ iPad.
-- 🌐 **Mọi thứ** — điều khiển Chrome, Office hoặc phần mềm chỉ chạy trên PC, từ bất kỳ thiết bị nào.
+- 🌐 **Ứng dụng desktop** — dùng Chrome, Office hoặc phần mềm chỉ có trên máy tính từ một thiết bị khác.
 - 🎮 **Game** — 60 fps, relative mouse và scancode DirectInput, pointer lock bằng `F9`.
 - 🖥️ **Nhiều display** — share một hoặc nhiều display, mỗi display là một session riêng.
 
@@ -169,13 +168,13 @@ UDP 47777**. Threat model đầy đủ nằm trong [`SECURITY.vi.md`](SECURITY.v
 
 ## ✨ Bên trong có gì
 
-- **Zero-copy từ đầu đến cuối** — capture trực tiếp vào VRAM → NVENC → hardware decode → render. Hot path không đi qua CPU.
+- **Đường xử lý video trên GPU** — capture, encode, decode và render dùng phần cứng của từng nền tảng khi có thể; đường NVENC trên Windows tránh sao chép frame qua CPU.
 - **Protocol riêng chạy trên QUIC** — GOP vô hạn kết hợp IDR theo yêu cầu, XOR FEC, adaptive bitrate, tất cả được multiplex trên một connection đã encrypt.
 - **Âm thanh đi kèm hình ảnh** — audio mix của chính máy đó, Opus 64 kbps, mỗi datagram chứa một frame 20 ms. Mất một packet chỉ mất một phần nhỏ của giây và không ảnh hưởng tới hình ảnh. Không bao giờ capture microphone.
 - **Input thật** — relative mouse (Raw Input) và scancode cho game DirectInput. Mouse và keyboard tại máy host luôn được ưu tiên.
 - **Core dùng chung** — protocol, FEC và bitrate control nằm trong `core/`, được compile vào mọi client.
-- **Có cả command line** — `deskhub-cli` share màn hình, mở remote shell và điều khiển host từ script hoặc qua SSH, không cần GUI toolkit. Xem [Build](docs/BUILD.vi.md#command-line-client).
-- **Được kiểm thử kỹ** — core có unit test chạy offline. CI chạy thêm ASan, UBSan và TSan. Bảy libFuzzer target kiểm tra wire format, phần parse H.264, reassembly, byte stream của terminal, chuỗi UI và các session state machine mỗi đêm. Mỗi crash phát hiện được bổ sung thành một regression test.
+- **Công cụ command line** — `deskhub-cli` share màn hình, mở remote shell và chạy từ script hoặc qua SSH. Trên Windows và Linux, lệnh này còn mở được cửa sổ xem màn hình từ xa. Xem [Build](docs/BUILD.vi.md#command-line-client).
+- **Được kiểm thử kỹ** — core có unit test chạy offline; CI chạy thêm ASan, UBSan và TSan. Mỗi đêm, bảy libFuzzer target kiểm tra wire format, phần parse H.264, reassembly, byte stream của terminal, chuỗi UI và các session state machine. Crash được phát hiện sẽ thành regression test.
 
 <a id="docs"></a>
 

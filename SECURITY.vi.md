@@ -2,37 +2,32 @@
 
 # Chính sách bảo mật của Deskhub
 
-_Cập nhật lần cuối: 15 tháng 8 năm 2026_
+_Cập nhật lần cuối: 27 tháng 9 năm 2026_
 
 Đây là bản dịch của [`SECURITY.md`](SECURITY.md). Nếu hai bản có khác biệt, bản tiếng Anh
 là bản chuẩn.
 
 ## ⚠️ Cần đọc trước
 
-**Deskhub encrypt các session của mình. Mọi dữ liệu một session mang theo — video, phím
-gõ, mouse, clipboard và lưu lượng terminal — đều chạy trên QUIC/TLS, và việc chấp nhận kết
-nối do một pairing handshake quyết định: máy chưa biết phải chứng minh được mình biết
-passcode của host (bản thân mã không đi qua network) hoặc phải được người dùng tại host
-phê duyệt.** Phần duy nhất không được encrypt là discovery beacon, và nó không mang thông
-tin bí mật; mọi dữ liệu khác tới mà không nằm trong một connection đã encrypt đều bị loại
-bỏ.
+**Hãy dùng Deskhub trên network tin cậy hoặc qua VPN. Không port-forward UDP 47777 và
+không đưa máy đang share trực tiếp ra Internet.**
+
+Session chạy trên QUIC/TLS, gồm video, phím gõ, mouse, clipboard và lưu lượng terminal.
+Trước khi máy lạ được connect, nó phải chứng minh mình biết passcode của host mà không gửi
+chính mã đó, hoặc được người dùng tại host chấp thuận. Probe và beacon discovery không
+được encrypt nhưng không mang nội dung session. Những packet khác nằm ngoài connection
+đã encrypt sẽ bị loại bỏ.
 
 Mọi host cũng có thể share ở chế độ **view-only** (input bị loại bỏ thay vì được inject),
 và có thể tắt hoàn toàn việc pair máy mới để chỉ chấp nhận những máy đã pair.
 
-Việc encrypt không đồng nghĩa với an toàn khi phơi ra Internet: port vẫn trả lời các
-probe discovery, passcode 4 chữ số vẫn là một chuỗi bí mật ngắn, lần kết nối đầu tiên vẫn
-dựa trên tin cậy chưa được xác minh, và hệ thống không có cơ chế chống flooding. Deskhub
-được thiết kế cho các network tin cậy.
+Encrypt không loại bỏ mọi rủi ro trên network. Port vẫn trả lời probe discovery,
+passcode 4 chữ số vẫn ngắn, lần connect đầu tiên chưa có danh tính đã biết để đối chiếu,
+và app không có cơ chế chống flooding.
 
-Vì vậy nguyên tắc sau vẫn được giữ nguyên:
-
-> **Không port-forward UDP 47777. Không phơi một máy đang share trực tiếp ra Internet. Để
-> truy cập từ xa, hãy dùng VPN — [Tailscale](https://tailscale.com) là phương án mà dự án
-> này kiểm thử cùng — và connect tới địa chỉ `100.x.y.z`.**
-
-Tuân thủ nguyên tắc này thì Deskhub an toàn để sử dụng. Không tuân thủ đồng nghĩa với việc
-mở máy của bạn ra Internet.
+Để truy cập từ xa, hãy dùng VPN. Dự án đã kiểm thử với
+[Tailscale](https://tailscale.com); bạn có thể connect tới địa chỉ `100.x.y.z` của host.
+Hãy xem các giới hạn bên dưới trước khi share màn hình hoặc terminal.
 
 ## Threat model
 
@@ -101,9 +96,9 @@ mở máy của bạn ra Internet.
   mọi viewer được chấp nhận đều nhìn thấy toàn bộ. Host di động luôn ở chế độ view-only,
   điều này loại bỏ rủi ro bị điều khiển từ xa nhưng không giảm rủi ro lộ thông tin.
 
-## Môi trường sử dụng an toàn
+## Môi trường sử dụng Deskhub
 
-✅ **An toàn**
+✅ **Môi trường nên dùng**
 
 - Mạng LAN gia đình hoặc cá nhân, nơi bạn kiểm soát mọi thiết bị.
 - Một tailnet Tailscale (hoặc một đường hầm WireGuard/VPN khác) chỉ gồm thiết bị của bạn.
@@ -111,7 +106,7 @@ mở máy của bạn ra Internet.
 - Một máy chỉ đóng vai *client* (điện thoại, tablet, laptop không share màn hình). Client
   không nhận session đi vào.
 
-❌ **Không an toàn**
+❌ **Môi trường nên tránh**
 
 - Port-forward UDP 47777 qua router, hoặc đặt máy đang share vào DMZ.
 - Share màn hình trên Wi-Fi của quán cà phê, khách sạn, sân bay, trường học, không gian
@@ -247,13 +242,11 @@ hành, bạn sẽ được ghi nhận trong release notes, trừ khi bạn khôn
 
 Dự án không có chương trình bug bounty và không chi trả phần thưởng.
 
-**Những nội dung đã nêu ở trên không được coi là lỗ hổng.** Các giới hạn đã liệt kê — tin
-cậy chưa xác minh ở lần kết nối đầu, phân tích lưu lượng, beacon trả lời các probe, việc
-không chống DoS — đều đã biết và đã được ghi nhận; một báo cáo nhắc lại các nội dung này
-không bổ sung thông tin mới. Những nội dung *nên* báo cáo gồm: memory corruption hoặc
-crash có thể kích hoạt từ một packet không hợp lệ, cách vượt ra ngoài threat model đã ghi,
-bất kỳ hình thức rò rỉ dữ liệu ra khỏi máy, hoặc lỗi trong một biện pháp giảm nhẹ sau khi
-nó được phát hành.
+Các giới hạn phía trên — tin cậy ở lần connect đầu, phân tích lưu lượng, phản hồi
+discovery và việc không chống DoS — đã được ghi nhận. Vui lòng báo cáo nếu bạn có bằng
+chứng mới về tác động của chúng, hoặc phát hiện vấn đề khác như memory corruption, crash
+do packet không hợp lệ, dữ liệu rời khỏi thiết bị ngoài dự kiến, hay lỗi trong biện pháp
+giảm nhẹ đã phát hành.
 
 ## Các phiên bản được hỗ trợ
 

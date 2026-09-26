@@ -4,10 +4,10 @@
 
 # 🖥️ Deskhub
 
-### Your machine, on every screen you own.
+### Your computer, wherever you need it.
 
-**Open-source. Native. Cross-platform. Remote desktop that feels local — fast and raw
-enough to actually play games remotely, which ordinary remote desktop tools can't pull off.**
+**Deskhub lets you view and control your computer from another device. It is open source,
+runs natively across five platforms, and is built for responsive work and play.**
 
 [![Release](https://img.shields.io/github/v/release/manhpham90vn/Deskhub?label=release&color=2563eb)](https://github.com/manhpham90vn/Deskhub/releases)
 [![License: MIT](https://img.shields.io/github/license/manhpham90vn/Deskhub?color=2563eb)](LICENSE)
@@ -40,7 +40,7 @@ enough to actually play games remotely, which ordinary remote desktop tools can'
 
 ## 📦 Install
 
-Through a package manager, which also keeps it up to date — Windows, macOS, and Ubuntu / Debian / Mint:
+Install through a package manager on Windows, macOS, Ubuntu, Debian or Mint:
 
 ```bash
 winget install ManhPham.Deskhub                  # Windows · app
@@ -128,14 +128,14 @@ Details and permissions per platform: [INSTALL.md](docs/INSTALL.md).
 
 ## 📖 About
 
-One **C++20 core** runs everywhere — Windows to iPhone — with zero protocol rewrites.
-Share a display, type an IP on the other machine, and you're driving it. Four pages on
-every platform — **Host**, **Client**, **Devices**, **Settings** — so learning it on a Mac
-teaches you the Android app too.
+Share a screen on one device, then connect from another using its IP address. The same
+four pages — **Host**, **Client**, **Devices** and **Settings** — appear on every platform,
+so the controls stay familiar as you move between a Mac, PC, phone or tablet. A shared
+**C++20 core** handles the protocol across all five platforms.
 
 | ⚡ Fast | 📦 Easy install | 🎛️ Simple |
 | ------ | ---------- | --------- |
-| **~3.5 ms** capture→display, 60 fps. Zero-copy VRAM pipeline — the hot path never touches the CPU. | Windows setup adds Start Menu and Desktop shortcuts; a portable exe remains available. No background service or account. | **Share** a display or **Connect** to an IP, and that's it. Desktops can also share a **shell** and take **files** viewers send. Phones host too, view-only, since no mobile OS lets an app inject input. |
+| Streams at 60 fps on supported hardware. The video path uses GPU memory where available. | Install with a package manager or download a release. No account or background service is required. | **Share** a display or **Connect** to an IP. Desktops can also share a **shell** and receive **files**. Phones can share their screens in view-only mode. |
 
 Sessions are encrypted end to end over **QUIC/TLS**, and an unknown machine only gets in
 by proving it knows the host's passcode — via **SPAKE2**, so the code itself never travels
@@ -148,7 +148,7 @@ network you trust or a VPN, and **never port-forward UDP 47777**. Full threat mo
 ## 💡 Why
 
 - 💻 **Work** — run Claude Code, VS Code, or builds on your home PC from a weak laptop or an iPad at a café.
-- 🌐 **Anything** — drive Chrome, Office, or PC-only software from any device.
+- 🌐 **Desktop apps** — use Chrome, Office, or software that only runs on your computer from another device.
 - 🎮 **Games** — 60 fps, relative mouse + DirectInput scancodes, `F9` pointer lock.
 - 🖥️ **Multi-monitor** — share one or several displays, each as its own session.
 
@@ -168,13 +168,13 @@ network you trust or a VPN, and **never port-forward UDP 47777**. Full threat mo
 
 ## ✨ What's inside
 
-- **Zero-copy end to end** — capture straight into VRAM → NVENC → HW decode → render; the hot path never touches the CPU.
+- **GPU video path** — capture, encode, decode and render use platform hardware where available; the Windows NVENC path avoids copying frames through the CPU.
 - **Purpose-built protocol over QUIC** — infinite GOP + on-demand IDR, XOR FEC, adaptive bitrate, all multiplexed on one encrypted connection.
 - **Sound comes with the screen** — the machine's own audio mix, Opus at 64 kbps, one 20 ms frame per datagram; a lost packet costs a fraction of a second and never disturbs the picture. Never a microphone.
 - **Real input** — relative mouse (Raw Input) + scancodes for DirectInput games; host's own mouse/keyboard always wins.
 - **One shared core** — protocol, FEC, and bitrate control live in `core/`, compiled into every client.
-- **A command line too** — `deskhub-cli` shares a screen, opens a remote shell and drives a host from a script or over SSH, with no GUI toolkit at all. See [Build](docs/BUILD.md#the-command-line-client).
-- **Beaten up on purpose** — the core is unit-tested offline, runs under ASan, UBSan and TSan in CI, and seven libFuzzer targets hammer the wire format, H.264 parsing, reassembly, terminal bytes, UI text and the session state machines every night; every crash found becomes a regression test.
+- **Command-line tools** — `deskhub-cli` can share a screen, open a remote shell and run from a script or over SSH. On Windows and Linux, it can also open a remote-screen window. See [Build](docs/BUILD.md#the-command-line-client).
+- **Tested across the core** — offline unit tests, sanitizer runs in CI and seven nightly libFuzzer targets cover the wire format, H.264 parsing, reassembly, terminal bytes, UI text and session state machines. Crashes found by fuzzing become regression tests.
 
 <a id="docs"></a>
 

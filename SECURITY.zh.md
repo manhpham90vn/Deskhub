@@ -2,32 +2,28 @@
 
 # Deskhub 安全策略
 
-_最后更新：2026 年 8 月 15 日_
+_最后更新：2026 年 9 月 27 日_
 
 本文件是 [`SECURITY.md`](SECURITY.md) 的译本；若两者有出入，以英文版为准。
 
 ## ⚠️ 请先阅读
 
-**Deskhub 会 encrypt 自己的 session。session 承载的全部内容 —— video、按键、mouse、
-clipboard 与 terminal 流量 —— 均运行在 QUIC/TLS 之上，接入与否由一次 pairing handshake
-决定：未知机器必须证明自己知道 host 的 passcode（该码本身不经过 network），或由 host 前
-的用户批准。** 唯一未 encrypt 的部分是 discovery beacon，它不携带任何机密；其余从
-encrypt 连接之外到达的数据一律丢弃。
+**请在可信的 network 或 VPN 中使用 Deskhub。不要对 UDP 47777 做 port-forward，
+也不要把正在共享的机器直接暴露在 Internet 上。**
+
+Session 通过 QUIC/TLS 传输，包括 video、按键、mouse、clipboard 和 terminal 流量。
+新机器要 Connect，必须在不发送 passcode 本身的前提下证明知道 host 的 passcode，
+或得到 host 前用户的批准。Discovery probe 和 beacon 未 encrypt，但不包含 session
+内容；encrypt 连接之外的其他 packet 会被丢弃。
 
 每个 host 还可以 **view-only** 方式共享（input 被丢弃而非 inject），也可以完全关闭新的
 pairing，仅接受已 pair 的机器。
 
-Encrypt 不等同于可以暴露在 Internet 上：该 port 仍会回应 discovery 探测，4 位 passcode
-仍是一个较短的秘密，首次连接仍以未经验证的信任为前提，且系统没有抗 flooding 的机制。
-Deskhub 面向可信的 network 设计。
+Encrypt 无法消除所有 network 风险：该 port 仍会回应 discovery 探测，4 位 passcode
+较短，首次 Connect 时没有已知身份可供核对，app 也无法抵御 flooding。
 
-因此下列原则依然成立：
-
-> **不要对 UDP 47777 做 port-forward。不要将正在共享的机器直接暴露到 Internet。远程
-> 访问请使用 VPN —— 本项目以 [Tailscale](https://tailscale.com) 为验证对象 —— 并连接其
-> `100.x.y.z` 地址。**
-
-遵循该原则时，Deskhub 可以安全使用；不遵循则相当于把本机开放给 Internet。
+远程访问请使用 VPN。本项目已使用 [Tailscale](https://tailscale.com) 测试；可以
+Connect 到 host 的 `100.x.y.z` 地址。共享屏幕或 terminal 前，请阅读下文的限制。
 
 ## Threat model
 
@@ -85,14 +81,14 @@ Deskhub 面向可信的 network 设计。
 
 ## 适合运行的环境
 
-✅ **安全**
+✅ **建议使用的环境**
 
 - 你掌控全部设备的家庭或个人 LAN。
 - 仅有你自己的设备加入的 Tailscale tailnet（或其他 WireGuard/VPN 隧道）。VPN 增加一层
   encrypt，并阻止陌生机器接触该 port。
 - 仅作为 *client* 的机器（手机、平板、不共享屏幕的笔记本）。client 不接受入站 session。
 
-❌ **不安全**
+❌ **应避免的环境**
 
 - 在路由器上为 UDP 47777 配置 port-forward，或将共享中的机器置于 DMZ。
 - 在咖啡馆、酒店、机场、校园、联合办公或会议的 Wi-Fi 上共享屏幕。
@@ -205,11 +201,9 @@ release notes 的致谢。
 
 本项目没有 bug bounty，也不支付任何报酬。
 
-**上文已说明的内容不属于漏洞。** 上述列出的局限 —— 首次连接的未验证信任、流量分析、
-beacon 回应探测、不具备抗 DoS 能力 —— 均为已知并已记录；重述其中任一项的报告不会提供
-新的信息。*值得*报告的内容包括：可由畸形 packet 触发的 memory corruption 或 crash、
-突破已记录 threat model 的方法、任何将数据泄出本机的途径，或某项缓解措施发布后其中存在
-的缺陷。
+上文已记录首次连接的信任限制、流量分析、discovery 回应和缺乏 DoS 防护等情况。
+如果你掌握了有关其影响的新证据，请报告。也请报告其他安全问题，例如畸形 packet
+引发的 memory corruption 或 crash、数据意外离开设备，或已发布缓解措施中的缺陷。
 
 ## 支持的版本
 

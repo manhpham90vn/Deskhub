@@ -2,9 +2,8 @@
 
 # Deskhub — ビルドと開発
 
-本書は、Deskhub を自分でコンパイルし、test suite を実行し、release を作成するために
-必要な事項をまとめたものである。app を*使用する*だけであれば、
-[`INSTALL.ja.md`](INSTALL.ja.md) から build 済みのものを入手するほうがよい。
+このガイドでは Deskhub の build、test の実行、release の準備を説明する。app を
+インストールして使うだけなら [`INSTALL.ja.md`](INSTALL.ja.md) から始めてほしい。
 
 本書は [`BUILD.md`](BUILD.md) の翻訳。食い違いがある場合は英語版が正文。
 
@@ -16,9 +15,9 @@ make test             # core suite を build し、オフラインで実行
 make build-linux      # または build-windows / build-macos / build-ios / build-android
 ```
 
-暗黙に build されるプラットフォームはない。引数なしの `make` は target の一覧を表示
-するだけで、build は行わない。各 target は [`Makefile`](../Makefile) の冒頭に完全な
-説明がある。引数なしの `make` が表示するのは `make/help.txt` である。
+build するプラットフォームの target を明示すること。引数なしの `make` は
+`make/help.txt` の target 一覧を表示するだけで、app を build しない。各 target の説明は
+[`Makefile`](../Makefile) にある。
 
 ---
 
@@ -77,9 +76,8 @@ make test      # core suite。オフラインで、GPU も network も不要 —
 make lint      # C++・Kotlin・Swift の format を検査する。ファイルは書き換えない
 ```
 
-変更を完了と判断する前に、両方を実行すること。`make format` は検査ではなく format を
-実際に適用する。手作業での整形は行わないこと。ツールのバージョンを固定しているのには
-理由がある。
+変更を終える前に両方を実行する。format を適用するときは `make format` を使い、
+確認だけなら `make lint` を使う。formatter のバージョンは CI と合わせて固定している。
 
 `core/` に追加したロジックには、`core/tests/` の対応するサブディレクトリに test が必要
 である。
@@ -101,9 +99,9 @@ make lint      # C++・Kotlin・Swift の format を検査する。ファイル�
 
 ### Command line client
 
-`client/cli/` は `deskhub-cli` という binary を 1 つ build する。同じ機能を GUI
-toolkit なしで提供し、ページではなくフラグで制御する。SSH 経由、スクリプト内、
-systemd 配下で Deskhub を動かす場合はこれを使用する。
+`client/cli/` は、app のページの代わりにコマンドで操作する `deskhub-cli` を build
+する。SSH、スクリプト、systemd から使える。Windows と Linux の `connect` は viewer
+ウィンドウを開くが、macOS 版はこのコマンドにまだ対応していない。
 
 ```bash
 make build-cli                       # この OS 向けの debug build
@@ -119,8 +117,9 @@ coverage・fuzz の preset には影響しない。有効にすると、OS ご�
 | コマンド | 機能 |
 | --- | --- |
 | `share` | このマシンを共有する —— 任意の display、shell、またはその両方 |
-| `connect ADDRESS` | host の画面を表示するウィンドウを開き、操作する |
+| `connect ADDRESS` | host の画面を表示して操作するウィンドウを開く（Windows と Linux） |
 | `shell ADDRESS` | 現在の terminal 内で host 上の shell を開く |
+| `send ADDRESS FILE...` | ファイルの受信を許可している host へファイルを送る |
 | `displays`、`scan`、`sources`、`probe` | 共有可能な対象と、ネットワーク上のマシン |
 | `devices`、`trust`、`settings` | デスクトップ app が読み書きするのと同じファイル |
 
@@ -128,10 +127,9 @@ coverage・fuzz の preset には影響しない。有効にすると、OS ご�
 exit code が失敗の理由を示す。`2` フラグの誤り、`3` 応答なし、`4` 拒否、`5` host key
 の変更、`9` この build では未対応。
 
-OS ごとの現状は次のとおりである。Linux はすべての機能に対応する。Windows は share と
-connect に対応し、デスクトップ app 既存のウィンドウコードを再利用する。macOS は share
-と shell の起動に対応するが、`connect` には未実装の window layer が必要であり、その旨
-を報告する。
+Linux は上表のコマンドをすべて利用できる。Windows の `connect` はデスクトップ app の
+ウィンドウコードを再利用する。macOS では share と remote shell を利用できるが、
+`connect` はこの build で画面を見られないことを通知する。
 
 `core/` と `platform/` のみを扱う場合は、共有の CMake ツリーのほうが高速である。
 
@@ -354,9 +352,8 @@ GitHub Release の作成後、`deploy.yml` は tag を `publish-packages.yml` �
   ある。
 - **macOS で `make fuzz` が libFuzzer を検出しない** —— Homebrew の LLVM が必要である。
   `make bootstrap` が導入し、それ以外は引き続き Xcode の toolchain で build される。
-- **`make lint` の結果がエディタと一致しない** —— バージョンを固定したツールが基準で
-  ある。`make bootstrap` を再実行して正確なバージョンを取得し、`make format` を実行
-  する。
+- **`make lint` の結果がエディタと一致しない** —— `make bootstrap` で CI と同じ
+  バージョンのツールを入れ直し、`make format` を実行する。
 - **Android の target が SDK を検出しない** —— `ANDROID_HOME` を設定したうえで
   `make bootstrap` を再実行する。別の NDK は `ANDROID_NDK_VERSION=<v>` で指定できる。
 - **ローカル build とダウンロード版を切り替えたあと macOS の permission が正しく動作

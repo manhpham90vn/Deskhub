@@ -2,36 +2,31 @@
 
 # Deskhub セキュリティポリシー
 
-_最終更新: 2026 年 8 月 15 日_
+_最終更新: 2026 年 9 月 27 日_
 
 本書は [`SECURITY.md`](SECURITY.md) の翻訳。食い違いがある場合は英語版が正文。
 
 ## ⚠️ 最初にお読みください
 
-**Deskhub は session を encrypt する。session が運ぶ内容 —— video、キー入力、mouse、
-clipboard、terminal のトラフィック —— はすべて QUIC/TLS 上を通り、受け入れの可否は
-pairing handshake が決定する。未知のマシンは、host の passcode を知っていることを証明
-する（コード自体は network を通過しない）か、host 側の利用者に承認される必要がある。**
-encrypt されないのは discovery beacon のみであり、これは機密情報を含まない。encrypt
-された connection の外から到達するそれ以外のデータはすべて破棄される。
+**Deskhub は信頼できる network または VPN 上で使うこと。UDP 47777 を
+port-forward したり、共有中のマシンを Internet に直接公開したりしないこと。**
+
+Session の video、キー入力、mouse、clipboard、terminal の通信には QUIC/TLS を使う。
+未知のマシンが Connect するには、passcode 自体を送らずに host の passcode を知っている
+と証明するか、host 側の利用者に承認される必要がある。Discovery の probe と beacon
+は encrypt されないが、session の内容は含まない。encrypt 済みの connection の外から
+届く、それ以外の packet は破棄される。
 
 いずれの host も **view-only** で共有でき（input は inject されず破棄される）、新規の
 pairing を完全に無効化して pair 済みのマシンのみを受け入れることもできる。
 
-encrypt されていることは、Internet に公開してよいことを意味しない。port は discovery の
-探索に応答し続け、4 桁の passcode は短い秘密であり、最初の接続は未検証の信頼に基づく。
-また flooding に対する防御機構はない。Deskhub は信頼できる network を前提に設計されて
-いる。
+Encrypt だけでは network 上のリスクはなくならない。port は discovery の探索に応答し、
+4 桁の passcode は短い。初回の Connect では既知の身元情報と照合できず、app に
+flooding への防御機構もない。
 
-したがって次の原則は引き続き適用される。
-
-> **UDP 47777 を port-forward しないこと。共有中のマシンを Internet に直接公開しない
-> こと。遠隔からのアクセスには VPN を用いること —— 本プロジェクトが検証に用いているのは
-> [Tailscale](https://tailscale.com) である —— そして `100.x.y.z` のアドレスに connect
-> すること。**
-
-この原則に従う限り Deskhub は安全に使用できる。従わない場合、自機を Internet に公開する
-ことになる。
+遠隔からアクセスするときは VPN を使う。本プロジェクトは
+[Tailscale](https://tailscale.com) で検証しており、host の `100.x.y.z` アドレスへ
+Connect できる。画面や terminal を共有する前に、以下の制限も確認してほしい。
 
 ## Threat model
 
@@ -98,9 +93,9 @@ encrypt されていることは、Internet に公開してよいことを意味
   host は常に view-only であり、これは遠隔操作の危険を除くが、情報が公開される危険は
   低減しない。
 
-## 安全に運用できる環境
+## Deskhub を使う環境
 
-✅ **安全**
+✅ **推奨する環境**
 
 - すべての端末を自分で管理している家庭内または個人の LAN。
 - 自分の端末のみが参加している Tailscale の tailnet（または他の WireGuard/VPN
@@ -108,7 +103,7 @@ encrypt されていることは、Internet に公開してよいことを意味
 - *client* としてのみ用いるマシン（スマートフォン、タブレット、画面を共有しないノート
   PC）。client は着信する session を受け付けない。
 
-❌ **安全ではない**
+❌ **避けるべき環境**
 
 - ルータで UDP 47777 を port-forward すること、または共有中のマシンを DMZ に置くこと。
 - カフェ、ホテル、空港、学内、コワーキングスペース、カンファレンスの Wi-Fi で画面を
@@ -242,12 +237,10 @@ pair 済みマシンの一覧。マシンごとの key と、client 側での ke
 
 bug bounty はなく、報酬の支払いも行わない。
 
-**上記に記載済みの内容は脆弱性とは扱わない。** 上に挙げた制約 —— 最初の接続における
-未検証の信頼、トラフィック解析、探索に応答する beacon、DoS 耐性の欠如 —— はいずれも
-既知であり記載済みである。これらを再度指摘する報告は新しい情報をもたらさない。*報告が
-有用な*内容は、不正な packet から到達しうる memory corruption や crash、文書化された
-threat model を回避する手法、データをマシン外へ流出させる経路、および緩和策が出荷された
-後にその中に存在する欠陥である。
+初回接続時の信頼、トラフィック解析、discovery への応答、DoS 耐性の欠如は、上記に
+記載済みの制限である。その影響について新しい証拠があれば報告してほしい。不正な
+packet による memory corruption や crash、データが予期せず端末外へ出る問題、
+公開済みの緩和策の欠陥なども報告対象となる。
 
 ## サポート対象のバージョン
 

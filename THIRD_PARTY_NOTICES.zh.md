@@ -4,8 +4,8 @@
 
 Deskhub 本身以 MIT License 分发 —— 见 [`LICENSE`](LICENSE)。
 
-本文件列出 Deskhub link 的第三方组件，以及随之而来的义务。这里没有任何东西使用 GPL
-license，也没有任何组件限制以 MIT License 再分发 Deskhub。
+本文件列出 Deskhub 使用的第三方组件、link 方式及相应的 license 义务。Deskhub 自身的
+source 仍采用 MIT License；表中各组件保留各自的 license。
 
 本文件是 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) 的译本；若两者有出入，以英
 文版为准。
@@ -51,17 +51,17 @@ driver 里（`libnvidia-encode.so.1`、`libcuda.so.1`），在运行时解析；
 
 ## Command line client（`client/cli`）
 
-command line client link 的库，和它所构建的那个系统的桌面 app 一样，只是少了 GUI
-toolkit —— Linux 上没有 GTK，Windows 上没有 wxWidgets。它在自己的窗口里画远端屏幕，这在
-Linux 上多带来两个 app 并不需要的库：
+command line client 不使用桌面 app 的 GUI toolkit：Linux 上不依赖 GTK，Windows 上
+不依赖 wxWidgets。`connect` 在这两个平台上会打开远程屏幕窗口；在 Linux 上，这需要
+桌面 app 不使用的两个额外库：
 
 | 组件 | License | link 方式 |
 | --- | --- | --- |
 | [libX11](https://gitlab.freedesktop.org/xorg/lib/libx11) | MIT | 动态（Linux） |
 | [libXfixes](https://gitlab.freedesktop.org/xorg/lib/libxfixes) | MIT | 动态（Linux） |
 
-Windows 上它复用 app 自己的 Win32 viewer 窗口，所以什么都不增加。macOS 上它和 app 一
-样，使用 Apple SDK 的 AppKit 和 ScreenCaptureKit。
+在 Windows 上，CLI 复用 app 的 Win32 viewer 窗口，不增加新的库。在 macOS 上，CLI
+使用 Apple SDK 的 AppKit 和 ScreenCaptureKit，但不提供远程屏幕 viewer。
 
 ## Windows app（`client/windows`）
 

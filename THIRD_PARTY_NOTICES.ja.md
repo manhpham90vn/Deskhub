@@ -4,9 +4,9 @@
 
 Deskhub 自体は MIT License で配布している —— [`LICENSE`](LICENSE) を参照。
 
-本書は Deskhub が link しているサードパーティ製コンポーネントと、それに伴う義務を
-一覧にしたものだ。ここに GPL の license のものは一つもなく、Deskhub を MIT License で
-再配布することを制限するコンポーネントもない。
+本書では、Deskhub が使用するサードパーティ製コンポーネント、その link 方法、適用される
+license 上の義務を一覧にする。Deskhub 自体の source は MIT License のままで、
+各コンポーネントにはそれぞれの license が適用される。
 
 本書は [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) の翻訳。食い違いがある場合は
 英語版が正文。
@@ -54,18 +54,19 @@ NVENC の実装そのものはユーザーの NVIDIA driver（`libnvidia-encode.
 
 ## Command line client（`client/cli`）
 
-command line client が link するライブラリは、build 対象のシステムのデスクトップ app
-と同じで、GUI toolkit だけが抜ける —— Linux では GTK なし、Windows では wxWidgets
-なし。リモートの画面は自前のウィンドウに描くので、Linux では app が必要としない
-ライブラリが 2 つ増える。
+command line client はデスクトップ app の GUI toolkit を使わず、Linux では GTK、
+Windows では wxWidgets に依存しない。両プラットフォームの `connect` はリモート画面の
+ウィンドウを開く。Linux では、そのためにデスクトップ app が使わないライブラリが
+2 つ必要になる。
 
 | コンポーネント | License | link |
 | --- | --- | --- |
 | [libX11](https://gitlab.freedesktop.org/xorg/lib/libx11) | MIT | 動的（Linux） |
 | [libXfixes](https://gitlab.freedesktop.org/xorg/lib/libxfixes) | MIT | 動的（Linux） |
 
-Windows では app 自身の Win32 の viewer ウィンドウを再利用するので、増えるものはない。
-macOS では app と同じく Apple SDK の AppKit と ScreenCaptureKit を使う。
+Windows では app の Win32 viewer ウィンドウを再利用するため、追加のライブラリは
+不要。macOS の CLI は Apple SDK の AppKit と ScreenCaptureKit を使うが、リモート
+画面の viewer は提供しない。
 
 ## Windows app（`client/windows`）
 

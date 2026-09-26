@@ -2,30 +2,28 @@
 
 # Deskhub — 機能仕様
 
-本書は Deskhub が**何をするか**を、利用者から見える形で記述したものである。製品仕様で
-あり設計書ではない。実装の詳細、protocol の説明、build 手順は含まない。それらは
-[`INSTALL.ja.md`](INSTALL.ja.md)、[`BUILD.ja.md`](BUILD.ja.md)、
-[`SECURITY.ja.md`](../SECURITY.ja.md)、および source ツリーに記載している。
+この仕様書では、Deskhub で何ができ、操作に app がどう応えるかを説明する。
+インストール、build、セキュリティについては [`INSTALL.ja.md`](INSTALL.ja.md)、
+[`BUILD.ja.md`](BUILD.ja.md)、[`SECURITY.ja.md`](../SECURITY.ja.md) を参照。
+実装の詳細は [`ARCHITECTURE.ja.md`](ARCHITECTURE.ja.md) と source ツリーにある。
 
 本書は [`SPECIFICATION.md`](SPECIFICATION.md) の翻訳。食い違いがある場合は英語版が正文。
 
 - **状態:** 現在のコードの挙動を記述している。
-- **読者:** 本製品が何をすべきかを把握する必要がある関係者 —— tester、reviewer、
-  コントリビュータ、ストア掲載文の作成者。
+- **読者:** tester、reviewer、コントリビュータ、ストア掲載文の作成者。
 
 ---
 
 ## 1. 製品概要
 
-Deskhub は、あるマシンの画面を同じ network 上の他のマシンに表示し、それらのマシンから
-mouse と keyboard を操作できるようにする。アプリケーションは 1 つであり、同じ app が
-画面の共有と他マシンの閲覧の両方を担う。デスクトップのマシンは **terminal**、すなわち
-host 上の実際の shell も共有でき、他のマシンはそれを自身のウィンドウで開く（4 節と
-5 節）。
+Deskhub では、双方から到達できる network 上の別の端末へ画面を Share できる。host が
+許可すれば、viewer はそのマシンの mouse と keyboard も操作できる。同じ app で画面の
+共有と別のマシンへの Connect の両方を行う。デスクトップの host は **terminal** も
+提供でき、接続した端末は host 上の shell を専用のウィンドウで開く（4 節と 5 節）。
 
-installer は必須ではなく、アカウント、サインイン、background service、クラウド構成要素
-のいずれも存在しない。2 台は、双方が到達できる network 上で IP アドレスにより相互に
-発見する。
+installer は用意されているが必須ではない。アカウント、サインイン、background
+service、クラウド構成要素も不要。client は、双方から到達できる network 上で IP
+アドレスを使って host に Connect する。
 
 ## 2. 用語
 
@@ -59,10 +57,10 @@ app はどのプラットフォームでも同じ区分で構成される。**Ho
 **Settings**、および本マシンと pair したマシンを一覧する **Devices** ページである
 （9 節）。
 
-デスクトップ 3 種には command line client もある。ページ形式の画面を持たないまま同じ
-挙動を提供する。host として動作し、connect し、remote shell を開き、マシンを探索し、
-app と同一の settings、pair 済みマシン一覧、trust 済み host key を読み書きする。本書に
-記載した挙動の別形態のインターフェースであり、異なる挙動ではない。
+デスクトップ 3 種には、共有、Connect、remote shell の起動、マシンの探索に使える
+command line client もある。settings、pair 済みマシン一覧、trust 済み host key は
+app と共通。CLI でリモート画面を見られるのは Windows と Linux で、macOS では app を
+使う。
 
 ---
 

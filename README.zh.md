@@ -4,10 +4,10 @@
 
 # 🖥️ Deskhub
 
-### 你的机器，出现在你每一块屏幕上。
+### 需要时，就能用上自己的电脑。
 
-**Open-source、native、跨平台。使用体验接近本机的 remote desktop —— 快且直接，足以用于
-远程游戏，这是普通远程桌面工具无法做到的。**
+**Deskhub 让你从另一台设备查看并操作自己的电脑。它开源、在五个平台上原生运行，
+兼顾日常工作与远程游戏所需的响应速度。**
 
 [![Release](https://img.shields.io/github/v/release/manhpham90vn/Deskhub?label=release&color=2563eb)](https://github.com/manhpham90vn/Deskhub/releases)
 [![License: MIT](https://img.shields.io/github/license/manhpham90vn/Deskhub?color=2563eb)](LICENSE)
@@ -40,7 +40,7 @@
 
 ## 📦 安装
 
-通过 package manager 安装，并由它保持更新 —— Windows、macOS，以及 Ubuntu / Debian / Mint：
+在 Windows、macOS、Ubuntu、Debian 或 Mint 上，可以通过 package manager 安装：
 
 ```bash
 winget install ManhPham.Deskhub                  # Windows · app
@@ -127,14 +127,13 @@ sudo apt install deskhub-cli   # CLI；也可以单独安装
 
 ## 📖 关于
 
-一份 **C++20 core** 运行于所有平台，从 Windows 到 iPhone，无需重写 protocol。共享一块
-display，在另一台机器上输入 IP，即可对其进行操作。每个平台都是相同的四个页面 ——
-**Host**、**Client**、**Devices**、**Settings** —— 因此在 macOS 上熟悉之后即可直接使用
-Android 上的 app。
+在一台设备上选择要 Share 的 display，再从另一台设备输入 IP 地址并 Connect。
+**Host**、**Client**、**Devices** 和 **Settings** 四个页面在各平台保持一致，
+从 Mac 换到 PC 或手机时也容易上手。五个平台共用一套 **C++20 core** 来处理 protocol。
 
 | ⚡ 快 | 📦 安装方便 | 🎛️ 简单 |
 | ------ | ---------- | --------- |
-| 从 capture 到显示 **~3.5 ms**，60 fps。zero-copy pipeline 全程位于 VRAM 内，hot path 不经过 CPU。 | Windows 安装程序创建开始菜单和桌面快捷方式；便携版 exe 仍可下载。无需 background service 或账号。 | **Share** 一块 display，或 **Connect** 到一个 IP。桌面端还可共享一个 **shell**，并接收 viewer 发送的**文件**。手机也可以做 host，但仅限 view-only，因为没有任何移动 OS 允许 app inject input。 |
+| 在适用的硬件上可按 60 fps stream。video 处理会在可用时使用 GPU 内存。 | 可通过 package manager 安装，也可下载 release。无需账号或 background service。 | **Share** 一块 display，或 **Connect** 到一个 IP。桌面端还可共享 **shell** 并接收**文件**；手机可用 view-only 模式共享屏幕。 |
 
 Session 在 **QUIC/TLS** 上以 end-to-end 方式 encrypt。陌生机器只有在证明自己知道 host
 的 passcode 时才被接受 —— 通过 **SPAKE2** 完成，因此 passcode 本身不会被传输 —— 或者由
@@ -147,7 +146,7 @@ VPN，并且**不要对 UDP 47777 做 port-forward**。完整的 threat model �
 ## 💡 为什么
 
 - 💻 **工作** —— 用配置较低的笔记本或 iPad，运行家中 PC 上的 Claude Code、VS Code 或 build。
-- 🌐 **任何用途** —— 从任意设备操作 Chrome、Office 或仅在 PC 上提供的软件。
+- 🌐 **桌面应用** —— 从另一台设备使用电脑上的 Chrome、Office 或其他桌面软件。
 - 🎮 **游戏** —— 60 fps，relative mouse 与 DirectInput scancode，`F9` 触发 pointer lock。
 - 🖥️ **多 display** —— 共享一块或多块 display，每块各自构成一个 session。
 
@@ -167,13 +166,13 @@ VPN，并且**不要对 UDP 47777 做 port-forward**。完整的 threat model �
 
 ## ✨ 里面有什么
 
-- **全程 zero-copy** —— capture 直接进入 VRAM → NVENC → hardware decode → render。hot path 不经过 CPU。
+- **GPU video 路径** —— capture、encode、decode 和 render 会在可用时使用平台硬件；Windows 的 NVENC 路径避免让 frame 经由 CPU 复制。
 - **基于 QUIC 的专用 protocol** —— 无限 GOP 配合按需 IDR、XOR FEC、adaptive bitrate，全部 multiplex 在一条已 encrypt 的 connection 上。
 - **画面附带声音** —— 机器自身的 audio mix，Opus 64 kbps，每个 datagram 承载一个 20 ms frame。丢失一个 packet 仅损失零点几秒，且不影响画面。不会 capture microphone。
 - **真实 input** —— relative mouse（Raw Input）以及面向 DirectInput 游戏的 scancode。host 本机的 mouse 和 keyboard 始终优先。
 - **共享的 core** —— protocol、FEC 和 bitrate control 位于 `core/`，编译进每一个 client。
-- **提供 command line** —— `deskhub-cli` 可共享屏幕、打开 remote shell，并从脚本或通过 SSH 操作 host，不需要 GUI toolkit。见 [Build](docs/BUILD.zh.md#command-line-client)。
-- **经过充分测试** —— core 具备离线运行的 unit test。CI 另外运行 ASan、UBSan 和 TSan。七个 libFuzzer target 每晚检查 wire format、H.264 parse、reassembly、terminal 的 byte stream、UI 文案以及各个 session state machine。每个发现的 crash 都会补充为一个 regression test。
+- **command line 工具** —— `deskhub-cli` 可共享屏幕、打开 remote shell，也可从脚本或 SSH 使用。在 Windows 和 Linux 上，它还能打开远程屏幕窗口。见 [Build](docs/BUILD.zh.md#command-line-client)。
+- **覆盖核心功能的测试** —— core 有离线 unit test，CI 运行 ASan、UBSan 和 TSan。七个 libFuzzer target 每晚检查 wire format、H.264 parse、reassembly、terminal 的 byte stream、UI 文案和 session state machine。发现的 crash 会加入 regression test。
 
 <a id="docs"></a>
 

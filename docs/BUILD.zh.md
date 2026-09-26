@@ -2,8 +2,8 @@
 
 # Deskhub —— 构建与开发
 
-本文档说明自行编译 Deskhub、运行各 test suite 以及发布 release 所需的全部内容。若只需
-*使用* app，请按 [`INSTALL.zh.md`](INSTALL.zh.md) 获取预先 build 好的版本。
+本指南介绍如何 build Deskhub、运行 test 并准备 release。如果只想安装和使用 app，
+请先看 [`INSTALL.zh.md`](INSTALL.zh.md)。
 
 本文件是 [`BUILD.md`](BUILD.md) 的译本；若两者有出入，以英文版为准。
 
@@ -15,9 +15,8 @@ make test             # build 并离线运行 core suite
 make build-linux      # 或 build-windows / build-macos / build-ios / build-android
 ```
 
-任何平台都不会被隐式 build：不带参数的 `make` 只打印 target 列表，不执行构建。每个
-target 在 [`Makefile`](../Makefile) 开头都有完整说明，而 `make/help.txt` 即为不带参数的
-`make` 所显示的内容。
+请明确指定要 build 的平台 target。不带参数的 `make` 只会显示 `make/help.txt` 中的
+target 列表，不会构建 app。各 target 的说明见 [`Makefile`](../Makefile)。
 
 ---
 
@@ -72,8 +71,8 @@ make test      # core suite，离线，无需 GPU 和 network —— 数秒完�
 make lint      # 检查 C++、Kotlin 和 Swift 的 format，不写回文件
 ```
 
-在认定一处改动完成之前，两者都需运行。`make format` 会实际应用 format，而不仅是检查。
-请勿手动排版，工具固定版本是有意为之。
+完成改动前，请运行这两个命令。需要实际应用 format 时，使用 `make format`；
+`make lint` 只负责检查。repo 固定了与 CI 一致的 formatter 版本。
 
 `core/` 中新增的逻辑，需在 `core/tests/` 对应的子目录中配套 test。
 
@@ -93,8 +92,9 @@ make lint      # 检查 C++、Kotlin 和 Swift 的 format，不写回文件
 
 ### Command line client
 
-`client/cli/` 构建出一个 `deskhub-cli` binary，实现相同功能但不需要 GUI toolkit，通过
-flag 而非页面进行控制。需要经由 SSH、从脚本中，或在 systemd 下运行 Deskhub 时使用它。
+`client/cli/` 会构建 `deskhub-cli`，用命令代替 app 页面。它适合通过 SSH、脚本或
+systemd 运行。在 Windows 和 Linux 上，`connect` 会打开 viewer 窗口；macOS 版本暂不
+支持该命令。
 
 ```bash
 make build-cli                       # 当前 OS 的 debug build
@@ -109,17 +109,17 @@ fuzz 等 preset 不受影响。启用后，各 OS 的 media 库由可选变为�
 | 命令 | 功能 |
 | --- | --- |
 | `share` | 共享本机 —— 任意 display、shell，或两者 |
-| `connect ADDRESS` | 打开窗口显示 host 的屏幕并进行操作 |
+| `connect ADDRESS` | 打开窗口查看并操作 host 的屏幕（Windows 和 Linux） |
 | `shell ADDRESS` | 在当前 terminal 中打开 host 上的一个 shell |
+| `send ADDRESS FILE...` | 向允许接收文件的 host 发送文件 |
 | `displays`、`scan`、`sources`、`probe` | 可共享的内容，以及网络中存在的机器 |
 | `devices`、`trust`、`settings` | 与桌面 app 读写同一批文件 |
 
 `deskhub-cli help COMMAND` 会打印可用 flag。所有命令均支持 `--json`，exit code 表明失败
 原因：`2` flag 有误、`3` 无响应、`4` 被拒绝、`5` host key 已变更、`9` 当前 build 不支持。
 
-各 OS 的当前状态：Linux 支持全部功能。Windows 支持 share 与 connect，复用桌面 app 已有
-的窗口代码。macOS 支持 share 与打开 shell，但 `connect` 需要尚未实现的 window layer，程
-序会据实报告。
+Linux 支持上表中的全部命令。Windows 的 `connect` 复用桌面 app 的窗口代码。
+macOS 可 share 并打开 remote shell；`connect` 会提示此 build 无法查看屏幕。
 
 若只修改 `core/` 与 `platform/`，使用共享的 CMake tree 更快：
 
@@ -323,8 +323,8 @@ GitHub Release 创建后，`deploy.yml` 将 tag 交给 `publish-packages.yml`，
   各自的版本。opus 与 `make opus*` 同理。
 - **macOS 上 `make fuzz` 找不到 libFuzzer** —— 它需要 Homebrew 的 LLVM。
   `make bootstrap` 会安装，其余部分仍使用 Xcode 的 toolchain 构建。
-- **`make lint` 的结果与编辑器不一致** —— 以固定版本的工具为准。重新运行
-  `make bootstrap` 获取确切版本，然后执行 `make format`。
+- **`make lint` 的结果与编辑器不一致** —— 运行 `make bootstrap`，获取 CI 使用的工具
+  版本，然后执行 `make format`。
 - **Android target 找不到 SDK** —— 设置 `ANDROID_HOME`，然后重新运行 `make bootstrap`。
   `ANDROID_NDK_VERSION=<v>` 可选择其他 NDK。
 - **在本地 build 与下载版本之间切换后，macOS 的 permission 行为异常** —— 执行

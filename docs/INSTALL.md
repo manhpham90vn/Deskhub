@@ -2,30 +2,30 @@
 
 # Deskhub — Install
 
-Every platform on one page. Nothing here needs a source checkout — every release is
-prebuilt. Compiling it yourself is [`BUILD.md`](BUILD.md).
+Choose your platform below to install a prebuilt release. You do not need to check out
+the source code. If you want to build Deskhub yourself, see [`BUILD.md`](BUILD.md).
 
-All downloads live on the
-[Releases page](https://github.com/manhpham90vn/Deskhub/releases); the mobile builds are
-distributed by TestFlight and Google Play.
+Desktop installers and the Android APK are on the
+[Releases page](https://github.com/manhpham90vn/Deskhub/releases). You can also get the
+mobile beta through TestFlight or Google Play.
 
-| Platform | File | One-line install |
+| Platform | File | How to install |
 | --- | --- | --- |
 | 🪟 Windows | `deskhub-v*-windows-setup.exe` | Download and install; open DeskHub from Start or Desktop |
-| 🍎 macOS | `deskhub-v*-macos.dmg` | Open the dmg, drag the app across |
+| 🍎 macOS | `deskhub-v*-macos.dmg` | Open the dmg and drag Deskhub into Applications |
 | 🐧 Ubuntu, Kubuntu, Debian, Mint | `deskhub-v*-amd64.deb` | `sudo apt install ./deskhub-v*-amd64.deb` |
 | 🐧 Fedora (Workstation & KDE spin) | `deskhub-v*-x86_64.rpm` | `sudo dnf install ./deskhub-v*-x86_64.rpm` |
 | 🐧 openSUSE | `deskhub-v*-x86_64.rpm` | `sudo zypper install ./deskhub-v*-x86_64.rpm` |
-| 🐧 Arch, anything else | `deskhub-v*-linux-x86_64` | `chmod +x deskhub-v*-linux-x86_64 && ./deskhub-v*-linux-x86_64` |
+| 🐧 Arch and other Linux distributions | `deskhub-v*-linux-x86_64` | `chmod +x deskhub-v*-linux-x86_64 && ./deskhub-v*-linux-x86_64` |
 | 🤖 Android | `deskhub-v*-android.apk` | Install the apk, or join the Play beta |
 | 📱 iOS | — | [TestFlight](https://testflight.apple.com/join/7qY7wgpd) |
 
-There is also `deskhub-cli`, the same client with no window of its own — see
-[Command line](#-command-line).
+There is also `deskhub-cli` for terminal commands and scripts. On Windows and Linux it
+can open a window to display a remote screen. See [Command line](#-command-line).
 
-**Package managers** keep Deskhub up to date on their own: `winget install ManhPham.Deskhub` on
-Windows, `brew install --cask manhpham90vn/tap/deskhub` on macOS, and an
-[apt repository](#-linux) for Ubuntu, Kubuntu, Debian and Mint.
+You can also install through `winget` on Windows, Homebrew on macOS, or the
+[apt repository](#-linux) on Ubuntu, Kubuntu, Debian and Mint. Use the package manager's
+upgrade command when you want a newer release.
 
 ---
 
@@ -82,9 +82,9 @@ Viewing another machine needs neither.
 
 ## 🐧 Linux
 
-**To connect and view, installing is all it takes.** The app links only against GTK3,
-PipeWire and libva, which every stock desktop already has; the H.264 decoder is compiled
-in, so no FFmpeg package is involved.
+**To connect and view, start with the app package.** The H.264 decoder is included, so
+you do not need to install an FFmpeg package separately. Your distribution must also
+provide the desktop libraries the app uses, including GTK3, PipeWire and libva.
 
 The deb and the rpm carry identical content — pick the one your package manager
 understands. Both ship the `/dev/uinput` udev rule described in requirement 3 below, so
@@ -230,10 +230,11 @@ into the device it runs on.
 
 ## 💻 Command line
 
-`deskhub-cli` is the same client without a window of its own: it shares a screen, opens a
-remote shell and drives a host from a script or over SSH. Run `deskhub-cli help` for the
-list. Everything it reads and writes — settings, paired machines, trusted host keys — is
-the same as the app's, so the two agree.
+`deskhub-cli` provides commands for sharing a screen, opening a remote shell and
+connecting from a script or over SSH. On Windows and Linux, `connect` opens a window for
+the remote screen; on macOS, use the desktop app to watch a screen. Run `deskhub-cli help`
+for the command list. The CLI and app use the same settings, paired machines and trusted
+host keys.
 
 | Platform | File |
 | --- | --- |
@@ -278,10 +279,11 @@ it must prove it knows the host's passcode via **SPAKE2** (the code itself never
 and each connection allows exactly one guess), or wait for the person at the host to
 answer *Let this machine in?*.
 
-Encrypted is not the same as Internet-proof. The port still answers discovery probes, and
-the first pairing with a machine you have never met is a leap of faith. Prefer a **network
-you trust**, or a **VPN** — install [Tailscale](https://tailscale.com) on both machines
-and connect to the `100.x.y.z` address. **Never port-forward UDP 47777.**
+Use Deskhub on a **network you trust** or through a **VPN**. Do not port-forward UDP
+47777. Encryption protects session contents, but the port still answers discovery probes,
+and the first pairing with a new machine has not yet verified its identity. For remote
+access, you can install [Tailscale](https://tailscale.com) on both machines and connect
+to the `100.x.y.z` address.
 
 [`SECURITY.md`](../SECURITY.md) has the full threat model, what is and isn't protected,
 and how to report a vulnerability.

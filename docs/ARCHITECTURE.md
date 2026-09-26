@@ -2,19 +2,19 @@
 
 # Deskhub — Architecture
 
-This document describes **how** Deskhub is built: the layers, the processes and
-threads, the wire protocol, and the design decisions behind them. What the product
-does, as a user sees it, lives in [`SPECIFICATION.md`](SPECIFICATION.md); the threat
-model lives in [`SECURITY.md`](../SECURITY.md).
+This document is for people changing Deskhub's code. It maps the layers, processes,
+threads and wire protocol, then explains the decisions behind them. For product behavior,
+see [`SPECIFICATION.md`](SPECIFICATION.md). For security boundaries, see
+[`SECURITY.md`](../SECURITY.md).
 
 - **Status:** describes the current code.
-- **Audience:** anyone changing the code.
+- **Audience:** contributors working on the implementation.
 
 ---
 
 ## 1. Layers
 
-One rule drives the whole layout: logic is written once and shared by every client.
+The layout follows one rule: write shared logic once, then use it from every client.
 
 ```
 core/       pure C++20, no OS headers, no third-party code, unit-tested offline

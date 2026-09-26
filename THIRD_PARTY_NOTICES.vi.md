@@ -4,9 +4,9 @@
 
 Bản thân Deskhub được phát hành theo MIT License — xem [`LICENSE`](LICENSE).
 
-File này liệt kê các thành phần bên thứ ba mà Deskhub link tới, cùng những nghĩa vụ đi
-kèm chúng. Không thứ nào ở đây dùng license GPL, và không thành phần nào hạn chế việc
-phân phối lại Deskhub theo MIT License.
+Tài liệu này liệt kê các thành phần bên thứ ba Deskhub sử dụng, cách chúng được link và
+những nghĩa vụ license đi kèm. Mã nguồn của Deskhub vẫn theo MIT License; mỗi thành phần
+trong danh sách giữ license riêng của nó.
 
 Đây là bản dịch của [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md). Nếu hai bản có
 khác biệt, bản tiếng Anh là bản chuẩn.
@@ -54,18 +54,17 @@ hay sửa đổi; người dùng có thể thay thế các thư viện hệ th�
 
 ## Command line client (`client/cli`)
 
-Command line client link đúng những thư viện mà app desktop của hệ thống nó được build
-cho, trừ phần GUI toolkit — không GTK trên Linux, không wxWidgets trên Windows. Nó vẽ một
-màn hình từ xa trong cửa sổ riêng của mình, và trên Linux điều đó thêm hai thư viện mà app
-không cần:
+Command line client không dùng GUI toolkit của app desktop: không phụ thuộc GTK trên
+Linux hay wxWidgets trên Windows. Lệnh `connect` mở cửa sổ xem màn hình từ xa trên hai
+nền tảng này. Trên Linux, cửa sổ đó cần thêm hai thư viện mà app desktop không dùng:
 
 | Thành phần | License | Cách link |
 | --- | --- | --- |
 | [libX11](https://gitlab.freedesktop.org/xorg/lib/libx11) | MIT | động (Linux) |
 | [libXfixes](https://gitlab.freedesktop.org/xorg/lib/libxfixes) | MIT | động (Linux) |
 
-Trên Windows nó dùng lại chính cửa sổ viewer Win32 của app, nên không thêm gì. Trên macOS
-nó dùng AppKit và ScreenCaptureKit từ Apple SDK, giống như app.
+Trên Windows, CLI dùng lại cửa sổ viewer Win32 của app nên không cần thêm thư viện. Trên
+macOS, CLI dùng AppKit và ScreenCaptureKit từ Apple SDK nhưng không có viewer màn hình từ xa.
 
 ## App Windows (`client/windows`)
 

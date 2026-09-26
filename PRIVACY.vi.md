@@ -4,9 +4,8 @@
 
 _Ngày hiệu lực: 7 tháng 9 năm 2026 — Phiên bản 2.5_
 
-> Các bản dịch có tại [`PRIVACY.vi.md`](PRIVACY.vi.md),
-> [`PRIVACY.zh.md`](PRIVACY.zh.md) và [`PRIVACY.ja.md`](PRIVACY.ja.md). Bản tiếng Anh là
-> bản chuẩn.
+> Đây là bản dịch của [`PRIVACY.md`](PRIVACY.md). Nếu nội dung có khác biệt, bản tiếng Anh
+> là bản chuẩn.
 
 ## 1. Giới thiệu
 
@@ -26,11 +25,10 @@ Phần mềm do một lập trình viên cá nhân phát triển và phát hành
 
 ## 2. Tóm tắt
 
-**Deskhub không thu thập, không lưu trữ, không bán và không chia sẻ bất kỳ dữ liệu cá
-nhân nào. Chúng tôi không vận hành server nào, và không dữ liệu nào về bạn hoặc về cách
-bạn sử dụng ứng dụng được chuyển tới chúng tôi hay bất kỳ bên thứ ba nào thông qua Phần
-mềm.** Phần mềm không có tài khoản người dùng, không analytics, không crash reporting,
-không quảng cáo và không nhúng SDK của bên thứ ba.
+**Lập trình viên không nhận hoặc lưu nội dung session hay dữ liệu sử dụng của bạn thông
+qua Deskhub.** App vẫn xử lý và lưu một số thông tin trên chính thiết bị của bạn, như mô
+tả bên dưới. Deskhub không có tài khoản người dùng, server do lập trình viên vận hành,
+analytics, crash reporting, quảng cáo hay SDK bên thứ ba được nhúng vào app.
 
 ## 3. Thông tin Phần mềm xử lý
 
@@ -72,11 +70,11 @@ không có phương tiện kỹ thuật để gửi dữ liệu tới lập trì
 
 ### 3.2 Dữ liệu Phần mềm KHÔNG xử lý
 
-Phần mềm không truy cập và không xử lý: tên của bạn (ngoài tên thiết bị đã mô tả ở trên,
-vốn mặc định là tên của chính máy tính hoặc thiết bị), địa chỉ email, số điện thoại, danh
-bạ, vị trí, ảnh, file (ngoài nội dung hiển thị trên màn hình PC mà bạn chọn stream),
-microphone, camera, định danh quảng cáo, hay bất kỳ định danh thiết bị nào vượt quá mức
-hệ điều hành cần để chạy app.
+Ngoài tên thiết bị đã mô tả ở trên, Deskhub không yêu cầu tên của bạn, địa chỉ email, số
+điện thoại, danh bạ, vị trí hay định danh quảng cáo. App không sử dụng microphone hoặc
+camera. App chỉ truy cập ảnh và file khi bạn chọn chúng để gửi, khi thiết bị khác gửi
+chúng tới bạn, hoặc khi chúng xuất hiện trên màn hình bạn chọn share. Các mục phía trên
+giải thích những file đó được lưu ở đâu và trong bao lâu.
 
 ### 3.3 Share màn hình điện thoại hoặc tablet
 
@@ -205,8 +203,8 @@ ai, bao gồm trẻ em dưới 13 tuổi (COPPA) và dưới 16 tuổi (GDPR).
 
 ## 10. Chuyển dữ liệu qua biên giới
 
-Không có. Dữ liệu của bạn không rời khỏi các thiết bị và network của chính bạn thông qua
-Phần mềm.
+Deskhub không gửi dữ liệu cho lập trình viên. Nếu bạn kết nối qua VPN, dữ liệu session đi
+giữa các thiết bị của bạn trên network đó, như mô tả ở mục 3.1.
 
 ## 11. Thay đổi đối với chính sách này
 

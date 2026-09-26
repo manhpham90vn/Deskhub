@@ -2,20 +2,19 @@
 
 # Deskhub — インストール
 
-全プラットフォームを 1 ページにまとめている。ここには source の checkout を必要とする
-手順はない。release はすべて build 済みで配布している。自分でコンパイルする場合は
-[`BUILD.ja.md`](BUILD.ja.md) を参照。
+お使いのプラットフォームを選び、build 済みの release をインストールできる。source を
+checkout する必要はない。自分でコンパイルする場合は [`BUILD.ja.md`](BUILD.ja.md) を参照。
 
-ダウンロードはすべて
-[Releases ページ](https://github.com/manhpham90vn/Deskhub/releases) にある。モバイルの
-build は TestFlight と Google Play から配布している。
+デスクトップのインストーラーと Android APK は
+[Releases ページ](https://github.com/manhpham90vn/Deskhub/releases) から入手できる。
+モバイルの beta は TestFlight または Google Play でも配布している。
 
 本書は [`INSTALL.md`](INSTALL.md) の翻訳。食い違いがある場合は英語版が正文。
 
 | プラットフォーム | ファイル | インストール手順 |
 | --- | --- | --- |
 | 🪟 Windows | `deskhub-v*-windows-setup.exe` | ダウンロードしてインストールし、スタートメニューまたはデスクトップから起動 |
-| 🍎 macOS | `deskhub-v*-macos.dmg` | dmg を開き、app を Applications にドラッグ |
+| 🍎 macOS | `deskhub-v*-macos.dmg` | dmg を開き、Deskhub を Applications にドラッグ |
 | 🐧 Ubuntu、Kubuntu、Debian、Mint | `deskhub-v*-amd64.deb` | `sudo apt install ./deskhub-v*-amd64.deb` |
 | 🐧 Fedora（Workstation と KDE spin） | `deskhub-v*-x86_64.rpm` | `sudo dnf install ./deskhub-v*-x86_64.rpm` |
 | 🐧 openSUSE | `deskhub-v*-x86_64.rpm` | `sudo zypper install ./deskhub-v*-x86_64.rpm` |
@@ -23,12 +22,12 @@ build は TestFlight と Google Play から配布している。
 | 🤖 Android | `deskhub-v*-android.apk` | apk をインストール、または Play の beta に参加 |
 | 📱 iOS | — | [TestFlight](https://testflight.apple.com/join/7qY7wgpd) |
 
-このほかに `deskhub-cli` がある。同じ client で、自前のウィンドウを持たない点だけが
-異なる。[Command line](#-command-line) を参照。
+terminal からの操作やスクリプトには `deskhub-cli` も使える。Windows と Linux では、
+CLI からリモート画面のウィンドウも開ける。[Command line](#-command-line) を参照。
 
-**Package manager** を使えば Deskhub は自動で最新に保たれる。Windows では
-`winget install ManhPham.Deskhub`、macOS では `brew install --cask manhpham90vn/tap/deskhub`、
-Ubuntu、Kubuntu、Debian、Mint では [apt repository](#-linux) を使う。
+Windows では `winget`、macOS では Homebrew、Ubuntu・Kubuntu・Debian・Mint では
+[apt repository](#-linux) からもインストールできる。新しい release が必要になったら、
+それぞれの package manager の更新コマンドを使う。
 
 ---
 
@@ -84,9 +83,9 @@ brew install --cask manhpham90vn/tap/deskhub
 
 ## 🐧 Linux
 
-**connect して観るだけであれば、インストールするだけでよい。** app が link するのは
-GTK3、PipeWire、libva のみで、いずれも標準的なデスクトップ環境に含まれている。H.264
-decoder は app にコンパイル済みのため、FFmpeg の package には依存しない。
+**connect して画面を見るなら、まず app の package をインストールする。** H.264
+decoder は app に含まれるため、FFmpeg の package を別途入れる必要はない。GTK3、
+PipeWire、libva など、app が使うデスクトップ向けライブラリは OS 側に必要となる。
 
 deb と rpm の内容は同一であり、利用中の package manager が扱えるほうを選べばよい。
 どちらにも下記の要件 3 で説明する `/dev/uinput` の udev rule が含まれるため、インストール
@@ -232,10 +231,10 @@ Android と同様に、iPhone と iPad の host は view-only に限られる。
 
 ## 💻 Command line
 
-`deskhub-cli` は同じ client であり、自前のウィンドウを持たない点だけが異なる。画面を
-共有し、remote shell を開き、スクリプトや SSH 経由で host を操作する。コマンドの一覧は
-`deskhub-cli help` で表示する。読み書きする内容 —— settings、pair 済みマシン、trust
-した host key —— はすべて app と共通であり、両者の状態は常に一致する。
+`deskhub-cli` では画面の共有や remote shell の起動をコマンドで行える。スクリプトや
+SSH からも利用可能。Windows と Linux の `connect` はリモート画面のウィンドウを開く。
+macOS で画面を見る場合はデスクトップ app を使う。コマンド一覧は `deskhub-cli help`
+で確認できる。settings、pair 済みマシン、trust した host key は app と共通である。
 
 | プラットフォーム | ファイル |
 | --- | --- |
@@ -281,11 +280,11 @@ session が運ぶ内容 —— video、キー入力、mouse、clipboard、termin
 （passcode 自体は送信されず、1 つの connection につき試行は 1 回）か、host 側の利用者が
 *Let this machine in?* に回答するかのいずれかである。
 
-encrypt されていることと、Internet に露出してよいことは別である。port は discovery の
-探索に応答し続けるし、面識のないマシンとの最初の pairing は初期的な信頼に基づく。
-**信頼できる network** または **VPN** を優先すること。両方のマシンに
-[Tailscale](https://tailscale.com) を導入し、`100.x.y.z` のアドレスに connect するのが
-確実である。**UDP 47777 を port-forward してはならない。**
+Deskhub は**信頼できる network** または **VPN** 上で使い、**UDP 47777 を
+port-forward しないこと**。Encrypt は session の内容を守るが、port は discovery の
+探索に応答する。また、初回の pairing では既知の身元情報と照合できない。遠隔から
+アクセスする場合は、両方のマシンに [Tailscale](https://tailscale.com) を導入し、
+`100.x.y.z` のアドレスへ Connect できる。
 
 完全な threat model、保護される範囲、脆弱性の報告方法は
 [`SECURITY.ja.md`](../SECURITY.ja.md) に記載している。

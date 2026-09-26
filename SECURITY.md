@@ -2,32 +2,31 @@
 
 # Deskhub Security Policy
 
-_Last updated: August 15, 2026_
+_Last updated: September 27, 2026_
 
 ## ⚠️ Read this first
 
-**Deskhub encrypts its sessions. Everything a session carries — video, keystrokes,
-mouse, clipboard and terminal traffic — runs over QUIC/TLS, and admission is decided by
-a pairing handshake: an unknown machine must either prove it knows the host's passcode
-(the code itself never travels over the network) or be approved by the person at the
-host.** The only traffic left in the plain is the discovery beacon, which carries no
-secrets; anything else arriving outside an encrypted connection is dropped.
+**Use Deskhub on a network you trust or through a VPN. Never port-forward UDP 47777 or
+expose a sharing machine directly to the Internet.**
+
+Sessions run over QUIC/TLS, including video, keystrokes, mouse, clipboard and terminal
+traffic. Before a new machine can connect, it must prove it knows the host's passcode
+without sending the code itself, or the person at the host must approve it. Discovery
+probes and beacons remain unencrypted; they carry no session content. Other packets
+outside an encrypted connection are dropped.
 
 Every host can also share **view-only** (input is dropped instead of injected), and can
 turn off new pairings entirely so only already-paired machines get in.
 
-Encryption is not the same as being Internet-proof: the port still answers discovery
-probes, a 4-digit passcode is still a small secret, the first meeting is still a leap of
-faith, and nothing here resists flooding. Deskhub remains built for networks you trust.
+Encryption does not remove every network risk. The port still answers discovery probes,
+a 4-digit passcode is a short secret, the first connection does not verify a previously
+known identity, and the app does not resist flooding.
 
-So the rule still stands:
+For remote access, use a VPN. The project has been tested with
+[Tailscale](https://tailscale.com); connect to the host's `100.x.y.z` address.
 
-> **Never port-forward UDP 47777. Never expose a sharing machine to the Internet
-> directly. For remote access, use a VPN — [Tailscale](https://tailscale.com) is what
-> this project is tested against — and connect to the `100.x.y.z` address.**
-
-If you follow that rule, Deskhub is safe to use. If you break it, you are handing your
-machine to the Internet.
+Keep the host on a trusted network, and review the limits below before sharing a screen
+or terminal.
 
 ## Threat model
 
@@ -92,9 +91,9 @@ This is the honest list. Nothing below is solved today:
   every viewer you admit sees all of it. Mobile hosts are always view-only, which removes
   the remote-control risk but none of the exposure risk.
 
-## Where it is safe to run
+## Where to run Deskhub
 
-✅ **Safe**
+✅ **Recommended environments**
 
 - A home or personal LAN where you control every device on it.
 - A Tailscale tailnet (or another WireGuard/VPN tunnel) that only your own devices have
@@ -103,7 +102,7 @@ This is the honest list. Nothing below is solved today:
 - A machine that is only ever a *client* (phone, tablet, laptop that never shares its
   screen). Clients accept no inbound sessions.
 
-❌ **Unsafe — do not do this**
+❌ **Avoid these setups**
 
 - Port-forwarding UDP 47777 through your router, or putting a sharing machine in a DMZ.
 - Sharing your screen on café, hotel, airport, campus, coworking or conference Wi-Fi.
@@ -238,13 +237,11 @@ release notes unless you would rather not be.
 
 There is no bug bounty; nothing is paid out.
 
-**Already documented above is not a vulnerability.** The limits listed above — the
-first-meeting leap of faith, traffic analysis, the beacon answering probes, the lack of
-DoS resistance — are known and listed; a report restating one of them tells us nothing
-new. What *is* worth reporting: memory
-corruption or crashes reachable from a malformed packet, a way to escape the documented
-threat model, anything that leaks data off the machine, or a flaw in a mitigation once
-one ships.
+The limits above — first-connection trust, traffic analysis, discovery responses and
+the lack of DoS resistance — are already documented. Please report new evidence about
+their impact, or other security issues such as memory corruption, crashes caused by
+malformed packets, data leaving a device unexpectedly, or a flaw in a released
+mitigation.
 
 ## Supported versions
 

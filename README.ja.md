@@ -4,11 +4,10 @@
 
 # 🖥️ Deskhub
 
-### あなたのマシンを、手元のすべての画面へ。
+### 必要な場所から、自分のパソコンを使える。
 
-**Open-source、native、クロスプラットフォーム。手元で操作しているのと変わらない
-remote desktop —— 通常のリモートデスクトップでは実現できない、遠隔でのゲームプレイに
-耐えるだけの速さと直接性を備える。**
+**Deskhub を使えば、別の端末から自分のパソコンの画面を見て操作できる。オープンソースで、
+5 つのプラットフォームで native に動作し、作業にもゲームにも応えられる操作感を目指している。**
 
 [![Release](https://img.shields.io/github/v/release/manhpham90vn/Deskhub?label=release&color=2563eb)](https://github.com/manhpham90vn/Deskhub/releases)
 [![License: MIT](https://img.shields.io/github/license/manhpham90vn/Deskhub?color=2563eb)](LICENSE)
@@ -41,7 +40,7 @@ remote desktop —— 通常のリモートデスクトップでは実現でき�
 
 ## 📦 インストール
 
-package manager を使えば、インストールとその後の更新を任せられる —— Windows、macOS、Ubuntu / Debian / Mint：
+Windows、macOS、Ubuntu、Debian、Mint では package manager からインストールできる。
 
 ```bash
 winget install ManhPham.Deskhub                  # Windows · app
@@ -130,15 +129,14 @@ sudo apt install deskhub-cli   # CLI。単独でもインストール可能
 
 ## 📖 概要
 
-一つの **C++20 core** が、Windows から iPhone まですべてのプラットフォームで動作し、
-protocol を書き直す必要はない。display を共有し、もう一方のマシンで IP を入力すれば
-操作できる。どのプラットフォームでも同じ 4 ページ —— **Host**、**Client**、
-**Devices**、**Settings** —— で構成されているため、macOS で操作を覚えれば Android の
-app もそのまま利用できる。
+一方の端末で共有する display を選び、もう一方で IP アドレスを入力して Connect する。
+**Host**、**Client**、**Devices**、**Settings** の 4 ページはどのプラットフォームでも
+共通なので、Mac から PC やスマートフォンに移っても操作に迷いにくい。protocol は 5 つの
+プラットフォームで共通の **C++20 core** が処理する。
 
 | ⚡ 速い | 📦 簡単インストール | 🎛️ シンプル |
 | ------ | ---------- | --------- |
-| capture から表示まで **~3.5 ms**、60 fps。zero-copy pipeline は VRAM 内で完結し、hot path は CPU を経由しない。 | Windows のインストーラーはスタートメニューとデスクトップにショートカットを作成。ポータブル版 exe も利用可能。background service やアカウントは不要。 | display を **Share** するか、IP へ **Connect** する。デスクトップではさらに **shell** を共有でき、viewer が送信した**ファイル**も受け取れる。スマートフォンも host になれるが view-only に限られる。app に input を inject させるモバイル OS が存在しないためである。 |
+| 対応するハードウェアでは 60 fps で stream できる。video 処理には、利用できる場合に GPU メモリを使う。 | package manager からインストールするか、release をダウンロードできる。アカウントも background service も不要。 | display を **Share** するか、IP アドレスへ **Connect** する。デスクトップでは **shell** の共有と**ファイル**の受信も可能。スマートフォンは view-only で画面を共有できる。 |
 
 Session は **QUIC/TLS** 上で end-to-end に encrypt される。未知のマシンが受け入れられる
 のは、host の passcode を知っていることを証明した場合 —— **SPAKE2** を用いるため
@@ -152,7 +150,7 @@ passcode 自体は送信されない —— または host 側の利用者が承
 ## 💡 用途
 
 - 💻 **作業** —— 性能の低いノート PC や iPad から、自宅 PC の Claude Code、VS Code、build を実行する。
-- 🌐 **汎用** —— Chrome、Office、PC 専用ソフトウェアを任意の端末から操作する。
+- 🌐 **デスクトップアプリ** —— 別の端末から、パソコン上の Chrome、Office などを使う。
 - 🎮 **ゲーム** —— 60 fps、relative mouse と DirectInput scancode、`F9` による pointer lock。
 - 🖥️ **マルチ display** —— display を 1 つまたは複数共有し、それぞれが独立した session となる。
 
@@ -172,13 +170,13 @@ passcode 自体は送信されない —— または host 側の利用者が承
 
 ## ✨ 中身
 
-- **端から端まで zero-copy** —— capture が直接 VRAM へ入り、NVENC → hardware decode → render と進む。hot path は CPU を経由しない。
+- **GPU を使う video 処理** —— 対応する環境では capture、encode、decode、render に各プラットフォームのハードウェアを使う。Windows の NVENC 経路では frame を CPU 経由でコピーしない。
 - **QUIC 上の専用 protocol** —— 無限 GOP と必要時の IDR、XOR FEC、adaptive bitrate を、encrypt 済みの connection 1 本に multiplex する。
 - **画面に音声が伴う** —— マシン自身の audio mix を Opus 64 kbps で送る。1 datagram につき 20 ms の frame を 1 つ。packet を 1 つ失っても損失は数十ミリ秒にとどまり、映像には影響しない。microphone は capture しない。
 - **実際の input** —— relative mouse（Raw Input）と、DirectInput ゲーム向けの scancode。host 自身の mouse と keyboard が常に優先される。
 - **共有された core** —— protocol、FEC、bitrate control は `core/` にあり、すべての client にコンパイルされる。
-- **command line も提供** —— `deskhub-cli` は画面の共有、remote shell の起動、スクリプトや SSH 経由での host の操作を行う。GUI toolkit は不要。[Build](docs/BUILD.ja.md#command-line-client) を参照。
-- **十分にテストされている** —— core にはオフラインで動作する unit test がある。CI では ASan、UBSan、TSan も実行する。7 つの libFuzzer target が、wire format、H.264 の parse、reassembly、terminal の byte stream、UI の文字列、session state machine を毎晩検査する。検出された crash はいずれも regression test として追加される。
+- **command line ツール** —— `deskhub-cli` で画面を共有したり、remote shell を開いたり、スクリプトや SSH から操作したりできる。Windows と Linux ではリモート画面のウィンドウも開ける。[Build](docs/BUILD.ja.md#command-line-client) を参照。
+- **core を継続的にテスト** —— オフラインの unit test に加え、CI で ASan、UBSan、TSan を実行する。7 つの libFuzzer target が wire format、H.264 の parse、reassembly、terminal の byte stream、UI の文字列、session state machine を毎晩検査し、見つかった crash は regression test に加える。
 
 <a id="docs"></a>
 

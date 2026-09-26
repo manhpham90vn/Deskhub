@@ -2,28 +2,27 @@
 
 # Deskhub — Functional Specification
 
-This document describes **what** Deskhub does, as experienced by a person using it. It is
-a product specification, not a design document: it contains no implementation detail, no
-protocol description and no build instructions. Those live in
-[`INSTALL.md`](INSTALL.md), [`BUILD.md`](BUILD.md), [`SECURITY.md`](../SECURITY.md) and
-the source tree.
+This specification describes what people can do with Deskhub and how the app responds.
+For installation, build instructions and security guidance, see [`INSTALL.md`](INSTALL.md),
+[`BUILD.md`](BUILD.md) and [`SECURITY.md`](../SECURITY.md). Implementation details live in
+[`ARCHITECTURE.md`](ARCHITECTURE.md) and the source tree.
 
 - **Status:** describes the behaviour of the current code.
-- **Audience:** anyone who needs to know what the product is supposed to do — testers,
-  reviewers, contributors, store listings.
+- **Audience:** testers, reviewers, contributors and people preparing store listings.
 
 ---
 
 ## 1. Product summary
 
-Deskhub lets one machine show its screen to other machines on the same network, and lets
-those machines drive its mouse and keyboard. It is a single application: the same app
-both shares a screen and views someone else's. A desktop machine can also share a
-**terminal**: a real shell on the host that other machines open in a window of their own
+Deskhub lets you share a machine's screen with another device on a network both can
+reach. The viewer can also control the shared machine's mouse and keyboard when the host
+allows it. The same app can share a screen or connect to another machine. Desktop hosts
+can also offer a **terminal**: a shell that a connected device opens in its own window
 (sections 4 and 5).
 
-There is no installer requirement, no account, no sign-in, no background service and no
-cloud component. Two machines find each other by IP address on a network both can reach.
+An installer is available but not required. Deskhub needs no account, sign-in,
+background service or cloud component. A client connects to a host by IP address over a
+network both devices can reach.
 
 ## 2. Vocabulary
 
@@ -57,10 +56,10 @@ The app is organised into the same named sections everywhere: **Host**, **Client
 **Settings** — plus a **Devices** page listing the machines paired with this one
 (section 9).
 
-The three desktops also have a command-line client. It offers the same behaviour with no
-pages at all: it hosts, connects, opens a remote shell, finds machines, and reads and
-writes the very same settings, paired machines and trusted host keys the app does. It is
-an alternative face on the behaviour in this document, never a different behaviour.
+The three desktop platforms also have a command-line client for sharing, connecting,
+opening a remote shell and finding machines. It reads and writes the same settings,
+paired machines and trusted host keys as the app. Screen viewing through the CLI is
+available on Windows and Linux; on macOS, use the app to watch a screen.
 
 ---
 

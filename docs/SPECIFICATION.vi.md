@@ -2,32 +2,29 @@
 
 # Deskhub — Đặc tả chức năng
 
-Tài liệu này mô tả Deskhub **làm gì**, theo góc nhìn của người sử dụng. Đây là đặc tả sản
-phẩm, không phải tài liệu thiết kế: không chứa chi tiết triển khai, không mô tả protocol
-và không có hướng dẫn build. Các nội dung đó nằm trong
-[`INSTALL.vi.md`](INSTALL.vi.md), [`BUILD.vi.md`](BUILD.vi.md),
-[`SECURITY.vi.md`](../SECURITY.vi.md) và trong cây source.
+Đặc tả này mô tả những việc người dùng có thể làm với Deskhub và cách app phản hồi.
+Hướng dẫn cài đặt, build và bảo mật nằm trong [`INSTALL.vi.md`](INSTALL.vi.md),
+[`BUILD.vi.md`](BUILD.vi.md) và [`SECURITY.vi.md`](../SECURITY.vi.md). Chi tiết triển khai
+nằm trong [`ARCHITECTURE.vi.md`](ARCHITECTURE.vi.md) và cây source.
 
 Đây là bản dịch của [`SPECIFICATION.md`](SPECIFICATION.md). Nếu hai bản có khác biệt, bản
 tiếng Anh là bản chuẩn.
 
 - **Trạng thái:** mô tả hành vi của mã nguồn hiện tại.
-- **Đối tượng:** những người cần biết sản phẩm phải làm được gì — tester, reviewer, người
-  đóng góp, và nội dung mô tả trên store.
+- **Đối tượng:** tester, reviewer, người đóng góp và người viết nội dung cho store.
 
 ---
 
 ## 1. Tóm tắt sản phẩm
 
-Deskhub cho phép một máy chiếu màn hình sang các máy khác trong cùng network, và cho
-những máy đó điều khiển mouse cùng keyboard của máy này. Đây là một ứng dụng duy nhất:
-cùng một app vừa share màn hình vừa xem màn hình của máy khác. Máy desktop còn share được
-một **terminal**, tức một shell thật trên host mà máy khác mở trong cửa sổ riêng (mục 4 và
-5).
+Deskhub cho phép bạn share màn hình máy này với một thiết bị khác trên network mà cả hai
+đều truy cập được. Viewer cũng có thể điều khiển mouse và keyboard khi host cho phép.
+Cùng một app vừa share màn hình, vừa connect tới máy khác. Máy desktop còn có thể share
+**terminal**: một shell trên host mà thiết bị đã connect mở trong cửa sổ riêng (mục 4 và 5).
 
-Không yêu cầu installer, không tài khoản, không đăng nhập, không background service và
-không có thành phần cloud. Hai máy tìm thấy nhau qua địa chỉ IP trên một network mà cả hai
-đều truy cập được.
+Có bộ cài nhưng không bắt buộc dùng. Deskhub không yêu cầu tài khoản, đăng nhập,
+background service hay thành phần cloud. Client connect tới host bằng địa chỉ IP qua
+network mà cả hai máy đều truy cập được.
 
 ## 2. Thuật ngữ
 
@@ -60,10 +57,9 @@ input, vì không OS di động nào cho phép app thông thường điều khi�
 App được tổ chức thành các phần giống nhau trên mọi nền tảng: **Host**, **Client** và
 **Settings**, cùng trang **Devices** liệt kê các máy đã pair với máy này (mục 9).
 
-Ba nền tảng desktop còn có một command line client. Nó cung cấp cùng hành vi nhưng không
-có giao diện trang: nó host, connect, mở remote shell, tìm máy, đồng thời đọc và ghi đúng
-những file settings, danh sách máy đã pair và host key đã trust mà app sử dụng. Đây là một
-giao diện khác cho các hành vi mô tả trong tài liệu này, không phải một tập hành vi khác.
+Ba nền tảng desktop còn có command line client để share, connect, mở remote shell và tìm
+máy. Nó đọc và ghi cùng settings, danh sách máy đã pair và host key đã trust như app.
+CLI xem màn hình được trên Windows và Linux; trên macOS, hãy dùng app để xem màn hình.
 
 ---
 

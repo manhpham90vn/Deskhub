@@ -2,21 +2,21 @@
 
 # Deskhub — Architecture
 
-本書は Deskhub が**どのように構築されているか**を記述する。layer の構成、process と
-thread、wire protocol、およびそれらの背景にある設計判断を扱う。利用者から見た製品の
-挙動は [`SPECIFICATION.ja.md`](SPECIFICATION.ja.md) に、threat model は
-[`SECURITY.ja.md`](../SECURITY.ja.md) に記載している。
+この文書は Deskhub のコードを変更する人向けに、layer、process、thread、wire
+protocol と、その設計判断を説明する。製品の挙動は
+[`SPECIFICATION.ja.md`](SPECIFICATION.ja.md)、セキュリティ上の境界は
+[`SECURITY.ja.md`](../SECURITY.ja.md) を参照。
 
 本書は [`ARCHITECTURE.md`](ARCHITECTURE.md) の翻訳。食い違いがある場合は英語版が正文。
 
 - **状態:** 現在のコードを記述している。
-- **読者:** このコードを変更する担当者。
+- **読者:** 実装に携わるコントリビュータ。
 
 ---
 
 ## 1. Layer
 
-全体の構成は一つの原則に従う。ロジックは一度だけ記述し、すべての client で共有する。
+構成の原則は一つ。共通のロジックを一度だけ書き、すべての client から使う。
 
 ```
 core/       純粋な C++20。OS ヘッダとサードパーティコードを含まず、オフラインで unit test

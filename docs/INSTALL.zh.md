@@ -2,19 +2,19 @@
 
 # Deskhub —— 安装
 
-所有平台集中于本页。其中没有任何步骤需要 checkout source，每个 release 都已预先 build。
-如需自行编译，见 [`BUILD.zh.md`](BUILD.zh.md)。
+按下面的平台说明安装已预先 build 的 release，无需 checkout source。如果想自行编译
+Deskhub，请参阅 [`BUILD.zh.md`](BUILD.zh.md)。
 
-所有下载文件位于
-[Releases 页面](https://github.com/manhpham90vn/Deskhub/releases)。移动端 build 通过
-TestFlight 和 Google Play 分发。
+桌面安装包和 Android APK 可从
+[Releases 页面](https://github.com/manhpham90vn/Deskhub/releases) 下载。移动端 beta 也可
+通过 TestFlight 或 Google Play 获取。
 
 本文件是 [`INSTALL.md`](INSTALL.md) 的译本；若两者有出入，以英文版为准。
 
-| 平台 | 文件 | 安装命令 |
+| 平台 | 文件 | 安装方式 |
 | --- | --- | --- |
 | 🪟 Windows | `deskhub-v*-windows-setup.exe` | 下载并安装，然后从开始菜单或桌面打开 |
-| 🍎 macOS | `deskhub-v*-macos.dmg` | 打开 dmg，将 app 拖入 Applications |
+| 🍎 macOS | `deskhub-v*-macos.dmg` | 打开 dmg，将 Deskhub 拖入 Applications |
 | 🐧 Ubuntu、Kubuntu、Debian、Mint | `deskhub-v*-amd64.deb` | `sudo apt install ./deskhub-v*-amd64.deb` |
 | 🐧 Fedora（Workstation 与 KDE spin） | `deskhub-v*-x86_64.rpm` | `sudo dnf install ./deskhub-v*-x86_64.rpm` |
 | 🐧 openSUSE | `deskhub-v*-x86_64.rpm` | `sudo zypper install ./deskhub-v*-x86_64.rpm` |
@@ -22,12 +22,11 @@ TestFlight 和 Google Play 分发。
 | 🤖 Android | `deskhub-v*-android.apk` | 安装 apk，或加入 Play 的 beta |
 | 📱 iOS | —— | [TestFlight](https://testflight.apple.com/join/7qY7wgpd) |
 
-此外还提供 `deskhub-cli`，它是同一个 client，只是没有自己的窗口。见
-[Command line](#-command-line)。
+还可以用 `deskhub-cli` 执行 terminal 命令或脚本。在 Windows 和 Linux 上，CLI 也能
+打开远程屏幕窗口。见 [Command line](#-command-line)。
 
-**Package manager** 会自动保持 Deskhub 为最新版本：Windows 上用
-`winget install ManhPham.Deskhub`，macOS 上用 `brew install --cask manhpham90vn/tap/deskhub`，
-Ubuntu、Kubuntu、Debian、Mint 则使用 [apt repository](#-linux)。
+Windows 可通过 `winget`、macOS 可通过 Homebrew，Ubuntu、Kubuntu、Debian 和 Mint 可通过
+[apt repository](#-linux) 安装。需要新版本时，使用相应 package manager 的升级命令。
 
 ---
 
@@ -78,9 +77,8 @@ Host 一块屏幕需要两个 macOS permission。两者均可从 app 的 **Setti
 
 ## 🐧 Linux
 
-**若仅需 connect 并观看，安装后即可使用。** app 仅 link GTK3、PipeWire 和 libva，这些库
-在任何原装桌面环境中均已具备；H.264 decoder 已编译进 app，因此不依赖任何 FFmpeg
-package。
+**若只需 connect 并观看，先安装 app 软件包即可。** H.264 decoder 已包含在 app 中，
+无需另装 FFmpeg package。系统仍需提供 app 使用的桌面库，包括 GTK3、PipeWire 和 libva。
 
 deb 与 rpm 内容一致，选择系统 package manager 支持的一种即可。两者都会安装下文第 3 条
 所述的 `/dev/uinput` udev rule，因此安装后 remote input 立即可用，无需修改 group，也无需
@@ -217,9 +215,10 @@ ipa 无法 sideload，因此 beta 通过 TestFlight 分发：
 
 ## 💻 Command line
 
-`deskhub-cli` 是同一个 client，只是没有自己的窗口。它可共享屏幕、打开 remote shell，并
-从脚本或通过 SSH 操作 host。运行 `deskhub-cli help` 查看完整命令列表。它读写的全部内容
-—— settings、已 pair 的机器、trust 的 host key —— 与 app 共用同一份，因此两者始终一致。
+`deskhub-cli` 提供共享屏幕、打开 remote shell 等命令，也可从脚本或 SSH 使用。
+在 Windows 和 Linux 上，`connect` 会打开远程屏幕窗口；在 macOS 上，请用桌面 app
+观看屏幕。运行 `deskhub-cli help` 可查看命令列表。CLI 与 app 共用 settings、已 pair
+的机器及 trust 的 host key。
 
 | 平台 | 文件 |
 | --- | --- |
@@ -261,10 +260,10 @@ window layer，程序会明确报告这一点。此类用途请使用 app。
 证明自己知道 host 的 passcode（passcode 本身不会被传输，且每条 connection 只允许一次尝
 试），或等待 host 前的用户回答 *Let this machine in?*。
 
-已 encrypt 不等同于可以暴露在 Internet 上。该 port 仍会回应 discovery 探测，与素未连接
-过的机器首次 pair 仍以初始信任为前提。请优先使用**可信的 network** 或 **VPN**：在两台
-机器上安装 [Tailscale](https://tailscale.com)，并连接其 `100.x.y.z` 地址。**不要对 UDP
-47777 做 port-forward。**
+请在**可信的 network** 或 **VPN** 中使用 Deskhub，**不要对 UDP 47777 做
+port-forward**。Encrypt 能保护 session 内容，但该 port 仍会回应 discovery 探测；首次
+pair 时也没有已知身份可供核对。远程访问时，可在两台机器上安装
+[Tailscale](https://tailscale.com)，再 Connect 到 `100.x.y.z` 地址。
 
 [`SECURITY.zh.md`](../SECURITY.zh.md) 给出完整的 threat model、保护范围以及漏洞报告
 方式。

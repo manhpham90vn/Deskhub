@@ -2,23 +2,22 @@
 
 # Deskhub — Architecture
 
-Tài liệu này mô tả Deskhub được xây dựng **như thế nào**: các layer, process và thread,
-wire protocol, cùng những quyết định thiết kế đứng sau chúng. Phần mô tả sản phẩm dưới góc
-nhìn người dùng nằm trong [`SPECIFICATION.vi.md`](SPECIFICATION.vi.md); threat model nằm
-trong [`SECURITY.vi.md`](../SECURITY.vi.md).
+Tài liệu này dành cho người sửa mã nguồn Deskhub. Nó mô tả các layer, process, thread,
+wire protocol và lý do đằng sau những quyết định thiết kế. Hành vi của sản phẩm nằm trong
+[`SPECIFICATION.vi.md`](SPECIFICATION.vi.md); giới hạn bảo mật nằm trong
+[`SECURITY.vi.md`](../SECURITY.vi.md).
 
 Đây là bản dịch của [`ARCHITECTURE.md`](ARCHITECTURE.md). Nếu hai bản có khác biệt, bản
 tiếng Anh là bản chuẩn.
 
 - **Trạng thái:** mô tả mã nguồn hiện tại.
-- **Đối tượng:** những người sửa đổi mã nguồn này.
+- **Đối tượng:** người đóng góp vào phần triển khai.
 
 ---
 
 ## 1. Các layer
 
-Toàn bộ cấu trúc tuân theo một nguyên tắc: logic được viết một lần và dùng chung cho mọi
-client.
+Cấu trúc này theo một nguyên tắc: viết logic dùng chung một lần, rồi sử dụng ở mọi client.
 
 ```
 core/       C++20 thuần, không OS header, không mã bên thứ ba, unit test offline

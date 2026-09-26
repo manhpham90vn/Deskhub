@@ -27,11 +27,10 @@ The Software is developed and published by an individual developer:
 
 ## 2. The short version
 
-**Deskhub does not collect, store, sell, or share any personal data. We do not
-operate any servers, and no data about you or your usage ever reaches us or any
-third party through the Software.** There are no user accounts, no analytics,
-no crash reporting, no advertising, and no third-party SDKs embedded in the
-Software.
+**The developer does not receive or store your session content or usage data through
+Deskhub.** The app does process and store some information on your own devices, as
+described below. Deskhub has no user accounts, developer-operated servers, analytics,
+crash reporting, advertising or embedded third-party SDKs.
 
 ## 3. Information the Software processes
 
@@ -73,12 +72,12 @@ Software has no technical means to send data to the developer.
 
 ### 3.2 Data we do NOT process
 
-The Software does not access or process: your name (beyond the device name
-described above, which defaults to your computer or device's own name), email address, phone
-number, contacts, location, photos, files (other than what is visible on the
-PC screen you choose to stream), microphone, camera, advertising identifiers,
-or any device identifiers beyond what the operating system needs to run the
-app.
+Apart from the device name described above, Deskhub does not ask for your name, email
+address, phone number, contacts, location or advertising identifier. It does not use
+your microphone or camera. It accesses photos and files only when you select them for
+transfer, when another device sends them to you, or when they appear on a screen you
+choose to share. The sections above describe where those files go and how long they
+remain on your devices.
 
 ### 3.3 Sharing a phone or tablet screen
 
@@ -208,8 +207,8 @@ data from anyone, including children under 13 (COPPA) or under 16 (GDPR).
 
 ## 10. International data transfers
 
-None. Your data never leaves your own devices and networks through the
-Software.
+Deskhub does not send data to the developer. If you connect through a VPN, session data
+travels between your devices over that network, as described in section 3.1.
 
 ## 11. Changes to this policy
 

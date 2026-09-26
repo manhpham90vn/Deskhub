@@ -2,28 +2,27 @@
 
 # Deskhub —— 功能规格
 
-本文档描述 Deskhub **做什么**，以使用者所见的形式呈现。这是一份产品规格，而非设计文档：
-其中不含实现细节、protocol 说明和 build 步骤。这些内容分别位于
-[`INSTALL.zh.md`](INSTALL.zh.md)、[`BUILD.zh.md`](BUILD.zh.md)、
-[`SECURITY.zh.md`](../SECURITY.zh.md) 以及 source 树中。
+本规格说明用户能用 Deskhub 做什么，以及 app 会如何响应。安装、build 和安全方面的
+说明分别见 [`INSTALL.zh.md`](INSTALL.zh.md)、[`BUILD.zh.md`](BUILD.zh.md) 和
+[`SECURITY.zh.md`](../SECURITY.zh.md)。实现细节见
+[`ARCHITECTURE.zh.md`](ARCHITECTURE.zh.md) 与 source 树。
 
 本文件是 [`SPECIFICATION.md`](SPECIFICATION.md) 的译本；若两者有出入，以英文版为准。
 
 - **状态：** 描述当前代码的行为。
-- **读者：** 需要了解本产品应具备哪些行为的人员 —— tester、reviewer、贡献者，以及商店
-  文案的撰写者。
+- **读者：** tester、reviewer、贡献者以及商店文案的撰写者。
 
 ---
 
 ## 1. 产品概述
 
-Deskhub 使一台机器能够将自身屏幕呈现给同一 network 上的其他机器，并允许这些机器操作其
-mouse 和 keyboard。它是单一应用：同一个 app 既可共享屏幕，也可观看其他机器的屏幕。桌面
-机器还可共享一个 **terminal**，即 host 上的真实 shell，其他机器在各自的窗口中打开它
-（第 4、5 节）。
+Deskhub 可以把一台机器的屏幕 Share 给 network 中可访问它的另一台设备。host 允许时，
+viewer 也能操作该机器的 mouse 和 keyboard。同一个 app 既能共享本机屏幕，也能 Connect
+到其他机器。桌面 host 还可提供 **terminal**：已连接的设备会在自己的窗口中打开 host
+上的 shell（第 4、5 节）。
 
-不要求 installer，无需账号与登录，没有 background service，也没有云端组件。两台机器通过
-IP 地址在彼此可达的 network 上相互发现。
+可使用 installer，但并非必需。Deskhub 不需要账号、登录、background service 或云端
+组件。client 通过 IP 地址，在双方可达的 network 上 Connect 到 host。
 
 ## 2. 术语
 
@@ -56,9 +55,9 @@ host：它们推送自身屏幕，但不接受 remote input，因为没有任何
 app 在各平台上划分为相同的部分：**Host**、**Client** 与 **Settings**，另有 **Devices**
 页列出与本机 pair 过的机器（第 9 节）。
 
-三个桌面平台另提供一个 command line client。它提供相同的行为但没有页面界面：可担任
-host、connect、打开 remote shell、查找机器，并读写与 app 完全相同的 settings、已 pair
-机器列表和 trust 的 host key。它是本文档所述行为的另一种界面形式，而非另一套行为。
+三个桌面平台还提供 command line client，可用于共享、connect、打开 remote shell 和
+查找机器。它与 app 读写同一份 settings、已 pair 的机器列表和 trust 的 host key。
+CLI 可在 Windows 和 Linux 上查看远程屏幕；macOS 上请使用 app 观看。
 
 ---
 
