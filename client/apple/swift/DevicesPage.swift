@@ -14,11 +14,29 @@ struct DevicesPage: View {
     @State private var devices: [PairedDeviceRow] = []
     @State private var allowPairing = dh_allow_pairing()
     @State private var confirmForgetAll = false
+    @State private var publicKeyInput = ""
+    @State private var publicKeyError = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             deskhubHeading(DeskhubClient.string(DHStrPairedHeading))
             deskhubHint(DeskhubClient.string(DHStrPairedHint))
+
+            TextField("Public key to allow", text: $publicKeyInput)
+            Button("Add public key") {
+                if dh_paired_add_public_key(publicKeyInput) {
+                    publicKeyInput = ""
+                    publicKeyError = false
+                    refresh()
+                } else {
+                    publicKeyError = true
+                }
+            }
+            .disabled(publicKeyInput.isEmpty)
+            if publicKeyError {
+                Text("Invalid public key or it could not be saved.")
+                    .foregroundStyle(DeskhubPalette.offline)
+            }
 
             #if os(macOS)
                 Table(devices) {
@@ -99,6 +117,9 @@ struct DevicesPage: View {
             deskhubHint(DeskhubClient.string(DHStrAllowPairingHint))
 
             deskhubSection(DeskhubClient.string(DHStrThisMachineHeading))
+            Text(DeskhubClient.buffered(1024) { dh_own_public_key($0, $1) })
+                .font(.system(size: 12, design: .monospaced))
+                .textSelection(.enabled)
             Text(DeskhubClient.buffered(128) { dh_own_fingerprint($0, $1) })
                 .font(.system(size: 13, design: .monospaced))
                 .foregroundStyle(DeskhubPalette.heading)

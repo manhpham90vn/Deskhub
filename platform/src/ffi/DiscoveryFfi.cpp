@@ -28,6 +28,7 @@
 #include "deskhubp/net/NetInfo.h"
 #include "deskhubp/net/UdpSocket.h"
 #include "deskhubp/system/AppDataFile.h"
+#include "deskhubp/system/AuthProof.h"
 #include "deskhubp/system/Autostart.h"
 #include "deskhubp/system/HostIdentity.h"
 #include "deskhubp/system/PairedDevicesFile.h"
@@ -574,6 +575,16 @@ int dh_paired_devices(DHPairedDevice* out, int capacity) {
     return count;
 }
 
+bool dh_paired_add_public_key(const char* public_key) {
+    if (!public_key) return false;
+    const auto parsed = deskhub::ParsePublicKeyText(public_key);
+    if (!parsed) return false;
+    const auto spki = deskhubp::PublicKeySpkiFromText(public_key);
+    const auto fingerprint = deskhubp::FingerprintOfPublicKey(spki);
+    return fingerprint && deskhubp::RememberPairedDevice(*fingerprint, parsed->label,
+                              std::time(nullptr));
+}
+
 bool dh_paired_forget(const char* fingerprint) {
     if (!fingerprint) return false;
     const std::optional<deskhub::Fingerprint> fp = deskhub::ParseFingerprint(fingerprint);
@@ -599,6 +610,12 @@ int dh_own_fingerprint(char* out, int capacity) {
         deskhubp::LoadOrCreateHostIdentity(deskhubp::SessionDeviceName());
     return FillText(out, capacity,
         identity.Valid() ? deskhub::FormatFingerprint(identity.fingerprint) : std::string());
+}
+
+int dh_own_public_key(char* out, int capacity) {
+    const deskhubp::HostIdentity identity =
+        deskhubp::LoadOrCreateHostIdentity(deskhubp::SessionDeviceName());
+    return FillText(out, capacity, deskhubp::IdentityPublicKeyText(identity));
 }
 
 int dh_format_address(uint64_t addr_packed, char* out, int capacity) {

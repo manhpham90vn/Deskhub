@@ -1,6 +1,8 @@
 #include "Commands.h"
 
 #include <optional>
+#include <ctime>
+#include <iostream>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -12,6 +14,7 @@
 #include "deskhub/net/TrustStore.h"
 #include "deskhub/ui/UiSettings.h"
 #include "deskhubp/system/HostIdentity.h"
+#include "deskhubp/system/AuthProof.h"
 #include "deskhubp/system/PairedDevicesFile.h"
 #include "deskhubp/system/TrustStoreFile.h"
 #include "deskhubp/system/UiSettingsStore.h"
@@ -74,6 +77,41 @@ std::string UnknownKeyMessage(std::string_view key, const std::vector<std::strin
 }
 
 ExitCode RunDevices(const Command& command) {
+    if (command.devices == DevicesAction::Public) {
+        const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity("deskhub");
+        const std::string publicKey = deskhubp::IdentityPublicKeyText(identity);
+        if (publicKey.empty()) {
+            PrintError("could not read this machine's public key");
+            return ExitCode::Failed;
+        }
+        PrintLine(publicKey);
+        return ExitCode::Ok;
+    }
+
+    if (command.devices == DevicesAction::Add) {
+        std::string text = command.target;
+        if (text == "-") {
+            if (!std::getline(std::cin, text)) {
+                PrintError("no public key arrived on stdin");
+                return ExitCode::Usage;
+            }
+        }
+        const std::vector<uint8_t> spki = deskhubp::PublicKeySpkiFromText(text);
+        const auto fingerprint = deskhubp::FingerprintOfPublicKey(spki);
+        if (!fingerprint) {
+            PrintError("invalid or unsupported public key");
+            return ExitCode::Usage;
+        }
+        const auto parsed = deskhub::ParsePublicKeyText(text);
+        const std::string label = parsed ? parsed->label : "";
+        if (!deskhubp::RememberPairedDevice(*fingerprint, label, std::time(nullptr))) {
+            PrintError("could not save the authorized key");
+            return ExitCode::Failed;
+        }
+        if (!command.quiet) PrintLine(deskhub::FormatFingerprint(*fingerprint));
+        return ExitCode::Ok;
+    }
+
     if (command.devices == DevicesAction::ForgetAll) {
         deskhubp::ForgetAllPairedDevices();
         if (!command.quiet) PrintLine("Every paired machine has to pair again.");
@@ -128,6 +166,21 @@ ExitCode RunDevices(const Command& command) {
 }
 
 ExitCode RunTrust(const Command& command) {
+    if (command.trust == TrustAction::Add) {
+        const auto fingerprint = deskhub::ParseFingerprint(command.value);
+        if (!fingerprint || command.target.empty()) {
+            PrintError("expected an address and SHA256 fingerprint");
+            return ExitCode::Usage;
+        }
+        if (!deskhubp::RememberTrustedHost(command.target, command.target, *fingerprint,
+                std::time(nullptr))) {
+            PrintError("could not save the trusted host key");
+            return ExitCode::Failed;
+        }
+        if (!command.quiet) PrintLine("Trusted host key saved.");
+        return ExitCode::Ok;
+    }
+
     if (command.trust == TrustAction::ForgetAll) {
         deskhub::TrustStore store;
         deskhubp::SaveTrustStore(store);

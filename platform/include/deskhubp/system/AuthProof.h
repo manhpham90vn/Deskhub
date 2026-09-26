@@ -1,5 +1,6 @@
 #pragma once
 #include "deskhub/net/TrustStore.h"
+#include "deskhub/net/PublicKeyText.h"
 #include "deskhub/protocol/Wire.h"
 #include "deskhubp/system/HostIdentity.h"
 
@@ -19,6 +20,8 @@ using AuthNonce = std::array<uint8_t, deskhub::kAuthNonceBytes>;
 using PasscodeVerifier = std::array<uint8_t, 32>;
 
 std::vector<uint8_t> IdentityPublicKey(const HostIdentity& identity);
+std::string IdentityPublicKeyText(const HostIdentity& identity);
+std::vector<uint8_t> PublicKeySpkiFromText(std::string_view text);
 std::optional<deskhub::Fingerprint> FingerprintOfPublicKey(std::span<const uint8_t> spkiDer);
 
 std::vector<uint8_t> SignWithIdentity(const HostIdentity& identity,

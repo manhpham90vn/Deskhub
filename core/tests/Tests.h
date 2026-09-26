@@ -59,6 +59,7 @@ void RunIpv4Tests();
 void RunBindAddressTests();
 void RunTrustStoreTests();
 void RunPairedDevicesTests();
+void RunPublicKeyTextTests();
 void RunVtParserTests();
 void RunScreenTests();
 void RunSnapshotTests();

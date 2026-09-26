@@ -8,6 +8,14 @@ std::vector<uint8_t> IdentityPublicKey(const HostIdentity&) {
     return {};
 }
 
+std::string IdentityPublicKeyText(const HostIdentity&) {
+    return {};
+}
+
+std::vector<uint8_t> PublicKeySpkiFromText(std::string_view) {
+    return {};
+}
+
 std::optional<deskhub::Fingerprint> FingerprintOfPublicKey(std::span<const uint8_t>) {
     return std::nullopt;
 }

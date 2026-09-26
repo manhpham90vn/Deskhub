@@ -41,6 +41,13 @@ void TestAKeyProvesTheMachineItBelongsTo() {
     const std::vector<uint8_t> pub = deskhubp::IdentityPublicKey(identity);
     Check(!pub.empty(), "its public key can be put on the wire");
 
+    const std::string publicText = deskhubp::IdentityPublicKeyText(identity);
+    Check(!publicText.empty(), "the key can be copied as OpenSSH text");
+    Check(deskhubp::PublicKeySpkiFromText(publicText) == pub,
+        "copying the text back gives the same public key used by authentication");
+    Check(deskhubp::PublicKeySpkiFromText("ssh-ed25519 AAAA").empty(),
+        "malformed imported key text is refused");
+
     const std::optional<deskhub::Fingerprint> derived = deskhubp::FingerprintOfPublicKey(pub);
     Check(derived && *derived == identity.fingerprint,
         "hashing that key gives exactly the fingerprint the far side looks up");

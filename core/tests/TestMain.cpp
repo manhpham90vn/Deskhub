@@ -181,6 +181,7 @@ int main() {
 
     std::printf("--- net: which machines this host has paired with ---\n");
     RunPairedDevicesTests();
+    RunPublicKeyTextTests();
 
     std::printf("--- terminal: the VT escape-sequence parser ---\n");
     RunVtParserTests();

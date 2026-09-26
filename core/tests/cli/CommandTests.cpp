@@ -151,6 +151,11 @@ void TestDevicesAndTrust() {
     Check(Parse({"devices"}).devices == cli::DevicesAction::List, "devices lists by default");
     Check(Parse({"devices", "list"}).devices == cli::DevicesAction::List, "devices list");
     Check(Parse({"devices", "--json"}).json, "devices takes global flags with no action");
+    Check(Parse({"devices", "public"}).devices == cli::DevicesAction::Public,
+        "devices public requests this machine's shareable key");
+    const cli::Command add = Parse({"devices", "add", "-"});
+    Check(add.devices == cli::DevicesAction::Add && add.target == "-",
+        "devices add reads public key text from stdin");
 
     const cli::Command forget = Parse({"devices", "forget", "SHA256:abc"});
     Check(forget.devices == cli::DevicesAction::Forget, "devices forget");
@@ -159,11 +164,18 @@ void TestDevicesAndTrust() {
         "devices forget all");
 
     Check(Parse({"trust"}).trust == cli::TrustAction::List, "trust lists by default");
+    const cli::Command trustAdd = Parse({"trust", "add", "1.2.3.4:47777", "SHA256:abc"});
+    Check(trustAdd.trust == cli::TrustAction::Add && trustAdd.target == "1.2.3.4:47777" &&
+              trustAdd.value == "SHA256:abc",
+        "trust add takes the address and host fingerprint");
     Check(Parse({"trust", "forget", "1.2.3.4"}).trust == cli::TrustAction::Forget, "trust forget");
     Check(Parse({"trust", "forget", "all"}).trust == cli::TrustAction::ForgetAll, "trust forget all");
 
     Check(!Parse({"devices", "wipe"}).error.empty(), "an unknown action is refused");
     Check(!Parse({"devices", "forget"}).error.empty(), "forget needs a target");
+    Check(!Parse({"devices", "add"}).error.empty(), "add needs a public key");
+    Check(!Parse({"trust", "add", "1.2.3.4"}).error.empty(),
+        "trust add needs a fingerprint");
     Check(!Parse({"trust", "forget", "--json"}).error.empty(), "a flag is not a target");
 }
 

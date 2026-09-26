@@ -379,12 +379,22 @@ void ParseDevices(Command& command, Cursor& cursor) {
     const std::string_view action = Take(cursor);
     if (action == "list") {
         command.devices = DevicesAction::List;
+    } else if (action == "public") {
+        command.devices = DevicesAction::Public;
+    } else if (action == "add") {
+        command.devices = DevicesAction::Add;
+        if (!More(cursor) || IsFlagToken(Look(cursor))) {
+            command.error = NeedsAction(Verb::Devices, "add PUBLIC_KEY or add -");
+            return;
+        }
+        command.target = std::string(Take(cursor));
     } else if (action == "forget") {
         bool forgetAll = false;
         if (!TakeForgetTarget(command, cursor, forgetAll)) return;
         command.devices = forgetAll ? DevicesAction::ForgetAll : DevicesAction::Forget;
     } else {
-        command.error = NeedsAction(Verb::Devices, "list, forget FINGERPRINT, forget all");
+        command.error = NeedsAction(Verb::Devices,
+            "list, public, add PUBLIC_KEY, forget FINGERPRINT, forget all");
         return;
     }
     ParseNoArgVerb(command, cursor);
@@ -403,12 +413,25 @@ void ParseTrust(Command& command, Cursor& cursor) {
     const std::string_view action = Take(cursor);
     if (action == "list") {
         command.trust = TrustAction::List;
+    } else if (action == "add") {
+        command.trust = TrustAction::Add;
+        if (!More(cursor) || IsFlagToken(Look(cursor))) {
+            command.error = NeedsAction(Verb::Trust, "add ADDRESS FINGERPRINT");
+            return;
+        }
+        command.target = std::string(Take(cursor));
+        if (!More(cursor) || IsFlagToken(Look(cursor))) {
+            command.error = NeedsAction(Verb::Trust, "add ADDRESS FINGERPRINT");
+            return;
+        }
+        command.value = std::string(Take(cursor));
     } else if (action == "forget") {
         bool forgetAll = false;
         if (!TakeForgetTarget(command, cursor, forgetAll)) return;
         command.trust = forgetAll ? TrustAction::ForgetAll : TrustAction::Forget;
     } else {
-        command.error = NeedsAction(Verb::Trust, "list, forget ADDRESS, forget all");
+        command.error = NeedsAction(Verb::Trust,
+            "list, add ADDRESS FINGERPRINT, forget ADDRESS, forget all");
         return;
     }
     ParseNoArgVerb(command, cursor);
@@ -971,6 +994,12 @@ std::string UsageText(Verb verb) {
                    " devices [list]\n"
                    "       " +
                    program +
+                   " devices public\n"
+                   "       " +
+                   program +
+                   " devices add PUBLIC_KEY|-\n"
+                   "       " +
+                   program +
                    " devices forget FINGERPRINT\n"
                    "       " +
                    program +
@@ -981,6 +1010,9 @@ std::string UsageText(Verb verb) {
         case Verb::Trust:
             return "Usage: " + program +
                    " trust [list]\n"
+                   "       " +
+                   program +
+                   " trust add ADDRESS FINGERPRINT\n"
                    "       " +
                    program +
                    " trust forget ADDRESS\n"

@@ -32,10 +32,13 @@ enum class PairingPolicy { Deny,
     Ask };
 
 enum class DevicesAction { List,
+    Add,
+    Public,
     Forget,
     ForgetAll };
 
 enum class TrustAction { List,
+    Add,
     Forget,
     ForgetAll };
 

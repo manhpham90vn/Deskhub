@@ -68,6 +68,7 @@ add_library(core STATIC
     src/net/BindAddress.cpp
     src/net/TrustStore.cpp
     src/net/PairedDevices.cpp
+    src/net/PublicKeyText.cpp
 
     src/terminal/VtParser.cpp
     src/terminal/Screen.cpp
@@ -181,6 +182,7 @@ if(DESKHUB_CORE_TESTS)
         tests/net/BindAddressTests.cpp
         tests/net/TrustStoreTests.cpp
         tests/net/PairedDevicesTests.cpp
+        tests/net/PublicKeyTextTests.cpp
 
         tests/terminal/VtParserTests.cpp
         tests/terminal/ScreenTests.cpp

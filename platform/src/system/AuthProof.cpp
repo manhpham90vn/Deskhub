@@ -2,6 +2,8 @@
 
 #include <openssl/bio.h>
 #include <openssl/curve25519.h>
+#include <openssl/ec.h>
+#include <openssl/ec_key.h>
 #include <openssl/evp.h>
 #include <openssl/hmac.h>
 #include <openssl/mem.h>
@@ -9,6 +11,7 @@
 #include <openssl/rand.h>
 #include <openssl/sha.h>
 #include <openssl/x509.h>
+#include <openssl/nid.h>
 
 #include <cstring>
 
@@ -45,10 +48,58 @@ struct MdCtxDeleter {
     }
 };
 
+struct EcKeyDeleter {
+    void operator()(EC_KEY* key) const {
+        EC_KEY_free(key);
+    }
+};
+
+struct EcPointDeleter {
+    void operator()(EC_POINT* point) const {
+        EC_POINT_free(point);
+    }
+};
+
 using BioPtr = std::unique_ptr<BIO, BioDeleter>;
 using X509Ptr = std::unique_ptr<X509, X509Deleter>;
 using PkeyPtr = std::unique_ptr<EVP_PKEY, PkeyDeleter>;
 using MdCtxPtr = std::unique_ptr<EVP_MD_CTX, MdCtxDeleter>;
+using EcKeyPtr = std::unique_ptr<EC_KEY, EcKeyDeleter>;
+using EcPointPtr = std::unique_ptr<EC_POINT, EcPointDeleter>;
+
+void AppendSshString(std::vector<uint8_t>& out, std::span<const uint8_t> value) {
+    const uint32_t size = uint32_t(value.size());
+    out.push_back(uint8_t(size >> 24));
+    out.push_back(uint8_t(size >> 16));
+    out.push_back(uint8_t(size >> 8));
+    out.push_back(uint8_t(size));
+    out.insert(out.end(), value.begin(), value.end());
+}
+
+void AppendSshString(std::vector<uint8_t>& out, std::string_view value) {
+    AppendSshString(out,
+        std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(value.data()), value.size()));
+}
+
+std::span<const uint8_t> ReadSshString(std::span<const uint8_t>& input) {
+    if (input.size() < 4) return {};
+    const size_t size = (size_t(input[0]) << 24) | (size_t(input[1]) << 16) |
+                        (size_t(input[2]) << 8) | size_t(input[3]);
+    input = input.subspan(4);
+    if (size > input.size()) return {};
+    const auto value = input.first(size);
+    input = input.subspan(size);
+    return value;
+}
+
+std::vector<uint8_t> SpkiFromKey(EVP_PKEY* key) {
+    uint8_t* der = nullptr;
+    const int length = i2d_PUBKEY(key, &der);
+    if (length <= 0 || der == nullptr) return {};
+    std::vector<uint8_t> out(der, der + length);
+    OPENSSL_free(der);
+    return out;
+}
 
 X509Ptr CertFromPem(std::string_view pem) {
     if (pem.empty()) return nullptr;
@@ -89,6 +140,57 @@ std::vector<uint8_t> IdentityPublicKey(const HostIdentity& identity) {
     return out;
 }
 
+std::string IdentityPublicKeyText(const HostIdentity& identity) {
+    const X509Ptr cert = CertFromPem(identity.certPem);
+    if (!cert) return {};
+    const PkeyPtr key(X509_get_pubkey(cert.get()));
+    if (!key || EVP_PKEY_id(key.get()) != EVP_PKEY_EC) return {};
+    const EC_KEY* ec = EVP_PKEY_get0_EC_KEY(key.get());
+    if (!ec) return {};
+    const EC_GROUP* group = EC_KEY_get0_group(ec);
+    const EC_POINT* point = EC_KEY_get0_public_key(ec);
+    if (!group || !point || EC_GROUP_get_curve_name(group) != NID_X9_62_prime256v1)
+        return {};
+    const size_t length = EC_POINT_point2oct(group, point, POINT_CONVERSION_UNCOMPRESSED,
+        nullptr, 0, nullptr);
+    if (length != 65) return {};
+    std::vector<uint8_t> bytes(length);
+    if (EC_POINT_point2oct(group, point, POINT_CONVERSION_UNCOMPRESSED, bytes.data(),
+            bytes.size(), nullptr) != length)
+        return {};
+    deskhub::PublicKeyText text;
+    text.algorithm = deskhub::PublicKeyAlgorithm::EcdsaP256;
+    AppendSshString(text.blob, "ecdsa-sha2-nistp256");
+    AppendSshString(text.blob, "nistp256");
+    AppendSshString(text.blob, bytes);
+    return deskhub::FormatPublicKeyText(text);
+}
+
+std::vector<uint8_t> PublicKeySpkiFromText(std::string_view text) {
+    const auto parsed = deskhub::ParsePublicKeyText(text);
+    if (!parsed) return {};
+    std::span<const uint8_t> blob(parsed->blob);
+    ReadSshString(blob);
+    if (parsed->algorithm == deskhub::PublicKeyAlgorithm::Ed25519) {
+        const auto bytes = ReadSshString(blob);
+        const PkeyPtr key(EVP_PKEY_new_raw_public_key(EVP_PKEY_ED25519, nullptr, bytes.data(),
+            bytes.size()));
+        return key ? SpkiFromKey(key.get()) : std::vector<uint8_t>{};
+    }
+    ReadSshString(blob);
+    const auto bytes = ReadSshString(blob);
+    const EcKeyPtr ec(EC_KEY_new_by_curve_name(NID_X9_62_prime256v1));
+    if (!ec) return {};
+    const EC_GROUP* group = EC_KEY_get0_group(ec.get());
+    const EcPointPtr point(EC_POINT_new(group));
+    if (!point || EC_POINT_oct2point(group, point.get(), bytes.data(), bytes.size(), nullptr) != 1 ||
+        EC_KEY_set_public_key(ec.get(), point.get()) != 1 || EC_KEY_check_key(ec.get()) != 1)
+        return {};
+    const PkeyPtr key(EVP_PKEY_new());
+    if (!key || EVP_PKEY_set1_EC_KEY(key.get(), ec.get()) != 1) return {};
+    return SpkiFromKey(key.get());
+}
+
 std::optional<deskhub::Fingerprint> FingerprintOfPublicKey(std::span<const uint8_t> spkiDer) {
     if (spkiDer.empty()) return std::nullopt;
     if (!PublicKeyFromSpki(spkiDer)) return std::nullopt;
@@ -103,7 +205,8 @@ std::vector<uint8_t> SignWithIdentity(const HostIdentity& identity,
     if (!key) return {};
     const MdCtxPtr ctx(EVP_MD_CTX_new());
     if (!ctx) return {};
-    if (EVP_DigestSignInit(ctx.get(), nullptr, EVP_sha256(), nullptr, key.get()) != 1) return {};
+    const EVP_MD* digest = EVP_PKEY_id(key.get()) == EVP_PKEY_ED25519 ? nullptr : EVP_sha256();
+    if (EVP_DigestSignInit(ctx.get(), nullptr, digest, nullptr, key.get()) != 1) return {};
 
     size_t len = 0;
     if (EVP_DigestSign(ctx.get(), nullptr, &len, data.data(), data.size()) != 1) return {};
@@ -121,7 +224,8 @@ bool VerifySignature(std::span<const uint8_t> spkiDer, std::span<const uint8_t> 
     if (!key) return false;
     const MdCtxPtr ctx(EVP_MD_CTX_new());
     if (!ctx) return false;
-    if (EVP_DigestVerifyInit(ctx.get(), nullptr, EVP_sha256(), nullptr, key.get()) != 1)
+    const EVP_MD* digest = EVP_PKEY_id(key.get()) == EVP_PKEY_ED25519 ? nullptr : EVP_sha256();
+    if (EVP_DigestVerifyInit(ctx.get(), nullptr, digest, nullptr, key.get()) != 1)
         return false;
     return EVP_DigestVerify(ctx.get(), signature.data(), signature.size(), data.data(),
                data.size()) == 1;
