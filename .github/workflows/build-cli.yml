@@ -55,6 +55,43 @@ jobs:
         shell: bash
         run: scripts/cli-smoke.sh out/build/x64-release/client/cli/deskhub-cli.exe
 
+      - name: Build Windows CLI installer
+        shell: pwsh
+        run: |
+          choco install innosetup -y
+          $version = (Get-Content VERSION -Raw).Trim()
+          & 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe' "/DAppVersion=$version" packaging/windows/DeskhubCLI.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Verify CLI PATH install, upgrade, and uninstall
+        shell: pwsh
+        run: |
+          $setup = (Resolve-Path 'out/installer/DeskHub-CLI-Setup.exe').Path
+          $installed = Join-Path $env:LOCALAPPDATA 'Programs\DeskHub CLI\deskhub-cli.exe'
+          $directory = Split-Path $installed
+          $originalPath = Get-ItemPropertyValue 'HKCU:\Environment' 'Path' -ErrorAction SilentlyContinue
+          foreach ($run in 1..2) {
+            $install = Start-Process $setup -ArgumentList '/VERYSILENT', '/NORESTART' -Wait -PassThru
+            if ($install.ExitCode -ne 0) { throw "Installer exited with $($install.ExitCode)" }
+            if (-not (Test-Path $installed)) { throw 'CLI executable was not installed' }
+            $path = Get-ItemPropertyValue 'HKCU:\Environment' 'Path'
+            if (@($path -split ';' | Where-Object { $_ -eq $directory }).Count -ne 1) {
+              throw 'CLI directory must appear exactly once in the user PATH'
+            }
+          }
+          $uninstall = Start-Process (Join-Path $directory 'unins000.exe') -ArgumentList '/VERYSILENT', '/NORESTART' -Wait -PassThru
+          if ($uninstall.ExitCode -ne 0) { throw "Uninstaller exited with $($uninstall.ExitCode)" }
+          $finalPath = Get-ItemPropertyValue 'HKCU:\Environment' 'Path' -ErrorAction SilentlyContinue
+          if ($finalPath -ne $originalPath) { throw 'Uninstall did not restore the user PATH' }
+
+      - name: Upload CLI installer
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: deskhub-cli-windows-installer
+          path: out/installer/DeskHub-CLI-Setup.exe
+          retention-days: 14
+          if-no-files-found: error
+
       - name: Upload the command-line client
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:

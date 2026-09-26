@@ -50,19 +50,31 @@ brew install --cask manhpham90vn/tap/deskhub     # macOS · app
 brew install manhpham90vn/tap/deskhub-cli        # macOS · deskhub-cli
 ```
 
-Ubuntu / Debian / Mint では、`deskhub` package が app と `deskhub-cli` の両方をインストールする。
+Ubuntu / Debian / Mint では、デスクトップ app と CLI は別パッケージである。
+apt repository を一度追加し、必要な方だけ、または両方をインストールする。
 
 ```bash
 sudo install -d /etc/apt/keyrings
 curl -fsSL https://manhpham90vn.github.io/Deskhub/apt/deskhub.gpg | sudo tee /etc/apt/keyrings/deskhub.gpg >/dev/null
 echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/deskhub.gpg] https://manhpham90vn.github.io/Deskhub/apt stable main" \
   | sudo tee /etc/apt/sources.list.d/deskhub.list
-sudo apt update && sudo apt install deskhub
+sudo apt update
+sudo apt install deskhub       # デスクトップ app
+sudo apt install deskhub-cli   # CLI。単独でもインストール可能
 ```
+
+デスクトップパッケージはアプリケーションメニューに DeskHub を追加し、`deskhub` を
+`/usr/bin` にインストールする。CLI パッケージは `deskhub-cli` を `/usr/bin` に
+インストールする。Windows の app インストーラーはスタートメニューとデスクトップに
+ショートカットを作成し、別の CLI インストーラーはユーザーの `PATH` にコマンドを
+追加する。macOS の CLI は Homebrew により `PATH` に配置される。
 
 その他のプラットフォームは [Releases](https://github.com/manhpham90vn/Deskhub/releases) から：
 
-- **Fedora / openSUSE** —— `sudo dnf install ./deskhub-v*-x86_64.rpm`（または `zypper install`）
+- **Windows 直接ダウンロード** —— app 用 `deskhub-v*-windows-setup.exe` と CLI 用
+  `deskhub-cli-v*-windows-setup.exe`。portable 版 exe も利用可能
+- **Fedora / openSUSE** —— app と CLI は別の RPM。`deskhub-v*-x86_64.rpm` と
+  `deskhub-cli-v*-x86_64.rpm` を必要に応じて `dnf` または `zypper` でインストール
 - **Arch、その他の Linux** —— portable 版 `deskhub-v*-linux-x86_64` を `chmod +x` して実行
 - **Android** —— `deskhub-v*-android.apk`、または [Play の beta](https://play.google.com/apps/testing/com.manhpham.deskhub)
 - **iOS** —— [TestFlight](https://testflight.apple.com/join/7qY7wgpd)
@@ -124,9 +136,9 @@ protocol を書き直す必要はない。display を共有し、もう一方の
 **Devices**、**Settings** —— で構成されているため、macOS で操作を覚えれば Android の
 app もそのまま利用できる。
 
-| ⚡ 速い | 📦 ファイル一つ | 🎛️ シンプル |
+| ⚡ 速い | 📦 簡単インストール | 🎛️ シンプル |
 | ------ | ---------- | --------- |
-| capture から表示まで **~3.5 ms**、60 fps。zero-copy pipeline は VRAM 内で完結し、hot path は CPU を経由しない。 | installer、background service、アカウントのいずれも不要。Windows app 全体が **~5.1 MB** の exe 一つ、macOS は **1.9 MB** の dmg。 | display を **Share** するか、IP へ **Connect** する。デスクトップではさらに **shell** を共有でき、viewer が送信した**ファイル**も受け取れる。スマートフォンも host になれるが view-only に限られる。app に input を inject させるモバイル OS が存在しないためである。 |
+| capture から表示まで **~3.5 ms**、60 fps。zero-copy pipeline は VRAM 内で完結し、hot path は CPU を経由しない。 | Windows のインストーラーはスタートメニューとデスクトップにショートカットを作成。ポータブル版 exe も利用可能。background service やアカウントは不要。 | display を **Share** するか、IP へ **Connect** する。デスクトップではさらに **shell** を共有でき、viewer が送信した**ファイル**も受け取れる。スマートフォンも host になれるが view-only に限られる。app に input を inject させるモバイル OS が存在しないためである。 |
 
 Session は **QUIC/TLS** 上で end-to-end に encrypt される。未知のマシンが受け入れられる
 のは、host の passcode を知っていることを証明した場合 —— **SPAKE2** を用いるため

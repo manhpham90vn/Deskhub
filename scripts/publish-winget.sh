@@ -54,5 +54,5 @@ submit() {
 }
 
 install_komac
-submit ManhPham.Deskhub "$RELEASE_URL/deskhub-$TAG-windows.exe"
+submit ManhPham.Deskhub "$RELEASE_URL/deskhub-$TAG-windows-setup.exe"
 submit ManhPham.DeskhubCLI "$RELEASE_URL/deskhub-cli-$TAG-windows.exe"

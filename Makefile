@@ -47,8 +47,8 @@
 # Distribution:
 #   make dist-macos     macOS dmg signed with Developer ID + notarized + stapled
 #   make verify-macos   check that Gatekeeper accepts the build that was just produced
-#   make dist-linux     Linux packages: .deb (Ubuntu/Debian) + .rpm (Fedora/openSUSE).
-#                       Both install the uinput udev rule from their post-install step,
+#   make dist-linux     Separate app and CLI .deb (Ubuntu/Debian) + .rpm (Fedora/openSUSE).
+#                       Each installs its own uinput udev rule from its post-install step,
 #                       so installing either package replaces setup-linux-permissions
 #
 # Shared CMake tree (core + platform + whatever client the current OS builds):

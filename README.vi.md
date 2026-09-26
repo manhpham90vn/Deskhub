@@ -50,19 +50,30 @@ brew install --cask manhpham90vn/tap/deskhub     # macOS · app
 brew install manhpham90vn/tap/deskhub-cli        # macOS · deskhub-cli
 ```
 
-Trên Ubuntu / Debian / Mint, package `deskhub` cài cả app lẫn `deskhub-cli`:
+Trên Ubuntu / Debian / Mint, app desktop và CLI là hai gói riêng. Thêm apt repository
+một lần, sau đó cài gói cần dùng hoặc cả hai:
 
 ```bash
 sudo install -d /etc/apt/keyrings
 curl -fsSL https://manhpham90vn.github.io/Deskhub/apt/deskhub.gpg | sudo tee /etc/apt/keyrings/deskhub.gpg >/dev/null
 echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/deskhub.gpg] https://manhpham90vn.github.io/Deskhub/apt stable main" \
   | sudo tee /etc/apt/sources.list.d/deskhub.list
-sudo apt update && sudo apt install deskhub
+sudo apt update
+sudo apt install deskhub       # app desktop
+sudo apt install deskhub-cli   # CLI; cũng cài riêng được
 ```
+
+Gói desktop thêm DeskHub vào menu ứng dụng và cài lệnh `deskhub` trong `/usr/bin`; gói
+CLI cài `deskhub-cli` trong `/usr/bin`. Bộ cài Windows tạo shortcut trong Start Menu và
+Desktop; bộ cài CLI riêng thêm lệnh vào `PATH` của người dùng. Homebrew đưa CLI trên
+macOS vào `PATH`.
 
 Các nền tảng còn lại lấy trên [Releases](https://github.com/manhpham90vn/Deskhub/releases):
 
-- **Fedora / openSUSE** — `sudo dnf install ./deskhub-v*-x86_64.rpm` (hoặc `zypper install`)
+- **Bản tải cho Windows** — bộ cài app `deskhub-v*-windows-setup.exe` và bộ cài CLI
+  `deskhub-cli-v*-windows-setup.exe`; vẫn có các file exe portable
+- **Fedora / openSUSE** — RPM riêng cho app `deskhub-v*-x86_64.rpm` và CLI
+  `deskhub-cli-v*-x86_64.rpm`; cài gói cần dùng bằng `dnf` hoặc `zypper`
 - **Arch, Linux khác** — bản portable `deskhub-v*-linux-x86_64`, `chmod +x` rồi chạy
 - **Android** — `deskhub-v*-android.apk`, hoặc [bản beta trên Play](https://play.google.com/apps/testing/com.manhpham.deskhub)
 - **iOS** — [TestFlight](https://testflight.apple.com/join/7qY7wgpd)
@@ -123,9 +134,9 @@ lại protocol. Share một display, nhập IP trên máy còn lại là có th�
 trang giống nhau trên mọi nền tảng — **Host**, **Client**, **Devices**, **Settings** —
 nên khi đã quen trên macOS thì dùng được ngay app Android.
 
-| ⚡ Nhanh | 📦 Một file | 🎛️ Đơn giản |
+| ⚡ Nhanh | 📦 Dễ cài đặt | 🎛️ Đơn giản |
 | ------ | ---------- | --------- |
-| **~3.5 ms** từ capture đến khi hiển thị, 60 fps. Pipeline zero-copy nằm hoàn toàn trong VRAM; hot path không đi qua CPU. | Không installer, không background service, không tài khoản. Toàn bộ app Windows là một file exe **~5.1 MB**; bản macOS là file dmg **1.9 MB**. | **Share** một display hoặc **Connect** tới một IP. Máy desktop share thêm được một **shell** và nhận **file** do viewer gửi. Điện thoại cũng host được nhưng chỉ view-only, vì không OS di động nào cho phép app inject input. |
+| **~3.5 ms** từ capture đến khi hiển thị, 60 fps. Pipeline zero-copy nằm hoàn toàn trong VRAM; hot path không đi qua CPU. | Bộ cài Windows tạo shortcut trong Start Menu và Desktop; bản exe portable vẫn có sẵn. Không cần background service hay tài khoản. | **Share** một display hoặc **Connect** tới một IP. Máy desktop share thêm được một **shell** và nhận **file** do viewer gửi. Điện thoại cũng host được nhưng chỉ view-only, vì không OS di động nào cho phép app inject input. |
 
 Session được encrypt end-to-end trên **QUIC/TLS**. Máy lạ chỉ được chấp nhận khi chứng
 minh được mình biết passcode của host — thông qua **SPAKE2**, nên passcode không bao giờ

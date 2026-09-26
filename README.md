@@ -49,19 +49,30 @@ brew install --cask manhpham90vn/tap/deskhub     # macOS · app
 brew install manhpham90vn/tap/deskhub-cli        # macOS · deskhub-cli
 ```
 
-On Ubuntu / Debian / Mint, the `deskhub` package brings both the app and `deskhub-cli`:
+On Ubuntu / Debian / Mint, the desktop app and CLI are separate packages. Add the apt
+repository once, then install either or both:
 
 ```bash
 sudo install -d /etc/apt/keyrings
 curl -fsSL https://manhpham90vn.github.io/Deskhub/apt/deskhub.gpg | sudo tee /etc/apt/keyrings/deskhub.gpg >/dev/null
 echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/deskhub.gpg] https://manhpham90vn.github.io/Deskhub/apt stable main" \
   | sudo tee /etc/apt/sources.list.d/deskhub.list
-sudo apt update && sudo apt install deskhub
+sudo apt update
+sudo apt install deskhub       # desktop app
+sudo apt install deskhub-cli   # CLI; also works on its own
 ```
+
+The desktop package adds DeskHub to the application menu and installs `deskhub` in
+`/usr/bin`; the CLI package installs `deskhub-cli` in `/usr/bin`. Windows setup adds
+Start Menu and Desktop shortcuts; the separate CLI setup adds its command to the user
+`PATH`. Homebrew places the macOS CLI on `PATH`.
 
 Everything else is on [Releases](https://github.com/manhpham90vn/Deskhub/releases):
 
-- **Fedora / openSUSE** — `sudo dnf install ./deskhub-v*-x86_64.rpm` (or `zypper install`)
+- **Windows downloads** — app setup `deskhub-v*-windows-setup.exe` and CLI setup
+  `deskhub-cli-v*-windows-setup.exe`; portable exe files are also available
+- **Fedora / openSUSE** — separate app and CLI RPMs: install
+  `deskhub-v*-x86_64.rpm` or `deskhub-cli-v*-x86_64.rpm` with `dnf` or `zypper`
 - **Arch, other Linux** — portable `deskhub-v*-linux-x86_64`, just `chmod +x` and run
 - **Android** — `deskhub-v*-android.apk`, or the [Play beta](https://play.google.com/apps/testing/com.manhpham.deskhub)
 - **iOS** — [TestFlight](https://testflight.apple.com/join/7qY7wgpd)
@@ -122,9 +133,9 @@ Share a display, type an IP on the other machine, and you're driving it. Four pa
 every platform — **Host**, **Client**, **Devices**, **Settings** — so learning it on a Mac
 teaches you the Android app too.
 
-| ⚡ Fast | 📦 One file | 🎛️ Simple |
+| ⚡ Fast | 📦 Easy install | 🎛️ Simple |
 | ------ | ---------- | --------- |
-| **~3.5 ms** capture→display, 60 fps. Zero-copy VRAM pipeline — the hot path never touches the CPU. | No installer, no background service, no account. The entire Windows app is one **~5.1 MB** exe; macOS is a **1.9 MB** dmg. | **Share** a display or **Connect** to an IP, and that's it. Desktops can also share a **shell** and take **files** viewers send. Phones host too, view-only, since no mobile OS lets an app inject input. |
+| **~3.5 ms** capture→display, 60 fps. Zero-copy VRAM pipeline — the hot path never touches the CPU. | Windows setup adds Start Menu and Desktop shortcuts; a portable exe remains available. No background service or account. | **Share** a display or **Connect** to an IP, and that's it. Desktops can also share a **shell** and take **files** viewers send. Phones host too, view-only, since no mobile OS lets an app inject input. |
 
 Sessions are encrypted end to end over **QUIC/TLS**, and an unknown machine only gets in
 by proving it knows the host's passcode — via **SPAKE2**, so the code itself never travels

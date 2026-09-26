@@ -4,7 +4,6 @@ cd "$(dirname "$0")/.."
 
 DEST="${1:?usage: stage-linux-pkgroot.sh <dest-dir>}"
 BIN=out/build/x64-release/client/linux/deskhub
-CLI=out/build/x64-release/client/cli/deskhub-cli
 
 [ -f "$BIN" ] || {
     echo "stage-linux-pkgroot.sh: $BIN not found - run 'make release-linux' first." >&2
@@ -15,13 +14,6 @@ rm -rf "$DEST"
 
 install -Dm755 "$BIN" "$DEST/usr/bin/deskhub"
 strip "$DEST/usr/bin/deskhub"
-
-if [ -f "$CLI" ]; then
-    install -Dm755 "$CLI" "$DEST/usr/bin/deskhub-cli"
-    strip "$DEST/usr/bin/deskhub-cli"
-else
-    echo "stage-linux-pkgroot.sh: no deskhub-cli to package - run 'make release-cli' to include it."
-fi
 
 install -Dm644 client/linux/icons/deskhub-256.png \
     "$DEST/usr/share/icons/hicolor/256x256/apps/deskhub.png"

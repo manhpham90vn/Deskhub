@@ -11,7 +11,7 @@ distributed by TestFlight and Google Play.
 
 | Platform | File | One-line install |
 | --- | --- | --- |
-| 🪟 Windows | `deskhub-v*-windows.exe` | Download and run it |
+| 🪟 Windows | `deskhub-v*-windows-setup.exe` | Download and install; open DeskHub from Start or Desktop |
 | 🍎 macOS | `deskhub-v*-macos.dmg` | Open the dmg, drag the app across |
 | 🐧 Ubuntu, Kubuntu, Debian, Mint | `deskhub-v*-amd64.deb` | `sudo apt install ./deskhub-v*-amd64.deb` |
 | 🐧 Fedora (Workstation & KDE spin) | `deskhub-v*-x86_64.rpm` | `sudo dnf install ./deskhub-v*-x86_64.rpm` |
@@ -31,15 +31,21 @@ Windows, `brew install --cask manhpham90vn/tap/deskhub` on macOS, and an
 
 ## 🪟 Windows
 
-Download `deskhub-v*-windows.exe` and run it. There is no installer, no background
-service and no account — the whole app is that one file.
+Download `deskhub-v*-windows-setup.exe` and run it. Setup installs DeskHub for your
+Windows user, adds it to the Start Menu, and creates a Desktop shortcut by default.
+You can launch DeskHub at the end of setup. No account or background service is needed.
+The separate `deskhub-v*-windows.exe` file remains available for portable use.
 
-Or let winget fetch the same file and keep it current — `winget upgrade` brings each new
-release and `winget uninstall ManhPham.Deskhub` removes it:
+Or let winget install the same setup package and keep it current — `winget upgrade` brings
+each new release and `winget uninstall ManhPham.Deskhub` removes it:
 
 ```powershell
 winget install ManhPham.Deskhub
 ```
+
+If you installed the earlier portable winget package, run
+`winget uninstall ManhPham.Deskhub` once, then install it again. Your settings and keys
+in `%USERPROFILE%\.deskhub` are kept.
 
 Two things happen the first time you use it:
 
@@ -47,8 +53,9 @@ Two things happen the first time you use it:
   is not possible without it.
 - **A Windows Firewall rule**, added by the app itself the first time you share.
 
-To remove Deskhub, delete the exe. Settings and keys stay in `%USERPROFILE%\.deskhub`
-until you delete that folder too.
+Uninstall DeskHub from Windows Settings or with `winget uninstall ManhPham.Deskhub`.
+For the portable version, delete its exe. Settings and keys remain in
+`%USERPROFILE%\.deskhub` until you remove that folder too.
 
 ## 🍎 macOS
 
@@ -85,8 +92,10 @@ remote input works right after install, with no group change and no re-login. Th
 portable binary runs on any x86_64 distro with glibc 2.35+ (Ubuntu 22.04, Fedora 36,
 openSUSE 15.5, any current Arch).
 
-The deb and the rpm also install `deskhub-cli` as `/usr/bin/deskhub-cli` — see
-[Command line](#-command-line) below.
+The CLI has separate deb and rpm packages. Install `deskhub-cli` only if you need the
+terminal commands; it can be installed alongside the desktop app or on its own. Both
+packages place their commands in `/usr/bin`, and the desktop app adds a launcher to the
+application menu.
 
 On Ubuntu, Kubuntu, Debian and Mint, the Deskhub apt repository installs the same deb and
 lets `sudo apt upgrade` bring every later release. It serves Ubuntu 22.04 and newer, and
@@ -99,6 +108,9 @@ echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/deskhub.gpg] https://manhpham9
   | sudo tee /etc/apt/sources.list.d/deskhub.list
 sudo apt update && sudo apt install deskhub
 ```
+
+Install the CLI separately with `sudo apt install deskhub-cli`. If upgrading from an
+older `deskhub` package that included the CLI, install `deskhub-cli` to keep that command.
 
 **To share this machine's screen**, three more things must be in place.
 
@@ -225,19 +237,30 @@ the same as the app's, so the two agree.
 
 | Platform | File |
 | --- | --- |
-| 🪟 Windows | `deskhub-cli-v*-windows.exe` — download and run it, no installer |
+| 🪟 Windows | `deskhub-cli-v*-windows-setup.exe` — installs `deskhub-cli` on your user `PATH` |
 | 🍎 macOS | `deskhub-cli-v*-macos` — one binary for Apple Silicon and Intel |
-| 🐧 Linux | `deskhub-cli-v*-linux-x86_64`, or already there if you installed the deb or the rpm |
+| 🐧 Linux | `deskhub-cli-v*-amd64.deb`, `deskhub-cli-v*-x86_64.rpm`, or portable `deskhub-cli-v*-linux-x86_64` |
 
-The macOS and Linux files arrive without the executable bit, so `chmod +x` them once.
-Neither is signed or notarized the way the dmg is: on macOS the first run needs
+For a downloaded Linux package, use `sudo apt install ./deskhub-cli-v*-amd64.deb` on
+Ubuntu/Debian or `sudo dnf install ./deskhub-cli-v*-x86_64.rpm` on Fedora. These install
+the command in `/usr/bin` without installing the desktop app.
+
+Only the portable macOS and Linux binaries may need `chmod +x` after download; `.deb` and
+`.rpm` packages are installed with the package manager. The portable macOS binary is not
+signed or notarized like the dmg, so its first run may need
 `xattr -d com.apple.quarantine deskhub-cli-v*-macos`, or *Open Anyway* in System Settings
 → Privacy & Security.
 
-None of that applies through a package manager, which also puts it on `PATH`:
+The Windows setup package adds the CLI to your user `PATH` without requiring an administrator.
+The separate `deskhub-cli-v*-windows.exe` remains available for portable use.
+Package managers also put the command on `PATH`:
 `winget install ManhPham.DeskhubCLI` on Windows, `brew install manhpham90vn/tap/deskhub-cli`
-on macOS — Homebrew installs it without the quarantine flag. The apt repository ships it
-inside the `deskhub` package.
+on macOS — Homebrew installs it without the quarantine flag. On Ubuntu or Debian, run
+`sudo apt install deskhub-cli` after adding the DeskHub apt repository above.
+
+On Windows, open a new PowerShell window after the winget install and run
+`deskhub-cli help`. To check which executable Windows finds, run
+`Get-Command deskhub-cli`. The portable exe does not add itself to `PATH`.
 
 On Linux it shares a screen through the same portal and VA-API driver the app needs, and
 relies on the same `/dev/uinput` rule for remote input, so everything under

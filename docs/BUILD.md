@@ -229,9 +229,11 @@ House rules, in short — the full version is in `CLAUDE.md`:
 | --- | --- |
 | `make dist-macos` | a dmg signed with Developer ID, notarized and stapled |
 | `make verify-macos` | a Gatekeeper check on the build just produced |
-| `make dist-linux` | `.deb` + `.rpm`, both installing the uinput udev rule |
+| `make dist-linux` | separate app and CLI `.deb` + `.rpm` packages, each installing its uinput udev rule |
 
-The Windows and Linux apps are each a single file; there is no installer to build.
+The Windows app and CLI are also published as Inno Setup installers, built from
+`packaging/windows/` by the release workflow. Their portable Windows builds and the Linux
+app remain single files.
 
 ## 8. Releasing
 
@@ -270,11 +272,12 @@ scripts, say — run it by hand: `gh workflow run publish-packages.yml -f tag=vX
 Each needs a one-time setup before the first tag that runs it:
 
 - **winget** — the job only updates packages that already exist, so submit the first
-  version of each by hand and pick `deskhub` / `deskhub-cli` as the portable command alias
-  when komac asks. Until Microsoft merges that pull request the job warns and skips.
+  version of each by hand. Use the Inno Setup installer for `ManhPham.Deskhub`, and
+  choose `deskhub-cli` as the portable command alias for `ManhPham.DeskhubCLI`.
+  Until Microsoft merges those pull requests the job warns and skips.
 
   ```bash
-  komac new ManhPham.Deskhub --version X.Y.Z --urls https://github.com/manhpham90vn/Deskhub/releases/download/vX.Y.Z/deskhub-vX.Y.Z-windows.exe
+  komac new ManhPham.Deskhub --version X.Y.Z --urls https://github.com/manhpham90vn/Deskhub/releases/download/vX.Y.Z/deskhub-vX.Y.Z-windows-setup.exe
   ```
 
   Repeat with `ManhPham.DeskhubCLI` and the `deskhub-cli-vX.Y.Z-windows.exe` URL.

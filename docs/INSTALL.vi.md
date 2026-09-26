@@ -14,7 +14,7 @@ bản chuẩn.
 
 | Nền tảng | File | Lệnh cài |
 | --- | --- | --- |
-| 🪟 Windows | `deskhub-v*-windows.exe` | Tải về và chạy |
+| 🪟 Windows | `deskhub-v*-windows-setup.exe` | Tải và cài; mở DeskHub từ Start hoặc Desktop |
 | 🍎 macOS | `deskhub-v*-macos.dmg` | Mở dmg, kéo app vào Applications |
 | 🐧 Ubuntu, Kubuntu, Debian, Mint | `deskhub-v*-amd64.deb` | `sudo apt install ./deskhub-v*-amd64.deb` |
 | 🐧 Fedora (Workstation và KDE spin) | `deskhub-v*-x86_64.rpm` | `sudo dnf install ./deskhub-v*-x86_64.rpm` |
@@ -34,15 +34,19 @@ Windows, `brew install --cask manhpham90vn/tap/deskhub` trên macOS, và
 
 ## 🪟 Windows
 
-Tải `deskhub-v*-windows.exe` và chạy. Không installer, không background service, không
-tài khoản — toàn bộ app nằm gọn trong file đó.
+Tải `deskhub-v*-windows-setup.exe` và chạy. Bộ cài thêm DeskHub vào Start Menu và tạo
+shortcut trên Desktop theo mặc định; bạn cũng có thể mở app ngay khi cài xong. Không cần
+tài khoản hay background service. File `deskhub-v*-windows.exe` vẫn có cho ai muốn chạy portable.
 
-Hoặc để winget tải đúng file đó và giữ nó luôn mới: `winget upgrade` lấy bản release mới,
+Hoặc để winget cài bộ cài đó và giữ nó luôn mới: `winget upgrade` lấy bản release mới,
 `winget uninstall ManhPham.Deskhub` gỡ nó đi:
 
 ```powershell
 winget install ManhPham.Deskhub
 ```
+
+Nếu đã cài bản winget portable trước đây, chạy `winget uninstall ManhPham.Deskhub` một
+lần rồi cài lại. Settings và key trong `%USERPROFILE%\.deskhub` vẫn được giữ.
 
 Lần sử dụng đầu tiên có hai điểm cần lưu ý:
 
@@ -50,8 +54,9 @@ Lần sử dụng đầu tiên có hai điểm cần lưu ý:
   inject mouse và keyboard vào các cửa sổ chạy ở quyền cao.
 - **Rule Windows Firewall** do app tự thêm trong lần share đầu tiên.
 
-Để gỡ Deskhub, xoá file exe. Settings và key vẫn nằm trong `%USERPROFILE%\.deskhub` cho
-đến khi bạn xoá thư mục đó.
+Gỡ DeskHub trong Windows Settings hoặc chạy `winget uninstall ManhPham.Deskhub`. Với bản
+portable, chỉ cần xoá file exe. Settings và key vẫn nằm trong `%USERPROFILE%\.deskhub`
+cho đến khi bạn xoá thư mục đó.
 
 ## 🍎 macOS
 
@@ -87,8 +92,9 @@ Cả hai đều cài udev rule cho `/dev/uinput` mô tả ở mục 3 bên dư�
 được trên mọi distro x86_64 có glibc 2.35 trở lên (Ubuntu 22.04, Fedora 36,
 openSUSE 15.5, Arch bản hiện tại).
 
-Bản deb và rpm cũng cài `deskhub-cli` vào `/usr/bin/deskhub-cli`. Xem
-[Command line](#-command-line) bên dưới.
+CLI có gói deb và rpm riêng. Chỉ cài `deskhub-cli` khi cần lệnh terminal; gói này chạy
+độc lập hoặc song song với app. Cả hai đặt lệnh trong `/usr/bin`, còn app desktop thêm
+launcher vào menu ứng dụng.
 
 Trên Ubuntu, Kubuntu, Debian và Mint, apt repository của Deskhub cài đúng bản deb đó và
 để `sudo apt upgrade` mang về mọi bản release sau này. Repository hỗ trợ Ubuntu 22.04 trở
@@ -101,6 +107,9 @@ echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/deskhub.gpg] https://manhpham9
   | sudo tee /etc/apt/sources.list.d/deskhub.list
 sudo apt update && sudo apt install deskhub
 ```
+
+Cài CLI riêng bằng `sudo apt install deskhub-cli`. Nếu nâng cấp từ bản `deskhub` cũ từng
+chứa CLI, hãy cài thêm `deskhub-cli` để giữ lệnh đó.
 
 **Để share màn hình của máy này**, cần thêm ba điều kiện.
 
@@ -226,19 +235,30 @@ lệnh. Mọi dữ liệu nó đọc và ghi — settings, danh sách máy đã 
 
 | Nền tảng | File |
 | --- | --- |
-| 🪟 Windows | `deskhub-cli-v*-windows.exe` — tải về và chạy, không có installer |
+| 🪟 Windows | `deskhub-cli-v*-windows-setup.exe` — cài `deskhub-cli` vào `PATH` của người dùng |
 | 🍎 macOS | `deskhub-cli-v*-macos` — một binary cho cả Apple Silicon và Intel |
-| 🐧 Linux | `deskhub-cli-v*-linux-x86_64`, hoặc đã có sẵn nếu đã cài bản deb hay rpm |
+| 🐧 Linux | `deskhub-cli-v*-amd64.deb`, `deskhub-cli-v*-x86_64.rpm`, hoặc file portable `deskhub-cli-v*-linux-x86_64` |
 
-File macOS và Linux tải về không có executable bit, cần `chmod +x` một lần.
-Cả hai đều không được sign và notarize như file dmg. Trên macOS, lần chạy đầu tiên cần
+Với gói Linux tải trực tiếp, chạy `sudo apt install ./deskhub-cli-v*-amd64.deb` trên
+Ubuntu/Debian hoặc `sudo dnf install ./deskhub-cli-v*-x86_64.rpm` trên Fedora. Lệnh được
+cài vào `/usr/bin` mà không cần cài app desktop.
+
+Chỉ binary portable trên macOS và Linux có thể cần `chmod +x` sau khi tải về; gói `.deb`
+và `.rpm` được cài bằng package manager. Binary macOS portable không được sign và notarize
+như file dmg, nên lần chạy đầu tiên có thể cần
 `xattr -d com.apple.quarantine deskhub-cli-v*-macos`, hoặc chọn *Open Anyway* trong System
 Settings → Privacy & Security.
 
-Cài qua package manager thì không cần các bước trên, và lệnh còn được đưa sẵn vào `PATH`:
+Bộ cài Windows thêm CLI vào `PATH` của người dùng mà không cần quyền Administrator.
+File `deskhub-cli-v*-windows.exe` vẫn có cho ai muốn chạy portable. Cài qua package
+manager cũng đưa lệnh vào `PATH`:
 `winget install ManhPham.DeskhubCLI` trên Windows, `brew install manhpham90vn/tap/deskhub-cli`
-trên macOS — Homebrew cài mà không gắn cờ quarantine. apt repository đã kèm nó trong package
-`deskhub`.
+trên macOS — Homebrew cài mà không gắn cờ quarantine. Trên Ubuntu hoặc Debian, sau khi thêm
+apt repository ở trên, chạy `sudo apt install deskhub-cli`.
+
+Trên Windows, sau khi cài bằng winget hãy mở cửa sổ PowerShell mới và chạy
+`deskhub-cli help`. Chạy `Get-Command deskhub-cli` để xem Windows tìm thấy file nào.
+File exe portable tải trực tiếp không tự thêm vào `PATH`.
 
 Trên Linux, `deskhub-cli` share màn hình qua cùng portal và VA-API driver mà app cần, đồng
 thời dựa vào cùng rule `/dev/uinput` cho remote input, nên toàn bộ mục [Linux](#-linux) áp

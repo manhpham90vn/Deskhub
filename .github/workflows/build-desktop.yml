@@ -56,6 +56,41 @@ jobs:
           }
           Write-Output "OK - the MSVC runtime is linked statically."
 
+      - name: Build Windows installer
+        shell: pwsh
+        run: |
+          choco install innosetup -y
+          $version = (Get-Content VERSION -Raw).Trim()
+          & 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe' "/DAppVersion=$version" packaging/windows/Deskhub.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Verify Windows installer shortcuts and uninstall
+        shell: pwsh
+        run: |
+          $setup = (Resolve-Path 'out/installer/DeskHub-Setup.exe').Path
+          $installed = Join-Path $env:LOCALAPPDATA 'Programs\DeskHub\Deskhub.exe'
+          $shortcut = Join-Path ([Environment]::GetFolderPath('Programs')) 'DeskHub.lnk'
+          $desktopShortcut = Join-Path ([Environment]::GetFolderPath('Desktop')) 'DeskHub.lnk'
+          $install = Start-Process $setup -ArgumentList '/VERYSILENT', '/NORESTART' -Wait -PassThru
+          if ($install.ExitCode -ne 0) { throw "Installer exited with $($install.ExitCode)" }
+          if (-not (Test-Path $installed) -or -not (Test-Path $shortcut) -or -not (Test-Path $desktopShortcut)) {
+            throw 'Installer did not install the app and both shortcuts'
+          }
+          $uninstall = Start-Process (Join-Path (Split-Path $installed) 'unins000.exe') -ArgumentList '/VERYSILENT', '/NORESTART' -Wait -PassThru
+          if ($uninstall.ExitCode -ne 0) { throw "Uninstaller exited with $($uninstall.ExitCode)" }
+          if ((Test-Path $shortcut) -or (Test-Path $desktopShortcut)) {
+            throw 'Uninstaller left a shortcut behind'
+          }
+
+      - name: Upload installer
+        if: ${{ inputs.for_release }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: deskhub-windows-installer
+          path: out/installer/DeskHub-Setup.exe
+          retention-days: 14
+          if-no-files-found: error
+
       - name: Upload app
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -141,7 +176,7 @@ jobs:
       - name: Build the Ubuntu app (make release-linux)
         run: make release-linux
 
-      - name: Build the command-line client the deb and the rpm ship
+      - name: Build the command-line client for its own packages
         run: make release-cli
 
       - name: Assert no dynamic FFmpeg dependency
@@ -173,10 +208,23 @@ jobs:
         run: |
           sudo apt-get install -y ./out/dist/linux/deskhub_*.deb
           test -x /usr/bin/deskhub
-          test -x /usr/bin/deskhub-cli
+          test ! -e /usr/bin/deskhub-cli
+          test -f /usr/share/applications/deskhub.desktop
+          grep -q '^Exec=deskhub$' /usr/share/applications/deskhub.desktop
           test -f /usr/lib/udev/rules.d/60-deskhub-uinput.rules
           test -f /usr/lib/modules-load.d/deskhub.conf
           dpkg-deb --info out/dist/linux/deskhub_*.deb
+
+      - name: Package and install the CLI deb separately
+        if: matrix.release
+        run: |
+          scripts/build-cli-deb.sh
+          sudo apt-get install -y ./out/dist/linux/deskhub-cli_*.deb
+          test -x /usr/bin/deskhub-cli
+          test -f /usr/lib/udev/rules.d/60-deskhub-cli-uinput.rules
+          test -f /usr/lib/modules-load.d/deskhub-cli.conf
+          test "$(dpkg-query -S /usr/bin/deskhub-cli | cut -d: -f1)" = deskhub-cli
+          dpkg-deb --info out/dist/linux/deskhub-cli_*.deb
 
       - name: Upload deb
         if: matrix.release
@@ -187,32 +235,56 @@ jobs:
           retention-days: 14
           if-no-files-found: error
 
+      - name: Upload CLI deb
+        if: matrix.release
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: deskhub-cli-linux-deb
+          path: out/dist/linux/deskhub-cli_*.deb
+          retention-days: 14
+          if-no-files-found: error
+
       - name: Package the rpm (scripts/build-rpm.sh)
         if: matrix.release
         run: |
           scripts/apt-install.sh rpm
           scripts/build-rpm.sh
+          scripts/build-cli-rpm.sh
 
       - name: Install the rpm in a Fedora container and verify its payload
         if: matrix.release
         run: |
           docker run --rm -v "$PWD/out/dist/linux:/pkg:ro" fedora:latest bash -ec '
-            dnf install -y -q /pkg/deskhub-*.rpm
+            dnf install -y -q /pkg/deskhub-cli-*.rpm
+            test -x /usr/bin/deskhub-cli
+            test ! -e /usr/bin/deskhub
+            dnf install -y -q /pkg/deskhub-[0-9]*.rpm
             test -x /usr/bin/deskhub
             test -x /usr/bin/deskhub-cli
+            test -f /usr/share/applications/deskhub.desktop
             test -f /usr/lib/udev/rules.d/60-deskhub-uinput.rules
+            test -f /usr/lib/udev/rules.d/60-deskhub-cli-uinput.rules
             test -f /usr/lib/modules-load.d/deskhub.conf
             if ldd /usr/bin/deskhub | grep "not found"; then
               echo "::error::unresolved shared libraries after dnf install"
               exit 1
             fi
-            rpm -q deskhub'
+            rpm -q deskhub deskhub-cli'
 
       - name: Upload rpm
         if: matrix.release
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: deskhub-linux-rpm
-          path: out/dist/linux/deskhub-*.rpm
+          path: out/dist/linux/deskhub-[0-9]*.rpm
+          retention-days: 14
+          if-no-files-found: error
+
+      - name: Upload CLI rpm
+        if: matrix.release
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: deskhub-cli-linux-rpm
+          path: out/dist/linux/deskhub-cli-*.rpm
           retention-days: 14
           if-no-files-found: error

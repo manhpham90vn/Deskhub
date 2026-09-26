@@ -14,9 +14,11 @@ release-linux: ffmpeg-min quiche opus
 run-linux: build-linux
 	$(LINUX_APP_DEBUG) $(ARGS)
 
-dist-linux: release-linux
+dist-linux: release-linux release-cli
 	@scripts/build-deb.sh
+	@scripts/build-cli-deb.sh
 	@scripts/build-rpm.sh
+	@scripts/build-cli-rpm.sh
 
 setup-linux-permissions:
 	@sudo scripts/setup-uinput.sh

@@ -19,11 +19,6 @@ RPM="$DIST/deskhub-${VERSION}-1.${ARCH}.rpm"
 rm -rf "$PKGROOT" "$TOP" "$RPM"
 scripts/stage-linux-pkgroot.sh "$PKGROOT"
 
-CLI_FILES=""
-if [ -f "$PKGROOT/usr/bin/deskhub-cli" ]; then
-    CLI_FILES="/usr/bin/deskhub-cli"
-fi
-
 mkdir -p "$TOP/SPECS"
 cat > "$TOP/SPECS/deskhub.spec" <<EOF
 %global debug_package %{nil}
@@ -63,7 +58,6 @@ fi
 
 %files
 /usr/bin/deskhub
-$CLI_FILES
 /usr/share/applications/deskhub.desktop
 /usr/share/icons/hicolor/256x256/apps/deskhub.png
 /usr/share/icons/hicolor/512x512/apps/deskhub.png

@@ -14,7 +14,7 @@ build は TestFlight と Google Play から配布している。
 
 | プラットフォーム | ファイル | インストール手順 |
 | --- | --- | --- |
-| 🪟 Windows | `deskhub-v*-windows.exe` | ダウンロードして実行 |
+| 🪟 Windows | `deskhub-v*-windows-setup.exe` | ダウンロードしてインストールし、スタートメニューまたはデスクトップから起動 |
 | 🍎 macOS | `deskhub-v*-macos.dmg` | dmg を開き、app を Applications にドラッグ |
 | 🐧 Ubuntu、Kubuntu、Debian、Mint | `deskhub-v*-amd64.deb` | `sudo apt install ./deskhub-v*-amd64.deb` |
 | 🐧 Fedora（Workstation と KDE spin） | `deskhub-v*-x86_64.rpm` | `sudo dnf install ./deskhub-v*-x86_64.rpm` |
@@ -34,15 +34,20 @@ Ubuntu、Kubuntu、Debian、Mint では [apt repository](#-linux) を使う。
 
 ## 🪟 Windows
 
-`deskhub-v*-windows.exe` をダウンロードして実行する。installer、background service、
-アカウントのいずれも不要で、app 全体がこのファイル 1 つである。
+`deskhub-v*-windows-setup.exe` をダウンロードして実行する。スタートメニューに登録され、
+デスクトップのショートカットも既定で作成される。インストール後すぐに起動することもできる。
+アカウントや background service は不要。ポータブル版の `deskhub-v*-windows.exe` も引き続き利用できる。
 
-winget に同じファイルを取得させ、最新に保つこともできる。`winget upgrade` で新しい release
+winget に同じインストーラーを取得させ、最新に保つこともできる。`winget upgrade` で新しい release
 を取得し、`winget uninstall ManhPham.Deskhub` で削除する。
 
 ```powershell
 winget install ManhPham.Deskhub
 ```
+
+以前の winget ポータブル版をインストール済みの場合は、
+`winget uninstall ManhPham.Deskhub` を一度実行してから再インストールする。
+`%USERPROFILE%\.deskhub` の設定と鍵は保持される。
 
 初回の使用時には次の 2 点が発生する。
 
@@ -50,7 +55,8 @@ winget install ManhPham.Deskhub
   と keyboard を inject できない。
 - **Windows Firewall のルールを 1 本追加する。** 初回の share 時に app 自身が追加する。
 
-Deskhub を削除するには exe を消す。Settings と key は、フォルダを削除するまで
+DeskHub は Windows の設定または `winget uninstall ManhPham.Deskhub` でアンインストールできる。
+ポータブル版は exe を削除する。Settings と key は、フォルダを削除するまで
 `%USERPROFILE%\.deskhub` に残る。
 
 ## 🍎 macOS
@@ -88,8 +94,9 @@ deb と rpm の内容は同一であり、利用中の package manager が扱え
 binary は glibc 2.35 以上の x86_64 ディストリビューションで動作する（Ubuntu 22.04、
 Fedora 36、openSUSE 15.5、現行の Arch）。
 
-deb と rpm は `deskhub-cli` も `/usr/bin/deskhub-cli` としてインストールする。下記の
-[Command line](#-command-line) を参照。
+CLI には別の deb と rpm があり、デスクトップ app と独立して、または一緒にインストールできる。
+両方ともコマンドを `/usr/bin` に配置し、デスクトップ app はアプリケーションメニューに
+ランチャーも追加する。
 
 Ubuntu、Kubuntu、Debian、Mint では、Deskhub の apt repository が同じ deb をインストール
 し、以後の release は `sudo apt upgrade` で届く。対応するのは Ubuntu 22.04 以降と
@@ -102,6 +109,9 @@ echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/deskhub.gpg] https://manhpham9
   | sudo tee /etc/apt/sources.list.d/deskhub.list
 sudo apt update && sudo apt install deskhub
 ```
+
+CLI は `sudo apt install deskhub-cli` で別途インストールする。以前の `deskhub`
+パッケージに同梱されていた CLI を使い続けるには、アップグレード後にこのパッケージを入れる。
 
 **このマシンの画面を共有する**には、さらに 3 つの条件が必要である。
 
@@ -229,19 +239,31 @@ Android と同様に、iPhone と iPad の host は view-only に限られる。
 
 | プラットフォーム | ファイル |
 | --- | --- |
-| 🪟 Windows | `deskhub-cli-v*-windows.exe` —— ダウンロードして実行する。installer はない |
+| 🪟 Windows | `deskhub-cli-v*-windows-setup.exe` —— `deskhub-cli` をユーザーの `PATH` に追加 |
 | 🍎 macOS | `deskhub-cli-v*-macos` —— Apple Silicon と Intel の両方に対応した binary 1 つ |
-| 🐧 Linux | `deskhub-cli-v*-linux-x86_64`。deb または rpm を導入済みであれば既に存在する |
+| 🐧 Linux | `deskhub-cli-v*-amd64.deb`、`deskhub-cli-v*-x86_64.rpm`、またはポータブル版 `deskhub-cli-v*-linux-x86_64` |
 
-macOS と Linux のファイルは executable ビットが付いていないため、一度 `chmod +x` を
-実行する。どちらも dmg のような sign と notarize は行っていない。macOS では初回の実行に
+Linux のパッケージを直接ダウンロードした場合、Ubuntu/Debian では
+`sudo apt install ./deskhub-cli-v*-amd64.deb`、Fedora では
+`sudo dnf install ./deskhub-cli-v*-x86_64.rpm` でインストールする。デスクトップ app
+をインストールしなくても、コマンドは `/usr/bin` から実行できる。
+
+macOS と Linux のポータブル binary はダウンロード後に `chmod +x` が必要な場合がある。
+`.deb` と `.rpm` は package manager でインストールする。macOS のポータブル binary は
+dmg のように署名や notarize をしていないため、初回の実行時に
 `xattr -d com.apple.quarantine deskhub-cli-v*-macos`、または System Settings →
 Privacy & Security の *Open Anyway* が必要である。
 
-package manager 経由であれば上記はいずれも不要で、`PATH` にも配置される。Windows では
+Windows のインストーラーは管理者権限なしで CLI をユーザーの `PATH` に追加する。
+ポータブル版 `deskhub-cli-v*-windows.exe` も利用できる。package manager 経由でも
+`PATH` に配置される。Windows では
 `winget install ManhPham.DeskhubCLI`、macOS では `brew install manhpham90vn/tap/deskhub-cli`
-を使う。Homebrew は quarantine フラグを付けずにインストールする。apt repository では
-`deskhub` package に同梱されている。
+を使う。Homebrew は quarantine フラグを付けずにインストールする。Ubuntu や Debian では
+上記の apt repository を追加した後、`sudo apt install deskhub-cli` を実行する。
+
+Windows で winget からインストールした後は、新しい PowerShell ウィンドウを開いて
+`deskhub-cli help` を実行する。`Get-Command deskhub-cli` で実際のファイルを確認できる。
+直接ダウンロードしたポータブル版 exe は自動的に `PATH` に追加されない。
 
 Linux では app と同じ portal および VA-API driver で画面を共有し、remote input も同じ
 `/dev/uinput` rule に依存するため、[Linux](#-linux) の節がそのまま当てはまる。macOS で

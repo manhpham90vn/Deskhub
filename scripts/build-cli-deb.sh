@@ -4,7 +4,7 @@ cd "$(dirname "$0")/.."
 
 for tool in dpkg-deb dpkg-shlibdeps dpkg; do
     command -v "$tool" >/dev/null 2>&1 || {
-        echo "build-deb.sh: '$tool' is required (sudo apt install dpkg-dev)." >&2
+        echo "build-cli-deb.sh: '$tool' is required (sudo apt install dpkg-dev)." >&2
         exit 1
     }
 done
@@ -12,22 +12,21 @@ done
 VERSION="$(tr -d '[:space:]' < VERSION)"
 ARCH="$(dpkg --print-architecture)"
 DIST=out/dist/linux
-STAGE="$DIST/deb"
-DEB="$DIST/deskhub_${VERSION}_${ARCH}.deb"
+STAGE="$DIST/cli-deb"
+DEB="$DIST/deskhub-cli_${VERSION}_${ARCH}.deb"
 
 rm -rf "$STAGE" "$DEB"
-scripts/stage-linux-pkgroot.sh "$STAGE"
+scripts/stage-linux-cli-pkgroot.sh "$STAGE"
 
 mkdir -p "$STAGE/debian"
 touch "$STAGE/debian/control"
-DEPENDS="$(cd "$STAGE" && dpkg-shlibdeps -O usr/bin/deskhub | sed 's/^shlibs:Depends=//')"
+DEPENDS="$(cd "$STAGE" && dpkg-shlibdeps -O usr/bin/deskhub-cli | sed 's/^shlibs:Depends=//')"
 rm -rf "$STAGE/debian"
 
 INSTALLED_SIZE="$(du -sk "$STAGE" | cut -f1)"
-
 mkdir -p "$STAGE/DEBIAN"
 cat > "$STAGE/DEBIAN/control" <<EOF
-Package: deskhub
+Package: deskhub-cli
 Version: $VERSION
 Architecture: $ARCH
 Maintainer: Manh Pham <manhpv151090@gmail.com>
@@ -36,25 +35,22 @@ Priority: optional
 Installed-Size: $INSTALLED_SIZE
 Depends: $DEPENDS
 Recommends: xdg-desktop-portal, va-driver-all
+Replaces: deskhub (<< $VERSION)
+Breaks: deskhub (<< $VERSION)
 Homepage: https://github.com/manhpham90vn/Deskhub
-Description: LAN remote desktop - share and control screens
- Deskhub shares the screen of one machine and controls it from another
- over UDP on the local network.
- .
- This package contains the Ubuntu app (host + viewer role) and the udev
- rule that grants access to /dev/uinput, so remote mouse and keyboard
- input works without any manual permission setup.
+Description: Command-line client for DeskHub LAN remote desktop
+ DeskHub CLI shares screens, connects to hosts, and opens remote shells
+ without a graphical user interface. The package also installs the udev
+ rule needed for remote keyboard and mouse input.
 EOF
 
 cat > "$STAGE/DEBIAN/postinst" <<'EOF'
 #!/bin/sh
 set -e
-if [ "$1" = "configure" ]; then
-    if command -v udevadm >/dev/null 2>&1; then
-        udevadm control --reload-rules || true
-        modprobe uinput 2>/dev/null || true
-        udevadm trigger --name-match=uinput || true
-    fi
+if [ "$1" = "configure" ] && command -v udevadm >/dev/null 2>&1; then
+    udevadm control --reload-rules || true
+    modprobe uinput 2>/dev/null || true
+    udevadm trigger --name-match=uinput || true
 fi
 exit 0
 EOF
@@ -71,7 +67,6 @@ exit 0
 EOF
 
 chmod 755 "$STAGE/DEBIAN/postinst" "$STAGE/DEBIAN/postrm"
-
 dpkg-deb --build --root-owner-group "$STAGE" "$DEB" >/dev/null
 rm -rf "$STAGE"
 echo "[ok]      $DEB"

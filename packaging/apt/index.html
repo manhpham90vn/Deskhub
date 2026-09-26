@@ -58,10 +58,10 @@ curl -fsSL https://manhpham90vn.github.io/Deskhub/apt/deskhub.gpg | sudo tee /et
 echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/deskhub.gpg] https://manhpham90vn.github.io/Deskhub/apt stable main" \
   | sudo tee /etc/apt/sources.list.d/deskhub.list
 sudo apt update &amp;&amp; sudo apt install deskhub</pre>
-<p>The <code>deskhub</code> package installs both the app and <code>deskhub-cli</code>. Later releases arrive with <code>sudo apt upgrade</code>.</p>
+<p>Install the CLI separately with <code>sudo apt install deskhub-cli</code>. The desktop app and CLI can be installed independently or together; both commands are placed in <code>/usr/bin</code>. Later releases arrive with <code>sudo apt upgrade</code>.</p>
 
 <h2>Remove</h2>
-<pre>sudo apt remove deskhub
+<pre>sudo apt remove deskhub deskhub-cli
 sudo rm -f /etc/apt/sources.list.d/deskhub.list /etc/apt/keyrings/deskhub.gpg</pre>
 
 <h2>Signing key</h2>

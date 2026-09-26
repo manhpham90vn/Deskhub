@@ -13,7 +13,7 @@ TestFlight 和 Google Play 分发。
 
 | 平台 | 文件 | 安装命令 |
 | --- | --- | --- |
-| 🪟 Windows | `deskhub-v*-windows.exe` | 下载并运行 |
+| 🪟 Windows | `deskhub-v*-windows-setup.exe` | 下载并安装，然后从开始菜单或桌面打开 |
 | 🍎 macOS | `deskhub-v*-macos.dmg` | 打开 dmg，将 app 拖入 Applications |
 | 🐧 Ubuntu、Kubuntu、Debian、Mint | `deskhub-v*-amd64.deb` | `sudo apt install ./deskhub-v*-amd64.deb` |
 | 🐧 Fedora（Workstation 与 KDE spin） | `deskhub-v*-x86_64.rpm` | `sudo dnf install ./deskhub-v*-x86_64.rpm` |
@@ -33,23 +33,27 @@ Ubuntu、Kubuntu、Debian、Mint 则使用 [apt repository](#-linux)。
 
 ## 🪟 Windows
 
-下载 `deskhub-v*-windows.exe` 并运行。没有 installer，没有 background service，也不需要
-账号：整个 app 就是这一个文件。
+下载并运行 `deskhub-v*-windows-setup.exe`。安装程序会将 DeskHub 添加到开始菜单，
+默认创建桌面快捷方式，并可在安装完成后立即启动。无需账号或 background service。
+需要便携版时仍可下载 `deskhub-v*-windows.exe`。
 
-也可以让 winget 获取同一个文件并保持更新：`winget upgrade` 获取每个新 release，
+也可以让 winget 安装同一个安装包并保持更新：`winget upgrade` 获取每个新 release，
 `winget uninstall ManhPham.Deskhub` 将其移除：
 
 ```powershell
 winget install ManhPham.Deskhub
 ```
 
+如果之前安装过 winget 便携版，请先运行一次 `winget uninstall ManhPham.Deskhub`，
+然后重新安装。`%USERPROFILE%\.deskhub` 中的设置和密钥会保留。
+
 首次使用时会发生两件事：
 
 - **启动时申请一次 Administrator。** 否则无法将 mouse 和 keyboard inject 进提权窗口。
 - **添加一条 Windows Firewall 规则**，由 app 在首次 share 时自行添加。
 
-卸载 Deskhub 只需删除该 exe。Settings 和 key 会保留在 `%USERPROFILE%\.deskhub`，直到该
-文件夹被删除。
+可在 Windows 设置中卸载 DeskHub，或运行 `winget uninstall ManhPham.Deskhub`。
+便携版只需删除 exe。Settings 和 key 会保留在 `%USERPROFILE%\.deskhub`，直到删除该文件夹。
 
 ## 🍎 macOS
 
@@ -83,8 +87,8 @@ deb 与 rpm 内容一致，选择系统 package manager 支持的一种即可。
 重新登录。免安装 binary 可在任何具备 glibc 2.35 及以上的 x86_64 发行版上运行（Ubuntu
 22.04、Fedora 36、openSUSE 15.5、当前版本的 Arch）。
 
-deb 与 rpm 还会将 `deskhub-cli` 安装为 `/usr/bin/deskhub-cli`。见下文
-[Command line](#-command-line)。
+CLI 有单独的 deb 和 rpm 包，可独立安装或与桌面 app 同时安装。
+两个包都将命令放在 `/usr/bin`，桌面 app 还会在应用菜单中创建启动器。
 
 在 Ubuntu、Kubuntu、Debian 和 Mint 上，Deskhub 的 apt repository 安装的是同一个 deb，
 并让 `sudo apt upgrade` 获取之后的每个 release。它支持 Ubuntu 22.04 及以上、Debian 12
@@ -97,6 +101,9 @@ echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/deskhub.gpg] https://manhpham9
   | sudo tee /etc/apt/sources.list.d/deskhub.list
 sudo apt update && sudo apt install deskhub
 ```
+
+CLI 可单独运行 `sudo apt install deskhub-cli` 安装。从旧版包含 CLI 的 `deskhub`
+包升级后，也需安装 `deskhub-cli` 才能保留该命令。
 
 **若需共享本机屏幕**，还需满足三个条件。
 
@@ -216,19 +223,29 @@ ipa 无法 sideload，因此 beta 通过 TestFlight 分发：
 
 | 平台 | 文件 |
 | --- | --- |
-| 🪟 Windows | `deskhub-cli-v*-windows.exe` —— 下载即可运行，没有 installer |
+| 🪟 Windows | `deskhub-cli-v*-windows-setup.exe` —— 安装后可从 `PATH` 运行 `deskhub-cli` |
 | 🍎 macOS | `deskhub-cli-v*-macos` —— 一个 binary 同时支持 Apple Silicon 与 Intel |
-| 🐧 Linux | `deskhub-cli-v*-linux-x86_64`；若已安装 deb 或 rpm 则已存在 |
+| 🐧 Linux | `deskhub-cli-v*-amd64.deb`、`deskhub-cli-v*-x86_64.rpm`，或便携版 `deskhub-cli-v*-linux-x86_64` |
 
-macOS 与 Linux 的文件下载后不带 executable 位，需执行一次 `chmod +x`。两者均未像 dmg
-那样进行 sign 和 notarize：在 macOS 上首次运行需要
+直接下载 Linux 软件包时，在 Ubuntu/Debian 上运行
+`sudo apt install ./deskhub-cli-v*-amd64.deb`，在 Fedora 上运行
+`sudo dnf install ./deskhub-cli-v*-x86_64.rpm`。无需安装桌面应用，也能从 `/usr/bin`
+运行该命令。
+
+macOS 与 Linux 的便携版 binary 下载后可能需要执行一次 `chmod +x`；`.deb` 和 `.rpm`
+应通过软件包管理器安装。macOS 便携版 binary 未像 dmg 一样签名或公证，首次运行可能需要
 `xattr -d com.apple.quarantine deskhub-cli-v*-macos`，或在 System Settings → Privacy &
 Security 中选择 *Open Anyway*。
 
-通过 package manager 安装则无需上述步骤，并且会直接放入 `PATH`：Windows 上用
+Windows 安装程序无需管理员权限即可将 CLI 加入用户的 `PATH`。
+便携版 `deskhub-cli-v*-windows.exe` 仍可下载。通过 package manager 安装也会把命令加入 `PATH`：Windows 上用
 `winget install ManhPham.DeskhubCLI`，macOS 上用 `brew install manhpham90vn/tap/deskhub-cli`
-—— Homebrew 安装时不会附加 quarantine 标记。apt repository 已将它包含在 `deskhub`
-package 中。
+—— Homebrew 安装时不会附加 quarantine 标记。在 Ubuntu 或 Debian 上添加上述 apt
+repository 后，运行 `sudo apt install deskhub-cli`。
+
+在 Windows 上通过 winget 安装后，请打开新的 PowerShell 窗口运行
+`deskhub-cli help`。用 `Get-Command deskhub-cli` 查看实际调用的文件。
+直接下载的便携版 exe 不会自动加入 `PATH`。
 
 在 Linux 上，它通过 app 所需的同一个 portal 和 VA-API driver 共享屏幕，remote input 也
 依赖同一条 `/dev/uinput` rule，因此 [Linux](#-linux) 一节同样适用。在 macOS 上它可以共享

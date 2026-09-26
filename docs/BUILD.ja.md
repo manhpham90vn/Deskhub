@@ -241,9 +241,10 @@ private な Kotlin コード、import、引数で失敗する。ある振る舞�
 | --- | --- |
 | `make dist-macos` | Developer ID で sign し、notarize と staple を行った dmg |
 | `make verify-macos` | 直前に build した成果物に対する Gatekeeper の検査 |
-| `make dist-linux` | `.deb` と `.rpm`。いずれも uinput の udev rule を導入する |
+| `make dist-linux` | app と CLI それぞれの `.deb` と `.rpm`。各パッケージに uinput の udev rule を含む |
 
-Windows と Linux の app はそれぞれファイル 1 つであり、build すべき installer はない。
+Release workflow は `packaging/windows/` から Windows app と CLI のインストーラーも作成する。
+Windows ポータブル版と Linux app は引き続き単一ファイルである。
 
 ## 8. リリース
 
@@ -284,11 +285,12 @@ GitHub Release の作成後、`deploy.yml` は tag を `publish-packages.yml` �
 いずれも、それを実行する最初の tag より前に一度だけ設定が必要である。
 
 - **winget** —— job は既存の package しか更新しないため、各 package の最初の版は手動で
-  提出し、komac に聞かれたら portable command alias に `deskhub` / `deskhub-cli` を選ぶ。
+  提出する。`ManhPham.Deskhub` には Inno Setup インストーラーを使用し、
+  `ManhPham.DeskhubCLI` の portable command alias には `deskhub-cli` を選ぶ。
   Microsoft がその pull request を merge するまで、job は警告を出してスキップする。
 
   ```bash
-  komac new ManhPham.Deskhub --version X.Y.Z --urls https://github.com/manhpham90vn/Deskhub/releases/download/vX.Y.Z/deskhub-vX.Y.Z-windows.exe
+  komac new ManhPham.Deskhub --version X.Y.Z --urls https://github.com/manhpham90vn/Deskhub/releases/download/vX.Y.Z/deskhub-vX.Y.Z-windows-setup.exe
   ```
 
   `ManhPham.DeskhubCLI` と `deskhub-cli-vX.Y.Z-windows.exe` の URL でも同様に行う。

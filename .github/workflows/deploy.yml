@@ -59,15 +59,19 @@ jobs:
         run: |
           mkdir -p out
           mv dist/deskhub-windows/Deskhub.exe "out/deskhub-${GITHUB_REF_NAME}-windows.exe"
+          mv dist/deskhub-windows-installer/DeskHub-Setup.exe "out/deskhub-${GITHUB_REF_NAME}-windows-setup.exe"
           mv dist/deskhub-linux/deskhub "out/deskhub-${GITHUB_REF_NAME}-linux-x86_64"
           chmod +x "out/deskhub-${GITHUB_REF_NAME}-linux-x86_64"
           mv dist/deskhub-cli-windows/deskhub-cli.exe "out/deskhub-cli-${GITHUB_REF_NAME}-windows.exe"
+          mv dist/deskhub-cli-windows-installer/DeskHub-CLI-Setup.exe "out/deskhub-cli-${GITHUB_REF_NAME}-windows-setup.exe"
           mv dist/deskhub-cli-linux/deskhub-cli "out/deskhub-cli-${GITHUB_REF_NAME}-linux-x86_64"
           chmod +x "out/deskhub-cli-${GITHUB_REF_NAME}-linux-x86_64"
           mv dist/deskhub-cli-macos/deskhub-cli "out/deskhub-cli-${GITHUB_REF_NAME}-macos"
           chmod +x "out/deskhub-cli-${GITHUB_REF_NAME}-macos"
           mv dist/deskhub-linux-deb/deskhub_*.deb "out/deskhub-${GITHUB_REF_NAME}-amd64.deb"
+          mv dist/deskhub-cli-linux-deb/deskhub-cli_*.deb "out/deskhub-cli-${GITHUB_REF_NAME}-amd64.deb"
           mv dist/deskhub-linux-rpm/deskhub-*.rpm "out/deskhub-${GITHUB_REF_NAME}-x86_64.rpm"
+          mv dist/deskhub-cli-linux-rpm/deskhub-cli-*.rpm "out/deskhub-cli-${GITHUB_REF_NAME}-x86_64.rpm"
 
       - name: Write release notes
         run: |
@@ -77,7 +81,7 @@ jobs:
 
           📦 **Installing** — every platform, one page: [INSTALL.md](https://github.com/manhpham90vn/Deskhub/blob/main/docs/INSTALL.md).
           The `deskhub-cli-*` files are the same client without a window, for a script or an SSH session;
-          the deb and the rpm already install it as `deskhub-cli`.
+          Linux has separate deb and rpm packages for the app and CLI.
           The macOS dmg and the Android apk are attached by their own jobs and may show up a few minutes later;
           iOS ships through [TestFlight](https://testflight.apple.com/join/7qY7wgpd).
 
@@ -91,10 +95,14 @@ jobs:
         with:
           files: |
             out/deskhub-${{ github.ref_name }}-windows.exe
+            out/deskhub-${{ github.ref_name }}-windows-setup.exe
             out/deskhub-${{ github.ref_name }}-linux-x86_64
             out/deskhub-${{ github.ref_name }}-amd64.deb
             out/deskhub-${{ github.ref_name }}-x86_64.rpm
+            out/deskhub-cli-${{ github.ref_name }}-amd64.deb
+            out/deskhub-cli-${{ github.ref_name }}-x86_64.rpm
             out/deskhub-cli-${{ github.ref_name }}-windows.exe
+            out/deskhub-cli-${{ github.ref_name }}-windows-setup.exe
             out/deskhub-cli-${{ github.ref_name }}-linux-x86_64
             out/deskhub-cli-${{ github.ref_name }}-macos
           body_path: out/release-notes.md

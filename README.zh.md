@@ -49,19 +49,29 @@ brew install --cask manhpham90vn/tap/deskhub     # macOS · app
 brew install manhpham90vn/tap/deskhub-cli        # macOS · deskhub-cli
 ```
 
-在 Ubuntu / Debian / Mint 上，`deskhub` package 同时安装 app 与 `deskhub-cli`：
+在 Ubuntu / Debian / Mint 上，桌面应用与 CLI 使用独立软件包。添加一次 apt repository，
+再按需安装其中一个或两个：
 
 ```bash
 sudo install -d /etc/apt/keyrings
 curl -fsSL https://manhpham90vn.github.io/Deskhub/apt/deskhub.gpg | sudo tee /etc/apt/keyrings/deskhub.gpg >/dev/null
 echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/deskhub.gpg] https://manhpham90vn.github.io/Deskhub/apt stable main" \
   | sudo tee /etc/apt/sources.list.d/deskhub.list
-sudo apt update && sudo apt install deskhub
+sudo apt update
+sudo apt install deskhub       # 桌面应用
+sudo apt install deskhub-cli   # CLI；也可以单独安装
 ```
+
+桌面软件包会在应用菜单添加 DeskHub，并将 `deskhub` 安装到 `/usr/bin`；CLI 软件包将
+`deskhub-cli` 安装到 `/usr/bin`。Windows 的应用安装程序创建开始菜单和桌面快捷方式；
+独立的 CLI 安装程序将命令加入用户 `PATH`。Homebrew 会将 macOS CLI 加入 `PATH`。
 
 其余平台请从 [Releases](https://github.com/manhpham90vn/Deskhub/releases) 获取：
 
-- **Fedora / openSUSE** —— `sudo dnf install ./deskhub-v*-x86_64.rpm`（或 `zypper install`）
+- **Windows 下载版** —— 应用安装程序 `deskhub-v*-windows-setup.exe` 与 CLI 安装程序
+  `deskhub-cli-v*-windows-setup.exe`；也提供便携版 exe
+- **Fedora / openSUSE** —— 应用与 CLI 使用独立 RPM：按需使用 `dnf` 或 `zypper`
+  安装 `deskhub-v*-x86_64.rpm`、`deskhub-cli-v*-x86_64.rpm`
 - **Arch 及其他 Linux** —— 免安装的 `deskhub-v*-linux-x86_64`，`chmod +x` 后运行
 - **Android** —— `deskhub-v*-android.apk`，或 [Play beta](https://play.google.com/apps/testing/com.manhpham.deskhub)
 - **iOS** —— [TestFlight](https://testflight.apple.com/join/7qY7wgpd)
@@ -122,9 +132,9 @@ display，在另一台机器上输入 IP，即可对其进行操作。每个平�
 **Host**、**Client**、**Devices**、**Settings** —— 因此在 macOS 上熟悉之后即可直接使用
 Android 上的 app。
 
-| ⚡ 快 | 📦 一个文件 | 🎛️ 简单 |
+| ⚡ 快 | 📦 安装方便 | 🎛️ 简单 |
 | ------ | ---------- | --------- |
-| 从 capture 到显示 **~3.5 ms**，60 fps。zero-copy pipeline 全程位于 VRAM 内，hot path 不经过 CPU。 | 没有 installer，没有 background service，无需账号。整个 Windows app 为一个 **~5.1 MB** 的 exe；macOS 为 **1.9 MB** 的 dmg。 | **Share** 一块 display，或 **Connect** 到一个 IP。桌面端还可共享一个 **shell**，并接收 viewer 发送的**文件**。手机也可以做 host，但仅限 view-only，因为没有任何移动 OS 允许 app inject input。 |
+| 从 capture 到显示 **~3.5 ms**，60 fps。zero-copy pipeline 全程位于 VRAM 内，hot path 不经过 CPU。 | Windows 安装程序创建开始菜单和桌面快捷方式；便携版 exe 仍可下载。无需 background service 或账号。 | **Share** 一块 display，或 **Connect** 到一个 IP。桌面端还可共享一个 **shell**，并接收 viewer 发送的**文件**。手机也可以做 host，但仅限 view-only，因为没有任何移动 OS 允许 app inject input。 |
 
 Session 在 **QUIC/TLS** 上以 end-to-end 方式 encrypt。陌生机器只有在证明自己知道 host
 的 passcode 时才被接受 —— 通过 **SPAKE2** 完成，因此 passcode 本身不会被传输 —— 或者由

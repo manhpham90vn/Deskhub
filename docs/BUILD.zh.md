@@ -218,9 +218,10 @@ clang 构建会对未使用的 member function、template 与 exception 参数�
 | --- | --- |
 | `make dist-macos` | 使用 Developer ID sign、经 notarize 并 staple 的 dmg |
 | `make verify-macos` | 对刚构建的产物执行 Gatekeeper 检查 |
-| `make dist-linux` | `.deb` 与 `.rpm`，两者均安装 uinput 的 udev rule |
+| `make dist-linux` | 分别构建 app 和 CLI 的 `.deb` 与 `.rpm`，每个包都有 uinput 的 udev rule |
 
-Windows 与 Linux 的 app 各为单个文件，没有需要构建的 installer。
+Release workflow 还会通过 `packaging/windows/` 构建 Windows app 和 CLI 安装程序。
+Windows 便携版和 Linux app 仍是单文件。
 
 ## 8. 发布
 
@@ -258,12 +259,13 @@ GitHub Release 创建后，`deploy.yml` 将 tag 交给 `publish-packages.yml`，
 
 每个 job 在首次运行它的 tag 之前都需要一次性设置：
 
-- **winget** —— 该 job 只更新已存在的 package，因此每个 package 的第一个版本需手动提交，
-  komac 询问时将 portable command alias 设为 `deskhub` / `deskhub-cli`。在 Microsoft merge
+- **winget** —— 该 job 只更新已存在的 package，因此每个 package 的第一个版本需手动提交。
+  `ManhPham.Deskhub` 使用 Inno Setup 安装程序；`ManhPham.DeskhubCLI` 的 portable command alias
+  设为 `deskhub-cli`。在 Microsoft merge
   该 pull request 之前，job 只会警告并跳过。
 
   ```bash
-  komac new ManhPham.Deskhub --version X.Y.Z --urls https://github.com/manhpham90vn/Deskhub/releases/download/vX.Y.Z/deskhub-vX.Y.Z-windows.exe
+  komac new ManhPham.Deskhub --version X.Y.Z --urls https://github.com/manhpham90vn/Deskhub/releases/download/vX.Y.Z/deskhub-vX.Y.Z-windows-setup.exe
   ```
 
   再对 `ManhPham.DeskhubCLI` 和 `deskhub-cli-vX.Y.Z-windows.exe` 的 URL 执行一次。

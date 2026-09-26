@@ -236,9 +236,10 @@ Quy ước của dự án, bản rút gọn; bản đầy đủ nằm trong `CLA
 | --- | --- |
 | `make dist-macos` | một file dmg đã sign bằng Developer ID, đã notarize và staple |
 | `make verify-macos` | kiểm tra Gatekeeper trên bản vừa build |
-| `make dist-linux` | `.deb` và `.rpm`, cả hai đều cài udev rule cho uinput |
+| `make dist-linux` | gói `.deb` và `.rpm` riêng cho app và CLI, mỗi gói cài udev rule cho uinput |
 
-App Windows và Linux mỗi bản chỉ là một file, không có installer nào để build.
+Workflow release cũng tạo bộ cài Windows cho app và CLI từ `packaging/windows/`. Các bản
+Windows portable và app Linux vẫn là file đơn lẻ.
 
 ## 8. Release
 
@@ -278,11 +279,12 @@ một trong các script này — chạy tay: `gh workflow run publish-packages.y
 Mỗi job cần thiết lập một lần trước tag đầu tiên chạy nó:
 
 - **winget** — job chỉ cập nhật package đã tồn tại, nên bản đầu tiên của mỗi package phải
-  gửi bằng tay, và chọn `deskhub` / `deskhub-cli` làm portable command alias khi komac hỏi.
+  gửi bằng tay. Dùng bộ cài Inno Setup cho `ManhPham.Deskhub`; chọn `deskhub-cli` làm
+  portable command alias cho `ManhPham.DeskhubCLI` khi komac hỏi.
   Trước khi Microsoft merge pull request đó, job chỉ cảnh báo rồi bỏ qua.
 
   ```bash
-  komac new ManhPham.Deskhub --version X.Y.Z --urls https://github.com/manhpham90vn/Deskhub/releases/download/vX.Y.Z/deskhub-vX.Y.Z-windows.exe
+  komac new ManhPham.Deskhub --version X.Y.Z --urls https://github.com/manhpham90vn/Deskhub/releases/download/vX.Y.Z/deskhub-vX.Y.Z-windows-setup.exe
   ```
 
   Làm lại với `ManhPham.DeskhubCLI` và URL `deskhub-cli-vX.Y.Z-windows.exe`.
