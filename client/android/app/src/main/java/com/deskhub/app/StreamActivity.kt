@@ -134,7 +134,6 @@ class StreamActivity : ComponentActivity() {
 
         setContent {
             MaterialTheme(colorScheme = darkColorScheme()) {
-                PairingPrompt()
                 StreamScreen(
                     address = address,
                     sessionKey = session,
@@ -203,7 +202,6 @@ private fun StreamScreen(
     var endReason by remember { mutableStateOf("") }
     var videoW by remember { mutableIntStateOf(0) }
     var videoH by remember { mutableIntStateOf(0) }
-    var trustAsk by remember { mutableStateOf<Pair<Int, String>?>(null) }
 
     DisposableEffect(sessionKey) {
         sessionPhase = NativeClient.PHASE_IDLE
@@ -211,7 +209,6 @@ private fun StreamScreen(
         endReason = ""
         videoW = 0
         videoH = 0
-        trustAsk = null
         if (!started) return@DisposableEffect onDispose {}
         val listener =
             object : NativeClient.SessionListener {
@@ -236,12 +233,6 @@ private fun StreamScreen(
                     sessionPhase = NativeClient.PHASE_ENDED
                 }
 
-                override fun onTrustAsked(
-                    verdict: Int,
-                    fingerprint: String,
-                ) {
-                    trustAsk = verdict to fingerprint
-                }
             }
         NativeClient.sessionListener = listener
         NativeClient.nativeSnapshot()?.let { snap ->
@@ -270,61 +261,6 @@ private fun StreamScreen(
             }
             delay(LINK_POLL_MS)
         }
-    }
-
-    trustAsk?.let { (verdict, fingerprint) ->
-        val changed = verdict == NativeClient.TRUST_CHANGED
-        AlertDialog(
-            onDismissRequest = {
-                NativeClient.rejectKey()
-                trustAsk = null
-            },
-            title = {
-                Text(
-                    NativeClient.string(
-                        if (changed) {
-                            NativeClient.STR_TRUST_CHANGED_TITLE
-                        } else {
-                            NativeClient.STR_TRUST_NEW_HOST_TITLE
-                        },
-                    ),
-                )
-            },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text(
-                        NativeClient.string(
-                            if (changed) {
-                                NativeClient.STR_TRUST_CHANGED_BODY
-                            } else {
-                                NativeClient.STR_TRUST_NEW_HOST_BODY
-                            },
-                        ),
-                    )
-                    Text(
-                        "${NativeClient.string(NativeClient.STR_TRUST_FINGERPRINT_LABEL)} " +
-                            fingerprint,
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                }
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        NativeClient.acceptKey()
-                        trustAsk = null
-                    },
-                ) { Text(NativeClient.string(NativeClient.STR_TRUST_ACCEPT)) }
-            },
-            dismissButton = {
-                TextButton(
-                    onClick = {
-                        NativeClient.rejectKey()
-                        trustAsk = null
-                    },
-                ) { Text(NativeClient.string(NativeClient.STR_TRUST_REJECT)) }
-            },
-        )
     }
 
     val appContext = LocalContext.current.applicationContext

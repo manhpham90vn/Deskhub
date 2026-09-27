@@ -63,7 +63,6 @@ add_library(core STATIC
 
     src/session/host/Beacon.cpp
 
-    src/net/LanScan.cpp
     src/net/Ipv4.cpp
     src/net/BindAddress.cpp
     src/net/TrustStore.cpp
@@ -177,7 +176,6 @@ if(DESKHUB_CORE_TESTS)
 
         tests/session/BeaconTests.cpp
 
-        tests/net/LanScanTests.cpp
         tests/net/Ipv4Tests.cpp
         tests/net/BindAddressTests.cpp
         tests/net/TrustStoreTests.cpp

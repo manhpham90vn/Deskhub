@@ -21,7 +21,6 @@ struct Peer {
     deskhubp::QuicConnId conn = 0;
     std::string stream{};
     std::vector<std::vector<uint8_t>> datagrams{};
-    std::vector<std::vector<uint8_t>> foreign{};
     std::vector<uint64_t> broken{};
     bool connected = false;
     bool closed = false;
@@ -40,9 +39,6 @@ deskhubp::QuicCallbacks HooksFor(Peer& peer) {
     };
     hooks.onDatagram = [&peer](deskhubp::QuicConnId, std::span<const uint8_t> bytes) {
         peer.datagrams.emplace_back(bytes.begin(), bytes.end());
-    };
-    hooks.onForeignDatagram = [&peer](const NetAddr&, std::span<const uint8_t> bytes) {
-        peer.foreign.emplace_back(bytes.begin(), bytes.end());
     };
     hooks.onStreamBroken = [&peer](deskhubp::QuicConnId, uint64_t stream) {
         peer.broken.push_back(stream);
@@ -122,10 +118,10 @@ void TestHandshakeStreamAndDatagram() {
     uint8_t beacon[deskhub::kMaxDatagram];
     const size_t beaconSize = deskhub::BuildListSources(beacon);
     Check(client.endpoint.SendRaw(target, std::span<const uint8_t>(beacon, beaconSize)),
-        "a plain beacon packet can share the port");
-    for (int i = 0; i < kMaxRounds && server.foreign.empty(); ++i) Pump(client, server, 1);
-    Check(server.foreign.size() == 1 && server.foreign[0].size() == beaconSize,
-        "and reaches the beacon handler instead of the QUIC connection");
+        "a legacy plaintext discovery packet reaches the UDP port");
+    Pump(client, server, 50);
+    Check(server.datagrams.size() == 1,
+        "the legacy discovery packet is ignored by the QUIC endpoint");
     Check(server.stream == payload, "without disturbing the stream");
 
     client.endpoint.CloseConnection(client.conn, 0, "done");

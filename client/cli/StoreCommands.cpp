@@ -2,6 +2,7 @@
 
 #include <optional>
 #include <ctime>
+#include <fstream>
 #include <iostream>
 #include <string>
 #include <string_view>
@@ -15,6 +16,7 @@
 #include "deskhub/ui/UiSettings.h"
 #include "deskhubp/system/HostIdentity.h"
 #include "deskhubp/system/AuthProof.h"
+#include "deskhubp/system/ClientIdentity.h"
 #include "deskhubp/system/PairedDevicesFile.h"
 #include "deskhubp/system/TrustStoreFile.h"
 #include "deskhubp/system/UiSettingsStore.h"
@@ -77,9 +79,38 @@ std::string UnknownKeyMessage(std::string_view key, const std::vector<std::strin
 }
 
 ExitCode RunDevices(const Command& command) {
+    if (command.devices == DevicesAction::Import) {
+        std::ifstream file(command.target, std::ios::binary);
+        if (!file) {
+            PrintError("could not read the private key file");
+            return ExitCode::Failed;
+        }
+        std::string pem(65537, '\0');
+        file.read(pem.data(), std::streamsize(pem.size()));
+        const std::streamsize length = file.gcount();
+        if (length <= 0 || length > 65536 || file.bad()) {
+            PrintError("invalid private key file size");
+            return ExitCode::Usage;
+        }
+        pem.resize(size_t(length));
+        std::string passphrase;
+        if (command.keyPassphraseStdin && !std::getline(std::cin, passphrase)) {
+            PrintError("no key passphrase arrived on stdin");
+            return ExitCode::Usage;
+        }
+        if (!deskhubp::ImportClientIdentity(pem, passphrase)) {
+            PrintError("unsupported private key format or incorrect key passphrase");
+            return ExitCode::Usage;
+        }
+        if (!command.quiet) {
+            PrintLine("Client identity imported. Update the public key on each host that allows it.");
+        }
+        return ExitCode::Ok;
+    }
+
     if (command.devices == DevicesAction::Public) {
-        const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity("deskhub");
-        const std::string publicKey = deskhubp::IdentityPublicKeyText(identity);
+        const deskhubp::ClientIdentity identity = deskhubp::LoadOrCreateClientIdentity();
+        const std::string publicKey = deskhubp::ClientPublicKeyText(identity);
         if (publicKey.empty()) {
             PrintError("could not read this machine's public key");
             return ExitCode::Failed;
@@ -166,10 +197,32 @@ ExitCode RunDevices(const Command& command) {
 }
 
 ExitCode RunTrust(const Command& command) {
+    if (command.trust == TrustAction::Public) {
+        const auto identity = deskhubp::LoadOrCreateHostIdentity("deskhub");
+        const std::string publicKey = deskhubp::IdentityPublicKeyText(identity);
+        if (publicKey.empty()) {
+            PrintError("could not read this host's public key");
+            return ExitCode::Failed;
+        }
+        PrintLine(publicKey);
+        return ExitCode::Ok;
+    }
+
     if (command.trust == TrustAction::Add) {
-        const auto fingerprint = deskhub::ParseFingerprint(command.value);
+        std::string supplied = command.value;
+        if (supplied == "-") {
+            if (!std::getline(std::cin, supplied)) {
+                PrintError("no host public key arrived on stdin");
+                return ExitCode::Usage;
+            }
+        }
+        auto fingerprint = deskhub::ParseFingerprint(supplied);
+        if (!fingerprint) {
+            const auto spki = deskhubp::PublicKeySpkiFromText(supplied);
+            fingerprint = deskhubp::FingerprintOfPublicKey(spki);
+        }
         if (!fingerprint || command.target.empty()) {
-            PrintError("expected an address and SHA256 fingerprint");
+            PrintError("expected an address and host public key or SHA256 fingerprint");
             return ExitCode::Usage;
         }
         if (!deskhubp::RememberTrustedHost(command.target, command.target, *fingerprint,

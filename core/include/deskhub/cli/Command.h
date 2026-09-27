@@ -16,8 +16,6 @@ enum class Verb {
     Version,
     Displays,
     Sources,
-    Scan,
-    Probe,
     Devices,
     Trust,
     Settings,
@@ -34,11 +32,13 @@ enum class PairingPolicy { Deny,
 enum class DevicesAction { List,
     Add,
     Public,
+    Import,
     Forget,
     ForgetAll };
 
 enum class TrustAction { List,
     Add,
+    Public,
     Forget,
     ForgetAll };
 
@@ -64,8 +64,6 @@ enum class ExitCode {
     Interrupted = 130,
 };
 
-inline constexpr uint32_t kDefaultTimeoutMs = 400;
-inline constexpr uint32_t kMaxTimeoutMs = 60000;
 inline constexpr uint32_t kDefaultStatusIntervalMs = 5000;
 inline constexpr uint32_t kMinStatusIntervalMs = 200;
 inline constexpr uint32_t kMaxStatusIntervalMs = 3600000;
@@ -118,7 +116,6 @@ struct Command {
     std::string address{};
     uint16_t port = kDeskhubPort;
     bool portGiven = false;
-    uint32_t timeoutMs = kDefaultTimeoutMs;
 
     PasscodeSource passcodeSource = PasscodeSource::Absent;
     std::string passcode{};
@@ -128,6 +125,7 @@ struct Command {
     TrustAction trust = TrustAction::List;
     SettingsAction settings = SettingsAction::List;
     std::string target{};
+    bool keyPassphraseStdin = false;
     bool forget = false;
     std::string key{};
     std::string value{};

@@ -23,11 +23,4 @@ void TouchRecentDevice(std::vector<RecentDevice>& devices, std::string_view addr
 std::string PasscodeForDevice(const std::vector<RecentDevice>& devices, std::string_view addr);
 void RemoveRecentDevice(std::vector<RecentDevice>& devices, std::string_view addr);
 
-inline std::vector<std::string> AddressesOf(const std::vector<RecentDevice>& devices) {
-    std::vector<std::string> out;
-    out.reserve(devices.size());
-    for (const RecentDevice& device : devices) out.push_back(device.addr);
-    return out;
-}
-
 }

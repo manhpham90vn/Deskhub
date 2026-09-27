@@ -54,7 +54,6 @@ void RunFrameMailboxTests();
 void RunPcmRingTests();
 void RunRgbDownscaleTests();
 void RunBeaconTests();
-void RunLanScanTests();
 void RunIpv4Tests();
 void RunBindAddressTests();
 void RunTrustStoreTests();

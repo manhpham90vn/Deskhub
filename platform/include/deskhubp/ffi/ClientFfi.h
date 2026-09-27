@@ -126,7 +126,6 @@ typedef enum {
     DHStrStopDisplayAction = 52,
     DHStrDisconnectViewerAction = 53,
     DHStrNotSharing = 55,
-    DHStrLanDevicesEmpty = 56,
     DHStrClientSettingsHeading = 57,
     DHStrClientSettingsHint = 58,
     DHStrUdpPortLabel = 59,
@@ -142,9 +141,6 @@ typedef enum {
     DHStrSettingsSectionSecurity = 73,
     DHStrSettingsSectionSession = 74,
     DHStrKeepAwakeLabel = 76,
-    DHStrPairingRequestTitle = 77,
-    DHStrPairingAllow = 78,
-    DHStrPairingDeny = 79,
     DHStrSidebarDevices = 80,
     DHStrPairedHeading = 81,
     DHStrPairedHint = 82,
@@ -152,21 +148,12 @@ typedef enum {
     DHStrPairedForget = 84,
     DHStrPairedForgetAll = 85,
     DHStrPairedForgetAllPrompt = 86,
-    DHStrAllowPairingLabel = 87,
-    DHStrAllowPairingHint = 88,
     DHStrThisMachineHeading = 89,
     DHStrThisMachineHint = 90,
     DHStrPairedColumnName = 91,
     DHStrPairedColumnKey = 92,
     DHStrPairedColumnPaired = 93,
     DHStrPairedColumnLastSeen = 94,
-    DHStrTrustNewHostTitle = 95,
-    DHStrTrustNewHostBody = 96,
-    DHStrTrustChangedTitle = 97,
-    DHStrTrustChangedBody = 98,
-    DHStrTrustFingerprintLabel = 99,
-    DHStrTrustAccept = 100,
-    DHStrTrustReject = 101,
     DHStrTerminalPickerLabel = 103,
     DHStrOpenDesktopLabel = 105,
     DHStrOpenShellLabel = 106,
@@ -246,9 +233,6 @@ typedef enum {
 const char* dh_string(DHStringId id);
 
 uint32_t dh_theme_color(DHThemeColor color, bool dark);
-
-int dh_pairing_request_body(const char* name, const char* address, const char* shortKey,
-    char* out, int capacity);
 
 bool dh_native_key_to_vk(int32_t native_key_code, int32_t* out_vk, int32_t* out_scan);
 

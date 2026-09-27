@@ -144,19 +144,6 @@ FlagResult ApplyGlobalFlag(Command& command, const Flag& flag) {
     return FlagResult::Unknown;
 }
 
-FlagResult ApplyTimeoutFlag(Command& command, const Flag& flag, Cursor& cursor) {
-    if (flag.name != "--timeout") return FlagResult::Unknown;
-    std::string text;
-    if (!ValueOf(flag, cursor, text, command.error)) return FlagResult::Failed;
-    const std::optional<uint32_t> value = ParseUint(text);
-    if (!value || *value == 0 || *value > kMaxTimeoutMs) {
-        command.error = BadValue(flag.name, text);
-        return FlagResult::Failed;
-    }
-    command.timeoutMs = *value;
-    return FlagResult::Handled;
-}
-
 FlagResult ApplyPortFlag(Command& command, const Flag& flag, Cursor& cursor) {
     if (flag.name != "--port") return FlagResult::Unknown;
     std::string text;
@@ -240,8 +227,6 @@ Verb VerbOf(std::string_view token) {
     if (token == "version") return Verb::Version;
     if (token == "displays") return Verb::Displays;
     if (token == "sources") return Verb::Sources;
-    if (token == "scan") return Verb::Scan;
-    if (token == "probe") return Verb::Probe;
     if (token == "devices") return Verb::Devices;
     if (token == "trust") return Verb::Trust;
     if (token == "settings") return Verb::Settings;
@@ -284,31 +269,7 @@ void ParseNoArgVerb(Command& command, Cursor& cursor) {
     }
 }
 
-void ParseScan(Command& command, Cursor& cursor) {
-    while (More(cursor)) {
-        const std::string_view token = Take(cursor);
-        if (!IsFlagToken(token)) {
-            command.error = std::string("scan takes no arguments, but got ") + Quoted(token);
-            return;
-        }
-        const Flag flag = SplitFlag(token);
-        if (WantsHelp(flag)) {
-            command.helpFor = Verb::Scan;
-            command.verb = Verb::Help;
-            return;
-        }
-        if (ApplyGlobalFlag(command, flag) == FlagResult::Handled) continue;
-
-        const FlagResult result = ApplyPortFlag(command, flag, cursor);
-        if (result == FlagResult::Failed) return;
-        if (result == FlagResult::Handled) continue;
-
-        command.error = UnknownOption(flag.name, Verb::Scan);
-        return;
-    }
-}
-
-void ParseAddressVerb(Command& command, Cursor& cursor, bool wantsPasscode, bool wantsTimeout) {
+void ParseAddressVerb(Command& command, Cursor& cursor, bool wantsPasscode) {
     bool haveAddress = false;
     while (More(cursor)) {
         const std::string_view token = Take(cursor);
@@ -328,12 +289,6 @@ void ParseAddressVerb(Command& command, Cursor& cursor, bool wantsPasscode, bool
             return;
         }
         if (ApplyGlobalFlag(command, flag) == FlagResult::Handled) continue;
-
-        if (wantsTimeout) {
-            const FlagResult result = ApplyTimeoutFlag(command, flag, cursor);
-            if (result == FlagResult::Failed) return;
-            if (result == FlagResult::Handled) continue;
-        }
 
         if (wantsPasscode) {
             FlagResult result = ApplyPasscodeFlag(command, flag, cursor);
@@ -388,13 +343,24 @@ void ParseDevices(Command& command, Cursor& cursor) {
             return;
         }
         command.target = std::string(Take(cursor));
+    } else if (action == "import") {
+        command.devices = DevicesAction::Import;
+        if (!More(cursor) || IsFlagToken(Look(cursor))) {
+            command.error = NeedsAction(Verb::Devices, "import PRIVATE_KEY_FILE");
+            return;
+        }
+        command.target = std::string(Take(cursor));
+        if (More(cursor) && Look(cursor) == "--passphrase-stdin") {
+            command.keyPassphraseStdin = true;
+            Take(cursor);
+        }
     } else if (action == "forget") {
         bool forgetAll = false;
         if (!TakeForgetTarget(command, cursor, forgetAll)) return;
         command.devices = forgetAll ? DevicesAction::ForgetAll : DevicesAction::Forget;
     } else {
         command.error = NeedsAction(Verb::Devices,
-            "list, public, add PUBLIC_KEY, forget FINGERPRINT, forget all");
+            "list, public, add PUBLIC_KEY, import PRIVATE_KEY_FILE, forget FINGERPRINT, forget all");
         return;
     }
     ParseNoArgVerb(command, cursor);
@@ -413,6 +379,8 @@ void ParseTrust(Command& command, Cursor& cursor) {
     const std::string_view action = Take(cursor);
     if (action == "list") {
         command.trust = TrustAction::List;
+    } else if (action == "public") {
+        command.trust = TrustAction::Public;
     } else if (action == "add") {
         command.trust = TrustAction::Add;
         if (!More(cursor) || IsFlagToken(Look(cursor))) {
@@ -431,7 +399,7 @@ void ParseTrust(Command& command, Cursor& cursor) {
         command.trust = forgetAll ? TrustAction::ForgetAll : TrustAction::Forget;
     } else {
         command.error = NeedsAction(Verb::Trust,
-            "list, add ADDRESS FINGERPRINT, forget ADDRESS, forget all");
+            "list, public, add ADDRESS FINGERPRINT, forget ADDRESS, forget all");
         return;
     }
     ParseNoArgVerb(command, cursor);
@@ -783,8 +751,6 @@ const char* VerbName(Verb verb) {
         case Verb::Version: return "version";
         case Verb::Displays: return "displays";
         case Verb::Sources: return "sources";
-        case Verb::Scan: return "scan";
-        case Verb::Probe: return "probe";
         case Verb::Devices: return "devices";
         case Verb::Trust: return "trust";
         case Verb::Settings: return "settings";
@@ -832,9 +798,7 @@ Command ParseCommand(int argc, const char* const* argv) {
         case Verb::Help: ParseHelp(command, cursor); break;
         case Verb::Version:
         case Verb::Displays: ParseNoArgVerb(command, cursor); break;
-        case Verb::Scan: ParseScan(command, cursor); break;
-        case Verb::Sources: ParseAddressVerb(command, cursor, true, false); break;
-        case Verb::Probe: ParseAddressVerb(command, cursor, false, true); break;
+        case Verb::Sources: ParseAddressVerb(command, cursor, true); break;
         case Verb::Devices: ParseDevices(command, cursor); break;
         case Verb::Trust: ParseTrust(command, cursor); break;
         case Verb::Settings: ParseSettings(command, cursor); break;
@@ -939,9 +903,7 @@ std::string UsageText() {
            "  shell ADDRESS       open a shell on a host, right here in this terminal\n"
            "  send ADDRESS FILE   send files to a host that takes them\n"
            "  displays            the displays this machine can share\n"
-           "  scan                look for machines sharing on this network\n"
            "  sources ADDRESS     ask a host what it is sharing\n"
-           "  probe ADDRESS       measure the round trip to a host\n"
            "  devices             machines allowed to connect to this one\n"
            "  trust               hosts this machine has decided to trust\n"
            "  settings            the settings the desktop app also uses\n"
@@ -964,15 +926,6 @@ std::string UsageText(Verb verb) {
                    "  --forget    drop the screen choice this machine saved, so the next listing\n"
                    "              asks again. Use it when sharing reports that the compositor\n"
                    "              sent no frame - the saved choice has gone stale.\n";
-        case Verb::Scan:
-            return "Usage: " + program +
-                   " scan [--port PORT]\n"
-                   "\n"
-                   "Look for machines sharing on this network. Every address on every real\n"
-                   "adapter is tried, the same way the desktop app scans.\n"
-                   "\n"
-                   "  --port PORT     the UDP port to look on (default " +
-                   std::to_string(kDeskhubPort) + ")\n";
         case Verb::Sources:
             return "Usage: " + program +
                    " sources ADDRESS[:PORT] [--passcode VALUE]\n"
@@ -981,14 +934,6 @@ std::string UsageText(Verb verb) {
                    "\n"
                    "  --passcode VALUE  the host's passcode. '-' reads one line from stdin, '@FILE'\n"
                    "                    reads it from a file, or set DESKHUB_PASSCODE instead\n";
-        case Verb::Probe:
-            return "Usage: " + program +
-                   " probe ADDRESS[:PORT] [--timeout MS]\n"
-                   "\n"
-                   "Measure the round trip to a host, and report whether it answers at all.\n"
-                   "\n"
-                   "  --timeout MS    how long to wait for the reply (default " +
-                   std::to_string(kDefaultTimeoutMs) + ")\n";
         case Verb::Devices:
             return "Usage: " + program +
                    " devices [list]\n"
@@ -998,6 +943,9 @@ std::string UsageText(Verb verb) {
                    "       " +
                    program +
                    " devices add PUBLIC_KEY|-\n"
+                   "       " +
+                   program +
+                   " devices import PRIVATE_KEY_FILE [--passphrase-stdin]\n"
                    "       " +
                    program +
                    " devices forget FINGERPRINT\n"
@@ -1012,7 +960,10 @@ std::string UsageText(Verb verb) {
                    " trust [list]\n"
                    "       " +
                    program +
-                   " trust add ADDRESS FINGERPRINT\n"
+                   " trust public\n"
+                   "       " +
+                   program +
+                   " trust add ADDRESS PUBLIC_KEY|-|FINGERPRINT\n"
                    "       " +
                    program +
                    " trust forget ADDRESS\n"

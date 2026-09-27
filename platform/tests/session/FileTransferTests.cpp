@@ -10,6 +10,7 @@
 #include "deskhubp/ffi/SendFfi.h"
 #include "deskhubp/client/FileUpload.h"
 #include "deskhubp/system/Clock.h"
+#include "deskhubp/system/ClientIdentity.h"
 #include "deskhubp/system/FileStore.h"
 #include "deskhubp/system/HostIdentity.h"
 #include "deskhubp/system/PairedDevicesFile.h"
@@ -89,8 +90,6 @@ struct HostRig {
 
         deskhubp::HostAuthConfig auth;
         auth.identity = identity;
-        auth.SetPasscode(deskhubp::LoadOrCreateAuthSalt(), kFilePasscode);
-        auth.allowNewPairings = true;
         sock.SetHostAuth(std::move(auth), deskhubp::TransportAuthCallbacks{});
         sock.SetOnPeerGone([this](const NetAddr& peer) { files.OnPeerGone(peer); });
 
@@ -147,6 +146,9 @@ struct ViewerRig {
         auth.passcode = kFilePasscode;
         auth.hostFingerprint = hostKey;
         auth.clientName = "file-test-viewer";
+        if (!deskhubp::RememberPairedDevice(auth.identity.fingerprint,
+                "file-test-viewer", 500))
+            return false;
 
         deskhub::AuthResultCode code = deskhub::AuthResultCode::NotPaired;
         bool hostProved = false;
@@ -538,6 +540,13 @@ void TestTheSendSurfaceTheClientPageDrives() {
     Check(dh_send_check(paths, 1, problem, int(sizeof(problem))) == 1, "a real file passes");
 
     const std::string address = std::string("127.0.0.1:") + std::to_string(kFileTestPort);
+    const auto clientKey = deskhubp::LoadOrCreateClientIdentity();
+    Check(clientKey.Valid() && deskhubp::RememberPairedDevice(clientKey.fingerprint,
+                                   "client-page", 500),
+        "the sender public key is authorized");
+    Check(deskhubp::RememberTrustedHost(address, address, identity.fingerprint,
+              NowUnixSeconds()),
+        "the host public key is pinned");
     Check(dh_send_start("nonsense", kFilePasscode, "page", paths, 1) == nullptr,
         "an address that cannot be read starts nothing");
     Check(dh_send_start(address.c_str(), kFilePasscode, "page", nullptr, 0) == nullptr,
@@ -580,8 +589,8 @@ void TestTheSendSurfaceTheClientPageDrives() {
     host.Shutdown();
 }
 
-void TestASenderAcceptsAChangedHostKey() {
-    std::printf("[files] a changed host key stops the send until it is accepted...\n");
+void TestASenderRejectsAChangedHostKey() {
+    std::printf("[files] a changed host key stops the send without a prompt...\n");
     const std::filesystem::path source = Scratch("send-key-change");
     const std::filesystem::path landing = Scratch("land-key-change");
 
@@ -610,7 +619,7 @@ void TestASenderAcceptsAChangedHostKey() {
         return progress.finished;
     };
     Check(WaitUntil(settled, 20000), "the sender settles inside the deadline");
-    Check(progress.state == DHSendKeyChanged, "and stops on the changed key");
+    Check(progress.state == DHSendFailed, "and fails on the changed key");
     std::error_code ec;
     Check(std::filesystem::is_empty(landing, ec), "before a byte is offered");
 
@@ -621,24 +630,19 @@ void TestASenderAcceptsAChangedHostKey() {
         "and it is the host's real key");
 
     Check(!dh_send_accept_key(nullptr), "a null handle accepts nothing");
-    Check(dh_send_accept_key(send), "accepting the key retries the batch");
-    Check(!dh_send_accept_key(send), "and cannot be accepted twice");
-
-    progress = DHSendProgress{};
-    Check(WaitUntil(settled, 20000), "the retried batch finishes inside the deadline");
-    Check(progress.state == DHSendDone, "and every file arrives");
+    Check(!dh_send_accept_key(send), "a connection-time call cannot accept the new key");
     dh_send_stop(send);
 
-    Check(ReadFile(landing / "guarded.bin") == bytes, "the file landed byte for byte");
-    Check(deskhubp::CheckTrustedHost(endpoint, identity.fingerprint) ==
+    Check(!std::filesystem::exists(landing / "guarded.bin"), "no file is sent");
+    Check(deskhubp::CheckTrustedHost(endpoint, stale) ==
               deskhub::TrustVerdict::Trusted,
-        "and the accepted key is now the one on record");
+        "the configured pin is not silently changed");
 
     host.Shutdown();
 }
 
-void TestTheDesktopSendSurfaceSeesTheChangedKey() {
-    std::printf("[files] the desktop send window is told about the key and can retry...\n");
+void TestTheDesktopSendSurfaceRejectsTheChangedKey() {
+    std::printf("[files] the desktop send surface fails without a trust question...\n");
     const std::filesystem::path source = Scratch("send-key-view");
     const std::filesystem::path landing = Scratch("land-key-view");
 
@@ -670,19 +674,11 @@ void TestTheDesktopSendSurfaceSeesTheChangedKey() {
         "the sender settles inside the deadline");
 
     const deskhub::ui::TransferView asked = client.View();
-    Check(asked.failed && asked.keyChanged, "the view carries the key question");
-    Check(asked.fingerprint == deskhub::FormatFingerprint(identity.fingerprint),
-        "with the host's real fingerprint");
-
-    Check(client.AcceptKeyAndRetry(), "accepting the key retries the batch");
-    Check(WaitUntil([&client] { return client.Finished(); }, 20000),
-        "the retried batch finishes inside the deadline");
-    const deskhub::ui::TransferView settled = client.View();
-    Check(settled.done && !settled.keyChanged && settled.fingerprint.empty(),
-        "a finished view asks nothing anymore");
+    Check(asked.failed && !asked.keyChanged, "the view shows a failure without a key question");
+    Check(!client.AcceptKeyAndRetry(), "the old approval action cannot retry the batch");
     client.Stop();
 
-    Check(ReadFile(landing / "window.bin") == bytes, "the file landed byte for byte");
+    Check(!std::filesystem::exists(landing / "window.bin"), "no file is sent");
     host.Shutdown();
 }
 
@@ -717,6 +713,6 @@ void RunFileTransferPlatformTests() {
     TestABatchCrossesARealConnection();
     TestAHostThatTakesNoFilesRefuses();
     TestAHostThatStopsMidBatchSaysWhy();
-    TestASenderAcceptsAChangedHostKey();
-    TestTheDesktopSendSurfaceSeesTheChangedKey();
+    TestASenderRejectsAChangedHostKey();
+    TestTheDesktopSendSurfaceRejectsTheChangedKey();
 }

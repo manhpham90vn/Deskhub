@@ -19,6 +19,7 @@ if(DESKHUB_QUIC)
     set(deskhub_platform_quic
         src/net/QuicEndpoint.cpp
         src/system/HostIdentity.cpp
+        src/system/ClientIdentity.cpp
         src/system/AuthProof.cpp
     )
 else()
@@ -28,6 +29,7 @@ else()
     set(deskhub_platform_quic
         src/net/QuicEndpointNone.cpp
         src/system/HostIdentityNone.cpp
+        src/system/ClientIdentityNone.cpp
         src/system/AuthProofNone.cpp
     )
 endif()
@@ -210,9 +212,6 @@ add_library(platform STATIC
     src/system/FileStore.cpp
     src/net/SessionTransport.cpp
     src/client/SourceQuery.cpp
-    src/client/HostProbe.cpp
-    src/client/DeviceStatusPoller.cpp
-    src/client/LanScanner.cpp
     src/client/ScreenViewerLoop.cpp
     src/host/HostNetLoop.cpp
     src/host/ViewerBroadcast.cpp
@@ -315,7 +314,6 @@ if(DESKHUB_PLATFORM_TESTS)
         tests/support/TestSupport.cpp
 
         tests/diag/LogFileTests.cpp
-        tests/ffi/DiscoveryFfiTests.cpp
         tests/ffi/FfiTextTests.cpp
         tests/ffi/TerminalFfiTests.cpp
         tests/input/LocalInputGateTests.cpp
@@ -323,8 +321,6 @@ if(DESKHUB_PLATFORM_TESTS)
         tests/media/OpusCodecTests.cpp
         tests/net/NetAddrTests.cpp
         tests/net/SourceQueryTests.cpp
-        tests/net/HostProbeTests.cpp
-        tests/net/LanScannerTests.cpp
         tests/net/UdpSocketTests.cpp
         tests/system/AppDataFileTests.cpp
         tests/system/HostIdentityTests.cpp
@@ -333,7 +329,6 @@ if(DESKHUB_PLATFORM_TESTS)
         tests/net/QuicEndpointTests.cpp
         tests/net/SessionTransportTests.cpp
         tests/net/TransportAdmissionTests.cpp
-        tests/session/SharingHostTests.cpp
         tests/session/ScreenHostCallbackTests.cpp
         tests/session/AuthNegotiationTests.cpp
         tests/session/HostLinkTests.cpp
@@ -345,6 +340,12 @@ if(DESKHUB_PLATFORM_TESTS)
         tests/system/RandomTests.cpp
     )
     target_link_libraries(platform_tests PRIVATE platform)
+    if(DESKHUB_QUIC)
+        target_sources(platform_tests PRIVATE tests/system/ClientIdentityTests.cpp)
+        target_link_libraries(platform_tests PRIVATE deskhub::quiche)
+    else()
+        target_sources(platform_tests PRIVATE tests/system/ClientIdentityTestsNone.cpp)
+    endif()
     target_include_directories(platform_tests PRIVATE tests)
     deskhub_target_warnings(platform_tests)
 

@@ -10,7 +10,6 @@ namespace deskhubp {
 namespace {
 
 constexpr std::string_view kClientLabel = "client";
-constexpr std::string_view kHostLabel = "host";
 
 }
 
@@ -22,20 +21,12 @@ struct HostAuth::Impl {
     std::string peerName{};
     std::vector<uint8_t> peerPublicKey{};
     AuthNonce nonce{};
-    AuthSalt salt{};
-    Spake2Session spake{};
-    PasscodeVerifier sharedKey{};
-    bool haveSharedKey = false;
 
     deskhub::AuthResult Settle(deskhub::AuthResultCode code) {
         state = HostAuthState::Settled;
         deskhub::AuthResult result;
         result.code = code;
         return result;
-    }
-
-    void Pair(int64_t nowUnix) {
-        RememberPairedDevice(peer, peerName, nowUnix);
     }
 };
 
@@ -56,31 +47,14 @@ std::optional<deskhub::AuthChallenge> HostAuth::Begin(const deskhub::AuthStart& 
     impl_->peerName = start.clientName;
     impl_->peerPublicKey = start.publicKey;
     impl_->nonce = NewAuthNonce();
-    impl_->haveSharedKey = false;
-
     deskhub::AuthChallenge challenge;
     challenge.nonce = impl_->nonce;
 
     const bool paired = CheckPairedDevice(*peer) == deskhub::PairVerdict::Paired;
-    const bool checkCode = impl_->config.hasPasscode && start.hasPasscode;
-    if (paired && !checkCode) {
-        impl_->mode = deskhub::AuthMode::Signature;
-    } else if (!paired && !impl_->config.allowNewPairings) {
-        impl_->mode = deskhub::AuthMode::Denied;
-    } else if (checkCode) {
-        impl_->mode = deskhub::AuthMode::Passcode;
-        impl_->salt = LoadOrCreateAuthSalt();
-        challenge.salt = impl_->salt;
-        if (!impl_->spake.Start(true, impl_->config.verifier, challenge.spake))
-            impl_->mode = deskhub::AuthMode::Denied;
-    } else {
-        impl_->mode = deskhub::AuthMode::Approval;
-    }
+    impl_->mode = paired ? deskhub::AuthMode::Signature : deskhub::AuthMode::Denied;
 
     challenge.mode = impl_->mode;
-    impl_->state = impl_->mode == deskhub::AuthMode::Approval ? HostAuthState::AwaitingApproval
-                                                              : HostAuthState::AwaitingResponse;
-    if (impl_->mode == deskhub::AuthMode::Denied) impl_->state = HostAuthState::Settled;
+    impl_->state = paired ? HostAuthState::AwaitingResponse : HostAuthState::Settled;
     return challenge;
 }
 
@@ -88,40 +62,14 @@ deskhub::AuthResult HostAuth::Respond(const deskhub::AuthResponse& response, int
     if (impl_->state != HostAuthState::AwaitingResponse)
         return impl_->Settle(deskhub::AuthResultCode::NotPaired);
 
-    if (impl_->mode == deskhub::AuthMode::Signature) {
-        const std::vector<uint8_t> transcript =
-            AuthTranscript(kClientLabel, impl_->nonce, impl_->config.identity.fingerprint);
-        if (!VerifySignature(impl_->peerPublicKey, transcript, response.proof))
-            return impl_->Settle(deskhub::AuthResultCode::NotPaired);
-        TouchPairedDevice(impl_->peer, impl_->peerName, nowUnix);
-        return impl_->Settle(deskhub::AuthResultCode::Accepted);
-    }
-
-    if (impl_->mode != deskhub::AuthMode::Passcode)
+    if (impl_->mode != deskhub::AuthMode::Signature ||
+        CheckPairedDevice(impl_->peer) != deskhub::PairVerdict::Paired)
         return impl_->Settle(deskhub::AuthResultCode::NotPaired);
-
-    if (!impl_->spake.Finish(response.proof, impl_->sharedKey))
-        return impl_->Settle(deskhub::AuthResultCode::WrongPasscode);
-    impl_->haveSharedKey = true;
-
-    const std::vector<uint8_t> expectedOver = AuthTranscript(kClientLabel, impl_->nonce,
-        impl_->config.identity.fingerprint, impl_->peerPublicKey);
-    const AuthMac expected = ComputeAuthMac(impl_->sharedKey, expectedOver);
-    if (!MacsMatch(expected, response.confirm))
-        return impl_->Settle(deskhub::AuthResultCode::WrongPasscode);
-
-    impl_->Pair(nowUnix);
-    deskhub::AuthResult result = impl_->Settle(deskhub::AuthResultCode::Accepted);
-    result.confirm = ComputeAuthMac(impl_->sharedKey,
-        AuthTranscript(kHostLabel, impl_->nonce, impl_->config.identity.fingerprint));
-    return result;
-}
-
-deskhub::AuthResult HostAuth::Approve(bool allowed, int64_t nowUnix) {
-    if (impl_->state != HostAuthState::AwaitingApproval)
+    const std::vector<uint8_t> transcript =
+        AuthTranscript(kClientLabel, impl_->nonce, impl_->config.identity.fingerprint);
+    if (!VerifySignature(impl_->peerPublicKey, transcript, response.proof))
         return impl_->Settle(deskhub::AuthResultCode::NotPaired);
-    if (!allowed) return impl_->Settle(deskhub::AuthResultCode::Refused);
-    impl_->Pair(nowUnix);
+    TouchPairedDevice(impl_->peer, impl_->peerName, nowUnix);
     return impl_->Settle(deskhub::AuthResultCode::Accepted);
 }
 
@@ -144,10 +92,6 @@ const std::string& HostAuth::PeerName() const {
 struct ClientAuth::Impl {
     ClientAuthConfig config{};
     deskhub::AuthMode mode = deskhub::AuthMode::Denied;
-    AuthNonce nonce{};
-    Spake2Session spake{};
-    PasscodeVerifier sharedKey{};
-    bool haveSharedKey = false;
 };
 
 ClientAuth::ClientAuth() : impl_(std::make_unique<Impl>()) {
@@ -161,48 +105,26 @@ void ClientAuth::Configure(ClientAuthConfig config) {
 
 deskhub::AuthStart ClientAuth::Begin() const {
     deskhub::AuthStart start;
-    start.publicKey = IdentityPublicKey(impl_->config.identity);
+    start.publicKey = impl_->config.identity.publicKey;
     start.clientName = impl_->config.clientName;
-    start.hasPasscode = !impl_->config.passcode.empty();
+    start.hasPasscode = false;
     return start;
 }
 
 std::optional<deskhub::AuthResponse> ClientAuth::Answer(
     const deskhub::AuthChallenge& challenge) {
     impl_->mode = challenge.mode;
-    impl_->nonce = challenge.nonce;
-    impl_->haveSharedKey = false;
-
-    if (challenge.mode == deskhub::AuthMode::Signature) {
-        deskhub::AuthResponse response;
-        response.proof = SignWithIdentity(impl_->config.identity,
-            AuthTranscript(kClientLabel, challenge.nonce, impl_->config.hostFingerprint));
-        if (response.proof.empty()) return std::nullopt;
-        return response;
-    }
-
-    if (challenge.mode != deskhub::AuthMode::Passcode) return std::nullopt;
-    if (impl_->config.passcode.empty()) return std::nullopt;
-
-    const PasscodeVerifier verifier =
-        MakePasscodeVerifier(challenge.salt, impl_->config.passcode);
+    if (challenge.mode != deskhub::AuthMode::Signature) return std::nullopt;
     deskhub::AuthResponse response;
-    if (!impl_->spake.Start(false, verifier, response.proof)) return std::nullopt;
-    if (!impl_->spake.Finish(challenge.spake, impl_->sharedKey)) return std::nullopt;
-    impl_->haveSharedKey = true;
-
-    const std::vector<uint8_t> publicKey = IdentityPublicKey(impl_->config.identity);
-    response.confirm = ComputeAuthMac(impl_->sharedKey,
-        AuthTranscript(kClientLabel, challenge.nonce, impl_->config.hostFingerprint, publicKey));
+    response.proof = SignWithClientIdentity(impl_->config.identity,
+        AuthTranscript(kClientLabel, challenge.nonce, impl_->config.hostFingerprint));
+    if (response.proof.empty()) return std::nullopt;
     return response;
 }
 
 bool ClientAuth::HostProvedThePasscode(const deskhub::AuthResult& result) const {
-    if (result.code != deskhub::AuthResultCode::Accepted) return false;
-    if (impl_->mode != deskhub::AuthMode::Passcode || !impl_->haveSharedKey) return false;
-    const AuthMac expected = ComputeAuthMac(impl_->sharedKey,
-        AuthTranscript(kHostLabel, impl_->nonce, impl_->config.hostFingerprint));
-    return MacsMatch(expected, result.confirm);
+    (void)result;
+    return false;
 }
 
 deskhub::AuthMode ClientAuth::Mode() const {

@@ -45,7 +45,6 @@ struct ConnectView: View {
                     .disabled(model.connect.address.isEmpty || model.connect.isConnecting)
 
                     deskhubHeadingRow(DeskhubClient.string(DHStrDevicesHeading)) {
-                        model.discovery.refreshStatus()
                         model.discovery.rescanNow()
                     }
                     DeviceListView(

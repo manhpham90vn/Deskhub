@@ -25,10 +25,10 @@ KOTLIN_CONST = re.compile(r"\bconst val ([A-Za-z_][A-Za-z0-9_]*)\b")
 
 def tracked_files():
     listing = subprocess.run(
-        ["git", "ls-files", "core", "platform", "client"],
+        ["git", "ls-files", "--cached", "--others", "--exclude-standard", "core", "platform", "client"],
         cwd=ROOT, check=True, capture_output=True, text=True,
     ).stdout
-    return [path for path in listing.splitlines() if path]
+    return [path for path in listing.splitlines() if path and (ROOT / path).is_file()]
 
 
 def is_production(path):

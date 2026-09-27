@@ -6,8 +6,13 @@
 #include "deskhub/session/host/SourcePipeline.h"
 
 #include "deskhubp/system/Clock.h"
+#include "deskhubp/system/ClientIdentity.h"
+#include "deskhubp/system/HostIdentity.h"
+#include "deskhubp/system/PairedDevicesFile.h"
+#include "deskhubp/system/TrustStoreFile.h"
 
 #include <cmath>
+#include <ctime>
 #include <memory>
 #include <mutex>
 #include <utility>
@@ -90,9 +95,6 @@ bool SharingHost::Start(const std::vector<deskhub::media::ShareSource>& sources,
     deskhubp::HostEnginePolicy policy;
     policy.source = deskhubp::MakeDefaultSourcePolicy<Pipeline>();
     policy.status = deskhubp::MakeDefaultStatusHooks<Pipeline>();
-    policy.onApprovalNeeded = [this](uint64_t addrPacked, std::string, std::string) {
-        PushPairingRequest(addrPacked);
-    };
 
     policy.startAudioCapture = [this](const deskhub::media::AudioFormat& format,
                                    std::function<void(std::span<const int16_t>)> offer) {
@@ -172,6 +174,13 @@ bool SharingHost::Start(const std::vector<deskhub::media::ShareSource>& sources,
         return deskhub::RetargetStream(st, engine->options().maxDim);
     };
 
+    const auto client = deskhubp::LoadOrCreateClientIdentity();
+    const auto host = deskhubp::LoadOrCreateHostIdentity("integration-host");
+    const std::string address = NetAddr{0x7F000001u, port}.ToString();
+    if (!client.Valid() || !host.Valid() ||
+        !deskhubp::RememberPairedDevice(client.fingerprint, "integration-client", std::time(nullptr)) ||
+        !deskhubp::RememberTrustedHost(address, "127.0.0.1", host.fingerprint, std::time(nullptr)))
+        return false;
     return engine_.Start(sources, opt, std::move(policy));
 }
 

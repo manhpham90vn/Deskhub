@@ -56,14 +56,6 @@ final class ScreenSession: @unchecked Sendable {
         Unmanaged<HandlerBox>.fromOpaque(handlerBox).release()
     }
 
-    func acceptKey() {
-        dh_screen_accept_key(handle)
-    }
-
-    func rejectKey() {
-        dh_screen_reject_key(handle)
-    }
-
     func setLayer(_ layer: AVSampleBufferDisplayLayer?) {
         let ptr = layer.map { Unmanaged.passUnretained($0).toOpaque() }
         dh_screen_set_layer(handle, ptr)

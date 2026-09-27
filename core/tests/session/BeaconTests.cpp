@@ -36,14 +36,14 @@ void TestBeaconSourcesAndProbe() {
         "the display entry survives the round trip");
 
     b.SetSources({});
-    const auto rep2 = Ask(b, std::span<const uint8_t>(req, rn));
+    const auto rep2 = Ask(b, std::span<const uint8_t>(req, rn), true);
     const auto h2 = ParseCommonHeader(rep2);
     Check(h2 && h2->type == MsgType::SourceList, "a host sharing nothing still answers");
     Check(ParseSourceList(PayloadOf(rep2), got) == 0, "...with an empty list");
 
     PingPong p{7, 123'456};
     rn = BuildPing(req, 0, p);
-    const auto pong = Ask(b, std::span<const uint8_t>(req, rn));
+    const auto pong = Ask(b, std::span<const uint8_t>(req, rn), true);
     const auto ph = ParseCommonHeader(pong);
     Check(ph && ph->type == MsgType::Pong && ph->sessionId == 0, "PING sid=0 -> PONG sid=0");
     const auto pp = ParsePingPong(PayloadOf(pong));
@@ -56,7 +56,7 @@ void TestBeaconSourcesAndProbe() {
 }
 
 void TestBeaconHidesSourcesFromStrangers() {
-    std::printf("[disc] Beacon: a stranger learns we are alive, not what is shared...\n");
+    std::printf("[disc] Beacon: an unauthenticated query receives no answer...\n");
     Beacon b;
     SourceInfo s;
     s.sourceId = 0;
@@ -69,12 +69,13 @@ void TestBeaconHidesSourcesFromStrangers() {
     SourceInfo got[kMaxSources];
 
     size_t rn = BuildListSources(req);
-    auto rep = Ask(b, std::span<const uint8_t>(req, rn));
-    auto h = ParseCommonHeader(rep);
-    Check(h && h->type == MsgType::SourceList,
-        "a query over plain UDP is still answered, so the host reads as online");
-    Check(ParseSourceList(PayloadOf(rep), got) == 0,
-        "but it learns nothing about the displays");
+    Check(Ask(b, std::span<const uint8_t>(req, rn)).empty(),
+        "a client without application authentication receives no source list");
+    const PingPong ping{7, 123'456};
+    rn = BuildPing(req, 0, ping);
+    Check(Ask(b, std::span<const uint8_t>(req, rn)).empty(),
+        "a client without application authentication receives no pong");
+    rn = BuildListSources(req);
     Check(ParseSourceList(PayloadOf(Ask(b, std::span<const uint8_t>(req, rn), true)), got) == 1,
         "the list comes back only once the asker is inside an authenticated connection");
 }
@@ -102,9 +103,8 @@ void TestBeaconTellsAuthenticatedAskersWhatTheHostCanDo() {
     Check(h && HostCapsOfFlags(h->flags).acceptsInput && HostCapsOfFlags(h->flags).terminal,
         "a desktop that shares both says so");
 
-    h = ParseCommonHeader(Ask(b, std::span<const uint8_t>(req, rn)));
-    Check(h && !HostCapsOfFlags(h->flags).acceptsInput && !HostCapsOfFlags(h->flags).terminal,
-        "a stranger over plain UDP is told nothing about either");
+    Check(Ask(b, std::span<const uint8_t>(req, rn)).empty(),
+        "a stranger receives no capability flags");
 }
 
 void TestBeaconIgnoresSessionTraffic() {

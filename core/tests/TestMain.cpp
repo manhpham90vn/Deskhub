@@ -167,9 +167,6 @@ int main() {
     std::printf("--- beacon (pre-session LIST_SOURCES + PING) ---\n");
     RunBeaconTests();
 
-    std::printf("--- net: which addresses a LAN scan should try ---\n");
-    RunLanScanTests();
-
     std::printf("--- net: dotted-quad IPv4 parsing ---\n");
     RunIpv4Tests();
 

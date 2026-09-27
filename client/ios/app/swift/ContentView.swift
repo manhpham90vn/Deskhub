@@ -13,7 +13,6 @@ struct ContentView: View {
             }
         }
         .preferredColorScheme(.dark)
-        .pairingPrompt(FilesHost.shared.pairing)
         .onChange(of: scenePhase) { _, phase in
             switch phase {
             case .background:

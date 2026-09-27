@@ -48,8 +48,6 @@
 #include "deskhub/ui/UiSettings.h"
 #include "deskhubp/diag/Log.h"
 #include "deskhubp/media/DisplayEnum.h"
-#include "deskhubp/client/DeviceStatusPoller.h"
-#include "deskhubp/client/LanScanner.h"
 #include "deskhubp/net/NetInfo.h"
 #include "deskhubp/net/UdpSocket.h"
 #include "deskhubp/host/ShareDriver.h"
@@ -73,12 +71,10 @@ namespace ui = deskhub::ui;
 constexpr const char* kRecentDevicesFile = "recent-devices.txt";
 
 constexpr int kHostTimerId = 1;
-constexpr int kScanTimerId = 2;
 constexpr int kClipTimerId = 3;
 constexpr int kAutoShareTimerId = 4;
 constexpr int kCopiedTimerId = 5;
 constexpr int kCopiedRevertMs = 1500;
-constexpr int kRescanDelayMs = int(deskhubp::kLanRescanSecs) * 1000;
 constexpr int kPrimaryButtonH = 46;
 constexpr int kConnectionWindowWidth = 460;
 constexpr int kConnectionWindowCascade = 28;
@@ -159,17 +155,6 @@ HostStateStyle StyleFor(HostShareState state) {
         case HostShareState::kIdle: break;
     }
     return {ui::kShareStateOff, kMutedText, kBannerIdleBg};
-}
-
-struct ProbeResult {
-    bool online = false;
-    uint32_t rttMs = 0;
-};
-
-void SetHintLabel(wxStaticText* hint, const wxString& text) {
-    hint->SetLabel(text);
-    hint->Wrap(hint->FromDIP(kHintWrapDip));
-    hint->GetParent()->Layout();
 }
 
 wxSizer* MakeHeadingRow(wxWindow* parent, const char* heading, const wxString& action,
@@ -330,19 +315,11 @@ private:
         wxWindow* control);
     wxSizer* MakeTransferFolderRow(wxWindow* area, const char* label);
     void RefreshPairedDevices();
-    bool AskPairing(const PairingRequest& request);
     void ForgetEveryDevice();
     static wxTextCtrl* MakePasscodeCtrl(wxWindow* parent);
 
     void SelectPage(int page);
     void RefreshDeviceList();
-    void ApplyRowStatus(long row, const std::string& addr);
-    void ApplyProbeToRows(const std::string& addr);
-    void RecordProbe(const std::string& addr, bool online, uint32_t rttMs);
-    const ProbeResult* ProbeFor(const std::string& addr) const;
-    void StartPoller();
-    void OnDeviceStatus(const deskhubp::DeviceStatus& status);
-
     void OnShare(ShareTrigger trigger = ShareTrigger::kUser);
     void BeginAutoShare();
     void OnAutoShareTimer(wxTimerEvent& event);
@@ -387,14 +364,7 @@ private:
     void ForgetConnection(ConnectionFrame* frame);
     void SetClientStatus(const wxString& text, const wxColour& colour);
     void ConnectWithPrompt(const std::string& addr, std::string passcode);
-    void StartScan();
-    void RescanNow();
-    void RefreshDeviceStatus();
     void RefreshDevicesNow();
-    void OnScanTimer(wxTimerEvent& event);
-    void OnScanHit(const deskhubp::ScanHit& hit);
-    void OnScanProgress(const deskhubp::ScanProgress& progress);
-    void OnScanFinished(const deskhubp::ScanProgress& progress);
     void OnListClick(wxMouseEvent& event);
     void ConnectRow(long row);
     void OnSourcesReady(const std::string& addr, const std::string& passcode,
@@ -423,7 +393,6 @@ private:
     wxScrolledWindow* pairedList_ = nullptr;
     wxBoxSizer* pairedRows_ = nullptr;
     wxStaticText* pairedHint_ = nullptr;
-    wxCheckBox* allowPairingCtrl_ = nullptr;
     std::vector<deskhub::PairedDevice> pairedDevices_;
     wxPanel* hostAddrPanel_ = nullptr;
     wxPanel* hostBanner_ = nullptr;
@@ -469,17 +438,11 @@ private:
     bool shareViewOnly_ = false;
     std::vector<ui::HostRow> hostRows_;
     std::vector<ui::RecentDevice> recent_;
-    std::vector<deskhubp::ScanHit> scanned_;
     std::vector<ui::DeviceRow> deviceRows_;
-    std::vector<std::string> scannedThisRound_;
-    std::map<uint64_t, ProbeResult> probes_;
     deskhubp::SourceQueryAsync connectDriver_;
-    deskhubp::DeviceStatusPoller poller_;
-    deskhubp::LanScanner scanner_;
     deskhubp::ShareController share_;
     deskhubp::ShareDriver shareDriver_;
     wxTimer hostTimer_;
-    wxTimer scanTimer_;
     wxTimer clipTimer_;
     wxTimer autoShareTimer_;
     wxTimer copiedTimer_;
@@ -499,8 +462,6 @@ public:
     const std::string& Address() const {
         return address_;
     }
-
-    void ApplyProbe(const ProbeResult* probe);
 
 private:
     void OpenDesktopSession();
@@ -539,12 +500,10 @@ MainFrame::MainFrame() : wxFrame(nullptr, wxID_ANY, ToWx(ui::kAppTitle)) {
     Centre();
 
     hostTimer_.SetOwner(this, kHostTimerId);
-    scanTimer_.SetOwner(this, kScanTimerId);
     clipTimer_.SetOwner(this, kClipTimerId);
     autoShareTimer_.SetOwner(this, kAutoShareTimerId);
     copiedTimer_.SetOwner(this, kCopiedTimerId);
     Bind(wxEVT_TIMER, &MainFrame::OnHostTimer, this, kHostTimerId);
-    Bind(wxEVT_TIMER, &MainFrame::OnScanTimer, this, kScanTimerId);
     Bind(wxEVT_TIMER, &MainFrame::OnClipboardTimer, this, kClipTimerId);
     Bind(wxEVT_TIMER, &MainFrame::OnAutoShareTimer, this, kAutoShareTimerId);
     Bind(wxEVT_TIMER, [this](wxTimerEvent&) { ShowPasscodeCard(); }, kCopiedTimerId);
@@ -563,14 +522,11 @@ MainFrame::MainFrame() : wxFrame(nullptr, wxID_ANY, ToWx(ui::kAppTitle)) {
         return OpenHostTerminalWindow(this, share_.terminalHost(), termId);
     };
     hooks.onRowsChanged = [this] { UpdateHostRows(hostStatus_); };
-    hooks.askPairing = [this](const PairingRequest& request) { return AskPairing(request); };
     hooks.onBannerChanged = [this] { ApplySharingBanner(); };
     hooks.onNothingLeftShared = [this] { StopHosting(); };
     share_.SetHooks(std::move(hooks));
 
     RefreshDeviceList();
-    StartPoller();
-    StartScan();
     SelectPage(kPageClient);
     ApplyTrayMode();
 
@@ -980,16 +936,6 @@ wxWindow* MainFrame::BuildDevicesPage(wxWindow* parent) {
     sizer->Add(MakeHint(panel, ToWx(ui::kPairedForgetNote)), pad);
 
     sizer->AddSpacer(FromDIP(12));
-    allowPairingCtrl_ = new wxCheckBox(panel, wxID_ANY, ToWx(ui::kAllowPairingLabel));
-    allowPairingCtrl_->SetName("allow-pairing");
-    allowPairingCtrl_->SetValue(settings_.allowNewPairings);
-    allowPairingCtrl_->Bind(wxEVT_CHECKBOX, [this](wxCommandEvent&) {
-        settings_.allowNewPairings = allowPairingCtrl_->GetValue();
-        deskhubp::SaveUiSettings(settings_);
-    });
-    sizer->Add(allowPairingCtrl_, pad);
-    sizer->Add(MakeHint(panel, ToWx(ui::kAllowPairingHint)), pad);
-
     sizer->AddSpacer(FromDIP(12));
     sizer->Add(MakeSection(panel, ui::kThisMachineHeading), pad);
     const std::string name =
@@ -1069,17 +1015,6 @@ void MainFrame::RefreshPairedDevices() {
     auto* page = static_cast<wxScrolledWindow*>(pairedList_->GetParent());
     page->Layout();
     page->FitInside();
-}
-
-bool MainFrame::AskPairing(const PairingRequest& request) {
-    wxString body = ToWx(ui::PairingRequestBody(request.name,
-        NetAddr::Unpack(request.addrPacked).ToString(), request.shortKey));
-    wxMessageDialog dialog(this, body, ToWx(ui::kPairingRequestTitle),
-        wxYES_NO | wxNO_DEFAULT | wxICON_QUESTION);
-    dialog.SetYesNoLabels(ToWx(ui::kPairingAllow), ToWx(ui::kPairingDeny));
-    const bool allowed = dialog.ShowModal() == wxID_YES;
-    if (allowed) RefreshPairedDevices();
-    return allowed;
 }
 
 void MainFrame::ForgetEveryDevice() {
@@ -1465,69 +1400,20 @@ void MainFrame::ShowHostTable(bool sharing) {
 }
 
 void MainFrame::RefreshDeviceList() {
-    std::vector<std::string> scannedAddrs;
-    scannedAddrs.reserve(scanned_.size());
-    for (const deskhubp::ScanHit& hit : scanned_) scannedAddrs.push_back(hit.addr);
-    deviceRows_ = ui::BuildDeviceRows(scannedAddrs, recent_);
+    deviceRows_ = ui::BuildDeviceRows({}, recent_);
 
     deviceList_->DeleteAllItems();
     for (size_t i = 0; i < deviceRows_.size(); ++i) {
         const ui::DeviceRow& device = deviceRows_[i];
         const long row = deviceList_->InsertItem(long(i), ToWx(device.addr));
         deviceList_->SetItem(row, 1, ToWx(ui::DeviceOriginLabel(device.origin)));
+        deviceList_->SetItem(row, 2, "-");
+        deviceList_->SetItem(row, 3, "-");
         deviceList_->SetItem(row, 4,
             device.lastConnectedUnix != 0 ? ToWx(FormatUnixMinute(device.lastConnectedUnix))
                                           : wxString("-"));
-        ApplyRowStatus(row, device.addr);
-    }
-}
-
-const ProbeResult* MainFrame::ProbeFor(const std::string& addr) const {
-    uint64_t key = 0;
-    if (!HostKeyOf(addr, key)) return nullptr;
-    const auto it = probes_.find(key);
-    return it == probes_.end() ? nullptr : &it->second;
-}
-
-void MainFrame::RecordProbe(const std::string& addr, bool online, uint32_t rttMs) {
-    uint64_t key = 0;
-    if (!HostKeyOf(addr, key)) return;
-    probes_[key] = ProbeResult{online, rttMs};
-}
-
-void MainFrame::ApplyRowStatus(long row, const std::string& addr) {
-    const ProbeResult* probe = ProbeFor(addr);
-    if (!probe) {
-        deviceList_->SetItem(row, 2, ToWx(ui::kStatusChecking));
-        deviceList_->SetItem(row, 3, "-");
         deviceList_->SetItemTextColour(row, kMutedText);
-        return;
     }
-    deviceList_->SetItem(row, 2, ToWx(probe->online ? ui::kStatusOnline : ui::kStatusOffline));
-    deviceList_->SetItem(row, 3, probe->online ? ToWx(ui::PingMs(probe->rttMs)) : wxString("-"));
-    deviceList_->SetItemTextColour(row, probe->online ? kOnline : kOffline);
-}
-
-void MainFrame::ApplyProbeToRows(const std::string& addr) {
-    uint64_t key = 0;
-    if (!HostKeyOf(addr, key)) return;
-    for (size_t i = 0; i < deviceRows_.size(); ++i)
-        if (SameHost(deviceRows_[i].addr, key)) ApplyRowStatus(long(i), deviceRows_[i].addr);
-}
-
-void MainFrame::StartPoller() {
-    poller_.SetAddresses(ui::AddressesOf(recent_));
-    poller_.Start([this](const deskhubp::DeviceStatus& status) {
-        CallAfter([this, status] { OnDeviceStatus(status); });
-    });
-}
-
-void MainFrame::OnDeviceStatus(const deskhubp::DeviceStatus& status) {
-    RecordProbe(status.addr, status.online, status.rttMs);
-    ApplyProbeToRows(status.addr);
-    for (ConnectionFrame* frame : connections_)
-        if (ui::SameDeviceAddr(frame->Address(), status.addr))
-            frame->ApplyProbe(ProbeFor(status.addr));
 }
 
 void MainFrame::ApplyHostState(HostShareState state, const wxString& detail) {
@@ -1779,7 +1665,6 @@ void MainFrame::StopHosting() {
 }
 
 void MainFrame::OnHostTimer(wxTimerEvent&) {
-    share_.DrainPairingRequests();
     if (!Sharing()) {
         hostTimer_.Stop();
         return;
@@ -1946,77 +1831,8 @@ void MainFrame::StartConnect(const std::string& rawAddr) {
     SetClientStatus(ToWx(ui::kQueryingSources), kMutedText);
 }
 
-void MainFrame::StartScan() {
-    scannedThisRound_.clear();
-    const bool started = scanner_.Start(
-        uint16_t(settings_.port),
-        [alive = alive_](std::function<void()> fn) {
-            if (!wxTheApp) return;
-            wxTheApp->CallAfter([alive, fn = std::move(fn)] {
-                if (*alive) fn();
-            });
-        },
-        [this](const deskhubp::ScanHit& hit) { OnScanHit(hit); },
-        [this](const deskhubp::ScanProgress& progress) { OnScanProgress(progress); },
-        [this](const deskhubp::ScanProgress& progress) { OnScanFinished(progress); });
-    if (!started) scanTimer_.StartOnce(kRescanDelayMs);
-}
-
-void MainFrame::RescanNow() {
-    scanTimer_.Stop();
-    SetHintLabel(deviceHint_, ToWx(ui::kLanDevicesEmpty));
-    StartScan();
-}
-
-void MainFrame::RefreshDeviceStatus() {
-    for (const ui::RecentDevice& device : recent_) {
-        uint64_t key = 0;
-        if (HostKeyOf(device.addr, key)) probes_.erase(key);
-    }
-    RefreshDeviceList();
-    poller_.RefreshNow();
-}
-
 void MainFrame::RefreshDevicesNow() {
-    RefreshDeviceStatus();
-    RescanNow();
-}
-
-void MainFrame::OnScanTimer(wxTimerEvent&) {
-    StartScan();
-}
-
-void MainFrame::OnScanHit(const deskhubp::ScanHit& hit) {
-    scannedThisRound_.push_back(hit.addr);
-    RecordProbe(hit.addr, true, hit.rttMs);
-
-    const auto known = std::find_if(scanned_.begin(), scanned_.end(),
-        [&hit](const deskhubp::ScanHit& seen) { return seen.addr == hit.addr; });
-    if (known == scanned_.end()) {
-        scanned_.push_back(hit);
-        RefreshDeviceList();
-    } else {
-        known->rttMs = hit.rttMs;
-    }
-    ApplyProbeToRows(hit.addr);
-}
-
-void MainFrame::OnScanProgress(const deskhubp::ScanProgress& progress) {
-    SetHintLabel(deviceHint_,
-        ToWx(ui::ScanningStatus(progress.probed, progress.total, uint16_t(settings_.port))));
-}
-
-void MainFrame::OnScanFinished(const deskhubp::ScanProgress& progress) {
-    const auto gone = [this](const deskhubp::ScanHit& hit) {
-        return std::find(scannedThisRound_.begin(), scannedThisRound_.end(), hit.addr) ==
-               scannedThisRound_.end();
-    };
-    scanned_.erase(std::remove_if(scanned_.begin(), scanned_.end(), gone), scanned_.end());
     RefreshDeviceList();
-
-    SetHintLabel(deviceHint_,
-        ToWx(ui::LanDevicesNote(scanned_.size(), progress.total, deskhubp::kLanRescanSecs)));
-    scanTimer_.StartOnce(kRescanDelayMs);
 }
 
 void MainFrame::OnListClick(wxMouseEvent& event) {
@@ -2064,7 +1880,6 @@ void MainFrame::OnSourcesReady(const std::string& addr, const std::string& passc
 
     ui::TouchRecentDevice(recent_, addr, NowUnixSeconds(), passcode);
     SaveRecentDevices();
-    poller_.SetAddresses(ui::AddressesOf(recent_));
     RefreshDeviceList();
 
     OpenConnectionWindow(addr, passcode, outcome);
@@ -2089,7 +1904,6 @@ void MainFrame::OpenConnectionWindow(const std::string& addr, const std::string&
     const int cascade = FromDIP(kConnectionWindowCascade) * int(connections_.size());
     frame->Move(GetPosition() + wxPoint(FromDIP(48) + cascade, FromDIP(48) + cascade));
     connections_.push_back(frame);
-    frame->ApplyProbe(ProbeFor(addr));
     frame->Show();
 }
 
@@ -2162,12 +1976,9 @@ void MainFrame::OnClose(wxCloseEvent& event) {
     share_.terminalHost().Stop();
     hostTimer_.Stop();
     clipTimer_.Stop();
-    scanTimer_.Stop();
     autoShareTimer_.Stop();
-    scanner_.Cancel();
     share_.sharingHost().Stop();
     shareDriver_.Join();
-    poller_.Stop();
     event.Skip();
 }
 
@@ -2249,15 +2060,6 @@ ConnectionFrame::ConnectionFrame(MainFrame* owner, std::string address, std::str
         owner_->ForgetConnection(this);
         Destroy();
     });
-}
-
-void ConnectionFrame::ApplyProbe(const ProbeResult* probe) {
-    const bool online = probe && probe->online;
-    const wxColour tint = probe && !probe->online ? kOffline : kOnline;
-    stateLabel_->SetForegroundColour(tint);
-    pingLabel_->SetForegroundColour(tint);
-    pingLabel_->SetLabel(online ? ToWx(ui::PingMs(probe->rttMs)) : wxString());
-    Layout();
 }
 
 void ConnectionFrame::OpenDesktopSession() {

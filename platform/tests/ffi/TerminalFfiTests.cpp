@@ -7,6 +7,7 @@
 #include "deskhubp/host/TerminalHost.h"
 #include "deskhubp/system/AppDataFile.h"
 #include "deskhubp/system/Clock.h"
+#include "deskhubp/system/ClientIdentity.h"
 #include "deskhubp/system/HostIdentity.h"
 #include "deskhubp/system/PairedDevicesFile.h"
 #include "deskhubp/system/Pty.h"
@@ -35,7 +36,7 @@ struct FfiHostRig {
         Stop();
     }
 
-    bool Start(const deskhubp::HostIdentity& identity, const std::string& passcode) {
+    bool Start(const deskhubp::HostIdentity& identity) {
         sock.SetRecvTimeout(1);
         deskhubp::QuicSettings settings;
         settings.certPemPath = identity.certPath;
@@ -44,8 +45,6 @@ struct FfiHostRig {
 
         deskhubp::HostAuthConfig auth;
         auth.identity = identity;
-        auth.SetPasscode(deskhubp::LoadOrCreateAuthSalt(), passcode);
-        auth.allowNewPairings = true;
         sock.SetHostAuth(std::move(auth), deskhubp::TransportAuthCallbacks{});
         sock.SetOnPeerGone([this](const NetAddr& peer) { term.OnPeerGone(peer); });
 
@@ -182,7 +181,7 @@ void RunTerminalFfiTests() {
 
     const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity("deskhub-test");
     FfiHostRig rig;
-    if (!rig.Start(identity, kTestPasscode)) {
+    if (!rig.Start(identity)) {
         Check(false, "the host rig starts");
         return;
     }
@@ -202,6 +201,13 @@ void RunTerminalFfiTests() {
     callbacks.user = &seen;
 
     const std::string address = "127.0.0.1:" + std::to_string(kFfiTestPort);
+    const auto client = deskhubp::LoadOrCreateClientIdentity();
+    Check(client.Valid() && deskhubp::RememberPairedDevice(client.fingerprint,
+                                "term-ffi-viewer", 500),
+        "the viewer public key is authorized before opening the terminal");
+    Check(deskhubp::RememberTrustedHost(address, address, identity.fingerprint,
+              NowUnixSeconds()),
+        "the host public key is pinned before opening the terminal");
     DHTermSession* session = dh_term_open(address.c_str(), kTestPasscode, 80, 24, &callbacks);
     Check(session != nullptr, "the C ABI opens a shell session");
     if (session == nullptr) {

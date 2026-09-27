@@ -43,12 +43,9 @@ struct ShellRow: Identifiable, Equatable {
 @MainActor protocol TerminalFeed {
     var state: Int32 { get }
     var message: String { get }
-    var trustVerdict: Int32 { get }
-    var fingerprint: String { get }
     var shells: [ShellRow] { get }
     var shellsKnown: Bool { get }
 
-    func answerTrust(_ accept: Bool)
     func grid(
         scrollOffset: UInt32, into cells: UnsafeMutablePointer<DHTermCell>?, capacity: UInt32,
         info: inout DHTermGrid

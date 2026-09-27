@@ -37,9 +37,7 @@ int main(int argc, char** argv) {
             deskhubcli::PrintLine(deskhub::ui::VersionLine());
             return Report(deskhubcli::ExitCode::Ok);
         case deskhub::cli::Verb::Displays: return Report(deskhubcli::RunDisplays(command));
-        case deskhub::cli::Verb::Scan: return Report(deskhubcli::RunScan(command));
         case deskhub::cli::Verb::Sources: return Report(deskhubcli::RunSources(command));
-        case deskhub::cli::Verb::Probe: return Report(deskhubcli::RunProbe(command));
         case deskhub::cli::Verb::Devices: return Report(deskhubcli::RunDevices(command));
         case deskhub::cli::Verb::Trust: return Report(deskhubcli::RunTrust(command));
         case deskhub::cli::Verb::Settings: return Report(deskhubcli::RunSettings(command));

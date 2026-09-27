@@ -16,13 +16,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -117,10 +115,6 @@ interface FileSendDriver {
 
     fun error(): String
 
-    fun changedKeyFingerprint(): String
-
-    fun acceptChangedKey(): Boolean
-
     fun release()
 }
 
@@ -153,10 +147,6 @@ class StandaloneFileSendDriver(
 
     override fun error(): String = lastError
 
-    override fun changedKeyFingerprint(): String = if (handle == 0L) "" else NativeClient.sendChangedKey(handle)
-
-    override fun acceptChangedKey(): Boolean = handle != 0L && NativeClient.sendAcceptKey(handle)
-
     override fun release() {
         if (handle != 0L) NativeClient.sendStop(handle)
         handle = 0L
@@ -183,7 +173,6 @@ fun FileSendScreen(
     var history by remember { mutableStateOf(emptyList<SentRow>()) }
     var settled by remember { mutableStateOf(true) }
     var staging by remember { mutableStateOf(false) }
-    var keyFingerprint by remember { mutableStateOf("") }
 
     val settleNow = {
         if (!settled && (transfer.done || transfer.failed)) {
@@ -236,13 +225,6 @@ fun FileSendScreen(
 
     LaunchedEffect(transfer.active) {
         if (!transfer.active) {
-            if (!settled && transfer.failed) {
-                val fingerprint = driver.changedKeyFingerprint()
-                if (fingerprint.isNotEmpty()) {
-                    keyFingerprint = fingerprint
-                    return@LaunchedEffect
-                }
-            }
             settleNow()
             return@LaunchedEffect
         }
@@ -367,39 +349,6 @@ fun FileSendScreen(
         }
     }
 
-    if (keyFingerprint.isNotEmpty()) {
-        AlertDialog(
-            onDismissRequest = {},
-            title = { Text(NativeClient.string(NativeClient.STR_TRUST_CHANGED_TITLE)) },
-            text = {
-                Text(
-                    NativeClient.string(NativeClient.STR_TRUST_CHANGED_BODY) + "\n\n" +
-                        NativeClient.string(NativeClient.STR_TRUST_FINGERPRINT_LABEL) + " " +
-                        keyFingerprint,
-                )
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        keyFingerprint = ""
-                        if (driver.acceptChangedKey()) {
-                            transfer = NativeClient.Transfer(active = true)
-                        } else {
-                            settleNow()
-                        }
-                    },
-                ) { Text(NativeClient.string(NativeClient.STR_TRUST_ACCEPT)) }
-            },
-            dismissButton = {
-                TextButton(
-                    onClick = {
-                        keyFingerprint = ""
-                        settleNow()
-                    },
-                ) { Text(NativeClient.string(NativeClient.STR_TRUST_REJECT)) }
-            },
-        )
-    }
 }
 
 private const val POLL_MS = 200L

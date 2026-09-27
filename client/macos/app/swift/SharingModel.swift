@@ -32,7 +32,6 @@ final class SharingModel {
     var tickedSources: Set<UInt32> = []
     var shareTerminal = true
     var shareFiles = true
-    let pairing = PairingAskModel()
 
     var hasScreenRecording = false
     var hasAccessibility = false
@@ -226,7 +225,6 @@ final class SharingModel {
     func stopSharing() {
         stopPolling()
         DeskhubShare.stop()
-        pairing.clear()
         isSharing = false
         sharingScreen = false
         sharingTerminal = false
@@ -254,7 +252,6 @@ final class SharingModel {
             stopSharing()
             return
         }
-        pairing.drain()
         if clipboardSync { pumpClipboard() }
     }
 }

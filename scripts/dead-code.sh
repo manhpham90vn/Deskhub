@@ -24,7 +24,7 @@ PYTHON=$(deskhub_host_python || true)
 echo "[dead-code] C++ functions, FFI entry points, string ids, Kotlin constants ($CPPCHECK)"
 "$PYTHON" scripts/dead-code.py "$CPPCHECK" || fail=1
 
-if command -v java >/dev/null 2>&1; then
+if command -v java >/dev/null 2>&1 && java -version >/dev/null 2>&1; then
     ensure_local_detekt >/dev/null
     echo "[detekt] unused Kotlin code (client/android)"
     if report=$(java -jar tools/detekt-cli.jar --input client/android/app/src/main/java \

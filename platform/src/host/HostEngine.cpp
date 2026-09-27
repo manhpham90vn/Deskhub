@@ -195,19 +195,11 @@ bool HostEngine::Start(const std::vector<deskhub::media::ShareSource>& sources,
 
     HostAuthConfig auth;
     auth.identity = identity;
-    auth.SetPasscode(LoadOrCreateAuthSalt(), opt_.passcode);
-    auth.allowNewPairings = opt_.allowNewPairings;
     TransportAuthCallbacks authHooks;
     authHooks.onPaired = [this](const NetAddr&, const deskhub::Fingerprint&,
                              std::string_view name) {
         LOGI("[Host] %s is paired with this machine.", std::string(name).c_str());
         if (policy_.onPaired) policy_.onPaired();
-    };
-    authHooks.onApprovalNeeded = [this](const NetAddr& peer, const deskhub::Fingerprint& fp,
-                                     std::string_view name) {
-        if (policy_.onApprovalNeeded)
-            policy_.onApprovalNeeded(peer.Pack(), deskhub::ShortFingerprint(fp),
-                std::string(name));
     };
     authHooks.onRefused = [](const NetAddr& peer, deskhub::AuthResultCode) {
         LOGW("[Host] %s was refused.", peer.ToString().c_str());
@@ -329,12 +321,6 @@ void HostEngine::RequestKickViewer(uint8_t sourceId, uint64_t addrPacked) {
     pendingViewerKicks_.emplace_back(sourceId, addrPacked);
 }
 
-void HostEngine::AnswerPairingRequest(uint64_t addrPacked, bool allowed) {
-    if (!addrPacked) return;
-    std::lock_guard<std::mutex> lk(controlMutex_);
-    pendingPairAnswers_.emplace_back(addrPacked, allowed);
-}
-
 HostSource* HostEngine::FindLiveSource(uint8_t sourceId) {
     for (HostSource* st : live_)
         if (st->sourceId == sourceId) return st;
@@ -371,16 +357,11 @@ void HostEngine::DrainLocalClipboard() {
 void HostEngine::DrainControlRequests() {
     std::vector<uint8_t> stops;
     std::vector<std::pair<uint8_t, uint64_t>> kicks;
-    std::vector<std::pair<uint64_t, bool>> pairAnswers;
     {
         std::lock_guard<std::mutex> lk(controlMutex_);
         stops.swap(pendingSourceStops_);
         kicks.swap(pendingViewerKicks_);
-        pairAnswers.swap(pendingPairAnswers_);
     }
-
-    for (const auto& [addrPacked, allowed] : pairAnswers)
-        sock_.ApproveConnection(NetAddr::Unpack(addrPacked), allowed);
 
     if (stops.empty() && kicks.empty()) return;
 

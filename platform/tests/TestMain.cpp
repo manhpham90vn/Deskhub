@@ -57,17 +57,12 @@ int main() {
     std::printf("--- net: pre-session source query over loopback ---\n");
     RunSourceQueryTests();
 
-    std::printf("--- net: host probe + device status poller over loopback ---\n");
-    RunHostProbeTests();
-
-    std::printf("--- net: which neighbours a LAN scan would knock on ---\n");
-    RunLanScannerTests();
-
     std::printf("--- system: app data files next to the logs ---\n");
     RunAppDataFileTests();
 
     std::printf("--- system: the host's own key pair and the machines it trusts ---\n");
     RunHostIdentityTests();
+    RunClientIdentityTests();
 
     std::printf("--- system: proving which machine, and that it knows the code ---\n");
     RunAuthProofTests();
@@ -96,9 +91,6 @@ int main() {
 
     std::printf("--- session: files from a viewer to the host, over QUIC ---\n");
     RunFileTransferPlatformTests();
-
-    RunSharingHostTests();
-    RunDiscoveryFfiTests();
 
     std::printf("--- ffi: string handover to the managed clients ---\n");
     RunFfiTextTests();

@@ -15,7 +15,6 @@ struct FileSendHooks {
     std::function<void()> cancel;
     std::function<deskhub::ui::TransferView()> view;
     std::function<std::string()> error;
-    std::function<bool()> acceptKey;
 };
 
 struct FileSendLaunch {

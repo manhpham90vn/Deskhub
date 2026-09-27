@@ -112,11 +112,6 @@ struct StreamView: View {
             .background(Color.black)
             .environment(\.colorScheme, .dark)
         }
-        .trustPrompt(
-            isPresented: $model.askingTrust,
-            changed: model.trustChanged,
-            fingerprint: model.trustFingerprint
-        ) { model.answerTrust($0) }
         .alert("Deskhub", isPresented: endedAlertShown) {
             Button("OK") { onEnd() }
         } message: {

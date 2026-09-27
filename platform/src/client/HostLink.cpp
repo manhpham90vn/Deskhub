@@ -276,44 +276,11 @@ bool HostLink::SettleTrust() {
         verdict_ = verdict;
     }
 
-    if (verdict != deskhub::TrustVerdict::Changed) {
-        autoTrustPending_.store(verdict == deskhub::TrustVerdict::Unknown,
-            std::memory_order_release);
-        return true;
-    }
-    if (!config_.trustGate) {
-        autoTrustPending_.store(false, std::memory_order_release);
-        return true;
-    }
-
-    trustDecision_.store(int(TrustDecision::Pending), std::memory_order_release);
-    SetState(HostLinkState::Deciding, deskhub::ui::kTrustChangedBody);
-    if (cb_.onTrustAsked) cb_.onTrustAsked(verdict, FormatFingerprint(*peer));
-
-    uint8_t buf[deskhub::kMaxRecordSize];
-    uint64_t lastKeepaliveUs = NowUs();
-    while (!stop_.load(std::memory_order_acquire)) {
-        const auto decision = TrustDecision(trustDecision_.load(std::memory_order_acquire));
-        if (decision == TrustDecision::Rejected) {
-            Fail(HostLinkState::Ended, deskhub::ui::kTrustReject);
-            return false;
-        }
-        if (decision == TrustDecision::Accepted) {
-            RememberTrustedHost(endpoint, config_.hostLabel, *peer, NowUnixSeconds());
-            {
-                const std::lock_guard<std::mutex> lock(mutex_);
-                verdict_ = deskhub::TrustVerdict::Trusted;
-            }
-            return true;
-        }
-        NetAddr from;
-        if (sock_.RecvFrom(buf, sizeof(buf), from) < 0) SleepUs(kDecisionPollUs);
-        const uint64_t nowUs = NowUs();
-        if (deskhub::KeepaliveDue(nowUs, lastKeepaliveUs, keepaliveIntervalUs_)) {
-            sock_.SendKeepalive(config_.host);
-            lastKeepaliveUs = nowUs;
-        }
-    }
+    if (verdict == deskhub::TrustVerdict::Trusted) return true;
+    Fail(HostLinkState::Failed,
+        verdict == deskhub::TrustVerdict::Changed
+            ? "Host key changed. Update the saved host key before connecting."
+            : "Host key is unknown. Add the host public key before connecting.");
     return false;
 }
 
@@ -328,8 +295,11 @@ bool HostLink::RunAuth() {
     }
 
     ClientAuthConfig auth;
-    auth.identity = LoadOrCreateHostIdentity(config_.clientName);
-    auth.passcode = config_.passcode;
+    auth.identity = LoadOrCreateClientIdentity();
+    if (!auth.identity.Valid()) {
+        Fail(HostLinkState::Failed, "Could not load the client authentication key");
+        return false;
+    }
     auth.hostFingerprint = peer;
     auth.clientName = config_.clientName;
 
@@ -345,16 +315,6 @@ bool HostLink::RunAuth() {
         return false;
     }
 
-    if (hostProved && autoTrustPending_.exchange(false, std::memory_order_acq_rel) &&
-        !deskhub::IsZero(peer)) {
-        {
-            const std::lock_guard<std::mutex> lock(mutex_);
-            verdict_ = deskhub::TrustVerdict::Trusted;
-        }
-        RememberTrustedHost(config_.host.ToString(), config_.hostLabel, peer, NowUnixSeconds());
-        LOGI("link: passcode accepted \xE2\x80\x94 remembering %s as %s",
-            config_.host.ToString().c_str(), FormatFingerprint(peer).c_str());
-    }
     return true;
 }
 

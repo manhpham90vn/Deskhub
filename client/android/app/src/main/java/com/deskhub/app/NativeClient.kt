@@ -93,9 +93,6 @@ object NativeClient {
     const val STR_SECTION_SESSION = 74
     const val STR_PASSCODE_HINT = 112
     const val STR_KEEP_AWAKE_LABEL = 76
-    const val STR_PAIRING_REQUEST_TITLE = 77
-    const val STR_PAIRING_ALLOW = 78
-    const val STR_PAIRING_DENY = 79
     const val STR_SIDEBAR_DEVICES = 80
     const val STR_PAIRED_HEADING = 81
     const val STR_PAIRED_HINT = 82
@@ -103,24 +100,14 @@ object NativeClient {
     const val STR_PAIRED_FORGET = 84
     const val STR_PAIRED_FORGET_ALL = 85
     const val STR_PAIRED_FORGET_ALL_PROMPT = 86
-    const val STR_ALLOW_PAIRING_LABEL = 87
-    const val STR_ALLOW_PAIRING_HINT = 88
     const val STR_THIS_MACHINE_HEADING = 89
     const val STR_THIS_MACHINE_HINT = 90
-    const val STR_TRUST_NEW_HOST_TITLE = 95
-    const val STR_TRUST_NEW_HOST_BODY = 96
-    const val STR_TRUST_CHANGED_TITLE = 97
-    const val STR_TRUST_CHANGED_BODY = 98
-    const val STR_TRUST_FINGERPRINT_LABEL = 99
-    const val STR_TRUST_ACCEPT = 100
-    const val STR_TRUST_REJECT = 101
     const val STR_OPEN_DESKTOP_LABEL = 105
     const val STR_OPEN_SHELL_LABEL = 106
     const val STR_CONNECT_BUTTON = 116
     const val STR_CONNECTED_PICK_SESSION = 150
     const val STR_TERMINAL_EXTRA_KEYS_HINT = 108
 
-    const val TRUST_CHANGED = 2
 
     const val STR_TRANSFER_CANCEL_BUTTON = 136
     const val STR_TRANSFER_SENDING = 138
@@ -271,10 +258,6 @@ object NativeClient {
 
     private external fun nativePairedForgetAll()
 
-    private external fun nativeAllowPairing(): Boolean
-
-    private external fun nativeSetAllowPairing(allow: Boolean)
-
     private external fun nativeOwnFingerprint(): String
 
     fun pairedDevices(): List<PairedDevice> = nativePairedDevices()?.toList() ?: emptyList()
@@ -282,10 +265,6 @@ object NativeClient {
     fun pairedForget(fingerprint: String): Boolean = nativePairedForget(fingerprint)
 
     fun pairedForgetAll() = nativePairedForgetAll()
-
-    fun allowPairing(): Boolean = nativeAllowPairing()
-
-    fun setAllowPairing(allow: Boolean) = nativeSetAllowPairing(allow)
 
     fun ownFingerprint(): String = nativeOwnFingerprint()
 
@@ -399,20 +378,6 @@ object NativeClient {
 
     fun setSettingsPort(port: Int) = nativeSetSettingsPort(port)
 
-    private external fun nativeScanStart(port: Int): Boolean
-
-    private external fun nativeScanRestart(port: Int): Boolean
-
-    private external fun nativeRescanSeconds(): Int
-
-    private external fun nativeStatusRefreshNow()
-
-    private external fun nativeScanCancel()
-
-    private external fun nativeScanRunning(): Boolean
-
-    private external fun nativeScanStatusText(port: Int): String
-
     private external fun nativeDeviceRows(): Array<DeviceRow>
 
     private external fun nativeRecentTouch(
@@ -422,21 +387,6 @@ object NativeClient {
 
     private external fun nativeRecentPasscode(addr: String): String
 
-    private external fun nativeWatchRecent()
-
-    fun scanStart(port: Int): Boolean = nativeScanStart(port)
-
-    suspend fun scanRestart(port: Int): Boolean = withContext(Dispatchers.IO) { nativeScanRestart(port) }
-
-    fun rescanSeconds(): Int = nativeRescanSeconds()
-
-    suspend fun statusRefreshNow() = withContext(Dispatchers.IO) { nativeStatusRefreshNow() }
-
-    fun scanCancel() = nativeScanCancel()
-
-    fun scanRunning(): Boolean = nativeScanRunning()
-
-    fun scanStatusText(port: Int): String = nativeScanStatusText(port)
 
     suspend fun deviceRows(): List<DeviceRow> = withContext(Dispatchers.IO) { nativeDeviceRows().toList() }
 
@@ -447,7 +397,6 @@ object NativeClient {
 
     fun recentPasscode(addr: String): String = nativeRecentPasscode(addr)
 
-    suspend fun watchRecent() = withContext(Dispatchers.IO) { nativeWatchRecent() }
 
     external fun nativeStart(
         addr: String,
@@ -475,7 +424,7 @@ object NativeClient {
         fun onTrustAsked(
             verdict: Int,
             fingerprint: String,
-        )
+        ) {}
     }
 
     @Volatile

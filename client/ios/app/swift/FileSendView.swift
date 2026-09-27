@@ -89,14 +89,6 @@ struct FileSendView<Driver: TransferDriver>: View {
             Spacer(minLength: 0)
         }
         .padding()
-        .trustPrompt(
-            isPresented: Binding(
-                get: { !model.changedKeyFingerprint.isEmpty },
-                set: { _ in }
-            ),
-            changed: true,
-            fingerprint: model.changedKeyFingerprint
-        ) { model.answerChangedKey(accept: $0) }
         .onChange(of: photoItems) { _, picked in
             guard !picked.isEmpty else { return }
             Task { await stagePhotos(picked) }

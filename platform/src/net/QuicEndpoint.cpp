@@ -433,7 +433,6 @@ struct QuicEndpoint::Impl {
 
     void Receive(const NetAddr& from, std::span<const uint8_t> packet) {
         if (deskhub::ClassifyPacket(packet) != deskhub::PacketKind::Quic) {
-            if (cb_.onForeignDatagram) cb_.onForeignDatagram(from, packet);
             return;
         }
 

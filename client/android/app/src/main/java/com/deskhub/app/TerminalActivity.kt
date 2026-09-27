@@ -72,7 +72,6 @@ class TerminalActivity : ComponentActivity() {
 
         setContent {
             MaterialTheme(colorScheme = darkColorScheme()) {
-                PairingPrompt()
                 var attempt by remember { mutableIntStateOf(0) }
                 val opened =
                     remember(attempt) {
@@ -295,15 +294,6 @@ private fun TerminalScreen(
             },
         )
         return
-    }
-
-    if (termState == NativeTerminal.STATE_DECIDING) {
-        TrustDialog(
-            verdict = NativeTerminal.verdict(),
-            fingerprint = NativeTerminal.fingerprint(),
-            onAccept = { NativeTerminal.acceptKey() },
-            onReject = { NativeTerminal.rejectKey() },
-        )
     }
 
     Column(
@@ -579,56 +569,4 @@ private fun TermKeyButton(
             color = if (active) MaterialTheme.colorScheme.primary else Color.White,
         )
     }
-}
-
-@Composable
-private fun TrustDialog(
-    verdict: Int,
-    fingerprint: String,
-    onAccept: () -> Unit,
-    onReject: () -> Unit,
-) {
-    val changed = verdict == NativeClient.TRUST_CHANGED
-    AlertDialog(
-        onDismissRequest = onReject,
-        title = {
-            Text(
-                NativeClient.string(
-                    if (changed) {
-                        NativeClient.STR_TRUST_CHANGED_TITLE
-                    } else {
-                        NativeClient.STR_TRUST_NEW_HOST_TITLE
-                    },
-                ),
-            )
-        },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(
-                    NativeClient.string(
-                        if (changed) {
-                            NativeClient.STR_TRUST_CHANGED_BODY
-                        } else {
-                            NativeClient.STR_TRUST_NEW_HOST_BODY
-                        },
-                    ),
-                )
-                Text(
-                    "${NativeClient.string(NativeClient.STR_TRUST_FINGERPRINT_LABEL)} " +
-                        fingerprint,
-                    style = MaterialTheme.typography.bodySmall,
-                )
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onAccept) {
-                Text(NativeClient.string(NativeClient.STR_TRUST_ACCEPT))
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onReject) {
-                Text(NativeClient.string(NativeClient.STR_TRUST_REJECT))
-            }
-        },
-    )
 }

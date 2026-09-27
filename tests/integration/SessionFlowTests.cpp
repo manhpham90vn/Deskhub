@@ -5,15 +5,16 @@
 #include "support/TestSupport.h"
 
 #include "deskhub/input/VirtualKeys.h"
-#include "deskhubp/client/HostProbe.h"
 #include "deskhubp/client/SourceQuery.h"
 #include "deskhubp/net/UdpSocket.h"
 #include "deskhubp/client/ScreenViewer.h"
 #include "deskhubp/system/HostIdentity.h"
+#include "deskhubp/system/ClientIdentity.h"
 #include "deskhubp/system/PairedDevicesFile.h"
 #include "deskhubp/system/TrustStoreFile.h"
 
 #include <cstdio>
+#include <ctime>
 #include <string>
 #include <vector>
 
@@ -558,129 +559,28 @@ void TestTheHostSurvivesAViewerThatVanishes() {
     Check(!host.running(), "and the host shuts down cleanly");
 }
 
-void TestPasscodeGatesTheStream() {
-    std::printf("[e2e] a host with a passcode only streams to viewers that know it...\n");
+void TestRevokedClientCannotReadSources() {
+    std::printf("[e2e] revoking the client key blocks source queries...\n");
     ResetObservations();
     const uint16_t port = NextTestPort();
-
     fake::SharingHost host;
-    if (!host.Start({fake::Source("Display 1", 1280, 720, 1)}, port, 30, 1920, "4726")) {
-        Check(false, "the host could not start");
-        std::printf("  host error: %s\n", host.LastError().c_str());
-        return;
-    }
-
-    {
-        Viewer wrong;
-        wrong.SetSurface(kDummySurface);
-        deskhubp::ScreenViewerConfig cfg = ViewerConfig(port, 0);
-        cfg.passcode = "1111";
-        StartViewer(wrong, cfg);
-
-        Check(WaitFor([&] { return wrong.phase() == deskhubp::ClientPhase::Ended; },
-                  kConnectTimeoutMs),
-            "a viewer with the wrong passcode is turned away instead of hanging");
-        Check(wrong.EndReason().find("passcode") != std::string::npos,
-            "and is told the passcode was the problem");
-        Check(fake::Decoded().frameCount() == 0, "not one frame of the screen leaked to it");
-        wrong.Stop();
-    }
-
-    {
-        Viewer blank;
-        blank.SetSurface(kDummySurface);
-        deskhubp::ScreenViewerConfig cfg = ViewerConfig(port, 0);
-        cfg.passcode.clear();
-        StartViewer(blank, cfg);
-
-        std::vector<uint64_t> asks;
-        Check(WaitFor(
-                  [&] {
-                      const std::vector<uint64_t> got = host.TakePairingRequests();
-                      asks.insert(asks.end(), got.begin(), got.end());
-                      return !asks.empty();
-                  },
-                  kConnectTimeoutMs),
-            "a viewer that sends no passcode is put to the person at the host");
-        if (!asks.empty()) host.AnswerPairing(asks[0], false);
-        Check(WaitFor([&] { return blank.phase() == deskhubp::ClientPhase::Ended; },
-                  kConnectTimeoutMs),
-            "and saying no turns it away");
-        Check(fake::Decoded().frameCount() == 0, "still nothing decoded");
-        blank.Stop();
-    }
-
-    ResetObservations();
-    Viewer right;
-    right.SetSurface(kDummySurface);
-    deskhubp::ScreenViewerConfig cfg = ViewerConfig(port, 0);
-    cfg.passcode = "4726";
-    StartViewer(right, cfg);
-
-    Check(WaitFor([&] { return Streaming(right); }, kConnectTimeoutMs),
-        "the viewer with the right passcode is let in");
-    Check(WaitFor([&] { return fake::Decoded().frameCount() >= 3; }, kStreamTimeoutMs),
-        "and receives real video once past the gate");
-
-    right.Stop();
-    host.Stop();
-}
-
-void TestDiscoveryIsGatedByThePasscode() {
-    std::printf("[e2e] a protected host answers discovery but names no displays...\n");
-    ResetObservations();
-    const uint16_t port = NextTestPort();
-
-    fake::SharingHost host;
-    if (!host.Start({fake::Source("DELL U2723QE", 1280, 720, 1)}, port, 30, 1920, "4726")) {
+    if (!host.Start({fake::Source("DELL U2723QE", 1280, 720, 1)}, port)) {
         Check(false, "the host could not start");
         return;
     }
 
-    Check(deskhubp::ProbeHostRttMs(HostAddr(port), 1000).has_value(),
-        "the host still answers a probe, so it shows as online in the device list");
-
+    deskhubp::ForgetAllPairedDevices();
     std::vector<deskhub::SourceInfo> sources;
-    Check(!QuerySources(HostAddr(port), sources),
-        "but a viewer with no passcode is not let far enough to ask what is shared");
-    Check(sources.empty(), "and sees no display names or sizes");
+    Check(!QuerySources(HostAddr(port), sources) && sources.empty(),
+        "a revoked client cannot read display names");
 
-    Check(!QuerySources(HostAddr(port), sources, "1111") && sources.empty(),
-        "a wrong passcode learns nothing either");
-
-    Check(QuerySources(HostAddr(port), sources, "4726"), "the right passcode is answered");
-    Check(sources.size() == 1 && sources[0].name == "DELL U2723QE",
-        "and gets the real display list");
-
-    host.Stop();
-}
-
-void TestAHostWithoutAPasscodeServesNobody() {
-    std::printf("[e2e] a host left without a passcode waits for its owner to say yes...\n");
-    ResetObservations();
-    const uint16_t port = NextTestPort();
-
-    fake::SharingHost host;
-    if (!host.Start({fake::Source("Display 1", 1280, 720, 1)}, port, 30, 1920, "")) {
-        Check(false, "the host could not start");
-        return;
-    }
-
-    Viewer viewer;
-    viewer.SetSurface(kDummySurface);
-    deskhubp::ScreenViewerConfig cfg = ViewerConfig(port, 0);
-    cfg.passcode = "0000";
-    StartViewer(viewer, cfg);
-
-    Check(!WaitFor([&] { return Streaming(viewer); }, kConnectTimeoutMs),
-        "a viewer nobody approved never reaches the stream, whatever it sends");
-    Check(fake::Decoded().frameCount() == 0, "and nothing of the screen leaves the machine");
-
-    std::vector<deskhub::SourceInfo> sources;
-    Check(!QuerySources(HostAddr(port), sources, "0000") && sources.empty(),
-        "and discovery gives up nothing either while the request is unanswered");
-
-    viewer.Stop();
+    const auto client = deskhubp::LoadOrCreateClientIdentity();
+    Check(client.Valid() &&
+              deskhubp::RememberPairedDevice(client.fingerprint, "integration-client", std::time(nullptr)),
+        "the client key can be explicitly granted again");
+    Check(QuerySources(HostAddr(port), sources) && sources.size() == 1 &&
+              sources[0].name == "DELL U2723QE",
+        "a granted client can read sources after authentication");
     host.Stop();
 }
 
@@ -766,9 +666,7 @@ void RunSessionFlowTests() {
     const SavedTrustFiles guard;
     TestAViewerConnectsAndSeesTheFramesTheHostEncoded();
     TestAViewerBackFromTheBackgroundGetsAKeyframe();
-    TestPasscodeGatesTheStream();
-    TestDiscoveryIsGatedByThePasscode();
-    TestAHostWithoutAPasscodeServesNobody();
+    TestRevokedClientCannotReadSources();
     TestKeystrokesReachTheHostInjector();
     TestPauseArrivesWithoutAScancode();
     TestTheHostReportsWhoIsWatching();

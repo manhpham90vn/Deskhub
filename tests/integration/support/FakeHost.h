@@ -62,30 +62,12 @@ public:
         return engine_.LastError();
     }
 
-    std::vector<uint64_t> TakePairingRequests() {
-        const std::lock_guard<std::mutex> lock(pairMutex_);
-        std::vector<uint64_t> out;
-        out.swap(pairingAsks_);
-        return out;
-    }
-
-    void AnswerPairing(uint64_t addrPacked, bool allowed) {
-        engine_.AnswerPairingRequest(addrPacked, allowed);
-    }
-
-    void PushPairingRequest(uint64_t addrPacked) {
-        const std::lock_guard<std::mutex> lock(pairMutex_);
-        pairingAsks_.push_back(addrPacked);
-    }
-
 private:
     void StartTone(const deskhub::media::AudioFormat& format,
         const std::function<void(std::span<const int16_t>)>& offer);
     void StopTone();
 
     deskhubp::HostEngine engine_;
-    std::mutex pairMutex_;
-    std::vector<uint64_t> pairingAsks_;
     std::thread tone_;
     std::atomic<bool> toneStop_{false};
 };

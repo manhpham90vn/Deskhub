@@ -19,8 +19,6 @@
 #include "deskhub/ui/HostRows.h"
 #include "deskhub/ui/RecentDevices.h"
 #include "deskhub/ui/UiSettings.h"
-#include "deskhubp/client/DeviceStatusPoller.h"
-#include "deskhubp/client/LanScanner.h"
 #include "deskhubp/host/ShareDriver.h"
 #include "deskhubp/host/SharingHost.h"
 #include "deskhubp/client/SourceQueryAsync.h"
@@ -82,7 +80,6 @@ private:
     void SelectPage(int page);
 
     void RefreshPairedDevices();
-    bool AskPairing(const PairingRequest& request);
     void ForgetEveryDevice();
 
     bool Sharing() const;
@@ -98,19 +95,7 @@ private:
     void PopulateBindCombo();
     void RebuildHostAddressRows();
 
-    void StartScan();
-    void RescanNow();
-    void ScheduleRescan();
-    void OnScanHit(const deskhubp::ScanHit& hit);
-    void OnScanProgress(const deskhubp::ScanProgress& progress);
-    void OnScanFinished(const deskhubp::ScanProgress& progress);
-
-    void StartPoller();
-    void OnDeviceStatus(const deskhubp::DeviceStatus& status);
-    void RecordProbe(const std::string& addr, bool online, uint32_t rttMs);
-    const deskhubp::DeviceStatus* ProbeFor(const std::string& addr) const;
     void RefreshDeviceList();
-    void RefreshDeviceStatus();
 
     void ConnectWithPrompt(const std::string& addr, std::string passcode);
     void StartConnect(const std::string& addr, const std::string& passcode);
@@ -189,7 +174,6 @@ private:
     static void OnTransferDirClicked(GtkButton* b, gpointer user);
     static void OnDeviceRowActivated(GtkTreeView* view, GtkTreePath* path,
         GtkTreeViewColumn* col, gpointer user);
-    static gboolean OnRescanTimer(gpointer user);
     static gboolean OnHostTimer(gpointer user);
     static gboolean OnDeleteEvent(GtkWidget* w, GdkEvent* e, gpointer user);
     static void OnDestroy(GtkWidget* w, gpointer user);
@@ -234,7 +218,6 @@ private:
 
     GtkWidget* pairedView_ = nullptr;
     GtkWidget* pairedHintLabel_ = nullptr;
-    GtkWidget* allowPairingCheck_ = nullptr;
     std::vector<deskhub::PairedDevice> pairedDevices_;
     GtkWidget* deviceHintLabel_ = nullptr;
     GtkListStore* deviceStore_ = nullptr;
@@ -263,18 +246,12 @@ private:
 
     deskhub::ui::UiSettings settings_;
     std::vector<deskhub::ui::RecentDevice> recent_;
-    std::vector<deskhubp::ScanHit> scanned_;
-    std::vector<std::string> scannedThisRound_;
-    std::map<uint64_t, deskhubp::DeviceStatus> probes_;
     std::vector<deskhub::ui::HostRow> hostRows_;
 
-    deskhubp::LanScanner scanner_;
-    deskhubp::DeviceStatusPoller poller_;
     deskhubp::ShareController share_;
     deskhubp::ShareDriver shareDriver_;
     std::vector<ShareSourceStatus> hostStatus_;
 
-    guint rescanTimerId_ = 0;
     guint hostTimerId_ = 0;
     guint autoShareTimerId_ = 0;
     deskhub::ui::AutoShareGate autoShareGate_;

@@ -39,7 +39,6 @@ struct HostLinkConfig {
     std::string passcode{};
     std::string clientName{};
     bool recoverLink = false;
-    bool trustGate = true;
     uint64_t recoverGraceUs = 0;
     uint32_t connectTimeoutMs = 10'000;
     uint32_t authTimeoutMs = 65'000;

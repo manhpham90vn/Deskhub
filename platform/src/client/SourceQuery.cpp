@@ -38,7 +38,6 @@ bool QuerySources(const NetAddr& server, std::vector<deskhub::SourceInfo>& out,
     config.connectTimeoutMs = kHandshakeTimeoutMs;
     config.authTimeoutMs = kAuthTimeoutMs;
     config.recvWaitMs = kPollWaitMs;
-    config.trustGate = false;
     if (!link.Start(config, deskhubp::HostLinkCallbacks{})) {
         LOGE("[Sources] Could not open a connection to %s.", server.ToString().c_str());
         return false;

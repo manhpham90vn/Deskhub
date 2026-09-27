@@ -63,25 +63,6 @@ final class RemoteTerminalFeed: TerminalFeed {
         return DeskhubClient.buffered(512) { dh_term_message(handle, $0, $1) }
     }
 
-    var trustVerdict: Int32 {
-        guard let handle else { return 0 }
-        return dh_term_verdict(handle)
-    }
-
-    var fingerprint: String {
-        guard let handle else { return "" }
-        return DeskhubClient.buffered(128) { dh_term_fingerprint(handle, $0, $1) }
-    }
-
-    func answerTrust(_ accept: Bool) {
-        guard let handle else { return }
-        if accept {
-            dh_term_accept_key(handle)
-        } else {
-            dh_term_reject_key(handle)
-        }
-    }
-
     func grid(
         scrollOffset: UInt32, into cells: UnsafeMutablePointer<DHTermCell>?, capacity: UInt32,
         info: inout DHTermGrid
@@ -109,7 +90,6 @@ final class RemoteTerminalFeed: TerminalFeed {
 
 @MainActor @Observable
 final class TerminalModel {
-    static let deciding: Int32 = 2
     static let live: Int32 = 4
     static let ended: Int32 = 8
 
@@ -125,9 +105,6 @@ final class TerminalModel {
     var shells: [ShellRow] = []
     var showingPicker = false
     private var pickerSettled = false
-    var askingTrust = false
-    var trustChanged = false
-    var trustFingerprint = ""
     var latchCtrl = false
     var latchAlt = false
     private(set) var scrollOffset = 0
@@ -208,11 +185,6 @@ final class TerminalModel {
         pickerSettled = false
     }
 
-    func answerTrust(_ accept: Bool) {
-        askingTrust = false
-        feed?.answerTrust(accept)
-    }
-
     func typeChar(_ codepoint: UInt32) {
         if latchCtrl || latchAlt {
             sendKey(TermKeyCode.char, codepoint: codepoint, alt: latchAlt, ctrl: latchCtrl)
@@ -257,12 +229,6 @@ final class TerminalModel {
         state = feed.state
         message = feed.message
         refreshShells()
-
-        if state == TerminalModel.deciding, !askingTrust {
-            trustChanged = feed.trustVerdict == 2
-            trustFingerprint = feed.fingerprint
-            askingTrust = true
-        }
 
         var info = DHTermGrid()
         _ = feed.grid(scrollOffset: UInt32(scrollOffset), into: nil, capacity: 0, info: &info)

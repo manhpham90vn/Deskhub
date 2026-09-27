@@ -2,6 +2,7 @@
 #include "deskhub/net/PairedDevices.h"
 #include "deskhub/protocol/Wire.h"
 #include "deskhubp/system/AuthProof.h"
+#include "deskhubp/system/ClientIdentity.h"
 
 #include <memory>
 #include <optional>
@@ -13,27 +14,12 @@ namespace deskhubp {
 
 struct HostAuthConfig {
     HostIdentity identity{};
-    PasscodeVerifier verifier{};
-    bool hasPasscode = false;
-    bool allowNewPairings = true;
-
-    void SetPasscode(const AuthSalt& salt, std::string_view passcode) {
-        hasPasscode = !passcode.empty();
-        verifier = hasPasscode ? MakePasscodeVerifier(salt, passcode) : PasscodeVerifier{};
-    }
 };
 
 enum class HostAuthState : uint8_t {
     Idle = 0,
     AwaitingResponse = 1,
-    AwaitingApproval = 2,
-    Settled = 3,
-};
-
-struct PairingRequest {
-    uint64_t addrPacked = 0;
-    std::string shortKey{};
-    std::string name{};
+    Settled = 2,
 };
 
 class HostAuth {
@@ -47,7 +33,6 @@ public:
 
     std::optional<deskhub::AuthChallenge> Begin(const deskhub::AuthStart& start);
     deskhub::AuthResult Respond(const deskhub::AuthResponse& response, int64_t nowUnix);
-    deskhub::AuthResult Approve(bool allowed, int64_t nowUnix);
 
     HostAuthState State() const;
     deskhub::AuthMode Mode() const;
@@ -60,7 +45,7 @@ private:
 };
 
 struct ClientAuthConfig {
-    HostIdentity identity{};
+    ClientIdentity identity{};
     std::string passcode{};
     deskhub::Fingerprint hostFingerprint{};
     std::string clientName{};

@@ -25,7 +25,7 @@ if ($Only -in @('all', 'cpp')) {
             "($($others -join '; ')). Run 'make bootstrap'.")
     }
 
-    $cpp = git ls-files 'core/*' 'platform/*' 'client/*' 'tests/*' | Where-Object { $_ -match '\.(h|hpp|cpp|cc|c)$' }
+    $cpp = git ls-files 'core/*' 'platform/*' 'client/*' 'tests/*' | Where-Object { $_ -match '\.(h|hpp|cpp|cc|c)$' -and (Test-Path -LiteralPath $_ -PathType Leaf) }
     Write-Host "[clang-format] $($cpp.Count) files ($clangFormat $clangFormatVersion)"
     if ($Check) {
         $bad = @()

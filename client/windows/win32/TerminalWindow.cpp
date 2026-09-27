@@ -311,10 +311,6 @@ public:
             const std::string copy(message);
             CallAfter([this, state, copy] { OnViewerState(state, copy); });
         };
-        hooks.onTrustAsked = [this](deskhub::TrustVerdict verdict, std::string_view fingerprint) {
-            const std::string copy(fingerprint);
-            CallAfter([this, verdict, copy] { AskAboutKey(verdict, copy); });
-        };
 
         if (!remote_->viewer.Start(config, std::move(hooks))) {
             remote_ = nullptr;
@@ -470,25 +466,6 @@ private:
             state == deskhubp::TerminalViewerState::Refused) {
             redrawTimer_.Stop();
         }
-    }
-
-    void AskAboutKey(deskhub::TrustVerdict verdict, const std::string& fingerprint) {
-        if (remote_ == nullptr) return;
-        const bool changed = verdict == deskhub::TrustVerdict::Changed;
-        wxString body = ToWx(changed ? ui::kTrustChangedBody : ui::kTrustNewHostBody);
-        body += "\n\n";
-        body += ToWx(ui::kTrustFingerprintLabel);
-        body += " ";
-        body += ToWx(fingerprint);
-
-        wxMessageDialog dialog(this, body,
-            ToWx(changed ? ui::kTrustChangedTitle : ui::kTrustNewHostTitle),
-            wxYES_NO | wxNO_DEFAULT | (changed ? wxICON_WARNING : wxICON_QUESTION));
-        dialog.SetYesNoLabels(ToWx(ui::kTrustAccept), ToWx(ui::kTrustReject));
-        if (dialog.ShowModal() == wxID_YES)
-            remote_->viewer.AcceptFingerprint();
-        else
-            remote_->viewer.RejectFingerprint();
     }
 
     std::unique_ptr<deskhubp::TerminalFeed> feed_{};

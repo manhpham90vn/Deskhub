@@ -58,18 +58,6 @@ Lane LaneOf(std::span<const uint8_t> message) {
     }
 }
 
-bool IsBeaconMessage(std::span<const uint8_t> message) {
-    const std::optional<deskhub::CommonHeader> header = deskhub::ParseCommonHeader(message);
-    if (!header) return false;
-    switch (header->type) {
-        case deskhub::MsgType::ListSources:
-        case deskhub::MsgType::SourceList:
-        case deskhub::MsgType::Ping:
-        case deskhub::MsgType::Pong: return true;
-        default: return false;
-    }
-}
-
 }
 
 SessionTransport::SessionTransport() = default;
@@ -83,10 +71,7 @@ QuicCallbacks SessionTransport::MakeCallbacks() {
     hooks.onStream = [this](QuicConnId conn, uint64_t stream, std::span<const uint8_t> bytes,
                          bool) { OnStream(conn, stream, bytes); };
     hooks.onDatagram = [this](QuicConnId conn, std::span<const uint8_t> bytes) {
-        Deliver(NetAddr::Unpack(conn), bytes, true);
-    };
-    hooks.onForeignDatagram = [this](const NetAddr& from, std::span<const uint8_t> bytes) {
-        Deliver(from, bytes, false);
+        Deliver(NetAddr::Unpack(conn), bytes);
     };
     hooks.pauseStream = [this](uint64_t stream) {
         return stream == kQuicFileStream && BulkBlocked();
@@ -173,7 +158,7 @@ void SessionTransport::OnStream(QuicConnId conn, uint64_t stream,
     deskhub::RecordStream& framer = framers_[StreamKey(conn, stream)];
     framer.Append(bytes);
     std::vector<uint8_t> message;
-    while (framer.Next(message)) Deliver(NetAddr::Unpack(conn), message, true);
+    while (framer.Next(message)) Deliver(NetAddr::Unpack(conn), message);
     if (framer.Failed()) {
         LOGW("transport: %s sent a malformed record stream, closing it",
             NetAddr::Unpack(conn).ToString().c_str());
@@ -181,11 +166,8 @@ void SessionTransport::OnStream(QuicConnId conn, uint64_t stream,
     }
 }
 
-void SessionTransport::Deliver(const NetAddr& from, std::span<const uint8_t> message,
-    bool overQuic) {
+void SessionTransport::Deliver(const NetAddr& from, std::span<const uint8_t> message) {
     if (message.empty()) return;
-
-    if (!overQuic && !(IsBeaconMessage(message) && !endpoint_.Established(from.Pack()))) return;
 
     if (clientAuthOn_ && IsAuthMessage(message)) {
         TransportMessage queued;
@@ -195,7 +177,7 @@ void SessionTransport::Deliver(const NetAddr& from, std::span<const uint8_t> mes
         return;
     }
 
-    if (hostAuthOn_ && overQuic && !HandleHostAuth(from, message)) return;
+    if (hostAuthOn_ && !HandleHostAuth(from, message)) return;
 
     TransportMessage queued;
     queued.from = from;
@@ -287,8 +269,6 @@ bool SessionTransport::HandleHostAuth(const NetAddr& from, std::span<const uint8
         out.resize(deskhub::BuildAuthChallenge(out, *challenge));
         SendAuth(from, out);
 
-        if (challenge->mode == deskhub::AuthMode::Approval && authCallbacks_.onApprovalNeeded)
-            authCallbacks_.onApprovalNeeded(from, auth->PeerFingerprint(), auth->PeerName());
         if (challenge->mode == deskhub::AuthMode::Denied && authCallbacks_.onRefused)
             authCallbacks_.onRefused(from, deskhub::AuthResultCode::PairingDisabled);
 
@@ -380,13 +360,6 @@ void SessionTransport::SetHostAuth(HostAuthConfig config, TransportAuthCallbacks
     hostAuthOn_ = true;
 }
 
-void SessionTransport::ApproveConnection(const NetAddr& peer, bool allowed) {
-    const std::lock_guard<std::mutex> lock(sendMutex_);
-    const auto at = hostAuth_.find(peer.Pack());
-    if (at == hostAuth_.end()) return;
-    SettleHostAuth(peer, *at->second, at->second->Approve(allowed, NowUnix()));
-}
-
 bool SessionTransport::Authenticated(const NetAddr& peer) const {
     const std::lock_guard<std::mutex> lock(sendMutex_);
     const auto at = authenticated_.find(peer.Pack());
@@ -465,9 +438,10 @@ bool SessionTransport::RunClientAuth(const NetAddr& server, ClientAuthConfig con
                 clientAuthOn_ = false;
                 return false;
             }
-            if (challenge->mode == deskhub::AuthMode::Approval) {
-                answered = true;
-                continue;
+            if (challenge->mode != deskhub::AuthMode::Signature) {
+                outCode = deskhub::AuthResultCode::NotPaired;
+                clientAuthOn_ = false;
+                return false;
             }
             const std::optional<deskhub::AuthResponse> response = client.Answer(*challenge);
             if (!response) {
@@ -485,7 +459,7 @@ bool SessionTransport::RunClientAuth(const NetAddr& server, ClientAuthConfig con
             continue;
         }
 
-        if (header->type == deskhub::MsgType::AuthResult) {
+        if (header->type == deskhub::MsgType::AuthResult && answered) {
             const std::optional<deskhub::AuthResult> result = deskhub::ParseAuthResult(payload);
             if (!result) continue;
             outCode = result->code;

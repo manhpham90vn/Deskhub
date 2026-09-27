@@ -23,12 +23,10 @@ protocol TransferDriver: AnyObject, Observable {
     var transferError: String { get set }
     var history: [TransferHistoryRow] { get }
     var canSend: Bool { get }
-    var changedKeyFingerprint: String { get }
 
     func sendChosenFiles()
     func cancelTransfer()
     func forgetTransfer()
-    func answerChangedKey(accept: Bool)
 }
 
 extension TransferDriver {

@@ -1,7 +1,6 @@
 #include "deskhubp/system/PairedDevicesFile.h"
 
 #include <atomic>
-#include <cstring>
 #include <mutex>
 
 #include "deskhubp/system/AppDataFile.h"
@@ -39,19 +38,6 @@ bool SavePairedDevicesLocked(const deskhub::PairedDevices& devices) {
 
 uint64_t PairedDevicesGeneration() {
     return Generation().load(std::memory_order_acquire);
-}
-
-AuthSalt LoadOrCreateAuthSalt() {
-    const std::string stored = ReadAppDataFile(kAuthSaltFileName);
-    AuthSalt salt{};
-    if (stored.size() == salt.size()) {
-        std::memcpy(salt.data(), stored.data(), salt.size());
-        return salt;
-    }
-    salt = NewAuthSalt();
-    WriteAppDataFile(kAuthSaltFileName,
-        std::string(reinterpret_cast<const char*>(salt.data()), salt.size()));
-    return salt;
 }
 
 deskhub::PairedDevices LoadPairedDevices() {

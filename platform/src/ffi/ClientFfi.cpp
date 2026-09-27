@@ -148,7 +148,6 @@ const char* dh_string(DHStringId id) {
         case DHStrStopDisplayAction: return deskhub::ui::kStopDisplayAction;
         case DHStrDisconnectViewerAction: return deskhub::ui::kDisconnectViewerAction;
         case DHStrNotSharing: return deskhub::ui::kNotSharing;
-        case DHStrLanDevicesEmpty: return deskhub::ui::kLanDevicesEmpty;
         case DHStrBroadcastMemoryLabel: return deskhub::ui::kBroadcastMemoryLabel;
         case DHStrBindInterfaceLabel: return deskhub::ui::kBindInterfaceLabel;
         case DHStrBindAllInterfaces: return deskhub::ui::kBindAllInterfaces;
@@ -163,9 +162,6 @@ const char* dh_string(DHStringId id) {
         case DHStrSettingsSectionSecurity: return deskhub::ui::kSettingsSectionSecurity;
         case DHStrSettingsSectionSession: return deskhub::ui::kSettingsSectionSession;
         case DHStrKeepAwakeLabel: return deskhub::ui::kKeepAwakeLabel;
-        case DHStrPairingRequestTitle: return deskhub::ui::kPairingRequestTitle;
-        case DHStrPairingAllow: return deskhub::ui::kPairingAllow;
-        case DHStrPairingDeny: return deskhub::ui::kPairingDeny;
         case DHStrSidebarDevices: return deskhub::ui::kSidebarDevices;
         case DHStrPairedHeading: return deskhub::ui::kPairedHeading;
         case DHStrPairedHint: return deskhub::ui::kPairedHint;
@@ -173,21 +169,12 @@ const char* dh_string(DHStringId id) {
         case DHStrPairedForget: return deskhub::ui::kPairedForget;
         case DHStrPairedForgetAll: return deskhub::ui::kPairedForgetAll;
         case DHStrPairedForgetAllPrompt: return deskhub::ui::kPairedForgetAllPrompt;
-        case DHStrAllowPairingLabel: return deskhub::ui::kAllowPairingLabel;
-        case DHStrAllowPairingHint: return deskhub::ui::kAllowPairingHint;
         case DHStrThisMachineHeading: return deskhub::ui::kThisMachineHeading;
         case DHStrThisMachineHint: return deskhub::ui::kThisMachineHint;
         case DHStrPairedColumnName: return deskhub::ui::kPairedColumnName;
         case DHStrPairedColumnKey: return deskhub::ui::kPairedColumnKey;
         case DHStrPairedColumnPaired: return deskhub::ui::kPairedColumnPaired;
         case DHStrPairedColumnLastSeen: return deskhub::ui::kPairedColumnLastSeen;
-        case DHStrTrustNewHostTitle: return deskhub::ui::kTrustNewHostTitle;
-        case DHStrTrustNewHostBody: return deskhub::ui::kTrustNewHostBody;
-        case DHStrTrustChangedTitle: return deskhub::ui::kTrustChangedTitle;
-        case DHStrTrustChangedBody: return deskhub::ui::kTrustChangedBody;
-        case DHStrTrustFingerprintLabel: return deskhub::ui::kTrustFingerprintLabel;
-        case DHStrTrustAccept: return deskhub::ui::kTrustAccept;
-        case DHStrTrustReject: return deskhub::ui::kTrustReject;
         case DHStrTerminalPickerLabel: return deskhub::ui::kTerminalPickerLabel;
         case DHStrFilesPickerLabel: return deskhub::ui::kFilesPickerLabel;
         case DHStrTransferChooseButton: return deskhub::ui::kTransferChooseButton;
@@ -244,15 +231,6 @@ bool dh_parse_address(const char* address) {
     if (!address) return false;
     NetAddr server;
     return ParseNetAddr(address, server);
-}
-
-int dh_pairing_request_body(const char* name, const char* address, const char* shortKey,
-    char* out, int capacity) {
-    if (!out || capacity <= 0) return 0;
-    deskhubp::CopyToBuf(out, size_t(capacity),
-        deskhub::ui::PairingRequestBody(
-            name ? name : "", address ? address : "", shortKey ? shortKey : ""));
-    return int(std::strlen(out));
 }
 
 int dh_connecting_to(const char* address, char* out, int capacity) {

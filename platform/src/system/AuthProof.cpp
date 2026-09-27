@@ -1,28 +1,20 @@
 #include "deskhubp/system/AuthProof.h"
 
 #include <openssl/bio.h>
-#include <openssl/curve25519.h>
 #include <openssl/ec.h>
 #include <openssl/ec_key.h>
 #include <openssl/evp.h>
-#include <openssl/hmac.h>
-#include <openssl/mem.h>
 #include <openssl/pem.h>
 #include <openssl/rand.h>
 #include <openssl/sha.h>
 #include <openssl/x509.h>
 #include <openssl/nid.h>
 
-#include <cstring>
-
 #include "deskhubp/diag/Log.h"
 
 namespace deskhubp {
 
 namespace {
-
-constexpr std::string_view kHostName = "deskhub-host";
-constexpr std::string_view kClientName = "deskhub-client";
 
 struct BioDeleter {
     void operator()(BIO* bio) const {
@@ -141,10 +133,25 @@ std::vector<uint8_t> IdentityPublicKey(const HostIdentity& identity) {
 }
 
 std::string IdentityPublicKeyText(const HostIdentity& identity) {
-    const X509Ptr cert = CertFromPem(identity.certPem);
-    if (!cert) return {};
-    const PkeyPtr key(X509_get_pubkey(cert.get()));
-    if (!key || EVP_PKEY_id(key.get()) != EVP_PKEY_EC) return {};
+    return PublicKeyTextFromSpki(IdentityPublicKey(identity));
+}
+
+std::string PublicKeyTextFromSpki(std::span<const uint8_t> spkiDer) {
+    const PkeyPtr key = PublicKeyFromSpki(spkiDer);
+    if (!key) return {};
+    deskhub::PublicKeyText text;
+    if (EVP_PKEY_id(key.get()) == EVP_PKEY_ED25519) {
+        std::array<uint8_t, 32> bytes{};
+        size_t length = bytes.size();
+        if (EVP_PKEY_get_raw_public_key(key.get(), bytes.data(), &length) != 1 ||
+            length != bytes.size())
+            return {};
+        text.algorithm = deskhub::PublicKeyAlgorithm::Ed25519;
+        AppendSshString(text.blob, "ssh-ed25519");
+        AppendSshString(text.blob, bytes);
+        return deskhub::FormatPublicKeyText(text);
+    }
+    if (EVP_PKEY_id(key.get()) != EVP_PKEY_EC) return {};
     const EC_KEY* ec = EVP_PKEY_get0_EC_KEY(key.get());
     if (!ec) return {};
     const EC_GROUP* group = EC_KEY_get0_group(ec);
@@ -158,7 +165,6 @@ std::string IdentityPublicKeyText(const HostIdentity& identity) {
     if (EC_POINT_point2oct(group, point, POINT_CONVERSION_UNCOMPRESSED, bytes.data(),
             bytes.size(), nullptr) != length)
         return {};
-    deskhub::PublicKeyText text;
     text.algorithm = deskhub::PublicKeyAlgorithm::EcdsaP256;
     AppendSshString(text.blob, "ecdsa-sha2-nistp256");
     AppendSshString(text.blob, "nistp256");
@@ -231,37 +237,10 @@ bool VerifySignature(std::span<const uint8_t> spkiDer, std::span<const uint8_t> 
                data.size()) == 1;
 }
 
-AuthSalt NewAuthSalt() {
-    AuthSalt salt{};
-    RAND_bytes(salt.data(), salt.size());
-    return salt;
-}
-
 AuthNonce NewAuthNonce() {
     AuthNonce nonce{};
     RAND_bytes(nonce.data(), nonce.size());
     return nonce;
-}
-
-PasscodeVerifier MakePasscodeVerifier(const AuthSalt& salt, std::string_view passcode) {
-    SHA256_CTX ctx;
-    SHA256_Init(&ctx);
-    SHA256_Update(&ctx, salt.data(), salt.size());
-    SHA256_Update(&ctx, passcode.data(), passcode.size());
-    PasscodeVerifier out{};
-    SHA256_Final(out.data(), &ctx);
-    return out;
-}
-
-AuthMac ComputeAuthMac(std::span<const uint8_t> key, std::span<const uint8_t> data) {
-    AuthMac mac{};
-    unsigned int len = 0;
-    HMAC(EVP_sha256(), key.data(), key.size(), data.data(), data.size(), mac.data(), &len);
-    return mac;
-}
-
-bool MacsMatch(const AuthMac& a, const AuthMac& b) {
-    return CRYPTO_memcmp(a.data(), b.data(), a.size()) == 0;
 }
 
 std::vector<uint8_t> AuthTranscript(std::string_view label, const AuthNonce& nonce,
@@ -274,55 +253,6 @@ std::vector<uint8_t> AuthTranscript(std::string_view label, const AuthNonce& non
     out.insert(out.end(), hostFingerprint.bytes.begin(), hostFingerprint.bytes.end());
     out.insert(out.end(), extra.begin(), extra.end());
     return out;
-}
-
-struct Spake2Session::Impl {
-    SPAKE2_CTX* ctx = nullptr;
-    bool generated = false;
-
-    ~Impl() {
-        if (ctx != nullptr) SPAKE2_CTX_free(ctx);
-    }
-};
-
-Spake2Session::Spake2Session() : impl_(std::make_unique<Impl>()) {
-}
-
-Spake2Session::~Spake2Session() = default;
-
-bool Spake2Session::Start(bool asHost, const PasscodeVerifier& verifier,
-    std::vector<uint8_t>& outMessage) {
-    if (impl_->ctx != nullptr) return false;
-    const std::string_view mine = asHost ? kHostName : kClientName;
-    const std::string_view theirs = asHost ? kClientName : kHostName;
-    impl_->ctx = SPAKE2_CTX_new(asHost ? spake2_role_alice : spake2_role_bob,
-        reinterpret_cast<const uint8_t*>(mine.data()), mine.size(),
-        reinterpret_cast<const uint8_t*>(theirs.data()), theirs.size());
-    if (impl_->ctx == nullptr) return false;
-
-    outMessage.assign(SPAKE2_MAX_MSG_SIZE, 0);
-    size_t written = 0;
-    if (SPAKE2_generate_msg(impl_->ctx, outMessage.data(), &written, outMessage.size(),
-            verifier.data(), verifier.size()) != 1) {
-        outMessage.clear();
-        return false;
-    }
-    outMessage.resize(written);
-    impl_->generated = true;
-    return true;
-}
-
-bool Spake2Session::Finish(std::span<const uint8_t> peerMessage, PasscodeVerifier& outKey) {
-    if (impl_->ctx == nullptr || !impl_->generated || peerMessage.empty()) return false;
-    uint8_t key[SPAKE2_MAX_KEY_SIZE];
-    size_t written = 0;
-    if (SPAKE2_process_msg(impl_->ctx, key, &written, sizeof(key), peerMessage.data(),
-            peerMessage.size()) != 1)
-        return false;
-    if (written < outKey.size()) return false;
-    std::memcpy(outKey.data(), key, outKey.size());
-    impl_->generated = false;
-    return true;
 }
 
 }

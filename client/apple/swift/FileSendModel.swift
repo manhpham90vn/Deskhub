@@ -7,7 +7,6 @@ final class FileSendModel: TransferDriver {
     var transfer = TransferState()
     var transferError = ""
     var history: [TransferHistoryRow] = []
-    var changedKeyFingerprint = ""
     @ObservationIgnored private var settled = true
 
     var address = ""
@@ -28,7 +27,6 @@ final class FileSendModel: TransferDriver {
     func sendChosenFiles() {
         guard !chosenFiles.isEmpty, !transfer.active else { return }
         transferError = ""
-        changedKeyFingerprint = ""
 
         let paths = chosenFiles.map(\.path)
         var problem = [CChar](repeating: 0, count: 512)
@@ -64,18 +62,7 @@ final class FileSendModel: TransferDriver {
         settleTransfer()
         chosenFiles = []
         transferError = ""
-        changedKeyFingerprint = ""
         transfer = TransferState()
-    }
-
-    func answerChangedKey(accept: Bool) {
-        changedKeyFingerprint = ""
-        guard accept, let handle, dh_send_accept_key(handle) else {
-            settleTransfer()
-            return
-        }
-        transfer = TransferState(active: true)
-        startPolling()
     }
 
     private func settleTransfer() {
@@ -121,12 +108,7 @@ final class FileSendModel: TransferDriver {
         )
         if raw.finished {
             stopPolling()
-            if raw.state == DHSendKeyChanged.rawValue {
-                changedKeyFingerprint = DeskhubClient.buffered(96) {
-                    dh_send_fingerprint(handle, $0, $1)
-                }
-            }
-            if changedKeyFingerprint.isEmpty { settleTransfer() }
+            settleTransfer()
         }
     }
 

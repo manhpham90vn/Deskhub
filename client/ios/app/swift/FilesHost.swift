@@ -6,8 +6,6 @@ import UserNotifications
 final class FilesHost {
     static let shared = FilesHost()
 
-    let pairing = PairingAskModel()
-
     private(set) var receiving = false
     @ObservationIgnored private var activeSettings = ""
 
@@ -16,7 +14,6 @@ final class FilesHost {
     func run() async {
         while !Task.isCancelled {
             sync()
-            if receiving { pairing.drain() }
             let delivered = await ReceivedFiles.sweep(
                 keepPartFiles: receiving || BroadcastStatus.broadcastProcessAlive
             )
@@ -41,7 +38,6 @@ final class FilesHost {
     }
 
     func stop() {
-        pairing.clear()
         guard receiving else { return }
         dh_share_stop()
         receiving = false

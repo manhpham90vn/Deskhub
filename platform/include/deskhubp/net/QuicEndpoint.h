@@ -49,7 +49,6 @@ struct QuicCallbacks {
     std::function<void(QuicConnId, uint64_t streamId, std::span<const uint8_t> bytes, bool fin)>
         onStream;
     std::function<void(QuicConnId, std::span<const uint8_t> bytes)> onDatagram;
-    std::function<void(const NetAddr& from, std::span<const uint8_t> bytes)> onForeignDatagram;
     std::function<bool(uint64_t streamId)> pauseStream;
     std::function<void(QuicConnId, uint64_t streamId)> onStreamBroken;
 };

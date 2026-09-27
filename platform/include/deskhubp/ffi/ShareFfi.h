@@ -78,12 +78,6 @@ int dh_share_quality_presets(DHQualityPreset* out, int capacity);
 
 int dh_share_list_sources(DHShareSource* out, int capacity);
 
-typedef struct {
-    uint64_t addrPacked;
-    char shortKey[16];
-    char name[80];
-} DHPairingRequest;
-
 bool dh_share_start(const DHShareSource* sources, int count, uint32_t fps, uint32_t bitrate_mbps,
     uint32_t max_dim, uint16_t port, bool allow_input, const char* passcode, bool terminal,
     bool files);
@@ -117,10 +111,6 @@ void dh_share_local_send_key(uint32_t term_id, int32_t key, uint32_t codepoint, 
     bool ctrl);
 
 void dh_share_local_resize(uint32_t term_id, uint16_t cols, uint16_t rows);
-
-int dh_share_take_pairing_requests(DHPairingRequest* out, int capacity);
-
-void dh_share_answer_pairing(uint64_t addr_packed, bool allowed);
 
 void dh_share_stop(void);
 

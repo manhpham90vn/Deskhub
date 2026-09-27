@@ -39,8 +39,6 @@ struct TransportMessage {
 struct TransportAuthCallbacks {
     std::function<void(const NetAddr&, const deskhub::Fingerprint&, std::string_view name)>
         onPaired;
-    std::function<void(const NetAddr&, const deskhub::Fingerprint&, std::string_view name)>
-        onApprovalNeeded;
     std::function<void(const NetAddr&, deskhub::AuthResultCode)> onRefused;
 };
 
@@ -66,7 +64,6 @@ public:
         deskhub::AuthResultCode& outCode, bool& outHostProvedPasscode,
         const std::atomic<bool>* cancel = nullptr);
     bool SendKeepalive(const NetAddr& peer);
-    void ApproveConnection(const NetAddr& peer, bool allowed);
     bool Authenticated(const NetAddr& peer) const;
     bool PeerAuth(const NetAddr& peer, deskhub::Fingerprint& fp, std::string& name) const;
 
@@ -91,7 +88,7 @@ public:
 private:
     QuicCallbacks MakeCallbacks();
     void OnStream(QuicConnId conn, uint64_t stream, std::span<const uint8_t> bytes);
-    void Deliver(const NetAddr& from, std::span<const uint8_t> message, bool overQuic);
+    void Deliver(const NetAddr& from, std::span<const uint8_t> message);
     bool BulkBlocked() const;
     bool BulkServable() const;
     std::deque<TransportMessage>* NextLane();

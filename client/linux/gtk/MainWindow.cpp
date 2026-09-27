@@ -49,7 +49,6 @@ constexpr int kHintWrapChars = 64;
 constexpr int kConnectionWindowWidth = 460;
 constexpr int kPrimaryButtonH = 46;
 
-constexpr guint kRescanDelayMs = deskhubp::kLanRescanSecs * 1000;
 constexpr guint kCopiedRevertMs = 1500;
 
 float ColumnXAlign(ui::ColumnAlign align) {
@@ -427,18 +426,6 @@ public:
         gtk_widget_destroy(window_);
     }
 
-    void ApplyProbe(const deskhubp::DeviceStatus* probe) {
-        const bool offline = probe && !probe->online;
-        const char* stateClass = offline ? "deskhub-status-offline" : "deskhub-status-online";
-        for (GtkWidget* label : {stateLabel_, pingLabel_}) {
-            RemoveClass(label, "deskhub-status-online");
-            RemoveClass(label, "deskhub-status-offline");
-            AddClass(label, stateClass);
-        }
-        gtk_label_set_text(GTK_LABEL(pingLabel_),
-            probe && probe->online ? ui::PingMs(probe->rttMs).c_str() : "");
-    }
-
 private:
     void Build() {
         window_ = gtk_window_new(GTK_WINDOW_TOPLEVEL);
@@ -601,7 +588,6 @@ void MainWindow::Build(GtkApplication* app) {
         return OpenHostTerminalWindow(GTK_WINDOW(window_), share_.terminalHost(), termId);
     };
     hooks.onRowsChanged = [this] { UpdateHostRows(hostStatus_); };
-    hooks.askPairing = [this](const PairingRequest& request) { return AskPairing(request); };
     hooks.onBannerChanged = [this] { ApplySharingBanner(); };
     hooks.onNothingLeftShared = [this] { StopHosting(); };
     share_.SetHooks(std::move(hooks));
@@ -609,8 +595,6 @@ void MainWindow::Build(GtkApplication* app) {
     loadingSettings_ = false;
 
     RefreshDeviceList();
-    StartPoller();
-    StartScan();
 
     ApplyTrayMode();
     gtk_widget_show_all(window_);
@@ -1039,13 +1023,6 @@ GtkWidget* MainWindow::BuildDevicesPage() {
 
     gtk_box_pack_start(GTK_BOX(box), Hint(ui::kPairedForgetNote), FALSE, FALSE, 0);
 
-    allowPairingCheck_ = gtk_check_button_new_with_label(ui::kAllowPairingLabel);
-    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(allowPairingCheck_),
-        settings_.allowNewPairings);
-    g_signal_connect(allowPairingCheck_, "toggled", G_CALLBACK(OnSettingChanged), this);
-    gtk_box_pack_start(GTK_BOX(box), allowPairingCheck_, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(box), Hint(ui::kAllowPairingHint), FALSE, FALSE, 0);
-
     gtk_box_pack_start(GTK_BOX(box), Section(ui::kThisMachineHeading), FALSE, FALSE, 0);
     const std::string name =
         settings_.deviceName.empty() ? deskhubp::LocalDeviceName() : settings_.deviceName;
@@ -1153,21 +1130,6 @@ void MainWindow::OnTransferDirClicked(GtkButton*, gpointer user) {
         }
     }
     gtk_widget_destroy(chooser);
-}
-
-bool MainWindow::AskPairing(const PairingRequest& request) {
-    const std::string body = ui::PairingRequestBody(request.name,
-        NetAddr::Unpack(request.addrPacked).ToString(), request.shortKey);
-    GtkWidget* dlg = gtk_message_dialog_new(GTK_WINDOW(window_), GTK_DIALOG_MODAL,
-        GTK_MESSAGE_QUESTION, GTK_BUTTONS_NONE, "%s", ui::kPairingRequestTitle);
-    gtk_message_dialog_format_secondary_text(GTK_MESSAGE_DIALOG(dlg), "%s", body.c_str());
-    gtk_dialog_add_button(GTK_DIALOG(dlg), ui::kPairingDeny, GTK_RESPONSE_NO);
-    gtk_dialog_add_button(GTK_DIALOG(dlg), ui::kPairingAllow, GTK_RESPONSE_YES);
-    gtk_dialog_set_default_response(GTK_DIALOG(dlg), GTK_RESPONSE_NO);
-    const bool allowed = gtk_dialog_run(GTK_DIALOG(dlg)) == GTK_RESPONSE_YES;
-    gtk_widget_destroy(dlg);
-    if (allowed) RefreshPairedDevices();
-    return allowed;
 }
 
 void MainWindow::BuildHostSettings(GtkWidget* host) {
@@ -1419,8 +1381,6 @@ void MainWindow::SaveSettings() {
     if (quality >= 0)
         settings_.maxDim = deskhub::media::QualityPresetMaxDim(size_t(quality), settings_.maxDim);
     settings_.allowInput = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(allowInputCheck_));
-    settings_.allowNewPairings =
-        gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(allowPairingCheck_));
     settings_.clipboardSync = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(clipboardCheck_));
     settings_.shareAudio = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(shareAudioCheck_));
     settings_.playAudio = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(playAudioCheck_));
@@ -1496,138 +1456,25 @@ void MainWindow::OnSettingChanged(GtkWidget*, gpointer user) {
     self->SaveSettings();
 }
 
-void MainWindow::StartScan() {
-    scannedThisRound_.clear();
-    const bool started = scanner_.Start(
-        Port(), [this](const std::function<void()>& fn) { PostToUi(fn); },
-        [this](const deskhubp::ScanHit& hit) { OnScanHit(hit); },
-        [this](const deskhubp::ScanProgress& progress) { OnScanProgress(progress); },
-        [this](const deskhubp::ScanProgress& progress) { OnScanFinished(progress); });
-    if (!started) ScheduleRescan();
-}
-
-void MainWindow::RescanNow() {
-    if (rescanTimerId_) {
-        g_source_remove(rescanTimerId_);
-        rescanTimerId_ = 0;
-    }
-    gtk_label_set_text(GTK_LABEL(deviceHintLabel_), ui::kLanDevicesEmpty);
-    scanner_.Cancel();
-    StartScan();
-}
-
-void MainWindow::ScheduleRescan() {
-    if (rescanTimerId_) g_source_remove(rescanTimerId_);
-    rescanTimerId_ = g_timeout_add(kRescanDelayMs, OnRescanTimer, this);
-}
-
 void MainWindow::OnRefreshDevicesClicked(GtkButton*, gpointer user) {
     auto* self = static_cast<MainWindow*>(user);
-    self->RefreshDeviceStatus();
-    self->RescanNow();
-}
-
-gboolean MainWindow::OnRescanTimer(gpointer user) {
-    auto* self = static_cast<MainWindow*>(user);
-    self->rescanTimerId_ = 0;
-    self->StartScan();
-    return G_SOURCE_REMOVE;
-}
-
-void MainWindow::OnScanHit(const deskhubp::ScanHit& hit) {
-    scannedThisRound_.push_back(hit.addr);
-    RecordProbe(hit.addr, true, hit.rttMs);
-    for (deskhubp::ScanHit& known : scanned_) {
-        if (known.addr != hit.addr) continue;
-        known.rttMs = hit.rttMs;
-        RefreshDeviceList();
-        return;
-    }
-    scanned_.push_back(hit);
-    RefreshDeviceList();
-}
-
-void MainWindow::OnScanProgress(const deskhubp::ScanProgress& progress) {
-    const std::string text = ui::ScanningStatus(progress.probed, progress.total, Port());
-    gtk_label_set_text(GTK_LABEL(deviceHintLabel_), text.c_str());
-}
-
-void MainWindow::OnScanFinished(const deskhubp::ScanProgress& progress) {
-    const auto gone = [this](const deskhubp::ScanHit& hit) {
-        return std::find(scannedThisRound_.begin(), scannedThisRound_.end(), hit.addr) ==
-               scannedThisRound_.end();
-    };
-    scanned_.erase(std::remove_if(scanned_.begin(), scanned_.end(), gone), scanned_.end());
-    RefreshDeviceList();
-
-    const std::string text =
-        ui::LanDevicesNote(scanned_.size(), progress.total, deskhubp::kLanRescanSecs);
-    gtk_label_set_text(GTK_LABEL(deviceHintLabel_), text.c_str());
-    ScheduleRescan();
-}
-
-void MainWindow::StartPoller() {
-    poller_.SetAddresses(ui::AddressesOf(recent_));
-    poller_.Start([this](const deskhubp::DeviceStatus& status) {
-        PostToUi([this, status] { OnDeviceStatus(status); });
-    });
-}
-
-void MainWindow::OnDeviceStatus(const deskhubp::DeviceStatus& status) {
-    RecordProbe(status.addr, status.online, status.rttMs);
-    RefreshDeviceList();
-    for (ConnectionWindow* open : connections_)
-        if (ui::SameDeviceAddr(open->Address(), status.addr))
-            open->ApplyProbe(ProbeFor(status.addr));
-}
-
-void MainWindow::RecordProbe(const std::string& addr, bool online, uint32_t rttMs) {
-    uint64_t key = 0;
-    if (!HostKeyOf(addr, key)) return;
-    probes_[key] = deskhubp::DeviceStatus{addr, online, rttMs};
-}
-
-const deskhubp::DeviceStatus* MainWindow::ProbeFor(const std::string& addr) const {
-    uint64_t key = 0;
-    if (!HostKeyOf(addr, key)) return nullptr;
-    const auto found = probes_.find(key);
-    return found == probes_.end() ? nullptr : &found->second;
+    self->RefreshDeviceList();
 }
 
 void MainWindow::RefreshDeviceList() {
-    std::vector<std::string> scannedAddrs;
-    scannedAddrs.reserve(scanned_.size());
-    for (const deskhubp::ScanHit& hit : scanned_) scannedAddrs.push_back(hit.addr);
-    deviceRows_ = ui::BuildDeviceRows(scannedAddrs, recent_);
+    deviceRows_ = ui::BuildDeviceRows({}, recent_);
 
     gtk_list_store_clear(deviceStore_);
     for (const ui::DeviceRow& device : deviceRows_) {
-        const deskhubp::DeviceStatus* probe = ProbeFor(device.addr);
-        const bool online = probe && probe->online;
-
-        const char* status = !probe ? ui::kStatusChecking
-                                    : (online ? ui::kStatusOnline : ui::kStatusOffline);
-        const std::string ping = online ? ui::PingMs(probe->rttMs) : std::string("-");
-        const char* colour = !probe ? kUnknownColour : (online ? kOnlineColour : kOfflineColour);
         const std::string last = device.lastConnectedUnix != 0
                                      ? FormatUnixMinute(device.lastConnectedUnix)
                                      : std::string("-");
-
         GtkTreeIter it;
         gtk_list_store_append(deviceStore_, &it);
         gtk_list_store_set(deviceStore_, &it, 0, device.addr.c_str(), 1,
-            ui::DeviceOriginLabel(device.origin), 2, status, 3, ping.c_str(), 4, last.c_str(), 5,
-            colour, -1);
+            ui::DeviceOriginLabel(device.origin), 2, "-", 3, "-", 4, last.c_str(), 5,
+            kUnknownColour, -1);
     }
-}
-
-void MainWindow::RefreshDeviceStatus() {
-    for (const ui::RecentDevice& device : recent_) {
-        uint64_t key = 0;
-        if (HostKeyOf(device.addr, key)) probes_.erase(key);
-    }
-    RefreshDeviceList();
-    poller_.RefreshNow();
 }
 
 void MainWindow::OnDeviceRowActivated(GtkTreeView*, GtkTreePath* path, GtkTreeViewColumn*,
@@ -1761,7 +1608,6 @@ void MainWindow::OnSourcesReady(const std::string& addr, const std::string& pass
 
     ui::TouchRecentDevice(recent_, addr, int64_t(std::time(nullptr)), passcode);
     SaveRecentDevices();
-    poller_.SetAddresses(ui::AddressesOf(recent_));
     RefreshDeviceList();
 
     OpenConnectionWindow(addr, passcode, outcome);
@@ -1786,7 +1632,6 @@ void MainWindow::OpenConnectionWindow(const std::string& addr, const std::string
     auto* window = new ConnectionWindow(this, addr, passcode, server, outcome.caps,
         outcome.sources, settings_.clientControl);
     connections_.push_back(window);
-    window->ApplyProbe(ProbeFor(addr));
 }
 
 void MainWindow::ForgetConnection(ConnectionWindow* window) {
@@ -2068,7 +1913,6 @@ gboolean MainWindow::OnClipboardTimer(gpointer user) {
 
 gboolean MainWindow::OnHostTimer(gpointer user) {
     auto* self = static_cast<MainWindow*>(user);
-    self->share_.DrainPairingRequests();
     if (!self->hosting_) {
         self->hostTimerId_ = 0;
         return G_SOURCE_REMOVE;
@@ -2276,12 +2120,9 @@ void MainWindow::OnDestroy(GtkWidget*, gpointer user) {
     self->alive_->store(false);
     self->CloseEveryConnection();
     self->tray_.Detach();
-    if (self->rescanTimerId_) g_source_remove(self->rescanTimerId_);
     if (self->hostTimerId_) g_source_remove(self->hostTimerId_);
     if (self->autoShareTimerId_) g_source_remove(self->autoShareTimerId_);
-    self->scanner_.Cancel();
     self->share_.sharingHost().Stop();
     self->shareDriver_.Join();
-    self->poller_.Stop();
     delete self;
 }

@@ -39,14 +39,6 @@ struct FileSendView<Driver: TransferDriver>: View {
         }
         .padding(20)
         .frame(minWidth: 460, maxWidth: .infinity, alignment: .topLeading)
-        .trustPrompt(
-            isPresented: Binding(
-                get: { !model.changedKeyFingerprint.isEmpty },
-                set: { _ in }
-            ),
-            changed: true,
-            fingerprint: model.changedKeyFingerprint
-        ) { model.answerChangedKey(accept: $0) }
     }
 
     @ViewBuilder

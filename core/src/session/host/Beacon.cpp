@@ -3,13 +3,13 @@
 namespace deskhub {
 
 size_t Beacon::Reply(std::span<uint8_t> out, std::span<const uint8_t> pkt, bool trusted) const {
+    if (!trusted) return 0;
     const auto h = ParseCommonHeader(pkt);
     if (!h) return 0;
     const auto payload = PayloadOf(pkt);
 
     switch (h->type) {
         case MsgType::ListSources: {
-            if (!trusted) return BuildSourceList(out, {});
             return BuildSourceList(out, sources_, caps_);
         }
         case MsgType::Ping: {

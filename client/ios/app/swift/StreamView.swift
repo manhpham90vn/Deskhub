@@ -74,11 +74,6 @@ struct StreamView: View {
             UIApplication.shared.isIdleTimerDisabled = dh_keep_awake()
             model.refresh()
         }
-        .trustPrompt(
-            isPresented: $model.askingTrust,
-            changed: model.trustChanged,
-            fingerprint: model.trustFingerprint
-        ) { model.answerTrust($0) }
         .task {
             guard dh_clipboard_sync() else { return }
             var lastChange = UIPasteboard.general.changeCount

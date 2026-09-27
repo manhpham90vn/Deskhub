@@ -3,7 +3,6 @@
 
 #include "deskhub/protocol/Wire.h"
 #include "deskhub/session/host/Beacon.h"
-#include "deskhub/ui/Strings.h"
 #include "deskhubp/net/SessionTransport.h"
 #include "deskhubp/auth/AuthNegotiation.h"
 #include "deskhubp/client/HostLink.h"
@@ -15,7 +14,6 @@
 #include <atomic>
 #include <cstdio>
 #include <functional>
-#include <mutex>
 #include <string>
 #include <thread>
 #include <vector>
@@ -53,6 +51,10 @@ struct LinkHostRig {
     }
 
     bool Start(const deskhubp::HostIdentity& identity) {
+        const auto client = deskhubp::LoadOrCreateClientIdentity();
+        if (!client.Valid() ||
+            !deskhubp::RememberPairedDevice(client.fingerprint, "link-test-client", 500))
+            return false;
         sock.SetRecvTimeout(1);
         deskhubp::QuicSettings settings;
         settings.certPemPath = identity.certPath;
@@ -61,8 +63,6 @@ struct LinkHostRig {
 
         deskhubp::HostAuthConfig auth;
         auth.identity = identity;
-        auth.SetPasscode(deskhubp::LoadOrCreateAuthSalt(), kLinkPasscode);
-        auth.allowNewPairings = true;
         sock.SetHostAuth(std::move(auth), deskhubp::TransportAuthCallbacks{});
 
         stop.store(false, std::memory_order_release);
@@ -117,6 +117,10 @@ void TestALinkAdmitsOnceAndRoutesByChannel() {
     const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity("link-test-host");
     LinkHostRig host;
     Check(host.Start(identity), "the host rig listens");
+    const deskhubp::HostLinkConfig config = LinkConfig(kLinkPasscode);
+    Check(deskhubp::RememberTrustedHost(config.hostLabel, "127.0.0.1",
+              identity.fingerprint, NowUnixSeconds()),
+        "the host key is pinned before connecting");
 
     deskhubp::HostLink link;
     const std::shared_ptr<deskhubp::HostLinkChannel> terminal =
@@ -126,7 +130,7 @@ void TestALinkAdmitsOnceAndRoutesByChannel() {
     std::atomic<int> readyCalls{0};
     deskhubp::HostLinkCallbacks hooks;
     hooks.onReady = [&readyCalls](bool) { readyCalls.fetch_add(1, std::memory_order_relaxed); };
-    Check(link.Start(LinkConfig(kLinkPasscode), std::move(hooks)), "the link starts");
+    Check(link.Start(config, std::move(hooks)), "the link starts");
 
     Check(WaitUntil(
               [&link, &readyCalls] {
@@ -138,7 +142,7 @@ void TestALinkAdmitsOnceAndRoutesByChannel() {
     Check(readyCalls.load(std::memory_order_relaxed) == 1, "and says so exactly once");
     Check(deskhubp::CheckTrustedHost(LinkConfig(kLinkPasscode).hostLabel, identity.fingerprint) ==
               deskhub::TrustVerdict::Trusted,
-        "a proved passcode pins the host key");
+        "the configured host key remains pinned");
 
     const std::vector<uint8_t> ping = TerminalProbe();
     Check(link.SendRecordOn(deskhubp::kQuicControlStream, ping), "a terminal record goes out");
@@ -155,63 +159,36 @@ void TestALinkAdmitsOnceAndRoutesByChannel() {
     host.Shutdown();
 }
 
-void TestALinkStopsOnAChangedKeyUntilAccepted() {
-    std::printf("[hostlink] a changed host key parks the link until someone decides...\n");
+void TestALinkRejectsUnknownAndChangedHostKeys() {
+    std::printf("[hostlink] unknown and changed host keys are rejected before auth...\n");
     const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity("link-test-host");
     LinkHostRig host;
     Check(host.Start(identity), "the host rig listens");
 
     deskhubp::HostLinkConfig config = LinkConfig(kLinkPasscode);
+    deskhubp::ForgetTrustedHost(config.hostLabel);
+    deskhubp::HostLink unknown;
+    Check(unknown.Start(config, deskhubp::HostLinkCallbacks{}), "an unconfigured link starts");
+    Check(WaitUntil([&unknown] { return unknown.Settled(); }, 10000),
+        "the unknown host key is rejected");
+    Check(unknown.State() == deskhubp::HostLinkState::Failed,
+        "unknown host key fails without a trust prompt");
+    unknown.Stop();
+
     deskhub::Fingerprint stale;
     stale.bytes.fill(0x77);
     Check(deskhubp::RememberTrustedHost(config.hostLabel, "127.0.0.1", stale, NowUnixSeconds()),
         "another machine's key is on record");
-
-    std::mutex askedMutex;
-    std::string asked;
-    const auto askedCopy = [&askedMutex, &asked] {
-        const std::lock_guard<std::mutex> lock(askedMutex);
-        return asked;
-    };
     deskhubp::HostLink link;
-    deskhubp::HostLinkCallbacks hooks;
-    hooks.onTrustAsked = [&askedMutex, &asked](deskhub::TrustVerdict,
-                             std::string_view fingerprint) {
-        const std::lock_guard<std::mutex> lock(askedMutex);
-        asked.assign(fingerprint);
-    };
-    Check(link.Start(config, std::move(hooks)), "the link starts");
-    Check(WaitUntil([&link] { return link.State() == deskhubp::HostLinkState::Deciding; }, 10000),
-        "the link parks on Deciding");
-    Check(WaitUntil([&askedCopy] { return !askedCopy().empty(); }, 10000),
-        "and asks inside the deadline");
-    Check(askedCopy() == deskhub::FormatFingerprint(identity.fingerprint),
-        "and shows the host's real fingerprint");
-    Check(link.Message() == deskhub::ui::kTrustChangedBody, "with the shared warning text");
-
-    link.AcceptFingerprint();
-    Check(WaitUntil([&link] { return link.State() == deskhubp::HostLinkState::Ready; }, 10000),
-        "accepting the key lets the link through");
-    Check(deskhubp::CheckTrustedHost(config.hostLabel, identity.fingerprint) ==
+    Check(link.Start(config, deskhubp::HostLinkCallbacks{}), "the changed-key link starts");
+    Check(WaitUntil([&link] { return link.Settled(); }, 10000),
+        "the changed host key is rejected");
+    Check(link.State() == deskhubp::HostLinkState::Failed,
+        "changed host key fails without a trust prompt");
+    Check(deskhubp::CheckTrustedHost(config.hostLabel, stale) ==
               deskhub::TrustVerdict::Trusted,
-        "and the new key replaces the stale one");
+        "the saved pin is not silently changed");
     link.Stop();
-
-    Check(deskhubp::RememberTrustedHost(config.hostLabel, "127.0.0.1", stale, NowUnixSeconds()),
-        "the stale key is planted again");
-    deskhubp::HostLink refuser;
-    Check(refuser.Start(config, deskhubp::HostLinkCallbacks{}), "a second link starts");
-    Check(WaitUntil([&refuser] {
-        return refuser.State() == deskhubp::HostLinkState::Deciding;
-    },
-              10000),
-        "it parks on Deciding too");
-    refuser.RejectFingerprint();
-    Check(WaitUntil([&refuser] { return refuser.Settled(); }, 10000),
-        "rejecting settles the link");
-    Check(refuser.State() == deskhubp::HostLinkState::Ended, "as ended, not failed");
-    Check(refuser.Message() == deskhub::ui::kTrustReject, "with the shared rejection text");
-    refuser.Stop();
 
     Check(deskhubp::RememberTrustedHost(config.hostLabel, "127.0.0.1", identity.fingerprint,
               NowUnixSeconds()),
@@ -220,17 +197,24 @@ void TestALinkStopsOnAChangedKeyUntilAccepted() {
 }
 
 void TestALinkReportsARefusal() {
-    std::printf("[hostlink] a wrong passcode comes back as a refusal, not a hang...\n");
+    std::printf("[hostlink] an unlisted client key is refused without approval...\n");
     const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity("link-test-host");
     LinkHostRig host;
     Check(host.Start(identity), "the host rig listens");
+    const auto client = deskhubp::LoadOrCreateClientIdentity();
+    Check(deskhubp::ForgetPairedDevice(client.fingerprint), "the client key is revoked");
+    const auto config = LinkConfig("");
+    Check(deskhubp::RememberTrustedHost(config.hostLabel, "127.0.0.1",
+              identity.fingerprint, NowUnixSeconds()),
+        "the host key is pinned separately");
 
     deskhubp::HostLink link;
-    Check(link.Start(LinkConfig("9999"), deskhubp::HostLinkCallbacks{}), "the link starts");
+    Check(link.Start(config, deskhubp::HostLinkCallbacks{}), "the link starts");
     Check(WaitUntil([&link] { return link.Settled(); }, 10000),
         "the link settles inside the deadline");
     Check(link.State() == deskhubp::HostLinkState::Refused, "as refused");
-    Check(link.AuthCode() == deskhub::AuthResultCode::WrongPasscode, "for the stated reason");
+    Check(link.AuthCode() == deskhub::AuthResultCode::PairingDisabled,
+        "because the client key is not authorized");
     Check(!link.Message().empty(), "with something to show the user");
     link.Stop();
     host.Shutdown();
@@ -361,7 +345,7 @@ void TestAHostThatStopsAnsweringPingsReadsAsLost() {
 
 void RunHostLinkTests() {
     TestALinkAdmitsOnceAndRoutesByChannel();
-    TestALinkStopsOnAChangedKeyUntilAccepted();
+    TestALinkRejectsUnknownAndChangedHostKeys();
     TestALinkReportsARefusal();
     TestALinkRecoversAndSaysItResumed();
     TestTheLinkPingsOnItsOwn();

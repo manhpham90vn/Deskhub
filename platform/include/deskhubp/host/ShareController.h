@@ -1,5 +1,4 @@
 #pragma once
-#include "deskhub/net/PairedDevices.h"
 #include "deskhub/session/FileTransfer.h"
 #include "deskhub/session/TerminalSession.h"
 #include "deskhub/ui/Strings.h"
@@ -7,12 +6,10 @@
 #include "deskhubp/host/FileHost.h"
 #include "deskhubp/host/TerminalHost.h"
 #include "deskhubp/system/FileStore.h"
-#include "deskhubp/system/PairedDevicesFile.h"
 
 #include <cstdint>
 #include <filesystem>
 #include <functional>
-#include <map>
 #include <string>
 #include <utility>
 #include <vector>
@@ -35,7 +32,6 @@ public:
         std::function<void(std::function<void()>)> postToUi;
         std::function<bool(uint32_t termId)> openLocalTerminal;
         std::function<void()> onRowsChanged;
-        std::function<bool(const PairingRequest& request)> askPairing;
         std::function<void()> onBannerChanged;
         std::function<void()> onNothingLeftShared;
     };
@@ -145,29 +141,6 @@ public:
         if (!hooks_.openLocalTerminal(termId)) KickShell(termId);
     }
 
-    void DrainPairingRequests() {
-        if (askingPairing_) return;
-        const std::vector<PairingRequest> requests = sharingHost_.TakePairingRequests();
-        if (requests.empty()) return;
-
-        askingPairing_ = true;
-        std::map<std::string, bool> answers;
-        const deskhub::PairedDevices paired = LoadPairedDevices();
-        for (const deskhub::PairedDevice& device : paired.Devices())
-            answers[deskhub::ShortFingerprint(device.fingerprint)] = true;
-
-        const auto answerFor = [this, &answers](const PairingRequest& request) {
-            const auto found = answers.find(request.shortKey);
-            if (found != answers.end()) return found->second;
-            const bool allowed = hooks_.askPairing(request);
-            answers[request.shortKey] = allowed;
-            return allowed;
-        };
-        for (const PairingRequest& request : requests)
-            sharingHost_.AnswerPairing(request.addrPacked, answerFor(request));
-        askingPairing_ = false;
-    }
-
     std::string BannerText(const ShareBanner& banner) const {
         std::string status = deskhub::ui::ShareSummaryLine(banner.screenSharing,
             terminalHost_.Running(), fileHost_.Running(), banner.port);
@@ -196,7 +169,6 @@ private:
     FileHost fileHost_;
     std::vector<deskhub::TerminalRecord> shells_;
     std::vector<deskhub::TransferRecord> transfers_;
-    bool askingPairing_ = false;
 };
 
 }

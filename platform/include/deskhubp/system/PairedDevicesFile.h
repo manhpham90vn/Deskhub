@@ -1,16 +1,11 @@
 #pragma once
 #include "deskhub/net/PairedDevices.h"
-#include "deskhubp/system/AuthProof.h"
 
 #include <cstdint>
 
 namespace deskhubp {
 
 inline constexpr const char* kPairedDevicesFileName = "paired_devices";
-inline constexpr const char* kAuthSaltFileName = "auth_salt";
-
-AuthSalt LoadOrCreateAuthSalt();
-
 deskhub::PairedDevices LoadPairedDevices();
 
 deskhub::PairVerdict CheckPairedDevice(const deskhub::Fingerprint& fingerprint);

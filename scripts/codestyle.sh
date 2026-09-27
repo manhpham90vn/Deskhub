@@ -38,7 +38,11 @@ if [ "$ONLY" = all ] || [ "$ONLY" = cpp ]; then
         echo "clang-format $CLANG_FORMAT_VERSION is what CI enforces but no usable binary was found, even after downloading to tools/." >&2
         exit 1
     }
-    CPP_LIST=$(git ls-files 'core/*' 'platform/*' 'client/*' 'tests/*' | grep -E '\.(h|hpp|cpp|cc|c)$' || true)
+    CPP_LIST=$(git ls-files 'core/*' 'platform/*' 'client/*' 'tests/*' |
+        grep -E '\.(h|hpp|cpp|cc|c)$' |
+        while IFS= read -r path; do
+            if [ -f "$path" ]; then printf '%s\n' "$path"; fi
+        done)
     if [ -z "$CPP_LIST" ]; then
         echo "codestyle.sh: found no C++ files - is this a full checkout?" >&2
         exit 1

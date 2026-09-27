@@ -161,8 +161,8 @@ void TestVideoRidesEncryptedDatagrams() {
     viewer.Close();
 }
 
-void TestAStrangerIsStillAnsweredInThePlain() {
-    std::printf("[transport] a scanner with no connection is answered as plain UDP...\n");
+void TestPlaintextDiscoveryIsIgnored() {
+    std::printf("[transport] plaintext discovery receives no reply...\n");
     if (!deskhubp::QuicAvailable()) return;
 
     const SavedIdentity guard;
@@ -178,7 +178,7 @@ void TestAStrangerIsStillAnsweredInThePlain() {
     if (!host.Listen(hostSettings, uint16_t(kTestPort + 2), "127.0.0.1")) return;
 
     UdpSocket scanner;
-    Check(scanner.Open(0, "127.0.0.1"), "a plain 4.x-style scanner opens a socket");
+    Check(scanner.Open(0, "127.0.0.1"), "a legacy scanner opens a socket");
     scanner.SetRecvTimeout(50);
 
     uint8_t probe[deskhub::kMaxDatagram];
@@ -189,15 +189,12 @@ void TestAStrangerIsStillAnsweredInThePlain() {
     uint8_t buf[deskhub::kMaxDatagram];
     NetAddr from;
     int got = 0;
-    for (int i = 0; i < kMaxRounds && got == 0; ++i) got = host.RecvFrom(buf, sizeof(buf), from);
-    Check(got == int(probeSize), "the beacon still reaches the host through the QUIC port");
-
-    Check(host.SendTo(from, buf, size_t(got)),
-        "and the reply goes back out as plain UDP, because the stranger has no connection");
+    for (int i = 0; i < 100 && got == 0; ++i) got = host.RecvFrom(buf, sizeof(buf), from);
+    Check(got == 0, "the transport drops plaintext LIST_SOURCES");
     uint8_t back[deskhub::kMaxDatagram];
     NetAddr replyFrom;
     const int returned = scanner.RecvFrom(back, sizeof(back), replyFrom);
-    Check(returned == int(probeSize), "so a scanner that speaks no QUIC still gets an answer");
+    Check(returned == 0, "the legacy scanner receives no response");
 
     uint8_t bye[deskhub::kMaxDatagram];
     const size_t byeSize = deskhub::BuildBye(bye, 1234);
@@ -206,7 +203,7 @@ void TestAStrangerIsStillAnsweredInThePlain() {
     NetAddr byeFrom;
     int leaked = 0;
     for (int i = 0; i < 200 && leaked == 0; ++i) leaked = host.RecvFrom(buf, sizeof(buf), byeFrom);
-    Check(leaked == 0, "and the transport drops it: only beacon traffic crosses in the plain");
+    Check(leaked == 0, "the transport drops other plaintext session messages too");
 
     scanner.Close();
     host.Close();
@@ -509,7 +506,7 @@ void TestAnIdleTransportWaitsInsteadOfSpinning() {
 void RunSessionTransportTests() {
     TestControlTravelsOnAStream();
     TestVideoRidesEncryptedDatagrams();
-    TestAStrangerIsStillAnsweredInThePlain();
+    TestPlaintextDiscoveryIsIgnored();
     TestAFileBacklogNeverDelaysTheStream();
     TestTheFileLaneNeverGrowsPastItsCap();
     TestSendBurstsStayBounded();

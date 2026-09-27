@@ -171,7 +171,7 @@ void TerminalViewer::OnLinkState(HostLinkState state, std::string_view message) 
             return;
         case HostLinkState::Refused: SetState(TerminalViewerState::Refused, message); return;
         case HostLinkState::Failed:
-            SetState(TerminalViewerState::Failed, deskhub::ui::kTerminalUnreachable);
+            SetState(TerminalViewerState::Failed, message);
             return;
         case HostLinkState::Ended: SetState(TerminalViewerState::Ended, message); return;
         default: return;

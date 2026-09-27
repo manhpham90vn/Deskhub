@@ -34,9 +34,9 @@ void TestHelpAndVersionFlags() {
     Check(Ok(Parse({"--version"}), cli::Verb::Version), "--version");
     Check(Ok(Parse({"-V"}), cli::Verb::Version), "-V");
 
-    const cli::Command scoped = Parse({"scan", "--help"});
+    const cli::Command scoped = Parse({"sources", "--help"});
     Check(Ok(scoped, cli::Verb::Help), "a flag after a command still asks for help");
-    Check(scoped.helpFor == cli::Verb::Scan, "help is scoped to that command");
+    Check(scoped.helpFor == cli::Verb::Sources, "help is scoped to that command");
 
     const cli::Command topic = Parse({"help", "sources"});
     Check(Ok(topic, cli::Verb::Help), "help takes a topic");
@@ -48,38 +48,27 @@ void TestUnknownInput() {
     std::printf("[cli] unknown commands and options are refused, not ignored...\n");
     Check(!Parse({"shrare"}).error.empty(), "an unknown command is an error");
     Check(!Parse({"--nope"}).error.empty(), "an unknown global option is an error");
-    Check(!Parse({"scan", "--nope"}).error.empty(), "an unknown command option is an error");
+    Check(!Parse({"sources", "1.2.3.4", "--nope"}).error.empty(),
+        "an unknown command option is an error");
     Check(!Parse({"displays", "extra"}).error.empty(), "a stray argument is an error");
 }
 
 void TestGlobalFlags() {
     std::printf("[cli] --json, --quiet and --verbose are accepted on either side...\n");
-    Check(Parse({"--json", "scan"}).json, "before the command");
-    Check(Parse({"scan", "--json"}).json, "after the command");
-    Check(Parse({"scan", "--quiet"}).quiet, "--quiet");
-    Check(Parse({"scan", "-q"}).quiet, "-q");
-    Check(Parse({"scan", "--verbose"}).verbose, "--verbose");
-    Check(Parse({"scan", "-v"}).verbose, "-v");
-    Check(!Parse({"scan", "--json=1"}).error.empty(), "a switch takes no value");
+    Check(Parse({"--json", "displays"}).json, "before the command");
+    Check(Parse({"displays", "--json"}).json, "after the command");
+    Check(Parse({"displays", "--quiet"}).quiet, "--quiet");
+    Check(Parse({"displays", "-q"}).quiet, "-q");
+    Check(Parse({"displays", "--verbose"}).verbose, "--verbose");
+    Check(Parse({"displays", "-v"}).verbose, "-v");
+    Check(!Parse({"displays", "--json=1"}).error.empty(), "a switch takes no value");
 }
 
-void TestScanFlags() {
-    std::printf("[cli] scan takes the port to look on, and nothing else...\n");
-    const cli::Command defaults = Parse({"scan"});
-    Check(Ok(defaults, cli::Verb::Scan), "scan parses");
-    Check(defaults.port == kDeskhubPort, "the default port is the Deskhub port");
-
-    Check(Parse({"scan", "--port", "50000"}).port == 50000, "a separate value");
-    Check(Parse({"scan", "--port=50000"}).port == 50000, "an inline value");
-
-    Check(!Parse({"scan", "--port"}).error.empty(), "a missing value is an error");
-    Check(!Parse({"scan", "--port="}).error.empty(), "an empty inline value is an error");
-    Check(!Parse({"scan", "--port", "0"}).error.empty(), "port 0 is refused");
-    Check(!Parse({"scan", "--port", "65536"}).error.empty(), "a port past the range is refused");
-    Check(!Parse({"scan", "--port", "http"}).error.empty(), "a non-numeric port is refused");
-    Check(!Parse({"scan", "127.0.0.1"}).error.empty(), "scan takes no address");
-    Check(!Parse({"scan", "--timeout", "900"}).error.empty(),
-        "scan paces itself, so it takes no timeout");
+void TestScanIsUnavailable() {
+    std::printf("[cli] LAN scan is no longer a command...\n");
+    Check(!Parse({"scan"}).error.empty(), "LAN scan is rejected");
+    Check(cli::UsageText().find("  scan ") == std::string::npos,
+        "the help page does not advertise LAN scanning");
 }
 
 void TestAddressParsing() {
@@ -124,26 +113,11 @@ void TestPasscodeSources() {
         "'@' with no path is refused");
     Check(!Parse({"sources", "1.2.3.4", "--passcode"}).error.empty(),
         "a missing passcode value is refused");
-    Check(!Parse({"probe", "1.2.3.4", "--passcode", "0417"}).error.empty(),
-        "probe asks nothing that needs a passcode");
 }
 
-void TestProbe() {
-    std::printf("[cli] probe wants one address, and is the only one that waits...\n");
-    const cli::Command command = Parse({"probe", "10.0.0.5:47000", "--timeout", "900"});
-    Check(Ok(command, cli::Verb::Probe), "probe parses");
-    Check(command.port == 47000, "the port comes from the address");
-    Check(command.timeoutMs == 900, "the timeout is taken");
-    Check(Parse({"probe", "1.2.3.4"}).timeoutMs == cli::kDefaultTimeoutMs, "the default timeout");
-    Check(!Parse({"probe"}).error.empty(), "probe needs an address");
-    Check(!Parse({"probe", "1.2.3.4", "--timeout", "0"}).error.empty(), "a zero timeout is refused");
-    Check(!Parse({"probe", "1.2.3.4", "--timeout", "600000"}).error.empty(),
-        "an absurd timeout is refused");
-    Check(!Parse({"probe", "1.2.3.4", "--timeout"}).error.empty(), "a missing timeout is refused");
-    Check(!Parse({"probe", "1.2.3.4", "--timeout", "soon"}).error.empty(),
-        "a non-numeric timeout is refused");
-    Check(!Parse({"sources", "1.2.3.4", "--timeout", "900"}).error.empty(),
-        "sources waits on the host's own reply, so it takes no timeout");
+void TestProbeIsUnavailable() {
+    std::printf("[cli] probe is no longer a command...\n");
+    Check(!Parse({"probe", "10.0.0.5"}).error.empty(), "probe is rejected");
 }
 
 void TestDevicesAndTrust() {
@@ -156,6 +130,11 @@ void TestDevicesAndTrust() {
     const cli::Command add = Parse({"devices", "add", "-"});
     Check(add.devices == cli::DevicesAction::Add && add.target == "-",
         "devices add reads public key text from stdin");
+    Check(Parse({"devices", "import", "client.pem"}).devices == cli::DevicesAction::Import,
+        "devices import names a private key file");
+    Check(Parse({"devices", "import", "client.pem", "--passphrase-stdin"})
+              .keyPassphraseStdin,
+        "an encrypted private key can read its passphrase from stdin");
 
     const cli::Command forget = Parse({"devices", "forget", "SHA256:abc"});
     Check(forget.devices == cli::DevicesAction::Forget, "devices forget");
@@ -164,6 +143,8 @@ void TestDevicesAndTrust() {
         "devices forget all");
 
     Check(Parse({"trust"}).trust == cli::TrustAction::List, "trust lists by default");
+    Check(Parse({"trust", "public"}).trust == cli::TrustAction::Public,
+        "a host can display its key for manual pinning");
     const cli::Command trustAdd = Parse({"trust", "add", "1.2.3.4:47777", "SHA256:abc"});
     Check(trustAdd.trust == cli::TrustAction::Add && trustAdd.target == "1.2.3.4:47777" &&
               trustAdd.value == "SHA256:abc",
@@ -429,8 +410,8 @@ void TestUsageText() {
     Check(cli::UsageText().find("deskhub-cli") != std::string::npos, "the summary names the program");
     Check(cli::UsageText().find("sources") != std::string::npos, "the summary lists the commands");
 
-    const cli::Verb verbs[] = {cli::Verb::Displays, cli::Verb::Scan, cli::Verb::Sources,
-        cli::Verb::Probe, cli::Verb::Devices, cli::Verb::Trust, cli::Verb::Settings,
+    const cli::Verb verbs[] = {cli::Verb::Displays, cli::Verb::Sources,
+        cli::Verb::Devices, cli::Verb::Trust, cli::Verb::Settings,
         cli::Verb::Version, cli::Verb::Share, cli::Verb::Shell, cli::Verb::Connect,
         cli::Verb::Send};
     for (cli::Verb verb : verbs) {
@@ -451,10 +432,10 @@ void RunCliCommandTests() {
     TestHelpAndVersionFlags();
     TestUnknownInput();
     TestGlobalFlags();
-    TestScanFlags();
+    TestScanIsUnavailable();
     TestAddressParsing();
     TestPasscodeSources();
-    TestProbe();
+    TestProbeIsUnavailable();
     TestDevicesAndTrust();
     TestSettings();
     TestShareFlags();

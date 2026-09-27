@@ -12,7 +12,6 @@ struct PairedDeviceRow: Identifiable {
 
 struct DevicesPage: View {
     @State private var devices: [PairedDeviceRow] = []
-    @State private var allowPairing = dh_allow_pairing()
     @State private var confirmForgetAll = false
     @State private var publicKeyInput = ""
     @State private var publicKeyError = false
@@ -112,10 +111,6 @@ struct DevicesPage: View {
 
             deskhubHint(DeskhubClient.string(DHStrPairedForgetNote))
 
-            Toggle(DeskhubClient.string(DHStrAllowPairingLabel), isOn: $allowPairing)
-                .onChange(of: allowPairing) { _, allow in dh_set_allow_pairing(allow) }
-            deskhubHint(DeskhubClient.string(DHStrAllowPairingHint))
-
             deskhubSection(DeskhubClient.string(DHStrThisMachineHeading))
             Text(DeskhubClient.buffered(1024) { dh_own_public_key($0, $1) })
                 .font(.system(size: 12, design: .monospaced))
@@ -157,7 +152,6 @@ struct DevicesPage: View {
                 )
             }
         )
-        allowPairing = dh_allow_pairing()
     }
 
     private static func subtitle(for device: PairedDeviceRow) -> String {

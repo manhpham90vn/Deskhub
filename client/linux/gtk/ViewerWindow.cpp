@@ -158,11 +158,6 @@ bool ViewerWindow::Build(const NetAddr& server, uint8_t sourceId, const std::str
     cfg.onFinished = [this](const char*) {
         PostToMain([](ViewerWindow& v) { v.EndSession(); });
     };
-    cfg.onTrustAsked = [this](deskhub::TrustVerdict verdict, std::string_view fingerprint) {
-        PostToMain([verdict, copy = std::string(fingerprint)](ViewerWindow& v) {
-            v.AskAboutKey(verdict, copy);
-        });
-    };
 
     loop_.SetSurface(&renderer_);
     if (!loop_.Start(cfg)) {
@@ -179,29 +174,6 @@ bool ViewerWindow::Build(const NetAddr& server, uint8_t sourceId, const std::str
     UpdateTitle();
     gtk_widget_show_all(window_);
     return true;
-}
-
-void ViewerWindow::AskAboutKey(deskhub::TrustVerdict verdict, const std::string& fingerprint) {
-    const bool changed = verdict == deskhub::TrustVerdict::Changed;
-    std::string body(changed ? deskhub::ui::kTrustChangedBody : deskhub::ui::kTrustNewHostBody);
-    body += "\n\n";
-    body += deskhub::ui::kTrustFingerprintLabel;
-    body += " ";
-    body += fingerprint;
-
-    GtkWidget* dlg = gtk_message_dialog_new(GTK_WINDOW(window_), GTK_DIALOG_MODAL,
-        changed ? GTK_MESSAGE_WARNING : GTK_MESSAGE_QUESTION, GTK_BUTTONS_NONE, "%s",
-        changed ? deskhub::ui::kTrustChangedTitle : deskhub::ui::kTrustNewHostTitle);
-    gtk_message_dialog_format_secondary_text(GTK_MESSAGE_DIALOG(dlg), "%s", body.c_str());
-    gtk_dialog_add_button(GTK_DIALOG(dlg), deskhub::ui::kTrustReject, GTK_RESPONSE_NO);
-    gtk_dialog_add_button(GTK_DIALOG(dlg), deskhub::ui::kTrustAccept, GTK_RESPONSE_YES);
-    gtk_dialog_set_default_response(GTK_DIALOG(dlg), GTK_RESPONSE_NO);
-    const bool accepted = gtk_dialog_run(GTK_DIALOG(dlg)) == GTK_RESPONSE_YES;
-    gtk_widget_destroy(dlg);
-    if (accepted)
-        loop_.AcceptFingerprint();
-    else
-        loop_.RejectFingerprint();
 }
 
 gboolean ViewerWindow::OnClipboardTimer(gpointer user) {

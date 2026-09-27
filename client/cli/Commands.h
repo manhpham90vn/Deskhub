@@ -11,9 +11,7 @@ using TrustAction = deskhub::cli::TrustAction;
 using SettingsAction = deskhub::cli::SettingsAction;
 
 ExitCode RunDisplays(const Command& command);
-ExitCode RunScan(const Command& command);
 ExitCode RunSources(const Command& command);
-ExitCode RunProbe(const Command& command);
 
 ExitCode RunDevices(const Command& command);
 ExitCode RunTrust(const Command& command);

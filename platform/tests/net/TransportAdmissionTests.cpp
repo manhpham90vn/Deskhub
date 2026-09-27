@@ -88,6 +88,9 @@ struct AdmissionRig {
 
     bool Start() {
         if (!machines.Make()) return false;
+        if (!deskhubp::RememberPairedDevice(machines.viewer.fingerprint,
+                "admission-viewer", 500))
+            return false;
         host.SetRecvTimeout(1);
         viewer.SetRecvTimeout(1);
 
@@ -98,8 +101,6 @@ struct AdmissionRig {
 
         deskhubp::HostAuthConfig auth;
         auth.identity = machines.host;
-        auth.SetPasscode(deskhubp::LoadOrCreateAuthSalt(), kTestPasscode);
-        auth.allowNewPairings = true;
         deskhubp::TransportAuthCallbacks hooks;
         hooks.onPaired = [this](const NetAddr& peer, const deskhub::Fingerprint&,
                              std::string_view) {

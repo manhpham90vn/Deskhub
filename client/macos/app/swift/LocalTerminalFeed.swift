@@ -21,11 +21,6 @@ final class LocalTerminalFeed: TerminalFeed {
         DeskhubClient.string(alive ? DHStrTerminalAttachedHere : DHStrTerminalClosed)
     }
 
-    var trustVerdict: Int32 { 0 }
-    var fingerprint: String { "" }
-
-    func answerTrust(_: Bool) {}
-
     func grid(
         scrollOffset: UInt32, into cells: UnsafeMutablePointer<DHTermCell>?, capacity: UInt32,
         info: inout DHTermGrid

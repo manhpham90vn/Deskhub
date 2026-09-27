@@ -2,7 +2,6 @@
 #include "deskhubp/host/HostEngine.h"
 
 #include <cstdint>
-#include <mutex>
 #include <optional>
 #include <span>
 #include <string>
@@ -12,8 +11,6 @@
 using ShareSource = deskhub::media::ShareSource;
 using ShareOptions = deskhub::media::ShareOptions;
 using ShareSourceStatus = deskhub::media::ShareSourceStatus;
-
-using PairingRequest = deskhubp::PairingRequest;
 
 class SharingHost {
 public:
@@ -67,30 +64,6 @@ public:
         return engine_.TakeRemoteClipboard();
     }
 
-    void PushPairingRequest(PairingRequest request) {
-        const std::lock_guard<std::mutex> lock(pairingMutex_);
-        if (pairingRequests_.size() >= kMaxQueuedPairingRequests)
-            pairingRequests_.erase(pairingRequests_.begin());
-        pairingRequests_.push_back(std::move(request));
-    }
-
-    std::vector<PairingRequest> TakePairingRequests(size_t maxCount = SIZE_MAX) {
-        const std::lock_guard<std::mutex> lock(pairingMutex_);
-        std::vector<PairingRequest> out;
-        if (maxCount >= pairingRequests_.size()) {
-            out.swap(pairingRequests_);
-            return out;
-        }
-        const auto split = pairingRequests_.begin() + ptrdiff_t(maxCount);
-        out.assign(pairingRequests_.begin(), split);
-        pairingRequests_.erase(pairingRequests_.begin(), split);
-        return out;
-    }
-
-    void AnswerPairing(uint64_t addrPacked, bool allowed) {
-        engine_.AnswerPairingRequest(addrPacked, allowed);
-    }
-
     deskhubp::SessionTransport& Socket() {
         return engine_.socket();
     }
@@ -106,19 +79,9 @@ public:
 protected:
     bool StartEngine(const std::vector<ShareSource>& sources, const ShareOptions& opt,
         deskhubp::HostEnginePolicy policy) {
-        if (!policy.onApprovalNeeded)
-            policy.onApprovalNeeded = [this](uint64_t addrPacked, std::string shortKey,
-                                          std::string name) {
-                PushPairingRequest(
-                    PairingRequest{addrPacked, std::move(shortKey), std::move(name)});
-            };
         return engine_.Start(sources, opt, std::move(policy));
     }
 
 private:
-    static constexpr size_t kMaxQueuedPairingRequests = 32;
-
     deskhubp::HostEngine engine_;
-    std::mutex pairingMutex_;
-    std::vector<PairingRequest> pairingRequests_;
 };

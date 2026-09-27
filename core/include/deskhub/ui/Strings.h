@@ -132,11 +132,7 @@ inline constexpr const char* kCloseToTrayLabel =
 inline constexpr const char* kTrayShowWindow = "Show Deskhub";
 inline constexpr const char* kTrayHideWindow = "Hide window";
 inline constexpr const char* kTrayQuit = "Quit Deskhub";
-inline constexpr const char* kLanDevicesEmpty = "Looking for devices that are sharing\xE2\x80\xA6";
-inline constexpr const char* kLanDevicesHint = "Click a device to connect to it.";
-inline constexpr const char* kLanDevicesNoneSharing =
-    "A machine appears here only while it is sharing \xE2\x80\x94 start the share on it, then "
-    "check again.";
+inline constexpr const char* kLanDevicesEmpty = "Saved devices appear here after a connection.";
 inline constexpr const char* kRefreshNow = "Refresh now";
 inline constexpr const char* kAuthWrongPasscode =
     "That passcode was not accepted \xE2\x80\x94 check the code on the machine you are "
@@ -164,40 +160,17 @@ inline const char* AuthRefusalText(AuthResultCode code) {
     return kAuthNotPaired;
 }
 
-inline constexpr const char* kPairingRequestTitle = "Let this machine in?";
-inline constexpr const char* kPairingAllow = "Allow";
-inline constexpr const char* kPairingDeny = "Deny";
-
-inline std::string PairingRequestBody(std::string_view name, std::string_view address,
-    std::string_view shortKey) {
-    std::string out(name.empty() ? std::string("A machine") : std::string(name));
-    out += " at ";
-    out += address;
-    out += " wants to connect to this one.\n\nIts key starts with ";
-    out += shortKey;
-    out +=
-        "\n\nAllowing it pairs the two machines: it will be recognised by that key from now "
-        "on and will not ask again. You can undo this on the Devices page.";
-    return out;
-}
-
 inline constexpr const char* kSidebarDevices = "Devices";
 inline constexpr const char* kPairedHeading = "Machines allowed to connect to this one";
 inline constexpr const char* kPairedHint =
-    "A machine gets on this list once, and after that it is recognised by its key \xE2\x80\x94 "
-    "no passcode is asked for again.";
-inline constexpr const char* kPairedEmpty = "(no machine has paired with this one yet)";
+    "Add each client's public key here before it connects. Only listed keys are allowed.";
+inline constexpr const char* kPairedEmpty = "(no client keys have been allowed yet)";
 inline constexpr const char* kPairedForget = "Forget";
 inline constexpr const char* kPairedForgetAll = "Forget every machine";
 inline constexpr const char* kPairedForgetAllPrompt =
-    "Every machine will have to pair again before it can connect. Continue?";
+    "All client keys will lose access. You can add them again later. Continue?";
 inline constexpr const char* kPairedForgetNote =
-    "Changing the passcode does NOT turn these machines away \xE2\x80\x94 they no longer use it. "
-    "Forgetting them is what does.";
-inline constexpr const char* kAllowPairingLabel = "Let new machines pair with this one";
-inline constexpr const char* kAllowPairingHint =
-    "Turn this off once your own machines are paired: a passcode that leaks is then worth "
-    "nothing, and the machines already on the list keep working.";
+    "Remove a client key to revoke its access to this machine.";
 inline constexpr const char* kThisMachineHeading = "This machine's key";
 inline constexpr const char* kThisMachineHint =
     "Read this out over the phone to whoever is connecting. It is the one thing a machine in "
@@ -210,8 +183,6 @@ inline constexpr const char* kDevicesHeading = "Devices";
 inline constexpr const char* kDeviceColumnWhere = "Where";
 inline constexpr const char* kDeviceOnThisNetwork = "On this network";
 inline constexpr const char* kDeviceRecent = "Recent";
-inline constexpr const char* kScanNoLocalNetwork =
-    "This machine has no network address to scan from.";
 inline constexpr const char* kConnectPromptTitle = "Connect to this device";
 inline constexpr const char* kPasscodeInvalid =
     "The passcode must be exactly 4 digits (for example 0417).";
@@ -334,16 +305,11 @@ inline std::string TransferProgressLine(std::string_view name, uint16_t index, u
     return out;
 }
 
-inline constexpr const char* kTrustNewHostTitle = "Is this the right machine?";
-inline constexpr const char* kTrustNewHostBody =
-    "This is the first time this machine has been contacted. Check its fingerprint matches the "
-    "one it shows, then decide whether to trust it.";
 inline constexpr const char* kTrustChangedTitle = "This machine's key has changed";
 inline constexpr const char* kTrustChangedBody =
     "The key does not match the one recorded the first time. Either the machine was reinstalled, "
     "or something is sitting between you and it. Do not continue unless you know why it changed.";
 inline constexpr const char* kTrustFingerprintLabel = "Fingerprint:";
-inline constexpr const char* kTrustAccept = "Trust this machine";
 inline constexpr const char* kTrustReject = "Do not connect";
 
 inline constexpr const char* kTerminalExtraKeysHint =
@@ -485,26 +451,6 @@ inline std::string SourceQueryFailed(std::string_view address) {
 inline std::string SourceQueryEmpty(std::string_view address) {
     return std::string(address) +
            " replied without any sources - it is not sharing a screen right now.";
-}
-
-inline std::string ScanningStatus(size_t probed, size_t total, uint16_t port) {
-    return "Looking for hosts on " + UdpPortLine(port) + " - " + std::to_string(probed) + " of " +
-           std::to_string(total) + " addresses checked" + "\xE2\x80\xA6";
-}
-
-inline std::string ScanRecheckNote(uint32_t seconds) {
-    return "Checking again in " + std::to_string(seconds) + "s.";
-}
-
-inline std::string ScanFinishedStatus(size_t found, size_t total) {
-    return std::to_string(found) + (found == 1 ? " device" : " devices") + " found after checking " +
-           std::to_string(total) + " addresses.";
-}
-
-inline std::string LanDevicesNote(size_t found, size_t total, uint32_t rescanSecs) {
-    if (total == 0) return kScanNoLocalNetwork;
-    const char* detail = found > 0 ? kLanDevicesHint : kLanDevicesNoneSharing;
-    return ScanFinishedStatus(found, total) + " " + detail + " " + ScanRecheckNote(rescanSecs);
 }
 
 inline uint16_t PortOrDefault(std::string_view typed, uint16_t fallback = kDeskhubPort) {

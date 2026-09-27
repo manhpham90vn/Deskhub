@@ -12,27 +12,6 @@ extern "C" {
 
 typedef struct {
     char addr[DH_ADDR_CAP];
-    uint32_t rttMs;
-} DHScanHit;
-
-typedef struct {
-    uint32_t probed;
-    uint32_t total;
-    uint32_t found;
-    bool running;
-} DHScanState;
-
-typedef struct {
-    char addr[DH_ADDR_CAP];
-    char passcode[DH_PASSCODE_CAP];
-    char status[16];
-    char ping[16];
-    char lastConnected[24];
-    bool online;
-} DHRecentRow;
-
-typedef struct {
-    char addr[DH_ADDR_CAP];
     char passcode[DH_PASSCODE_CAP];
     char origin[20];
     char status[16];
@@ -52,16 +31,8 @@ typedef struct {
     char passcode[DH_PASSCODE_CAP];
 } DHUiSettings;
 
-bool dh_scan_start(uint16_t port);
-bool dh_scan_restart(uint16_t port);
-void dh_scan_cancel(void);
-DHScanState dh_scan_state(void);
-uint32_t dh_scan_rescan_secs(void);
-
 void dh_recent_touch(const char* address, const char* passcode);
 int dh_recent_passcode(const char* address, char* out, int capacity);
-
-void dh_status_refresh_now(void);
 
 typedef enum {
     DHSettingsEntryArea = 0,
@@ -104,8 +75,6 @@ void dh_settings_save(uint32_t fps, uint32_t bitrate_mbps, uint32_t max_dim, uin
     bool allow_input, bool client_control, const char* passcode);
 
 int dh_device_rows(DHDeviceRow* out, int capacity);
-void dh_status_watch_recent(void);
-int dh_scan_status_text(uint16_t port, char* out, int capacity);
 bool dh_same_device_addr(const char* a, const char* b);
 uint16_t dh_default_port(void);
 
@@ -159,11 +128,8 @@ int dh_paired_devices(DHPairedDevice* out, int capacity);
 bool dh_paired_add_public_key(const char* public_key);
 bool dh_paired_forget(const char* fingerprint);
 void dh_paired_forget_all(void);
-bool dh_allow_pairing(void);
-void dh_set_allow_pairing(bool allow);
 int dh_own_fingerprint(char* out, int capacity);
 int dh_own_public_key(char* out, int capacity);
-int dh_format_address(uint64_t addr_packed, char* out, int capacity);
 
 #ifdef __cplusplus
 }

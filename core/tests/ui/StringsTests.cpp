@@ -33,8 +33,7 @@ void TestEveryLabelSaysSomething() {
         ui::kAllowControlLabel, ui::kViewOnlyNote, ui::kRequestControlLabel,
         ui::kPasscodeLabel, ui::kClientPasscodePrompt, ui::kClientPasscodeHint,
         ui::kClientIpPlaceholder, ui::kUdpPortLabel, ui::kPasscodeInvalid,
-        ui::kLanDevicesEmpty, ui::kLanDevicesHint, ui::kLanDevicesNoneSharing,
-        ui::kScanNoLocalNetwork,
+        ui::kLanDevicesEmpty,
         ui::kConnectPromptTitle, ui::kAppVersion, ui::kProjectUrl, ui::kProjectLinkLabel,
         ui::kRefreshNow, ui::kBindInterfaceLabel, ui::kBindAllInterfaces,
         ui::kBindNotConnectedNote, ui::kAutostartLabel,
@@ -42,7 +41,7 @@ void TestEveryLabelSaysSomething() {
         ui::kTrayShowWindow, ui::kTrayHideWindow, ui::kTrayQuit,
         ui::kSettingsSectionVideo, ui::kSettingsSectionConnection, ui::kSettingsSectionSecurity,
         ui::kSettingsSectionSession, ui::kSettingsSectionLaunch,
-        ui::kPairingRequestTitle, ui::kPairingAllow, ui::kPairingDeny, ui::kAuthLocked,
+        ui::kAuthLocked,
         ui::kPasscodeShareHeading, ui::kPasscodeSetNote, ui::kPasscodeUnsetNote,
         ui::kPasscodeNoneSet, ui::kCopyPasscodeAction, ui::kPasscodeCopied};
     for (const char* s : labels) Check(s && *s, "every shared UI string is non-empty");
@@ -206,45 +205,6 @@ void TestTheAboutLineNamesTheBuild() {
         "the project link points at GitHub over https");
 }
 
-void TestScanStatusCountsWhatWasChecked() {
-    std::printf("[strings] the scan status says how far it got and on which port...\n");
-    const std::string running = ui::ScanningStatus(64, 253, 50123);
-    Check(Contains(running, "64") && Contains(running, "253"),
-        "the user can see the sweep is progressing");
-    Check(Contains(running, "50123"), "and which port is being knocked on");
-    Check(Contains(ui::ScanFinishedStatus(1, 253), "1 device"),
-        "a single hit is not reported as devices");
-    Check(Contains(ui::ScanFinishedStatus(0, 253), "0 devices"),
-        "an empty network still reports how much was checked");
-}
-
-void TestRecheckNotesQuoteTheRealInterval() {
-    std::printf("[strings] the user is told how often a list refreshes itself...\n");
-    Check(Contains(ui::ScanRecheckNote(45), "45"), "the rescan note quotes the caller's delay");
-    Check(!Contains(ui::ScanRecheckNote(45), "shortly"),
-        "no vague wording survives where a number is available");
-}
-
-void TestDeviceListNotesReadTheSameOnEveryClient() {
-    std::printf("[strings] the two device lists explain themselves the same way everywhere...\n");
-    Check(ui::LanDevicesNote(0, 0, 45) == ui::kScanNoLocalNetwork,
-        "a machine with no local network says so instead of reporting 0 of 0");
-
-    const std::string empty = ui::LanDevicesNote(0, 253, 45);
-    Check(Contains(empty, "0 devices") && Contains(empty, "45"),
-        "an empty sweep still says how much was checked and when it retries");
-    Check(!Contains(empty, ui::kLanDevicesHint),
-        "there is nothing to click, so no click hint is offered");
-    Check(Contains(empty, ui::kLanDevicesNoneSharing),
-        "an empty sweep says why a machine would be missing, not just that none was found");
-
-    const std::string found = ui::LanDevicesNote(2, 253, 45);
-    Check(Contains(found, ui::kLanDevicesHint) && Contains(found, "45"),
-        "once devices are listed the user is told to click one, and when the list refreshes");
-    Check(!Contains(found, ui::kLanDevicesNoneSharing),
-        "the missing-machine explanation is dropped once the list has something in it");
-}
-
 void TestTerminalRefusalsNameTheirOwnCause() {
     std::printf("[strings] a share that cannot start says which of the two causes it is...\n");
     Check(std::string(ui::kShareNoQuicLibrary) != std::string(ui::kShareNoHostIdentity),
@@ -309,9 +269,6 @@ void RunStringsTests() {
     TestTrimStripsOnlyTheEdges();
     TestPingLabelQuotesTheMeasurement();
     TestTheAboutLineNamesTheBuild();
-    TestScanStatusCountsWhatWasChecked();
-    TestRecheckNotesQuoteTheRealInterval();
-    TestDeviceListNotesReadTheSameOnEveryClient();
     TestTerminalRefusalsNameTheirOwnCause();
     TestEveryAuthVerdictReadsAsItsOwnMessage();
     TestClampWarningQuotesTheProtocolLimit();

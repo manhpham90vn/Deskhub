@@ -12,15 +12,28 @@ Trạng thái: đang triển khai; các ô chưa đánh dấu vẫn còn phải 
 - [x] Thêm CLI `devices public`, `devices add PUBLIC_KEY|-` (dấu `-` đọc stdin) và `trust add ADDRESS FINGERPRINT`. `devices add` hiện chuyển khóa text thành fingerprint rồi lưu vào `paired_devices` cũ.
 - [x] Thêm API FFI lấy public key và thêm public key bằng text; trang Devices dùng chung macOS/iOS đã có ô dán khóa và hiển thị public key của máy.
 - [x] Thêm test parser, test chuyển đổi khóa và test cú pháp CLI. `make test`, `make test-platform`, `make build-cli`, build macOS không ký, `make lint-cpp` và `make lint-swift` đã qua.
+- [x] Tách identity xác thực client khỏi khóa TLS host: tự tạo khóa Ed25519 riêng, giữ ổn định giữa các lần chạy và báo lỗi nếu file khóa hiện có bị hỏng.
+- [x] Thêm import private key PEM/PKCS#8 Ed25519 hoặc ECDSA P-256 qua `devices import FILE`; khóa có passphrase nhận qua `--passphrase-stdin`, không truyền bí mật qua argv. Import tự ký và xác minh thử trước khi lưu; file khóa mới được ghi tạm với quyền POSIX `0600` rồi thay thế atomic.
+- [x] `devices public` và API FFI nay xuất public key của identity client riêng; `trust public` xuất public key TLS host. `trust add ADDRESS -` nhận public key host qua stdin và suy ra fingerprint SPKI.
+- [x] Client từ chối host chưa có pin hoặc đổi khóa trước khi gửi auth; cập nhật pin phải thực hiện chủ động qua cấu hình/lệnh trust.
+- [x] Chặn nhánh xác thực bằng passcode và nhánh Approval tại handshake: host chỉ phát challenge chữ ký cho fingerprint đã cấp quyền, client từ chối mode cũ; host không phát callback tạo yêu cầu popup duyệt client. Kiểm tra lại quyền ngay trước khi nhận chữ ký. Đây mới là chặn ở tầng giao thức, chưa xóa hết UI/API và dữ liệu passcode cũ.
+- [x] Cập nhật test handshake, HostLink, terminal, FFI và gửi file: cấp khóa client/ghim khóa host trước kết nối; kiểm tra client lạ và host đổi khóa bị từ chối, không mở yêu cầu duyệt hay tự cập nhật pin. Bản hiện tại qua `make test`, `make lint-cpp`, `make build-cli` và toàn bộ binary `platform_tests` có socket loopback.
+- [x] Gỡ UI popup duyệt client và chấp nhận khóa host khi kết nối trên Apple, Android, Linux và Windows; gỡ prompt duyệt trong CLI. Màn gửi file trả lỗi khi khóa host đổi, không hiện nút chấp nhận để thử lại.
+- [x] Gỡ công tắc cho phép pair máy lạ khỏi trang Devices trên Apple, Android, Linux và Windows. Bỏ đường Android JNI lấy/trả lời yêu cầu pairing, gồm nhánh tự chấp nhận máy đã từng pair; API FFI và dữ liệu cũ còn phải dọn tiếp.
+- [x] Xóa hàng đợi approval trong `SharingHost`, callback và lệnh trả lời approval từ transport/host engine, FFI lấy/trả lời yêu cầu, cùng text popup pairing không còn dùng. Cập nhật hướng dẫn ở trang Devices: client được cấp quyền bằng public key nhập chủ động. Platform tests với QUIC loopback đã qua.
+- [x] Chạy `make lint-dead`; xóa string ID, hằng số Kotlin, FFI helper và test chỉ phục vụ popup/approval đã bỏ. Xóa API passcode verifier/salt, SPAKE2 và MAC khỏi `platform/` vì handshake chữ ký không dùng chúng. Cập nhật script dead code để quét cả file mới chưa được Git track và bỏ qua file đã xóa; phần C++/FFI/string/Kotlin constants không còn finding.
+- [x] Đóng đường nhận discovery plaintext ở QUIC endpoint và transport; `Beacon` không trả `SOURCE_LIST`/`PONG` cho peer chưa auth. CLI `sources`/`connect` không gửi probe UDP trước auth. Bỏ lệnh CLI `scan`; ngừng auto scan và status probe khi mở UI Apple, Android, Linux, Windows.
+- [x] Xóa `LanScanner`, `HostProbe`, `DeviceStatusPoller`, logic chọn địa chỉ subnet, FFI/JNI quét và thăm dò, callback/timer scan còn sót ở Linux/Windows. Danh sách thiết bị giờ lấy từ recent đã lưu; status/ping không còn suy đoán bằng probe trước auth. Xóa test scanner/probe cũ; `make test`, `make build-cli`, `make lint-cpp`, `make lint-dead`, `make test-platform` và build macOS không ký đã qua sau đợt dọn này.
+- [x] Xóa CLI `probe` vì thời gian đo toàn bộ truy vấn nguồn không phải RTT và `--timeout` cũ không được áp dụng. CLI `sources` vẫn truy vấn sau khi ghim khóa host và xác thực. Integration harness cấp quyền khóa client và ghim khóa host trước khi chạy; thay kịch bản passcode/approval cũ bằng test thu hồi khóa client. `make test-integration` đã qua.
 
-Các việc trên mới giúp trao đổi và nhập **public key**. Ứng dụng vẫn dùng chung khóa P-256 TLS làm identity xác thực, chưa import private key bên ngoài, chưa có host profile, chưa bắt buộc ghim khóa host trước khi kết nối. Passcode, popup approval và LAN discovery vẫn hoạt động. Chưa coi đây là cơ chế mới hoàn tất.
+Đã có identity client riêng nhưng mới lưu được một khóa và import hiện chỉ hỗ trợ PEM/PKCS#8, chưa đọc private key OpenSSH. Chưa có host profile. Luồng auth mới không mở popup xác nhận kết nối; hàng đợi và API trả lời approval đã được gỡ. Giao thức wire cũ, trường passcode trong CLI/settings, cờ pairing cũ trong settings và các message beacon discovery còn trong code; phải gỡ tiếp trước khi coi là hoàn tất.
 
-Gate chưa qua trọn vẹn: `make lint`/`make lint-dead` cần Java cho phần Kotlin trong môi trường hiện tại; build macOS có ký cần chứng chỉ phát triển. Build macOS không ký đã qua.
+Gate chưa qua trọn vẹn: detekt/ktlint cần Java runtime trong môi trường hiện tại; build macOS có ký cần chứng chỉ phát triển. Sau lượt dọn dead code, `make lint-dead` qua phần C++/FFI/string/Kotlin constants và bỏ qua detekt; `make test`, `make test-platform` và `make test-integration` với socket loopback, `make lint-cpp`, `make build-cli` và build macOS không ký đã qua. Swift lint đã qua trước lượt dọn mới nhất; không có file Swift thay đổi trong lượt dọn.
 
 ## 1. Phạm vi đã chốt
 
 - [ ] Bỏ hoàn toàn passcode dùng để kết nối/pair, SPAKE2 và dữ liệu passcode được lưu.
-- [ ] Bỏ popup duyệt kết nối, hàng đợi yêu cầu duyệt và chế độ tự chấp nhận máy lạ.
+- [x] Bỏ popup duyệt kết nối, hàng đợi yêu cầu duyệt và chế độ tự chấp nhận máy lạ. Cờ `allow_new_pairings` còn trong settings cũ nhưng không được handshake đọc; xóa cùng migration settings.
 - [ ] Mọi kết nối phải xác thực bằng chữ ký từ private key tương ứng với public key đã được cấp quyền.
 - [ ] Cho phép thiết bị tự tạo khóa hoặc import private key có sẵn bên ngoài.
 - [ ] Host nhận public key của client bằng text. GUI có ô dán; CLI nhận stdin; service sau này đọc cùng cấu hình text.
@@ -46,10 +59,10 @@ Giả sử A muốn kết nối tới B:
 
 Public key và thông tin host phải được chuyển qua kênh mà chủ thiết bị tin cậy. Một public key tự ký hoặc lấy trực tiếp từ host chưa biết không tự tạo ra sự tin cậy.
 
-- [ ] Không tự tin cậy host lần đầu dựa trên địa chỉ, tên máy hoặc việc TLS kết nối thành công.
-- [ ] Host chưa được cấu hình khóa: dừng và trả lỗi hướng dẫn thêm host.
-- [ ] Host đổi khóa: dừng và yêu cầu cập nhật chủ động trong cấu hình/Devices; không mở popup chấp nhận ngay khi Connect.
-- [ ] Client chưa được cấp quyền: từ chối; không tạo yêu cầu duyệt.
+- [x] Không tự tin cậy host lần đầu dựa trên địa chỉ, tên máy hoặc việc TLS kết nối thành công.
+- [x] Host chưa được cấu hình khóa: dừng và trả lỗi hướng dẫn thêm host.
+- [x] Host đổi khóa: dừng và yêu cầu cập nhật chủ động trong cấu hình/Devices; không mở popup chấp nhận ngay khi Connect.
+- [x] Client chưa được cấp quyền: từ chối; không tạo yêu cầu duyệt.
 - [ ] Public key chỉ định danh khóa. Tên/comment là nhãn hiển thị, không quyết định quyền truy cập.
 - [ ] Mỗi chiều truy cập được cấp quyền riêng; A vào được B không tự cấp quyền B vào A.
 
@@ -75,13 +88,13 @@ Logic thuần dữ liệu/giao thức đặt trong `core/`. Crypto, filesystem, 
 
 ### 4.1. Tách vai trò khóa
 
-- [ ] Giữ khóa TLS host P-256 hiện có để tương thích quiche/BoringSSL đang dùng. Không đổi TLS sang Ed25519 trong đợt này.
-- [ ] Thêm abstraction khóa xác thực client, độc lập với chứng chỉ TLS. Import khóa client không làm thay đổi khóa TLS host.
+- [x] Giữ khóa TLS host P-256 hiện có để tương thích quiche/BoringSSL đang dùng. Không đổi TLS sang Ed25519 trong đợt này.
+- [x] Thêm abstraction khóa xác thực client, độc lập với chứng chỉ TLS. Import khóa client không làm thay đổi khóa TLS host.
 - [ ] Mặc định mỗi thiết bị có một khóa xác thực riêng; cho phép lưu nhiều khóa import và chọn khóa cho từng host.
 - [ ] Hỗ trợ Ed25519 và ECDSA P-256 trong đợt đầu. RSA, FIDO/security key, SSH certificate và ssh-agent là phần mở rộng riêng.
 - [x] Public key dùng text OpenSSH một dòng: `<key-type> <base64-key-blob> <optional-label>`.
 - [ ] Private key import hỗ trợ OpenSSH và PKCS#8 cho các thuật toán đã nêu; từ chối rõ định dạng/thuật toán chưa hỗ trợ.
-- [ ] Kiểm tra khóa private hợp lệ, suy ra public key và xác minh cặp khóa bằng ký/xác minh thử trước khi lưu.
+- [x] Kiểm tra khóa private hợp lệ, suy ra public key và xác minh cặp khóa bằng ký/xác minh thử trước khi lưu.
 - [ ] Dùng thư viện crypto/parser đã được duy trì; khảo sát khả năng thư viện hiện có trước khi chọn dependency đọc OpenSSH private key. Không tự xây thuật toán mật mã/KDF.
 - [ ] Nếu private key import có passphrase, yêu cầu mở khóa trong luồng import. CLI không tương tác nhận qua stdin/file descriptor riêng và báo lỗi nếu thiếu; không truyền bí mật qua argv/log.
 - [ ] Phân biệt passphrase bảo vệ file private key với passcode kết nối đã bị loại bỏ. Sau import, khóa được bảo vệ bằng cơ chế lưu cục bộ để kết nối không cần popup.
@@ -114,18 +127,18 @@ Tên file và lệnh bên dưới là thiết kế dự kiến cần thống nh�
 - [ ] Tách thư mục cấu hình có thể chỉ định để service không phụ thuộc tài khoản GUI hoặc thư mục log.
 - [ ] Reload danh sách public key khi GUI/CLI cập nhật hoặc khi service yêu cầu reload. Đồng bộ thay đổi tới các transport đang chạy.
 - [ ] File thiếu/hỏng không được dẫn tới cho phép tất cả. Reload lỗi phải báo rõ, từ chối admission mới và không báo đã áp dụng việc thu hồi khi chưa áp dụng được.
-- [ ] Khóa đã tồn tại nhưng không đọc được phải trả lỗi; không âm thầm sinh khóa mới. Không log private key hoặc passphrase.
+- [x] Khóa đã tồn tại nhưng không đọc được phải trả lỗi; không âm thầm sinh khóa mới. Không log private key hoặc passphrase.
 
 ## 5. Handshake chỉ bằng khóa
 
 - [ ] Định nghĩa phiên bản auth mới; client/server không hỗ trợ phải trả lỗi phiên bản và đóng kết nối. Không fallback về passcode, approval hay plaintext.
 - [ ] `AuthStart` gửi thuật toán, public key client và tên hiển thị có giới hạn độ dài.
-- [ ] Host kiểm tra public key hợp lệ và có trong danh sách được phép trước khi tiếp tục xác thực.
+- [x] Host kiểm tra public key hợp lệ và có trong danh sách được phép trước khi tiếp tục xác thực.
 - [ ] Host phát challenge bằng CSPRNG, dùng một lần, có thời hạn và gắn với đúng kết nối.
 - [ ] Định nghĩa transcript bằng encoding không mơ hồ, gồm nhãn riêng của Deskhub, version, vai trò, nonce, danh tính client và khóa TLS host.
 - [ ] Ràng buộc chữ ký với phiên transport. Kiểm tra API quiche C hiện có có xuất TLS keying material hay không; nếu cần, bổ sung wrapper và test. Không coi IP/port là session binding.
 - [ ] Client ký transcript bằng private key đã chọn; host xác minh bằng public key đã được cấp quyền.
-- [ ] Kiểm tra lại quyền ngay trước khi chấp nhận, tránh khóa bị thu hồi trong lúc handshake vẫn được cho vào.
+- [x] Kiểm tra lại quyền ngay trước khi chấp nhận, tránh khóa bị thu hồi trong lúc handshake vẫn được cho vào.
 - [ ] Client chỉ nhận `Accepted` trong trạng thái đã hoàn thành các bước xác thực mong đợi; từ chối message sai thứ tự/lặp hoặc không thuộc kết nối hiện tại.
 - [ ] Auth thành công chỉ có hiệu lực cho kết nối đó. Reconnect, resume hoặc QUIC session resumption không tự kế thừa admission; không chạy thao tác đặc quyền bằng 0-RTT trước auth.
 - [ ] Không cho phép screen, input, clipboard, terminal, file transfer hoặc danh sách tài nguyên trước khi auth hoàn tất.
@@ -167,19 +180,19 @@ deskhub-cli connect office
 - [ ] Public API trong `platform/` không gọi UI, không đọc stdin, không phụ thuộc event loop GUI. CLI/GUI cung cấp dữ liệu cho API.
 - [ ] `connect`, `sources`, `shell`, `send` và các luồng truy cập khác đều dùng host profile, identity và trust policy chung.
 - [ ] Bỏ `scan`, tùy chọn passcode, biến môi trường passcode, cơ chế approval/auto-allow và tùy chọn bỏ qua kiểm tra host key.
-- [ ] Nếu giữ lệnh `probe`, chuyển nó sang kết nối tới host được chỉ định với kiểm tra khóa và auth đầy đủ; không còn probe UDP công khai.
+- [x] Bỏ lệnh `probe` và tùy chọn `--timeout` chỉ dùng cho probe; không còn probe UDP công khai.
 
 ## 7. Loại bỏ LAN discovery
 
-- [ ] Xóa `LanScanner` và các callback/thread/timer quét mạng, gồm tự scan khi mở app và rescan định kỳ.
-- [ ] Rà `HostProbe`, `DiscoveryFfi`, `DiscoveryModel`, UI từng OS và CLI để bỏ dependency vào kết quả scan.
+- [x] Xóa `LanScanner` và các callback/thread/timer quét mạng, gồm tự scan khi mở app và rescan định kỳ.
+- [x] Rà `HostProbe`, `DiscoveryFfi`, `DiscoveryModel`, UI từng OS và CLI để bỏ dependency vào kết quả scan.
 - [ ] Tách logic recent/saved host còn cần ra khỏi `DiscoveryFfi`; không xóa nhầm chức năng lưu host thủ công.
-- [ ] Bỏ ngoại lệ nhận beacon plaintext trong `SessionTransport::Deliver` và đường gửi/trả lời discovery plaintext tương ứng.
-- [ ] Host không trả `SOURCE_LIST` hay `PONG` cho các probe discovery chưa xác thực, kể cả trả danh sách rỗng.
-- [ ] Sửa `RunSources` và các luồng kết nối khác đang gọi `ProbeHostRttMs`: đi thẳng vào QUIC/TLS, kiểm tra host, auth rồi mới query nguồn.
+- [x] Bỏ ngoại lệ nhận beacon plaintext trong `SessionTransport::Deliver` và đường gửi/trả lời discovery plaintext tương ứng.
+- [x] Host không trả `SOURCE_LIST` hay `PONG` cho các probe discovery chưa xác thực, kể cả trả danh sách rỗng.
+- [x] Sửa `RunSources` và `RunConnect` đang gọi `ProbeHostRttMs`: đi thẳng vào QUIC/TLS, kiểm tra host, auth rồi mới query nguồn.
 - [ ] Rà `Beacon`, `HostNetLoop` và `ViewerBroadcast`: tách phần liệt kê nguồn trong phiên đã auth trước khi xóa chức năng discovery. Không xóa theo tên “Broadcast” vì còn broadcast media tới viewer hợp lệ.
 - [ ] Giữ `ListSources/SourceList` khi cần cho danh sách màn hình sau auth; giữ ping/pong, heartbeat, RTT trong phiên hợp lệ.
-- [ ] Bỏ import, file build, FFI, string ID, bản dịch và test chỉ phục vụ scan LAN.
+- [ ] Bỏ import, file build, FFI, string ID, bản dịch và test chỉ phục vụ scan LAN. Đã xóa source/build/FFI/JNI/test scanner, probe và string helper quét; cần rà tiếp string ID, bản dịch và tài liệu cũ.
 - [ ] Kiểm tra bằng packet capture: app idle không quét subnet; host không trả lời gói discovery Deskhub cũ; kết nối cấu hình thủ công vẫn hoạt động.
 
 Bỏ discovery giảm dữ liệu công khai và đường xử lý trước auth. QUIC vẫn cần gói handshake mạng trước auth ứng dụng; cổng lắng nghe không trở nên vô hình trước quét mạng.

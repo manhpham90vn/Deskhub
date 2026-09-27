@@ -1,11 +1,6 @@
 #include "Commands.h"
 
-#include <condition_variable>
-#include <functional>
-#include <mutex>
-#include <optional>
 #include <string>
-#include <utility>
 #include <vector>
 
 #include "Output.h"
@@ -15,8 +10,6 @@
 #include "deskhub/media/SourceLabel.h"
 #include "deskhub/ui/Strings.h"
 #include "deskhubp/media/DisplayEnum.h"
-#include "deskhubp/client/HostProbe.h"
-#include "deskhubp/client/LanScanner.h"
 #include "deskhubp/client/SourceQuery.h"
 #include "deskhubp/net/UdpSocket.h"
 #include "deskhubp/system/HostIdentity.h"
@@ -92,69 +85,6 @@ ExitCode RunDisplays(const Command& command) {
     return ExitCode::Ok;
 }
 
-ExitCode RunScan(const Command& command) {
-    std::mutex mutex;
-    std::condition_variable finished;
-    std::vector<deskhubp::ScanHit> hits;
-    deskhubp::ScanProgress summary;
-    bool done = false;
-
-    deskhubp::LanScanner scanner;
-    const bool started = scanner.Start(
-        command.port, [](std::function<void()> work) { work(); },
-        [&](const deskhubp::ScanHit& hit) {
-            const std::lock_guard<std::mutex> lock(mutex);
-            hits.push_back(hit);
-        },
-        [&](const deskhubp::ScanProgress& progress) {
-            if (command.quiet || command.json) return;
-            PrintError(deskhub::ui::ScanningStatus(progress.probed, progress.total, command.port));
-        },
-        [&](const deskhubp::ScanProgress& progress) {
-            const std::lock_guard<std::mutex> lock(mutex);
-            summary = progress;
-            done = true;
-            finished.notify_all();
-        });
-
-    if (!started) {
-        PrintError("a scan is already running");
-        return ExitCode::Failed;
-    }
-
-    std::unique_lock<std::mutex> lock(mutex);
-    finished.wait(lock, [&] { return done; });
-
-    if (command.json) {
-        deskhub::cli::JsonWriter json;
-        json.ObjectBegin();
-        json.FieldBegin("hosts");
-        json.ArrayBegin();
-        for (const deskhubp::ScanHit& hit : hits) {
-            json.ObjectBegin();
-            json.Field("address", hit.addr);
-            json.Field("rttMs", hit.rttMs);
-            json.ObjectEnd();
-        }
-        json.ArrayEnd();
-        json.Field("checked", summary.total);
-        json.Field("found", summary.found);
-        json.ObjectEnd();
-        PrintLine(json.Text());
-        return ExitCode::Ok;
-    }
-
-    if (!hits.empty()) {
-        Table table;
-        table.Row({"ADDRESS", "PING"});
-        for (const deskhubp::ScanHit& hit : hits)
-            table.Row({hit.addr, std::to_string(hit.rttMs) + " ms"});
-        table.Print();
-    }
-    if (!command.quiet) PrintError(deskhub::ui::ScanFinishedStatus(summary.found, summary.total));
-    return ExitCode::Ok;
-}
-
 ExitCode RunSources(const Command& command) {
     NetAddr server{};
     if (!ResolveTarget(command, server)) return ExitCode::Usage;
@@ -165,11 +95,6 @@ ExitCode RunSources(const Command& command) {
     if (!deskhubp::QuicAvailable()) {
         PrintError(deskhub::ui::kShareNoQuicLibrary);
         return ExitCode::Unsupported;
-    }
-
-    if (!deskhubp::ProbeHostRttMs(server, command.timeoutMs)) {
-        PrintError(deskhub::ui::SourceQueryFailed(command.address));
-        return ExitCode::Unreachable;
     }
 
     std::vector<deskhub::SourceInfo> sources;
@@ -231,31 +156,6 @@ ExitCode RunSources(const Command& command) {
         PrintLine(std::string("audio:         ") + yesNo(caps.audio));
         PrintLine(std::string("file transfer: ") + yesNo(caps.files));
     }
-    return ExitCode::Ok;
-}
-
-ExitCode RunProbe(const Command& command) {
-    NetAddr host{};
-    if (!ResolveTarget(command, host)) return ExitCode::Usage;
-
-    const std::optional<uint32_t> rttMs = deskhubp::ProbeHostRttMs(host, command.timeoutMs);
-
-    if (command.json) {
-        deskhub::cli::JsonWriter json;
-        json.ObjectBegin();
-        json.Field("address", command.address);
-        json.Field("reachable", rttMs.has_value());
-        json.Field("rttMs", rttMs ? int64_t(*rttMs) : int64_t(-1));
-        json.ObjectEnd();
-        PrintLine(json.Text());
-        return rttMs ? ExitCode::Ok : ExitCode::Unreachable;
-    }
-
-    if (!rttMs) {
-        PrintError(deskhub::ui::CouldNotConnectTo(command.address));
-        return ExitCode::Unreachable;
-    }
-    PrintLine(command.address + "  " + std::to_string(*rttMs) + " ms");
     return ExitCode::Ok;
 }
 

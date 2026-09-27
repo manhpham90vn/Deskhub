@@ -105,7 +105,6 @@ struct MainMenuView: View {
                 + "them until Deskhub has Accessibility permission. The other "
                 + "machine will see this Mac but not control it.")
         }
-        .pairingPrompt(sharing.pairing)
     }
 
     @ViewBuilder
@@ -133,7 +132,6 @@ struct MainMenuView: View {
             .disabled(connect.address.isEmpty || connect.isConnecting)
 
             deskhubHeadingRow(DeskhubClient.string(DHStrDevicesHeading)) {
-                discovery.refreshStatus()
                 discovery.rescanNow()
             }
             DeviceTable(

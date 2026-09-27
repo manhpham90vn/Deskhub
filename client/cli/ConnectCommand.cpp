@@ -10,7 +10,6 @@
 #include "deskhub/cli/Command.h"
 #include "deskhub/media/SourceLabel.h"
 #include "deskhub/ui/Strings.h"
-#include "deskhubp/client/HostProbe.h"
 #include "deskhubp/client/SourceQuery.h"
 #include "deskhubp/net/UdpSocket.h"
 #include "deskhubp/system/DeviceName.h"
@@ -36,11 +35,6 @@ ExitCode RunConnect(const Command& command) {
     if (!deskhubp::QuicAvailable()) {
         PrintError(deskhub::ui::kShareNoQuicLibrary);
         return ExitCode::Unsupported;
-    }
-
-    if (!deskhubp::ProbeHostRttMs(server, command.timeoutMs)) {
-        PrintError(deskhub::ui::SourceQueryFailed(command.address));
-        return ExitCode::Unreachable;
     }
 
     std::vector<deskhub::SourceInfo> offered;

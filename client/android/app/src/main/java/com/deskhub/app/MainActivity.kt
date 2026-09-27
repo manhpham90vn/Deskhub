@@ -54,7 +54,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -131,7 +130,6 @@ class MainActivity : ComponentActivity() {
         setContent {
             MaterialTheme(colorScheme = DeskhubDarkColors) {
                 Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                    PairingPrompt()
                     Column(modifier = Modifier.safeDrawingPadding()) {
                         MainScreen(
                             initialSection = startSection,
@@ -372,30 +370,11 @@ private fun MainScreen(
     var section by remember { mutableStateOf(initialSection) }
     var port by remember { mutableStateOf(NativeClient.settingsPort()) }
     val scope = rememberCoroutineScope()
-    val rescanTicks = remember { NativeClient.rescanSeconds() }
-
     BackHandler(enabled = step != Step.Address) { step = Step.Address }
 
-    DisposableEffect(Unit) {
-        onDispose { NativeClient.scanCancel() }
-    }
-
     LaunchedEffect(port) {
-        NativeClient.watchRecent()
-        NativeClient.scanRestart(port)
-        var idleTicks = 0
         while (true) {
             deviceRows = NativeClient.deviceRows()
-            scanStatus = NativeClient.scanStatusText(port)
-            if (NativeClient.scanRunning()) {
-                idleTicks = 0
-            } else {
-                idleTicks++
-                if (idleTicks >= rescanTicks) {
-                    idleTicks = 0
-                    NativeClient.scanStart(port)
-                }
-            }
             delay(POLL_INTERVAL_MS)
         }
     }
@@ -426,7 +405,6 @@ private fun MainScreen(
             }
             onRemember(addr, code)
             NativeClient.recentTouch(addr, code)
-            NativeClient.watchRecent()
             deviceRows = NativeClient.deviceRows()
             authed = queried
             authedAddr = addr
@@ -536,8 +514,8 @@ private fun MainScreen(
                 deviceRows = deviceRows,
                 scanStatus = scanStatus,
                 onPickDevice = pickDevice,
-                onRescan = { scope.launch { NativeClient.scanRestart(port) } },
-                onRefreshStatus = { scope.launch { NativeClient.statusRefreshNow() } },
+                onRescan = { deviceRows = NativeClient.deviceRows() },
+                onRefreshStatus = { deviceRows = NativeClient.deviceRows() },
                 port = port,
                 onPortChange = { chosen ->
                     NativeClient.setSettingsPort(chosen)
@@ -1056,7 +1034,6 @@ private fun HostRowList(
 @Composable
 private fun DevicesScreen() {
     var devices by remember { mutableStateOf(NativeClient.pairedDevices()) }
-    var allowPairing by remember { mutableStateOf(NativeClient.allowPairing()) }
     var confirmForgetAll by remember { mutableStateOf(false) }
     val dateText: (Long) -> String = { unix ->
         if (unix <= 0) {
@@ -1142,19 +1119,6 @@ private fun DevicesScreen() {
             onClick = { confirmForgetAll = true },
             enabled = devices.isNotEmpty(),
         ) { Text(NativeClient.string(NativeClient.STR_PAIRED_FORGET_ALL)) }
-
-        SwitchRow(
-            label = NativeClient.string(NativeClient.STR_ALLOW_PAIRING_LABEL),
-            checked = allowPairing,
-        ) {
-            allowPairing = it
-            NativeClient.setAllowPairing(it)
-        }
-        Text(
-            NativeClient.string(NativeClient.STR_ALLOW_PAIRING_HINT),
-            style = MaterialTheme.typography.bodySmall,
-            color = MutedColor,
-        )
 
         SectionLabel(NativeClient.string(NativeClient.STR_THIS_MACHINE_HEADING))
         Text(

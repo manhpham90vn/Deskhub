@@ -59,8 +59,6 @@ struct HostEnginePolicy {
     std::function<void()> onSharing;
     std::function<std::string(const SessionTransport&)> portError;
     std::function<void()> onPaired;
-    std::function<void(uint64_t addrPacked, std::string shortKey, std::string name)>
-        onApprovalNeeded;
 
     std::function<bool(const deskhub::media::AudioFormat&,
         std::function<void(std::span<const int16_t>)>)>
@@ -89,7 +87,6 @@ public:
 
     void RequestStopSource(uint8_t sourceId);
     void RequestKickViewer(uint8_t sourceId, uint64_t addrPacked);
-    void AnswerPairingRequest(uint64_t addrPacked, bool allowed);
 
     void SetTerminal(TerminalHost* terminal) {
         terminal_.store(terminal, std::memory_order_release);
@@ -184,7 +181,6 @@ private:
     std::mutex controlMutex_;
     std::vector<uint8_t> pendingSourceStops_;
     std::vector<std::pair<uint8_t, uint64_t>> pendingViewerKicks_;
-    std::vector<std::pair<uint64_t, bool>> pendingPairAnswers_;
 
     std::mutex clipMutex_;
     std::optional<std::string> pendingLocalClip_;

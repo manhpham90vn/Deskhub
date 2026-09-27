@@ -266,29 +266,6 @@ void dh_share_local_resize(uint32_t term_id, uint16_t cols, uint16_t rows) {
     if (g_terminal) g_terminal->ResizeLocal(term_id, deskhub::TermSize{cols, rows});
 }
 
-int dh_share_take_pairing_requests(DHPairingRequest* out, int capacity) {
-    if (!out || capacity <= 0) return 0;
-    std::vector<deskhubp::PairingRequest> requests;
-    {
-        std::unique_lock<std::mutex> lk(g_agentMutex, std::try_to_lock);
-        if (!lk.owns_lock() || !g_agent) return 0;
-        requests = g_agent->TakePairingRequests(size_t(capacity));
-    }
-    const int count = int(requests.size()) < capacity ? int(requests.size()) : capacity;
-    for (int i = 0; i < count; ++i) {
-        out[i].addrPacked = requests[size_t(i)].addrPacked;
-        deskhubp::CopyToBuf(out[i].shortKey, sizeof(out[i].shortKey),
-            requests[size_t(i)].shortKey);
-        deskhubp::CopyToBuf(out[i].name, sizeof(out[i].name), requests[size_t(i)].name);
-    }
-    return count;
-}
-
-void dh_share_answer_pairing(uint64_t addr_packed, bool allowed) {
-    std::lock_guard<std::mutex> lk(g_agentMutex);
-    if (g_agent) g_agent->AnswerPairing(addr_packed, allowed);
-}
-
 void dh_share_stop_source(uint8_t source_id) {
     std::lock_guard<std::mutex> lk(g_agentMutex);
     if (g_agent) g_agent->StopSource(source_id);

@@ -324,12 +324,6 @@ private:
                 if (TerminalWindow* self = *token) self->OnViewerState(state, copy);
             });
         };
-        hooks.onTrustAsked = [token = alive_](deskhub::TrustVerdict verdict,
-                                 std::string_view fingerprint) {
-            RunOnMain([token, verdict, copy = std::string(fingerprint)] {
-                if (TerminalWindow* self = *token) self->AskAboutKey(verdict, copy);
-            });
-        };
 
         if (!remote_->viewer.Start(config, std::move(hooks))) {
             remote_ = nullptr;
@@ -524,30 +518,6 @@ private:
             StopRedrawTimer();
             PullSnapshot();
         }
-    }
-
-    void AskAboutKey(deskhub::TrustVerdict verdict, const std::string& fingerprint) {
-        const bool changed = verdict == deskhub::TrustVerdict::Changed;
-        std::string body(changed ? ui::kTrustChangedBody : ui::kTrustNewHostBody);
-        body += "\n\n";
-        body += ui::kTrustFingerprintLabel;
-        body += " ";
-        body += fingerprint;
-
-        GtkWidget* dlg = gtk_message_dialog_new(GTK_WINDOW(window_), GTK_DIALOG_MODAL,
-            changed ? GTK_MESSAGE_WARNING : GTK_MESSAGE_QUESTION, GTK_BUTTONS_NONE, "%s",
-            changed ? ui::kTrustChangedTitle : ui::kTrustNewHostTitle);
-        gtk_message_dialog_format_secondary_text(GTK_MESSAGE_DIALOG(dlg), "%s", body.c_str());
-        gtk_dialog_add_button(GTK_DIALOG(dlg), ui::kTrustReject, GTK_RESPONSE_NO);
-        gtk_dialog_add_button(GTK_DIALOG(dlg), ui::kTrustAccept, GTK_RESPONSE_YES);
-        gtk_dialog_set_default_response(GTK_DIALOG(dlg), GTK_RESPONSE_NO);
-        const bool accepted = gtk_dialog_run(GTK_DIALOG(dlg)) == GTK_RESPONSE_YES;
-        gtk_widget_destroy(dlg);
-        if (remote_ == nullptr) return;
-        if (accepted)
-            remote_->viewer.AcceptFingerprint();
-        else
-            remote_->viewer.RejectFingerprint();
     }
 
     void StopRedrawTimer() {

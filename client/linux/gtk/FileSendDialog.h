@@ -14,7 +14,6 @@ public:
     virtual ~FileSendTarget() = default;
     virtual bool Begin(const std::vector<std::filesystem::path>& files) = 0;
     virtual void Cancel() = 0;
-    virtual bool AcceptChangedKey() = 0;
     virtual deskhub::ui::TransferView View() const = 0;
     virtual std::string LastError() const = 0;
 };

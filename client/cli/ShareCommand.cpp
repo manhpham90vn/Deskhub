@@ -83,19 +83,6 @@ void PrintStatusJson(const std::vector<deskhub::media::ShareSourceStatus>& sourc
     PrintLine(json.Text());
 }
 
-void AnswerPairing(SharingHost& host, PairingPolicy policy, bool quiet) {
-    for (const PairingRequest& request : host.TakePairingRequests()) {
-        const NetAddr peer = NetAddr::Unpack(request.addrPacked);
-        const bool allowed = policy == PairingPolicy::Allow;
-        if (!quiet) {
-            PrintError(deskhub::ui::PairingRequestBody(request.name, peer.ToString(),
-                request.shortKey));
-            PrintError(allowed ? "Letting it in." : "Turning it away.");
-        }
-        host.AnswerPairing(request.addrPacked, allowed);
-    }
-}
-
 bool CollectSources(const Command& command, std::vector<ShareSource>& out) {
     std::vector<ShareSource> displays = deskhubp::ListDisplays();
     if (displays.empty()) {
@@ -203,7 +190,6 @@ ExitCode RunShare(const Command& command) {
     uint32_t sinceStatusMs = 0;
     while (!Interrupted() && host.running()) {
         std::this_thread::sleep_for(std::chrono::milliseconds(kPollMs));
-        AnswerPairing(host, command.share.pairing, command.quiet);
 
         if (!command.share.status || command.quiet) continue;
         sinceStatusMs += kPollMs;

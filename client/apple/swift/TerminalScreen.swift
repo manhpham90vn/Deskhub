@@ -74,11 +74,6 @@ struct TerminalScreen: View {
             .padding(8)
         }
         .background(termBackground)
-        .trustPrompt(
-            isPresented: $model.askingTrust,
-            changed: model.trustChanged,
-            fingerprint: model.trustFingerprint
-        ) { model.answerTrust($0) }
     }
 }
 
