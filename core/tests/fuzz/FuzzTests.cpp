@@ -204,7 +204,6 @@ Datagram BuildRandomValidDatagram() {
         case 17: {
             AuthChallenge m;
             m.mode = AuthMode(Rnd() % (uint8_t(AuthMode::Signature) + 1));
-            for (auto& b : m.nonce) b = uint8_t(Rnd());
             n = BuildAuthChallenge(buf, m);
             break;
         }

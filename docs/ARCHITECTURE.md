@@ -100,7 +100,7 @@ connection whose auth has not settled:
 
 | Client offers | Host knows the machine | Result |
 | --- | --- | --- |
-| nothing | paired | **Signature**: client signs a nonce+host-fingerprint transcript with its key. In silently. |
+| nothing | paired | **Signature**: client signs a TLS-session-ID and host-fingerprint transcript with its key. In silently. |
 | nothing | unknown | **Approval**: the person at the host is asked (*Let this machine in?*). |
 | a passcode | host has one | **Passcode**: SPAKE2 over a salted verifier — the code never travels, one guess per connection, both sides prove it, MACs are bound to the host key the client actually saw (kills relays). A typed code is always checked, paired or not. |
 | a passcode | host has none | nothing to check against → Signature if paired, Approval otherwise. |
@@ -302,8 +302,19 @@ line.
 
 ## 9. Decisions worth remembering
 
+- **The signature covers one unambiguous auth transcript**: `core/auth/Transcript` encodes
+  a Deskhub domain, auth version, signer role, the 32-byte QUIC/TLS exporter value,
+  full client public key, and TLS host key fingerprint as length-prefixed fields.
+  A small patch to quiche 0.29.3 exposes the TLS exporter through its C API. Both
+  peers derive the same value for this connection; auth fails if export fails. The
+  host accepts one signed response per connection, preventing replay on another session.
+  It keeps at most eight auth requests waiting for a signature and closes each one after
+  ten seconds without a response. Three failed proofs from the same key and source IP
+  within one minute pause that pair for ten seconds. The in-memory table holds at most
+  64 pairs; a successful proof clears its failure count.
+
 - **Auth has its own version inside protocol version 3**: `AuthStart` keeps a zero byte
-  before the key as a compatibility prefix and puts auth version 4 after the client name.
+  before the key as a compatibility prefix and puts auth version 5 after the client name.
   An older host can read the offer and send its old challenge; the new client then detects
   the incompatible challenge and closes. A new host rejects an offer without the version
   suffix, sends `VersionMismatch`, and closes. The prefix no longer carries a passcode

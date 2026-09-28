@@ -12,6 +12,8 @@ if(NOT COMMAND deskhub_target_warnings)
 endif()
 
 add_library(core STATIC
+    src/auth/FailureLimiter.cpp
+    src/auth/Transcript.cpp
     src/protocol/Wire.cpp
     src/protocol/RecordStream.cpp
 
@@ -110,6 +112,8 @@ if(DESKHUB_CORE_TESTS)
     add_executable(core_tests
         tests/TestMain.cpp
         tests/support/TestSupport.cpp
+        tests/auth/FailureLimiterTests.cpp
+        tests/auth/TranscriptTests.cpp
 
         tests/protocol/ByteOrderTests.cpp
         tests/protocol/WireTests.cpp

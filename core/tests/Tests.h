@@ -1,4 +1,6 @@
 #pragma once
+void RunAuthFailureLimiterTests();
+void RunAuthTranscriptTests();
 void RunWireTests();
 void RunByteOrderTests();
 void RunReassemblerTests();

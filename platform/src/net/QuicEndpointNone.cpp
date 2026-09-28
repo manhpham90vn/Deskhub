@@ -75,6 +75,10 @@ std::optional<deskhub::Fingerprint> QuicEndpoint::PeerFingerprint(QuicConnId) co
     return std::nullopt;
 }
 
+std::optional<deskhub::AuthSessionId> QuicEndpoint::ExportAuthSessionId(QuicConnId) const {
+    return std::nullopt;
+}
+
 bool QuicEndpoint::Established(QuicConnId) const {
     return false;
 }

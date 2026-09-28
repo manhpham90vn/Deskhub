@@ -178,8 +178,8 @@ struct HelloAck {
     RejectReason reason = RejectReason::None;
 };
 
-inline constexpr size_t kAuthNonceBytes = 32;
-inline constexpr uint8_t kAuthVersion = 4;
+inline constexpr size_t kAuthSessionIdBytes = 32;
+inline constexpr uint8_t kAuthVersion = 5;
 inline constexpr size_t kMaxAuthBlobBytes = 256;
 
 enum class AuthMode : uint8_t {
@@ -202,7 +202,6 @@ struct AuthStart {
 
 struct AuthChallenge {
     AuthMode mode = AuthMode::Denied;
-    std::array<uint8_t, kAuthNonceBytes> nonce{};
 };
 
 struct AuthResponse {

@@ -1,4 +1,5 @@
 #pragma once
+#include "deskhub/auth/Transcript.h"
 #include "deskhub/net/TrustStore.h"
 #include "deskhub/net/PublicKeyText.h"
 #include "deskhub/protocol/Wire.h"
@@ -13,8 +14,6 @@
 
 namespace deskhubp {
 
-using AuthNonce = std::array<uint8_t, deskhub::kAuthNonceBytes>;
-
 std::vector<uint8_t> IdentityPublicKey(const HostIdentity& identity);
 std::string IdentityPublicKeyText(const HostIdentity& identity);
 std::string PublicKeyTextFromSpki(std::span<const uint8_t> spkiDer);
@@ -25,10 +24,5 @@ std::vector<uint8_t> SignWithIdentity(const HostIdentity& identity,
     std::span<const uint8_t> data);
 bool VerifySignature(std::span<const uint8_t> spkiDer, std::span<const uint8_t> data,
     std::span<const uint8_t> signature);
-
-AuthNonce NewAuthNonce();
-
-std::vector<uint8_t> AuthTranscript(std::string_view label, const AuthNonce& nonce,
-    const deskhub::Fingerprint& hostFingerprint, std::span<const uint8_t> extra = {});
 
 }

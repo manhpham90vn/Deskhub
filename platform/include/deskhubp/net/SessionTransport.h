@@ -1,4 +1,5 @@
 #pragma once
+#include "deskhub/auth/FailureLimiter.h"
 #include "deskhub/net/TrustStore.h"
 #include "deskhub/protocol/RecordStream.h"
 #include "deskhubp/net/QuicEndpoint.h"
@@ -29,6 +30,8 @@ enum class Lane : uint8_t {
 inline constexpr size_t kLaneCount = 3;
 inline constexpr size_t kMaxBulkQueued = 64;
 inline constexpr unsigned kBulkEveryNthPop = 8;
+inline constexpr size_t kMaxPendingAuth = 8;
+inline constexpr uint64_t kAuthResponseTimeoutUs = 10'000'000;
 
 struct TransportMessage {
     NetAddr from{};
@@ -100,6 +103,7 @@ private:
     void ForgetPeerAuth(const NetAddr& peer);
     void DropQueuedFrom(const NetAddr& peer);
     void RevokeForgottenPeers();
+    void ExpirePendingAuth(uint64_t nowUs);
 
     QuicEndpoint endpoint_;
     std::map<uint64_t, deskhub::RecordStream> framers_;
@@ -108,6 +112,8 @@ private:
     std::vector<std::pair<NetAddr, uint64_t>> brokenStreams_;
     std::atomic<size_t> bulkDepth_{0};
     std::map<uint64_t, std::unique_ptr<HostAuth>> hostAuth_;
+    deskhub::AuthFailureLimiter authFailures_{};
+    std::map<uint64_t, uint64_t> pendingAuthDeadlines_;
     std::map<uint64_t, bool> authenticated_;
     HostAuthConfig hostAuthConfig_{};
     TransportAuthCallbacks authCallbacks_{};

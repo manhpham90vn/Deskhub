@@ -14,6 +14,7 @@ namespace deskhubp {
 
 struct HostAuthConfig {
     HostIdentity identity{};
+    deskhub::AuthSessionId sessionId{};
 };
 
 enum class HostAuthState : uint8_t {
@@ -46,6 +47,7 @@ private:
 struct ClientAuthConfig {
     ClientIdentity identity{};
     deskhub::Fingerprint hostFingerprint{};
+    deskhub::AuthSessionId sessionId{};
     std::string clientName{};
 };
 

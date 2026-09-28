@@ -13,6 +13,7 @@
 #include <atomic>
 #include <cstdio>
 #include <functional>
+#include <memory>
 #include <string>
 #include <thread>
 #include <vector>
@@ -154,6 +155,166 @@ bool Skipped(const char* tag) {
     return true;
 }
 
+bool BeginWithoutAnswer(deskhubp::SessionTransport& viewer, const NetAddr& target,
+    const deskhubp::HostIdentity& identity) {
+    deskhub::AuthStart start;
+    start.publicKey = deskhubp::IdentityPublicKey(identity);
+    start.clientName = "pending-auth-test";
+    std::vector<uint8_t> message(deskhub::kMaxRecordSize);
+    message.resize(deskhub::BuildAuthStart(message, start));
+    if (message.empty() || !viewer.SendRecord(target, message)) return false;
+    return WaitUntil(
+        [&] {
+            uint8_t buf[deskhub::kMaxRecordSize];
+            NetAddr from;
+            const int got = viewer.RecvFrom(buf, sizeof(buf), from);
+            if (got <= 0) return false;
+            const auto header = deskhub::ParseCommonHeader(
+                std::span<const uint8_t>(buf, size_t(got)));
+            if (!header || header->type != deskhub::MsgType::AuthChallenge) return false;
+            const auto challenge = deskhub::ParseAuthChallenge(
+                deskhub::PayloadOf(std::span<const uint8_t>(buf, size_t(got))));
+            return challenge && challenge->mode == deskhub::AuthMode::Signature;
+        },
+        kSettleMillis);
+}
+
+bool SendInvalidProof(deskhubp::SessionTransport& viewer, const NetAddr& target) {
+    deskhub::AuthResponse response;
+    response.proof.assign(64, 0);
+    std::vector<uint8_t> message(deskhub::kMaxRecordSize);
+    message.resize(deskhub::BuildAuthResponse(message, response));
+    if (message.empty() || !viewer.SendRecord(target, message)) return false;
+    return WaitUntil(
+        [&] {
+            uint8_t buf[deskhub::kMaxRecordSize];
+            NetAddr from;
+            const int got = viewer.RecvFrom(buf, sizeof(buf), from);
+            if (got <= 0) return false;
+            const auto packet = std::span<const uint8_t>(buf, size_t(got));
+            const auto header = deskhub::ParseCommonHeader(packet);
+            if (!header || header->type != deskhub::MsgType::AuthResult) return false;
+            const auto result = deskhub::ParseAuthResult(deskhub::PayloadOf(packet));
+            return result && result->code == deskhub::AuthResultCode::NotPaired;
+        },
+        kSettleMillis);
+}
+
+void TestRepeatedBadProofsAreLimited() {
+    std::printf("[admission] repeated bad signatures temporarily block one source and key...\n");
+    if (Skipped("admission")) return;
+    const SavedState guard;
+    AdmissionRig rig;
+    Check(rig.Start(false), "the host and first viewer establish QUIC");
+    if (!rig.viewer.Established(rig.target)) return;
+
+    for (size_t i = 0; i < deskhub::kAuthFailureLimit; ++i) {
+        deskhubp::SessionTransport next;
+        deskhubp::SessionTransport* viewer = &rig.viewer;
+        if (i != 0) {
+            next.SetRecvTimeout(1);
+            if (!next.Connect(deskhubp::QuicSettings{}, rig.target, "admission-host") ||
+                !next.WaitEstablished(rig.target, kAuthTimeoutMs)) {
+                Check(false, "the next viewer establishes QUIC");
+                return;
+            }
+            viewer = &next;
+        }
+        Check(BeginWithoutAnswer(*viewer, rig.target, rig.machines.viewer),
+            "the authorized key can start authentication before the threshold");
+        Check(SendInvalidProof(*viewer, rig.target),
+            "a bad signature is rejected without admission");
+        viewer->Close();
+    }
+
+    deskhubp::SessionTransport blocked;
+    blocked.SetRecvTimeout(1);
+    Check(blocked.Connect(deskhubp::QuicSettings{}, rig.target, "admission-host") &&
+              blocked.WaitEstablished(rig.target, kAuthTimeoutMs),
+        "a new QUIC connection can still be made");
+    deskhub::AuthStart start;
+    start.publicKey = deskhubp::IdentityPublicKey(rig.machines.viewer);
+    start.clientName = "rate-limit-test";
+    std::vector<uint8_t> message(deskhub::kMaxRecordSize);
+    message.resize(deskhub::BuildAuthStart(message, start));
+    Check(!message.empty() && blocked.SendRecord(rig.target, message),
+        "the key requests another auth attempt");
+    Check(WaitUntil(
+              [&] {
+                  uint8_t buf[deskhub::kMaxRecordSize];
+                  NetAddr from;
+                  blocked.RecvFrom(buf, sizeof(buf), from);
+                  return !blocked.Established(rig.target);
+              },
+              kSettleMillis),
+        "the host closes the repeated attempt before verifying another signature");
+    Check(rig.Peer().Pack() == 0, "none of the invalid proofs received admission");
+}
+
+void TestPendingAuthHasACapAndDeadline() {
+    std::printf("[admission] unfinished authentication has a cap and a deadline...\n");
+    if (Skipped("admission")) return;
+    const SavedState guard;
+    AdmissionRig rig;
+    Check(rig.Start(false), "the host and first viewer establish QUIC");
+    if (!rig.viewer.Established(rig.target)) return;
+    Check(BeginWithoutAnswer(rig.viewer, rig.target, rig.machines.viewer),
+        "the first authorized key receives a challenge");
+
+    std::vector<std::unique_ptr<deskhubp::SessionTransport>> waiting;
+    for (size_t i = 1; i < deskhubp::kMaxPendingAuth; ++i) {
+        auto viewer = std::make_unique<deskhubp::SessionTransport>();
+        viewer->SetRecvTimeout(1);
+        if (!viewer->Connect(deskhubp::QuicSettings{}, rig.target, "admission-host") ||
+            !viewer->WaitEstablished(rig.target, kAuthTimeoutMs) ||
+            !BeginWithoutAnswer(*viewer, rig.target, rig.machines.viewer)) {
+            Check(false, "each remaining pending slot accepts one challenge");
+            return;
+        }
+        waiting.push_back(std::move(viewer));
+    }
+    Check(waiting.size() + 1 == deskhubp::kMaxPendingAuth,
+        "the configured number of auth requests are waiting");
+
+    deskhubp::SessionTransport excess;
+    excess.SetRecvTimeout(1);
+    Check(excess.Connect(deskhubp::QuicSettings{}, rig.target, "admission-host") &&
+              excess.WaitEstablished(rig.target, kAuthTimeoutMs),
+        "an extra client establishes QUIC");
+    deskhub::AuthStart start;
+    start.publicKey = deskhubp::IdentityPublicKey(rig.machines.viewer);
+    start.clientName = "excess-auth-test";
+    std::vector<uint8_t> message(deskhub::kMaxRecordSize);
+    message.resize(deskhub::BuildAuthStart(message, start));
+    Check(!message.empty() && excess.SendRecord(rig.target, message),
+        "the extra client requests authentication");
+    Check(WaitUntil(
+              [&] {
+                  uint8_t buf[deskhub::kMaxRecordSize];
+                  NetAddr from;
+                  excess.RecvFrom(buf, sizeof(buf), from);
+                  return !excess.Established(rig.target);
+              },
+              kSettleMillis),
+        "the host closes the request beyond the pending limit");
+
+    Check(WaitUntil(
+              [&] {
+                  rig.PumpViewer();
+                  return !rig.viewer.Established(rig.target);
+              },
+              int(deskhubp::kAuthResponseTimeoutUs / 1000) + kSettleMillis),
+        "a client that never signs is disconnected at the auth deadline");
+    Check(rig.Peer().Pack() == 0, "no pending client is admitted");
+
+    deskhubp::SessionTransport replacement;
+    replacement.SetRecvTimeout(1);
+    Check(replacement.Connect(deskhubp::QuicSettings{}, rig.target, "admission-host") &&
+              replacement.WaitEstablished(rig.target, kAuthTimeoutMs) &&
+              BeginWithoutAnswer(replacement, rig.target, rig.machines.viewer),
+        "an expired request frees a slot for a new client");
+}
+
 void TestAClosedConnectionTakesItsAdmissionWithIt() {
     std::printf("[admission] a connection that ends leaves nothing admitted behind it...\n");
     if (Skipped("admission")) return;
@@ -289,6 +450,8 @@ void TestForgettingADeviceClosesItsLiveConnection() {
 }
 
 void RunTransportAdmissionTests() {
+    TestRepeatedBadProofsAreLimited();
+    TestPendingAuthHasACapAndDeadline();
     TestAClosedConnectionTakesItsAdmissionWithIt();
     TestASecondHandshakeOnOneConnectionIsRefused();
     TestAnOldAuthStartIsRefused();

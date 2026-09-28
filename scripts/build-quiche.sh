@@ -7,6 +7,7 @@ QUICHE_COMMIT=55886df3be579579207104c8e645825b6347a209
 ANDROID_API=24
 PREFIX="$PWD/third_party/quiche"
 SRC="$PREFIX/src"
+EXPORTER_PATCH="$PWD/patches/quiche-key-exporter.patch"
 
 ANDROID_TARGETS=(aarch64-linux-android x86_64-linux-android)
 APPLE_TARGETS=(aarch64-apple-darwin x86_64-apple-darwin aarch64-apple-ios aarch64-apple-ios-sim)
@@ -50,6 +51,14 @@ fetch_source() {
         exit 1
     fi
     echo "$QUICHE_COMMIT" >"$SRC/.commit"
+}
+
+apply_exporter_patch() {
+    if git -C "$SRC" apply --reverse --check "$EXPORTER_PATCH" >/dev/null 2>&1; then
+        return 0
+    fi
+    git -C "$SRC" apply --check "$EXPORTER_PATCH"
+    git -C "$SRC" apply "$EXPORTER_PATCH"
 }
 
 export_boringssl_headers() {
@@ -242,8 +251,8 @@ build_target() {
     local stamp="$out/.stamp"
     local artifact want
     artifact=$(artifact_of "$target")
-    want="$QUICHE_COMMIT"
-    is_msvc_target "$target" && want="$QUICHE_COMMIT+crt-static"
+    want="$QUICHE_COMMIT+exporter-v1"
+    is_msvc_target "$target" && want="$want+crt-static"
     rust_checks_wanted && want="$want+checks"
 
     if [ -f "$stamp" ] && [ "$(cat "$stamp")" = "$want" ] && [ -f "$out/$artifact" ]; then
@@ -320,6 +329,7 @@ while IFS= read -r target; do
 done < <(resolve_targets "${REQUESTED[@]}")
 
 fetch_source
+apply_exporter_patch
 mkdir -p "$PREFIX/include"
 cp "$SRC/quiche/include/quiche.h" "$PREFIX/include/quiche.h"
 

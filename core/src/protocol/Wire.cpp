@@ -85,13 +85,12 @@ size_t BuildAuthStart(std::span<uint8_t> out, const AuthStart& m) {
 
 size_t BuildAuthChallenge(std::span<uint8_t> out, const AuthChallenge& m) {
     if (uint8_t(m.mode) > uint8_t(AuthMode::Signature)) return 0;
-    const size_t payload = 2 + kAuthNonceBytes;
+    const size_t payload = 2;
     const size_t total = WriteCommon(out, MsgType::AuthChallenge, 0, Chan::Control, 0, payload);
     if (!total) return 0;
     uint8_t* p = out.data() + kCommonHeaderSize;
     *p++ = kAuthVersion;
-    *p++ = uint8_t(m.mode);
-    std::memcpy(p, m.nonce.data(), kAuthNonceBytes);
+    *p = uint8_t(m.mode);
     return total;
 }
 
@@ -370,13 +369,11 @@ std::optional<AuthStart> ParseAuthStart(std::span<const uint8_t> payload) {
 }
 
 std::optional<AuthChallenge> ParseAuthChallenge(std::span<const uint8_t> payload) {
-    if (payload.size() != 2 + kAuthNonceBytes || payload[0] != kAuthVersion ||
+    if (payload.size() != 2 || payload[0] != kAuthVersion ||
         payload[1] > uint8_t(AuthMode::Signature))
         return std::nullopt;
-    const uint8_t* p = payload.data();
     AuthChallenge m;
-    m.mode = AuthMode(p[1]);
-    std::memcpy(m.nonce.data(), p + 2, kAuthNonceBytes);
+    m.mode = AuthMode(payload[1]);
     return m;
 }
 

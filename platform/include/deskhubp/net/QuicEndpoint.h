@@ -1,4 +1,5 @@
 #pragma once
+#include "deskhub/auth/Transcript.h"
 #include "deskhub/net/TrustStore.h"
 #include "deskhubp/net/UdpSocket.h"
 
@@ -77,6 +78,7 @@ public:
     size_t MaxDatagramSize(QuicConnId conn) const;
     QuicSendStats SendStats() const;
     std::optional<deskhub::Fingerprint> PeerFingerprint(QuicConnId conn) const;
+    std::optional<deskhub::AuthSessionId> ExportAuthSessionId(QuicConnId conn) const;
     bool Established(QuicConnId conn) const;
     void CloseConnection(QuicConnId conn, uint64_t errorCode = 0, std::string_view reason = {});
     void Close();

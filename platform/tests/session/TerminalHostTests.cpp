@@ -63,6 +63,10 @@ struct Viewer {
         config.identity = own;
         config.hostFingerprint = hostKey;
         config.clientName = "test-client";
+        const auto sessionId = endpoint.ExportAuthSessionId(conn);
+        Check(sessionId.has_value(), "the terminal client can export its QUIC session ID");
+        if (!sessionId) return;
+        config.sessionId = *sessionId;
         auth = std::make_unique<deskhubp::ClientAuth>();
         auth->Configure(std::move(config));
 

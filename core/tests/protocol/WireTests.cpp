@@ -777,14 +777,12 @@ void TestAuthWire() {
 
     AuthChallenge challenge;
     challenge.mode = AuthMode::Signature;
-    challenge.nonce.fill(0x5A);
     n = BuildAuthChallenge(buf, challenge);
     Check(n > 0, "the host issues a signature challenge");
     std::optional<AuthChallenge> gotChallenge =
         ParseAuthChallenge(PayloadOf(std::span<const uint8_t>(buf, n)));
-    Check(gotChallenge && gotChallenge->mode == AuthMode::Signature &&
-              gotChallenge->nonce == challenge.nonce,
-        "the mode and nonce round-trip without passcode material");
+    Check(gotChallenge && gotChallenge->mode == AuthMode::Signature,
+        "the mode round-trips without a separate challenge nonce");
     buf[kCommonHeaderSize] = uint8_t(AuthMode::Signature);
     Check(!ParseAuthChallenge(PayloadOf(std::span<const uint8_t>(buf, n))),
         "an old challenge is refused");
@@ -817,7 +815,7 @@ void TestAuthWire() {
         Check(!ParseAuthResult(std::span<const uint8_t>(buf, cut)).has_value(),
             "a truncated verdict is refused rather than half-read");
 
-    uint8_t badMode[2 + kAuthNonceBytes] = {kAuthVersion, 0xFF};
+    uint8_t badMode[2] = {kAuthVersion, 0xFF};
     Check(!ParseAuthChallenge(badMode).has_value(), "a mode we do not know is refused");
     const uint8_t badCode[2] = {kAuthVersion, 0xFF};
     Check(!ParseAuthResult(badCode).has_value(), "so is a verdict we do not know");

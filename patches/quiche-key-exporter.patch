@@ -1,0 +1,84 @@
+diff --git a/quiche/include/quiche.h b/quiche/include/quiche.h
+index 3afa20e..1777bd3 100644
+--- a/quiche/include/quiche.h
++++ b/quiche/include/quiche.h
+@@ -510,6 +510,10 @@ void quiche_conn_application_proto(const quiche_conn *conn, const uint8_t **out,
+ // Returns the peer's leaf certificate (if any) as a DER-encoded buffer.
+ void quiche_conn_peer_cert(const quiche_conn *conn, const uint8_t **out, size_t *out_len);
+ 
++int quiche_conn_export_keying_material(const quiche_conn *conn, uint8_t *out,
++                                       size_t out_len, const uint8_t *label,
++                                       size_t label_len);
++
+ // Returns the serialized cryptographic session for the connection.
+ void quiche_conn_session(const quiche_conn *conn, const uint8_t **out, size_t *out_len);
+ 
+diff --git a/quiche/src/ffi.rs b/quiche/src/ffi.rs
+index 3306b61..a4593e6 100644
+--- a/quiche/src/ffi.rs
++++ b/quiche/src/ffi.rs
+@@ -1206,6 +1206,21 @@ pub extern "C" fn quiche_conn_peer_cert(
+     }
+ }
+ 
++#[no_mangle]
++pub extern "C" fn quiche_conn_export_keying_material(
++    conn: &Connection, out: *mut u8, out_len: size_t, label: *const u8,
++    label_len: size_t,
++) -> c_int {
++    if out.is_null() || label.is_null() || out_len == 0 || label_len == 0 ||
++        !conn.is_established() {
++        return -1;
++    }
++
++    let output = unsafe { slice::from_raw_parts_mut(out, out_len) };
++    let label = unsafe { slice::from_raw_parts(label, label_len) };
++    if conn.handshake.export_keying_material(output, label) { 0 } else { -1 }
++}
++
+ #[no_mangle]
+ pub extern "C" fn quiche_conn_session(
+     conn: &Connection, out: &mut *const u8, out_len: &mut size_t,
+diff --git a/quiche/src/tls/mod.rs b/quiche/src/tls/mod.rs
+index e5205f4..d08519e 100644
+--- a/quiche/src/tls/mod.rs
++++ b/quiche/src/tls/mod.rs
+@@ -580,6 +580,25 @@ impl Handshake {
+         unsafe { SSL_in_init(self.as_ptr()) == 0 }
+     }
+ 
++    pub fn export_keying_material(&self, out: &mut [u8], label: &[u8]) -> bool {
++        if !self.is_completed() || out.is_empty() || label.is_empty() {
++            return false;
++        }
++
++        unsafe {
++            SSL_export_keying_material(
++                self.ptr,
++                out.as_mut_ptr(),
++                out.len(),
++                label.as_ptr() as *const c_char,
++                label.len(),
++                ptr::null(),
++                0,
++                0,
++            ) == 1
++        }
++    }
++
+     pub fn is_resumed(&self) -> bool {
+         unsafe { SSL_session_reused(self.as_ptr()) == 1 }
+     }
+@@ -1199,6 +1218,12 @@ extern "C" {
+ 
+     fn SSL_session_reused(ssl: *const SSL) -> c_int;
+ 
++    fn SSL_export_keying_material(
++        ssl: *mut SSL, out: *mut u8, out_len: usize, label: *const c_char,
++        label_len: usize, context: *const u8, context_len: usize,
++        use_context: c_int,
++    ) -> c_int;
++
+     fn SSL_in_init(ssl: *const SSL) -> c_int;
+ 
+     fn SSL_clear(ssl: *mut SSL) -> c_int;

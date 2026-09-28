@@ -5,7 +5,6 @@
 #include <openssl/ec_key.h>
 #include <openssl/evp.h>
 #include <openssl/pem.h>
-#include <openssl/rand.h>
 #include <openssl/sha.h>
 #include <openssl/x509.h>
 #include <openssl/nid.h>
@@ -235,24 +234,6 @@ bool VerifySignature(std::span<const uint8_t> spkiDer, std::span<const uint8_t> 
         return false;
     return EVP_DigestVerify(ctx.get(), signature.data(), signature.size(), data.data(),
                data.size()) == 1;
-}
-
-AuthNonce NewAuthNonce() {
-    AuthNonce nonce{};
-    RAND_bytes(nonce.data(), nonce.size());
-    return nonce;
-}
-
-std::vector<uint8_t> AuthTranscript(std::string_view label, const AuthNonce& nonce,
-    const deskhub::Fingerprint& hostFingerprint, std::span<const uint8_t> extra) {
-    std::vector<uint8_t> out;
-    out.reserve(label.size() + 1 + nonce.size() + hostFingerprint.bytes.size() + extra.size());
-    out.insert(out.end(), label.begin(), label.end());
-    out.push_back(0);
-    out.insert(out.end(), nonce.begin(), nonce.end());
-    out.insert(out.end(), hostFingerprint.bytes.begin(), hostFingerprint.bytes.end());
-    out.insert(out.end(), extra.begin(), extra.end());
-    return out;
 }
 
 }

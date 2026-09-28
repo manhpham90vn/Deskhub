@@ -98,7 +98,7 @@ handshake（`AuthNegotiation`）按 connection 决定准入。transport 负责�
 
 | client 提供的内容 | host 是否认识该机器 | 结果 |
 | --- | --- | --- |
-| 不提供 | 已 pair | **Signature**: client 使用自身 key 对包含 nonce 与 host fingerprint 的 transcript 签名，随即被接受。 |
+| 不提供 | 已 pair | **Signature**: client 使用自身 key 对包含 TLS 会话标识与 host fingerprint 的 transcript 签名，随即被接受。 |
 | 不提供 | 未知 | **Approval**: 询问 host 前的用户（*Let this machine in?*）。 |
 | 提供 passcode | host 设有 passcode | **Passcode**: 在加 salt 的 verifier 上执行 SPAKE2。码本身不经过网络，每条 connection 仅允许一次尝试，双方均需证明，且 MAC 绑定到 client 实际接收到的 host key，从而使 relay 攻击无效。填入的码始终会被校验，无论是否已 pair。 |
 | 提供 passcode | host 未设 passcode | 无可比对的值 → 已 pair 走 Signature，否则走 Approval。 |
@@ -270,8 +270,17 @@ runner 上与 base commit 的 A/B 结果（偏移仅作为警告，不导致失�
 
 ## 9. 需要记录的设计决策
 
+- **签名覆盖无歧义的认证 transcript**：`core/auth/Transcript` 把 Deskhub 域标识、认证
+  版本、签名角色、32 字节的 QUIC/TLS exporter 值、完整客户端公钥和 TLS 主机密钥指纹
+  编码为带长度前缀的字段。对 quiche 0.29.3 的小型补丁通过 C API 提供 TLS exporter。
+  双方为当前连接导出相同的值；导出失败时认证失败。主机每个连接只接受一次签名响应，
+  防止在其他会话中重放。
+  主机最多保留八个等待签名的认证请求；十秒内没有响应就关闭该连接。
+  同一密钥和来源 IP 在一分钟内有三次签名验证失败时，该组合会被暂停十秒。
+  内存表最多保存 64 个组合；验证成功后清除其失败计数。
+
 - **认证在协议版本 3 内有独立版本**：`AuthStart` 在公钥前保留一个值为 0 的兼容字节，
-  并在客户端名称后写入认证版本 4。旧主机能够读取请求并发送旧版 challenge；新客户端
+  并在客户端名称后写入认证版本 5。旧主机能够读取请求并发送旧版 challenge；新客户端
   据此识别不兼容版本并关闭连接。新主机拒绝缺少版本后缀的请求，发送
   `VersionMismatch` 后关闭连接。兼容字节不再表示 passcode 选项。challenge、response
   和 result 只携带带版本的签名数据。

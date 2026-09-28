@@ -811,6 +811,17 @@ std::optional<deskhub::Fingerprint> QuicEndpoint::PeerFingerprint(QuicConnId con
     return FingerprintOfCertDer(std::span<const uint8_t>(der, len));
 }
 
+std::optional<deskhub::AuthSessionId> QuicEndpoint::ExportAuthSessionId(QuicConnId conn) const {
+    const Impl::Connection* entry = impl_->Lookup(conn);
+    if (entry == nullptr || !quiche_conn_is_established(entry->conn)) return std::nullopt;
+    constexpr std::string_view label = "EXPORTER-Deskhub-Auth-v5";
+    deskhub::AuthSessionId sessionId{};
+    if (quiche_conn_export_keying_material(entry->conn, sessionId.data(), sessionId.size(),
+            reinterpret_cast<const uint8_t*>(label.data()), label.size()) != 0)
+        return std::nullopt;
+    return sessionId;
+}
+
 bool QuicEndpoint::Established(QuicConnId conn) const {
     const Impl::Connection* entry = impl_->Lookup(conn);
     return entry != nullptr && quiche_conn_is_established(entry->conn);

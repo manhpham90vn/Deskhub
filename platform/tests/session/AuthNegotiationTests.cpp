@@ -44,6 +44,7 @@ struct Machines {
     deskhubp::HostAuthConfig HostConfig() const {
         deskhubp::HostAuthConfig config;
         config.identity = host;
+        config.sessionId.fill(0x41);
         return config;
     }
 
@@ -51,6 +52,7 @@ struct Machines {
         deskhubp::ClientAuthConfig config;
         config.identity = client;
         config.hostFingerprint = host.fingerprint;
+        config.sessionId.fill(0x41);
         config.clientName = "client";
         return config;
     }
@@ -98,6 +100,9 @@ void TestAuthorizedKeyMustSignForThisHost() {
     if (!response) return;
     Check(host.Respond(*response, 1000).code == deskhub::AuthResultCode::Accepted,
         "the signature admits the client");
+    Check(host.Respond(*response, 1000).code != deskhub::AuthResultCode::Accepted,
+        "the same signed response is not accepted twice");
+    Check(!host.Begin(client.Begin()), "a settled handshake cannot issue another challenge");
 
     deskhubp::HostAuth wrongHost;
     deskhubp::ClientAuth fooled;
@@ -134,6 +139,30 @@ void TestRevocationDuringHandshakeIsEnforced() {
             "the signed response cannot finish after revocation");
 }
 
+void TestAProofCannotMoveToAnotherTlsSession() {
+    std::printf("[authneg] a signed request cannot be replayed on another TLS session...\n");
+    const CleanSlate guard;
+    Machines machines;
+    if (!machines.Make()) return;
+    Check(deskhubp::RememberPairedDevice(machines.client.fingerprint, "client", 500),
+        "the client key is authorized");
+    deskhubp::HostAuth original;
+    deskhubp::HostAuth other;
+    deskhubp::ClientAuth client;
+    original.Configure(machines.HostConfig());
+    auto otherConfig = machines.HostConfig();
+    otherConfig.sessionId[0] ^= 1;
+    other.Configure(otherConfig);
+    client.Configure(machines.ClientConfig());
+    const auto challenge = original.Begin(client.Begin());
+    const auto response = challenge ? client.Answer(*challenge) : std::nullopt;
+    Check(response.has_value(), "the client signs for its own TLS session");
+    if (!response) return;
+    Check(other.Begin(client.Begin()).has_value(), "another connection requests authentication");
+    Check(other.Respond(*response, 1000).code != deskhub::AuthResultCode::Accepted,
+        "that connection rejects the captured signature");
+}
+
 void TestMalformedKeyIsRejected() {
     std::printf("[authneg] malformed public keys cannot start auth...\n");
     const CleanSlate guard;
@@ -153,5 +182,6 @@ void RunAuthNegotiationTests() {
     TestUnknownKeyNeverRequestsApproval();
     TestAuthorizedKeyMustSignForThisHost();
     TestRevocationDuringHandshakeIsEnforced();
+    TestAProofCannotMoveToAnotherTlsSession();
     TestMalformedKeyIsRejected();
 }

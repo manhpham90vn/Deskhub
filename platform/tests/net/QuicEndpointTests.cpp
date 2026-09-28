@@ -98,6 +98,13 @@ void TestHandshakeStreamAndDatagram() {
     Check(fingerprint && *fingerprint == identity.fingerprint,
         "and its fingerprint is the one the host published - this is what TOFU compares");
 
+    const auto clientSession = client.endpoint.ExportAuthSessionId(client.conn);
+    const auto hostSession = server.endpoint.ExportAuthSessionId(server.conn);
+    Check(clientSession && hostSession && *clientSession == *hostSession,
+        "both peers export the same TLS session identifier for authentication");
+    Check(!client.endpoint.ExportAuthSessionId(0).has_value(),
+        "an unknown connection has no authentication session identifier");
+
     const std::string payload = "terminal: echo hello";
     Check(client.endpoint.SendStream(client.conn, deskhubp::kQuicControlStream,
               std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(payload.data()),

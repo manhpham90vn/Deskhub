@@ -156,6 +156,57 @@ void TestClientRejectsAnOldAuthChallenge() {
         "the client reports the incompatible auth version");
 }
 
+void TestClientRejectsAcceptedBeforeSigning() {
+    std::printf("[transport] an acceptance before the signature cannot authorize a client...\n");
+    if (!deskhubp::QuicAvailable()) return;
+
+    const SavedIdentity guard;
+    ForgetHostIdentity();
+    const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity("deskhub-test");
+    Check(identity.Valid(), "the test host has a TLS identity");
+    if (!identity.Valid()) return;
+
+    deskhubp::SessionTransport host;
+    deskhubp::SessionTransport viewer;
+    host.SetRecvTimeout(1);
+    viewer.SetRecvTimeout(1);
+    deskhubp::QuicSettings settings;
+    settings.certPemPath = identity.certPath;
+    settings.keyPemPath = identity.keyPath;
+    Check(host.Listen(settings, kTestPort, "127.0.0.1"), "the test host listens");
+    const NetAddr target{0x7F000001u, kTestPort};
+    Check(viewer.Connect(deskhubp::QuicSettings{}, target, "deskhub-test"),
+        "the viewer connects");
+
+    uint8_t buf[deskhub::kMaxDatagram];
+    NetAddr from;
+    for (int i = 0; i < kMaxRounds && !viewer.Established(target); ++i) {
+        viewer.RecvFrom(buf, sizeof(buf), from);
+        host.RecvFrom(buf, sizeof(buf), from);
+    }
+    Check(viewer.Established(target), "the TLS connection is established");
+    if (!viewer.Established(target)) return;
+
+    deskhubp::ClientAuthConfig config;
+    config.identity.publicKey.assign(32, 0x41);
+    config.hostFingerprint = identity.fingerprint;
+    deskhub::AuthResultCode code = deskhub::AuthResultCode::NotPaired;
+    bool admitted = false;
+    std::thread auth([&] { admitted = viewer.RunClientAuth(target, config, 2000, code); });
+    const int got = PumpFor(host, host, buf, sizeof(buf), from);
+    Check(got > 0, "the client sent its auth start");
+    if (got > 0) {
+        deskhub::AuthResult result;
+        result.code = deskhub::AuthResultCode::Accepted;
+        std::vector<uint8_t> message(deskhub::kMaxDatagram);
+        message.resize(deskhub::BuildAuthResult(message, result));
+        Check(host.SendRecord(from, message), "the premature acceptance reaches the client");
+    }
+    auth.join();
+    Check(!admitted && code == deskhub::AuthResultCode::Refused,
+        "the client rejects acceptance without signing");
+}
+
 void TestVideoRidesEncryptedDatagrams() {
     std::printf("[transport] video rides QUIC datagrams by default, and raw video is refused...\n");
     if (!deskhubp::QuicAvailable()) {
@@ -562,6 +613,7 @@ void TestAnIdleTransportWaitsInsteadOfSpinning() {
 void RunSessionTransportTests() {
     TestControlTravelsOnAStream();
     TestClientRejectsAnOldAuthChallenge();
+    TestClientRejectsAcceptedBeforeSigning();
     TestVideoRidesEncryptedDatagrams();
     TestPlaintextDiscoveryIsIgnored();
     TestAFileBacklogNeverDelaysTheStream();

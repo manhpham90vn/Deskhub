@@ -80,19 +80,23 @@ void TestAProofCannotBeCarriedToADifferentHost() {
     std::printf("[auth] a proof is bound to the key the client was shown...\n");
     if (!deskhubp::QuicAvailable()) return;
 
-    const deskhubp::AuthNonce nonce = deskhubp::NewAuthNonce();
+    deskhub::AuthSessionId sessionId{};
+    sessionId.fill(0x41);
     deskhub::Fingerprint real;
     deskhub::Fingerprint impostor;
     for (size_t i = 0; i < real.bytes.size(); ++i) {
         real.bytes[i] = uint8_t(i);
         impostor.bytes[i] = uint8_t(i + 1);
     }
+    const std::vector<uint8_t> clientKey(44, 0x21);
 
-    const std::vector<uint8_t> toReal = deskhubp::AuthTranscript("client", nonce, real);
-    const std::vector<uint8_t> toImpostor = deskhubp::AuthTranscript("client", nonce, impostor);
+    const std::vector<uint8_t> toReal =
+        deskhub::AuthTranscript(deskhub::AuthRole::Client, sessionId, clientKey, real);
+    const std::vector<uint8_t> toImpostor =
+        deskhub::AuthTranscript(deskhub::AuthRole::Client, sessionId, clientKey, impostor);
     Check(toReal != toImpostor, "the machine's own key is part of what gets proved");
 
-    Check(deskhubp::AuthTranscript("host", nonce, real) != toReal,
+    Check(deskhub::AuthTranscript(deskhub::AuthRole::Host, sessionId, clientKey, real) != toReal,
         "and the two directions are not interchangeable, so neither can be replayed at the other");
 }
 

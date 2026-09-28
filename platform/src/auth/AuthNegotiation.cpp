@@ -2,16 +2,9 @@
 
 #include <utility>
 
-#include "deskhubp/diag/Log.h"
 #include "deskhubp/system/PairedDevicesFile.h"
 
 namespace deskhubp {
-
-namespace {
-
-constexpr std::string_view kClientLabel = "client";
-
-}
 
 struct HostAuth::Impl {
     HostAuthConfig config{};
@@ -19,7 +12,6 @@ struct HostAuth::Impl {
     deskhub::Fingerprint peer{};
     std::string peerName{};
     std::vector<uint8_t> peerPublicKey{};
-    AuthNonce nonce{};
 
     deskhub::AuthResult Settle(deskhub::AuthResultCode code) {
         state = HostAuthState::Settled;
@@ -39,17 +31,16 @@ void HostAuth::Configure(HostAuthConfig config) {
 }
 
 std::optional<deskhub::AuthChallenge> HostAuth::Begin(const deskhub::AuthStart& start) {
+    if (impl_->state != HostAuthState::Idle) return std::nullopt;
     const std::optional<deskhub::Fingerprint> peer = FingerprintOfPublicKey(start.publicKey);
     if (!peer) return std::nullopt;
 
+    const bool paired = CheckPairedDevice(*peer) == deskhub::PairVerdict::Paired;
     impl_->peer = *peer;
     impl_->peerName = start.clientName;
     impl_->peerPublicKey = start.publicKey;
-    impl_->nonce = NewAuthNonce();
     deskhub::AuthChallenge challenge;
-    challenge.nonce = impl_->nonce;
 
-    const bool paired = CheckPairedDevice(*peer) == deskhub::PairVerdict::Paired;
     challenge.mode = paired ? deskhub::AuthMode::Signature : deskhub::AuthMode::Denied;
     impl_->state = paired ? HostAuthState::AwaitingResponse : HostAuthState::Settled;
     return challenge;
@@ -61,8 +52,9 @@ deskhub::AuthResult HostAuth::Respond(const deskhub::AuthResponse& response, int
 
     if (CheckPairedDevice(impl_->peer) != deskhub::PairVerdict::Paired)
         return impl_->Settle(deskhub::AuthResultCode::NotPaired);
-    const std::vector<uint8_t> transcript =
-        AuthTranscript(kClientLabel, impl_->nonce, impl_->config.identity.fingerprint);
+    const std::vector<uint8_t> transcript = deskhub::AuthTranscript(deskhub::AuthRole::Client,
+        impl_->config.sessionId, impl_->peerPublicKey, impl_->config.identity.fingerprint);
+    if (transcript.empty()) return impl_->Settle(deskhub::AuthResultCode::NotPaired);
     if (!VerifySignature(impl_->peerPublicKey, transcript, response.proof))
         return impl_->Settle(deskhub::AuthResultCode::NotPaired);
     TouchPairedDevice(impl_->peer, impl_->peerName, nowUnix);
@@ -105,8 +97,11 @@ std::optional<deskhub::AuthResponse> ClientAuth::Answer(
     const deskhub::AuthChallenge& challenge) {
     if (challenge.mode != deskhub::AuthMode::Signature) return std::nullopt;
     deskhub::AuthResponse response;
-    response.proof = SignWithClientIdentity(impl_->config.identity,
-        AuthTranscript(kClientLabel, challenge.nonce, impl_->config.hostFingerprint));
+    const std::vector<uint8_t> transcript = deskhub::AuthTranscript(deskhub::AuthRole::Client,
+        impl_->config.sessionId, impl_->config.identity.publicKey,
+        impl_->config.hostFingerprint);
+    if (transcript.empty()) return std::nullopt;
+    response.proof = SignWithClientIdentity(impl_->config.identity, transcript);
     if (response.proof.empty()) return std::nullopt;
     return response;
 }

@@ -12,6 +12,10 @@ int main() {
     std::printf("--- wire ---\n");
     RunWireTests();
 
+    std::printf("--- authentication transcript ---\n");
+    RunAuthFailureLimiterTests();
+    RunAuthTranscriptTests();
+
     std::printf("--- transport: reassembler ---\n");
     RunReassemblerTests();
     RunAudioJitterBufferTests();

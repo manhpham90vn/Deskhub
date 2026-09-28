@@ -88,7 +88,7 @@ bool WriteAppDataFileAtomic(const std::string& fileName, const std::string& cont
     }
 #ifdef _WIN32
     const bool saved = MoveFileExW(temporary.c_str(), target.c_str(),
-        MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH) != 0;
+                           MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH) != 0;
 #else
     const bool saved = ::rename(temporary.c_str(), target.c_str()) == 0;
 #endif

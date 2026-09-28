@@ -104,7 +104,7 @@ connection chưa hoàn tất phần auth:
 
 | Client cung cấp | Host có biết máy này không | Kết quả |
 | --- | --- | --- |
-| không cung cấp gì | đã pair | **Signature**: client ký một transcript gồm nonce và fingerprint của host bằng key của nó, và được chấp nhận không cần thao tác thêm. |
+| không cung cấp gì | đã pair | **Signature**: client ký transcript gồm định danh phiên TLS và fingerprint của host bằng key của nó, rồi được chấp nhận không cần thao tác thêm. |
 | không cung cấp gì | chưa biết | **Approval**: người dùng tại host được hỏi (*Let this machine in?*). |
 | một passcode | host có passcode | **Passcode**: SPAKE2 trên một verifier đã salt. Mã không đi qua đường truyền, mỗi connection chỉ được thử một lần, cả hai phía cùng chứng minh, và MAC được ràng buộc với đúng host key mà client thực sự nhận được, nhờ đó vô hiệu hoá các cuộc tấn công relay. Mã đã nhập luôn được kiểm tra, bất kể máy đã pair hay chưa. |
 | một passcode | host không có passcode | không có giá trị để đối chiếu → Signature nếu đã pair, ngược lại là Approval. |
@@ -302,8 +302,18 @@ coverage của core.
 
 ## 9. Những quyết định cần ghi nhớ
 
+- **Chữ ký bao phủ một transcript auth không mơ hồ**: `core/auth/Transcript` mã hóa
+  domain Deskhub, auth version, vai trò bên ký, giá trị 32 byte xuất từ QUIC/TLS,
+  toàn bộ public key client và fingerprint khóa TLS host thành các trường có tiền tố
+  độ dài. Bản vá nhỏ cho quiche 0.29.3 cung cấp TLS exporter qua C API. Hai đầu lấy
+  cùng giá trị cho kết nối này; nếu không xuất được thì auth thất bại. Host chỉ nhận
+  một phản hồi có chữ ký trên mỗi kết nối, ngăn phát lại trên phiên khác.
+  Host giữ tối đa tám yêu cầu đang chờ chữ ký và đóng từng kết nối nếu không có phản hồi
+  trong mười giây. Ba chữ ký sai từ cùng khóa và IP nguồn trong một phút sẽ tạm chặn
+  cặp đó mười giây. Bảng trong bộ nhớ giữ tối đa 64 cặp; chữ ký đúng xóa bộ đếm lỗi.
+
 - **Auth có phiên bản riêng trong protocol version 3**: `AuthStart` giữ một byte bằng 0
-  trước khóa làm tiền tố tương thích và đặt auth version 4 sau tên client. Host cũ có thể
+  trước khóa làm tiền tố tương thích và đặt auth version 5 sau tên client. Host cũ có thể
   đọc lời mở đầu và gửi challenge cũ; client mới nhận ra challenge không tương thích rồi
   đóng kết nối. Host mới từ chối lời mở đầu thiếu hậu tố version, gửi `VersionMismatch`
   rồi đóng kết nối. Byte tiền tố không còn biểu thị lựa chọn passcode. Challenge, response

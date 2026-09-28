@@ -30,11 +30,15 @@ Trạng thái: đang triển khai; các ô chưa đánh dấu vẫn còn phải 
 - [x] Cập nhật `PRIVACY` phiên bản 2.6 ở bốn ngôn ngữ cho khóa client riêng, khóa TLS host, xác thực bằng khóa và cách làm sạch passcode settings/recent. Còn phải rà toàn bộ tài liệu sản phẩm khi mô hình host profile và `authorized_keys` hoàn tất.
 - [x] Gỡ `--passcode`, `--pairing`, `--no-new-pairings` và `DESKHUB_PASSCODE` khỏi CLI, cùng parser, nguồn passcode stdin/file, help và passcode note; lệnh cũ trả lỗi tùy chọn không biết. Xóa cờ `allowNewPairings` không còn tác dụng khỏi settings/share options và cập nhật test. Cập nhật checklist CLI trong `SECURITY` bốn ngôn ngữ. Test terminal FFI dùng `/bin/sh` trên POSIX và in kết quả trên dòng riêng để không phụ thuộc wizard/prompt của shell mặc định.
 - [x] Xóa throttle passcode không còn đường chạy, tham số kết quả `hostProvedPasscode` luôn false và trường passcode khỏi cấu hình auth client. Client báo `NotPaired` khi host từ chối khóa chưa được cấp quyền, thay cho `PairingDisabled`; dọn test transport/terminal tương ứng. Giới hạn auth bằng khóa vẫn cần thiết kế và triển khai riêng.
-- [x] Định dạng bản tin auth có version riêng (`kAuthVersion = 4`): bỏ mode passcode/approval, salt, SPAKE2, MAC xác nhận và các mã lỗi passcode khỏi wire. `AuthStart` giữ byte tiền tố cố định bằng 0 và đặt version sau tên để client mới nhận được challenge từ host cũ rồi báo lỗi version; host mới trả `VersionMismatch` và đóng kết nối khi nhận start cũ. Thêm test parser, wire vectors và QUIC loopback cho cả hai chiều không tương thích.
+- [x] Định dạng bản tin auth có version riêng (`kAuthVersion = 5`): bỏ mode passcode/approval, salt, SPAKE2, MAC xác nhận và các mã lỗi passcode khỏi wire. `AuthStart` giữ byte tiền tố cố định bằng 0 và đặt version sau tên để client mới nhận được challenge từ host cũ rồi báo lỗi version; host mới trả `VersionMismatch` và đóng kết nối khi nhận start cũ. Thêm test parser, wire vectors và QUIC loopback cho cả hai chiều không tương thích.
+- [x] Chuyển transcript chữ ký sang `core/auth`: mã hóa trường có độ dài rõ ràng và đưa domain, auth version, vai trò client, định danh phiên xuất từ QUIC/TLS, public key client và fingerprint khóa TLS host vào dữ liệu ký. Bổ sung TLS exporter vào C API của quiche 0.29.3 bằng bản vá được áp dụng khi build; bỏ nonce và thời hạn challenge riêng. Host chỉ nhận một chữ ký trên mỗi kết nối, và chữ ký của phiên khác không hợp lệ.
+- [x] Siết trạng thái auth client: chỉ xử lý bản tin từ đúng peer, từ chối `Accepted` trước khi ký, challenge lặp và bản tin auth sai thứ tự; xóa auth inbox cũ trước một lần xác thực mới. Thêm test host gửi `Accepted` quá sớm qua QUIC loopback; `make test-platform` và `make lint` đã qua.
+- [x] Giới hạn tối đa 8 phiên auth đang chờ chữ ký và đóng kết nối nếu quá 10 giây; xóa slot khi xác thực xong hoặc kết nối đóng. Test QUIC loopback xác nhận phiên thứ 9 bị từ chối, phiên im lặng hết hạn và slot được tái sử dụng.
+- [x] Giới hạn chữ ký sai theo cặp public key client và IP nguồn: ba lần sai trong một phút chặn cặp đó 10 giây; chữ ký đúng xóa lỗi. Bộ đếm tối đa 64 cặp trong bộ nhớ, không ảnh hưởng khóa khác cùng IP. Unit test kiểm tra ngưỡng, thời hạn, tách khóa/IP và giới hạn bộ nhớ; QUIC loopback xác nhận lần thử thứ tư bị đóng trước khi xác minh chữ ký.
 
 Đã có identity client riêng nhưng mới lưu được một khóa và import hiện chỉ hỗ trợ PEM/PKCS#8, chưa đọc private key OpenSSH. Chưa có host profile. Luồng auth mới không mở popup xác nhận kết nối; hàng đợi và API trả lời approval đã được gỡ. Giao thức wire cũ, trường passcode trong UI/API và các message beacon discovery còn trong code; phải gỡ tiếp trước khi coi là hoàn tất. File settings/recent cũ được làm sạch khi nạp thành công; nếu ghi thất bại, file cũ còn nguyên để thử lại. Migration cấu hình mới có version và xử lý cập nhật đồng thời vẫn cần làm.
 
-Gate chưa qua trọn vẹn: build macOS có ký cần chứng chỉ phát triển. Sau khi chuyển wire auth sang version 4, `make test`, `make lint`, `make test-platform` với socket loopback, `make test-integration` và `make build-cli` đã qua. Lỗi terminal FFI được truy ra shell mặc định mở wizard zsh trong HOME thử nghiệm; test đã dùng `/bin/sh` và output riêng dòng. Build macOS không ký đã qua ở lượt trước.
+Gate chưa qua trọn vẹn: build macOS có ký cần chứng chỉ phát triển. Sau khi chuyển wire auth sang version 5 và ràng buộc chữ ký với phiên QUIC/TLS, `make test`, `make lint`, `make test-platform`, `make test-integration` và `make build-cli` đã qua trên Linux. Lần chạy platform đầu sau thay đổi còn lỗi ở test terminal thiếu định danh phiên và đã sửa; một lần chạy kế tiếp lỗi timeout ở test ping/reconnect, lần lặp lại qua. Lỗi terminal FFI trước đó được truy ra shell mặc định mở wizard zsh trong HOME thử nghiệm; test đã dùng `/bin/sh` và output riêng dòng. Build macOS không ký đã qua ở lượt trước, chưa chạy lại sau thay đổi này.
 
 ## 1. Phạm vi đã chốt
 
@@ -140,16 +144,16 @@ Tên file và lệnh bên dưới là thiết kế dự kiến cần thống nh�
 - [x] Định nghĩa phiên bản auth mới; client/server không hỗ trợ phải trả lỗi phiên bản và đóng kết nối. Không fallback về passcode, approval hay plaintext.
 - [ ] `AuthStart` gửi thuật toán, public key client và tên hiển thị có giới hạn độ dài.
 - [x] Host kiểm tra public key hợp lệ và có trong danh sách được phép trước khi tiếp tục xác thực.
-- [ ] Host phát challenge bằng CSPRNG, dùng một lần, có thời hạn và gắn với đúng kết nối.
-- [ ] Định nghĩa transcript bằng encoding không mơ hồ, gồm nhãn riêng của Deskhub, version, vai trò, nonce, danh tính client và khóa TLS host.
-- [ ] Ràng buộc chữ ký với phiên transport. Kiểm tra API quiche C hiện có có xuất TLS keying material hay không; nếu cần, bổ sung wrapper và test. Không coi IP/port là session binding.
+- [x] Host chỉ nhận một phản hồi chữ ký trên mỗi kết nối; định danh phiên QUIC/TLS thay nonce challenge riêng.
+- [x] Định nghĩa transcript bằng encoding không mơ hồ, gồm nhãn riêng của Deskhub, version, vai trò, định danh phiên, danh tính client và khóa TLS host.
+- [x] Ràng buộc chữ ký với phiên transport bằng TLS exporter của quiche; bổ sung wrapper C và test. Không coi IP/port là session binding.
 - [ ] Client ký transcript bằng private key đã chọn; host xác minh bằng public key đã được cấp quyền.
 - [x] Kiểm tra lại quyền ngay trước khi chấp nhận, tránh khóa bị thu hồi trong lúc handshake vẫn được cho vào.
-- [ ] Client chỉ nhận `Accepted` trong trạng thái đã hoàn thành các bước xác thực mong đợi; từ chối message sai thứ tự/lặp hoặc không thuộc kết nối hiện tại.
+- [x] Client chỉ nhận `Accepted` trong trạng thái đã hoàn thành các bước xác thực mong đợi; từ chối message sai thứ tự/lặp hoặc không thuộc kết nối hiện tại.
 - [ ] Auth thành công chỉ có hiệu lực cho kết nối đó. Reconnect, resume hoặc QUIC session resumption không tự kế thừa admission; không chạy thao tác đặc quyền bằng 0-RTT trước auth.
 - [ ] Không cho phép screen, input, clipboard, terminal, file transfer hoặc danh sách tài nguyên trước khi auth hoàn tất.
 - [ ] Thu hồi khóa đóng tất cả kết nối của khóa đó và chặn lần kết nối tiếp theo, kể cả khi cập nhật bằng CLI/service.
-- [ ] Giới hạn thời gian/số handshake đang chờ và lưu lượng auth thất bại; thay cơ chế throttle passcode bằng giới hạn phù hợp với auth bằng khóa.
+- [x] Giới hạn thời gian/số handshake đang chờ và lưu lượng auth thất bại; thay cơ chế throttle passcode bằng giới hạn phù hợp với auth bằng khóa.
 - [ ] Trả mã lỗi ổn định: host chưa tin cậy, host đổi khóa, khóa client chưa được cấp quyền, chữ ký sai, khóa cục bộ không dùng được, version không tương thích, timeout, lỗi cấu hình.
 
 ## 6. GUI, CLI và API cho service
