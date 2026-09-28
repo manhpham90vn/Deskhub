@@ -257,41 +257,32 @@ std::vector<Vector> AllVectors() {
                      AuthStart m;
                      m.publicKey = {0xA1, 0xA2, 0xA3, 0xA4, 0xA5, 0xA6, 0xA7, 0xA8};
                      m.clientName = "Tablet 01";
-                     m.hasPasscode = true;
                      return BuildAuthStart(out, m);
                  },
-        "0360000000000000010008a1a2a3a4a5a6a7a8095461626c6574203031"});
+        "0360000000000000000008a1a2a3a4a5a6a7a8095461626c657420303104"});
 
     v.push_back({"AUTH_CHALLENGE", [](std::span<uint8_t> out) {
                      AuthChallenge m;
-                     m.mode = AuthMode::Passcode;
+                     m.mode = AuthMode::Signature;
                      m.nonce.fill(0xAA);
-                     m.salt.fill(0xBB);
-                     m.spake = {0xC1, 0xC2, 0xC3, 0xC4};
                      return BuildAuthChallenge(out, m);
                  },
-        "036100000000000002"
-        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-        "0004c1c2c3c4"});
+        "03610000000000000401"
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"});
 
     v.push_back({"AUTH_RESPONSE", [](std::span<uint8_t> out) {
                      AuthResponse m;
                      m.proof = {0xD1, 0xD2, 0xD3, 0xD4, 0xD5};
-                     m.confirm.fill(0xEE);
                      return BuildAuthResponse(out, m);
                  },
-        "03620000000000000005d1d2d3d4d5"
-        "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"});
+        "0362000000000000040005d1d2d3d4d5"});
 
     v.push_back({"AUTH_RESULT", [](std::span<uint8_t> out) {
                      AuthResult m;
-                     m.code = AuthResultCode::WrongPasscode;
-                     m.confirm.fill(0xEE);
+                     m.code = AuthResultCode::NotPaired;
                      return BuildAuthResult(out, m);
                  },
-        "036300000000000001"
-        "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"});
+        "03630000000000000401"});
 
     v.push_back({"RECORD", [](std::span<uint8_t> out) {
                      uint8_t inner[kMaxDatagram];

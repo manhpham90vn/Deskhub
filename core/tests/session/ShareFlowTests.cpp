@@ -40,7 +40,6 @@ void TestSettingsBecomeShareOptions() {
     settings.passcode = "0417";
     settings.bindIp = "192.168.1.10";
     settings.deviceName = "study pc";
-    settings.allowNewPairings = false;
     settings.clipboardSync = true;
     settings.shareAudio = false;
 
@@ -52,8 +51,7 @@ void TestSettingsBecomeShareOptions() {
     Check(options.passcode == "0417" && options.bindIp == "192.168.1.10",
         "and the passcode and the network");
     Check(options.deviceName == "study pc", "and the name viewers see");
-    Check(!options.allowNewPairings && options.clipboardSync && !options.audio,
-        "and the pairing, clipboard and sound switches");
+    Check(options.clipboardSync && !options.audio, "and the clipboard and sound switches");
     Check(options.terminal, "the shell is asked for separately, not read from the file");
     Check(!ShareOptionsOf(settings, false).terminal, "and can be left out");
 }

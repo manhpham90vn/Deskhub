@@ -4,7 +4,6 @@
 #include <vector>
 
 #include "Output.h"
-#include "Passcode.h"
 #include "ViewerRun.h"
 
 #include "deskhub/cli/Command.h"
@@ -26,12 +25,6 @@ ExitCode RunConnect(const Command& command) {
         return ExitCode::Usage;
     }
 
-    const Passcode passcode = ResolvePasscode(command);
-    if (!passcode.ok) {
-        PrintError(passcode.error);
-        return ExitCode::Usage;
-    }
-
     if (!deskhubp::QuicAvailable()) {
         PrintError(deskhub::ui::kShareNoQuicLibrary);
         return ExitCode::Unsupported;
@@ -40,7 +33,7 @@ ExitCode RunConnect(const Command& command) {
     std::vector<deskhub::SourceInfo> offered;
     deskhub::AuthResultCode code = deskhub::AuthResultCode::NotPaired;
     deskhub::HostCaps caps{};
-    if (!QuerySources(server, offered, passcode.value, &code, &caps)) {
+    if (!QuerySources(server, offered, {}, &code, &caps)) {
         PrintError(deskhub::ui::AuthRefusalText(code));
         return ExitCode::Refused;
     }
@@ -68,7 +61,6 @@ ExitCode RunConnect(const Command& command) {
     ViewRequest request;
     request.server = server;
     request.hostLabel = command.address;
-    request.passcode = passcode.value;
     request.displayName =
         command.deviceName ? *command.deviceName : deskhubp::SessionDeviceName();
     request.control = command.connect.control && caps.acceptsInput;

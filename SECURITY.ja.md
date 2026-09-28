@@ -155,10 +155,9 @@ Deskhub を現状のまま使い続ける場合、次の項目を実施するこ
 - [ ] 両方のマシンで Tailscale を動作させ、`100.x.y.z` のアドレスのみで connect する。
 - [ ] ルータに UDP 47777 の port-forward および UPnP マッピングが**存在しない**ことを
       確認する。
-- [ ] マシンの受け入れ方法を決める。Settings で 4 桁の passcode を設定するか、空のまま
-      にして承認プロンプトに自分で回答する。Devices ページを定期的に確認し、認識できない
-      マシンは削除する。閲覧のみで足りる場合は *Viewers can control this machine* の
-      チェックを外す。
+- [ ] 接続前に、host で各 client の public key を許可し、各 client で host key を固定する。
+      Devices ページを定期的に確認して不要な key を取り消す。閲覧のみで足りる場合は
+      *Viewers can control this machine* のチェックを外す。
 - [ ] 使用していないときは Deskhub を終了する。background service ではないため、終了
       すれば受け入れ口も閉じる。
 - [ ] Linux で `ufw` を使用している場合は、全面的に開放せず範囲を限定する。
@@ -166,10 +165,8 @@ Deskhub を現状のまま使い続ける場合、次の項目を実施するこ
       `sudo ufw allow from 100.64.0.0/10 to any port 47777 proto udp` とする。
 - [ ] 他の network へ持ち出すノート PC で共有を動作させたままにしない。
 - [ ] 離席時にはマシンをロックし、無人の session が引き継がれないようにする。
-- [ ] `deskhub-cli` では passcode をコマンドに直接記述しない。`--passcode 0417` は
-      `ps` や `/proc/*/cmdline` を通じてマシン上のすべてのプロセスから参照でき、shell
-      の履歴にも残る。標準入力から読む `--passcode -`、自分のみが読めるファイルから読む
-      `--passcode @FILE`、または環境変数 `DESKHUB_PASSCODE` を使用すること。
+- [ ] `deskhub-cli` の `devices public` で client public key、`trust public` で host TLS
+      public key を表示する。client の許可や host key の固定前に、信頼できる経路で key を渡す。
 
 ## ローカルに保存されるデータ
 

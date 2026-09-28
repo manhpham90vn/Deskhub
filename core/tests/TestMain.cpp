@@ -75,7 +75,6 @@ int main() {
     RunLinkPulseTests();
 
     std::printf("--- session: passcode attempt throttle ---\n");
-    RunAuthThrottleTests();
 
     std::printf("--- input ---\n");
     RunInputTests();

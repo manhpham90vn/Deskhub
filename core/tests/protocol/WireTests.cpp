@@ -738,105 +738,88 @@ namespace {
 }
 
 void TestAuthWire() {
-    std::printf("[wire] the pairing handshake survives the wire, and junk does not...\n");
+    std::printf("[wire] versioned key authentication survives the wire, and old layouts do not...\n");
     uint8_t buf[kMaxDatagram];
 
     AuthStart start;
     start.publicKey.assign(91, 0x31);
     start.clientName = "manh laptop";
-    start.hasPasscode = true;
     size_t n = BuildAuthStart(buf, start);
     Check(n > 0, "a machine announces the key it holds");
     std::optional<AuthStart> gotStart = ParseAuthStart(PayloadOf(std::span<const uint8_t>(buf, n)));
     Check(gotStart && gotStart->publicKey == start.publicKey,
         "and the key arrives byte for byte - the host hashes it to get the fingerprint");
     Check(gotStart && gotStart->clientName == "manh laptop", "so does the name it goes by");
-    Check(gotStart && gotStart->hasPasscode, "and whether it brought a passcode to prove");
-
-    start.hasPasscode = false;
-    n = BuildAuthStart(buf, start);
-    gotStart = ParseAuthStart(PayloadOf(std::span<const uint8_t>(buf, n)));
-    Check(gotStart && !gotStart->hasPasscode,
-        "a machine with no code says so, and the host will ask its user instead");
-
-    Check(buf[kCommonHeaderSize] == 0 && GetU16(buf + kCommonHeaderSize + 1) == 91,
-        "the flag leads the payload and the key length follows it");
-    buf[kCommonHeaderSize] = 2;
+    Check(buf[kCommonHeaderSize] == 0 && GetU16(buf + kCommonHeaderSize + 1) == 91 &&
+              buf[n - 1] == kAuthVersion,
+        "the compatibility prefix is fixed and the auth version follows the name");
+    buf[n - 1] = kAuthVersion - 1;
     Check(!ParseAuthStart(PayloadOf(std::span<const uint8_t>(buf, n))).has_value(),
-        "a flag value we never defined is refused, keeping the byte reserved");
+        "a different auth version is refused");
+    buf[n - 1] = kAuthVersion;
+    buf[kCommonHeaderSize] = 1;
+    Check(!ParseAuthStart(PayloadOf(std::span<const uint8_t>(buf, n))).has_value(),
+        "the old passcode flag is refused even with a version suffix");
     buf[kCommonHeaderSize] = 0;
 
     const size_t startPayload = n - kCommonHeaderSize;
     for (size_t cut = 0; cut < startPayload; ++cut)
-        Check(!ParseAuthStart(std::span<const uint8_t>(buf + kCommonHeaderSize, cut))
-                      .has_value() ||
-                  cut >= 1 + 2 + start.publicKey.size() + 1,
+        Check(!ParseAuthStart(std::span<const uint8_t>(buf + kCommonHeaderSize, cut)).has_value(),
             "a truncated key offer is refused rather than half-read");
 
-    std::vector<uint8_t> legacy(2 + start.publicKey.size() + 1);
-    PutU16(legacy.data(), uint16_t(start.publicKey.size()));
-    std::memcpy(legacy.data() + 2, start.publicKey.data(), start.publicKey.size());
-    legacy[2 + start.publicKey.size()] = 0;
+    std::vector<uint8_t> legacy(buf + kCommonHeaderSize, buf + n - 1);
     Check(!ParseAuthStart(legacy).has_value(),
-        "the old layout without the flag byte cannot be mistaken for the new one");
+        "the old layout without an auth version cannot be mistaken for the new one");
 
     AuthStart keyless;
     keyless.clientName = "no key at all";
     Check(BuildAuthStart(buf, keyless) == 0, "a machine with no key cannot even ask");
 
     AuthChallenge challenge;
-    challenge.mode = AuthMode::Passcode;
+    challenge.mode = AuthMode::Signature;
     challenge.nonce.fill(0x5A);
-    challenge.salt.fill(0x11);
-    challenge.spake.assign(32, 0xAB);
     n = BuildAuthChallenge(buf, challenge);
-    Check(n > 0, "the host answers with what it wants proved");
+    Check(n > 0, "the host issues a signature challenge");
     std::optional<AuthChallenge> gotChallenge =
         ParseAuthChallenge(PayloadOf(std::span<const uint8_t>(buf, n)));
-    Check(gotChallenge && gotChallenge->mode == AuthMode::Passcode, "the mode round-trips");
-    Check(gotChallenge && gotChallenge->nonce == challenge.nonce &&
-              gotChallenge->salt == challenge.salt,
-        "so do the nonce and the salt");
-    Check(gotChallenge && gotChallenge->spake == challenge.spake,
-        "and the SPAKE2 message it carries");
-
-    AuthChallenge tooBig = challenge;
-    tooBig.spake.assign(kMaxAuthBlobBytes + 1, 0);
-    Check(BuildAuthChallenge(buf, tooBig) == 0, "an oversized blob is refused at build time");
+    Check(gotChallenge && gotChallenge->mode == AuthMode::Signature &&
+              gotChallenge->nonce == challenge.nonce,
+        "the mode and nonce round-trip without passcode material");
+    buf[kCommonHeaderSize] = uint8_t(AuthMode::Signature);
+    Check(!ParseAuthChallenge(PayloadOf(std::span<const uint8_t>(buf, n))),
+        "an old challenge is refused");
+    buf[kCommonHeaderSize] = kAuthVersion;
 
     AuthResponse response;
     response.proof.assign(64, 0xC3);
-    response.confirm.fill(0x77);
     n = BuildAuthResponse(buf, response);
     Check(n > 0, "the client answers with its proof");
     std::optional<AuthResponse> gotResponse =
         ParseAuthResponse(PayloadOf(std::span<const uint8_t>(buf, n)));
-    Check(gotResponse && gotResponse->proof == response.proof &&
-              gotResponse->confirm == response.confirm,
-        "both the proof and the confirmation come back whole");
+    Check(gotResponse && gotResponse->proof == response.proof,
+        "the signature comes back whole");
 
     AuthResult result;
-    result.code = AuthResultCode::WrongPasscode;
-    result.confirm.fill(0x42);
+    result.code = AuthResultCode::NotPaired;
     n = BuildAuthResult(buf, result);
     std::optional<AuthResult> gotResult =
         ParseAuthResult(PayloadOf(std::span<const uint8_t>(buf, n)));
-    Check(gotResult && gotResult->code == AuthResultCode::WrongPasscode,
+    Check(gotResult && gotResult->code == AuthResultCode::NotPaired,
         "and the verdict says which of the refusals it was");
 
-    result.code = AuthResultCode::Locked;
+    result.code = AuthResultCode::VersionMismatch;
     n = BuildAuthResult(buf, result);
     gotResult = ParseAuthResult(PayloadOf(std::span<const uint8_t>(buf, n)));
-    Check(gotResult && gotResult->code == AuthResultCode::Locked,
-        "a lockout verdict survives the trip too");
+    Check(gotResult && gotResult->code == AuthResultCode::VersionMismatch,
+        "an incompatible auth version survives the trip too");
 
     for (size_t cut = 0; cut < n; ++cut)
-        Check(!ParseAuthResult(std::span<const uint8_t>(buf, cut)).has_value() || cut >= 1 + kAuthMacBytes,
+        Check(!ParseAuthResult(std::span<const uint8_t>(buf, cut)).has_value(),
             "a truncated verdict is refused rather than half-read");
 
-    const uint8_t badMode[1 + kAuthNonceBytes + kAuthSaltBytes + 2] = {0xFF};
+    uint8_t badMode[2 + kAuthNonceBytes] = {kAuthVersion, 0xFF};
     Check(!ParseAuthChallenge(badMode).has_value(), "a mode we do not know is refused");
-    const uint8_t badCode[1 + kAuthMacBytes] = {0xFF};
+    const uint8_t badCode[2] = {kAuthVersion, 0xFF};
     Check(!ParseAuthResult(badCode).has_value(), "so is a verdict we do not know");
 }
 

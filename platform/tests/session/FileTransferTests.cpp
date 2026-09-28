@@ -143,7 +143,6 @@ struct ViewerRig {
 
         deskhubp::ClientAuthConfig auth;
         auth.identity = deskhubp::LoadOrCreateHostIdentity("file-test-viewer");
-        auth.passcode = kFilePasscode;
         auth.hostFingerprint = hostKey;
         auth.clientName = "file-test-viewer";
         if (!deskhubp::RememberPairedDevice(auth.identity.fingerprint,
@@ -151,8 +150,7 @@ struct ViewerRig {
             return false;
 
         deskhub::AuthResultCode code = deskhub::AuthResultCode::NotPaired;
-        bool hostProved = false;
-        if (!sock.RunClientAuth(host, std::move(auth), kAuthTimeoutMs, code, hostProved))
+        if (!sock.RunClientAuth(host, std::move(auth), kAuthTimeoutMs, code))
             return false;
 
         deskhubp::FileUploadCallbacks hooks;

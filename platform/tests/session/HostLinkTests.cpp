@@ -213,7 +213,7 @@ void TestALinkReportsARefusal() {
     Check(WaitUntil([&link] { return link.Settled(); }, 10000),
         "the link settles inside the deadline");
     Check(link.State() == deskhubp::HostLinkState::Refused, "as refused");
-    Check(link.AuthCode() == deskhub::AuthResultCode::PairingDisabled,
+    Check(link.AuthCode() == deskhub::AuthResultCode::NotPaired,
         "because the client key is not authorized");
     Check(!link.Message().empty(), "with something to show the user");
     link.Stop();

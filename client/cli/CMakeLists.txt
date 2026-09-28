@@ -7,7 +7,6 @@ endif()
 add_executable(deskhub_cli
     Main.cpp
     Output.cpp
-    Passcode.cpp
     DiscoverCommands.cpp
     StoreCommands.cpp
     ShareCommand.cpp

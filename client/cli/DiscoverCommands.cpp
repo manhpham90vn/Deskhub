@@ -4,7 +4,6 @@
 #include <vector>
 
 #include "Output.h"
-#include "Passcode.h"
 
 #include "deskhub/cli/Json.h"
 #include "deskhub/media/SourceLabel.h"
@@ -23,16 +22,6 @@ bool ResolveTarget(const Command& command, NetAddr& out) {
     PrintError(deskhub::ui::InvalidAddressLine(command.address));
     PrintError(deskhub::ui::InvalidAddressHint());
     return false;
-}
-
-bool TakePasscode(const Command& command, std::string& out) {
-    const Passcode passcode = ResolvePasscode(command);
-    if (!passcode.ok) {
-        PrintError(passcode.error);
-        return false;
-    }
-    out = passcode.value;
-    return true;
 }
 
 }
@@ -89,9 +78,6 @@ ExitCode RunSources(const Command& command) {
     NetAddr server{};
     if (!ResolveTarget(command, server)) return ExitCode::Usage;
 
-    std::string passcode;
-    if (!TakePasscode(command, passcode)) return ExitCode::Usage;
-
     if (!deskhubp::QuicAvailable()) {
         PrintError(deskhub::ui::kShareNoQuicLibrary);
         return ExitCode::Unsupported;
@@ -100,7 +86,7 @@ ExitCode RunSources(const Command& command) {
     std::vector<deskhub::SourceInfo> sources;
     deskhub::AuthResultCode code = deskhub::AuthResultCode::NotPaired;
     deskhub::HostCaps caps{};
-    if (!QuerySources(server, sources, passcode, &code, &caps)) {
+    if (!QuerySources(server, sources, {}, &code, &caps)) {
         PrintError(deskhub::ui::AuthRefusalText(code));
         return ExitCode::Refused;
     }

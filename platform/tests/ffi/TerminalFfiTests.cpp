@@ -48,7 +48,12 @@ struct FfiHostRig {
         sock.SetHostAuth(std::move(auth), deskhubp::TransportAuthCallbacks{});
         sock.SetOnPeerGone([this](const NetAddr& peer) { term.OnPeerGone(peer); });
 
-        if (!term.Start(sock, std::string(), deskhubp::TerminalHostCallbacks{})) return false;
+#ifdef _WIN32
+        const std::string shell;
+#else
+        const std::string shell = "/bin/sh";
+#endif
+        if (!term.Start(sock, shell, deskhubp::TerminalHostCallbacks{})) return false;
 
         pump = std::thread([this] {
             uint8_t buf[deskhub::kMaxRecordSize];
@@ -216,17 +221,19 @@ void RunTerminalFfiTests() {
     }
 
     Check(WaitForMs([session] { return dh_term_state(session) == DHTermLive; }, 20000),
-        "and it reaches Live with the passcode proved, never sent");
+        "and it reaches Live with key authentication");
     Check(seen.lastState.load() == DHTermLive, "the state callback saw the same journey");
     Check(rig.term.SessionCount() == 1, "the host lists the shell");
 
     char fingerprint[64] = {};
     dh_term_fingerprint(session, fingerprint, sizeof(fingerprint));
     Check(std::string(fingerprint).rfind("SHA256:", 0) == 0,
-        "the host key is available for a warning dialog to show");
+        "the host key fingerprint is available to the client");
 
-    dh_term_send_text(session, "echo dh-ffi-ok\n");
-    Check(WaitForMs([session] { return GridHasWholeRow(session, "dh-ffi-ok"); }, 30000),
+    dh_term_send_text(session, "printf '\\ndh-ffi-ok\\n'\n");
+    const bool echoSeen = WaitForMs([session] { return GridHasWholeRow(session, "dh-ffi-ok"); }, 30000);
+    if (!echoSeen) PrintGrid(session);
+    Check(echoSeen,
         "typed text runs on the host and the grid comes back through the C ABI");
     Check(seen.redraws.load() > 0, "the redraw callback fired as the grid changed");
     SleepUs(400'000);

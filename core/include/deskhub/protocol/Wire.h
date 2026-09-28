@@ -179,48 +179,38 @@ struct HelloAck {
 };
 
 inline constexpr size_t kAuthNonceBytes = 32;
-inline constexpr size_t kAuthSaltBytes = 16;
-inline constexpr size_t kAuthMacBytes = 32;
+inline constexpr uint8_t kAuthVersion = 4;
 inline constexpr size_t kMaxAuthBlobBytes = 256;
 
 enum class AuthMode : uint8_t {
     Denied = 0,
     Signature = 1,
-    Passcode = 2,
-    Approval = 3,
 };
 
 enum class AuthResultCode : uint8_t {
     Accepted = 0,
-    WrongPasscode = 1,
-    NotPaired = 2,
-    PairingDisabled = 3,
-    Refused = 4,
-    TimedOut = 5,
-    Locked = 6,
+    NotPaired = 1,
+    Refused = 2,
+    TimedOut = 3,
+    VersionMismatch = 4,
 };
 
 struct AuthStart {
     std::vector<uint8_t> publicKey{};
     std::string clientName{};
-    bool hasPasscode = false;
 };
 
 struct AuthChallenge {
     AuthMode mode = AuthMode::Denied;
     std::array<uint8_t, kAuthNonceBytes> nonce{};
-    std::array<uint8_t, kAuthSaltBytes> salt{};
-    std::vector<uint8_t> spake{};
 };
 
 struct AuthResponse {
     std::vector<uint8_t> proof{};
-    std::array<uint8_t, kAuthMacBytes> confirm{};
 };
 
 struct AuthResult {
     AuthResultCode code = AuthResultCode::NotPaired;
-    std::array<uint8_t, kAuthMacBytes> confirm{};
 };
 
 struct PingPong {

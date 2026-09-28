@@ -302,6 +302,13 @@ line.
 
 ## 9. Decisions worth remembering
 
+- **Auth has its own version inside protocol version 3**: `AuthStart` keeps a zero byte
+  before the key as a compatibility prefix and puts auth version 4 after the client name.
+  An older host can read the offer and send its old challenge; the new client then detects
+  the incompatible challenge and closes. A new host rejects an offer without the version
+  suffix, sends `VersionMismatch`, and closes. The prefix no longer carries a passcode
+  choice. Challenge, response, and result carry only versioned signature data.
+
 - **What a desktop screen shows is data in `core/ui`, not code in each app**: the colour
   theme (`Theme.h`, a light and a dark value per colour), the live host table's columns
   and sizes (`HostRows.h`) and the Settings page's boxes, sections and order

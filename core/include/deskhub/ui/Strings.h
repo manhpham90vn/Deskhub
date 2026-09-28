@@ -134,26 +134,18 @@ inline constexpr const char* kTrayHideWindow = "Hide window";
 inline constexpr const char* kTrayQuit = "Quit Deskhub";
 inline constexpr const char* kLanDevicesEmpty = "Saved devices appear here after a connection.";
 inline constexpr const char* kRefreshNow = "Refresh now";
-inline constexpr const char* kAuthWrongPasscode =
-    "That passcode was not accepted \xE2\x80\x94 check the code on the machine you are "
-    "connecting to.";
 inline constexpr const char* kAuthNotPaired =
-    "That machine does not recognise this one. It may have been forgotten there.";
-inline constexpr const char* kAuthPairingDisabled =
-    "That machine is not letting new machines pair with it right now.";
-inline constexpr const char* kAuthRefused = "Somebody at that machine turned this one away.";
-inline constexpr const char* kAuthTimedOut = "Nobody at that machine answered in time.";
-inline constexpr const char* kAuthLocked =
-    "Too many wrong passcodes \xE2\x80\x94 that machine is not taking attempts right now. "
-    "Wait half a minute and try again.";
+    "This client key is not authorized on that machine.";
+inline constexpr const char* kAuthRefused = "That machine rejected the authentication attempt.";
+inline constexpr const char* kAuthTimedOut = "The authentication attempt timed out.";
+inline constexpr const char* kAuthVersionMismatch =
+    "That machine uses an incompatible authentication version. Update Deskhub on both machines.";
 
 inline const char* AuthRefusalText(AuthResultCode code) {
     switch (code) {
-        case AuthResultCode::WrongPasscode: return kAuthWrongPasscode;
-        case AuthResultCode::PairingDisabled: return kAuthPairingDisabled;
         case AuthResultCode::Refused: return kAuthRefused;
         case AuthResultCode::TimedOut: return kAuthTimedOut;
-        case AuthResultCode::Locked: return kAuthLocked;
+        case AuthResultCode::VersionMismatch: return kAuthVersionMismatch;
         case AuthResultCode::Accepted: return "Connected.";
         case AuthResultCode::NotPaired: break;
     }
@@ -431,12 +423,6 @@ inline std::string PasscodeDisplay(std::string_view passcode) {
         spaced += digit;
     }
     return spaced;
-}
-
-inline std::string PasscodeNote(std::string_view passcode) {
-    if (passcode.empty()) return kPasscodeUnsetNote;
-    return "A machine pairing for the first time needs passcode " + std::string(passcode) +
-           " \xE2\x80\x94 or your approval here if it offers none.";
 }
 
 inline std::string CouldNotConnectTo(std::string_view address) {

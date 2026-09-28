@@ -348,7 +348,6 @@ fun FileSendScreen(
             }
         }
     }
-
 }
 
 private const val POLL_MS = 200L

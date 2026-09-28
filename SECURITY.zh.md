@@ -130,19 +130,16 @@ host 优先的机制可在你*坐在*机器前时限制异常操作，但在你�
 
 - [ ] 在两台机器上运行 Tailscale，并仅通过 `100.x.y.z` 地址连接。
 - [ ] 确认路由器上**没有**针对 UDP 47777 的 port-forward 或 UPnP 映射。
-- [ ] 确定机器的接入方式：在 Settings 中设置 4 位 passcode，或留空并自行回答批准提示。
-      定期检查 Devices 页，移除不再识别的机器。仅需他人观看时，取消勾选 *Viewers can
-      control this machine*。
+- [ ] 连接前，在 host 上授权每台 client 的 public key，并在每台 client 上固定 host key。
+      定期检查 Devices 页并撤销不再认可的 key。仅需观看时，取消勾选 *Viewers can control this machine*。
 - [ ] 不使用时退出 Deskhub。它不是 background service，关闭即关闭了接入点。
 - [ ] 在 Linux 上使用 `ufw` 时，请收窄规则而非全面放行：
       `sudo ufw allow from 100.64.0.0/10 to any port 47777 proto udp`，而不是
       `sudo ufw allow 47777/udp`。
 - [ ] 不要在会被带往其他 network 的笔记本上保持共享运行。
 - [ ] 离开时锁定机器，避免无人看管的 session 被接管。
-- [ ] 使用 `deskhub-cli` 时，不要将 passcode 写入命令本身。`--passcode 0417` 可被机器
-      上的每个进程通过 `ps` 与 `/proc/*/cmdline` 看到，并会进入 shell 历史。请使用
-      `--passcode -` 从标准输入读取、`--passcode @FILE` 从仅自己可读的文件读取，或设置
-      环境变量 `DESKHUB_PASSCODE`。
+- [ ] 使用 `deskhub-cli` 时，以 `devices public` 显示 client public key，以 `trust public`
+      显示 host TLS public key。通过可信渠道传递各 key，再授权 client 或固定 host key。
 
 ## 本地保存的数据
 

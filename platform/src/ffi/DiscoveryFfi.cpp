@@ -37,17 +37,24 @@ std::mutex g_mutex;
 
 std::vector<ui::RecentDevice> g_recent;
 bool g_recentLoaded = false;
+bool g_recentNeedsMigration = false;
 
 std::vector<ui::RecentDevice>& Recent() {
     if (!g_recentLoaded) {
-        g_recent = ui::ParseRecentDevices(deskhubp::ReadAppDataFile(kRecentDevicesFile));
+        const std::string text = deskhubp::ReadAppDataFile(kRecentDevicesFile);
+        g_recent = ui::ParseRecentDevices(text);
+        g_recentNeedsMigration = !text.empty() && text != ui::SerializeRecentDevices(g_recent);
         g_recentLoaded = true;
     }
+    if (g_recentNeedsMigration)
+        g_recentNeedsMigration = !deskhubp::WriteAppDataFileAtomic(kRecentDevicesFile,
+            ui::SerializeRecentDevices(g_recent));
     return g_recent;
 }
 
 void SaveRecent() {
-    deskhubp::WriteAppDataFile(kRecentDevicesFile, ui::SerializeRecentDevices(g_recent));
+    g_recentNeedsMigration = !deskhubp::WriteAppDataFileAtomic(kRecentDevicesFile,
+        ui::SerializeRecentDevices(g_recent));
 }
 
 std::string LocalTimeText(int64_t unixTime) {

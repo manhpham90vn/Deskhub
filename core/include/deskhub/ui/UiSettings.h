@@ -25,7 +25,6 @@ struct UiSettings {
     bool playAudio = true;
     bool startHidden = false;
     bool keepAwake = true;
-    bool allowNewPairings = true;
     std::string transferDir{};
 
     bool operator==(const UiSettings&) const = default;

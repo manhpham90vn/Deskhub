@@ -50,7 +50,6 @@ struct Machines {
     deskhubp::ClientAuthConfig ClientConfig() const {
         deskhubp::ClientAuthConfig config;
         config.identity = client;
-        config.passcode = "0417";
         config.hostFingerprint = host.fingerprint;
         config.clientName = "client";
         return config;
@@ -67,7 +66,7 @@ void TestUnknownKeyNeverRequestsApproval() {
     host.Configure(machines.HostConfig());
     client.Configure(machines.ClientConfig());
     const deskhub::AuthStart start = client.Begin();
-    Check(!start.hasPasscode, "the client never offers a connection passcode");
+    Check(!start.publicKey.empty(), "the client offers its public key");
     const auto challenge = host.Begin(start);
     Check(challenge && challenge->mode == deskhub::AuthMode::Denied,
         "an unlisted key is denied");

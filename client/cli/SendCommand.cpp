@@ -9,7 +9,6 @@
 #include <vector>
 
 #include "Output.h"
-#include "Passcode.h"
 #include "Signals.h"
 
 #include "deskhub/cli/Json.h"
@@ -63,12 +62,6 @@ ExitCode RunSend(const Command& command) {
         return ExitCode::Usage;
     }
 
-    const Passcode passcode = ResolvePasscode(command);
-    if (!passcode.ok) {
-        PrintError(passcode.error);
-        return ExitCode::Usage;
-    }
-
     if (!deskhubp::QuicAvailable()) {
         PrintError(deskhub::ui::kShareNoQuicLibrary);
         return ExitCode::Unsupported;
@@ -87,7 +80,6 @@ ExitCode RunSend(const Command& command) {
     deskhubp::FileTransferClientConfig config;
     config.host = host;
     config.hostLabel = command.address;
-    config.passcode = passcode.value;
     config.clientName =
         command.deviceName ? *command.deviceName : deskhubp::SessionDeviceName();
     config.files = std::move(paths);

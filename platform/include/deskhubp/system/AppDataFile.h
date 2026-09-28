@@ -42,4 +42,6 @@ inline bool WriteAppDataFile(const std::string& fileName, const std::string& con
     return bool(out);
 }
 
+bool WriteAppDataFileAtomic(const std::string& fileName, const std::string& content);
+
 }

@@ -232,7 +232,6 @@ private fun StreamScreen(
                     endReason = reason
                     sessionPhase = NativeClient.PHASE_ENDED
                 }
-
             }
         NativeClient.sessionListener = listener
         NativeClient.nativeSnapshot()?.let { snap ->

@@ -146,7 +146,6 @@ bool dh_share_start(const DHShareSource* sources, int count, uint32_t fps, uint3
         opt.clipboardSync = stored.clipboardSync;
         opt.audio = stored.shareAudio;
         opt.deviceName = stored.deviceName;
-        opt.allowNewPairings = stored.allowNewPairings;
     }
 
     std::lock_guard<std::mutex> lk(g_agentMutex);

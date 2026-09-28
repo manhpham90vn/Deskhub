@@ -108,7 +108,6 @@ object NativeClient {
     const val STR_CONNECTED_PICK_SESSION = 150
     const val STR_TERMINAL_EXTRA_KEYS_HINT = 108
 
-
     const val STR_TRANSFER_CANCEL_BUTTON = 136
     const val STR_TRANSFER_SENDING = 138
     const val STR_TRANSFER_SEND_HEADING = 141
@@ -387,7 +386,6 @@ object NativeClient {
 
     private external fun nativeRecentPasscode(addr: String): String
 
-
     suspend fun deviceRows(): List<DeviceRow> = withContext(Dispatchers.IO) { nativeDeviceRows().toList() }
 
     suspend fun recentTouch(
@@ -396,7 +394,6 @@ object NativeClient {
     ) = withContext(Dispatchers.IO) { nativeRecentTouch(addr, passcode) }
 
     fun recentPasscode(addr: String): String = nativeRecentPasscode(addr)
-
 
     external fun nativeStart(
         addr: String,

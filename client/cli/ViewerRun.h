@@ -12,7 +12,6 @@ namespace deskhubcli {
 struct ViewRequest {
     NetAddr server{};
     std::string hostLabel{};
-    std::string passcode{};
     std::string displayName{};
     std::vector<deskhub::SourceInfo> sources{};
     bool control = true;

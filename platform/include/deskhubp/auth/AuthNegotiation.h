@@ -35,7 +35,6 @@ public:
     deskhub::AuthResult Respond(const deskhub::AuthResponse& response, int64_t nowUnix);
 
     HostAuthState State() const;
-    deskhub::AuthMode Mode() const;
     const deskhub::Fingerprint& PeerFingerprint() const;
     const std::string& PeerName() const;
 
@@ -46,7 +45,6 @@ private:
 
 struct ClientAuthConfig {
     ClientIdentity identity{};
-    std::string passcode{};
     deskhub::Fingerprint hostFingerprint{};
     std::string clientName{};
 };
@@ -62,10 +60,6 @@ public:
 
     deskhub::AuthStart Begin() const;
     std::optional<deskhub::AuthResponse> Answer(const deskhub::AuthChallenge& challenge);
-
-    bool HostProvedThePasscode(const deskhub::AuthResult& result) const;
-
-    deskhub::AuthMode Mode() const;
 
 private:
     struct Impl;

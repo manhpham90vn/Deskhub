@@ -9,7 +9,6 @@
 #include <vector>
 
 #include "Output.h"
-#include "Passcode.h"
 #include "Signals.h"
 
 #include "deskhub/ui/ShellPicker.h"
@@ -55,11 +54,10 @@ ExitCode CodeFor(deskhubp::TerminalViewerState state, bool keyChanged) {
     return ExitCode::Ok;
 }
 
-ExitCode ListShells(const Command& command, const NetAddr& host, const std::string& passcodeValue) {
+ExitCode ListShells(const Command& command, const NetAddr& host) {
     deskhubp::TerminalViewerConfig config;
     config.host = host;
     config.hostLabel = command.address;
-    config.passcode = passcodeValue;
     config.clientName =
         command.deviceName ? *command.deviceName : deskhubp::SessionDeviceName();
     config.size = SizeNow();
@@ -128,12 +126,6 @@ ExitCode RunShell(const Command& command) {
         return ExitCode::Usage;
     }
 
-    const Passcode passcode = ResolvePasscode(command);
-    if (!passcode.ok) {
-        PrintError(passcode.error);
-        return ExitCode::Usage;
-    }
-
     if (!deskhubp::QuicAvailable()) {
         PrintError(deskhub::ui::kShareNoQuicLibrary);
         return ExitCode::Unsupported;
@@ -142,10 +134,9 @@ ExitCode RunShell(const Command& command) {
     deskhubp::TerminalViewerConfig config;
     config.host = host;
     config.hostLabel = command.address;
-    config.passcode = passcode.value;
     config.resumeId = command.shell.resumeId;
 
-    if (command.shell.list) return ListShells(command, host, passcode.value);
+    if (command.shell.list) return ListShells(command, host);
     config.clientName =
         command.deviceName ? *command.deviceName : deskhubp::SessionDeviceName();
     config.size = SizeNow();

@@ -71,13 +71,12 @@ bool ExerciseWireParsers(std::span<const uint8_t> d) {
         ok = ok && authStart->clientName.size() <= kMaxClientNameBytes;
     }
     if (const auto authChallenge = ParseAuthChallenge(pl)) {
-        ok = ok && uint8_t(authChallenge->mode) <= uint8_t(AuthMode::Approval);
-        ok = ok && authChallenge->spake.size() <= kMaxAuthBlobBytes;
+        ok = ok && uint8_t(authChallenge->mode) <= uint8_t(AuthMode::Signature);
     }
     if (const auto authResponse = ParseAuthResponse(pl))
         ok = ok && authResponse->proof.size() <= kMaxAuthBlobBytes;
     if (const auto authResult = ParseAuthResult(pl))
-        ok = ok && uint8_t(authResult->code) <= uint8_t(AuthResultCode::Locked);
+        ok = ok && uint8_t(authResult->code) <= uint8_t(AuthResultCode::VersionMismatch);
 
     if (h) {
         if (const auto v = ParseVideoPacket(*h, pl)) {
@@ -199,30 +198,25 @@ Datagram BuildRandomValidDatagram() {
             if (m.publicKey.empty()) m.publicKey.push_back(uint8_t(Rnd()));
             m.clientName.assign(Rnd() % 40, ' ');
             for (auto& c : m.clientName) c = char('a' + Rnd() % 26);
-            m.hasPasscode = Rnd() % 2 != 0;
             n = BuildAuthStart(buf, m);
             break;
         }
         case 17: {
             AuthChallenge m;
-            m.mode = AuthMode(Rnd() % (uint8_t(AuthMode::Approval) + 1));
+            m.mode = AuthMode(Rnd() % (uint8_t(AuthMode::Signature) + 1));
             for (auto& b : m.nonce) b = uint8_t(Rnd());
-            for (auto& b : m.salt) b = uint8_t(Rnd());
-            m.spake = RandomJunk(kMaxAuthBlobBytes);
             n = BuildAuthChallenge(buf, m);
             break;
         }
         case 18: {
             AuthResponse m;
             m.proof = RandomJunk(kMaxAuthBlobBytes);
-            for (auto& b : m.confirm) b = uint8_t(Rnd());
             n = BuildAuthResponse(buf, m);
             break;
         }
         case 19: {
             AuthResult m;
-            m.code = AuthResultCode(Rnd() % (uint8_t(AuthResultCode::Locked) + 1));
-            for (auto& b : m.confirm) b = uint8_t(Rnd());
+            m.code = AuthResultCode(Rnd() % (uint8_t(AuthResultCode::VersionMismatch) + 1));
             n = BuildAuthResult(buf, m);
             break;
         }

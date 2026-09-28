@@ -302,6 +302,13 @@ coverage của core.
 
 ## 9. Những quyết định cần ghi nhớ
 
+- **Auth có phiên bản riêng trong protocol version 3**: `AuthStart` giữ một byte bằng 0
+  trước khóa làm tiền tố tương thích và đặt auth version 4 sau tên client. Host cũ có thể
+  đọc lời mở đầu và gửi challenge cũ; client mới nhận ra challenge không tương thích rồi
+  đóng kết nối. Host mới từ chối lời mở đầu thiếu hậu tố version, gửi `VersionMismatch`
+  rồi đóng kết nối. Byte tiền tố không còn biểu thị lựa chọn passcode. Challenge, response
+  và result chỉ mang dữ liệu chữ ký có version.
+
 - **Những gì một màn hình desktop hiển thị là dữ liệu trong `core/ui`, không phải code
   riêng của từng app**: bộ màu (`Theme.h`, mỗi màu có một giá trị sáng và một giá trị tối),
   các cột và kích thước của bảng host (`HostRows.h`), cùng các khung, section và thứ tự của

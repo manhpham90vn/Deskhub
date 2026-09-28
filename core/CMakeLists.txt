@@ -135,7 +135,6 @@ if(DESKHUB_CORE_TESTS)
         tests/session/FileTransferTests.cpp
         tests/session/LinkRecoveryTests.cpp
         tests/session/LinkPulseTests.cpp
-        tests/session/AuthThrottleTests.cpp
 
         tests/transfer/Crc32Tests.cpp
         tests/transfer/SafeNameTests.cpp

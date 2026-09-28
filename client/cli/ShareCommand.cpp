@@ -7,7 +7,6 @@
 #include <vector>
 
 #include "Output.h"
-#include "Passcode.h"
 #include "Signals.h"
 
 #include "deskhub/cli/Json.h"
@@ -25,8 +24,6 @@
 namespace deskhubcli {
 
 namespace {
-
-using deskhub::cli::PairingPolicy;
 
 constexpr uint32_t kPollMs = 200;
 
@@ -116,19 +113,8 @@ bool CollectSources(const Command& command, std::vector<ShareSource>& out) {
 }
 
 ExitCode RunShare(const Command& command) {
-    const Passcode passcode = ResolvePasscode(command);
-    if (!passcode.ok) {
-        PrintError(passcode.error);
-        return ExitCode::Usage;
-    }
-    if (command.share.pairing == PairingPolicy::Ask) {
-        PrintError("--pairing ask is not built yet - use allow or deny.");
-        return ExitCode::Usage;
-    }
-
     deskhub::ui::UiSettings settings =
         deskhub::cli::ApplyShareOptions(command, deskhubp::LoadUiSettings());
-    if (!passcode.value.empty()) settings.passcode = passcode.value;
     if (settings.deviceName.empty()) settings.deviceName = deskhubp::LocalDeviceName();
 
     ShareOptions options =
@@ -178,7 +164,6 @@ ExitCode RunShare(const Command& command) {
     const bool screenSharing = !host.Status().empty();
     if (!command.quiet) {
         PrintError(deskhub::ui::ShareSummaryLine(screenSharing, terminal.Running(), options.port));
-        PrintError(deskhub::ui::PasscodeNote(options.passcode));
         if (!options.allowInput) PrintError(deskhub::ui::kViewOnlyNote);
         if (files.Running())
             PrintError(deskhub::ui::TransferFolderNote(deskhubp::PathText(files.Directory())));

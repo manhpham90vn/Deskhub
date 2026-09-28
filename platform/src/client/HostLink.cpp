@@ -304,9 +304,8 @@ bool HostLink::RunAuth() {
     auth.clientName = config_.clientName;
 
     deskhub::AuthResultCode code = deskhub::AuthResultCode::NotPaired;
-    bool hostProved = false;
     const bool allowed = sock_.RunClientAuth(config_.host, std::move(auth), config_.authTimeoutMs,
-        code, hostProved, &stop_);
+        code, &stop_);
     authCode_.store(code, std::memory_order_release);
     if (!allowed) {
         if (stop_.load(std::memory_order_acquire)) return false;

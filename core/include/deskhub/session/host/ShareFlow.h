@@ -35,7 +35,6 @@ inline media::ShareOptions ShareOptionsOf(const ui::UiSettings& settings, bool t
     options.passcode = settings.passcode;
     options.bindIp = settings.bindIp;
     options.deviceName = settings.deviceName;
-    options.allowNewPairings = settings.allowNewPairings;
     options.clipboardSync = settings.clipboardSync;
     options.audio = settings.shareAudio;
     options.terminal = terminal;

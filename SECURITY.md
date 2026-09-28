@@ -152,10 +152,9 @@ If you want to keep using Deskhub as it is today, these are worth doing:
 
 - [ ] Run Tailscale on both machines and connect only over the `100.x.y.z` address.
 - [ ] Confirm your router has **no** port-forward or UPnP mapping for UDP 47777.
-- [ ] Decide how machines get in: set a 4-digit passcode in Settings, or leave it empty
-      and answer the approval prompt yourself. Review the Devices page now and then and
-      forget machines you no longer recognise. Untick *Viewers can control this machine*
-      whenever you only need someone to watch.
+- [ ] Authorize each client's public key on the host and pin the host's key on each
+      client before connecting. Review the Devices page and revoke keys you no longer
+      recognize. Untick *Viewers can control this machine* when only viewing is needed.
 - [ ] Quit Deskhub when you are not actively using it. It does not run as a background
       service — closing it closes the hole.
 - [ ] On Linux, if you use `ufw`, scope the rule instead of opening it wide:
@@ -164,11 +163,9 @@ If you want to keep using Deskhub as it is today, these are worth doing:
 - [ ] Do not leave a share running on a laptop that you carry onto other networks.
 - [ ] Lock your machine when you walk away, so an unattended session cannot be taken
       over silently.
-- [ ] With `deskhub-cli`, do not put the passcode in the command itself. `--passcode 0417`
-      is visible to every process on the machine through `ps` and `/proc/*/cmdline`, and
-      it lands in your shell history. Use `--passcode -` to read it from standard input,
-      `--passcode @FILE` to read it from a file only you can read, or set
-      `DESKHUB_PASSCODE` in the environment.
+- [ ] With `deskhub-cli`, use `devices public` to display the client public key and
+      `trust public` to display the host TLS public key. Transfer each over a channel
+      you trust before authorizing a client or pinning a host.
 
 ## Local artifacts
 

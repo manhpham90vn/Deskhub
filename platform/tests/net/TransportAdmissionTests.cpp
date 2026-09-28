@@ -86,7 +86,7 @@ struct AdmissionRig {
         viewer.Close();
     }
 
-    bool Start() {
+    bool Start(bool authenticate = true) {
         if (!machines.Make()) return false;
         if (!deskhubp::RememberPairedDevice(machines.viewer.fingerprint,
                 "admission-viewer", 500))
@@ -118,15 +118,14 @@ struct AdmissionRig {
 
         if (!viewer.Connect(deskhubp::QuicSettings{}, target, "admission-host")) return false;
         if (!viewer.WaitEstablished(target, kAuthTimeoutMs)) return false;
+        if (!authenticate) return true;
 
         deskhubp::ClientAuthConfig client;
         client.identity = machines.viewer;
-        client.passcode = kTestPasscode;
         client.hostFingerprint = machines.host.fingerprint;
         client.clientName = "admission-viewer";
         deskhub::AuthResultCode code = deskhub::AuthResultCode::NotPaired;
-        bool hostProved = false;
-        if (!viewer.RunClientAuth(target, std::move(client), kAuthTimeoutMs, code, hostProved))
+        if (!viewer.RunClientAuth(target, std::move(client), kAuthTimeoutMs, code))
             return false;
         return WaitUntil([this] { return Peer().Pack() != 0; }, kSettleMillis);
     }
@@ -161,7 +160,7 @@ void TestAClosedConnectionTakesItsAdmissionWithIt() {
     const SavedState guard;
     AdmissionRig rig;
     const bool started = rig.Start();
-    Check(started, "the viewer proves the passcode and is let in");
+    Check(started, "the authorized viewer signs the challenge and is let in");
     if (!started) return;
 
     const NetAddr peer = rig.Peer();
@@ -210,6 +209,52 @@ void TestASecondHandshakeOnOneConnectionIsRefused() {
         "the connection itself is closed");
 }
 
+void TestAnOldAuthStartIsRefused() {
+    std::printf("[admission] an old auth start cannot enter the key-only handshake...\n");
+    if (Skipped("admission")) return;
+    const SavedState guard;
+    AdmissionRig rig;
+    const bool started = rig.Start(false);
+    Check(started, "the transport connects before authentication");
+    if (!started) return;
+
+    deskhub::AuthStart start;
+    start.publicKey = deskhubp::IdentityPublicKey(rig.machines.viewer);
+    start.clientName = "old-client";
+    std::vector<uint8_t> message(deskhub::kMaxRecordSize);
+    message.resize(deskhub::BuildAuthStart(message, start));
+    Check(!message.empty(), "the new auth start can be encoded");
+    if (message.empty()) return;
+    message.pop_back();
+    Check(rig.viewer.SendRecord(rig.target, message), "the old layout reaches the host");
+    bool versionMismatch = false;
+    Check(WaitUntil(
+              [&] {
+                  uint8_t buf[deskhub::kMaxRecordSize];
+                  NetAddr from;
+                  const int got = rig.viewer.RecvFrom(buf, sizeof(buf), from);
+                  if (got <= 0) return false;
+                  const std::span<const uint8_t> reply(buf, size_t(got));
+                  const auto header = deskhub::ParseCommonHeader(reply);
+                  if (!header || header->type != deskhub::MsgType::AuthResult) return false;
+                  const auto result = deskhub::ParseAuthResult(deskhub::PayloadOf(reply));
+                  versionMismatch = result &&
+                                    result->code == deskhub::AuthResultCode::VersionMismatch;
+                  return versionMismatch;
+              },
+              kSettleMillis),
+        "the host returns an explicit auth version error");
+    Check(versionMismatch, "the old layout never enters the key handshake");
+    Check(WaitUntil(
+              [&] {
+                  rig.PumpViewer();
+                  return !rig.viewer.Established(rig.target);
+              },
+              kSettleMillis),
+        "the host closes the incompatible connection");
+    Check(rig.Peer().Pack() == 0, "the old client is never admitted");
+}
+
 void TestForgettingADeviceClosesItsLiveConnection() {
     std::printf("[admission] forgetting a machine on the Devices page cuts it off now...\n");
     if (Skipped("admission")) return;
@@ -221,7 +266,7 @@ void TestForgettingADeviceClosesItsLiveConnection() {
     const NetAddr peer = rig.Peer();
     Check(deskhubp::CheckPairedDevice(rig.machines.viewer.fingerprint) ==
               deskhub::PairVerdict::Paired,
-        "the passcode left it on the paired list");
+        "the authorized key remains on the paired list");
 
     deskhubp::RememberPairedDevice(rig.machines.impostor.fingerprint, "bystander", 1);
     deskhubp::ForgetPairedDevice(rig.machines.impostor.fingerprint);
@@ -246,5 +291,6 @@ void TestForgettingADeviceClosesItsLiveConnection() {
 void RunTransportAdmissionTests() {
     TestAClosedConnectionTakesItsAdmissionWithIt();
     TestASecondHandshakeOnOneConnectionIsRefused();
+    TestAnOldAuthStartIsRefused();
     TestForgettingADeviceClosesItsLiveConnection();
 }

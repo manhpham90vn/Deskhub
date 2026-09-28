@@ -16,6 +16,7 @@ constexpr uint32_t kAuthPollMs = 2;
 constexpr uint64_t kCloseBadFraming = 1;
 constexpr uint64_t kCloseAuthRestarted = 2;
 constexpr uint64_t kCloseDeviceForgotten = 3;
+constexpr uint64_t kCloseAuthVersionMismatch = 4;
 
 uint64_t StreamKey(QuicConnId conn, uint64_t stream) {
     return conn ^ (stream << 48);
@@ -238,39 +239,34 @@ bool SessionTransport::HandleHostAuth(const NetAddr& from, std::span<const uint8
             LOGW(
                 "transport: %s restarted authentication on a connection that already began "
                 "it, closing the connection: one connection gets one handshake, so a settled "
-                "identity cannot be swapped and a refused passcode cannot be retried in place",
+                "identity cannot be swapped and a refused challenge cannot be retried in place",
                 from.ToString().c_str());
             ForgetPeerAuth(from);
             endpoint_.CloseConnection(key, kCloseAuthRestarted, "auth restarted");
             return false;
         }
         const std::optional<deskhub::AuthStart> start = deskhub::ParseAuthStart(payload);
-        if (!start) return false;
+        if (!start) {
+            deskhub::AuthResult mismatch;
+            mismatch.code = deskhub::AuthResultCode::VersionMismatch;
+            std::vector<uint8_t> out(deskhub::kMaxRecordSize);
+            out.resize(deskhub::BuildAuthResult(out, mismatch));
+            SendAuth(from, out);
+            endpoint_.CloseConnection(key, kCloseAuthVersionMismatch, "auth version mismatch");
+            return false;
+        }
 
         auto auth = std::make_unique<HostAuth>();
         auth->Configure(hostAuthConfig_);
         const std::optional<deskhub::AuthChallenge> challenge = auth->Begin(*start);
         if (!challenge) return false;
 
-        if (challenge->mode == deskhub::AuthMode::Passcode && authThrottle_.Locked(NowUs())) {
-            deskhub::AuthResult locked;
-            locked.code = deskhub::AuthResultCode::Locked;
-            std::vector<uint8_t> out(deskhub::kMaxRecordSize);
-            out.resize(deskhub::BuildAuthResult(out, locked));
-            SendAuth(from, out);
-            LOGW("transport: %s is locked out after too many wrong passcodes",
-                from.ToString().c_str());
-            if (authCallbacks_.onRefused)
-                authCallbacks_.onRefused(from, deskhub::AuthResultCode::Locked);
-            return false;
-        }
-
         std::vector<uint8_t> out(deskhub::kMaxRecordSize);
         out.resize(deskhub::BuildAuthChallenge(out, *challenge));
         SendAuth(from, out);
 
         if (challenge->mode == deskhub::AuthMode::Denied && authCallbacks_.onRefused)
-            authCallbacks_.onRefused(from, deskhub::AuthResultCode::PairingDisabled);
+            authCallbacks_.onRefused(from, deskhub::AuthResultCode::NotPaired);
 
         hostAuth_[key] = std::move(auth);
         return false;
@@ -280,13 +276,11 @@ bool SessionTransport::HandleHostAuth(const NetAddr& from, std::span<const uint8
         const auto at = hostAuth_.find(key);
         if (at == hostAuth_.end()) return false;
         const std::optional<deskhub::AuthResponse> response = deskhub::ParseAuthResponse(payload);
-        if (!response) return false;
-        const deskhub::AuthResult result = at->second->Respond(*response, NowUnix());
-        if (at->second->Mode() == deskhub::AuthMode::Passcode) {
-            if (result.code == deskhub::AuthResultCode::WrongPasscode)
-                authThrottle_.RecordFailure(NowUs());
-            if (result.code == deskhub::AuthResultCode::Accepted) authThrottle_.RecordSuccess();
+        if (!response) {
+            endpoint_.CloseConnection(key, kCloseBadFraming, "invalid auth response");
+            return false;
         }
+        const deskhub::AuthResult result = at->second->Respond(*response, NowUnix());
         SettleHostAuth(from, *at->second, result);
         return false;
     }
@@ -395,11 +389,10 @@ bool SessionTransport::SendKeepalive(const NetAddr& peer) {
 }
 
 bool SessionTransport::RunClientAuth(const NetAddr& server, ClientAuthConfig config,
-    uint32_t timeoutMs, deskhub::AuthResultCode& outCode, bool& outHostProvedPasscode,
+    uint32_t timeoutMs, deskhub::AuthResultCode& outCode,
     const std::atomic<bool>* cancel) {
     clientAuthOn_ = true;
     outCode = deskhub::AuthResultCode::NotPaired;
-    outHostProvedPasscode = false;
 
     ClientAuth client;
     client.Configure(std::move(config));
@@ -432,9 +425,18 @@ bool SessionTransport::RunClientAuth(const NetAddr& server, ClientAuthConfig con
         if (header->type == deskhub::MsgType::AuthChallenge && !answered) {
             const std::optional<deskhub::AuthChallenge> challenge =
                 deskhub::ParseAuthChallenge(payload);
-            if (!challenge) continue;
+            if (!challenge) {
+                outCode = payload.empty() || payload[0] != deskhub::kAuthVersion
+                              ? deskhub::AuthResultCode::VersionMismatch
+                              : deskhub::AuthResultCode::Refused;
+                clientAuthOn_ = false;
+                const std::lock_guard<std::mutex> lock(sendMutex_);
+                endpoint_.CloseConnection(server.Pack(), kCloseAuthVersionMismatch,
+                    "auth challenge rejected");
+                return false;
+            }
             if (challenge->mode == deskhub::AuthMode::Denied) {
-                outCode = deskhub::AuthResultCode::PairingDisabled;
+                outCode = deskhub::AuthResultCode::NotPaired;
                 clientAuthOn_ = false;
                 return false;
             }
@@ -445,7 +447,7 @@ bool SessionTransport::RunClientAuth(const NetAddr& server, ClientAuthConfig con
             }
             const std::optional<deskhub::AuthResponse> response = client.Answer(*challenge);
             if (!response) {
-                outCode = deskhub::AuthResultCode::WrongPasscode;
+                outCode = deskhub::AuthResultCode::NotPaired;
                 clientAuthOn_ = false;
                 return false;
             }
@@ -459,11 +461,18 @@ bool SessionTransport::RunClientAuth(const NetAddr& server, ClientAuthConfig con
             continue;
         }
 
-        if (header->type == deskhub::MsgType::AuthResult && answered) {
+        if (header->type == deskhub::MsgType::AuthResult) {
             const std::optional<deskhub::AuthResult> result = deskhub::ParseAuthResult(payload);
-            if (!result) continue;
+            if (!result) {
+                outCode = deskhub::AuthResultCode::VersionMismatch;
+                clientAuthOn_ = false;
+                const std::lock_guard<std::mutex> lock(sendMutex_);
+                endpoint_.CloseConnection(server.Pack(), kCloseAuthVersionMismatch,
+                    "auth result rejected");
+                return false;
+            }
+            if (!answered && result->code != deskhub::AuthResultCode::VersionMismatch) continue;
             outCode = result->code;
-            outHostProvedPasscode = client.HostProvedThePasscode(*result);
             clientAuthOn_ = false;
             return result->code == deskhub::AuthResultCode::Accepted;
         }

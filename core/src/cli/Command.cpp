@@ -181,35 +181,6 @@ FlagResult ApplyTextFlag(Command& command, const Flag& flag, Cursor& cursor,
     return FlagResult::Handled;
 }
 
-FlagResult ApplyPasscodeFlag(Command& command, const Flag& flag, Cursor& cursor) {
-    if (flag.name != "--passcode") return FlagResult::Unknown;
-    std::string text;
-    if (!ValueOf(flag, cursor, text, command.error)) return FlagResult::Failed;
-
-    if (text == "-") {
-        command.passcodeSource = PasscodeSource::Stdin;
-        command.passcode.clear();
-        return FlagResult::Handled;
-    }
-    if (text.front() == '@') {
-        const std::string path = text.substr(1);
-        if (path.empty()) {
-            command.error = BadValue(flag.name, text);
-            return FlagResult::Failed;
-        }
-        command.passcodeSource = PasscodeSource::File;
-        command.passcode = path;
-        return FlagResult::Handled;
-    }
-    if (!IsValidPasscode(text)) {
-        command.error = std::string(ui::kPasscodeInvalid);
-        return FlagResult::Failed;
-    }
-    command.passcodeSource = PasscodeSource::Literal;
-    command.passcode = text;
-    return FlagResult::Handled;
-}
-
 bool TakeAddress(Command& command, std::string_view token) {
     std::string host;
     uint16_t port = command.port;
@@ -269,7 +240,7 @@ void ParseNoArgVerb(Command& command, Cursor& cursor) {
     }
 }
 
-void ParseAddressVerb(Command& command, Cursor& cursor, bool wantsPasscode) {
+void ParseAddressVerb(Command& command, Cursor& cursor) {
     bool haveAddress = false;
     while (More(cursor)) {
         const std::string_view token = Take(cursor);
@@ -289,16 +260,6 @@ void ParseAddressVerb(Command& command, Cursor& cursor, bool wantsPasscode) {
             return;
         }
         if (ApplyGlobalFlag(command, flag) == FlagResult::Handled) continue;
-
-        if (wantsPasscode) {
-            FlagResult result = ApplyPasscodeFlag(command, flag, cursor);
-            if (result == FlagResult::Failed) return;
-            if (result == FlagResult::Handled) continue;
-
-            result = ApplyTextFlag(command, flag, cursor, "--name", command.deviceName);
-            if (result == FlagResult::Failed) return;
-            if (result == FlagResult::Handled) continue;
-        }
 
         command.error = UnknownOption(flag.name, command.verb);
         return;
@@ -446,23 +407,6 @@ void ParseSettings(Command& command, Cursor& cursor) {
     ParseNoArgVerb(command, cursor);
 }
 
-FlagResult ApplyPairingFlag(Command& command, const Flag& flag, Cursor& cursor) {
-    if (flag.name != "--pairing") return FlagResult::Unknown;
-    std::string text;
-    if (!ValueOf(flag, cursor, text, command.error)) return FlagResult::Failed;
-    if (text == "deny") {
-        command.share.pairing = PairingPolicy::Deny;
-    } else if (text == "allow") {
-        command.share.pairing = PairingPolicy::Allow;
-    } else if (text == "ask") {
-        command.share.pairing = PairingPolicy::Ask;
-    } else {
-        command.error = BadValue(flag.name, text);
-        return FlagResult::Failed;
-    }
-    return FlagResult::Handled;
-}
-
 void ParseSend(Command& command, Cursor& cursor) {
     bool haveAddress = false;
     while (More(cursor)) {
@@ -489,11 +433,7 @@ void ParseSend(Command& command, Cursor& cursor) {
         }
         if (ApplyGlobalFlag(command, flag) == FlagResult::Handled) continue;
 
-        FlagResult result = ApplyPasscodeFlag(command, flag, cursor);
-        if (result == FlagResult::Failed) return;
-        if (result == FlagResult::Handled) continue;
-
-        result = ApplyTextFlag(command, flag, cursor, "--name", command.deviceName);
+        FlagResult result = ApplyTextFlag(command, flag, cursor, "--name", command.deviceName);
         if (result == FlagResult::Failed) return;
         if (result == FlagResult::Handled) continue;
 
@@ -548,10 +488,6 @@ void ParseShare(Command& command, Cursor& cursor) {
                 share.audio = false;
                 continue;
             }
-            if (flag.name == "--no-new-pairings") {
-                share.allowNewPairings = false;
-                continue;
-            }
             if (flag.name == "--no-status") {
                 share.status = false;
                 continue;
@@ -566,14 +502,6 @@ void ParseShare(Command& command, Cursor& cursor) {
         }
 
         FlagResult result = ApplyPortFlag(command, flag, cursor);
-        if (result == FlagResult::Failed) return;
-        if (result == FlagResult::Handled) continue;
-
-        result = ApplyPasscodeFlag(command, flag, cursor);
-        if (result == FlagResult::Failed) return;
-        if (result == FlagResult::Handled) continue;
-
-        result = ApplyPairingFlag(command, flag, cursor);
         if (result == FlagResult::Failed) return;
         if (result == FlagResult::Handled) continue;
 
@@ -660,11 +588,7 @@ void ParseShell(Command& command, Cursor& cursor) {
             continue;
         }
 
-        FlagResult result = ApplyPasscodeFlag(command, flag, cursor);
-        if (result == FlagResult::Failed) return;
-        if (result == FlagResult::Handled) continue;
-
-        result = ApplyTextFlag(command, flag, cursor, "--name", command.deviceName);
+        FlagResult result = ApplyTextFlag(command, flag, cursor, "--name", command.deviceName);
         if (result == FlagResult::Failed) return;
         if (result == FlagResult::Handled) continue;
 
@@ -717,11 +641,7 @@ void ParseConnect(Command& command, Cursor& cursor) {
             continue;
         }
 
-        FlagResult result = ApplyPasscodeFlag(command, flag, cursor);
-        if (result == FlagResult::Failed) return;
-        if (result == FlagResult::Handled) continue;
-
-        result = ApplyTextFlag(command, flag, cursor, "--name", command.deviceName);
+        FlagResult result = ApplyTextFlag(command, flag, cursor, "--name", command.deviceName);
         if (result == FlagResult::Failed) return;
         if (result == FlagResult::Handled) continue;
 
@@ -798,7 +718,7 @@ Command ParseCommand(int argc, const char* const* argv) {
         case Verb::Help: ParseHelp(command, cursor); break;
         case Verb::Version:
         case Verb::Displays: ParseNoArgVerb(command, cursor); break;
-        case Verb::Sources: ParseAddressVerb(command, cursor, true); break;
+        case Verb::Sources: ParseAddressVerb(command, cursor); break;
         case Verb::Devices: ParseDevices(command, cursor); break;
         case Verb::Trust: ParseTrust(command, cursor); break;
         case Verb::Settings: ParseSettings(command, cursor); break;
@@ -881,7 +801,6 @@ ui::UiSettings ApplyShareOptions(const Command& command, ui::UiSettings settings
     if (share.maxDim) settings.maxDim = *share.maxDim;
     if (share.allowInput) settings.allowInput = *share.allowInput;
     if (share.audio) settings.shareAudio = *share.audio;
-    if (share.allowNewPairings) settings.allowNewPairings = *share.allowNewPairings;
     if (command.deviceName) settings.deviceName = ui::TruncateDeviceName(*command.deviceName);
     if (share.bindIp) settings.bindIp = *share.bindIp;
     if (share.filesDir) settings.transferDir = ui::TruncateSettingsPath(*share.filesDir);
@@ -928,12 +847,9 @@ std::string UsageText(Verb verb) {
                    "              sent no frame - the saved choice has gone stale.\n";
         case Verb::Sources:
             return "Usage: " + program +
-                   " sources ADDRESS[:PORT] [--passcode VALUE]\n"
+                   " sources ADDRESS[:PORT]\n"
                    "\n"
-                   "Ask a host what it is sharing.\n"
-                   "\n"
-                   "  --passcode VALUE  the host's passcode. '-' reads one line from stdin, '@FILE'\n"
-                   "                    reads it from a file, or set DESKHUB_PASSCODE instead\n";
+                   "Ask a host what it is sharing. Its TLS key must already be pinned.\n";
         case Verb::Devices:
             return "Usage: " + program +
                    " devices [list]\n"
@@ -954,7 +870,7 @@ std::string UsageText(Verb verb) {
                    " devices forget all\n"
                    "\n"
                    "Machines that are allowed to connect to this one. Forgetting a machine means it\n"
-                   "has to pair again.\n";
+                   "needs its public key authorized again.\n";
         case Verb::Trust:
             return "Usage: " + program +
                    " trust [list]\n"
@@ -971,8 +887,8 @@ std::string UsageText(Verb verb) {
                    program +
                    " trust forget all\n"
                    "\n"
-                   "Hosts this machine has decided to trust, by key. Forgetting a host means its key\n"
-                   "is accepted afresh on the next connection.\n";
+                   "Hosts this machine has decided to trust, by key. Forgetting a host blocks\n"
+                   "new connections until its key is pinned again.\n";
         case Verb::Settings:
             return "Usage: " + program +
                    " settings [list]\n"
@@ -994,13 +910,12 @@ std::string UsageText(Verb verb) {
                    "  --source ID|NAME|all  which of the host's screens to watch\n"
                    "  --view-only           watch without typing or clicking\n"
                    "  --audio / --no-audio  play the host's sound, or do not\n"
-                   "  --passcode VALUE      the host's passcode, the same way sources takes it\n"
                    "  --name NAME           what the host sees this machine called\n"
                    "\n"
                    "F9 locks the pointer to the window, Escape lets it go again.\n";
         case Verb::Shell:
             return "Usage: " + program +
-                   " shell ADDRESS[:PORT] [--passcode VALUE] [--name NAME] [--resume ID] [--list]\n"
+                   " shell ADDRESS[:PORT] [--name NAME] [--resume ID] [--list]\n"
                    "\n"
                    "Open a shell on a host and drive it from this terminal. Everything the\n"
                    "shell prints is written straight through, so your own terminal draws it.\n"
@@ -1008,20 +923,18 @@ std::string UsageText(Verb verb) {
                    "host until its shell exits, so --list shows the shells left behind and\n"
                    "--resume ID picks one back up instead of opening a new one.\n"
                    "\n"
-                   "  --passcode VALUE  the host's passcode, the same way sources takes it\n"
                    "  --name NAME       what the host sees this machine called\n"
                    "  --resume ID       reattach a shell the host is keeping, by its id\n"
                    "  --list            list the shells open on the host, then quit\n";
         case Verb::Send:
             return "Usage: " + program +
-                   " send ADDRESS[:PORT] FILE [FILE...] [--passcode VALUE] [--name NAME]\n"
+                   " send ADDRESS[:PORT] FILE [FILE...] [--name NAME]\n"
                    "\n"
                    "Send files to a host that was started with --files. The host stores them in\n"
                    "its transfer folder without asking, so it only takes files from machines it\n"
                    "has admitted. Names are reduced to a plain file name before they are stored,\n"
                    "and nothing already there is ever overwritten.\n"
                    "\n"
-                   "  --passcode VALUE  the host's passcode, the same way sources takes it\n"
                    "  --name NAME       what the host sees this machine called\n"
                    "\n"
                    "At most " +
@@ -1047,11 +960,7 @@ std::string UsageText(Verb verb) {
                    "  --max-dim PX           cap the longest side of the picture\n"
                    "  --port PORT            the UDP port to share on\n"
                    "  --bind IP              share on one network only\n"
-                   "  --passcode VALUE       the passcode viewers must type\n"
                    "  --name NAME            what viewers see this machine called\n"
-                   "  --no-new-pairings      only machines that already paired may connect\n"
-                   "  --pairing deny|allow|ask  what to do when a new machine asks in\n"
-                   "                         (deny by default, ask needs a terminal)\n"
                    "  --status-interval MS   how often to print the status line\n"
                    "  --no-status            print nothing until it stops\n"
                    "\n"

@@ -2,7 +2,7 @@
 
 # Chính sách quyền riêng tư của Deskhub
 
-_Ngày hiệu lực: 7 tháng 9 năm 2026 — Phiên bản 2.5_
+_Ngày hiệu lực: 28 tháng 9 năm 2026 — Phiên bản 2.6_
 
 > Đây là bản dịch của [`PRIVACY.md`](PRIVACY.md). Nếu nội dung có khác biệt, bản tiếng Anh
 > là bản chuẩn.
@@ -41,13 +41,14 @@ bên thứ ba nào.
 | Nội dung màn hình của máy được share (frame video) | Hiển thị màn hình đó trên thiết bị khác của bạn | Gửi trực tiếp giữa hai thiết bị của bạn, encrypt trên đường truyền (QUIC/TLS) | Không lưu trữ; chỉ tồn tại trong bộ nhớ trong thời gian session diễn ra |
 | Âm thanh mà máy được share đang phát (chỉ khi máy đó share âm thanh và viewer yêu cầu) | Cho phép người đang xem nghe được âm thanh của máy đó | Gửi trực tiếp giữa hai thiết bị của bạn, encrypt trên đường truyền (QUIC/TLS), ở dạng audio đã nén | Không lưu trữ; chỉ tồn tại trong bộ nhớ trong thời gian session diễn ra |
 | Input từ mouse, keyboard và cảm ứng | Điều khiển máy được share từ thiết bị khác của bạn | Gửi trực tiếp từ thiết bị đang xem tới máy được share, encrypt trên đường truyền (QUIC/TLS) | Không lưu trữ; được loại bỏ sau khi inject |
-| Cặp key của máy này, gồm một private key và một certificate tự ký được tạo trong lần chạy đầu tiên | Chứng minh danh tính của máy này với các máy mà nó kết nối tới; người dùng nhìn thấy dưới dạng fingerprint (`SHA256:…`) | Ghi vào `host_key.pem` và `host_cert.pem` trong thư mục riêng của app; chỉ phần công khai (certificate) được gửi tới các máy bạn kết nối | Lưu cho tới khi bạn xoá các file này; việc xoá sẽ tạo cho máy một danh tính mới, và các máy đã biết danh tính cũ sẽ hiển thị cảnh báo |
+| Cặp khóa TLS host, gồm private key và certificate tự ký được tạo trong lần chạy đầu tiên | Chứng minh danh tính host với client kết nối đến; người dùng nhìn thấy dưới dạng fingerprint (`SHA256:…`) | Ghi vào `host_key.pem` và `host_cert.pem` trong thư mục riêng của app; chỉ certificate công khai được gửi tới client kết nối | Lưu cho tới khi bạn xoá các file này; việc xoá sẽ tạo danh tính host mới và client đã biết khóa cũ sẽ cảnh báo |
+| Khóa ký client của thiết bị này | Chứng minh thiết bị được phép truy cập host đã cấp quyền cho public key của nó | Ghi vào `client_key.pem` trong thư mục riêng của app; private key ở lại trên máy, chỉ chữ ký và public key được gửi trong xác thực | Lưu cho tới khi thay hoặc xóa khóa; host cần cấp quyền lại cho public key mới |
 | Key của các host mà thiết bị này đã trust (fingerprint, địa chỉ, nhãn, thời điểm thấy lần đầu và lần cuối) | Nhận diện một host đã biết và cảnh báo rõ ràng nếu key của host đó thay đổi | Ghi vào `known_hosts` trong cùng thư mục; không được truyền đi | Lưu cho tới khi bạn xoá file |
 | Các máy đã pair với host này: fingerprint key, tên do máy đó gửi, thời điểm pair và thời điểm thấy gần nhất | Cho phép máy đã pair kết nối lại mà không cần passcode, và liệt kê chúng trên trang Devices để bạn có thể gỡ bỏ | Ghi vào `paired_devices` trong cùng thư mục; không được truyền đi | Lưu cho tới khi bạn gỡ máy đó trên trang Devices hoặc xoá file |
-| Một salt ngẫu nhiên cho verifier của passcode | Chuyển passcode thành giá trị mà pairing handshake đối chiếu, để bản thân mã không đi qua đường truyền | Ghi vào `auth_salt` trong cùng thư mục; salt được gửi tới máy đang kết nối trong quá trình handshake và không phải thông tin bí mật | Lưu cho tới khi bạn xoá file |
+| Salt cũ của verifier passcode đã bỏ | Không còn dùng để xác thực | Bản cài cũ có thể còn file `auth_salt` trong cùng thư mục; file này không còn được truyền đi | Lưu cho tới khi bạn xoá file |
 | Địa chỉ (IP hoặc hostname) bạn nhập | Kết nối tới máy còn lại | Chỉ lưu trên thiết bị bạn đã nhập | Lưu cục bộ cho tới khi bạn thay đổi |
-| 10 địa chỉ kết nối gần nhất, thời điểm của từng lần, và passcode dùng cho từng địa chỉ | Điền danh sách *Recent devices* để bạn kết nối lại bằng một thao tác | Ghi vào `recent-devices.txt` trong thư mục riêng của app trên thiết bị của bạn: `%USERPROFILE%\.deskhub` trên Windows, `~/.deskhub` trên macOS và Linux, sandbox của app trên iOS và Android | Lưu cho tới khi bạn kết nối tới 10 địa chỉ mới hơn, hoặc xoá file |
-| Tuỳ chọn share của bạn (frame rate, bitrate, giới hạn độ phân giải, port, network dùng để share, việc viewer có được điều khiển máy hay không, các switch clipboard sync, keep awake, khởi động cùng OS, tự động share và chế độ nền, cùng passcode bạn yêu cầu ở viewer) | Khôi phục settings trong lần mở app tiếp theo | Ghi vào `ui-settings.txt` trong cùng thư mục. Trên iOS, file nằm trong app group container dùng chung giữa app và broadcast extension, để hai thành phần thống nhất về passcode và port | Lưu cho tới khi bạn thay đổi hoặc xoá file |
+| 10 địa chỉ kết nối gần nhất và thời điểm của từng lần | Điền danh sách *Recent devices* | Ghi vào `recent-devices.txt` trong thư mục riêng của app trên thiết bị của bạn: `%USERPROFILE%\.deskhub` trên Windows, `~/.deskhub` trên macOS và Linux, sandbox của app trên iOS và Android. Passcode cũ bị loại bỏ khi file được nạp và ghi lại thành công | Lưu cho tới khi bạn kết nối tới 10 địa chỉ mới hơn, hoặc xoá file |
+| Tuỳ chọn share của bạn (frame rate, bitrate, giới hạn độ phân giải, port, network dùng để share, quyền điều khiển, clipboard sync, keep awake, khởi động cùng OS, tự động share và chế độ nền) | Khôi phục settings trong lần mở app tiếp theo | Ghi vào `ui-settings.txt` trong cùng thư mục; trên iOS, file nằm trong app group container dùng chung giữa app và broadcast extension. Passcode và cờ pairing cũ bị loại bỏ khi file được nạp và ghi lại thành công | Lưu cho tới khi bạn thay đổi hoặc xoá file |
 | Token quyền màn hình do desktop Linux cấp sau khi bạn chọn display trong hộp thoại chia sẻ màn hình (chỉ Linux) | Cho phép các lần share sau sử dụng lại lựa chọn đó, nên hộp thoại chỉ xuất hiện trong lần đầu | Ghi vào `portal-restore-token.txt` trong cùng thư mục; token chỉ có ý nghĩa với phiên desktop của bạn trên máy này và không được truyền đi | Được thay thế sau mỗi lần share; bị xoá khi bạn chọn *Choose screens again* hoặc xoá file |
 | Văn bản clipboard (chỉ khi switch clipboard sync được bật và có một session đang chạy) | Cho phép văn bản copy trên một thiết bị được dán trên các thiết bị khác | Gửi trực tiếp giữa các thiết bị của bạn, encrypt trên đường truyền (QUIC/TLS), giới hạn 32 KiB mỗi lần copy; chỉ văn bản thuần, không bao gồm ảnh hay file | Deskhub không lưu trữ; văn bản chỉ tồn tại trong clipboard hệ thống của từng thiết bị |
 | Trạng thái broadcast đang chạy hay không, số viewer đang kết nối, mức bộ nhớ của broadcast extension tính bằng megabyte, và nội dung lỗi khởi động gần nhất (chỉ iOS) | Cho phép màn hình share của app hiển thị trạng thái của broadcast extension, thành phần mà iOS chạy như một process riêng và sẽ kết thúc nếu sử dụng quá nhiều bộ nhớ | Ghi vào `broadcast-status.txt` trong cùng app group container | Bị xoá khi broadcast kết thúc |
@@ -156,16 +157,15 @@ nhật.
   (WireGuard).
 - Deskhub encrypt lưu lượng session: video, control, input, clipboard và dữ liệu terminal
   đều chạy trên QUIC/TLS giữa các thiết bị của bạn. Việc chấp nhận kết nối do một pairing
-  handshake quyết định: máy chưa biết phải chứng minh được mình biết passcode 4 chữ số tuỳ
-  chọn của host (bản thân mã không được truyền đi) hoặc phải được người dùng tại host
-  phê duyệt. Tên thiết bị được encrypt trên đường truyền nhưng hiển thị trên host, nên
+  handshake quyết định: client phải ký challenge bằng khóa đã được host cấp quyền
+  và kiểm tra khóa host đã ghim trước khi gửi xác thực. Tên thiết bị được encrypt trên đường truyền nhưng hiển thị trên host, nên
   không nên đặt thông tin nhạy cảm vào trường này. Không phơi Deskhub trực tiếp ra
   Internet. Threat model đầy đủ, gồm phạm vi được bảo vệ, phạm vi không được bảo vệ và
   cách báo lỗ hổng, nằm trong
   [`SECURITY.vi.md`](https://github.com/manhpham90vn/Deskhub/blob/main/SECURITY.vi.md).
-- Các passcode lưu trong `recent-devices.txt` và `ui-settings.txt` được làm rối bằng một
-  khoá cố định để không đọc được trực tiếp. Đây không phải encrypt và không nhằm chống lại
-  người đã có quyền truy cập vào tài khoản người dùng của bạn.
+- File `recent-devices.txt` và `ui-settings.txt` cũ có thể chứa passcode. Khi nạp,
+  app loại bỏ các trường này bằng cách ghi thay thế an toàn. Nếu ghi thất bại,
+  file cũ còn nguyên và việc chuyển đổi được thử lại ở lần nạp sau.
 - Vì chúng tôi không lưu giữ dữ liệu nào về bạn, không tồn tại cơ sở dữ liệu phía lập
   trình viên có thể bị xâm phạm.
 
@@ -174,7 +174,7 @@ nhật.
 Chúng tôi không lưu giữ dữ liệu nào, nên không có dữ liệu nào để chúng tôi xoá. Toàn bộ
 dữ liệu session biến mất khi session kết thúc. Địa chỉ lưu trong app được gỡ bỏ bằng cách
 xoá trắng trường tương ứng hoặc gỡ cài đặt app. Danh sách thiết bị gần đây và các settings
-đã lưu, bao gồm mọi passcode, được gỡ bỏ bằng cách xoá thư mục của app
+đã lưu được gỡ bỏ bằng cách xoá thư mục của app
 (`%USERPROFILE%\.deskhub` trên Windows, `~/.deskhub` trên macOS và Linux); app sẽ tạo lại
 thư mục rỗng trong lần chạy tiếp theo. Trên iOS và Android, việc gỡ cài đặt app sẽ xoá
 các dữ liệu này.
@@ -215,6 +215,7 @@ luôn được công bố tại: https://github.com/manhpham90vn/Deskhub/blob/ma
 
 | Phiên bản | Ngày | Nội dung thay đổi |
 |---|---|---|
+| 2.6 | 2026-09-28 | Quyền kết nối client nay yêu cầu khóa ký đã được cấp quyền và khóa host đã ghim. Recent devices và UI settings không còn lưu passcode; các trường cũ bị loại bỏ khi nạp và ghi lại file an toàn. Nếu ghi thất bại, file cũ được giữ để thử lại sau. |
 | 2.5 | 2026-09-07 | Đây là một đính chính, không phải thay đổi về hành vi: Deskhub hoạt động như trước. Các phiên bản trước của chính sách này nêu rằng file tới trên điện thoại hoặc tablet Android được lưu vào `Pictures/Deskhub`, `Movies/Deskhub` hoặc `Download/Deskhub` qua media store của hệ thống. Điều này đúng với Android 10 trở lên. Đường lưu qua media store mà Deskhub sử dụng yêu cầu Android 10, nên trên Android 9 trở xuống, file tới nơi được lưu trong thư mục riêng của app trên thiết bị và không xuất hiện trong gallery hay trong Downloads. Trong cả hai trường hợp, file chỉ tới hai thiết bị liên quan. |
 | 2.4 | 2026-08-28 | **Điện thoại và tablet hiện nhận file cũng như gửi file**, và vị trí lưu file trên các thiết bị này là nội dung mới. Trên iOS, ảnh và video được thêm vào thư viện ảnh; hệ thống xin permission Photos dạng chỉ-thêm trong lần đầu, và Deskhub chỉ có thể thêm mục mới, không đọc và không sửa nội dung có sẵn. Các file khác được lưu vào thư mục Documents của app, nơi app Files truy cập được. Trên Android, ảnh được lưu vào `Pictures/Deskhub`, video vào `Movies/Deskhub` và các file khác vào `Download/Deskhub`, đều qua media store của hệ thống. Cả hai nền tảng đều nêu tên file vừa tới trong một notification. Không dữ liệu nào trong số đó tới chúng tôi. Phiên bản này cũng đính chính hai điểm mà các phiên bản trước nêu chưa chính xác: Android luôn cần permission mà hệ thống gọi là *Microphone* (`RECORD_AUDIO`) để capture nội dung do chính thiết bị phát, tức phần share âm thanh mô tả ở phiên bản 2.1, trong khi Deskhub không ghi microphone; và các app desktop chưa bao giờ mất ô chọn *File transfer* mô tả ở phiên bản 2.3, chỉ phần setting được lưu đằng sau nó bị gỡ. |
 | 2.3 | 2026-08-24 | **Việc nhận file không còn là một setting được lưu.** Tuỳ chọn *Take files viewers send* đã được gỡ khỏi `ui-settings.txt`: điện thoại và tablet nhận file bất cứ khi nào app hiển thị trên màn hình, còn máy tính đưa *File transfer* vào danh sách nội dung được share, được chọn sẵn ở mỗi lần và không được lưu, nên máy tính vẫn chỉ nhận file trong khi đang share. Cách xử lý một file tới nơi không thay đổi: vẫn yêu cầu bên gửi đã pair và đã được chấp nhận, vẫn được lưu vào nơi máy đó dành cho file nhận được, vẫn không ghi đè file đã tồn tại, và vẫn được ghi log cục bộ kèm tên, địa chỉ và fingerprint key của thiết bị gửi. Việc share màn hình vẫn là một thao tác chủ động sau nút riêng, và một máy tính đang share màn hình vẫn tiếp tục nhận file trong thời gian đó. |

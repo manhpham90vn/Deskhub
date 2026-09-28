@@ -2,7 +2,7 @@
 
 # Deskhub 隐私政策
 
-_生效日期：2026 年 9 月 7 日 —— 版本 2.5_
+_生效日期：2026 年 9 月 28 日 —— 版本 2.6_
 
 > 本文件译自 [`PRIVACY.md`](PRIVACY.md)。如有出入，以英文版为准。
 
@@ -37,13 +37,14 @@ analytics、crash reporting、广告，也未嵌入第三方 SDK。
 | 被共享电脑的屏幕内容（video frame） | 在你的另一台设备上显示该屏幕 | 在你的两台设备之间直接发送，传输中 encrypt（QUIC/TLS） | 不存储；仅在 session 期间存在于内存中 |
 | 被共享电脑正在播放的声音（仅当该电脑共享声音且 viewer 提出请求时） | 使观看者能够听到该电脑的声音 | 在你的两台设备之间直接发送，传输中 encrypt（QUIC/TLS），以压缩音频形式传输 | 不存储；仅在 session 期间存在于内存中 |
 | Mouse、keyboard 与触摸 input | 从你的另一台设备操作被共享的电脑 | 由观看设备直接发送至被共享的电脑，传输中 encrypt（QUIC/TLS） | 不存储；inject 之后即丢弃 |
-| 本机的密钥对，即首次运行时创建的私钥与自签 certificate | 向所连接的机器证明本机身份；对用户呈现为 fingerprint（`SHA256:…`） | 写入 app 自身文件夹中的 `host_key.pem` 与 `host_cert.pem`；仅公开部分（certificate）会出示给你连接的机器 | 保留至你删除这些文件为止；删除后本机将获得新的身份，此前认识旧身份的机器会发出警告 |
+| host 的 TLS 密钥对，即首次运行时创建的私钥与自签 certificate | 向连接的 client 证明 host 身份；对用户呈现为 fingerprint（`SHA256:…`） | 写入 app 自身文件夹中的 `host_key.pem` 与 `host_cert.pem`；仅公开 certificate 会出示给连接的 client | 保留至你删除这些文件为止；删除后 host 将获得新的身份，此前认识旧身份的 client 会发出警告 |
+| 本设备的 client 签名 key | 向已授权其 public key 的 host 证明访问权限 | 写入 app 自身文件夹中的 `client_key.pem`；private key 留在本地，认证时仅发送签名与 public key | 保留至你替换或删除该 key；新的 public key 需要 host 重新授权 |
 | 本设备 trust 过的 host 的 key（fingerprint、地址、标签、首次与最后一次出现时间） | 识别已知的 host，并在其 key 发生变化时明确告警 | 写入同一文件夹中的 `known_hosts`；不会被传输 | 保留至你删除该文件为止 |
 | 与本 host pair 过的机器：其 key fingerprint、所发送的名称、pair 时间与最后一次出现时间 | 使已 pair 的机器无需 passcode 即可重新连接，并在 Devices 页列出以便你移除 | 写入同一文件夹中的 `paired_devices`；不会被传输 | 保留至你在 Devices 页移除该机器或删除该文件为止 |
-| passcode verifier 所用的随机 salt | 将 passcode 转换为 pairing handshake 所核对的值，使该码本身不经过网络 | 写入同一文件夹中的 `auth_salt`；handshake 期间 salt 会发送给正在连接的机器，该值不属于机密 | 保留至你删除该文件为止 |
+| 已停用的 passcode verifier 所用的旧随机 salt | 不再用于认证 | 旧安装可能仍在同一文件夹中保留 `auth_salt`；该文件不再传输 | 保留至你删除该文件为止 |
 | 你输入的地址（IP 或 hostname） | 连接到另一台机器 | 仅保留在你输入它的设备上 | 本地保留至你修改为止 |
-| 最近 10 个连接地址、各自的时间，以及各自使用的 passcode | 填充 *Recent devices* 列表，以便一次操作即可重新连接 | 写入你设备上 app 自身文件夹中的 `recent-devices.txt`：Windows 为 `%USERPROFILE%\.deskhub`，macOS 与 Linux 为 `~/.deskhub`，iOS 与 Android 为 app 沙箱 | 保留至你连接了 10 个更新的地址，或删除该文件为止 |
-| 你的共享设置（frame rate、bitrate、分辨率上限、port、用于共享的 network 地址、是否允许 viewer 操作本机，以及 clipboard sync、keep awake、随 OS 启动、自动共享与后台模式等开关，还有你要求 viewer 提供的 passcode） | 在下次打开 app 时恢复你的 settings | 写入同一文件夹中的 `ui-settings.txt`。在 iOS 上，该文件位于 app 与其 broadcast extension 共享的 app group 容器中，以保证两者对 passcode 与 port 的取值一致 | 保留至你修改或删除该文件为止 |
+| 最近 10 个连接地址及各自的时间 | 填充 *Recent devices* 列表 | 写入你设备上 app 自身文件夹中的 `recent-devices.txt`：Windows 为 `%USERPROFILE%\.deskhub`，macOS 与 Linux 为 `~/.deskhub`，iOS 与 Android 为 app 沙箱。读取并成功重写旧文件时会删除其中的 passcode | 保留至你连接了 10 个更新的地址，或删除该文件为止 |
+| 你的共享设置（frame rate、bitrate、分辨率上限、port、network 地址、viewer 操作权限，以及 clipboard sync、keep awake、随 OS 启动、自动共享与后台模式等开关） | 在下次打开 app 时恢复你的 settings | 写入同一文件夹中的 `ui-settings.txt`；在 iOS 上位于 app 与 broadcast extension 共享的 app group 容器中。读取并成功重写旧文件时会删除 passcode 与旧 pairing 开关 | 保留至你修改或删除该文件为止 |
 | 你在 Linux 桌面的屏幕共享对话框中选定 display 后，桌面签发的屏幕 permission token（仅 Linux） | 使后续共享复用该选择，从而对话框仅在首次出现 | 写入同一文件夹中的 `portal-restore-token.txt`；该 token 仅对本机上你自己的桌面 session 有意义，不会被传输 | 每次共享后被替换；在你选择 *Choose screens again* 或删除该文件时移除 |
 | Clipboard 文本（仅当 clipboard sync 开关开启且存在运行中的 session 时） | 使在一台设备上复制的文本可在其他设备上粘贴 | 在你的设备之间直接发送，传输中 encrypt（QUIC/TLS），每次复制上限 32 KiB；仅限纯文本，不包含图片或文件 | Deskhub 不存储；仅存在于各设备自身的系统 clipboard 中 |
 | 当前是否有 broadcast 在运行、已连接的 viewer 数量、broadcast extension 自身的内存占用（MB），以及最近一次启动错误的文本（仅 iOS） | 使 app 的共享界面能够显示 broadcast extension 的状态。iOS 将其作为独立 process 运行，并在内存占用过高时终止它 | 写入同一 app group 容器中的 `broadcast-status.txt` | 在 broadcast 结束时删除 |
@@ -135,21 +136,20 @@ App 不申请其他任何 permission。若将来的版本需要新的 permission
 - Stream 的流量保留在你自己的 network 或你自己的 VPN 隧道内。使用 Tailscale 等 VPN
   时，设备之间的数据由该 VPN（WireGuard）进行端到端 encrypt。
 - Deskhub 会 encrypt session 的流量：video、control、input、clipboard 与 terminal
-  数据均在你的设备之间通过 QUIC/TLS 传输。接入与否由 pairing handshake 决定：未知机器
-  必须证明自己知道 host 可选的 4 位 passcode（该码本身不会被传输），或由 host 前的用户
-  批准。设备名在传输中 encrypt，但会显示在 host 上，因此不应在该字段中填入敏感信息。
+  数据均在你的设备之间通过 QUIC/TLS 传输。client 必须使用 host 已授权的 key 对 challenge 签名，
+  并在发送认证前检查已固定的 host key。设备名在传输中 encrypt，但会显示在 host 上，因此不应在该字段中填入敏感信息。
   请勿将 Deskhub 直接暴露到 Internet。完整的 threat model，包括保护范围、不受保护的
   范围以及漏洞报告方式，见
   [`SECURITY.zh.md`](https://github.com/manhpham90vn/Deskhub/blob/main/SECURITY.zh.md)。
-- 保存在 `recent-devices.txt` 与 `ui-settings.txt` 中的 passcode 使用固定 key 进行
-  混淆，使其无法直接读取。这不是 encrypt，也不用于防范已获得你的用户账号访问权限的人。
+- 旧的 `recent-devices.txt` 与 `ui-settings.txt` 可能含有 passcode。读取时，app 会通过原子替换
+  删除这些字段。若重写失败，旧文件保持不变，并在以后读取时重试。
 - 由于我们不持有关于你的任何数据，不存在可能被攻破的开发者侧数据库。
 
 ## 7. 数据保留与删除
 
 我们不保留任何数据，因此也没有需要我们删除的内容。所有 session 数据在 session 结束时
 消失。app 中保存的地址可通过清空相应字段或卸载 app 移除。最近设备列表与已保存的
-settings（包括所有 passcode）可通过删除 app 的文件夹移除（Windows 上为
+settings 可通过删除 app 的文件夹移除（Windows 上为
 `%USERPROFILE%\.deskhub`，macOS 与 Linux 上为 `~/.deskhub`），app 会在下次启动时重新
 创建空的文件夹；在 iOS 与 Android 上，卸载 app 即可移除这些数据。
 
@@ -185,6 +185,7 @@ https://github.com/manhpham90vn/Deskhub/blob/main/PRIVACY.md
 
 | 版本 | 日期 | 变更内容 |
 |---|---|---|
+| 2.6 | 2026-09-28 | client 接入现在需要已授权的签名 key 和已固定的 host key。Recent devices 与 UI settings 不再保存 passcode；读取旧文件并安全重写时会删除旧字段。若重写失败，保留旧文件供下次重试。 |
 | 2.5 | 2026-09-07 | 本次为更正而非行为变更，Deskhub 的行为与此前一致。本政策的早期版本称，到达 Android 手机或平板的文件会通过系统媒体库存入 `Pictures/Deskhub`、`Movies/Deskhub` 或 `Download/Deskhub`。该说明适用于 Android 10 及以上版本。Deskhub 所使用的媒体库路径需要 Android 10，因此在 Android 9 及更早版本上，到达的文件保留在设备上 app 自身的文件夹中，不会出现在相册或 Downloads 中。两种情况下，文件都只到达相关的两台设备。 |
 | 2.4 | 2026-08-28 | **手机与平板现在既可接收文件也可发送文件**，其文件存放位置为新增内容。在 iOS 上，照片与视频会加入你的相册，系统会在首次时申请仅添加模式的 Photos permission；Deskhub 只能添加条目，不会读取或修改已有内容。其他文件放入 app 的 Documents 文件夹，可由 Files app 访问。在 Android 上，照片存入 `Pictures/Deskhub`，视频存入 `Movies/Deskhub`，其余文件存入 `Download/Deskhub`，均通过系统媒体库完成。两个平台都会以通知说明到达的内容。上述数据均不会到达我们。本版本还更正了此前政策中两处不准确的表述：Android 一直需要系统标记为 *Microphone* 的 permission（`RECORD_AUDIO`）来 capture 设备自身播放的内容，即版本 2.1 所述的声音共享，而 Deskhub 并不录制 microphone；此外，桌面 app 从未失去版本 2.3 中所述的 *File transfer* 选项，失去的只是其背后被保存的设置。 |
 | 2.3 | 2026-08-24 | **接收文件不再是一项被保存的设置。** 存储的 *Take files viewers send* 设置已从 `ui-settings.txt` 中移除：手机与平板在 app 显示于屏幕上时即接收文件，而电脑将 *File transfer* 作为共享内容之一提供，每次默认勾选且不予保存，因此电脑仍仅在共享期间接收文件。到达文件的处理方式未变：仍需发送方已 pair 且已被接受，仍存放于该机器为接收文件指定的位置，仍不会覆盖已有文件，并仍会连同发送设备的名称、地址与 key fingerprint 记入本地日志。屏幕共享仍是通过专用按钮触发的主动操作，正在共享屏幕的电脑在此期间同时继续接收文件。 |

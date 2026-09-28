@@ -25,10 +25,6 @@ enum class Verb {
     Send,
 };
 
-enum class PairingPolicy { Deny,
-    Allow,
-    Ask };
-
 enum class DevicesAction { List,
     Add,
     Public,
@@ -45,11 +41,6 @@ enum class TrustAction { List,
 enum class SettingsAction { List,
     Get,
     Set };
-
-enum class PasscodeSource { Absent,
-    Literal,
-    Stdin,
-    File };
 
 enum class ExitCode {
     Ok = 0,
@@ -91,7 +82,6 @@ struct ShareOptions {
     bool terminal = false;
     bool files = false;
     std::optional<std::string> filesDir{};
-    PairingPolicy pairing = PairingPolicy::Deny;
     uint32_t statusIntervalMs = kDefaultStatusIntervalMs;
     bool status = true;
 
@@ -100,7 +90,6 @@ struct ShareOptions {
     std::optional<uint32_t> maxDim{};
     std::optional<bool> allowInput{};
     std::optional<bool> audio{};
-    std::optional<bool> allowNewPairings{};
     std::optional<std::string> bindIp{};
 };
 
@@ -117,8 +106,6 @@ struct Command {
     uint16_t port = kDeskhubPort;
     bool portGiven = false;
 
-    PasscodeSource passcodeSource = PasscodeSource::Absent;
-    std::string passcode{};
     std::optional<std::string> deviceName{};
 
     DevicesAction devices = DevicesAction::List;

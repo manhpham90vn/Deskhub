@@ -192,6 +192,7 @@ else()
 endif()
 
 add_library(platform STATIC
+    src/system/AppDataFile.cpp
     ${deskhub_platform_os}
     ${deskhub_platform_quic}
     ${deskhub_platform_pty}

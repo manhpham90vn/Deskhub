@@ -9,6 +9,7 @@
 
 #include <cstdio>
 #include <string>
+#include <thread>
 #include <vector>
 
 namespace {
@@ -98,6 +99,61 @@ void TestControlTravelsOnAStream() {
 
     host.Close();
     viewer.Close();
+}
+
+void TestClientRejectsAnOldAuthChallenge() {
+    std::printf("[transport] an old auth challenge reports a version mismatch...\n");
+    if (!deskhubp::QuicAvailable()) return;
+
+    const SavedIdentity guard;
+    ForgetHostIdentity();
+    const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity("deskhub-test");
+    Check(identity.Valid(), "the test host has a TLS identity");
+    if (!identity.Valid()) return;
+
+    deskhubp::SessionTransport host;
+    deskhubp::SessionTransport viewer;
+    host.SetRecvTimeout(1);
+    viewer.SetRecvTimeout(1);
+    deskhubp::QuicSettings settings;
+    settings.certPemPath = identity.certPath;
+    settings.keyPemPath = identity.keyPath;
+    const bool listening = host.Listen(settings, kTestPort, "127.0.0.1");
+    Check(listening, "the test host listens");
+    if (!listening) return;
+    const NetAddr target{0x7F000001u, kTestPort};
+    const bool connected = viewer.Connect(deskhubp::QuicSettings{}, target, "deskhub-test");
+    Check(connected,
+        "the viewer connects to the old host");
+    if (!connected) return;
+    uint8_t buf[deskhub::kMaxDatagram];
+    NetAddr from;
+    for (int i = 0; i < kMaxRounds && !viewer.Established(target); ++i) {
+        viewer.RecvFrom(buf, sizeof(buf), from);
+        host.RecvFrom(buf, sizeof(buf), from);
+    }
+    Check(viewer.Established(target), "the TLS connection is established");
+    if (!viewer.Established(target)) return;
+
+    deskhubp::ClientAuthConfig config;
+    config.identity.publicKey.assign(32, 0x41);
+    config.hostFingerprint = identity.fingerprint;
+    deskhub::AuthResultCode code = deskhub::AuthResultCode::NotPaired;
+    bool admitted = false;
+    std::thread auth([&] { admitted = viewer.RunClientAuth(target, config, 2000, code); });
+    const int got = PumpFor(host, host, buf, sizeof(buf), from);
+    Check(got > 0, "the new client sends an auth start");
+    if (got > 0) {
+        deskhub::AuthChallenge challenge;
+        challenge.mode = deskhub::AuthMode::Signature;
+        std::vector<uint8_t> message(deskhub::kMaxDatagram);
+        message.resize(deskhub::BuildAuthChallenge(message, challenge));
+        message[deskhub::kCommonHeaderSize] = uint8_t(deskhub::AuthMode::Signature);
+        Check(host.SendRecord(from, message), "the old challenge reaches the client");
+    }
+    auth.join();
+    Check(!admitted && code == deskhub::AuthResultCode::VersionMismatch,
+        "the client reports the incompatible auth version");
 }
 
 void TestVideoRidesEncryptedDatagrams() {
@@ -505,6 +561,7 @@ void TestAnIdleTransportWaitsInsteadOfSpinning() {
 
 void RunSessionTransportTests() {
     TestControlTravelsOnAStream();
+    TestClientRejectsAnOldAuthChallenge();
     TestVideoRidesEncryptedDatagrams();
     TestPlaintextDiscoveryIsIgnored();
     TestAFileBacklogNeverDelaysTheStream();

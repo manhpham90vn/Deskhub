@@ -68,58 +68,54 @@ size_t BuildHello(std::span<uint8_t> out, const Hello& m) {
 size_t BuildAuthStart(std::span<uint8_t> out, const AuthStart& m) {
     if (m.publicKey.empty() || m.publicKey.size() > kMaxAuthBlobBytes) return 0;
     const size_t nameLen = Utf8TruncLen(m.clientName, kMaxClientNameBytes);
-    const size_t payload = 1 + 2 + m.publicKey.size() + 1 + nameLen;
+    const size_t payload = 1 + 2 + m.publicKey.size() + 1 + nameLen + 1;
     const size_t total = WriteCommon(out, MsgType::AuthStart, 0, Chan::Control, 0, payload);
     if (!total) return 0;
     uint8_t* p = out.data() + kCommonHeaderSize;
-    *p++ = m.hasPasscode ? 1 : 0;
+    *p++ = 0;
     PutU16(p, uint16_t(m.publicKey.size()));
     p += 2;
     std::memcpy(p, m.publicKey.data(), m.publicKey.size());
     p += m.publicKey.size();
     *p++ = uint8_t(nameLen);
     if (nameLen) std::memcpy(p, m.clientName.data(), nameLen);
+    p[nameLen] = kAuthVersion;
     return total;
 }
 
 size_t BuildAuthChallenge(std::span<uint8_t> out, const AuthChallenge& m) {
-    if (m.spake.size() > kMaxAuthBlobBytes) return 0;
-    const size_t payload = 1 + kAuthNonceBytes + kAuthSaltBytes + 2 + m.spake.size();
+    if (uint8_t(m.mode) > uint8_t(AuthMode::Signature)) return 0;
+    const size_t payload = 2 + kAuthNonceBytes;
     const size_t total = WriteCommon(out, MsgType::AuthChallenge, 0, Chan::Control, 0, payload);
     if (!total) return 0;
     uint8_t* p = out.data() + kCommonHeaderSize;
+    *p++ = kAuthVersion;
     *p++ = uint8_t(m.mode);
     std::memcpy(p, m.nonce.data(), kAuthNonceBytes);
-    p += kAuthNonceBytes;
-    std::memcpy(p, m.salt.data(), kAuthSaltBytes);
-    p += kAuthSaltBytes;
-    PutU16(p, uint16_t(m.spake.size()));
-    p += 2;
-    if (!m.spake.empty()) std::memcpy(p, m.spake.data(), m.spake.size());
     return total;
 }
 
 size_t BuildAuthResponse(std::span<uint8_t> out, const AuthResponse& m) {
-    if (m.proof.size() > kMaxAuthBlobBytes) return 0;
-    const size_t payload = 2 + m.proof.size() + kAuthMacBytes;
+    if (m.proof.empty() || m.proof.size() > kMaxAuthBlobBytes) return 0;
+    const size_t payload = 1 + 2 + m.proof.size();
     const size_t total = WriteCommon(out, MsgType::AuthResponse, 0, Chan::Control, 0, payload);
     if (!total) return 0;
     uint8_t* p = out.data() + kCommonHeaderSize;
+    *p++ = kAuthVersion;
     PutU16(p, uint16_t(m.proof.size()));
     p += 2;
     if (!m.proof.empty()) std::memcpy(p, m.proof.data(), m.proof.size());
-    p += m.proof.size();
-    std::memcpy(p, m.confirm.data(), kAuthMacBytes);
     return total;
 }
 
 size_t BuildAuthResult(std::span<uint8_t> out, const AuthResult& m) {
-    const size_t payload = 1 + kAuthMacBytes;
+    if (uint8_t(m.code) > uint8_t(AuthResultCode::VersionMismatch)) return 0;
+    const size_t payload = 2;
     const size_t total = WriteCommon(out, MsgType::AuthResult, 0, Chan::Control, 0, payload);
     if (!total) return 0;
     uint8_t* p = out.data() + kCommonHeaderSize;
-    *p++ = uint8_t(m.code);
-    std::memcpy(p, m.confirm.data(), kAuthMacBytes);
+    *p++ = kAuthVersion;
+    *p = uint8_t(m.code);
     return total;
 }
 
@@ -351,63 +347,56 @@ std::span<const uint8_t> PayloadOf(std::span<const uint8_t> datagram) {
 }
 
 std::optional<AuthStart> ParseAuthStart(std::span<const uint8_t> payload) {
-    if (payload.size() < 4) return std::nullopt;
+    if (payload.size() < 5) return std::nullopt;
     const uint8_t* p = payload.data();
-    if (p[0] > 1) return std::nullopt;
+    if (p[0] != 0) return std::nullopt;
     const size_t keyLen = GetU16(p + 1);
-    if (keyLen == 0 || keyLen > kMaxAuthBlobBytes || payload.size() < 1 + 2 + keyLen + 1)
+    if (keyLen == 0 || keyLen > kMaxAuthBlobBytes || payload.size() < 1 + 2 + keyLen + 1 + 1)
         return std::nullopt;
 
     AuthStart m;
-    m.hasPasscode = p[0] != 0;
     m.publicKey.assign(p + 3, p + 3 + keyLen);
     const size_t nameOff = 1 + 2 + keyLen;
-    size_t nameLen = p[nameOff];
-    if (nameLen > kMaxClientNameBytes) nameLen = 0;
-    if (nameLen && payload.size() >= nameOff + 1 + nameLen) {
-        m.clientName.reserve(nameLen);
-        for (size_t i = 0; i < nameLen; ++i) {
-            const uint8_t c = p[nameOff + 1 + i];
-            if (c >= 0x20 && c != 0x7F) m.clientName.push_back(char(c));
-        }
+    const size_t nameLen = p[nameOff];
+    if (nameLen > kMaxClientNameBytes || payload.size() != nameOff + 1 + nameLen + 1 ||
+        p[nameOff + 1 + nameLen] != kAuthVersion)
+        return std::nullopt;
+    m.clientName.reserve(nameLen);
+    for (size_t i = 0; i < nameLen; ++i) {
+        const uint8_t c = p[nameOff + 1 + i];
+        if (c >= 0x20 && c != 0x7F) m.clientName.push_back(char(c));
     }
     return m;
 }
 
 std::optional<AuthChallenge> ParseAuthChallenge(std::span<const uint8_t> payload) {
-    constexpr size_t kFixed = 1 + kAuthNonceBytes + kAuthSaltBytes + 2;
-    if (payload.size() < kFixed) return std::nullopt;
+    if (payload.size() != 2 + kAuthNonceBytes || payload[0] != kAuthVersion ||
+        payload[1] > uint8_t(AuthMode::Signature))
+        return std::nullopt;
     const uint8_t* p = payload.data();
     AuthChallenge m;
-    if (p[0] > uint8_t(AuthMode::Approval)) return std::nullopt;
-    m.mode = AuthMode(p[0]);
-    std::memcpy(m.nonce.data(), p + 1, kAuthNonceBytes);
-    std::memcpy(m.salt.data(), p + 1 + kAuthNonceBytes, kAuthSaltBytes);
-    const size_t blob = GetU16(p + 1 + kAuthNonceBytes + kAuthSaltBytes);
-    if (blob > kMaxAuthBlobBytes || payload.size() < kFixed + blob) return std::nullopt;
-    m.spake.assign(p + kFixed, p + kFixed + blob);
+    m.mode = AuthMode(p[1]);
+    std::memcpy(m.nonce.data(), p + 2, kAuthNonceBytes);
     return m;
 }
 
 std::optional<AuthResponse> ParseAuthResponse(std::span<const uint8_t> payload) {
-    if (payload.size() < 2 + kAuthMacBytes) return std::nullopt;
+    if (payload.size() < 3 || payload[0] != kAuthVersion) return std::nullopt;
     const uint8_t* p = payload.data();
-    const size_t blob = GetU16(p);
-    if (blob > kMaxAuthBlobBytes || payload.size() < 2 + blob + kAuthMacBytes)
+    const size_t blob = GetU16(p + 1);
+    if (blob == 0 || blob > kMaxAuthBlobBytes || payload.size() != 3 + blob)
         return std::nullopt;
     AuthResponse m;
-    m.proof.assign(p + 2, p + 2 + blob);
-    std::memcpy(m.confirm.data(), p + 2 + blob, kAuthMacBytes);
+    m.proof.assign(p + 3, p + 3 + blob);
     return m;
 }
 
 std::optional<AuthResult> ParseAuthResult(std::span<const uint8_t> payload) {
-    if (payload.size() < 1 + kAuthMacBytes) return std::nullopt;
+    if (payload.size() != 2 || payload[0] != kAuthVersion) return std::nullopt;
     const uint8_t* p = payload.data();
-    if (p[0] > uint8_t(AuthResultCode::Locked)) return std::nullopt;
+    if (p[1] > uint8_t(AuthResultCode::VersionMismatch)) return std::nullopt;
     AuthResult m;
-    m.code = AuthResultCode(p[0]);
-    std::memcpy(m.confirm.data(), p + 1, kAuthMacBytes);
+    m.code = AuthResultCode(p[1]);
     return m;
 }
 

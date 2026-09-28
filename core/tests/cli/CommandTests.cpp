@@ -89,30 +89,26 @@ void TestAddressParsing() {
     Check(!Parse({"sources", "1.2.3.4:nope"}).error.empty(), "a non-numeric port is an error");
 }
 
-void TestPasscodeSources() {
-    std::printf("[cli] a passcode can come from the flag, stdin or a file...\n");
-    const cli::Command literal = Parse({"sources", "1.2.3.4", "--passcode", "0417"});
-    Check(literal.passcodeSource == cli::PasscodeSource::Literal, "a literal passcode");
-    Check(literal.passcode == "0417", "kept as given");
-
-    const cli::Command stdinPasscode = Parse({"sources", "1.2.3.4", "--passcode", "-"});
-    Check(stdinPasscode.passcodeSource == cli::PasscodeSource::Stdin, "'-' means stdin");
-    Check(stdinPasscode.passcode.empty(), "nothing is read at parse time");
-
-    const cli::Command filePasscode = Parse({"sources", "1.2.3.4", "--passcode", "@/run/secret"});
-    Check(filePasscode.passcodeSource == cli::PasscodeSource::File, "'@' means a file");
-    Check(filePasscode.passcode == "/run/secret", "the path is kept, not the passcode");
-
-    Check(Parse({"sources", "1.2.3.4"}).passcodeSource == cli::PasscodeSource::Absent,
-        "no flag means no passcode yet");
-    Check(!Parse({"sources", "1.2.3.4", "--passcode", "12"}).error.empty(),
-        "a short passcode is refused");
-    Check(!Parse({"sources", "1.2.3.4", "--passcode", "abcd"}).error.empty(),
-        "a non-numeric passcode is refused");
-    Check(!Parse({"sources", "1.2.3.4", "--passcode", "@"}).error.empty(),
-        "'@' with no path is refused");
-    Check(!Parse({"sources", "1.2.3.4", "--passcode"}).error.empty(),
-        "a missing passcode value is refused");
+void TestLegacyAuthFlagsRejected() {
+    std::printf("[cli] obsolete passcode and pairing options are rejected...\n");
+    Check(!Parse({"sources", "1.2.3.4", "--passcode", "0417"}).error.empty(),
+        "sources rejects a passcode");
+    Check(!Parse({"connect", "1.2.3.4", "--passcode", "0417"}).error.empty(),
+        "connect rejects a passcode");
+    Check(!Parse({"shell", "1.2.3.4", "--passcode", "0417"}).error.empty(),
+        "shell rejects a passcode");
+    Check(!Parse({"send", "1.2.3.4", "a.txt", "--passcode", "0417"}).error.empty(),
+        "send rejects a passcode");
+    Check(!Parse({"share", "--passcode", "0417"}).error.empty(),
+        "share rejects a passcode");
+    Check(!Parse({"share", "--pairing", "allow"}).error.empty(),
+        "share rejects pairing approval");
+    Check(!Parse({"share", "--no-new-pairings"}).error.empty(),
+        "share rejects the retired pairing switch");
+    Check(cli::UsageText().find("--passcode") == std::string::npos,
+        "general help has no passcode option");
+    Check(cli::UsageText(cli::Verb::Share).find("--pairing") == std::string::npos,
+        "share help has no pairing option");
 }
 
 void TestProbeIsUnavailable() {
@@ -195,7 +191,6 @@ void TestShareFlags() {
     Check(Ok(bare, cli::Verb::Share), "share parses with nothing else");
     Check(bare.share.screen && !bare.share.terminal, "the screen goes out, the shell does not");
     Check(bare.share.displays.empty(), "no --display means every display");
-    Check(bare.share.pairing == cli::PairingPolicy::Deny, "a new machine is turned away by default");
     Check(bare.share.statusIntervalMs == cli::kDefaultStatusIntervalMs, "the default status pace");
     Check(!bare.share.fps && !bare.share.bitrateMbps && !bare.share.audio,
         "what is not named is left to the settings file");
@@ -213,10 +208,6 @@ void TestShareFlags() {
     Check(Parse({"share", "--fps", "30"}).share.fps.value_or(0) == 30, "--fps");
     Check(Parse({"share", "--bitrate=8"}).share.bitrateMbps.value_or(0) == 8, "--bitrate");
     Check(Parse({"share", "--max-dim", "1280"}).share.maxDim.value_or(0) == 1280, "--max-dim");
-    Check(Parse({"share", "--pairing", "allow"}).share.pairing == cli::PairingPolicy::Allow,
-        "--pairing allow");
-    Check(Parse({"share", "--pairing", "ask"}).share.pairing == cli::PairingPolicy::Ask,
-        "--pairing ask");
     Check(!Parse({"share", "--no-status"}).share.status, "--no-status");
     Check(Parse({"share", "--bind", "192.168.1.10"}).share.bindIp.value_or("") == "192.168.1.10",
         "--bind takes an address");
@@ -226,7 +217,6 @@ void TestShareFlags() {
 
     Check(!Parse({"share", "--fps", "0"}).error.empty(), "zero frames a second is refused");
     Check(!Parse({"share", "--fps", "1000"}).error.empty(), "an impossible frame rate is refused");
-    Check(!Parse({"share", "--pairing", "maybe"}).error.empty(), "an unknown pairing answer");
     Check(!Parse({"share", "--bind", "not-an-ip"}).error.empty(), "--bind wants a real address");
     Check(!Parse({"share", "--no-screen"}).error.empty(), "--no-screen alone shares nothing");
     Check(Ok(Parse({"share", "--no-screen", "--terminal"}), cli::Verb::Share),
@@ -238,12 +228,10 @@ void TestShareFlags() {
 }
 
 void TestShell() {
-    std::printf("[cli] shell wants a host, a passcode and a name...\n");
-    const cli::Command command =
-        Parse({"shell", "10.0.0.5", "--passcode", "0417", "--name", "laptop"});
+    std::printf("[cli] shell wants a host and optional name...\n");
+    const cli::Command command = Parse({"shell", "10.0.0.5", "--name", "laptop"});
     Check(Ok(command, cli::Verb::Shell), "shell parses");
     Check(command.address == "10.0.0.5:" + std::to_string(kDeskhubPort), "the address");
-    Check(command.passcodeSource == cli::PasscodeSource::Literal, "the passcode");
     Check(command.deviceName.value_or("") == "laptop", "the name");
     Check(!Parse({"shell"}).error.empty(), "shell needs an address");
     Check(!Parse({"shell", "1.2.3.4", "--fps", "30"}).error.empty(), "a shell has no frame rate");
@@ -358,11 +346,9 @@ void TestSend() {
     Check(!Parse({"send", "10.0.0.4", "a.txt", "--nope"}).error.empty(),
         "an unknown flag is refused");
 
-    const cli::Command named = Parse({"send", "10.0.0.4", "a.txt", "--passcode", "0417",
-        "--name", "laptop"});
-    Check(Ok(named, cli::Verb::Send), "a passcode and a name are accepted");
-    Check(named.passcode == "0417" && named.deviceName && *named.deviceName == "laptop",
-        "and are carried through");
+    const cli::Command named = Parse({"send", "10.0.0.4", "a.txt", "--name", "laptop"});
+    Check(Ok(named, cli::Verb::Send), "a name is accepted");
+    Check(named.deviceName && *named.deviceName == "laptop", "and carried through");
 
     std::vector<const char*> flood{"send", "10.0.0.4"};
     for (size_t i = 0; i <= kMaxTransferFiles; ++i) flood.push_back("f.bin");
@@ -434,7 +420,7 @@ void RunCliCommandTests() {
     TestGlobalFlags();
     TestScanIsUnavailable();
     TestAddressParsing();
-    TestPasscodeSources();
+    TestLegacyAuthFlagsRejected();
     TestProbeIsUnavailable();
     TestDevicesAndTrust();
     TestSettings();

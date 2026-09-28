@@ -2,7 +2,7 @@
 
 # Deskhub Privacy Policy
 
-_Effective date: September 7, 2026 — Version 2.5_
+_Effective date: September 28, 2026 — Version 2.6_
 
 > Translations are available at [`PRIVACY.vi.md`](PRIVACY.vi.md),
 > [`PRIVACY.zh.md`](PRIVACY.zh.md) and [`PRIVACY.ja.md`](PRIVACY.ja.md). This English
@@ -43,13 +43,14 @@ party.
 | Screen content of the shared computer (video frames) | Displaying that screen on your other device | Sent directly between your two devices, encrypted in transit (QUIC/TLS) | Never stored; exists only in memory during the session |
 | Sound the shared computer is playing (only while it shares sound and a viewer asks for it) | Letting the person watching hear that computer | Sent directly between your two devices, encrypted in transit (QUIC/TLS), as compressed audio | Never stored; exists only in memory during the session |
 | Mouse, keyboard, and touch input | Controlling the shared computer from your other device | Sent directly from the viewing device to the shared computer, encrypted in transit (QUIC/TLS) | Never stored; discarded after injection |
-| This machine's key pair — a private key and self-signed certificate created on first run | Proving this machine's identity to machines it connects to; people see it as a fingerprint (`SHA256:…`) | Written to `host_key.pem` and `host_cert.pem` in the app's own folder; only the public half (the certificate) is presented to machines you connect to | Kept until you delete the files; deleting them gives the machine a new identity, and machines that knew the old one will warn |
+| This host's TLS key pair — a private key and self-signed certificate created on first run | Proving the host's identity to connecting clients; people see it as a fingerprint (`SHA256:…`) | Written to `host_key.pem` and `host_cert.pem` in the app's own folder; only the public certificate is presented to connecting clients | Kept until you delete the files; deleting them gives the host a new identity, and clients that knew the old one will warn |
+| This device's client signing key | Proving this device may access a host that has authorized its public key | Written to `client_key.pem` in the app's own folder; the private key remains local and only a signature and public key are sent during authentication | Kept until you replace or delete the key; hosts must authorize the new public key |
 | The keys of hosts this device has trusted (fingerprint, address, label, first/last seen) | Recognising a known host and warning loudly if its key ever changes | Written to `known_hosts` in the same folder; never transmitted | Kept until you delete the file |
 | The machines paired with this host — their key fingerprint, the name they sent, when they paired and were last seen | Letting paired machines reconnect without a passcode, and listing them on the Devices page so you can forget them | Written to `paired_devices` in the same folder; never transmitted | Kept until you forget the machine on the Devices page or delete the file |
-| A random salt for the passcode verifier | Turning the passcode into the value the pairing handshake checks, so the code itself never travels | Written to `auth_salt` in the same folder; the salt is sent to a connecting machine during the handshake (it is not a secret) | Kept until you delete the file |
+| A legacy random salt for the retired passcode verifier | No longer used for authentication | Older installations may retain `auth_salt` in the same folder; it is no longer transmitted | Kept until you delete the file |
 | The address (IP/hostname) you type | Connecting to the other machine | Stays on the device you typed it on | Kept locally until you change it |
-| The last 10 addresses you connected to, the time of each, and the passcode you used for each | Filling in the *Recent devices* list so you can reconnect with one click | Written to `recent-devices.txt` in the app's own folder on your device — `%USERPROFILE%\.deskhub` on Windows, `~/.deskhub` on macOS and Linux, the app sandbox on iOS and Android | Kept until you connect to 10 newer addresses, or you delete the file |
-| Your sharing preferences (frame rate, bitrate, resolution cap, port, which network address to share on, whether viewers may control the machine, the clipboard-sync, keep-awake, start-with-OS, auto-share and background-mode toggles, and the passcode you ask viewers for) | Restoring your settings the next time you open the app | Written to `ui-settings.txt` in the same folder. On iOS the file lives in the app group container shared by the app and its broadcast extension, so both halves agree on your passcode and port | Kept until you change them or delete the file |
+| The last 10 addresses you connected to and the time of each | Filling in the *Recent devices* list | Written to `recent-devices.txt` in the app's own folder on your device — `%USERPROFILE%\.deskhub` on Windows, `~/.deskhub` on macOS and Linux, the app sandbox on iOS and Android. A legacy passcode is removed when this file is loaded and successfully rewritten | Kept until you connect to 10 newer addresses, or you delete the file |
+| Your sharing preferences (frame rate, bitrate, resolution cap, port, network address, input permission, clipboard sync, keep awake, start with OS, auto share and background mode) | Restoring your settings the next time you open the app | Written to `ui-settings.txt` in the same folder. On iOS the file lives in the app group container shared by the app and its broadcast extension. Legacy passcode and pairing flags are removed when this file is loaded and successfully rewritten | Kept until you change them or delete the file |
 | The screen-permission token the Linux desktop issues after you pick displays in its screen-sharing dialog (Linux only) | Letting later shares reuse your choice silently, so the dialog appears only the first time | Written to `portal-restore-token.txt` in the same folder; the token is meaningful only to your own desktop session on this machine and is never transmitted | Replaced after each share; removed when you press *Choose screens again* or delete the file |
 | Clipboard text (only while the clipboard-sync toggle is on and a session is active) | Making text copied on one device pastable on the others | Sent directly between your devices, encrypted in transit (QUIC/TLS), capped at 32 KiB per copy; only plain text, never images or files | Never stored by Deskhub; lives only in each device's normal system clipboard |
 | Whether a broadcast is currently running, how many viewers are connected, the broadcast extension's own memory use in megabytes, and the text of the last start-up error (iOS only) | Letting the app's sharing screen report the state of the broadcast extension, which iOS runs as a separate process and terminates if it uses too much memory | Written to `broadcast-status.txt` in the same app group container | Deleted when the broadcast ends |
@@ -159,18 +160,16 @@ permission, it will be requested in-context and this policy will be updated.
   When you use a VPN such as Tailscale, traffic between devices is end-to-end
   encrypted by that VPN (WireGuard).
 - Deskhub encrypts its session traffic — video, control, input, clipboard and
-  terminal data all run over QUIC/TLS between your devices. Admission is
-  decided by a pairing handshake: an unknown machine must prove it knows the
-  host's optional 4-digit passcode (the code itself is never transmitted) or be
-  approved by the person at the host. The device name is encrypted in transit
+  terminal data all run over QUIC/TLS between your devices. A client must sign
+  the host's challenge with a key the host has authorized, and the client checks
+  the host's pinned key before sending authentication. The device name is encrypted in transit
   but displayed on the host, so do not put anything sensitive in it. Never
   expose Deskhub to the Internet directly. The full threat model — what is
   protected, what is not, and how to report a vulnerability — is in
   [`SECURITY.md`](https://github.com/manhpham90vn/Deskhub/blob/main/SECURITY.md).
-- The passcodes saved in `recent-devices.txt` and `ui-settings.txt` are
-  obfuscated with a fixed key so they are not legible at a glance. That is not
-  encryption and is not meant to defend against someone who already has access
-  to your user account.
+- Older `recent-devices.txt` and `ui-settings.txt` files may contain passcodes.
+  Loading either file removes those fields through an atomic rewrite. If that
+  rewrite fails, the older file remains and migration is retried on a later load.
 - Because we hold no data about you, there is no developer-side database that
   could be breached.
 
@@ -179,7 +178,7 @@ permission, it will be requested in-context and this policy will be updated.
 We retain nothing, so there is nothing for us to delete. All session data
 disappears when the session ends. The address saved in the app is removed by
 clearing the field or uninstalling the app. The recent-device list and the
-saved settings — including any passcodes — are removed by deleting the app's
+saved settings are removed by deleting the app's
 folder (`%USERPROFILE%\.deskhub` on Windows, `~/.deskhub` on macOS and Linux),
 which the app recreates empty on the next launch; on iOS and Android,
 uninstalling the app removes them.
@@ -220,6 +219,7 @@ https://github.com/manhpham90vn/Deskhub/blob/main/PRIVACY.md
 
 | Version | Date | Change |
 |---|---|---|
+| 2.6 | 2026-09-28 | Client admission now requires an authorized signing key and a pinned host key. Recent devices and UI settings no longer store passcodes; legacy fields are removed when their files are loaded and safely rewritten. A failed rewrite leaves the old file for a later retry. |
 | 2.5 | 2026-09-07 | A correction, not a change — Deskhub behaves exactly as before. Earlier versions of this policy said a file arriving on an Android phone or tablet goes to `Pictures/Deskhub`, `Movies/Deskhub` or `Download/Deskhub` through the system media store. That holds on Android 10 and later. The media-store route Deskhub uses needs Android 10, so on Android 9 and older an arriving file stays in the app's own folder on the device and never appears in the gallery or in Downloads. Either way it reaches nobody but the two devices involved. |
 | 2.4 | 2026-08-28 | **Phones and tablets now take files as well as send them**, and where a file lands on one is new. On iOS a photo or video is added to your photo library, which asks for the system's add-only Photos permission the first time — Deskhub can only add, never read or change what is already there — and anything else is put in the app's Documents folder, where the Files app can see it. On Android a photo goes to `Pictures/Deskhub`, a video to `Movies/Deskhub` and everything else to `Download/Deskhub`, all through the system media store. Both name what arrived in a notification. None of it reaches us. This version also corrects two things earlier versions of this policy stated wrongly: Android has always needed the permission the system labels *Microphone* (`RECORD_AUDIO`) to capture what the device itself is playing, which is what version 2.1 describes as sharing sound — Deskhub still never records a microphone — and the desktop apps never lost the *File transfer* tick described in 2.3, only the saved setting behind it. |
 | 2.3 | 2026-08-24 | **Taking files stopped being a saved setting.** The stored *Take files viewers send* preference was removed from `ui-settings.txt`: a phone or tablet takes files whenever the app is on screen, and a computer offers *File transfer* as one of the things it shares, ticked by default each time and never remembered, so it still takes files only while it is sharing. What happens to a file that arrives is unchanged: it still needs a paired, admitted sender, still lands where that machine puts received files, still never overwrites a file already there, and is still logged locally with the sending device's name, address and key fingerprint. Sharing the screen stays a deliberate act behind its own button, and a computer sharing its screen keeps taking files at the same time rather than shutting that off for the duration. |

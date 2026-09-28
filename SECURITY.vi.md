@@ -156,10 +156,9 @@ Nếu bạn tiếp tục sử dụng Deskhub ở trạng thái hiện tại, nê
 
 - [ ] Chạy Tailscale trên cả hai máy và chỉ connect qua địa chỉ `100.x.y.z`.
 - [ ] Xác nhận router **không** có port-forward hoặc mapping UPnP cho UDP 47777.
-- [ ] Xác định cách máy khác được chấp nhận: đặt một passcode 4 chữ số trong Settings,
-      hoặc để trống và tự trả lời prompt phê duyệt. Rà soát trang Devices định kỳ và gỡ
-      những máy không còn nhận ra. Bỏ chọn *Viewers can control this machine* khi chỉ cần
-      cho người khác xem.
+- [ ] Cấp quyền public key của từng client trên host và ghim khóa host trên từng client
+      trước khi kết nối. Rà soát trang Devices và thu hồi khóa không còn nhận ra. Bỏ chọn
+      *Viewers can control this machine* khi chỉ cần cho người khác xem.
 - [ ] Thoát Deskhub khi không sử dụng. App không chạy như một background service, nên
       đóng app là đóng luôn điểm truy cập.
 - [ ] Trên Linux, nếu dùng `ufw`, hãy thu hẹp rule thay vì mở rộng:
@@ -167,11 +166,9 @@ Nếu bạn tiếp tục sử dụng Deskhub ở trạng thái hiện tại, nê
       `sudo ufw allow 47777/udp`.
 - [ ] Không để một phiên share đang chạy trên laptop mà bạn mang sang các network khác.
 - [ ] Khoá máy khi rời đi, để một session không người trông coi không bị chiếm quyền.
-- [ ] Với `deskhub-cli`, không đặt passcode trực tiếp trong câu lệnh. `--passcode 0417`
-      hiển thị với mọi process trên máy qua `ps` và `/proc/*/cmdline`, đồng thời được lưu
-      vào lịch sử shell. Hãy dùng `--passcode -` để đọc từ standard input,
-      `--passcode @FILE` để đọc từ một file chỉ bạn đọc được, hoặc đặt biến môi trường
-      `DESKHUB_PASSCODE`.
+- [ ] Với `deskhub-cli`, dùng `devices public` để xem public key client và `trust public`
+      để xem public key TLS host. Chuyển từng khóa qua kênh tin cậy trước khi cấp quyền
+      client hoặc ghim khóa host.
 
 ## Dữ liệu lưu trên máy
 

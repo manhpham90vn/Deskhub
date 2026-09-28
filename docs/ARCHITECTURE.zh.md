@@ -270,6 +270,12 @@ runner 上与 base commit 的 A/B 结果（偏移仅作为警告，不导致失�
 
 ## 9. 需要记录的设计决策
 
+- **认证在协议版本 3 内有独立版本**：`AuthStart` 在公钥前保留一个值为 0 的兼容字节，
+  并在客户端名称后写入认证版本 4。旧主机能够读取请求并发送旧版 challenge；新客户端
+  据此识别不兼容版本并关闭连接。新主机拒绝缺少版本后缀的请求，发送
+  `VersionMismatch` 后关闭连接。兼容字节不再表示 passcode 选项。challenge、response
+  和 result 只携带带版本的签名数据。
+
 - **桌面界面显示什么，由 `core/ui` 中的数据决定，而不是各个应用各写一份代码**：配色
   （`Theme.h`，每种颜色有浅色和深色两个值）、主机实时表格的列与尺寸（`HostRows.h`），以及
   Settings 页面的区域、分节与顺序（`SettingsLayout.h`）都只定义一次。Windows 直接读取，

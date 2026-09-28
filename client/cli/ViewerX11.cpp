@@ -250,7 +250,6 @@ bool ViewerSession::OpenWindow(const deskhub::SourceInfo& source, const ViewRequ
     config.sourceId = source.sourceId;
     config.screenW = uint32_t(DisplayWidth(display_, DefaultScreen(display_)));
     config.screenH = uint32_t(DisplayHeight(display_, DefaultScreen(display_)));
-    config.passcode = request.passcode;
     config.displayName = request.displayName;
     config.wantsAudio = request.audio;
     config.onStatus = [raw](const char* status) { raw->statusLine = status ? status : ""; };

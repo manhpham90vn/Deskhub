@@ -2,7 +2,7 @@
 
 # Deskhub プライバシーポリシー
 
-_発効日: 2026 年 9 月 7 日 — バージョン 2.5_
+_発効日: 2026 年 9 月 28 日 — バージョン 2.6_
 
 > 本書は [`PRIVACY.md`](PRIVACY.md) の翻訳。内容に差がある場合は英語版を優先する。
 
@@ -40,13 +40,14 @@ analytics、crash reporting、広告、組み込みの第三者 SDK はない。
 | 共有されているコンピュータの画面内容（video の frame） | その画面を利用者の別の端末に表示するため | 2 台の端末間で直接送信し、転送中は encrypt（QUIC/TLS） | 保存しない。session の間のみメモリ上に存在する |
 | 共有されているコンピュータが再生している音声（当該コンピュータが音声を共有し、viewer が要求した場合のみ） | 閲覧者がそのコンピュータの音声を聞けるようにするため | 2 台の端末間で直接送信し、転送中は encrypt（QUIC/TLS）。圧縮された音声として送る | 保存しない。session の間のみメモリ上に存在する |
 | Mouse、keyboard、タッチの input | 別の端末から、共有されているコンピュータを操作するため | 閲覧側の端末から共有されているコンピュータへ直接送信し、転送中は encrypt（QUIC/TLS） | 保存しない。inject 後に破棄する |
-| 本マシンの鍵ペア（初回起動時に生成される秘密鍵と自己署名 certificate） | 接続先のマシンに対して本マシンの identity を証明するため。利用者には fingerprint（`SHA256:…`）として表示される | app 自身のフォルダの `host_key.pem` と `host_cert.pem` に保存する。接続先に提示するのは公開側（certificate）のみ | 利用者が削除するまで保持する。削除すると本マシンは新しい identity となり、旧 identity を記録していたマシンは警告を表示する |
+| host の TLS 鍵ペア（初回起動時に生成される秘密鍵と自己署名 certificate） | 接続してくる client に host の identity を証明するため。利用者には fingerprint（`SHA256:…`）として表示される | app 自身のフォルダの `host_key.pem` と `host_cert.pem` に保存する。接続してくる client に提示するのは公開 certificate のみ | 利用者が削除するまで保持する。削除すると host は新しい identity となり、旧 identity を記録していた client は警告を表示する |
+| 本端末の client 署名 key | public key を許可した host へのアクセス権を証明するため | app 自身のフォルダの `client_key.pem` に保存する。private key は端末に留まり、認証時には署名と public key のみを送信する | key を交換または削除するまで保持する。新しい public key は host 側で再承認が必要 |
 | 本端末が trust した host の key（fingerprint、アドレス、ラベル、初回および最終確認時刻） | 既知の host を識別し、その key が変化した場合に明確に警告するため | 同じフォルダの `known_hosts` に保存する。送信しない | 利用者が削除するまで保持する |
 | 本 host と pair したマシン（key fingerprint、送られてきた名称、pair した時刻、最後に確認された時刻） | pair 済みのマシンが passcode なしで再接続できるようにし、Devices ページに表示して削除できるようにするため | 同じフォルダの `paired_devices` に保存する。送信しない | Devices ページで当該マシンを削除するか、ファイルを削除するまで保持する |
-| passcode verifier 用のランダムな salt | passcode を pairing handshake が照合する値に変換し、コード自体がネットワークを通過しないようにするため | 同じフォルダの `auth_salt` に保存する。handshake の際に接続してくるマシンへ送信されるが、機密情報ではない | 利用者が削除するまで保持する |
+| 廃止された passcode verifier 用の旧ランダム salt | 認証には使用しない | 旧版からの更新では、同じフォルダに `auth_salt` が残る場合がある。現在は送信しない | 利用者が削除するまで保持する |
 | 利用者が入力するアドレス（IP または hostname） | 相手のマシンへ接続するため | 入力した端末内にのみ保持する | 利用者が変更するまでローカルに保持する |
-| 直近 10 件の接続先アドレス、各接続の時刻、各接続に使用した passcode | *Recent devices* の一覧を構成し、1 回の操作で再接続できるようにするため | 利用者の端末上、app 自身のフォルダの `recent-devices.txt` に保存する。Windows は `%USERPROFILE%\.deskhub`、macOS と Linux は `~/.deskhub`、iOS と Android は app のサンドボックス | より新しいアドレスへ 10 件接続するか、ファイルを削除するまで保持する |
-| 共有に関する設定（frame rate、bitrate、解像度の上限、port、共有に使用する network アドレス、viewer による操作の可否、clipboard sync・keep awake・OS 起動時の開始・自動共有・バックグラウンドモードの各トグル、viewer に要求する passcode） | 次回 app を開いた際に settings を復元するため | 同じフォルダの `ui-settings.txt` に保存する。iOS では、app と broadcast extension が共有する app group のコンテナに置き、両者が passcode と port について一致するようにしている | 利用者が変更するか、ファイルを削除するまで保持する |
+| 直近 10 件の接続先アドレスと各接続の時刻 | *Recent devices* の一覧を構成するため | 利用者の端末上、app 自身のフォルダの `recent-devices.txt` に保存する。Windows は `%USERPROFILE%\.deskhub`、macOS と Linux は `~/.deskhub`、iOS と Android は app のサンドボックス。旧ファイルの読み込みと再書き込みに成功すると、古い passcode は削除される | より新しいアドレスへ 10 件接続するか、ファイルを削除するまで保持する |
+| 共有に関する設定（frame rate、bitrate、解像度の上限、port、network アドレス、viewer による操作の可否、clipboard sync・keep awake・OS 起動時の開始・自動共有・バックグラウンドモードの各トグル） | 次回 app を開いた際に settings を復元するため | 同じフォルダの `ui-settings.txt` に保存する。iOS では app と broadcast extension が共有する app group のコンテナに置く。旧ファイルの読み込みと再書き込みに成功すると、古い passcode と pairing 設定は削除される | 利用者が変更するか、ファイルを削除するまで保持する |
 | Linux のデスクトップが、その画面共有ダイアログで display を選択した後に発行する画面 permission の token（Linux のみ） | 以後の共有でその選択を再利用し、ダイアログが初回のみ表示されるようにするため | 同じフォルダの `portal-restore-token.txt` に保存する。この token は本マシン上の利用者自身のデスクトップ session にのみ意味を持ち、送信されない | 共有のたびに置き換わる。*Choose screens again* を選択するか、ファイルを削除すると消去される |
 | Clipboard のテキスト（clipboard sync のトグルが on で、session が動作している場合のみ） | ある端末でコピーしたテキストを他の端末で貼り付けられるようにするため | 端末間で直接送信し、転送中は encrypt（QUIC/TLS）。1 回のコピーにつき 32 KiB を上限とする。プレーンテキストのみで、画像やファイルは含まない | Deskhub は保存しない。各端末の通常のシステム clipboard 内にのみ存在する |
 | broadcast が動作中かどうか、接続中の viewer の数、broadcast extension 自身のメモリ使用量（MB）、直近の起動エラーの文言（iOS のみ） | app の共有画面が broadcast extension の状態を表示できるようにするため。iOS はこれを独立した process として動作させ、メモリ使用量が上限を超えた場合に終了させる | 同じ app group のコンテナの `broadcast-status.txt` に保存する | broadcast の終了時に削除する |
@@ -152,17 +153,16 @@ App はこれ以外の permission を要求しない。将来のバージョン�
   Tailscale などの VPN を使用する場合、端末間のデータは当該 VPN（WireGuard）によって
   end-to-end で encrypt される。
 - Deskhub は session のトラフィックを encrypt する。video、control、input、clipboard、
-  terminal のデータはいずれも端末間で QUIC/TLS 上を通る。接続の受け入れは pairing
-  handshake によって決定され、未知のマシンは host の任意の 4 桁 passcode を知っている
-  ことを証明する（コード自体は送信されない）か、host 側の利用者に承認される必要がある。
+  terminal のデータはいずれも端末間で QUIC/TLS 上を通る。client は host が許可した key で
+  challenge に署名し、認証を送る前に固定済みの host key を確認する必要がある。
   デバイス名は転送中 encrypt されるが host に表示されるため、この項目に機微な情報を
   入力しないこと。Deskhub を Internet に直接公開しないこと。完全な threat model、保護
   される範囲、保護されない範囲、脆弱性の報告方法は
   [`SECURITY.ja.md`](https://github.com/manhpham90vn/Deskhub/blob/main/SECURITY.ja.md)
   に記載している。
-- `recent-devices.txt` と `ui-settings.txt` に保存される passcode は固定の key で
-  難読化され、そのままでは読み取れない状態になっている。これは encrypt ではなく、
-  既に利用者のアカウントへアクセスできる者を想定した対策でもない。
+- 旧版の `recent-devices.txt` と `ui-settings.txt` には passcode が残っている場合がある。
+  読み込み時に原子的な置き換えによってこれらの項目を削除する。書き換えが失敗した場合は
+  旧ファイルをそのまま残し、次回の読み込み時に再試行する。
 - 当方は利用者に関するデータを保持していないため、侵害されうる開発者側のデータベースも
   存在しない。
 
@@ -171,7 +171,7 @@ App はこれ以外の permission を要求しない。将来のバージョン�
 当方はデータを保持しないため、当方が削除すべきものも存在しない。session のデータは
 session の終了時に消える。app に保存されたアドレスは、該当する欄を空にするか app を
 アンインストールすることで削除できる。最近使用した端末の一覧と保存済みの settings
-（passcode を含む）は、app のフォルダ（Windows は `%USERPROFILE%\.deskhub`、macOS と
+は、app のフォルダ（Windows は `%USERPROFILE%\.deskhub`、macOS と
 Linux は `~/.deskhub`）を削除することで消去できる。app は次回起動時に空のフォルダを
 作り直す。iOS と Android では、app をアンインストールすればこれらは削除される。
 
@@ -211,6 +211,7 @@ https://github.com/manhpham90vn/Deskhub/blob/main/PRIVACY.md
 
 | バージョン | 日付 | 変更内容 |
 |---|---|---|
+| 2.6 | 2026-09-28 | client の接続には許可済みの署名 key と固定済みの host key が必要になった。Recent devices と UI settings は passcode を保存せず、旧ファイルの読み込みと安全な再書き込み時に古い項目を削除する。書き換えに失敗した場合は旧ファイルを残して後で再試行する。 |
 | 2.5 | 2026-09-07 | 本項は訂正であり、挙動の変更ではない。Deskhub の動作は従来と同一である。本ポリシーの旧版では、Android のスマートフォンやタブレットに届いたファイルはシステムのメディアストア経由で `Pictures/Deskhub`、`Movies/Deskhub`、`Download/Deskhub` に保存されると記載していた。これは Android 10 以降について正しい。Deskhub が使用するメディアストアの経路には Android 10 が必要であるため、Android 9 以前では、届いたファイルは端末上の app 自身のフォルダに留まり、ギャラリーにも Downloads にも表示されない。いずれの場合も、ファイルが届くのは関係する 2 台の端末のみである。 |
 | 2.4 | 2026-08-28 | **スマートフォンとタブレットが、ファイルの送信に加えて受信にも対応した。** その保存先が新たな内容である。iOS では写真と動画が写真ライブラリに追加され、初回にシステムの追加専用の Photos permission を要求する。Deskhub は追加のみが可能で、既存の内容の読み取りや変更は行わない。それ以外のファイルは app の Documents フォルダに置かれ、Files app から参照できる。Android では、写真は `Pictures/Deskhub`、動画は `Movies/Deskhub`、その他のファイルは `Download/Deskhub` へ、いずれもシステムのメディアストア経由で保存される。両プラットフォームとも、届いた内容を通知で知らせる。これらのデータが当方に届くことはない。本バージョンでは、旧版の記載のうち 2 点を訂正する。Android は端末自身が再生している音声を capture するために、システムが *Microphone* と表示する permission（`RECORD_AUDIO`）を従来から必要としていた。これがバージョン 2.1 に記載した音声の共有にあたる。Deskhub が microphone を録音することは現在もない。また、デスクトップの app はバージョン 2.3 に記載した *File transfer* の選択肢自体を失ったことはなく、失われたのはその背後にある保存設定のみである。 |
 | 2.3 | 2026-08-24 | **ファイルの受信は保存される設定ではなくなった。** 保存されていた *Take files viewers send* の設定は `ui-settings.txt` から削除した。スマートフォンとタブレットは app が画面に表示されている間はファイルを受信し、コンピュータは共有する対象の一つとして *File transfer* を提示する。これは毎回既定で選択され、保存されないため、コンピュータは共有中にのみファイルを受信する。届いたファイルの扱いに変更はない。送信側が pair 済みかつ受け入れ済みであることを要し、当該マシンが受信ファイル用に定めた場所に保存され、既存のファイルを上書きせず、送信端末の名称、アドレス、key fingerprint とともにローカルに記録される。画面の共有は引き続き専用のボタンによる明示的な操作であり、画面を共有中のコンピュータはその間もファイルの受信を継続する。 |

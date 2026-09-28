@@ -58,11 +58,9 @@ struct Viewer {
             pending.insert(pending.end(), record.begin(), record.end());
     }
 
-    void BeginAuth(const deskhubp::HostIdentity& own, const deskhub::Fingerprint& hostKey,
-        std::string passcode) {
+    void BeginAuth(const deskhubp::HostIdentity& own, const deskhub::Fingerprint& hostKey) {
         deskhubp::ClientAuthConfig config;
         config.identity = own;
-        config.passcode = std::move(passcode);
         config.hostFingerprint = hostKey;
         config.clientName = "test-client";
         auth = std::make_unique<deskhubp::ClientAuth>();
@@ -87,7 +85,7 @@ struct Viewer {
             const std::optional<deskhub::AuthResponse> response = auth->Answer(*challenge);
             if (!response) {
                 authSettled = true;
-                authCode = deskhub::AuthResultCode::PairingDisabled;
+                authCode = deskhub::AuthResultCode::NotPaired;
                 return true;
             }
             std::vector<uint8_t> out(deskhub::kMaxRecordSize);
@@ -286,10 +284,10 @@ void TestHostSharesAShell() {
         stranger.endpoint.Connect(deskhubp::QuicSettings{}, NetAddr{0x7F000001u, kTestPort},
             "deskhub-test", stranger.Hooks());
         stranger.PumpUntil([&stranger] { return stranger.connected; }, kMaxRounds);
-        stranger.BeginAuth(clientIdentity, identity.fingerprint, "9999");
+        stranger.BeginAuth(clientIdentity, identity.fingerprint);
         Check(stranger.PumpUntil([&stranger] { return stranger.authSettled; }, kMaxRounds),
             "an unlisted client key is settled by the host");
-        Check(stranger.authCode == deskhub::AuthResultCode::PairingDisabled,
+        Check(stranger.authCode == deskhub::AuthResultCode::NotPaired,
             "and rejected without approval");
         stranger.client->Open(deskhub::TermSize{80, 24}, "test-client");
         stranger.Pump(200);
@@ -310,7 +308,7 @@ void TestHostSharesAShell() {
 
     Check(deskhubp::RememberPairedDevice(clientIdentity.fingerprint, "test-client", 500),
         "the owner grants the client key locally");
-    viewer.BeginAuth(clientIdentity, identity.fingerprint, kTestPasscode);
+    viewer.BeginAuth(clientIdentity, identity.fingerprint);
     Check(viewer.PumpUntil([&viewer] { return viewer.Allowed(); }, kMaxRounds),
         "the permitted key signs and is admitted");
 
@@ -491,7 +489,7 @@ void TestDroppedShellWaitsForItsClient() {
         host.Stop();
         return;
     }
-    first.BeginAuth(clientIdentity, identity.fingerprint, kTestPasscode);
+    first.BeginAuth(clientIdentity, identity.fingerprint);
     if (!first.PumpUntil([&first] { return first.Allowed(); }, kMaxRounds)) {
         Check(false, "and proves itself");
         host.Stop();
@@ -532,7 +530,7 @@ void TestDroppedShellWaitsForItsClient() {
         host.Stop();
         return;
     }
-    second.BeginAuth(clientIdentity, identity.fingerprint, kTestPasscode);
+    second.BeginAuth(clientIdentity, identity.fingerprint);
     if (!second.PumpUntil([&second] { return second.Allowed(); }, kMaxRounds)) {
         Check(false, "and proves itself too");
         host.Stop();
@@ -607,7 +605,7 @@ void TestAnotherClientClosesAShell() {
         host.Stop();
         return;
     }
-    owner.BeginAuth(clientIdentity, identity.fingerprint, kTestPasscode);
+    owner.BeginAuth(clientIdentity, identity.fingerprint);
     if (!owner.PumpUntil([&owner] { return owner.Allowed(); }, kMaxRounds)) {
         Check(false, "and proves itself");
         host.Stop();
@@ -630,7 +628,7 @@ void TestAnotherClientClosesAShell() {
         host.Stop();
         return;
     }
-    other.BeginAuth(clientIdentity, identity.fingerprint, kTestPasscode);
+    other.BeginAuth(clientIdentity, identity.fingerprint);
     if (!other.PumpUntil([&other] { return other.Allowed(); }, kMaxRounds)) {
         Check(false, "and proves itself too");
         host.Stop();
@@ -707,7 +705,7 @@ void TestHostStopsAndAttachesShell() {
     viewer.endpoint.Connect(deskhubp::QuicSettings{},
         NetAddr{0x7F000001u, uint16_t(kTestPort + 4)}, "deskhub-test", viewer.Hooks());
     viewer.PumpUntil([&viewer] { return viewer.connected; }, kMaxRounds);
-    viewer.BeginAuth(clientIdentity, identity.fingerprint, kTestPasscode);
+    viewer.BeginAuth(clientIdentity, identity.fingerprint);
     viewer.PumpUntil([&viewer] { return viewer.Allowed(); }, kMaxRounds);
     viewer.client->Open(deskhub::TermSize{80, 24}, "test-client");
     if (!viewer.PumpUntil([&viewer] { return viewer.opens == 1; }, kMaxRounds)) {
@@ -1022,7 +1020,7 @@ void TestAFloodOfOutputNeverTearsTheStream() {
         viewer.endpoint.Connect(deskhubp::QuicSettings{}, NetAddr{0x7F000001u, port},
             "deskhub-test", viewer.Hooks());
         viewer.PumpUntil([&viewer] { return viewer.connected; }, kMaxRounds);
-        viewer.BeginAuth(clientIdentity, identity.fingerprint, kTestPasscode);
+        viewer.BeginAuth(clientIdentity, identity.fingerprint);
         viewer.PumpUntil([&viewer] { return viewer.Allowed(); }, kMaxRounds);
         viewer.client->Open(deskhub::TermSize{80, 24}, "test-client");
 

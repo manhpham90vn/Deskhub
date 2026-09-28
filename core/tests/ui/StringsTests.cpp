@@ -41,16 +41,10 @@ void TestEveryLabelSaysSomething() {
         ui::kTrayShowWindow, ui::kTrayHideWindow, ui::kTrayQuit,
         ui::kSettingsSectionVideo, ui::kSettingsSectionConnection, ui::kSettingsSectionSecurity,
         ui::kSettingsSectionSession, ui::kSettingsSectionLaunch,
-        ui::kAuthLocked,
+        ui::kAuthVersionMismatch,
         ui::kPasscodeShareHeading, ui::kPasscodeSetNote, ui::kPasscodeUnsetNote,
         ui::kPasscodeNoneSet, ui::kCopyPasscodeAction, ui::kPasscodeCopied};
     for (const char* s : labels) Check(s && *s, "every shared UI string is non-empty");
-    Check(Contains(ui::PasscodeNote("0417"), "0417"),
-        "the sharing status quotes the passcode viewers must enter");
-    Check(Contains(ui::PasscodeNote("0417"), "approval"),
-        "and says a machine offering no code falls back to the owner's approval");
-    Check(Contains(ui::PasscodeNote(""), "asked here"),
-        "with no code set, it promises the owner will be asked instead");
     Check(Contains(ui::kClientPasscodeHint, "empty"),
         "the client hint says the field may be left empty");
 }
@@ -218,17 +212,18 @@ void TestTerminalRefusalsNameTheirOwnCause() {
 }
 
 void TestEveryAuthVerdictReadsAsItsOwnMessage() {
-    std::printf("[strings] each auth verdict has its own words, and lockout names itself...\n");
+    std::printf("[strings] each auth verdict has its own words, including version mismatch...\n");
     std::vector<std::string> seen;
-    for (uint8_t c = 0; c <= uint8_t(AuthResultCode::Locked); ++c) {
+    for (uint8_t c = 0; c <= uint8_t(AuthResultCode::VersionMismatch); ++c) {
         const std::string text = ui::AuthRefusalText(AuthResultCode(c));
         Check(!text.empty(), "every verdict has words to show");
         for (const std::string& other : seen)
             Check(text != other, "and no two verdicts share them");
         seen.push_back(text);
     }
-    Check(ui::AuthRefusalText(AuthResultCode::Locked) == std::string(ui::kAuthLocked),
-        "a lockout shows the lockout text, not the generic refusal");
+    Check(ui::AuthRefusalText(AuthResultCode::VersionMismatch) ==
+              std::string(ui::kAuthVersionMismatch),
+        "an incompatible version shows the version message");
 }
 
 void TestClampWarningQuotesTheProtocolLimit() {
