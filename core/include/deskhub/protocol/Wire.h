@@ -154,18 +154,6 @@ inline constexpr bool IsValidPasscode(std::string_view p) {
     return true;
 }
 
-inline constexpr uint32_t kPasscodeRange = 10000;
-
-inline std::string PasscodeFromRandom(uint32_t value) {
-    std::string out(kPasscodeDigits, '0');
-    uint32_t left = value % kPasscodeRange;
-    for (size_t i = kPasscodeDigits; i-- > 0;) {
-        out[i] = char('0' + left % 10);
-        left /= 10;
-    }
-    return out;
-}
-
 struct Hello {
     uint32_t clientId;
     uint16_t maxWidth;

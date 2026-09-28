@@ -227,7 +227,6 @@ int main() {
     RunAutoShareGateTests();
 
     std::printf("--- ui: passcodes stored on disk ---\n");
-    RunSecretTextTests();
 
     std::printf("--- ui: one colour theme for every app ---\n");
     RunThemeTests();

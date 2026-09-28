@@ -3,7 +3,6 @@
 #include "deskhub/ui/UiSettings.h"
 #include "deskhubp/system/AppDataFile.h"
 #include "deskhubp/system/DeviceName.h"
-#include "deskhubp/system/Random.h"
 
 namespace deskhubp {
 
@@ -14,13 +13,7 @@ inline void SaveUiSettings(const deskhub::ui::UiSettings& settings) {
 }
 
 inline deskhub::ui::UiSettings LoadUiSettings() {
-    deskhub::ui::UiSettings settings =
-        deskhub::ui::ParseUiSettings(ReadAppDataFile(kUiSettingsFileName));
-    if (deskhub::IsValidPasscode(settings.passcode)) return settings;
-
-    settings.passcode = deskhub::PasscodeFromRandom(RandomU32());
-    SaveUiSettings(settings);
-    return settings;
+    return deskhub::ui::ParseUiSettings(ReadAppDataFile(kUiSettingsFileName));
 }
 
 inline std::string HostPasscode() {

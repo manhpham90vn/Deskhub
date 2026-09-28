@@ -8,7 +8,6 @@
 #include "deskhub/session/client/ScreenClientSession.h"
 #include "deskhub/session/host/ScreenHostSession.h"
 #include "deskhub/ui/RecentDevices.h"
-#include "deskhub/ui/SecretText.h"
 #include "deskhub/ui/UiSettings.h"
 
 #include <algorithm>
@@ -728,8 +727,7 @@ std::string MakeDevicesSoup() {
                 s += " host";
                 s += std::to_string(Rnd() % 6);
                 s += ' ';
-                s += (Rnd() % 2) ? ui::EncodeSecret(PasscodeFromRandom(Rnd()))
-                                 : std::string("not-a-passcode");
+                s += (Rnd() % 2) ? std::string("0417") : std::string("not-a-passcode");
                 break;
             case 2:
                 s += std::to_string(Rnd());
@@ -825,28 +823,6 @@ void TestSessionChaosFuzz() {
     }
 }
 
-void TestSecretTextFuzz() {
-    std::printf("[fuzz] secrets round-trip, junk is decoded safely...\n");
-    bool ok = true;
-    for (int i = 0; i < 600; ++i) {
-        std::string plain(Rnd() % 40, '\0');
-        for (auto& c : plain) c = char(uint8_t(Rnd()));
-        const std::string encoded = ui::EncodeSecret(plain);
-        ok = ok && ui::DecodeSecret(encoded) == plain;
-        if (!plain.empty()) ok = ok && encoded.front() == ui::kSecretPrefix;
-    }
-    Check(ok, "EncodeSecret/DecodeSecret round-trips random byte strings");
-
-    ok = true;
-    for (int i = 0; i < 600; ++i) {
-        std::string junk(Rnd() % 40, '\0');
-        for (auto& c : junk) c = char(uint8_t(Rnd()));
-        const std::string decoded = ui::DecodeSecret(junk);
-        if (junk.empty() || junk.front() != ui::kSecretPrefix) ok = ok && decoded == junk;
-    }
-    Check(ok, "DecodeSecret leaves unprefixed text alone and never crashes on junk");
-}
-
 }
 
 void RunFuzzTests() {
@@ -861,5 +837,4 @@ void RunFuzzTests() {
     TestSessionChaosFuzz();
     TestUiSettingsFuzz();
     TestRecentDevicesFuzz();
-    TestSecretTextFuzz();
 }

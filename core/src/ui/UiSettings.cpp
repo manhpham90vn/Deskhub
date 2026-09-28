@@ -3,7 +3,6 @@
 #include <optional>
 
 #include "deskhub/net/Ipv4.h"
-#include "deskhub/ui/SecretText.h"
 #include "deskhub/ui/Strings.h"
 
 namespace deskhub::ui {
@@ -22,11 +21,6 @@ std::optional<uint32_t> ParseUint(std::string_view s) {
 }
 
 void ApplyKeyValue(UiSettings& out, std::string_view key, std::string_view value) {
-    if (key == "passcode") {
-        const std::string decoded = DecodeSecret(value);
-        if (IsValidPasscode(decoded)) out.passcode = decoded;
-        return;
-    }
     if (key == "name") {
         out.deviceName = TruncateDeviceName(value);
         return;
@@ -55,7 +49,6 @@ void ApplyKeyValue(UiSettings& out, std::string_view key, std::string_view value
     if (key == "play_audio") out.playAudio = *v != 0;
     if (key == "start_hidden") out.startHidden = *v != 0;
     if (key == "keep_awake") out.keepAwake = *v != 0;
-    if (key == "allow_new_pairings") out.allowNewPairings = *v != 0;
 }
 
 }
@@ -110,9 +103,6 @@ std::string SerializeUiSettings(const UiSettings& settings) {
     out += "port=" + std::to_string(settings.port) + '\n';
     out += std::string("allow_input=") + (settings.allowInput ? "1" : "0") + '\n';
     out += std::string("client_control=") + (settings.clientControl ? "1" : "0") + '\n';
-    out += "passcode=";
-    if (IsValidPasscode(settings.passcode)) out += EncodeSecret(settings.passcode);
-    out += '\n';
     out += "name=" + TruncateDeviceName(settings.deviceName) + '\n';
     out += "bind_ip=";
     if (ParseIPv4(settings.bindIp)) out += settings.bindIp;
@@ -124,7 +114,6 @@ std::string SerializeUiSettings(const UiSettings& settings) {
     out += std::string("play_audio=") + (settings.playAudio ? "1" : "0") + '\n';
     out += std::string("start_hidden=") + (settings.startHidden ? "1" : "0") + '\n';
     out += std::string("keep_awake=") + (settings.keepAwake ? "1" : "0") + '\n';
-    out += std::string("allow_new_pairings=") + (settings.allowNewPairings ? "1" : "0") + '\n';
     out += "transfer_dir=" + TruncateSettingsPath(settings.transferDir) + '\n';
     return out;
 }

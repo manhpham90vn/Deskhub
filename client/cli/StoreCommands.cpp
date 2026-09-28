@@ -25,9 +25,6 @@ namespace deskhubcli {
 
 namespace {
 
-constexpr std::string_view kPasscodeKey = "passcode";
-constexpr std::string_view kPasscodeMask = "****";
-
 std::string DeviceName(const deskhub::PairedDevice& device) {
     return device.name.empty() ? std::string("(unnamed)") : device.name;
 }
@@ -293,10 +290,6 @@ ExitCode RunSettings(const Command& command) {
             PrintError(UnknownKeyMessage(command.key, keys));
             return ExitCode::Usage;
         }
-        if (command.key == kPasscodeKey) {
-            PrintLine(current.passcode);
-            return ExitCode::Ok;
-        }
         std::string value;
         ValueOfSetting(text, command.key, value);
         PrintLine(value);
@@ -331,7 +324,7 @@ ExitCode RunSettings(const Command& command) {
         for (const std::string& key : keys) {
             std::string value;
             ValueOfSetting(text, key, value);
-            json.Field(key, key == kPasscodeKey ? std::string(kPasscodeMask) : value);
+            json.Field(key, value);
         }
         json.ObjectEnd();
         PrintLine(json.Text());
@@ -342,7 +335,7 @@ ExitCode RunSettings(const Command& command) {
     for (const std::string& key : keys) {
         std::string value;
         ValueOfSetting(text, key, value);
-        table.Row({key, key == kPasscodeKey ? std::string(kPasscodeMask) : value});
+        table.Row({key, value});
     }
     table.Print();
 

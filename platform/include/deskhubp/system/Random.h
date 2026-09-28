@@ -65,9 +65,3 @@ inline bool RandomBytes(void* out, size_t n) {
 }
 
 #endif
-
-inline uint32_t RandomU32() {
-    uint32_t v = 0;
-    if (!RandomBytes(&v, sizeof(v))) return 0;
-    return v;
-}

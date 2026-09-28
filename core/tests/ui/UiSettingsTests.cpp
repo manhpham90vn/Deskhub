@@ -19,7 +19,6 @@ void TestRoundTrip() {
     s.port = 50123;
     s.allowInput = false;
     s.clientControl = false;
-    s.passcode = "0417";
     s.deviceName = "Anh's laptop";
     s.bindIp = "192.168.1.10";
     s.autostart = true;
@@ -96,26 +95,21 @@ void TestDeviceNamePersistence() {
         "a dirty in-memory name is cleaned on the way out");
 }
 
-void TestPasscodePersistence() {
-    std::printf("[settings] the passcode persists only when it is 4 digits...\n");
+void TestLegacySettingsAreDiscarded() {
+    std::printf("[settings] retired authentication fields are discarded...\n");
     ui::UiSettings s;
     s.passcode = "0417";
+    s.allowNewPairings = false;
     const std::string text = ui::SerializeUiSettings(s);
-    Check(ui::ParseUiSettings(text).passcode == "0417",
-        "a 4-digit passcode round-trips, leading zero kept");
-    Check(text.find("passcode=0417") == std::string::npos,
-        "the file never carries the digits in the clear");
-
-    Check(ui::ParseUiSettings("").passcode.empty(), "no passcode by default");
-    Check(ui::ParseUiSettings("passcode=0417").passcode == "0417",
-        "a hand-written passcode still works");
-    Check(ui::ParseUiSettings("passcode=123").passcode.empty(), "too short is dropped");
-    Check(ui::ParseUiSettings("passcode=12345").passcode.empty(), "too long is dropped");
-    Check(ui::ParseUiSettings("passcode=12ab").passcode.empty(), "non-digits are dropped");
-
-    s.passcode = "not4";
-    Check(ui::ParseUiSettings(ui::SerializeUiSettings(s)).passcode.empty(),
-        "an invalid in-memory passcode is not written out");
+    Check(text.find("passcode=") == std::string::npos,
+        "a passcode is not serialized");
+    Check(text.find("allow_new_pairings=") == std::string::npos,
+        "the old pairing switch is not serialized");
+    const ui::UiSettings legacy = ui::ParseUiSettings(
+        "passcode=0417\nallow_new_pairings=0\nname=Older host\n");
+    Check(legacy.passcode.empty() && legacy.allowNewPairings,
+        "retired values from an old file are ignored");
+    Check(legacy.deviceName == "Older host", "other settings remain available");
 }
 
 void TestDefaultsMatchShareDefaults() {
@@ -213,7 +207,7 @@ void RunUiSettingsTests() {
     TestBindIpPersistence();
     TestBehaviorTogglesPersist();
     TestDeviceNamePersistence();
-    TestPasscodePersistence();
+    TestLegacySettingsAreDiscarded();
     TestDefaultsMatchShareDefaults();
     TestNativeQualityIsPreserved();
     TestGarbageFallsBackPerKey();

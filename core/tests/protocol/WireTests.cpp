@@ -61,16 +61,6 @@ void TestWireRoundtrip() {
     Check(!IsValidPasscode("123") && !IsValidPasscode("12345") && !IsValidPasscode("12a4"),
         "wrong length or non-digits are invalid");
 
-    Check(PasscodeFromRandom(0) == "0000" && PasscodeFromRandom(kPasscodeRange - 1) == "9999",
-        "the generator spans the whole 4-digit range");
-    Check(PasscodeFromRandom(417) == "0417", "a small draw keeps its leading zeros");
-    Check(PasscodeFromRandom(kPasscodeRange) == "0000" &&
-              PasscodeFromRandom(0xFFFFFFFFu) == "7295",
-        "draws past the range wrap instead of overflowing");
-    for (uint32_t seed = 0; seed < 5000; seed += 7)
-        Check(IsValidPasscode(PasscodeFromRandom(seed * 2654435761u)),
-            "every generated passcode passes validation");
-
     HelloAck a{0xCAFE0001, 1920, 1080, 60, 20'000'000};
     n = BuildHelloAck(buf, a);
     auto ap = ParseHelloAck(PayloadOf(std::span<const uint8_t>(buf, n)));

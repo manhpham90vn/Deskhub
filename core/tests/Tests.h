@@ -77,7 +77,6 @@ void RunCliCommandTests();
 void RunCliJsonTests();
 void RunAutostartConfigTests();
 void RunAutoShareGateTests();
-void RunSecretTextTests();
 void RunThemeTests();
 void RunSettingsLayoutTests();
 void RunFuzzTests();

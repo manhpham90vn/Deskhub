@@ -1,5 +1,4 @@
 #include "deskhub/ui/RecentDevices.h"
-#include "deskhub/ui/SecretText.h"
 #include "deskhub/ui/UiSettings.h"
 
 #include <cstddef>
@@ -15,7 +14,5 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
     const auto devices = deskhub::ui::ParseRecentDevices(text);
     deskhub::ui::ParseRecentDevices(deskhub::ui::SerializeRecentDevices(devices));
 
-    deskhub::ui::DecodeSecret(text);
-    deskhub::ui::DecodeSecret(deskhub::ui::EncodeSecret(text));
     return 0;
 }

@@ -14,44 +14,25 @@ namespace {
 void TestRoundTrip() {
     std::printf("[recent] a saved list comes back exactly as it was...\n");
     std::vector<ui::RecentDevice> devices{
-        {"192.168.1.10", 1754300000, "0417"},
+        {"192.168.1.10", 1754300000, ""},
         {"192.168.1.20:5000", 1754200000, ""},
     };
     const std::string text = ui::SerializeRecentDevices(devices);
     Check(ui::ParseRecentDevices(text) == devices, "serialize then parse is identity");
 }
 
-void TestPasscodePerDevice() {
-    std::printf("[recent] each device remembers its own passcode, or none...\n");
+void TestLegacyPasscodesAreDiscarded() {
+    std::printf("[recent] old passcodes are discarded while addresses remain...\n");
     std::vector<ui::RecentDevice> devices;
     ui::TouchRecentDevice(devices, "192.168.1.10", 100, "0417");
-    ui::TouchRecentDevice(devices, "192.168.1.20", 110, "");
-    ui::TouchRecentDevice(devices, "192.168.1.30", 120, "12ab");
-
-    Check(ui::PasscodeForDevice(devices, "192.168.1.10") == "0417",
-        "the code typed for a device is what comes back for it");
-    Check(ui::PasscodeForDevice(devices, "192.168.1.20").empty(),
-        "a device connected without a code keeps none");
-    Check(ui::PasscodeForDevice(devices, "192.168.1.30").empty(),
-        "an invalid code is never stored");
-    Check(ui::PasscodeForDevice(devices, "10.0.0.1").empty(),
-        "an address we have never seen has no code");
-
-    ui::TouchRecentDevice(devices, "192.168.1.10", 200, "");
-    Check(ui::PasscodeForDevice(devices, "192.168.1.10") == "0417",
-        "reconnecting without a code keeps the remembered one");
-    ui::TouchRecentDevice(devices, "192.168.1.10", 300, "5150");
-    Check(ui::PasscodeForDevice(devices, "192.168.1.10") == "5150",
-        "and a newly typed code replaces it");
-    ui::TouchRecentDevice(devices, "192.168.1.10", 400, "12ab");
-    Check(ui::PasscodeForDevice(devices, "192.168.1.10") == "5150",
-        "a mistyped code does not wipe the remembered one");
+    Check(devices.size() == 1 && devices[0].passcode.empty(),
+        "a supplied passcode is not kept in memory");
 
     const std::vector<ui::RecentDevice> saved{{"192.168.1.50", 1754300000, "0417"}};
     const std::string text = ui::SerializeRecentDevices(saved);
-    Check(text.find("0417") == std::string::npos,
-        "the file never carries the digits in the clear");
-    Check(ui::ParseRecentDevices(text) == saved, "but the app reads its own file back");
+    Check(text == "1754300000 192.168.1.50\n", "the retired field is omitted entirely");
+    Check(ui::ParseRecentDevices(text)[0].passcode.empty(),
+        "a saved address does not recreate a passcode");
 
     const auto reloaded = ui::ParseRecentDevices(
         "1754300000 192.168.1.40 9182\n"
@@ -60,11 +41,12 @@ void TestPasscodePerDevice() {
         "  1754000000   192.168.1.43   5150  \n");
     Check(reloaded.size() == 4, "all four lines parse");
     if (reloaded.size() == 4) {
-        Check(reloaded[0].passcode == "9182", "a 4-digit code on the line is read back");
+        Check(reloaded[0].addr == "192.168.1.40" && reloaded[0].passcode.empty(),
+            "a code on an old line is discarded");
         Check(reloaded[1].addr == "192.168.1.41" && reloaded[1].passcode.empty(),
             "a malformed code is dropped but the device is kept");
         Check(reloaded[2].passcode.empty(), "an old line without a code still parses");
-        Check(reloaded[3].addr == "192.168.1.43" && reloaded[3].passcode == "5150",
+        Check(reloaded[3].addr == "192.168.1.43" && reloaded[3].passcode.empty(),
             "runs of spaces around the fields do not swallow the address");
     }
 }
@@ -139,12 +121,6 @@ void TestRemove() {
     Check(devices.size() == 1 && devices[0].addr == "192.168.1.20", "the other entry stays");
     ui::RemoveRecentDevice(devices, "192.168.1.99");
     Check(devices.size() == 1, "removing an unknown address is a no-op");
-
-    std::vector<ui::RecentDevice> forgotten{{"192.168.1.10", 100, "0417"}};
-    ui::RemoveRecentDevice(forgotten, "192.168.1.10");
-    ui::TouchRecentDevice(forgotten, "192.168.1.10", 110, "");
-    Check(ui::PasscodeForDevice(forgotten, "192.168.1.10").empty(),
-        "a forgotten device does not come back with its old code");
 }
 
 void TestDefaultPortSpellingsAreOneDevice() {
@@ -152,15 +128,9 @@ void TestDefaultPortSpellingsAreOneDevice() {
     std::vector<ui::RecentDevice> devices;
     ui::TouchRecentDevice(devices, "192.168.1.60:47777", 100, "0417");
 
-    Check(ui::PasscodeForDevice(devices, "192.168.1.60") == "0417",
-        "the scanned spelling finds the code saved for the typed one");
-    Check(ui::PasscodeForDevice(devices, "192.168.1.60:5000").empty(),
-        "another port is a different device");
-
     ui::TouchRecentDevice(devices, "192.168.1.60", 200, "");
     Check(devices.size() == 1, "touching the other spelling replaces the entry");
-    Check(ui::PasscodeForDevice(devices, "192.168.1.60:47777") == "0417",
-        "the code carries over to the entry that replaced it");
+    Check(devices[0].passcode.empty(), "the replacement has no passcode");
 
     ui::RemoveRecentDevice(devices, "192.168.1.60:47777");
     Check(devices.empty(), "removing either spelling removes the device");
@@ -170,7 +140,7 @@ void TestDefaultPortSpellingsAreOneDevice() {
 
 void RunRecentDevicesTests() {
     TestRoundTrip();
-    TestPasscodePerDevice();
+    TestLegacyPasscodesAreDiscarded();
     TestParseSkipsGarbage();
     TestParseDropsDuplicates();
     TestTouchMovesToFront();

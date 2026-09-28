@@ -5,7 +5,6 @@
 
 #include <cstdio>
 #include <cstring>
-#include <set>
 #include <vector>
 
 namespace {
@@ -34,15 +33,6 @@ void TestTheWholeBufferIsFilled() {
     }
 }
 
-void TestSessionIdsDoNotRepeat() {
-    std::printf("[random] two sessions never end up with the same id...\n");
-    std::set<uint32_t> seen;
-    for (int i = 0; i < 512; ++i) seen.insert(RandomU32());
-    Check(seen.size() >= 500,
-        "512 draws give ~512 distinct values; a repeat rate above that means it is not random");
-    Check(seen.size() > 1, "and it is certainly not a constant");
-}
-
 void TestTheBytesAreSpreadAcrossTheRange() {
     std::printf("[random] the bytes cover the whole range, not one corner of it...\n");
     uint8_t buf[8192];
@@ -63,6 +53,5 @@ void TestTheBytesAreSpreadAcrossTheRange() {
 void RunRandomTests() {
     TestARequestForNothingIsRefused();
     TestTheWholeBufferIsFilled();
-    TestSessionIdsDoNotRepeat();
     TestTheBytesAreSpreadAcrossTheRange();
 }
