@@ -95,19 +95,42 @@ void TestTheListSurvivesARestart() {
     devices.Touch(Key(1), "manh laptop", 2000);
 
     const std::string text = SerializePairedDevices(devices);
-    const PairedDevices back = ParsePairedDevices(text);
-    Check(back.Size() == 2, "both machines come back");
-    Check(back.Check(Key(1)) == PairVerdict::Paired && back.Check(Key(2)) == PairVerdict::Paired,
+    const auto back = ParsePairedDevicesStrict(text);
+    Check(back && back->Size() == 2, "both machines come back");
+    if (!back) return;
+    Check(back->Check(Key(1)) == PairVerdict::Paired && back->Check(Key(2)) == PairVerdict::Paired,
         "and both are still let in");
 
-    const std::optional<PairedDevice> one = back.Find(Key(1));
+    const std::optional<PairedDevice> one = back->Find(Key(1));
     Check(one && one->name == "manh laptop", "a name with a space survives the round trip");
     Check(one && one->pairedUnix == 1000 && one->lastSeenUnix == 2000, "so do both timestamps");
 
-    Check(SerializePairedDevices(back) == text, "writing what was read gives the same file");
-    Check(ParsePairedDevices("").Size() == 0, "an empty file is an empty list");
-    Check(ParsePairedDevices("# just a comment\nnonsense\nSHA256:short 1 2\n").Size() == 0,
-        "and junk lines are skipped rather than half-read");
+    Check(SerializePairedDevices(*back) == text, "writing what was read gives the same file");
+    Check(ParsePairedDevicesStrict("")->Size() == 0, "an empty file is an empty list");
+    Check(!ParsePairedDevicesStrict("# just a comment\nnonsense\nSHA256:short 1 2\n"),
+        "and junk lines invalidate the entire admission list");
+}
+
+void TestStrictAdmissionListRejectsDamage() {
+    std::printf("[paired] admission fails closed for damaged or duplicate rows...\n");
+    PairedDevices devices;
+    devices.Remember(Key(1), "laptop", 1000);
+    const std::string row = SerializePairedDevices(devices);
+    const auto valid = ParsePairedDevicesStrict(row);
+    Check(valid && valid->Check(Key(1)) == PairVerdict::Paired,
+        "a valid stored key remains authorized");
+    Check(!ParsePairedDevicesStrict(row + "nonsense\n"),
+        "a damaged row invalidates the whole admission list");
+    Check(!ParsePairedDevicesStrict(row + row),
+        "a duplicate key invalidates the admission list");
+    std::string control = row;
+    control.insert(control.size() - 1, 1, '\x01');
+    Check(!ParsePairedDevicesStrict(control),
+        "a control byte in a key label invalidates the admission list");
+    Check(!ParsePairedDevicesStrict(std::string(32769, 'x')),
+        "an oversized admission list is rejected before parsing");
+    Check(ParsePairedDevicesStrict("")->Size() == 0,
+        "an intentionally empty admission list authorizes nobody");
 }
 
 void TestTheKeyIsShownShortEnoughToRead() {
@@ -131,4 +154,5 @@ void RunPairedDevicesTests() {
     TestTheListCannotGrowForever();
     TestJunkNeverBecomesAPairing();
     TestTheListSurvivesARestart();
+    TestStrictAdmissionListRejectsDamage();
 }

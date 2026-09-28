@@ -2,6 +2,7 @@
 #include "support/TestSupport.h"
 
 #include "deskhub/net/PublicKeyText.h"
+#include "deskhub/net/AuthorizedKeys.h"
 
 #include <cstdio>
 
@@ -74,9 +75,35 @@ void TestMalformedKeysAreRejected() {
         "trailing data in the key blob is invalid");
 }
 
+void TestAuthorizedKeysRejectDuplicatesAndDamage() {
+    std::printf("[public key] authorized keys reject duplicates and damaged rows...\n");
+    const std::string ed = deskhub::FormatPublicKeyText(Ed25519Key());
+    const std::string p256 = deskhub::FormatPublicKeyText(P256Key());
+    const auto keys = deskhub::ParseAuthorizedKeys("# managed list\n" + ed + "\n" + p256 + "\n");
+    Check(keys && keys->Keys().size() == 2 && keys->Contains(Ed25519Key()),
+        "two valid key types are retained");
+    Check(keys && deskhub::ParseAuthorizedKeys(deskhub::SerializeAuthorizedKeys(*keys))
+                          ->Keys()
+                          .size() == 2,
+        "the canonical list round trips");
+    auto duplicate = Ed25519Key();
+    duplicate.label = "another label";
+    Check(!deskhub::ParseAuthorizedKeys(ed + "\n" +
+                                        deskhub::FormatPublicKeyText(duplicate) + "\n"),
+        "a different label cannot disguise a duplicate key");
+    Check(!deskhub::ParseAuthorizedKeys(ed + "\nssh-rsa AAAA\n"),
+        "one unsupported row invalidates the whole list");
+    Check(!deskhub::ParseAuthorizedKeys(std::string(deskhub::kMaxAuthorizedKeysFileBytes + 1,
+              'x')),
+        "an oversized list is rejected");
+    Check(deskhub::ParseAuthorizedKeys("")->Keys().empty(),
+        "an empty authorized list authorizes nobody");
+}
+
 }
 
 void RunPublicKeyTextTests() {
     TestValidKeysRoundTrip();
     TestMalformedKeysAreRejected();
+    TestAuthorizedKeysRejectDuplicatesAndDamage();
 }

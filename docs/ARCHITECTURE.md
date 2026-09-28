@@ -302,6 +302,36 @@ line.
 
 ## 9. Decisions worth remembering
 
+- **Host application sends require admission**: `SessionTransport` rejects outgoing
+  records and datagrams until that connection has completed key authentication.
+  Auth challenge and result messages use the internal auth send path. The trust store
+  serializes read-modify-write operations within one process and persists changes
+  through an atomic file replacement.
+
+- **A damaged client allowlist grants no access**: loading `paired_devices` rejects
+  unreadable, oversized, malformed, or duplicate entries as one failed configuration.
+  The host periodically rechecks live admissions so a file replacement from another
+  process can revoke active connections without an in-process generation update.
+
+- **A host pin belongs to one endpoint**: a TLS host key trusted at one address and
+  port does not automatically authorize the same key at another endpoint. The new
+  endpoint must be pinned explicitly before connection.
+
+- **The new client allowlist contains full public keys**: `authorized_keys` accepts
+  bounded OpenSSH public key lines and rejects malformed or duplicate entries. It
+  becomes authoritative when first saved. An activation marker prevents deleting
+  the file from reactivating legacy fingerprint-only permissions. `known_hosts`
+  stores each endpoint's alias and selected client identity beside its TLS pin.
+  Config writes use an OS file lock across processes and atomic replacement.
+  A service can set its configuration directory with `SetConfigDir` or
+  `DESKHUB_CONFIG_DIR` independently from the log directory.
+
+- **Fingerprint input is SPKI-based**: every `SHA256:…` value Deskhub displays or
+  stores hashes the DER SubjectPublicKeyInfo encoding of a public key. An OpenSSH
+  public key line carries an SSH blob; its usual SSH fingerprint hashes that blob
+  and cannot be compared directly with Deskhub's SPKI fingerprint. Importing the
+  text key converts it to SPKI before calculating the Deskhub fingerprint.
+
 - **The signature covers one unambiguous auth transcript**: `core/auth/Transcript` encodes
   a Deskhub domain, auth version, signer role, the 32-byte QUIC/TLS exporter value,
   full client public key, and TLS host key fingerprint as length-prefixed fields.
@@ -314,7 +344,7 @@ line.
   64 pairs; a successful proof clears its failure count.
 
 - **Auth has its own version inside protocol version 3**: `AuthStart` keeps a zero byte
-  before the key as a compatibility prefix and puts auth version 5 after the client name.
+  before the key as a compatibility prefix and puts auth version 6 after the client name.
   An older host can read the offer and send its old challenge; the new client then detects
   the incompatible challenge and closes. A new host rejects an offer without the version
   suffix, sends `VersionMismatch`, and closes. The prefix no longer carries a passcode
@@ -619,9 +649,10 @@ line.
   backgrounding) covers it; kept shells can also be listed (`TermList`) and resumed
   by id from a fresh client.
 - **ECDSA P-256, not Ed25519**: BoringSSL's server side will not sign a TLS
-  handshake with Ed25519 through quiche. Do not switch back. A stored Ed25519
-  identity is replaced on load — it would fail every handshake as
-  `QUICHE_ERR_TLS_FAIL` with nothing on screen to explain it.
+  handshake with Ed25519 through quiche. A stored unsupported or mismatched
+  certificate and private key makes startup fail without changing either file.
+  Only an installation with neither file creates a new host identity, so an
+  existing host fingerprint never changes silently.
 - **The passcode verifier is one SHA-256, not an expensive KDF**: SPAKE2 already
   limits an attacker to one online guess per connection and leaves no transcript
   worth cracking offline, which is the whole job KDF hardness exists to do.

@@ -4,13 +4,20 @@
 #include "deskhubp/system/AppDataFile.h"
 #include "deskhubp/system/AuthProof.h"
 #include "deskhubp/system/ClientIdentity.h"
+#include "deskhubp/system/Random.h"
 
 #include <openssl/bio.h>
 #include <openssl/evp.h>
 #include <openssl/nid.h>
 #include <openssl/pem.h>
 
+#include <array>
 #include <cstdio>
+#include <filesystem>
+
+#ifndef _WIN32
+#include <sys/stat.h>
+#endif
 
 namespace {
 
@@ -125,8 +132,77 @@ void TestClientKeyIsSeparateAndStable() {
         "the imported P-256 key can authenticate a connection");
 }
 
+void TestNamedClientKeysStaySeparate() {
+    std::array<uint8_t, 8> suffix{};
+    if (!RandomBytes(suffix.data(), suffix.size())) {
+        Check(false, "the named identity test has a unique directory");
+        return;
+    }
+    std::string name = "deskhub-client-keys-";
+    constexpr char digits[] = "0123456789abcdef";
+    for (uint8_t byte : suffix) {
+        name += digits[byte >> 4];
+        name += digits[byte & 15];
+    }
+    const auto dir = std::filesystem::temp_directory_path() / name;
+    const std::string previous = deskhubp::AppDataDirRef();
+    deskhubp::SetAppDataDir(dir.string());
+
+    const auto first = deskhubp::LoadOrCreateClientIdentity();
+    const auto second = deskhubp::GenerateClientIdentity("laptop-a");
+    Check(first.Valid() && second.Valid() && first.fingerprint != second.fingerprint,
+        "a named identity has its own signing key beside the default");
+    Check(deskhubp::LoadClientIdentity("laptop-a").fingerprint == second.fingerprint,
+        "the named identity survives a fresh load");
+#ifndef _WIN32
+    const auto keyPath = deskhubp::AppDataFilePath("client_key.laptop-a.pem");
+    struct stat keyStat{};
+    Check(::stat(keyPath.c_str(), &keyStat) == 0 && (keyStat.st_mode & 0777) == 0600,
+        "a named private key is stored with owner-only permissions");
+    Check(::chmod(keyPath.c_str(), 0644) == 0,
+        "the test can make a private key readable by other accounts");
+    Check(!deskhubp::LoadClientIdentity("laptop-a").Valid(),
+        "a private key with broad permissions is refused");
+    Check(::chmod(keyPath.c_str(), 0600) == 0 &&
+              deskhubp::LoadClientIdentity("laptop-a").Valid(),
+        "restoring owner-only permissions restores the same key");
+#endif
+    Check(!deskhubp::GenerateClientIdentity("laptop-a").Valid(),
+        "generation never replaces an existing named key");
+    Check(!deskhubp::GenerateClientIdentity("../escape").Valid(),
+        "a key name cannot escape the app data directory");
+
+    const std::string p256 = NewP256PrivateKey();
+    Check(!p256.empty() && deskhubp::ImportClientIdentity("phone", p256, {}),
+        "a second named identity can import a P-256 private key");
+    Check(!deskhubp::ImportClientIdentity("phone", first.keyPem, {}),
+        "import does not silently replace a named key");
+    Check(deskhubp::LoadClientIdentity().fingerprint == first.fingerprint,
+        "named imports do not change the default identity");
+    const auto listed = deskhubp::ListClientIdentities();
+    Check(listed.size() == 3 && listed[0].name == "default" &&
+              listed[1].name == "laptop-a" && listed[2].name == "phone",
+        "listing returns all identities in name order");
+    Check(listed.size() == 3 && listed[1].valid && listed[2].valid &&
+              !listed[2].publicKeyText.empty(),
+        "listing exposes public keys without exporting private PEM");
+
+    Check(deskhubp::WriteAppDataFile("client_key.phone.pem", "damaged private key"),
+        "the named identity can be made unreadable for the regression check");
+    Check(!deskhubp::LoadClientIdentity("phone").Valid(),
+        "an unreadable named key is not regenerated or replaced");
+    const auto damaged = deskhubp::ListClientIdentities();
+    Check(damaged.size() == 3 && damaged[2].name == "phone" && !damaged[2].valid,
+        "listing identifies an unusable named key without hiding it");
+
+    deskhubp::SetAppDataDir(previous);
+    std::error_code error;
+    std::filesystem::remove_all(dir, error);
+}
+
 }
 
 void RunClientIdentityTests() {
     TestClientKeyIsSeparateAndStable();
+    TestNamedClientKeysStaySeparate();
 }

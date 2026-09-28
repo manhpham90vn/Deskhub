@@ -13,6 +13,7 @@ struct ViewRequest {
     NetAddr server{};
     std::string hostLabel{};
     std::string displayName{};
+    std::string clientIdentityName{};
     std::vector<deskhub::SourceInfo> sources{};
     bool control = true;
     bool audio = true;

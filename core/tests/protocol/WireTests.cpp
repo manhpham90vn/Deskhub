@@ -783,6 +783,13 @@ void TestAuthWire() {
         ParseAuthChallenge(PayloadOf(std::span<const uint8_t>(buf, n)));
     Check(gotChallenge && gotChallenge->mode == AuthMode::Signature,
         "the mode round-trips without a separate challenge nonce");
+    challenge.mode = AuthMode::ConfigError;
+    n = BuildAuthChallenge(buf, challenge);
+    gotChallenge = ParseAuthChallenge(PayloadOf(std::span<const uint8_t>(buf, n)));
+    Check(gotChallenge && gotChallenge->mode == AuthMode::ConfigError,
+        "a broken host authorization file has a distinct challenge mode");
+    challenge.mode = AuthMode::Signature;
+    n = BuildAuthChallenge(buf, challenge);
     buf[kCommonHeaderSize] = uint8_t(AuthMode::Signature);
     Check(!ParseAuthChallenge(PayloadOf(std::span<const uint8_t>(buf, n))),
         "an old challenge is refused");
@@ -810,6 +817,11 @@ void TestAuthWire() {
     gotResult = ParseAuthResult(PayloadOf(std::span<const uint8_t>(buf, n)));
     Check(gotResult && gotResult->code == AuthResultCode::VersionMismatch,
         "an incompatible auth version survives the trip too");
+    result.code = AuthResultCode::BadSignature;
+    n = BuildAuthResult(buf, result);
+    gotResult = ParseAuthResult(PayloadOf(std::span<const uint8_t>(buf, n)));
+    Check(gotResult && gotResult->code == AuthResultCode::BadSignature,
+        "an invalid signature has a stable wire result");
 
     for (size_t cut = 0; cut < n; ++cut)
         Check(!ParseAuthResult(std::span<const uint8_t>(buf, cut)).has_value(),

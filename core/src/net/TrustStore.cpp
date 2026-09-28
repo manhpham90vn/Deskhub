@@ -25,6 +25,17 @@ std::string SanitizeLabel(std::string_view label) {
     return detail::SanitizeText(label, kMaxTrustLabelBytes);
 }
 
+bool ValidIdentityName(std::string_view name) {
+    if (name.empty() || name.size() > 64) return false;
+    for (size_t i = 0; i < name.size(); ++i) {
+        const char c = name[i];
+        const bool letter = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
+        const bool digit = c >= '0' && c <= '9';
+        if (!letter && !digit && (i == 0 || (c != '-' && c != '_'))) return false;
+    }
+    return true;
+}
+
 }
 
 bool IsZero(const Fingerprint& fp) {
@@ -82,8 +93,6 @@ TrustVerdict TrustStore::Check(std::string_view endpoint, const Fingerprint& fp)
         if (h.endpoint != key) continue;
         return h.fingerprint == fp ? TrustVerdict::Trusted : TrustVerdict::Changed;
     }
-    for (const TrustedHost& h : hosts_)
-        if (h.fingerprint == fp) return TrustVerdict::Trusted;
     return TrustVerdict::Unknown;
 }
 
@@ -104,7 +113,9 @@ void TrustStore::Remember(std::string_view endpoint, std::string_view label,
 
 void TrustStore::Insert(const TrustedHost& host) {
     const std::string key = Trim(host.endpoint);
-    if (key.empty() || IsZero(host.fingerprint)) return;
+    if (key.empty() || IsZero(host.fingerprint) ||
+        (!host.identityName.empty() && !ValidIdentityName(host.identityName)))
+        return;
     Forget(key);
     if (hosts_.size() >= kMaxTrustedHosts) {
         const auto oldest = std::min_element(hosts_.begin(), hosts_.end(),
@@ -117,6 +128,19 @@ void TrustStore::Insert(const TrustedHost& host) {
     stored.endpoint = key;
     stored.label = SanitizeLabel(host.label);
     hosts_.push_back(std::move(stored));
+}
+
+bool TrustStore::SetProfile(std::string_view endpoint, std::string_view label,
+    std::string_view identityName) {
+    if (label != SanitizeLabel(label) || !ValidIdentityName(identityName)) return false;
+    const std::string key = Trim(endpoint);
+    for (TrustedHost& host : hosts_) {
+        if (host.endpoint != key) continue;
+        host.label = std::string(label);
+        host.identityName = std::string(identityName);
+        return true;
+    }
+    return false;
 }
 
 bool TrustStore::Forget(std::string_view endpoint) {
@@ -148,32 +172,63 @@ TrustStore ParseTrustStore(std::string_view text) {
         const std::string line = Trim(text.substr(pos, end - pos));
         pos = end + 1;
         if (line.empty() || line[0] == '#') continue;
+        const size_t profileAt = line.find('\t');
+        const std::string_view base = profileAt == std::string::npos
+                                          ? std::string_view(line)
+                                          : std::string_view(line).substr(0, profileAt);
+        const std::string_view identityName = profileAt == std::string::npos
+                                                  ? std::string_view()
+                                                  : std::string_view(line).substr(profileAt + 1);
+        if (!identityName.empty() && !ValidIdentityName(identityName)) continue;
 
-        const size_t s1 = line.find(' ');
+        const size_t s1 = base.find(' ');
         if (s1 == std::string::npos) continue;
-        const size_t s2 = line.find(' ', s1 + 1);
+        const size_t s2 = base.find(' ', s1 + 1);
         if (s2 == std::string::npos) continue;
-        const size_t s3 = line.find(' ', s2 + 1);
+        const size_t s3 = base.find(' ', s2 + 1);
 
-        const std::optional<Fingerprint> fp = ParseFingerprint(line.substr(0, s1));
+        const std::optional<Fingerprint> fp = ParseFingerprint(base.substr(0, s1));
         if (!fp) continue;
         int64_t firstSeen = 0;
         int64_t lastSeen = 0;
-        if (!ParseUnixTime(std::string_view(line).substr(s1 + 1, s2 - s1 - 1), firstSeen))
+        if (!ParseUnixTime(base.substr(s1 + 1, s2 - s1 - 1), firstSeen))
             continue;
-        const size_t stampEnd = s3 == std::string::npos ? line.size() : s3;
-        if (!ParseUnixTime(std::string_view(line).substr(s2 + 1, stampEnd - s2 - 1), lastSeen))
+        const size_t stampEnd = s3 == std::string::npos ? base.size() : s3;
+        if (!ParseUnixTime(base.substr(s2 + 1, stampEnd - s2 - 1), lastSeen))
             continue;
         if (s3 == std::string::npos) continue;
 
-        const size_t s4 = line.find(' ', s3 + 1);
-        const size_t endpointEnd = s4 == std::string::npos ? line.size() : s4;
-        const std::string endpoint = line.substr(s3 + 1, endpointEnd - s3 - 1);
+        const size_t s4 = base.find(' ', s3 + 1);
+        const size_t endpointEnd = s4 == std::string::npos ? base.size() : s4;
+        const std::string endpoint(base.substr(s3 + 1, endpointEnd - s3 - 1));
         if (endpoint.empty()) continue;
         const std::string label =
-            s4 == std::string::npos ? std::string() : SanitizeLabel(line.substr(s4 + 1));
+            s4 == std::string::npos ? std::string() : SanitizeLabel(base.substr(s4 + 1));
 
-        store.Insert(TrustedHost{endpoint, label, *fp, firstSeen, lastSeen});
+        store.Insert(TrustedHost{endpoint, label, *fp, firstSeen, lastSeen,
+            std::string(identityName)});
+    }
+    return store;
+}
+
+std::optional<TrustStore> ParseTrustStoreStrict(std::string_view text) {
+    if (text.size() > 131072) return std::nullopt;
+    TrustStore store;
+    size_t pos = 0;
+    while (pos < text.size()) {
+        size_t end = text.find('\n', pos);
+        if (end == std::string_view::npos) end = text.size();
+        const std::string line = Trim(text.substr(pos, end - pos));
+        pos = end + 1;
+        if (line.empty() || line[0] == '#') continue;
+        if (line.size() > 512 || store.Size() >= kMaxTrustedHosts) return std::nullopt;
+        for (char c : line)
+            if (uint8_t(c) < 32 && c != '\t') return std::nullopt;
+        const TrustStore parsed = ParseTrustStore(line);
+        if (parsed.Size() != 1) return std::nullopt;
+        const TrustedHost& host = parsed.Hosts().front();
+        if (store.Find(host.endpoint)) return std::nullopt;
+        store.Insert(host);
     }
     return store;
 }
@@ -192,6 +247,10 @@ std::string SerializeTrustStore(const TrustStore& store) {
         if (!h.label.empty()) {
             out += ' ';
             out += h.label;
+        }
+        if (!h.identityName.empty()) {
+            out += '\t';
+            out += h.identityName;
         }
         out += '\n';
     }

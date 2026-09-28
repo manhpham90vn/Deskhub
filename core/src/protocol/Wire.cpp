@@ -84,7 +84,7 @@ size_t BuildAuthStart(std::span<uint8_t> out, const AuthStart& m) {
 }
 
 size_t BuildAuthChallenge(std::span<uint8_t> out, const AuthChallenge& m) {
-    if (uint8_t(m.mode) > uint8_t(AuthMode::Signature)) return 0;
+    if (uint8_t(m.mode) > uint8_t(AuthMode::ConfigError)) return 0;
     const size_t payload = 2;
     const size_t total = WriteCommon(out, MsgType::AuthChallenge, 0, Chan::Control, 0, payload);
     if (!total) return 0;
@@ -108,7 +108,7 @@ size_t BuildAuthResponse(std::span<uint8_t> out, const AuthResponse& m) {
 }
 
 size_t BuildAuthResult(std::span<uint8_t> out, const AuthResult& m) {
-    if (uint8_t(m.code) > uint8_t(AuthResultCode::VersionMismatch)) return 0;
+    if (uint8_t(m.code) > uint8_t(AuthResultCode::ConfigError)) return 0;
     const size_t payload = 2;
     const size_t total = WriteCommon(out, MsgType::AuthResult, 0, Chan::Control, 0, payload);
     if (!total) return 0;
@@ -370,7 +370,7 @@ std::optional<AuthStart> ParseAuthStart(std::span<const uint8_t> payload) {
 
 std::optional<AuthChallenge> ParseAuthChallenge(std::span<const uint8_t> payload) {
     if (payload.size() != 2 || payload[0] != kAuthVersion ||
-        payload[1] > uint8_t(AuthMode::Signature))
+        payload[1] > uint8_t(AuthMode::ConfigError))
         return std::nullopt;
     AuthChallenge m;
     m.mode = AuthMode(payload[1]);
@@ -391,7 +391,7 @@ std::optional<AuthResponse> ParseAuthResponse(std::span<const uint8_t> payload) 
 std::optional<AuthResult> ParseAuthResult(std::span<const uint8_t> payload) {
     if (payload.size() != 2 || payload[0] != kAuthVersion) return std::nullopt;
     const uint8_t* p = payload.data();
-    if (p[1] > uint8_t(AuthResultCode::VersionMismatch)) return std::nullopt;
+    if (p[1] > uint8_t(AuthResultCode::ConfigError)) return std::nullopt;
     AuthResult m;
     m.code = AuthResultCode(p[1]);
     return m;

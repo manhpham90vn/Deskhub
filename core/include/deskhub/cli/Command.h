@@ -29,6 +29,8 @@ enum class DevicesAction { List,
     Add,
     Public,
     Import,
+    Generate,
+    Identities,
     Forget,
     ForgetAll };
 
@@ -107,12 +109,14 @@ struct Command {
     bool portGiven = false;
 
     std::optional<std::string> deviceName{};
+    std::optional<std::string> identityName{};
 
     DevicesAction devices = DevicesAction::List;
     TrustAction trust = TrustAction::List;
     SettingsAction settings = SettingsAction::List;
     std::string target{};
     bool keyPassphraseStdin = false;
+    std::string keyName{};
     bool forget = false;
     std::string key{};
     std::string value{};

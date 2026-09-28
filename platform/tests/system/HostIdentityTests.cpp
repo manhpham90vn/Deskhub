@@ -6,6 +6,7 @@
 #include "deskhubp/system/TrustStoreFile.h"
 
 #include <cstdio>
+#include <filesystem>
 #include <string>
 
 namespace {
@@ -87,8 +88,8 @@ const char* const kEd25519Cert =
     "1lRxNSVAoWFAaTuUzL0Uy1QG8v04BqXvXPBLPFXfmKuGE7wJ\n"
     "-----END CERTIFICATE-----\n";
 
-void TestUnusableStoredKeyIsReplaced() {
-    std::printf("[identity] a stored key this build cannot sign with is thrown away...\n");
+void TestUnusableStoredIdentityDoesNotRotate() {
+    std::printf("[identity] an unusable stored host key never rotates silently...\n");
     if (!deskhubp::QuicAvailable()) return;
     const SavedIdentity guard;
 
@@ -97,12 +98,38 @@ void TestUnusableStoredKeyIsReplaced() {
     Check(!deskhubp::LoadHostIdentity().Valid(),
         "but it is refused rather than presented to a peer that cannot use it");
 
-    const deskhubp::HostIdentity fresh = deskhubp::LoadOrCreateHostIdentity("deskhub-test");
-    Check(fresh.Valid(), "asking for an identity replaces it with one that works");
-    Check(fresh.certPem.find("BEGIN CERTIFICATE") != std::string::npos,
-        "and writes the replacement to disk");
-    Check(deskhubp::LoadHostIdentity().fingerprint == fresh.fingerprint,
-        "which is what the next launch reads back");
+    Check(!deskhubp::LoadOrCreateHostIdentity("deskhub-test").Valid(),
+        "asking for an identity refuses the unusable stored pair");
+    Check(deskhubp::ReadAppDataFile(deskhubp::kHostCertFileName) == kEd25519Cert,
+        "the existing certificate is left for explicit recovery");
+
+    ForgetHostIdentity();
+    const deskhubp::HostIdentity first = deskhubp::LoadOrCreateHostIdentity("first");
+    Check(first.Valid(), "a fresh host identity can be generated");
+    ForgetHostIdentity();
+    const deskhubp::HostIdentity second = deskhubp::LoadOrCreateHostIdentity("second");
+    Check(second.Valid(), "a second independent host identity can be generated");
+
+    Check(deskhubp::WriteAppDataFile(deskhubp::kHostCertFileName, first.certPem),
+        "the test can place a mismatched certificate on disk");
+    Check(!deskhubp::LoadHostIdentity().Valid(),
+        "a certificate and private key from different identities are invalid");
+    Check(!deskhubp::LoadOrCreateHostIdentity("deskhub-test").Valid(),
+        "a mismatched pair is not silently rotated");
+
+    deskhubp::RemoveAppDataFile(deskhubp::kHostKeyFileName);
+    Check(!deskhubp::LoadOrCreateHostIdentity("deskhub-test").Valid(),
+        "a missing private key beside an existing certificate is not silently rotated");
+
+#ifndef _WIN32
+    deskhubp::RemoveAppDataFile(deskhubp::kHostCertFileName);
+    const auto keyPath = deskhubp::AppDataFilePath(deskhubp::kHostKeyFileName);
+    std::error_code error;
+    std::filesystem::create_symlink(keyPath.string() + ".missing", keyPath, error);
+    Check(!error, "the test can place a dangling key symlink on disk");
+    Check(!deskhubp::LoadOrCreateHostIdentity("deskhub-test").Valid(),
+        "a dangling private key symlink is treated as an existing identity");
+#endif
 }
 
 void TestTrustStoreOnDisk() {
@@ -119,6 +146,16 @@ void TestTrustStoreOnDisk() {
         "trusting it writes the file");
     Check(deskhubp::CheckTrustedHost("10.1.2.3:47777", fp) == deskhub::TrustVerdict::Trusted,
         "and a later launch reads it back");
+    const std::string valid = deskhubp::ReadAppDataFile(deskhubp::kTrustStoreFileName);
+    Check(deskhubp::WriteAppDataFile(deskhubp::kTrustStoreFileName,
+              valid + "damaged row\n"),
+        "the isolated trust file can be corrupted for a regression check");
+    Check(deskhubp::CheckTrustedHost("10.1.2.3:47777", fp) == deskhub::TrustVerdict::Unknown,
+        "a damaged trust file does not trust even a valid stored pin");
+    Check(!deskhubp::RememberTrustedHost("10.1.2.3:47777", "Desk", fp, 2000),
+        "a normal update cannot overwrite a damaged trust file");
+    Check(deskhubp::WriteAppDataFile(deskhubp::kTrustStoreFileName, valid),
+        "the valid trust file is restored");
 
     deskhub::Fingerprint other = fp;
     other.bytes[0] ^= 0xFF;
@@ -137,6 +174,6 @@ void TestTrustStoreOnDisk() {
 
 void RunHostIdentityTests() {
     TestIdentityIsCreatedOnceAndKept();
-    TestUnusableStoredKeyIsReplaced();
+    TestUnusableStoredIdentityDoesNotRotate();
     TestTrustStoreOnDisk();
 }

@@ -113,9 +113,9 @@ void TestAuthorizedKeyMustSignForThisHost() {
     const auto wrongChallenge = wrongHost.Begin(fooled.Begin());
     const auto wrongResponse = wrongChallenge ? fooled.Answer(*wrongChallenge) : std::nullopt;
     Check(wrongResponse &&
-              wrongHost.Respond(*wrongResponse, 1000).code !=
-                  deskhub::AuthResultCode::Accepted,
-        "a signature for another host key is rejected");
+              wrongHost.Respond(*wrongResponse, 1000).code ==
+                  deskhub::AuthResultCode::BadSignature,
+        "a signature for another host key has a distinct error code");
 }
 
 void TestRevocationDuringHandshakeIsEnforced() {

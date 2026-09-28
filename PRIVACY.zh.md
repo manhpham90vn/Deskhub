@@ -2,7 +2,7 @@
 
 # Deskhub 隐私政策
 
-_生效日期：2026 年 9 月 28 日 —— 版本 2.6_
+_生效日期：2026 年 9 月 28 日 —— 版本 2.8_
 
 > 本文件译自 [`PRIVACY.md`](PRIVACY.md)。如有出入，以英文版为准。
 
@@ -38,9 +38,10 @@ analytics、crash reporting、广告，也未嵌入第三方 SDK。
 | 被共享电脑正在播放的声音（仅当该电脑共享声音且 viewer 提出请求时） | 使观看者能够听到该电脑的声音 | 在你的两台设备之间直接发送，传输中 encrypt（QUIC/TLS），以压缩音频形式传输 | 不存储；仅在 session 期间存在于内存中 |
 | Mouse、keyboard 与触摸 input | 从你的另一台设备操作被共享的电脑 | 由观看设备直接发送至被共享的电脑，传输中 encrypt（QUIC/TLS） | 不存储；inject 之后即丢弃 |
 | host 的 TLS 密钥对，即首次运行时创建的私钥与自签 certificate | 向连接的 client 证明 host 身份；对用户呈现为 fingerprint（`SHA256:…`） | 写入 app 自身文件夹中的 `host_key.pem` 与 `host_cert.pem`；仅公开 certificate 会出示给连接的 client | 保留至你删除这些文件为止；删除后 host 将获得新的身份，此前认识旧身份的 client 会发出警告 |
-| 本设备的 client 签名 key | 向已授权其 public key 的 host 证明访问权限 | 写入 app 自身文件夹中的 `client_key.pem`；private key 留在本地，认证时仅发送签名与 public key | 保留至你替换或删除该 key；新的 public key 需要 host 重新授权 |
-| 本设备 trust 过的 host 的 key（fingerprint、地址、标签、首次与最后一次出现时间） | 识别已知的 host，并在其 key 发生变化时明确告警 | 写入同一文件夹中的 `known_hosts`；不会被传输 | 保留至你删除该文件为止 |
-| 与本 host pair 过的机器：其 key fingerprint、所发送的名称、pair 时间与最后一次出现时间 | 使已 pair 的机器无需 passcode 即可重新连接，并在 Devices 页列出以便你移除 | 写入同一文件夹中的 `paired_devices`；不会被传输 | 保留至你在 Devices 页移除该机器或删除该文件为止 |
+| 本设备的 client 签名 key | 向已授权所选 public key 的 host 证明访问权限 | 默认 private key 位于 `client_key.pem`；额外的命名 key 存放在 app 自身文件夹的 `client_key.NAME.pem`。private key 留在本地，认证时仅发送所选 public key 和签名 | 保留至你删除该 key；每个 host 都须授权连接时选用的 public key |
+| 已保存的 host 配置（固定的 TLS key fingerprint、地址、别名、所选 client identity、首次与最后一次出现时间） | 识别已知 host 并选择连接所用 client key | 写入同一文件夹中的 `known_hosts`；不会被传输 | 保留至你移除 host 或删除文件 |
+| 获准访问本 host 的 public key，以及可选标签 | 只允许能证明持有对应 private key 的 client 进入 | 写入同一文件夹中的 `authorized_keys`；`authorized_keys_active` 记录新策略已启用。这些文件不会被传输 | 保留至撤销 key 或删除文件；启用后仅删除 `authorized_keys` 不会恢复旧权限 |
+| 旧版已 pair 机器（key fingerprint、名称、pair 与最后出现时间） | 为尚未启用 `authorized_keys` 的安装保留访问权 | 旧安装可能仍在同一文件夹中保留 `paired_devices`；文件不会被传输，启用 `authorized_keys` 后不再授予访问权 | 保留至你删除旧文件 |
 | 已停用的 passcode verifier 所用的旧随机 salt | 不再用于认证 | 旧安装可能仍在同一文件夹中保留 `auth_salt`；该文件不再传输 | 保留至你删除该文件为止 |
 | 你输入的地址（IP 或 hostname） | 连接到另一台机器 | 仅保留在你输入它的设备上 | 本地保留至你修改为止 |
 | 最近 10 个连接地址及各自的时间 | 填充 *Recent devices* 列表 | 写入你设备上 app 自身文件夹中的 `recent-devices.txt`：Windows 为 `%USERPROFILE%\.deskhub`，macOS 与 Linux 为 `~/.deskhub`，iOS 与 Android 为 app 沙箱。读取并成功重写旧文件时会删除其中的 passcode | 保留至你连接了 10 个更新的地址，或删除该文件为止 |
@@ -185,6 +186,8 @@ https://github.com/manhpham90vn/Deskhub/blob/main/PRIVACY.md
 
 | 版本 | 日期 | 变更内容 |
 |---|---|---|
+| 2.8 | 2026-09-28 | Host 可将获准访问的 public key 保存到 `authorized_keys`，并在本地保留启用标记。已保存的 host 配置增加别名和选用的 client identity。旧版仅含 fingerprint 的列表只在新列表启用前使用。 |
+| 2.7 | 2026-09-28 | CLI 可创建和导入额外的命名 client 签名 key，并为连接选择其中一个。每个命名 private key 单独保存在本地文件中；列出 identity 时只提供 public key 信息。 |
 | 2.6 | 2026-09-28 | client 接入现在需要已授权的签名 key 和已固定的 host key。Recent devices 与 UI settings 不再保存 passcode；读取旧文件并安全重写时会删除旧字段。若重写失败，保留旧文件供下次重试。 |
 | 2.5 | 2026-09-07 | 本次为更正而非行为变更，Deskhub 的行为与此前一致。本政策的早期版本称，到达 Android 手机或平板的文件会通过系统媒体库存入 `Pictures/Deskhub`、`Movies/Deskhub` 或 `Download/Deskhub`。该说明适用于 Android 10 及以上版本。Deskhub 所使用的媒体库路径需要 Android 10，因此在 Android 9 及更早版本上，到达的文件保留在设备上 app 自身的文件夹中，不会出现在相册或 Downloads 中。两种情况下，文件都只到达相关的两台设备。 |
 | 2.4 | 2026-08-28 | **手机与平板现在既可接收文件也可发送文件**，其文件存放位置为新增内容。在 iOS 上，照片与视频会加入你的相册，系统会在首次时申请仅添加模式的 Photos permission；Deskhub 只能添加条目，不会读取或修改已有内容。其他文件放入 app 的 Documents 文件夹，可由 Files app 访问。在 Android 上，照片存入 `Pictures/Deskhub`，视频存入 `Movies/Deskhub`，其余文件存入 `Download/Deskhub`，均通过系统媒体库完成。两个平台都会以通知说明到达的内容。上述数据均不会到达我们。本版本还更正了此前政策中两处不准确的表述：Android 一直需要系统标记为 *Microphone* 的 permission（`RECORD_AUDIO`）来 capture 设备自身播放的内容，即版本 2.1 所述的声音共享，而 Deskhub 并不录制 microphone；此外，桌面 app 从未失去版本 2.3 中所述的 *File transfer* 选项，失去的只是其背后被保存的设置。 |

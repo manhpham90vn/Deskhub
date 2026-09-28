@@ -112,12 +112,18 @@ struct DevicesPage: View {
             deskhubHint(DeskhubClient.string(DHStrPairedForgetNote))
 
             deskhubSection(DeskhubClient.string(DHStrThisMachineHeading))
+            Text("Client authentication public key")
             Text(DeskhubClient.buffered(1024) { dh_own_public_key($0, $1) })
                 .font(.system(size: 12, design: .monospaced))
                 .textSelection(.enabled)
+            Text("Client authentication fingerprint (SHA-256 of SPKI)")
             Text(DeskhubClient.buffered(128) { dh_own_fingerprint($0, $1) })
                 .font(.system(size: 13, design: .monospaced))
                 .foregroundStyle(DeskhubPalette.heading)
+                .textSelection(.enabled)
+            Text("TLS host fingerprint (SHA-256 of SPKI)")
+            Text(DeskhubClient.buffered(128) { dh_host_fingerprint($0, $1) })
+                .font(.system(size: 13, design: .monospaced))
                 .textSelection(.enabled)
             deskhubHint(DeskhubClient.string(DHStrThisMachineHint))
         }

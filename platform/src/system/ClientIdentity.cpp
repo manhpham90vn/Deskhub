@@ -13,18 +13,24 @@
 #include <algorithm>
 #include <filesystem>
 #include <memory>
+#include <optional>
+#include <mutex>
 
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #include <windows.h>
+#include <dpapi.h>
 #else
+#include <cerrno>
 #include <fcntl.h>
+#include <sys/stat.h>
 #include <unistd.h>
 #endif
 
 #include "deskhubp/system/AppDataFile.h"
 #include "deskhubp/system/AuthProof.h"
+#include "deskhubp/system/ConfigFileLock.h"
 
 namespace deskhubp {
 
@@ -51,6 +57,69 @@ struct PkeyCtxDeleter {
 using BioPtr = std::unique_ptr<BIO, BioDeleter>;
 using PkeyPtr = std::unique_ptr<EVP_PKEY, PkeyDeleter>;
 using PkeyCtxPtr = std::unique_ptr<EVP_PKEY_CTX, PkeyCtxDeleter>;
+
+std::mutex& IdentityMutex() {
+    static std::mutex mutex;
+    return mutex;
+}
+
+#ifdef _WIN32
+std::string ProtectPrivateKey(std::string_view pem) {
+    DATA_BLOB input{DWORD(pem.size()),
+        reinterpret_cast<BYTE*>(const_cast<char*>(pem.data()))};
+    DATA_BLOB output{};
+    if (!CryptProtectData(&input, L"Deskhub client identity", nullptr, nullptr,
+            nullptr, CRYPTPROTECT_UI_FORBIDDEN, &output)) return {};
+    std::string encrypted("DHK1", 4);
+    encrypted.append(reinterpret_cast<const char*>(output.pbData), output.cbData);
+    LocalFree(output.pbData);
+    return encrypted;
+}
+
+std::string UnprotectPrivateKey(std::string_view encrypted) {
+    if (!encrypted.starts_with("DHK1") || encrypted.size() <= 4) return {};
+    DATA_BLOB input{DWORD(encrypted.size() - 4),
+        reinterpret_cast<BYTE*>(const_cast<char*>(encrypted.data() + 4))};
+    DATA_BLOB output{};
+    if (!CryptUnprotectData(&input, nullptr, nullptr, nullptr, nullptr,
+            CRYPTPROTECT_UI_FORBIDDEN, &output)) return {};
+    std::string pem(reinterpret_cast<const char*>(output.pbData), output.cbData);
+    SecureZeroMemory(output.pbData, output.cbData);
+    LocalFree(output.pbData);
+    return pem;
+}
+#endif
+
+std::string ReadPrivateKey(std::string_view fileName) {
+    const auto path = AppDataFilePath(std::string(fileName));
+    if (path.empty()) return {};
+#ifdef _WIN32
+    const std::string data = ReadAppDataFile(std::string(fileName));
+    if (data.size() > 65536) return {};
+    if (data.starts_with("DHK1")) return UnprotectPrivateKey(data);
+    return data.starts_with("-----BEGIN ") ? data : std::string();
+#else
+    const int fd = ::open(path.c_str(), O_RDONLY | O_CLOEXEC | O_NOFOLLOW);
+    if (fd < 0) return {};
+    struct stat info{};
+    if (::fstat(fd, &info) != 0 || !S_ISREG(info.st_mode) ||
+        info.st_uid != geteuid() || (info.st_mode & 077) != 0 ||
+        info.st_size <= 0 || info.st_size > 65536) {
+        ::close(fd);
+        return {};
+    }
+    std::string data(size_t(info.st_size), '\0');
+    size_t position = 0;
+    while (position < data.size()) {
+        const ssize_t count = ::read(fd, data.data() + position, data.size() - position);
+        if (count < 0 && errno == EINTR) continue;
+        if (count <= 0) break;
+        position += size_t(count);
+    }
+    ::close(fd);
+    return position == data.size() ? data : std::string();
+#endif
+}
 
 int ReadPassphrase(char* output, int capacity, int, void* user) {
     const auto* secret = static_cast<const std::string*>(user);
@@ -123,6 +192,9 @@ std::filesystem::path TemporaryPath(const std::filesystem::path& target) {
 
 bool WriteTemporary(const std::filesystem::path& path, std::string_view data) {
 #ifdef _WIN32
+    const std::string protectedData = ProtectPrivateKey(data);
+    if (protectedData.empty()) return false;
+    data = protectedData;
     const HANDLE file = CreateFileW(path.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_NEW,
         FILE_ATTRIBUTE_NORMAL, nullptr);
     if (file == INVALID_HANDLE_VALUE) return false;
@@ -147,6 +219,7 @@ bool WriteTemporary(const std::filesystem::path& path, std::string_view data) {
     size_t position = 0;
     while (position < data.size()) {
         const ssize_t count = ::write(fd, data.data() + position, data.size() - position);
+        if (count < 0 && errno == EINTR) continue;
         if (count <= 0) {
             okay = false;
             break;
@@ -159,8 +232,23 @@ bool WriteTemporary(const std::filesystem::path& path, std::string_view data) {
 #endif
 }
 
-bool SavePrivateKey(std::string_view pem, bool replace) {
-    const auto path = AppDataFilePath(kClientKeyFileName);
+std::optional<std::string> KeyFileName(std::string_view name) {
+    if (name == "default") return std::string(kClientKeyFileName);
+    if (name.empty() || name.size() > 64) return std::nullopt;
+    for (size_t i = 0; i < name.size(); ++i) {
+        const char c = name[i];
+        const bool letter = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
+        const bool digit = c >= '0' && c <= '9';
+        if (!letter && !digit && (i == 0 || (c != '-' && c != '_'))) return std::nullopt;
+    }
+    return "client_key." + std::string(name) + ".pem";
+}
+
+bool SavePrivateKey(std::string_view fileName, std::string_view pem, bool replace) {
+    const std::lock_guard<std::mutex> lock(IdentityMutex());
+    const ConfigFileLock fileLock(fileName);
+    if (!fileLock.Valid()) return false;
+    const auto path = AppDataFilePath(std::string(fileName));
     if (path.empty()) return false;
     const auto temporary = TemporaryPath(path);
     if (temporary.empty() || !WriteTemporary(temporary, pem)) {
@@ -193,7 +281,19 @@ ClientIdentity::ClientIdentity(const HostIdentity& legacy) {
 }
 
 ClientIdentity LoadClientIdentity() {
-    return IdentityFromPem(ReadAppDataFile(kClientKeyFileName));
+    return LoadClientIdentity("default");
+}
+
+ClientIdentity LoadClientIdentity(std::string_view name) {
+    const auto fileName = KeyFileName(name);
+    if (!fileName) return {};
+    const std::string pem = ReadPrivateKey(*fileName);
+    const ClientIdentity identity = IdentityFromPem(pem);
+#ifdef _WIN32
+    if (identity.Valid() && ReadAppDataFile(*fileName).starts_with("-----BEGIN ") &&
+        !SavePrivateKey(*fileName, pem, true)) return {};
+#endif
+    return identity;
 }
 
 ClientIdentity LoadOrCreateClientIdentity() {
@@ -202,6 +302,13 @@ ClientIdentity LoadOrCreateClientIdentity() {
     std::error_code ec;
     if (std::filesystem::exists(path, ec) || ec) return LoadClientIdentity();
 
+    const ClientIdentity generated = GenerateClientIdentity("default");
+    return generated.Valid() ? generated : LoadClientIdentity();
+}
+
+ClientIdentity GenerateClientIdentity(std::string_view name) {
+    const auto fileName = KeyFileName(name);
+    if (!fileName) return {};
     PkeyCtxPtr ctx(EVP_PKEY_CTX_new_id(EVP_PKEY_ED25519, nullptr));
     if (!ctx || EVP_PKEY_keygen_init(ctx.get()) != 1) return {};
     EVP_PKEY* raw = nullptr;
@@ -209,11 +316,18 @@ ClientIdentity LoadOrCreateClientIdentity() {
     PkeyPtr key(raw);
     const std::string pem = SerializePrivateKey(key.get());
     if (pem.empty()) return {};
-    if (!SavePrivateKey(pem, false)) return LoadClientIdentity();
+    if (!SavePrivateKey(*fileName, pem, false)) return {};
     return IdentityFromKey(key.get(), pem);
 }
 
 bool ImportClientIdentity(std::string_view privateKeyPem, std::string_view passphrase) {
+    return ImportClientIdentity("default", privateKeyPem, passphrase);
+}
+
+bool ImportClientIdentity(std::string_view name, std::string_view privateKeyPem,
+    std::string_view passphrase) {
+    const auto fileName = KeyFileName(name);
+    if (!fileName) return false;
     PkeyPtr key = ParsePrivateKey(privateKeyPem, passphrase);
     if (!key) return false;
     const std::string pem = SerializePrivateKey(key.get());
@@ -224,7 +338,42 @@ bool ImportClientIdentity(std::string_view privateKeyPem, std::string_view passp
         'k', 'e', 'y', ' ', 'i', 'm', 'p', 'o', 'r', 't', ' ', 's', 'e', 'l', 'f', '-', 't'};
     const auto signature = SignWithClientIdentity(identity, probe);
     if (signature.empty() || !VerifySignature(identity.publicKey, probe, signature)) return false;
-    return SavePrivateKey(pem, true);
+    return SavePrivateKey(*fileName, pem, name == "default");
+}
+
+std::vector<ClientIdentityInfo> ListClientIdentities() {
+    std::vector<ClientIdentityInfo> out;
+    const auto defaultPath = AppDataFilePath(kClientKeyFileName);
+    if (defaultPath.empty()) return out;
+    std::error_code error;
+    if (std::filesystem::exists(defaultPath, error)) {
+        const ClientIdentity identity = LoadClientIdentity();
+        out.push_back(ClientIdentityInfo{"default", ClientPublicKeyText(identity),
+            identity.fingerprint, identity.Valid()});
+    }
+    if (error) return out;
+
+    constexpr std::string_view prefix = "client_key.";
+    constexpr std::string_view suffix = ".pem";
+    std::filesystem::directory_iterator it(defaultPath.parent_path(), error);
+    const std::filesystem::directory_iterator end;
+    while (!error && it != end) {
+        const std::string file = it->path().filename().string();
+        if (file.size() > prefix.size() + suffix.size() && file.starts_with(prefix) &&
+            file.ends_with(suffix)) {
+            const std::string name = file.substr(prefix.size(), file.size() - prefix.size() - suffix.size());
+            if (KeyFileName(name) && name != "default") {
+                const ClientIdentity identity = LoadClientIdentity(name);
+                out.push_back(ClientIdentityInfo{name, ClientPublicKeyText(identity),
+                    identity.fingerprint, identity.Valid()});
+            }
+        }
+        it.increment(error);
+    }
+    std::sort(out.begin(), out.end(), [](const ClientIdentityInfo& a, const ClientIdentityInfo& b) {
+        return a.name < b.name;
+    });
+    return out;
 }
 
 std::string ClientPublicKeyText(const ClientIdentity& identity) {

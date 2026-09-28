@@ -36,6 +36,7 @@ struct TrustedHost {
     Fingerprint fingerprint{};
     int64_t firstSeenUnix = 0;
     int64_t lastSeenUnix = 0;
+    std::string identityName{};
 
     bool operator==(const TrustedHost&) const = default;
 };
@@ -49,6 +50,8 @@ public:
     void Remember(std::string_view endpoint, std::string_view label, const Fingerprint& fp,
         int64_t nowUnix);
     void Insert(const TrustedHost& host);
+    bool SetProfile(std::string_view endpoint, std::string_view label,
+        std::string_view identityName);
     bool Forget(std::string_view endpoint);
     void Clear();
 
@@ -65,6 +68,7 @@ private:
 };
 
 TrustStore ParseTrustStore(std::string_view text);
+std::optional<TrustStore> ParseTrustStoreStrict(std::string_view text);
 std::string SerializeTrustStore(const TrustStore& store);
 
 }

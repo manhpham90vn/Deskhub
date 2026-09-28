@@ -37,6 +37,7 @@ public:
 
     HostAuthState State() const;
     const deskhub::Fingerprint& PeerFingerprint() const;
+    const std::vector<uint8_t>& PeerPublicKey() const;
     const std::string& PeerName() const;
 
 private:

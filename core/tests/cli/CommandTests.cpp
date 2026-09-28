@@ -77,6 +77,9 @@ void TestAddressParsing() {
     Check(Ok(bare, cli::Verb::Sources), "sources parses");
     Check(bare.port == kDeskhubPort, "the default port fills in");
     Check(bare.address == "192.168.1.10:" + std::to_string(kDeskhubPort), "the address carries the port");
+    Check(Parse({"sources", "192.168.1.10", "--identity", "phone"})
+                  .identityName.value_or("") == "phone",
+        "source queries can choose a client signing key");
 
     const cli::Command explicitPort = Parse({"sources", "192.168.1.10:50000"});
     Check(explicitPort.port == 50000, "a port in the address wins");
@@ -123,6 +126,13 @@ void TestDevicesAndTrust() {
     Check(Parse({"devices", "--json"}).json, "devices takes global flags with no action");
     Check(Parse({"devices", "public"}).devices == cli::DevicesAction::Public,
         "devices public requests this machine's shareable key");
+    Check(Parse({"devices", "public", "laptop"}).keyName == "laptop",
+        "devices public can select a named client identity");
+    Check(Parse({"devices", "identities"}).devices == cli::DevicesAction::Identities,
+        "client identities can be listed separately from authorized peers");
+    const cli::Command generated = Parse({"devices", "generate", "laptop"});
+    Check(generated.devices == cli::DevicesAction::Generate && generated.keyName == "laptop",
+        "a named client identity can be generated");
     const cli::Command add = Parse({"devices", "add", "-"});
     Check(add.devices == cli::DevicesAction::Add && add.target == "-",
         "devices add reads public key text from stdin");
@@ -131,6 +141,12 @@ void TestDevicesAndTrust() {
     Check(Parse({"devices", "import", "client.pem", "--passphrase-stdin"})
               .keyPassphraseStdin,
         "an encrypted private key can read its passphrase from stdin");
+    const cli::Command namedImport = Parse(
+        {"devices", "import", "client.pem", "--name", "phone", "--passphrase-stdin"});
+    Check(namedImport.keyName == "phone" && namedImport.keyPassphraseStdin,
+        "an imported key can have a name and read its passphrase from stdin");
+    Check(!Parse({"devices", "import", "client.pem", "--name"}).error.empty(),
+        "an import name cannot be missing");
 
     const cli::Command forget = Parse({"devices", "forget", "SHA256:abc"});
     Check(forget.devices == cli::DevicesAction::Forget, "devices forget");
@@ -145,6 +161,11 @@ void TestDevicesAndTrust() {
     Check(trustAdd.trust == cli::TrustAction::Add && trustAdd.target == "1.2.3.4:47777" &&
               trustAdd.value == "SHA256:abc",
         "trust add takes the address and host fingerprint");
+    const cli::Command profile = Parse({"trust", "add", "1.2.3.4:47777", "SHA256:abc",
+        "--name", "Office", "--identity", "phone"});
+    Check(profile.error.empty() && profile.deviceName == "Office" &&
+              profile.identityName == "phone",
+        "trust add can save a separate alias and selected client key");
     Check(Parse({"trust", "forget", "1.2.3.4"}).trust == cli::TrustAction::Forget, "trust forget");
     Check(Parse({"trust", "forget", "all"}).trust == cli::TrustAction::ForgetAll, "trust forget all");
 
@@ -233,6 +254,9 @@ void TestShell() {
     Check(Ok(command, cli::Verb::Shell), "shell parses");
     Check(command.address == "10.0.0.5:" + std::to_string(kDeskhubPort), "the address");
     Check(command.deviceName.value_or("") == "laptop", "the name");
+    Check(Parse({"shell", "10.0.0.5", "--identity", "phone"})
+                  .identityName.value_or("") == "phone",
+        "shell can choose a client signing key");
     Check(!Parse({"shell"}).error.empty(), "shell needs an address");
     Check(!Parse({"shell", "1.2.3.4", "--fps", "30"}).error.empty(), "a shell has no frame rate");
     const cli::Command resumed = Parse({"shell", "10.0.0.5", "--resume", "3"});
@@ -261,6 +285,9 @@ void TestConnect() {
     Check(!picked.connect.control, "--view-only");
     Check(picked.connect.audio.has_value() && !*picked.connect.audio, "--no-audio");
     Check(picked.deviceName.value_or("") == "couch", "--name");
+    Check(Parse({"connect", "1.2.3.4", "--identity", "laptop-a"})
+                  .identityName.value_or("") == "laptop-a",
+        "connect can choose a client signing key");
     Check(Parse({"connect", "1.2.3.4", "--audio"}).connect.audio.value_or(false), "--audio");
 
     Check(!Parse({"connect"}).error.empty(), "connect needs an address");
@@ -334,6 +361,9 @@ void TestSend() {
         "the address is the first word, with the default port filled in");
     Check(one.send.files.size() == 1 && one.send.files[0] == "report.pdf",
         "and the rest are files");
+    Check(Parse({"send", "10.0.0.4", "report.pdf", "--identity", "phone"})
+                  .identityName.value_or("") == "phone",
+        "send can choose a client signing key");
 
     const cli::Command many = Parse({"send", "host:47800", "a.txt", "b/c.txt", "../d.bin"});
     Check(Ok(many, cli::Verb::Send), "several files parse");

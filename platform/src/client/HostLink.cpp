@@ -269,7 +269,13 @@ bool HostLink::SettleTrust() {
     }
 
     const std::string endpoint = config_.host.ToString();
-    const deskhub::TrustVerdict verdict = CheckTrustedHost(endpoint, *peer);
+    const auto trustedHosts = TryLoadTrustStore();
+    if (!trustedHosts) {
+        authCode_.store(deskhub::AuthResultCode::ConfigError, std::memory_order_release);
+        Fail(HostLinkState::Failed, deskhub::ui::AuthRefusalText(deskhub::AuthResultCode::ConfigError));
+        return false;
+    }
+    const deskhub::TrustVerdict verdict = trustedHosts->Check(endpoint, *peer);
     {
         const std::lock_guard<std::mutex> lock(mutex_);
         fingerprint_ = *peer;
@@ -277,10 +283,11 @@ bool HostLink::SettleTrust() {
     }
 
     if (verdict == deskhub::TrustVerdict::Trusted) return true;
-    Fail(HostLinkState::Failed,
-        verdict == deskhub::TrustVerdict::Changed
-            ? "Host key changed. Update the saved host key before connecting."
-            : "Host key is unknown. Add the host public key before connecting.");
+    const auto code = verdict == deskhub::TrustVerdict::Changed
+                          ? deskhub::AuthResultCode::HostKeyChanged
+                          : deskhub::AuthResultCode::UntrustedHost;
+    authCode_.store(code, std::memory_order_release);
+    Fail(HostLinkState::Failed, deskhub::ui::AuthRefusalText(code));
     return false;
 }
 
@@ -295,9 +302,18 @@ bool HostLink::RunAuth() {
     }
 
     ClientAuthConfig auth;
-    auth.identity = LoadOrCreateClientIdentity();
+    std::string identityName = config_.clientIdentityName;
+    if (identityName.empty()) {
+        const auto profile = LoadTrustStore().Find(config_.host.ToString());
+        if (profile) identityName = profile->identityName;
+    }
+    auth.identity = identityName.empty()
+                        ? LoadOrCreateClientIdentity()
+                        : LoadClientIdentity(identityName);
     if (!auth.identity.Valid()) {
-        Fail(HostLinkState::Failed, "Could not load the client authentication key");
+        authCode_.store(deskhub::AuthResultCode::LocalKeyUnavailable, std::memory_order_release);
+        Fail(HostLinkState::Failed,
+            deskhub::ui::AuthRefusalText(deskhub::AuthResultCode::LocalKeyUnavailable));
         return false;
     }
     auth.hostFingerprint = peer;

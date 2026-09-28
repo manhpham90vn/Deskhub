@@ -10,6 +10,7 @@
 #include "deskhubp/system/HostIdentity.h"
 #include "deskhubp/system/PairedDevicesFile.h"
 
+#include <array>
 #include <atomic>
 #include <cstdio>
 #include <functional>
@@ -336,6 +337,24 @@ void TestAClosedConnectionTakesItsAdmissionWithIt() {
         "and the host no longer vouches for who was on it");
 }
 
+void TestHostCannotSendBeforeAuthentication() {
+    std::printf("[admission] the host cannot send application data before authentication...\n");
+    if (Skipped("admission")) return;
+    const SavedState guard;
+    AdmissionRig rig;
+    const bool started = rig.Start(false);
+    Check(started, "the viewer establishes QUIC without authentication");
+    if (!started) return;
+
+    const NetAddr peer{0x7F000001u, rig.viewer.LocalPort()};
+    const std::array<uint8_t, 1> payload{0x42};
+    Check(!rig.host.SendRecord(peer, payload),
+        "the host refuses a reliable application record before authentication");
+    Check(!rig.host.SendTo(peer, payload.data(), payload.size()),
+        "the host refuses an application datagram before authentication");
+    Check(!rig.host.Authenticated(peer), "QUIC establishment alone grants no admission");
+}
+
 void TestASecondHandshakeOnOneConnectionIsRefused() {
     std::printf("[admission] one connection gets exactly one handshake...\n");
     if (Skipped("admission")) return;
@@ -447,13 +466,33 @@ void TestForgettingADeviceClosesItsLiveConnection() {
         "the connection is closed");
 }
 
+void TestExternalKeyRevocationClosesItsLiveConnection() {
+    std::printf("[admission] an external allowlist edit revokes a live connection...\n");
+    if (Skipped("admission")) return;
+    const SavedState guard;
+    AdmissionRig rig;
+    const bool started = rig.Start();
+    Check(started, "the viewer is admitted before the external edit");
+    if (!started) return;
+    const NetAddr peer = rig.Peer();
+    const uint64_t generation = deskhubp::PairedDevicesGeneration();
+    Check(deskhubp::WriteAppDataFileAtomic(deskhubp::kPairedDevicesFileName, ""),
+        "another process can replace the authorized key file");
+    Check(deskhubp::PairedDevicesGeneration() == generation,
+        "an external edit does not use the in-process generation counter");
+    Check(WaitUntil([&] { return !rig.host.Authenticated(peer); }, kSettleMillis),
+        "the host still notices the edit and withdraws admission");
+}
+
 }
 
 void RunTransportAdmissionTests() {
     TestRepeatedBadProofsAreLimited();
     TestPendingAuthHasACapAndDeadline();
     TestAClosedConnectionTakesItsAdmissionWithIt();
+    TestHostCannotSendBeforeAuthentication();
     TestASecondHandshakeOnOneConnectionIsRefused();
     TestAnOldAuthStartIsRefused();
     TestForgettingADeviceClosesItsLiveConnection();
+    TestExternalKeyRevocationClosesItsLiveConnection();
 }

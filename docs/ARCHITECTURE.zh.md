@@ -270,6 +270,29 @@ runner 上与 base commit 的 A/B 结果（偏移仅作为警告，不导致失�
 
 ## 9. 需要记录的设计决策
 
+- **主机发送应用数据需要先完成授权**：`SessionTransport` 在连接完成密钥认证前拒绝
+  发送记录和数据报。认证 challenge 和结果使用内部认证发送路径。信任存储在单个进程内
+  串行化读取、修改和写入，并通过原子替换文件来持久化更改。
+
+- **损坏的客户端许可列表不授予访问权**：读取 `paired_devices` 时，只要文件不可读、
+  过大、格式错误或包含重复密钥，整个配置就视为失败。主机会定期重新检查已接纳连接
+  的权限，因此其他进程替换文件后，即使进程内 generation 未变化也能撤销连接。
+
+- **主机密钥固定值属于单个地址和端口**：在一个 endpoint 受信任的 TLS 主机密钥，
+  不会自动授权另一个 endpoint 使用同一密钥；连接前必须显式固定新地址和端口。
+
+- **新的客户端许可列表保存完整 public key**：`authorized_keys` 只接受有限长度的
+  OpenSSH public key 行，并拒绝损坏或重复的密钥。首次保存后由该文件决定访问权。
+  启用标记防止删除文件后重新启用旧版仅含 fingerprint 的权限。`known_hosts` 在
+  TLS pin 旁保存各 endpoint 的别名和选用的 client identity。配置写入使用跨进程
+  文件锁与原子替换。
+  Service 可通过 `SetConfigDir` 或 `DESKHUB_CONFIG_DIR` 独立于日志目录选择配置目录。
+
+- **Fingerprint 基于 SPKI**：Deskhub 显示或保存的每个 `SHA256:…` 值都是公钥
+  DER SubjectPublicKeyInfo 编码的 SHA-256。OpenSSH public key 行包含 SSH blob；
+  常见的 SSH fingerprint 对该 blob 求 hash，不能直接与 Deskhub 的 SPKI fingerprint
+  比较。导入文本 key 时先转换成 SPKI，再计算 Deskhub fingerprint。
+
 - **签名覆盖无歧义的认证 transcript**：`core/auth/Transcript` 把 Deskhub 域标识、认证
   版本、签名角色、32 字节的 QUIC/TLS exporter 值、完整客户端公钥和 TLS 主机密钥指纹
   编码为带长度前缀的字段。对 quiche 0.29.3 的小型补丁通过 C API 提供 TLS exporter。
@@ -280,7 +303,7 @@ runner 上与 base commit 的 A/B 结果（偏移仅作为警告，不导致失�
   内存表最多保存 64 个组合；验证成功后清除其失败计数。
 
 - **认证在协议版本 3 内有独立版本**：`AuthStart` 在公钥前保留一个值为 0 的兼容字节，
-  并在客户端名称后写入认证版本 5。旧主机能够读取请求并发送旧版 challenge；新客户端
+  并在客户端名称后写入认证版本 6。旧主机能够读取请求并发送旧版 challenge；新客户端
   据此识别不兼容版本并关闭连接。新主机拒绝缺少版本后缀的请求，发送
   `VersionMismatch` 后关闭连接。兼容字节不再表示 passcode 选项。challenge、response
   和 result 只携带带版本的签名数据。
@@ -525,8 +548,9 @@ runner 上与 base commit 的 A/B 结果（偏移仅作为警告，不导致失�
 - **不使用 connection migration。** 候选库均缺乏可用的 client 侧支持。reconnect 与
   reattach 机制（类似 tmux，本就是移动端进入后台所必需）已覆盖该需求；被保留的 shell 也可被列出（`TermList`）并由新 client 按 id resume。
 - **使用 ECDSA P-256 而非 Ed25519。** BoringSSL 的服务端不会通过 quiche 以 Ed25519 对
-  TLS handshake 签名。不应改回。已保存的 Ed25519 identity 会在加载时被替换，否则它将使
-  每次 handshake 以 `QUICHE_ERR_TLS_FAIL` 失败，且界面上没有任何说明。
+  TLS handshake 签名。已保存但不受支持或不匹配的证书和私钥会使 host 启动失败，
+  两个文件均保持原样。只有两个文件都不存在时才创建新的 host identity，因此已有的
+  host fingerprint 不会悄然改变。
 - **passcode 的 verifier 是一次 SHA-256，而非开销较大的 KDF。** SPAKE2 已将攻击者限制为
   每条 connection 一次在线尝试，且不留下值得离线破解的 transcript，这正是 KDF 的计算
   强度所要达到的目的。

@@ -140,12 +140,26 @@ inline constexpr const char* kAuthRefused = "That machine rejected the authentic
 inline constexpr const char* kAuthTimedOut = "The authentication attempt timed out.";
 inline constexpr const char* kAuthVersionMismatch =
     "That machine uses an incompatible authentication version. Update Deskhub on both machines.";
+inline constexpr const char* kAuthBadSignature = "The client authentication signature was invalid.";
+inline constexpr const char* kAuthConfigError =
+    "The host authentication configuration cannot be read or parsed.";
+inline constexpr const char* kAuthUntrustedHost =
+    "Host key is unknown. Add the host public key before connecting.";
+inline constexpr const char* kAuthHostKeyChanged =
+    "Host key changed. Update the saved host key before connecting.";
+inline constexpr const char* kAuthLocalKeyUnavailable =
+    "Could not load the client authentication key.";
 
 inline const char* AuthRefusalText(AuthResultCode code) {
     switch (code) {
         case AuthResultCode::Refused: return kAuthRefused;
         case AuthResultCode::TimedOut: return kAuthTimedOut;
         case AuthResultCode::VersionMismatch: return kAuthVersionMismatch;
+        case AuthResultCode::BadSignature: return kAuthBadSignature;
+        case AuthResultCode::ConfigError: return kAuthConfigError;
+        case AuthResultCode::UntrustedHost: return kAuthUntrustedHost;
+        case AuthResultCode::HostKeyChanged: return kAuthHostKeyChanged;
+        case AuthResultCode::LocalKeyUnavailable: return kAuthLocalKeyUnavailable;
         case AuthResultCode::Accepted: return "Connected.";
         case AuthResultCode::NotPaired: break;
     }

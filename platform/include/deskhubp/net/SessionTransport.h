@@ -120,6 +120,8 @@ private:
     bool hostAuthOn_ = false;
     bool clientAuthOn_ = false;
     uint64_t pairedGenerationSeen_ = 0;
+    uint64_t authorizedGenerationSeen_ = 0;
+    uint64_t nextPairedCheckUs_ = 0;
     std::function<void(const NetAddr&)> onPeerGone_;
     std::function<void(const NetAddr&, uint64_t streamId)> onStreamBroken_;
     std::function<bool()> bulkReady_;

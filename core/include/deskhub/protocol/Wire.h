@@ -179,12 +179,13 @@ struct HelloAck {
 };
 
 inline constexpr size_t kAuthSessionIdBytes = 32;
-inline constexpr uint8_t kAuthVersion = 5;
+inline constexpr uint8_t kAuthVersion = 6;
 inline constexpr size_t kMaxAuthBlobBytes = 256;
 
 enum class AuthMode : uint8_t {
     Denied = 0,
     Signature = 1,
+    ConfigError = 2,
 };
 
 enum class AuthResultCode : uint8_t {
@@ -193,6 +194,11 @@ enum class AuthResultCode : uint8_t {
     Refused = 2,
     TimedOut = 3,
     VersionMismatch = 4,
+    BadSignature = 5,
+    ConfigError = 6,
+    UntrustedHost = 7,
+    HostKeyChanged = 8,
+    LocalKeyUnavailable = 9,
 };
 
 struct AuthStart {

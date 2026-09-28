@@ -7,12 +7,17 @@
 #include "deskhubp/auth/AuthNegotiation.h"
 #include "deskhubp/client/HostLink.h"
 #include "deskhubp/system/Clock.h"
+#include "deskhubp/system/AppDataFile.h"
+#include "deskhubp/system/ClientIdentity.h"
 #include "deskhubp/system/HostIdentity.h"
 #include "deskhubp/system/PairedDevicesFile.h"
+#include "deskhubp/system/Random.h"
 #include "deskhubp/system/TrustStoreFile.h"
 
 #include <atomic>
+#include <array>
 #include <cstdio>
+#include <filesystem>
 #include <functional>
 #include <string>
 #include <thread>
@@ -220,6 +225,50 @@ void TestALinkReportsARefusal() {
     host.Shutdown();
 }
 
+void TestALinkUsesTheSelectedClientIdentity() {
+    std::array<uint8_t, 8> suffix{};
+    if (!RandomBytes(suffix.data(), suffix.size())) {
+        Check(false, "the selected identity test has a unique directory");
+        return;
+    }
+    std::string name = "deskhub-selected-key-";
+    constexpr char digits[] = "0123456789abcdef";
+    for (uint8_t byte : suffix) {
+        name += digits[byte >> 4];
+        name += digits[byte & 15];
+    }
+    const auto dir = std::filesystem::temp_directory_path() / name;
+    const std::string previous = deskhubp::AppDataDirRef();
+    deskhubp::SetAppDataDir(dir.string());
+
+    const auto identity = deskhubp::LoadOrCreateHostIdentity("selected-key-host");
+    LinkHostRig host;
+    Check(host.Start(identity), "the host starts with the default client key authorized");
+    const auto fallback = deskhubp::LoadClientIdentity();
+    const auto selected = deskhubp::GenerateClientIdentity("phone");
+    Check(selected.Valid() && selected.fingerprint != fallback.fingerprint,
+        "the selected client key differs from the default");
+    Check(deskhubp::RememberPairedDevice(selected.fingerprint, "phone", 500),
+        "the host authorizes the selected client key");
+    Check(deskhubp::ForgetPairedDevice(fallback.fingerprint),
+        "the default key is not authorized for this connection");
+
+    auto config = LinkConfig("");
+    Check(deskhubp::RememberTrustedHostProfile(config.hostLabel, "selected-key-host",
+              identity.fingerprint, "phone", NowUnixSeconds()),
+        "the host profile pins its key and selects the phone identity");
+    deskhubp::HostLink link;
+    Check(link.Start(config, deskhubp::HostLinkCallbacks{}), "the selected-key link starts");
+    Check(WaitUntil([&link] { return link.State() == deskhubp::HostLinkState::Ready; }, 10000),
+        "the key selected by the host profile authenticates the connection");
+    link.Stop();
+    host.Shutdown();
+
+    deskhubp::SetAppDataDir(previous);
+    std::error_code error;
+    std::filesystem::remove_all(dir, error);
+}
+
 void TestALinkRecoversAndSaysItResumed() {
     std::printf("[hostlink] a dropped link redials on its own and says it resumed...\n");
     const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity("link-test-host");
@@ -347,6 +396,7 @@ void RunHostLinkTests() {
     TestALinkAdmitsOnceAndRoutesByChannel();
     TestALinkRejectsUnknownAndChangedHostKeys();
     TestALinkReportsARefusal();
+    TestALinkUsesTheSelectedClientIdentity();
     TestALinkRecoversAndSaysItResumed();
     TestTheLinkPingsOnItsOwn();
     TestARequestedRedialResumes();

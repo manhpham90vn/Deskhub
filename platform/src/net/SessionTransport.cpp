@@ -6,6 +6,7 @@
 #include "deskhubp/diag/Log.h"
 #include "deskhubp/system/Clock.h"
 #include "deskhubp/system/PairedDevicesFile.h"
+#include "deskhubp/system/AuthorizedKeysFile.h"
 
 namespace deskhubp {
 
@@ -20,6 +21,7 @@ constexpr uint64_t kCloseAuthVersionMismatch = 4;
 constexpr uint64_t kCloseAuthExpired = 5;
 constexpr uint64_t kCloseAuthCapacity = 6;
 constexpr uint64_t kCloseAuthRateLimited = 7;
+constexpr uint64_t kPairedCheckIntervalUs = 100'000;
 
 uint64_t StreamKey(QuicConnId conn, uint64_t stream) {
     return conn ^ (stream << 48);
@@ -133,6 +135,7 @@ void SessionTransport::Close() {
     authFailures_.Clear();
     pendingAuthDeadlines_.clear();
     authenticated_.clear();
+    nextPairedCheckUs_ = 0;
 }
 
 bool SessionTransport::SetRecvTimeout(uint32_t ms) {
@@ -271,7 +274,10 @@ bool SessionTransport::HandleHostAuth(const NetAddr& from, std::span<const uint8
         config.sessionId = *sessionId;
         auth->Configure(std::move(config));
         const std::optional<deskhub::AuthChallenge> challenge = auth->Begin(*start);
-        if (!challenge) return false;
+        if (!challenge) {
+            endpoint_.CloseConnection(key, kCloseBadFraming, "unsupported client key");
+            return false;
+        }
         if (challenge->mode == deskhub::AuthMode::Signature &&
             !authFailures_.Allow(auth->PeerFingerprint(), from.ip, NowUs())) {
             endpoint_.CloseConnection(key, kCloseAuthRateLimited, "auth attempts rate limited");
@@ -289,6 +295,8 @@ bool SessionTransport::HandleHostAuth(const NetAddr& from, std::span<const uint8
 
         if (challenge->mode == deskhub::AuthMode::Denied && authCallbacks_.onRefused)
             authCallbacks_.onRefused(from, deskhub::AuthResultCode::NotPaired);
+        if (challenge->mode == deskhub::AuthMode::ConfigError && authCallbacks_.onRefused)
+            authCallbacks_.onRefused(from, deskhub::AuthResultCode::ConfigError);
         if (challenge->mode == deskhub::AuthMode::Signature)
             pendingAuthDeadlines_[key] = NowUs() + kAuthResponseTimeoutUs;
 
@@ -373,15 +381,21 @@ void SessionTransport::DropQueuedFrom(const NetAddr& peer) {
 void SessionTransport::RevokeForgottenPeers() {
     if (!hostAuthOn_) return;
     const uint64_t generation = PairedDevicesGeneration();
-    if (generation == pairedGenerationSeen_) return;
+    const uint64_t authorizedGeneration = AuthorizedKeysGeneration();
+    const uint64_t nowUs = NowUs();
+    if (generation == pairedGenerationSeen_ &&
+        authorizedGeneration == authorizedGenerationSeen_ && nowUs < nextPairedCheckUs_)
+        return;
     pairedGenerationSeen_ = generation;
+    authorizedGenerationSeen_ = authorizedGeneration;
+    nextPairedCheckUs_ = nowUs + kPairedCheckIntervalUs;
 
     std::vector<NetAddr> revoked;
     for (const auto& [key, admitted] : authenticated_) {
         if (!admitted) continue;
         const auto at = hostAuth_.find(key);
         if (at == hostAuth_.end()) continue;
-        if (CheckPairedDevice(at->second->PeerFingerprint()) == deskhub::PairVerdict::Paired)
+        if (IsClientKeyAuthorized(at->second->PeerPublicKey()))
             continue;
         revoked.push_back(NetAddr::Unpack(key));
     }
@@ -430,6 +444,10 @@ bool SessionTransport::SendRecord(const NetAddr& to, std::span<const uint8_t> me
 bool SessionTransport::SendRecordOn(const NetAddr& to, uint64_t streamId,
     std::span<const uint8_t> message) {
     const std::lock_guard<std::mutex> lock(sendMutex_);
+    if (hostAuthOn_) {
+        const auto admission = authenticated_.find(to.Pack());
+        if (admission == authenticated_.end() || !admission->second) return false;
+    }
     if (!endpoint_.Established(to.Pack())) return false;
     return SendReliable(to, streamId, message);
 }
@@ -510,6 +528,11 @@ bool SessionTransport::RunClientAuth(const NetAddr& server, ClientAuthConfig con
                 clientAuthOn_ = false;
                 return false;
             }
+            if (challenge->mode == deskhub::AuthMode::ConfigError) {
+                outCode = deskhub::AuthResultCode::ConfigError;
+                clientAuthOn_ = false;
+                return false;
+            }
             if (challenge->mode != deskhub::AuthMode::Signature) {
                 outCode = deskhub::AuthResultCode::NotPaired;
                 clientAuthOn_ = false;
@@ -517,7 +540,7 @@ bool SessionTransport::RunClientAuth(const NetAddr& server, ClientAuthConfig con
             }
             const std::optional<deskhub::AuthResponse> response = client.Answer(*challenge);
             if (!response) {
-                outCode = deskhub::AuthResultCode::NotPaired;
+                outCode = deskhub::AuthResultCode::LocalKeyUnavailable;
                 clientAuthOn_ = false;
                 return false;
             }
@@ -575,13 +598,12 @@ bool SessionTransport::SendReliable(const NetAddr& to, uint64_t streamId,
 
 bool SessionTransport::SendTo(const NetAddr& to, const uint8_t* data, size_t len) {
     const std::span<const uint8_t> message(data, len);
-
-    if (CarriesVideo(message)) {
-        const std::lock_guard<std::mutex> lock(sendMutex_);
-        return endpoint_.SendDatagram(to.Pack(), message);
-    }
-
     const std::lock_guard<std::mutex> lock(sendMutex_);
+    if (hostAuthOn_) {
+        const auto admission = authenticated_.find(to.Pack());
+        if (admission == authenticated_.end() || !admission->second) return false;
+    }
+    if (CarriesVideo(message)) return endpoint_.SendDatagram(to.Pack(), message);
     if (!endpoint_.Established(to.Pack())) return endpoint_.SendRaw(to, message);
     if (CarriesAudio(message)) return endpoint_.SendDatagram(to.Pack(), message);
     return SendReliable(to, kQuicControlStream, message);

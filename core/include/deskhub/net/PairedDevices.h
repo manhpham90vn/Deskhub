@@ -47,7 +47,7 @@ private:
     std::vector<PairedDevice> devices_{};
 };
 
-PairedDevices ParsePairedDevices(std::string_view text);
+std::optional<PairedDevices> ParsePairedDevicesStrict(std::string_view text);
 std::string SerializePairedDevices(const PairedDevices& devices);
 
 inline constexpr size_t kShortFingerprintChars = 12;

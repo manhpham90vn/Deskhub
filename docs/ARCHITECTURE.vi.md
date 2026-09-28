@@ -302,6 +302,35 @@ coverage của core.
 
 ## 9. Những quyết định cần ghi nhớ
 
+- **Host chỉ gửi dữ liệu ứng dụng sau khi cấp quyền**: `SessionTransport` từ chối gửi
+  record và datagram cho tới khi kết nối đó xác thực bằng khóa xong. Bản tin challenge
+  và kết quả dùng đường gửi auth nội bộ. Trust store tuần tự hóa thao tác đọc-sửa-ghi
+  trong một tiến trình và lưu thay đổi bằng cách thay thế file atomic.
+
+- **Danh sách khóa client hỏng không cấp quyền**: khi nạp `paired_devices`, file không
+  đọc được, quá lớn, sai định dạng hoặc trùng khóa đều làm toàn bộ cấu hình thất bại.
+  Host kiểm tra lại quyền của kết nối đang chạy theo chu kỳ, nên file được thay từ
+  tiến trình khác vẫn có thể thu hồi kết nối mà không cần generation nội bộ đổi.
+
+- **Pin khóa host gắn với một địa chỉ/cổng**: khóa TLS host được tin cậy ở một
+  endpoint không tự cấp quyền cho cùng khóa ở endpoint khác. Địa chỉ/cổng mới phải
+  được ghim rõ trước khi kết nối.
+
+- **Danh sách cấp quyền mới chứa public key đầy đủ**: `authorized_keys` nhận các dòng
+  public key OpenSSH có giới hạn và từ chối dòng hỏng hoặc trùng khóa. File này có
+  hiệu lực từ lần lưu đầu tiên. Dấu kích hoạt ngăn việc xóa file làm sống lại quyền
+  chỉ dựa trên fingerprint cũ. `known_hosts` lưu alias và khóa client được chọn cho
+  từng endpoint cạnh pin TLS. Ghi cấu hình dùng khóa file liên tiến trình và thay
+  thế file atomic.
+  Service có thể chọn thư mục cấu hình qua `SetConfigDir` hoặc `DESKHUB_CONFIG_DIR`
+  độc lập với thư mục log.
+
+- **Fingerprint dựa trên SPKI**: mọi giá trị `SHA256:…` Deskhub hiển thị hoặc lưu là
+  SHA-256 của DER SubjectPublicKeyInfo. Dòng public key OpenSSH mang SSH blob;
+  fingerprint SSH thường dùng hash blob này nên không thể so trực tiếp với
+  fingerprint SPKI của Deskhub. Khi nhập khóa text, app chuyển sang SPKI trước khi
+  tính fingerprint Deskhub.
+
 - **Chữ ký bao phủ một transcript auth không mơ hồ**: `core/auth/Transcript` mã hóa
   domain Deskhub, auth version, vai trò bên ký, giá trị 32 byte xuất từ QUIC/TLS,
   toàn bộ public key client và fingerprint khóa TLS host thành các trường có tiền tố
@@ -313,7 +342,7 @@ coverage của core.
   cặp đó mười giây. Bảng trong bộ nhớ giữ tối đa 64 cặp; chữ ký đúng xóa bộ đếm lỗi.
 
 - **Auth có phiên bản riêng trong protocol version 3**: `AuthStart` giữ một byte bằng 0
-  trước khóa làm tiền tố tương thích và đặt auth version 5 sau tên client. Host cũ có thể
+  trước khóa làm tiền tố tương thích và đặt auth version 6 sau tên client. Host cũ có thể
   đọc lời mở đầu và gửi challenge cũ; client mới nhận ra challenge không tương thích rồi
   đóng kết nối. Host mới từ chối lời mở đầu thiếu hậu tố version, gửi `VersionMismatch`
   rồi đóng kết nối. Byte tiền tố không còn biểu thị lựa chọn passcode. Challenge, response
@@ -619,9 +648,10 @@ coverage của core.
   dùng được. Cơ chế reconnect và reattach (tương tự tmux, vốn đã cần thiết cho việc app di
   động chạy nền) đã đáp ứng yêu cầu này; các shell đang được giữ cũng có thể được liệt kê (`TermList`) và resume theo id từ một client mới.
 - **Sử dụng ECDSA P-256 thay vì Ed25519.** Phía server của BoringSSL không ký TLS
-  handshake bằng Ed25519 thông qua quiche. Không nên chuyển lại. Một identity Ed25519 đã
-  lưu sẽ bị thay khi load, vì nó làm fail mọi handshake với `QUICHE_ERR_TLS_FAIL` mà không
-  có thông tin giải thích trên giao diện.
+  handshake bằng Ed25519 thông qua quiche. Certificate và private key đã lưu nhưng
+  không được hỗ trợ hoặc không khớp khiến host không khởi động và giữ nguyên cả hai file.
+  Chỉ khi cả hai file đều chưa có, ứng dụng mới tạo identity host, nên fingerprint host
+  hiện có không tự đổi.
 - **Verifier của passcode là một lần SHA-256, không phải một KDF tốn chi phí.** SPAKE2 đã
   giới hạn kẻ tấn công ở một lần thử online cho mỗi connection và không để lại transcript
   nào có thể crack offline, tức là đã đáp ứng đúng mục đích mà độ cứng của KDF hướng tới.

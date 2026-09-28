@@ -2,7 +2,7 @@
 
 # Deskhub プライバシーポリシー
 
-_発効日: 2026 年 9 月 28 日 — バージョン 2.6_
+_発効日: 2026 年 9 月 28 日 — バージョン 2.8_
 
 > 本書は [`PRIVACY.md`](PRIVACY.md) の翻訳。内容に差がある場合は英語版を優先する。
 
@@ -41,9 +41,10 @@ analytics、crash reporting、広告、組み込みの第三者 SDK はない。
 | 共有されているコンピュータが再生している音声（当該コンピュータが音声を共有し、viewer が要求した場合のみ） | 閲覧者がそのコンピュータの音声を聞けるようにするため | 2 台の端末間で直接送信し、転送中は encrypt（QUIC/TLS）。圧縮された音声として送る | 保存しない。session の間のみメモリ上に存在する |
 | Mouse、keyboard、タッチの input | 別の端末から、共有されているコンピュータを操作するため | 閲覧側の端末から共有されているコンピュータへ直接送信し、転送中は encrypt（QUIC/TLS） | 保存しない。inject 後に破棄する |
 | host の TLS 鍵ペア（初回起動時に生成される秘密鍵と自己署名 certificate） | 接続してくる client に host の identity を証明するため。利用者には fingerprint（`SHA256:…`）として表示される | app 自身のフォルダの `host_key.pem` と `host_cert.pem` に保存する。接続してくる client に提示するのは公開 certificate のみ | 利用者が削除するまで保持する。削除すると host は新しい identity となり、旧 identity を記録していた client は警告を表示する |
-| 本端末の client 署名 key | public key を許可した host へのアクセス権を証明するため | app 自身のフォルダの `client_key.pem` に保存する。private key は端末に留まり、認証時には署名と public key のみを送信する | key を交換または削除するまで保持する。新しい public key は host 側で再承認が必要 |
-| 本端末が trust した host の key（fingerprint、アドレス、ラベル、初回および最終確認時刻） | 既知の host を識別し、その key が変化した場合に明確に警告するため | 同じフォルダの `known_hosts` に保存する。送信しない | 利用者が削除するまで保持する |
-| 本 host と pair したマシン（key fingerprint、送られてきた名称、pair した時刻、最後に確認された時刻） | pair 済みのマシンが passcode なしで再接続できるようにし、Devices ページに表示して削除できるようにするため | 同じフォルダの `paired_devices` に保存する。送信しない | Devices ページで当該マシンを削除するか、ファイルを削除するまで保持する |
+| 本端末の client 署名 key | 選択した public key を許可した host へのアクセス権を証明するため | 既定の private key は `client_key.pem`、追加した名前付き key は app 自身のフォルダの `client_key.NAME.pem` に保存する。private key は端末に留まり、認証時には選択した public key と署名のみを送信する | key を削除するまで保持する。各 host は接続時に選択する public key を許可する必要がある |
+| 保存済み host profile（固定した TLS key fingerprint、アドレス、別名、選択した client identity、初回と最終確認時刻） | 既知の host を識別し、接続用 client key を選ぶため | 同じフォルダの `known_hosts` に保存する。送信しない | host を削除するかファイルを削除するまで保持する |
+| 本 host へのアクセスを許可した public key と任意のラベル | 対応する private key の所持を証明した client だけを受け入れるため | 同じフォルダの `authorized_keys` に保存し、`authorized_keys_active` は新ポリシーの有効化を記録する。送信しない | key を取り消すかファイルを削除するまで保持する。有効化後に `authorized_keys` だけを削除しても旧権限は復活しない |
+| 旧方式で pair したマシン（key fingerprint、名前、pair と最終確認時刻） | `authorized_keys` をまだ有効化していない環境のアクセスを維持するため | 旧環境では同じフォルダに `paired_devices` が残る場合がある。送信せず、新ポリシー有効化後はアクセスを許可しない | 旧ファイルを削除するまで保持する |
 | 廃止された passcode verifier 用の旧ランダム salt | 認証には使用しない | 旧版からの更新では、同じフォルダに `auth_salt` が残る場合がある。現在は送信しない | 利用者が削除するまで保持する |
 | 利用者が入力するアドレス（IP または hostname） | 相手のマシンへ接続するため | 入力した端末内にのみ保持する | 利用者が変更するまでローカルに保持する |
 | 直近 10 件の接続先アドレスと各接続の時刻 | *Recent devices* の一覧を構成するため | 利用者の端末上、app 自身のフォルダの `recent-devices.txt` に保存する。Windows は `%USERPROFILE%\.deskhub`、macOS と Linux は `~/.deskhub`、iOS と Android は app のサンドボックス。旧ファイルの読み込みと再書き込みに成功すると、古い passcode は削除される | より新しいアドレスへ 10 件接続するか、ファイルを削除するまで保持する |
@@ -211,6 +212,8 @@ https://github.com/manhpham90vn/Deskhub/blob/main/PRIVACY.md
 
 | バージョン | 日付 | 変更内容 |
 |---|---|---|
+| 2.8 | 2026-09-28 | Host は許可した public key を `authorized_keys` に保存し、有効化の印をローカルに保持できる。保存済み host profile に別名と選択した client identity を追加した。旧方式の fingerprint のみの一覧は新しい一覧の有効化前に限り使用する。 |
+| 2.7 | 2026-09-28 | CLI で追加の名前付き client 署名 key を作成・import し、接続に使用する key を選択できる。名前付き private key は個別のローカルファイルに保存され、identity の一覧には public key の情報のみを表示する。 |
 | 2.6 | 2026-09-28 | client の接続には許可済みの署名 key と固定済みの host key が必要になった。Recent devices と UI settings は passcode を保存せず、旧ファイルの読み込みと安全な再書き込み時に古い項目を削除する。書き換えに失敗した場合は旧ファイルを残して後で再試行する。 |
 | 2.5 | 2026-09-07 | 本項は訂正であり、挙動の変更ではない。Deskhub の動作は従来と同一である。本ポリシーの旧版では、Android のスマートフォンやタブレットに届いたファイルはシステムのメディアストア経由で `Pictures/Deskhub`、`Movies/Deskhub`、`Download/Deskhub` に保存されると記載していた。これは Android 10 以降について正しい。Deskhub が使用するメディアストアの経路には Android 10 が必要であるため、Android 9 以前では、届いたファイルは端末上の app 自身のフォルダに留まり、ギャラリーにも Downloads にも表示されない。いずれの場合も、ファイルが届くのは関係する 2 台の端末のみである。 |
 | 2.4 | 2026-08-28 | **スマートフォンとタブレットが、ファイルの送信に加えて受信にも対応した。** その保存先が新たな内容である。iOS では写真と動画が写真ライブラリに追加され、初回にシステムの追加専用の Photos permission を要求する。Deskhub は追加のみが可能で、既存の内容の読み取りや変更は行わない。それ以外のファイルは app の Documents フォルダに置かれ、Files app から参照できる。Android では、写真は `Pictures/Deskhub`、動画は `Movies/Deskhub`、その他のファイルは `Download/Deskhub` へ、いずれもシステムのメディアストア経由で保存される。両プラットフォームとも、届いた内容を通知で知らせる。これらのデータが当方に届くことはない。本バージョンでは、旧版の記載のうち 2 点を訂正する。Android は端末自身が再生している音声を capture するために、システムが *Microphone* と表示する permission（`RECORD_AUDIO`）を従来から必要としていた。これがバージョン 2.1 に記載した音声の共有にあたる。Deskhub が microphone を録音することは現在もない。また、デスクトップの app はバージョン 2.3 に記載した *File transfer* の選択肢自体を失ったことはなく、失われたのはその背後にある保存設定のみである。 |

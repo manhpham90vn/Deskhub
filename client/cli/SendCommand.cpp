@@ -82,6 +82,7 @@ ExitCode RunSend(const Command& command) {
     config.hostLabel = command.address;
     config.clientName =
         command.deviceName ? *command.deviceName : deskhubp::SessionDeviceName();
+    config.clientIdentityName = command.identityName.value_or("");
     config.files = std::move(paths);
 
     deskhubp::FileTransferClientCallbacks hooks;

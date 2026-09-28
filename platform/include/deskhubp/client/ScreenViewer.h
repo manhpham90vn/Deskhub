@@ -56,6 +56,7 @@ struct ScreenViewerConfig {
     std::string passcode;
     std::string displayName;
     std::string hostLabel;
+    std::string clientIdentityName;
 
     std::function<void(deskhub::TrustVerdict, std::string_view fingerprint)> onTrustAsked;
     std::function<void(uint32_t width, uint32_t height, uint8_t fps)> onParams;
@@ -100,6 +101,7 @@ public:
         linkConfig.passcode = cfg_.passcode;
         linkConfig.clientName =
             cfg_.displayName.empty() ? SessionDeviceName() : cfg_.displayName;
+        linkConfig.clientIdentityName = cfg_.clientIdentityName;
         linkConfig.connectTimeoutMs = kHandshakeTimeoutMs;
         linkConfig.authTimeoutMs = kAuthTimeoutMs;
         linkConfig.recvWaitMs = 10;

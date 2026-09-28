@@ -26,6 +26,7 @@
 #include "deskhubp/system/Autostart.h"
 #include "deskhubp/system/HostIdentity.h"
 #include "deskhubp/system/PairedDevicesFile.h"
+#include "deskhubp/system/AuthorizedKeysFile.h"
 #include "deskhubp/system/UiSettingsStore.h"
 
 namespace {
@@ -356,7 +357,9 @@ int dh_passcode_display(const char* passcode, char* out, int capacity) {
 
 int dh_paired_devices(DHPairedDevice* out, int capacity) {
     if (!out || capacity <= 0) return 0;
-    const std::vector<deskhub::PairedDevice> devices = deskhubp::LoadPairedDevices().Devices();
+    const auto loaded = deskhubp::LoadEffectiveAuthorizedDevices();
+    if (!loaded) return 0;
+    const std::vector<deskhub::PairedDevice>& devices = loaded->Devices();
     const int count = int(devices.size()) < capacity ? int(devices.size()) : capacity;
     for (int i = 0; i < count; ++i) {
         const deskhub::PairedDevice& device = devices[size_t(i)];
@@ -373,25 +376,26 @@ int dh_paired_devices(DHPairedDevice* out, int capacity) {
 
 bool dh_paired_add_public_key(const char* public_key) {
     if (!public_key) return false;
-    const auto parsed = deskhub::ParsePublicKeyText(public_key);
-    if (!parsed) return false;
-    const auto spki = deskhubp::PublicKeySpkiFromText(public_key);
-    const auto fingerprint = deskhubp::FingerprintOfPublicKey(spki);
-    return fingerprint && deskhubp::RememberPairedDevice(*fingerprint, parsed->label,
-                              std::time(nullptr));
+    return deskhubp::RememberAuthorizedKey(public_key);
 }
 
 bool dh_paired_forget(const char* fingerprint) {
     if (!fingerprint) return false;
     const std::optional<deskhub::Fingerprint> fp = deskhub::ParseFingerprint(fingerprint);
-    return fp && deskhubp::ForgetPairedDevice(*fp);
+    return fp && deskhubp::ForgetEffectiveAuthorizedDevice(*fp);
 }
 
 void dh_paired_forget_all(void) {
-    deskhubp::ForgetAllPairedDevices();
+    deskhubp::ClearAuthorizedKeys();
 }
 
 int dh_own_fingerprint(char* out, int capacity) {
+    const deskhubp::ClientIdentity identity = deskhubp::LoadOrCreateClientIdentity();
+    return FillText(out, capacity,
+        identity.Valid() ? deskhub::FormatFingerprint(identity.fingerprint) : std::string());
+}
+
+int dh_host_fingerprint(char* out, int capacity) {
     const deskhubp::HostIdentity identity =
         deskhubp::LoadOrCreateHostIdentity(deskhubp::SessionDeviceName());
     return FillText(out, capacity,

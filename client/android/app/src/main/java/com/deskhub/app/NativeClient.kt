@@ -259,6 +259,10 @@ object NativeClient {
 
     private external fun nativeOwnFingerprint(): String
 
+    private external fun nativeHostFingerprint(): String
+
+    private external fun nativeOwnPublicKey(): String
+
     fun pairedDevices(): List<PairedDevice> = nativePairedDevices()?.toList() ?: emptyList()
 
     fun pairedForget(fingerprint: String): Boolean = nativePairedForget(fingerprint)
@@ -266,6 +270,10 @@ object NativeClient {
     fun pairedForgetAll() = nativePairedForgetAll()
 
     fun ownFingerprint(): String = nativeOwnFingerprint()
+
+    fun hostFingerprint(): String = nativeHostFingerprint()
+
+    fun ownPublicKey(): String = nativeOwnPublicKey()
 
     private external fun nativeDefaultPort(): Int
 

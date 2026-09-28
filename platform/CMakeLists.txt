@@ -193,6 +193,7 @@ endif()
 
 add_library(platform STATIC
     src/system/AppDataFile.cpp
+    src/system/ConfigFileLock.cpp
     ${deskhub_platform_os}
     ${deskhub_platform_quic}
     ${deskhub_platform_pty}
@@ -203,6 +204,7 @@ add_library(platform STATIC
     src/audio/AudioBroadcaster.cpp
     src/system/TrustStoreFile.cpp
     src/system/PairedDevicesFile.cpp
+    src/system/AuthorizedKeysFile.cpp
     src/auth/AuthNegotiation.cpp
     src/client/HostLink.cpp
     src/host/TerminalHost.cpp
@@ -290,7 +292,7 @@ endif()
 
 deskhub_target_warnings(platform)
 if(WIN32)
-    target_link_libraries(platform PUBLIC ws2_32 psapi ole32 shell32)
+    target_link_libraries(platform PUBLIC ws2_32 psapi ole32 shell32 crypt32)
     target_compile_options(platform PRIVATE /sdl)
 endif()
 

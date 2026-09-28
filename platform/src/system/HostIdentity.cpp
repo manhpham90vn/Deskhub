@@ -12,6 +12,7 @@
 #include <openssl/x509.h>
 
 #include <memory>
+#include <filesystem>
 #include <vector>
 
 #include "deskhubp/diag/Log.h"
@@ -135,7 +136,14 @@ HostIdentity IdentityFromPem(std::string certPem, std::string keyPem) {
     X509Ptr cert(PEM_read_bio_X509(bio.get(), nullptr, nullptr, nullptr));
     if (!cert) return out;
     if (!UsableForTls(cert.get())) {
-        LOGW("host identity: the stored key cannot be used for TLS, replacing it");
+        LOGE("host identity: the stored certificate cannot be used for TLS");
+        return out;
+    }
+    BioPtr keyBio(BIO_new_mem_buf(keyPem.data(), int(keyPem.size())));
+    if (!keyBio) return out;
+    PkeyPtr key(PEM_read_bio_PrivateKey(keyBio.get(), nullptr, nullptr, nullptr));
+    if (!key || X509_check_private_key(cert.get(), key.get()) != 1) {
+        LOGE("host identity: the stored private key does not match the certificate");
         return out;
     }
     const std::optional<deskhub::Fingerprint> fp = FingerprintOfCert(cert.get());
@@ -146,6 +154,14 @@ HostIdentity IdentityFromPem(std::string certPem, std::string keyPem) {
     out.certPath = AppDataFilePath(kHostCertFileName).string();
     out.keyPath = AppDataFilePath(kHostKeyFileName).string();
     return out;
+}
+
+bool HasStoredFile(const std::filesystem::path& path, bool& present) {
+    std::error_code error;
+    const auto status = std::filesystem::symlink_status(path, error);
+    if (error && error != std::errc::no_such_file_or_directory) return false;
+    present = status.type() != std::filesystem::file_type::not_found;
+    return true;
 }
 
 }
@@ -169,6 +185,16 @@ HostIdentity LoadHostIdentity() {
 HostIdentity LoadOrCreateHostIdentity(std::string_view commonName) {
     HostIdentity existing = LoadHostIdentity();
     if (existing.Valid()) return existing;
+    const auto certPath = AppDataFilePath(kHostCertFileName);
+    const auto keyPath = AppDataFilePath(kHostKeyFileName);
+    if (certPath.empty() || keyPath.empty()) return {};
+    bool hasCert = false;
+    bool hasKey = false;
+    if (!HasStoredFile(certPath, hasCert) || !HasStoredFile(keyPath, hasKey)) return {};
+    if (hasCert || hasKey) {
+        LOGE("host identity: stored certificate or private key is unusable; refusing to replace it");
+        return {};
+    }
 
     PkeyPtr key = GenerateKey();
     if (!key) {
@@ -191,8 +217,8 @@ HostIdentity LoadOrCreateHostIdentity(std::string_view commonName) {
 
     const std::string certPem = BioToString(certBio.get());
     const std::string keyPem = BioToString(keyBio.get());
-    if (!WriteAppDataFile(kHostCertFileName, certPem) ||
-        !WriteAppDataFile(kHostKeyFileName, keyPem)) {
+    if (!WriteAppDataFileAtomic(kHostKeyFileName, keyPem) ||
+        !WriteAppDataFileAtomic(kHostCertFileName, certPem)) {
         LOGE("host identity: could not save the key pair to the app data directory");
         return {};
     }

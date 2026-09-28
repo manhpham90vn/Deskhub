@@ -30,15 +30,23 @@ Trạng thái: đang triển khai; các ô chưa đánh dấu vẫn còn phải 
 - [x] Cập nhật `PRIVACY` phiên bản 2.6 ở bốn ngôn ngữ cho khóa client riêng, khóa TLS host, xác thực bằng khóa và cách làm sạch passcode settings/recent. Còn phải rà toàn bộ tài liệu sản phẩm khi mô hình host profile và `authorized_keys` hoàn tất.
 - [x] Gỡ `--passcode`, `--pairing`, `--no-new-pairings` và `DESKHUB_PASSCODE` khỏi CLI, cùng parser, nguồn passcode stdin/file, help và passcode note; lệnh cũ trả lỗi tùy chọn không biết. Xóa cờ `allowNewPairings` không còn tác dụng khỏi settings/share options và cập nhật test. Cập nhật checklist CLI trong `SECURITY` bốn ngôn ngữ. Test terminal FFI dùng `/bin/sh` trên POSIX và in kết quả trên dòng riêng để không phụ thuộc wizard/prompt của shell mặc định.
 - [x] Xóa throttle passcode không còn đường chạy, tham số kết quả `hostProvedPasscode` luôn false và trường passcode khỏi cấu hình auth client. Client báo `NotPaired` khi host từ chối khóa chưa được cấp quyền, thay cho `PairingDisabled`; dọn test transport/terminal tương ứng. Giới hạn auth bằng khóa vẫn cần thiết kế và triển khai riêng.
-- [x] Định dạng bản tin auth có version riêng (`kAuthVersion = 5`): bỏ mode passcode/approval, salt, SPAKE2, MAC xác nhận và các mã lỗi passcode khỏi wire. `AuthStart` giữ byte tiền tố cố định bằng 0 và đặt version sau tên để client mới nhận được challenge từ host cũ rồi báo lỗi version; host mới trả `VersionMismatch` và đóng kết nối khi nhận start cũ. Thêm test parser, wire vectors và QUIC loopback cho cả hai chiều không tương thích.
+- [x] Định dạng bản tin auth có version riêng (`kAuthVersion = 6`): bỏ mode passcode/approval, salt, SPAKE2, MAC xác nhận và các mã lỗi passcode khỏi wire. `AuthStart` giữ byte tiền tố cố định bằng 0 và đặt version sau tên để client mới nhận được challenge từ host cũ rồi báo lỗi version; host mới trả `VersionMismatch` và đóng kết nối khi nhận start cũ. Thêm test parser, wire vectors và QUIC loopback cho cả hai chiều không tương thích.
 - [x] Chuyển transcript chữ ký sang `core/auth`: mã hóa trường có độ dài rõ ràng và đưa domain, auth version, vai trò client, định danh phiên xuất từ QUIC/TLS, public key client và fingerprint khóa TLS host vào dữ liệu ký. Bổ sung TLS exporter vào C API của quiche 0.29.3 bằng bản vá được áp dụng khi build; bỏ nonce và thời hạn challenge riêng. Host chỉ nhận một chữ ký trên mỗi kết nối, và chữ ký của phiên khác không hợp lệ.
 - [x] Siết trạng thái auth client: chỉ xử lý bản tin từ đúng peer, từ chối `Accepted` trước khi ký, challenge lặp và bản tin auth sai thứ tự; xóa auth inbox cũ trước một lần xác thực mới. Thêm test host gửi `Accepted` quá sớm qua QUIC loopback; `make test-platform` và `make lint` đã qua.
 - [x] Giới hạn tối đa 8 phiên auth đang chờ chữ ký và đóng kết nối nếu quá 10 giây; xóa slot khi xác thực xong hoặc kết nối đóng. Test QUIC loopback xác nhận phiên thứ 9 bị từ chối, phiên im lặng hết hạn và slot được tái sử dụng.
 - [x] Giới hạn chữ ký sai theo cặp public key client và IP nguồn: ba lần sai trong một phút chặn cặp đó 10 giây; chữ ký đúng xóa lỗi. Bộ đếm tối đa 64 cặp trong bộ nhớ, không ảnh hưởng khóa khác cùng IP. Unit test kiểm tra ngưỡng, thời hạn, tách khóa/IP và giới hạn bộ nhớ; QUIC loopback xác nhận lần thử thứ tư bị đóng trước khi xác minh chữ ký.
+- [x] Ghi danh sách khóa được phép bằng thay thế atomic. Chỉ tăng generation khi lưu thành công; thao tác thu hồi toàn bộ ghi danh sách rỗng và CLI báo lỗi nếu không persist được. Test riêng kiểm tra lỗi ghi không được công bố là thay đổi quyền.
+- [x] Danh tính TLS host chỉ được tạo khi cả file certificate và private key đều chưa tồn tại. Nếu file đã lưu hỏng, không hỗ trợ hoặc không khớp nhau, host từ chối khởi động mà không tự thay khóa; khi tạo mới ghi mỗi file bằng thay thế atomic với quyền tạm chặt. Test gồm cặp khóa không khớp, thiếu file và symlink hỏng.
+- [x] Bổ sung identity client có tên mà không thay `client_key.pem` mặc định: API tạo/import/nạp/liệt kê chỉ trả public key khi liệt kê; tên được giới hạn để không thoát thư mục. `HostLink` và các viewer nhận tên khóa, CLI hỗ trợ `devices generate`, `devices import --name`, `devices identities`, `devices public NAME` và `--identity NAME` cho `sources`/`connect`/`shell`/`send`. Chưa có host profile lưu lựa chọn khóa lâu dài; OpenSSH private key và backend bảo vệ khóa theo OS vẫn chưa xong.
+- [x] Chặn mọi đường gửi record/datagram ứng dụng của host trước khi kết nối được auth; auth challenge/result dùng đường gửi nội bộ. Test QUIC xác nhận kết nối đã thiết lập nhưng chưa auth không nhận được dữ liệu host. Trust store nay ghi atomic và khóa thao tác đọc-sửa-ghi trong cùng tiến trình; cập nhật quyết định này ở bốn bản kiến trúc.
+- [x] File `paired_devices` khi hỏng, đọc lỗi, trùng khóa hoặc vượt giới hạn sẽ từ chối toàn bộ admission; thao tác thêm/thu hồi thường không ghi đè file hỏng. Host kiểm tra lại danh sách theo chu kỳ ngắn để thu hồi cả khi tiến trình CLI khác sửa file mà generation nội bộ không đổi. Test parser và QUIC loopback đã bổ sung.
+- [x] Trust pin nay chỉ có hiệu lực cho đúng địa chỉ/cổng đã lưu; cùng khóa TLS ở địa chỉ khác vẫn là host chưa tin cậy cho tới khi được ghim riêng. Test core và quyết định kiến trúc bốn ngôn ngữ đã cập nhật.
+- [x] Thêm parser `authorized_keys` chứa public key text đầy đủ, giới hạn file và từ chối khóa trùng/dòng hỏng. Khi bật, file này thay danh sách fingerprint cũ; dấu kích hoạt ngăn xóa file làm sống lại quyền cũ. Host, CLI, FFI và danh sách Linux/Windows dùng chính sách mới; test migration và quyền rỗng đã bổ sung.
+- [x] Host profile trong `known_hosts` lưu alias và tên khóa client cạnh địa chỉ/cổng và pin TLS. `trust add --name --identity` ghi cùng một lần; `HostLink` tự chọn khóa đã lưu nếu không có cờ ghi đè. Trust file hỏng từ chối toàn bộ pin; các file cấu hình quyền/trust được khóa liên tiến trình khi sửa và ghi bằng thay thế atomic.
 
-Đã có identity client riêng nhưng mới lưu được một khóa và import hiện chỉ hỗ trợ PEM/PKCS#8, chưa đọc private key OpenSSH. Chưa có host profile. Luồng auth mới không mở popup xác nhận kết nối; hàng đợi và API trả lời approval đã được gỡ. Giao thức wire cũ, trường passcode trong UI/API và các message beacon discovery còn trong code; phải gỡ tiếp trước khi coi là hoàn tất. File settings/recent cũ được làm sạch khi nạp thành công; nếu ghi thất bại, file cũ còn nguyên để thử lại. Migration cấu hình mới có version và xử lý cập nhật đồng thời vẫn cần làm.
+Đã có nhiều identity client riêng nhưng import hiện chỉ hỗ trợ PEM/PKCS#8, chưa đọc private key OpenSSH. Chưa có host profile. Luồng auth mới không mở popup xác nhận kết nối; hàng đợi và API trả lời approval đã được gỡ. Giao thức wire cũ, trường passcode trong UI/API và các message beacon discovery còn trong code; phải gỡ tiếp trước khi coi là hoàn tất. File settings/recent cũ được làm sạch khi nạp thành công; nếu ghi thất bại, file cũ còn nguyên để thử lại. Migration cấu hình mới có version và xử lý cập nhật đồng thời vẫn cần làm.
 
-Gate chưa qua trọn vẹn: build macOS có ký cần chứng chỉ phát triển. Sau khi chuyển wire auth sang version 5 và ràng buộc chữ ký với phiên QUIC/TLS, `make test`, `make lint`, `make test-platform`, `make test-integration` và `make build-cli` đã qua trên Linux. Lần chạy platform đầu sau thay đổi còn lỗi ở test terminal thiếu định danh phiên và đã sửa; một lần chạy kế tiếp lỗi timeout ở test ping/reconnect, lần lặp lại qua. Lỗi terminal FFI trước đó được truy ra shell mặc định mở wizard zsh trong HOME thử nghiệm; test đã dùng `/bin/sh` và output riêng dòng. Build macOS không ký đã qua ở lượt trước, chưa chạy lại sau thay đổi này.
+Gate chưa qua trọn vẹn: build macOS có ký cần chứng chỉ phát triển. Sau khi chuyển wire auth sang version 6 và ràng buộc chữ ký với phiên QUIC/TLS, `make test`, `make lint`, `make test-platform`, `make test-integration` và `make build-cli` đã qua trên Linux. Lần chạy platform đầu sau thay đổi còn lỗi ở test terminal thiếu định danh phiên và đã sửa; một lần chạy kế tiếp lỗi timeout ở test ping/reconnect, lần lặp lại qua. Lỗi terminal FFI trước đó được truy ra shell mặc định mở wizard zsh trong HOME thử nghiệm; test đã dùng `/bin/sh` và output riêng dòng. Build macOS không ký đã qua ở lượt trước, chưa chạy lại sau thay đổi này.
 
 ## 1. Phạm vi đã chốt
 
@@ -100,14 +108,16 @@ Logic thuần dữ liệu/giao thức đặt trong `core/`. Crypto, filesystem, 
 
 - [x] Giữ khóa TLS host P-256 hiện có để tương thích quiche/BoringSSL đang dùng. Không đổi TLS sang Ed25519 trong đợt này.
 - [x] Thêm abstraction khóa xác thực client, độc lập với chứng chỉ TLS. Import khóa client không làm thay đổi khóa TLS host.
-- [ ] Mặc định mỗi thiết bị có một khóa xác thực riêng; cho phép lưu nhiều khóa import và chọn khóa cho từng host.
-- [ ] Hỗ trợ Ed25519 và ECDSA P-256 trong đợt đầu. RSA, FIDO/security key, SSH certificate và ssh-agent là phần mở rộng riêng.
+- [x] Mặc định mỗi thiết bị có một khóa xác thực riêng; CLI cho phép tạo/import nhiều khóa theo tên và hồ sơ host chọn khóa tương ứng.
+- [x] Hỗ trợ Ed25519 và ECDSA P-256 cho khóa client được tạo hoặc import dạng PKCS#8 và dùng để xác thực. RSA, FIDO/security key, SSH certificate và ssh-agent là phần mở rộng riêng.
 - [x] Public key dùng text OpenSSH một dòng: `<key-type> <base64-key-blob> <optional-label>`.
 - [ ] Private key import hỗ trợ OpenSSH và PKCS#8 cho các thuật toán đã nêu; từ chối rõ định dạng/thuật toán chưa hỗ trợ.
 - [x] Kiểm tra khóa private hợp lệ, suy ra public key và xác minh cặp khóa bằng ký/xác minh thử trước khi lưu.
 - [ ] Dùng thư viện crypto/parser đã được duy trì; khảo sát khả năng thư viện hiện có trước khi chọn dependency đọc OpenSSH private key. Không tự xây thuật toán mật mã/KDF.
-- [ ] Nếu private key import có passphrase, yêu cầu mở khóa trong luồng import. CLI không tương tác nhận qua stdin/file descriptor riêng và báo lỗi nếu thiếu; không truyền bí mật qua argv/log.
+- [x] Nếu private key PKCS#8 import có passphrase, yêu cầu mở khóa trong luồng import. CLI không tương tác nhận qua stdin với `--passphrase-stdin` và báo lỗi nếu thiếu; không truyền bí mật qua argv/log. OpenSSH còn chờ parser hỗ trợ.
 - [ ] Phân biệt passphrase bảo vệ file private key với passcode kết nối đã bị loại bỏ. Sau import, khóa được bảo vệ bằng cơ chế lưu cục bộ để kết nối không cần popup.
+
+Khảo sát ban đầu: parser PEM/PKCS#8 hiện có dùng BoringSSL; repo chưa chứa parser private key OpenSSH hay `libssh`. [API `ssh_pki_import_privkey_base64` của libssh](https://api.libssh.org/master/group__libssh__pki.html) có đường đọc OpenSSH private key và passphrase, nhưng cần kiểm tra tương thích build với BoringSSL trên các nền tảng trước khi thêm dependency. Không dùng tiến trình `ssh-keygen` làm đường import chung vì mobile không có công cụ này.
 
 ### 4.2. Ba nhóm cấu hình
 
@@ -119,42 +129,42 @@ Tên file và lệnh bên dưới là thiết kế dự kiến cần thống nh�
 | `authorized_keys` | Mỗi dòng một public key client, kèm comment tùy chọn | Danh sách rỗng từ chối tất cả |
 | Host profiles | Alias, địa chỉ/cổng, khóa TLS host đã ghim, ID khóa client sử dụng | Không có pin thì không kết nối |
 
-- [ ] Parser giới hạn kích thước, kiểm tra base64 và tính nhất quán giữa loại khóa khai báo với blob; phát hiện khóa trùng sau chuẩn hóa.
+- [x] Parser `authorized_keys` giới hạn kích thước, kiểm tra base64 và tính nhất quán giữa loại khóa khai báo với blob; phát hiện khóa trùng sau chuẩn hóa.
 - [x] Parser chỉ nhận cú pháp public key đã định nghĩa; không âm thầm bỏ qua các option `authorized_keys` của OpenSSH chưa hỗ trợ.
-- [ ] Chuẩn hóa fingerprint và ghi rõ encoding được hash. Fingerprint SPKI hiện tại khác fingerprint trên SSH key blob; không so sánh hai loại như cùng một giá trị.
-- [ ] UI hiển thị rõ fingerprint khóa client và fingerprint TLS host để tránh copy nhầm.
-- [ ] Hồ sơ host lưu alias riêng với địa chỉ; thay IP/cổng không tự thay khóa tin cậy.
-- [ ] Host TLS public key/fingerprint có cách xuất text và nhập trước trên client; cả hai đầu dùng cùng quy ước fingerprint.
-- [ ] Quyền truy cập gắn với khóa, không gắn IP. Chép cùng private key sang hai thiết bị sẽ khiến chúng dùng chung danh tính và bị thu hồi cùng nhau.
+- [x] Fingerprint `SHA256:…` của Deskhub là SHA-256 trên DER SPKI; đã ghi rõ trong kiến trúc bốn ngôn ngữ. Fingerprint SSH trên key blob là giá trị khác, không so sánh trực tiếp.
+- [x] UI Apple, Android, Linux và Windows hiển thị riêng public key/fingerprint xác thực client và fingerprint TLS host, đều ghi rõ SHA-256 trên SPKI.
+- [x] Hồ sơ host lưu alias riêng với địa chỉ; thay IP/cổng không tự thay khóa tin cậy.
+- [x] Host TLS public key/fingerprint có cách xuất text (`trust public`) và nhập trước trên client (`trust add ADDRESS PUBLIC_KEY|FINGERPRINT`); hai đầu dùng fingerprint SHA-256 của SPKI.
+- [x] Quyền truy cập gắn với public key trong `authorized_keys`, không gắn IP. Chép cùng private key sang hai thiết bị khiến chúng dùng chung danh tính và bị thu hồi cùng nhau.
 
 ### 4.3. Lưu trữ và reload
 
-- [ ] Tạo API lưu khóa riêng trong `platform/`, không ghi private key bằng helper ghi text chung hiện tại.
+- [x] `ClientIdentity` có đường ghi khóa riêng, tạo file tạm `0600` trên POSIX, ghi/flush rồi thay thế atomic; không dùng helper ghi text chung cho private key.
 - [ ] Chọn backend lưu cục bộ cho từng OS: credential store hoặc mã hóa bằng khóa được OS bảo vệ; với file service phải giới hạn quyền đọc cho tài khoản chạy service.
 - [ ] Xem xét iOS app/broadcast extension và desktop app/CLI dùng chung danh tính: backend phải hỗ trợ đúng app group/tài khoản, không vô tình tạo hai danh tính khác nhau.
 - [ ] POSIX đặt quyền phù hợp cho thư mục/file nhạy cảm; Windows đặt ACL phù hợp. Tạo file tạm với quyền chặt ngay từ đầu.
-- [ ] Ghi atomic, serialize thao tác sửa và xử lý app/CLI truy cập cùng cấu hình. Chỉ báo thành công sau khi persist thành công.
-- [ ] Tách thư mục cấu hình có thể chỉ định để service không phụ thuộc tài khoản GUI hoặc thư mục log.
-- [ ] Reload danh sách public key khi GUI/CLI cập nhật hoặc khi service yêu cầu reload. Đồng bộ thay đổi tới các transport đang chạy.
+- [x] Private key, `authorized_keys`, `known_hosts` và `paired_devices` ghi atomic; thao tác sửa khóa bằng mutex và file lock liên tiến trình, chỉ báo thành công sau khi ghi xong.
+- [x] Thư mục cấu hình có thể chỉ định riêng bằng `SetConfigDir` hoặc `DESKHUB_CONFIG_DIR`, để service không phụ thuộc thư mục log/tài khoản GUI; test xác nhận hai đường dẫn độc lập.
+- [x] Host đọc `authorized_keys` từ đĩa khi xét admission và khi rà quyền các kết nối đang chạy; thay đổi bởi GUI/CLI hoặc tiến trình ngoài đều thu hồi kết nối tương ứng.
 - [ ] File thiếu/hỏng không được dẫn tới cho phép tất cả. Reload lỗi phải báo rõ, từ chối admission mới và không báo đã áp dụng việc thu hồi khi chưa áp dụng được.
 - [x] Khóa đã tồn tại nhưng không đọc được phải trả lỗi; không âm thầm sinh khóa mới. Không log private key hoặc passphrase.
 
 ## 5. Handshake chỉ bằng khóa
 
 - [x] Định nghĩa phiên bản auth mới; client/server không hỗ trợ phải trả lỗi phiên bản và đóng kết nối. Không fallback về passcode, approval hay plaintext.
-- [ ] `AuthStart` gửi thuật toán, public key client và tên hiển thị có giới hạn độ dài.
+- [x] `AuthStart` gửi SPKI DER chứa OID thuật toán, public key client và tên hiển thị có giới hạn độ dài. Host chỉ nhận SPKI Ed25519/P-256 và đóng kết nối nếu khóa không hỗ trợ.
 - [x] Host kiểm tra public key hợp lệ và có trong danh sách được phép trước khi tiếp tục xác thực.
 - [x] Host chỉ nhận một phản hồi chữ ký trên mỗi kết nối; định danh phiên QUIC/TLS thay nonce challenge riêng.
 - [x] Định nghĩa transcript bằng encoding không mơ hồ, gồm nhãn riêng của Deskhub, version, vai trò, định danh phiên, danh tính client và khóa TLS host.
 - [x] Ràng buộc chữ ký với phiên transport bằng TLS exporter của quiche; bổ sung wrapper C và test. Không coi IP/port là session binding.
-- [ ] Client ký transcript bằng private key đã chọn; host xác minh bằng public key đã được cấp quyền.
+- [x] Client ký transcript bằng private key đã chọn; host xác minh bằng public key đã được cấp quyền. QUIC loopback đã kiểm tra khóa client được chọn và khóa khác bị từ chối.
 - [x] Kiểm tra lại quyền ngay trước khi chấp nhận, tránh khóa bị thu hồi trong lúc handshake vẫn được cho vào.
 - [x] Client chỉ nhận `Accepted` trong trạng thái đã hoàn thành các bước xác thực mong đợi; từ chối message sai thứ tự/lặp hoặc không thuộc kết nối hiện tại.
 - [ ] Auth thành công chỉ có hiệu lực cho kết nối đó. Reconnect, resume hoặc QUIC session resumption không tự kế thừa admission; không chạy thao tác đặc quyền bằng 0-RTT trước auth.
-- [ ] Không cho phép screen, input, clipboard, terminal, file transfer hoặc danh sách tài nguyên trước khi auth hoàn tất.
-- [ ] Thu hồi khóa đóng tất cả kết nối của khóa đó và chặn lần kết nối tiếp theo, kể cả khi cập nhật bằng CLI/service.
+- [x] Transport host không chuyển message ứng dụng vào các handler và không gửi record/datagram ứng dụng trước khi auth hoàn tất; bao gồm các kênh screen, input, clipboard, terminal, file transfer và danh sách tài nguyên.
+- [x] Thu hồi khóa đóng các kết nối đang được cấp quyền của khóa đó và chặn kết nối mới; host nhận cả thay đổi cùng tiến trình và file được tiến trình khác thay thế. QUIC loopback kiểm tra thu hồi đang chạy và thay đổi file bên ngoài.
 - [x] Giới hạn thời gian/số handshake đang chờ và lưu lượng auth thất bại; thay cơ chế throttle passcode bằng giới hạn phù hợp với auth bằng khóa.
-- [ ] Trả mã lỗi ổn định: host chưa tin cậy, host đổi khóa, khóa client chưa được cấp quyền, chữ ký sai, khóa cục bộ không dùng được, version không tương thích, timeout, lỗi cấu hình.
+- [x] Trả mã lỗi ổn định: host chưa tin cậy, host đổi khóa, khóa client chưa được cấp quyền, chữ ký sai, khóa cục bộ không dùng được, version không tương thích, timeout, lỗi cấu hình; wire auth tăng lên version 6 cho mã lỗi mới.
 
 ## 6. GUI, CLI và API cho service
 
@@ -209,7 +219,7 @@ Bỏ discovery giảm dữ liệu công khai và đường xử lý trước aut
 
 ## 8. Chuyển đổi dữ liệu và tương thích
 
-- [ ] Giữ khóa TLS host hiện tại nếu hợp lệ để tránh đổi danh tính host ngoài ý muốn.
+- [x] Giữ khóa TLS host hiện tại nếu hợp lệ để tránh đổi danh tính host ngoài ý muốn; file đã lưu nhưng không dùng được không bị tự thay thế.
 - [ ] Version hóa cấu hình mới; migration có thể chạy lại an toàn, chỉ đánh dấu hoàn tất sau khi ghi thành công.
 - [ ] `paired_devices` cũ chỉ lưu fingerprint, không có public key để xuất thành `authorized_keys`. Không chuyển fingerprint thành một public key giả hoặc tự cấp quyền cho khóa do mạng cung cấp.
 - [ ] Cung cấp hướng dẫn/lệnh migration chủ động: xuất public key từ identity cũ trên từng client và thêm lại trên host, hoặc tạo khóa client mới rồi cấp quyền.

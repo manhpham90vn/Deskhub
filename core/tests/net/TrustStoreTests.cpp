@@ -66,8 +66,8 @@ void TestThreeTrustStates() {
     Check(store.Check("192.168.1.10:47777", Fingerprint{}) == TrustVerdict::Unknown,
         "a host that offered no key is never trusted");
 
-    Check(store.Check("10.0.0.9:47777", mine) == TrustVerdict::Trusted,
-        "the same machine on a new address is recognised by its key");
+    Check(store.Check("10.0.0.9:47777", mine) == TrustVerdict::Unknown,
+        "a new address needs its own explicit host pin, even for a known key");
     Check(store.Check("10.0.0.9:47777", theirs) == TrustVerdict::Unknown,
         "an unknown key at an unknown address is simply new");
 }
@@ -126,6 +126,8 @@ void TestSerializeRoundTrip() {
     store.Remember("192.168.1.10:47777", "Workstation", MakeFingerprint(5), 111);
     store.Remember("10.0.0.9:47777", "", MakeFingerprint(6), 222);
     store.Remember("[fe80::1]:47777", "Laptop with spaces", MakeFingerprint(7), 333);
+    Check(store.SetProfile("192.168.1.10:47777", "Workstation", "phone"),
+        "a host profile selects a named client key");
 
     const std::string text = SerializeTrustStore(store);
     const TrustStore back = ParseTrustStore(text);
@@ -137,6 +139,10 @@ void TestSerializeRoundTrip() {
         "address, name and key all survive");
     Check(one && one->firstSeenUnix == 111 && one->lastSeenUnix == 111,
         "and so do both timestamps");
+    Check(one && one->identityName == "phone",
+        "the selected client key survives serialization");
+    Check(!store.SetProfile("192.168.1.10:47777", "Workstation", "../escape"),
+        "a host profile cannot reference a key outside the identity store");
     const auto spaced = back.Find("[fe80::1]:47777");
     Check(spaced && spaced->label == "Laptop with spaces",
         "a name with spaces is kept whole because it is the last field");
@@ -191,6 +197,25 @@ void TestParseJunk() {
     }
 }
 
+void TestStrictHostProfilesRejectDamage() {
+    std::printf("[trust] a damaged host profile file grants no trust...\n");
+    TrustStore store;
+    store.Remember("host:1", "Host", MakeFingerprint(4), 1);
+    Check(store.SetProfile("host:1", "Host", "phone"),
+        "the test profile selects a named identity");
+    const std::string valid = SerializeTrustStore(store);
+    const auto parsed = ParseTrustStoreStrict(valid);
+    Check(parsed && parsed->Find("host:1") &&
+              parsed->Find("host:1")->identityName == "phone",
+        "a valid profile is preserved");
+    Check(!ParseTrustStoreStrict(valid + "damaged row\n"),
+        "one malformed row invalidates every host pin");
+    Check(!ParseTrustStoreStrict(valid + valid),
+        "a duplicate endpoint invalidates the file");
+    Check(!ParseTrustStoreStrict(std::string(131073, 'x')),
+        "an oversized profile file is rejected");
+}
+
 }
 
 void RunTrustStoreTests() {
@@ -200,4 +225,5 @@ void RunTrustStoreTests() {
     TestCapEvictsOldest();
     TestSerializeRoundTrip();
     TestParseJunk();
+    TestStrictHostProfilesRejectDamage();
 }

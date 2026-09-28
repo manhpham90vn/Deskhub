@@ -9,12 +9,28 @@ ClientIdentity LoadClientIdentity() {
     return {};
 }
 
+ClientIdentity LoadClientIdentity(std::string_view) {
+    return {};
+}
+
 ClientIdentity LoadOrCreateClientIdentity() {
+    return {};
+}
+
+ClientIdentity GenerateClientIdentity(std::string_view) {
     return {};
 }
 
 bool ImportClientIdentity(std::string_view, std::string_view) {
     return false;
+}
+
+bool ImportClientIdentity(std::string_view, std::string_view, std::string_view) {
+    return false;
+}
+
+std::vector<ClientIdentityInfo> ListClientIdentities() {
+    return {};
 }
 
 std::string ClientPublicKeyText(const ClientIdentity&) {

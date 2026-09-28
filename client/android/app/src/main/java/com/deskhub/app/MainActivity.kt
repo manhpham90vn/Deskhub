@@ -1121,8 +1121,21 @@ private fun DevicesScreen() {
         ) { Text(NativeClient.string(NativeClient.STR_PAIRED_FORGET_ALL)) }
 
         SectionLabel(NativeClient.string(NativeClient.STR_THIS_MACHINE_HEADING))
+        Text("Client authentication public key")
+        Text(
+            NativeClient.ownPublicKey(),
+            style = MaterialTheme.typography.bodySmall,
+            color = HeadingColor,
+        )
+        Text("Client authentication fingerprint (SHA-256 of SPKI)")
         Text(
             NativeClient.ownFingerprint(),
+            style = MaterialTheme.typography.bodySmall,
+            color = HeadingColor,
+        )
+        Text("TLS host fingerprint (SHA-256 of SPKI)")
+        Text(
+            NativeClient.hostFingerprint(),
             style = MaterialTheme.typography.bodySmall,
             color = HeadingColor,
         )

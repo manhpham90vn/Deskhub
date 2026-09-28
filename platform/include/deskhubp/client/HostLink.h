@@ -38,6 +38,7 @@ struct HostLinkConfig {
     std::string hostLabel{};
     std::string passcode{};
     std::string clientName{};
+    std::string clientIdentityName{};
     bool recoverLink = false;
     uint64_t recoverGraceUs = 0;
     uint32_t connectTimeoutMs = 10'000;

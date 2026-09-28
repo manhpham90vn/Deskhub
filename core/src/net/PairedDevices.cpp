@@ -15,6 +15,29 @@ std::string SanitizeName(std::string_view name) {
     return detail::SanitizeText(name, kMaxPairedNameBytes);
 }
 
+std::optional<PairedDevice> ParsePairedDeviceLine(std::string_view line) {
+    const size_t s1 = line.find(' ');
+    if (s1 == std::string_view::npos) return std::nullopt;
+    const size_t s2 = line.find(' ', s1 + 1);
+    if (s2 == std::string_view::npos) return std::nullopt;
+    const size_t s3 = line.find(' ', s2 + 1);
+
+    const std::optional<Fingerprint> fp = ParseFingerprint(line.substr(0, s1));
+    if (!fp || IsZero(*fp)) return std::nullopt;
+    int64_t paired = 0;
+    int64_t lastSeen = 0;
+    if (!ParseUnixTime(line.substr(s1 + 1, s2 - s1 - 1), paired)) return std::nullopt;
+    const size_t stampEnd = s3 == std::string_view::npos ? line.size() : s3;
+    if (!ParseUnixTime(line.substr(s2 + 1, stampEnd - s2 - 1), lastSeen))
+        return std::nullopt;
+
+    const std::string_view rawName =
+        s3 == std::string_view::npos ? std::string_view() : line.substr(s3 + 1);
+    const std::string name = SanitizeName(rawName);
+    if (name != rawName) return std::nullopt;
+    return PairedDevice{*fp, name, paired, lastSeen};
+}
+
 }
 
 PairVerdict PairedDevices::Check(const Fingerprint& fp) const {
@@ -84,7 +107,8 @@ std::string ShortFingerprint(const Fingerprint& fp) {
     return full.substr(start, kShortFingerprintChars);
 }
 
-PairedDevices ParsePairedDevices(std::string_view text) {
+std::optional<PairedDevices> ParsePairedDevicesStrict(std::string_view text) {
+    if (text.size() > 32768) return std::nullopt;
     PairedDevices out;
     size_t pos = 0;
     while (pos < text.size()) {
@@ -93,25 +117,11 @@ PairedDevices ParsePairedDevices(std::string_view text) {
         const std::string line = Trim(text.substr(pos, end - pos));
         pos = end + 1;
         if (line.empty() || line[0] == '#') continue;
-
-        const size_t s1 = line.find(' ');
-        if (s1 == std::string::npos) continue;
-        const size_t s2 = line.find(' ', s1 + 1);
-        if (s2 == std::string::npos) continue;
-        const size_t s3 = line.find(' ', s2 + 1);
-
-        const std::optional<Fingerprint> fp = ParseFingerprint(line.substr(0, s1));
-        if (!fp) continue;
-        int64_t paired = 0;
-        int64_t lastSeen = 0;
-        if (!ParseUnixTime(std::string_view(line).substr(s1 + 1, s2 - s1 - 1), paired)) continue;
-        const size_t stampEnd = s3 == std::string::npos ? line.size() : s3;
-        if (!ParseUnixTime(std::string_view(line).substr(s2 + 1, stampEnd - s2 - 1), lastSeen))
-            continue;
-
-        const std::string name =
-            s3 == std::string::npos ? std::string() : SanitizeName(line.substr(s3 + 1));
-        out.Insert(PairedDevice{*fp, name, paired, lastSeen});
+        const auto device = ParsePairedDeviceLine(line);
+        if (!device || out.Size() >= kMaxPairedDevices ||
+            out.Find(device->fingerprint).has_value() || line.size() > 512)
+            return std::nullopt;
+        out.Insert(*device);
     }
     return out;
 }

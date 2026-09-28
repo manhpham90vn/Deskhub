@@ -574,6 +574,20 @@ Java_com_deskhub_app_NativeClient_nativeOwnFingerprint(JNIEnv* env, jobject) {
     return env->NewStringUTF(buf);
 }
 
+JNIEXPORT jstring JNICALL
+Java_com_deskhub_app_NativeClient_nativeHostFingerprint(JNIEnv* env, jobject) {
+    char buf[128];
+    dh_host_fingerprint(buf, int(sizeof(buf)));
+    return env->NewStringUTF(buf);
+}
+
+JNIEXPORT jstring JNICALL
+Java_com_deskhub_app_NativeClient_nativeOwnPublicKey(JNIEnv* env, jobject) {
+    char buf[1024];
+    dh_own_public_key(buf, int(sizeof(buf)));
+    return env->NewStringUTF(buf);
+}
+
 JNIEXPORT jboolean JNICALL
 Java_com_deskhub_app_NativeClient_nativeIsValidPasscode(JNIEnv* env, jobject,
     jstring passcodeStr) {

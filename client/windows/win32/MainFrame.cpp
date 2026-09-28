@@ -60,8 +60,10 @@
 #include "deskhubp/system/Clock.h"
 #include "deskhubp/system/Autostart.h"
 #include "deskhubp/system/DeviceName.h"
+#include "deskhubp/system/ClientIdentity.h"
 #include "deskhubp/system/HostIdentity.h"
 #include "deskhubp/system/PairedDevicesFile.h"
+#include "deskhubp/system/AuthorizedKeysFile.h"
 #include "deskhubp/system/UiSettingsStore.h"
 
 namespace {
@@ -940,12 +942,23 @@ wxWindow* MainFrame::BuildDevicesPage(wxWindow* parent) {
     sizer->Add(MakeSection(panel, ui::kThisMachineHeading), pad);
     const std::string name =
         settings_.deviceName.empty() ? deskhubp::LocalDeviceName() : settings_.deviceName;
-    const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity(name);
+    const deskhubp::ClientIdentity clientIdentity = deskhubp::LoadOrCreateClientIdentity();
+    const deskhubp::HostIdentity hostIdentity = deskhubp::LoadOrCreateHostIdentity(name);
+    sizer->Add(new wxStaticText(panel, wxID_ANY, "Client authentication public key"), pad);
+    auto* publicKeyText = new wxStaticText(panel, wxID_ANY,
+        ToWx(deskhubp::ClientPublicKeyText(clientIdentity)));
+    sizer->Add(publicKeyText, pad);
+    sizer->Add(new wxStaticText(panel, wxID_ANY, "Client authentication fingerprint (SHA-256 of SPKI)"), pad);
     auto* keyText = new wxStaticText(panel, wxID_ANY,
-        ToWx(identity.Valid() ? deskhub::FormatFingerprint(identity.fingerprint)
-                              : std::string(ui::kShareNoHostIdentity)));
+        ToWx(clientIdentity.Valid() ? deskhub::FormatFingerprint(clientIdentity.fingerprint)
+                                    : std::string(ui::kShareNoHostIdentity)));
     keyText->SetName("own-fingerprint");
     sizer->Add(keyText, pad);
+    sizer->Add(new wxStaticText(panel, wxID_ANY, "TLS host fingerprint (SHA-256 of SPKI)"), pad);
+    sizer->Add(new wxStaticText(panel, wxID_ANY,
+                   ToWx(hostIdentity.Valid() ? deskhub::FormatFingerprint(hostIdentity.fingerprint)
+                                             : std::string(ui::kShareNoHostIdentity))),
+        pad);
     sizer->Add(MakeHint(panel, ToWx(ui::kThisMachineHint)),
         wxSizerFlags().Border(wxALL, FromDIP(16)));
 
@@ -957,7 +970,8 @@ wxWindow* MainFrame::BuildDevicesPage(wxWindow* parent) {
 
 void MainFrame::RefreshPairedDevices() {
     if (pairedList_ == nullptr) return;
-    pairedDevices_ = deskhubp::LoadPairedDevices().Devices();
+    const auto authorized = deskhubp::LoadEffectiveAuthorizedDevices();
+    pairedDevices_ = authorized ? authorized->Devices() : std::vector<deskhub::PairedDevice>{};
 
     pairedRows_->Clear(true);
     const wxSize actionSize = FromDIP(wxSize(120, 32));
@@ -999,7 +1013,7 @@ void MainFrame::RefreshPairedDevices() {
         PaintButton(forget, kOffline);
         const deskhub::Fingerprint fingerprint = device.fingerprint;
         forget->Bind(wxEVT_BUTTON, [this, fingerprint](wxCommandEvent&) {
-            deskhubp::ForgetPairedDevice(fingerprint);
+            deskhubp::ForgetEffectiveAuthorizedDevice(fingerprint);
             RefreshPairedDevices();
         });
         row->Add(forget, wxSizerFlags().CentreVertical());

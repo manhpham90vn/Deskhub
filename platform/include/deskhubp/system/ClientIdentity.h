@@ -24,9 +24,21 @@ struct ClientIdentity {
     }
 };
 
+struct ClientIdentityInfo {
+    std::string name{};
+    std::string publicKeyText{};
+    deskhub::Fingerprint fingerprint{};
+    bool valid = false;
+};
+
 ClientIdentity LoadClientIdentity();
+ClientIdentity LoadClientIdentity(std::string_view name);
 ClientIdentity LoadOrCreateClientIdentity();
+ClientIdentity GenerateClientIdentity(std::string_view name);
 bool ImportClientIdentity(std::string_view privateKeyPem, std::string_view passphrase);
+bool ImportClientIdentity(std::string_view name, std::string_view privateKeyPem,
+    std::string_view passphrase);
+std::vector<ClientIdentityInfo> ListClientIdentities();
 std::string ClientPublicKeyText(const ClientIdentity& identity);
 std::vector<uint8_t> SignWithClientIdentity(const ClientIdentity& identity,
     std::span<const uint8_t> data);

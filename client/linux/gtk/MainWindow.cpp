@@ -21,8 +21,10 @@
 #include "deskhubp/system/FolderOpen.h"
 #include "deskhubp/system/Autostart.h"
 #include "deskhubp/system/DeviceName.h"
+#include "deskhubp/system/ClientIdentity.h"
 #include "deskhubp/system/HostIdentity.h"
 #include "deskhubp/system/PairedDevicesFile.h"
+#include "deskhubp/system/AuthorizedKeysFile.h"
 #include "deskhubp/system/UiSettingsStore.h"
 
 #include "deskhub/media/QualityPreset.h"
@@ -1026,12 +1028,24 @@ GtkWidget* MainWindow::BuildDevicesPage() {
     gtk_box_pack_start(GTK_BOX(box), Section(ui::kThisMachineHeading), FALSE, FALSE, 0);
     const std::string name =
         settings_.deviceName.empty() ? deskhubp::LocalDeviceName() : settings_.deviceName;
-    const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity(name);
-    GtkWidget* keyText = Label(identity.Valid()
-                                   ? deskhub::FormatFingerprint(identity.fingerprint)
+    const deskhubp::ClientIdentity clientIdentity = deskhubp::LoadOrCreateClientIdentity();
+    const deskhubp::HostIdentity hostIdentity = deskhubp::LoadOrCreateHostIdentity(name);
+    gtk_box_pack_start(GTK_BOX(box), Label("Client authentication public key"), FALSE, FALSE, 0);
+    GtkWidget* publicKeyText = Label(deskhubp::ClientPublicKeyText(clientIdentity));
+    gtk_label_set_selectable(GTK_LABEL(publicKeyText), TRUE);
+    gtk_box_pack_start(GTK_BOX(box), publicKeyText, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(box), Label("Client authentication fingerprint (SHA-256 of SPKI)"), FALSE, FALSE, 0);
+    GtkWidget* keyText = Label(clientIdentity.Valid()
+                                   ? deskhub::FormatFingerprint(clientIdentity.fingerprint)
                                    : std::string(ui::kShareNoHostIdentity));
     gtk_label_set_selectable(GTK_LABEL(keyText), TRUE);
     gtk_box_pack_start(GTK_BOX(box), keyText, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(box), Label("TLS host fingerprint (SHA-256 of SPKI)"), FALSE, FALSE, 0);
+    GtkWidget* hostKeyText = Label(hostIdentity.Valid()
+                                       ? deskhub::FormatFingerprint(hostIdentity.fingerprint)
+                                       : std::string(ui::kShareNoHostIdentity));
+    gtk_label_set_selectable(GTK_LABEL(hostKeyText), TRUE);
+    gtk_box_pack_start(GTK_BOX(box), hostKeyText, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(box), Hint(ui::kThisMachineHint), FALSE, FALSE, 0);
 
     RefreshPairedDevices();
@@ -1040,7 +1054,8 @@ GtkWidget* MainWindow::BuildDevicesPage() {
 
 void MainWindow::RefreshPairedDevices() {
     if (pairedView_ == nullptr) return;
-    pairedDevices_ = deskhubp::LoadPairedDevices().Devices();
+    const auto authorized = deskhubp::LoadEffectiveAuthorizedDevices();
+    pairedDevices_ = authorized ? authorized->Devices() : std::vector<deskhub::PairedDevice>{};
 
     GList* children = gtk_container_get_children(GTK_CONTAINER(pairedView_));
     for (GList* child = children; child != nullptr; child = child->next)
@@ -1098,7 +1113,7 @@ void MainWindow::OnForgetDeviceClicked(GtkButton* button, gpointer user) {
     const int row = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(button), "deskhub-paired-row")) - 1;
     if (row < 0 || size_t(row) >= self->pairedDevices_.size()) return;
     const deskhub::Fingerprint fingerprint = self->pairedDevices_[size_t(row)].fingerprint;
-    deskhubp::ForgetPairedDevice(fingerprint);
+    deskhubp::ForgetEffectiveAuthorizedDevice(fingerprint);
     self->RefreshPairedDevices();
 }
 

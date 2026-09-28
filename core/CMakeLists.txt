@@ -70,6 +70,7 @@ add_library(core STATIC
     src/net/TrustStore.cpp
     src/net/PairedDevices.cpp
     src/net/PublicKeyText.cpp
+    src/net/AuthorizedKeys.cpp
 
     src/terminal/VtParser.cpp
     src/terminal/Screen.cpp

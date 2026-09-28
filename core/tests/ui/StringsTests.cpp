@@ -214,7 +214,7 @@ void TestTerminalRefusalsNameTheirOwnCause() {
 void TestEveryAuthVerdictReadsAsItsOwnMessage() {
     std::printf("[strings] each auth verdict has its own words, including version mismatch...\n");
     std::vector<std::string> seen;
-    for (uint8_t c = 0; c <= uint8_t(AuthResultCode::VersionMismatch); ++c) {
+    for (uint8_t c = 0; c <= uint8_t(AuthResultCode::LocalKeyUnavailable); ++c) {
         const std::string text = ui::AuthRefusalText(AuthResultCode(c));
         Check(!text.empty(), "every verdict has words to show");
         for (const std::string& other : seen)

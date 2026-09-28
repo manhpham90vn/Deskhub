@@ -16,7 +16,7 @@ constexpr uint32_t kPollWaitMs = 2;
 
 bool QuerySources(const NetAddr& server, std::vector<deskhub::SourceInfo>& out,
     const std::string& passcode, deskhub::AuthResultCode* outCode,
-    deskhub::HostCaps* outCaps) {
+    deskhub::HostCaps* outCaps, std::string_view clientIdentityName) {
     out.clear();
     if (outCode) *outCode = deskhub::AuthResultCode::NotPaired;
     if (outCaps) *outCaps = deskhub::HostCaps{};
@@ -35,6 +35,7 @@ bool QuerySources(const NetAddr& server, std::vector<deskhub::SourceInfo>& out,
     config.hostLabel = server.ToString();
     config.passcode = passcode;
     config.clientName = deskhubp::SessionDeviceName();
+    config.clientIdentityName = clientIdentityName;
     config.connectTimeoutMs = kHandshakeTimeoutMs;
     config.authTimeoutMs = kAuthTimeoutMs;
     config.recvWaitMs = kPollWaitMs;

@@ -33,7 +33,8 @@ ExitCode RunConnect(const Command& command) {
     std::vector<deskhub::SourceInfo> offered;
     deskhub::AuthResultCode code = deskhub::AuthResultCode::NotPaired;
     deskhub::HostCaps caps{};
-    if (!QuerySources(server, offered, {}, &code, &caps)) {
+    if (!QuerySources(server, offered, {}, &code, &caps,
+            command.identityName.value_or(""))) {
         PrintError(deskhub::ui::AuthRefusalText(code));
         return ExitCode::Refused;
     }
@@ -63,6 +64,7 @@ ExitCode RunConnect(const Command& command) {
     request.hostLabel = command.address;
     request.displayName =
         command.deviceName ? *command.deviceName : deskhubp::SessionDeviceName();
+    request.clientIdentityName = command.identityName.value_or("");
     request.control = command.connect.control && caps.acceptsInput;
     request.audio = command.connect.audio.value_or(settings.playAudio) && caps.audio;
     for (size_t index : pick.indices) request.sources.push_back(offered[index]);

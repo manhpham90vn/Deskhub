@@ -71,12 +71,12 @@ bool ExerciseWireParsers(std::span<const uint8_t> d) {
         ok = ok && authStart->clientName.size() <= kMaxClientNameBytes;
     }
     if (const auto authChallenge = ParseAuthChallenge(pl)) {
-        ok = ok && uint8_t(authChallenge->mode) <= uint8_t(AuthMode::Signature);
+        ok = ok && uint8_t(authChallenge->mode) <= uint8_t(AuthMode::ConfigError);
     }
     if (const auto authResponse = ParseAuthResponse(pl))
         ok = ok && authResponse->proof.size() <= kMaxAuthBlobBytes;
     if (const auto authResult = ParseAuthResult(pl))
-        ok = ok && uint8_t(authResult->code) <= uint8_t(AuthResultCode::VersionMismatch);
+        ok = ok && uint8_t(authResult->code) <= uint8_t(AuthResultCode::ConfigError);
 
     if (h) {
         if (const auto v = ParseVideoPacket(*h, pl)) {
@@ -215,7 +215,7 @@ Datagram BuildRandomValidDatagram() {
         }
         case 19: {
             AuthResult m;
-            m.code = AuthResultCode(Rnd() % (uint8_t(AuthResultCode::VersionMismatch) + 1));
+            m.code = AuthResultCode(Rnd() % (uint8_t(AuthResultCode::ConfigError) + 1));
             n = BuildAuthResult(buf, m);
             break;
         }
