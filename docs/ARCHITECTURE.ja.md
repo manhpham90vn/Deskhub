@@ -853,6 +853,18 @@ scaling の 2 つの判定とともに実行する（共有 runner には時間�
   いる間は自身で `GDBusConnection` を保持する。デスクトップの app がこの問題を長く
   覆い隠していたのは、GTK がプロセスの寿命の間 session bus への参照を保持するためで
   ある。`deskhub-cli` は GTK を link しないため、その参照を持たなかった。
+- **キャプチャする画面ごとに自分の PipeWire リモートを開く**：portal のセッションが
+  `OpenPipeWireRemote` から渡す fd は一つで、それを複製しても二本目の接続にはならない —
+  `dup` は同じソケットを指す別のディスクリプタにすぎない。複製に対して
+  `pw_context_connect_fd` を二回呼ぶと、独立した proxy-id マップを持つ `pw_core` が二つ
+  できて一本のバイトストリームを読み書きする。id はデーモンが持つ単一のクライアント id
+  空間で衝突し、先に epoll が起きたスレッドが相手宛のメッセージを — バッファのメモリを運ぶ
+  `SCM_RIGHTS` ディスクリプタも含めて — 飲み込んでしまう。競争に負けたストリームはリンクの
+  割り当て段階で *Buffer allocation failed* となって死ぬ。モニタが一台なら必ず動き、二台だと
+  運任せだったのはこれが理由である。そこで `ScreenCapture::Start` は
+  `PortalScreenCast::OpenRemoteFd()` を呼んで自分専用のリモートを取る。portal は start 済み
+  のセッションに対する `OpenPipeWireRemote` の再呼び出しを許している。セッションが最初の fd を
+  持ち続けるのは、portal がリモートを渡すことの確認と `isOpen()` の裏付けのためだけである。
 - **すべてのアイコンは 1 つの原本から生成し、角を丸めるのは一部のみである。**
   `make icons` は唯一のマスターである `assets/icon_1024.png` からセット全体を再生成
   する。macOS、iOS、Play Store の掲載、Android の adaptive-icon のパイプラインは、

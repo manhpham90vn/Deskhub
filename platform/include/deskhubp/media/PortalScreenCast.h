@@ -26,9 +26,7 @@ public:
         return pipewireFd_ >= 0;
     }
 
-    int pipewireFd() const {
-        return pipewireFd_;
-    }
+    int OpenRemoteFd();
 
     const std::vector<PortalStream>& streams() const {
         return streams_;
