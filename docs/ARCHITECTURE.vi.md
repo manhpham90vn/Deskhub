@@ -748,6 +748,13 @@ coverage của core.
   `com.deskhub.macos`: System Settings hiển thị quyền đã được cấp trong khi bản vừa chạy
   lại bị từ chối, và với Accessibility thì từ chối không kèm thông báo.
   `make reset-macos-permissions` xoá toàn bộ các lần cấp để lần chạy sau hỏi lại.
+  Vì vậy bản Debug chạy với bundle id `com.deskhub.macos.debug` ("Deskhub Dev"), chỉ còn
+  bản Release build tại máy là dùng chung mục đó với bản dmg.
+- **Bản Debug không bao giờ đụng tới bản release đã cài**: mọi bản Debug của app và CLI
+  (`DESKHUB_DEV_BUILD`, do CMake đặt cho cấu hình Debug) lưu dữ liệu trong `~/.deskhub-dev`
+  thay vì `~/.deskhub`. Nếu không, khi chạy bản build mới trên máy đang cài một bản release
+  cũ, bản mới đã xoá danh sách client được phép của bản release đó (bản mới xoá các file cũ)
+  và trên macOS còn tắt luôn app đang chạy vì dùng chung bundle id.
 - **macOS được build ở dạng desktop trong CI và ở dạng đã ký khi release, không đồng thời
   cả hai.** `build-desktop` compile app với chữ ký ad-hoc ở mỗi lần push, nên một thay đổi
   Cocoa không build được sẽ fail ngay trên pull request tương ứng. `deploy` xử lý cùng app

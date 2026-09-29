@@ -231,6 +231,7 @@ add_library(platform STATIC
     src/ffi/ClientKeyFfi.cpp
 )
 target_include_directories(platform PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
+target_compile_definitions(platform PUBLIC $<$<CONFIG:Debug>:DESKHUB_DEV_BUILD>)
 target_compile_features(platform PUBLIC cxx_std_20)
 target_link_libraries(platform PUBLIC core)
 

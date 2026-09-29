@@ -757,6 +757,14 @@ scaling の 2 つの判定とともに実行する（共有 runner には時間�
   `com.deskhub.macos` のエントリを共有する。System Settings では許可済みと表示される
   一方、起動したコピーは拒否され、Accessibility については通知もない。
   `make reset-macos-permissions` はすべての許可を消去し、次回の起動で再度確認させる。
+  そのため Debug build は `com.deskhub.macos.debug`（"Deskhub Dev"）として動き、dmg と
+  エントリを共有するのはローカルで build した Release のコピーだけになる。
+- **Debug build はインストール済みの release に決して触れない**：app と CLI のすべての Debug
+  build（Debug 構成で CMake が設定する `DESKHUB_DEV_BUILD`）はデータを `~/.deskhub` では
+  なく `~/.deskhub-dev` に保存する。これがないと、古い release をインストールしたマシンで
+  新しい build を動かしたとき、新しい build がその release の許可済み client 一覧を削除し
+  （新しい build は廃止したファイルを削除する）、macOS では共有する bundle id のせいで
+  実行中の app まで終了させていた。
 - **macOS は CI ではデスクトップ build、release では署名 build であり、同時に両方を行わ
   ない。** `build-desktop` は push のたびに app を ad-hoc 署名でコンパイルするため、
   build できなくなった Cocoa の変更はその pull request で失敗する。`deploy` は

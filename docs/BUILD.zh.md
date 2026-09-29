@@ -90,6 +90,12 @@ make lint      # 检查 C++、Kotlin 和 Swift 的 format，不写回文件
 不解析任何 command line 参数，所有选择均在四个页面中完成。`run-android` 通过 adb 在已
 连接的设备或 emulator 上安装并打开；`run-ios` 在 Simulator 上执行相同操作。
 
+Debug 版本不会干扰已安装的正式版。在所有桌面系统上，app 与 CLI 的 Debug 版本把 key、允许的
+client、受信任的 host、设置与日志保存在 `~/.deskhub-dev`（Windows：`%USERPROFILE%\.deskhub-dev`）
+而不是 `~/.deskhub`；在 macOS 上，`build-macos`/`run-macos` 生成 bundle id 为
+`com.deskhub.macos.debug` 的 **Deskhub Dev**。因此运行本地构建永远不会退出已安装的 app，
+不会触碰它的数据，并会单独申请 macOS 隐私权限。`release-<os>` 构建使用常规的目录与 bundle id。
+
 ### Command line client
 
 `client/cli/` 会构建 `deskhub-cli`，用命令代替 app 页面。它适合通过 SSH、脚本或

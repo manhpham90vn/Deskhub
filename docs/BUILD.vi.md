@@ -95,6 +95,14 @@ chạy). Các app desktop không nhận cờ command line nào; mọi lựa ch�
 giao diện. `run-android` cài và mở app trên thiết bị hoặc emulator đang kết nối qua adb;
 `run-ios` thực hiện tương tự trên Simulator.
 
+Bản Debug không đụng tới bản release đã cài. Trên mọi hệ điều hành desktop, bản Debug của
+app và CLI lưu key, client được phép, host đã trust, settings và log trong
+`~/.deskhub-dev` (Windows: `%USERPROFILE%\.deskhub-dev`) thay vì `~/.deskhub`; trên macOS,
+`build-macos`/`run-macos` tạo ra **Deskhub Dev** với bundle id `com.deskhub.macos.debug`.
+Vì vậy chạy bản build cục bộ không bao giờ tắt app đã cài, không đụng tới dữ liệu của nó,
+và tự xin quyền riêng tư macOS của riêng mình. Các target `release-<os>` dùng thư mục và
+bundle id bình thường.
+
 ### Command line client
 
 `client/cli/` build ra `deskhub-cli`, dùng lệnh thay cho các trang của app. Bạn có thể

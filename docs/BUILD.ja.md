@@ -97,6 +97,14 @@ make lint      # C++・Kotlin・Swift の format を検査する。ファイル�
 ページで行う。`run-android` は adb 経由で接続中の端末または emulator にインストールして
 起動し、`run-ios` は Simulator で同じ処理を行う。
 
+Debug build はインストール済みの release の邪魔をしない。どのデスクトップ OS でも、app と
+CLI の Debug build は key、許可済み client、信頼済み host、設定、ログを `~/.deskhub` ではなく
+`~/.deskhub-dev`（Windows: `%USERPROFILE%\.deskhub-dev`）に保存する。macOS では
+`build-macos`/`run-macos` が bundle id `com.deskhub.macos.debug` の **Deskhub Dev** を作る。
+そのためローカル build を動かしても、インストール済みの app を終了させることも、そのデータに
+触れることもなく、macOS のプライバシー権限も別に要求する。`release-<os>` の build は通常の
+フォルダと bundle id を使う。
+
 ### Command line client
 
 `client/cli/` は、app のページの代わりにコマンドで操作する `deskhub-cli` を build

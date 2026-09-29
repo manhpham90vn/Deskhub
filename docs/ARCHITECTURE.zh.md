@@ -634,6 +634,12 @@ runner 上与 base commit 的 A/B 结果（偏移仅作为警告，不导致失�
   签名）与 Developer ID 的 dmg 共用同一条 `com.deskhub.macos` 记录：System Settings 显示
   权限已授予，而刚启动的副本却被拒绝，对 Accessibility 则是无提示的拒绝。
   `make reset-macos-permissions` 清除全部授权，使下次启动重新询问。
+  因此 Debug 构建以 `com.deskhub.macos.debug`（"Deskhub Dev"）运行，只有本地构建的 Release
+  副本仍与 dmg 共用这条记录。
+- **Debug 构建从不触碰已安装的正式版**：app 与 CLI 的所有 Debug 构建（由 CMake 为 Debug 配置
+  设置 `DESKHUB_DEV_BUILD`）把数据保存在 `~/.deskhub-dev` 而不是 `~/.deskhub`。否则，在同时
+  装有旧正式版的机器上运行新构建时，新构建会删除该正式版允许的 client 列表（新构建会删除
+  已淘汰的文件），并且在 macOS 上还会因共用 bundle id 而退出正在运行的 app。
 - **macOS 在 CI 中为桌面构建，在 release 时为签名构建，两者不同时进行。**
   `build-desktop` 在每次 push 时以 ad-hoc 签名编译 app，因此无法构建的 Cocoa 改动会在其
   自身的 pull request 上失败；`deploy` 通过 `release-macos` 处理同一个 app，即 fastlane

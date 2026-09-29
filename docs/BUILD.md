@@ -90,6 +90,14 @@ build and launch it. Choose desktop app settings on its four pages; the desktop 
 not accept command-line flags. `run-android` installs and opens the app on a connected
 device or emulator through adb. `run-ios` does the same on the Simulator.
 
+Debug builds keep out of the way of an installed release. On every desktop OS a Debug
+build of the app or the CLI keeps its keys, allowed clients, trusted hosts, settings and
+logs in `~/.deskhub-dev` (Windows: `%USERPROFILE%\.deskhub-dev`) instead of `~/.deskhub`,
+and on macOS `build-macos`/`run-macos` produce **Deskhub Dev** with the bundle id
+`com.deskhub.macos.debug`. Running a local build therefore never quits the installed app,
+never touches its data, and asks for its own macOS privacy permissions. `release-<os>`
+builds use the normal folder and bundle id.
+
 ### The command-line client
 
 `client/cli/` builds `deskhub-cli`, which uses commands instead of the app's pages. Use

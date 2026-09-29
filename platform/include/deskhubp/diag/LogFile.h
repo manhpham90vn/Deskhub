@@ -31,6 +31,12 @@
 
 namespace deskhubp {
 
+#ifdef DESKHUB_DEV_BUILD
+inline constexpr const char* kAppDataFolderName = ".deskhub-dev";
+#else
+inline constexpr const char* kAppDataFolderName = ".deskhub";
+#endif
+
 inline std::string& AppDataDirRef() {
     static std::string dir;
     return dir;
@@ -97,7 +103,7 @@ inline std::wstring LogDirW() {
         wchar_t buf[MAX_PATH] = {};
         const DWORD n = GetEnvironmentVariableW(L"USERPROFILE", buf, MAX_PATH);
         if (n == 0 || n >= MAX_PATH) return std::wstring();
-        dir = std::wstring(buf, n) + L"\\.deskhub";
+        dir = std::wstring(buf, n) + L"\\" + WidenUtf8(kAppDataFolderName);
     }
 
     if (!CreateDirectoryW(dir.c_str(), nullptr) && GetLastError() != ERROR_ALREADY_EXISTS)
@@ -180,17 +186,17 @@ inline std::string LogDir() {
 
     const std::string home = HomeDir();
     if (!home.empty()) {
-        const std::string dir = home + "/.deskhub";
+        const std::string dir = home + "/" + kAppDataFolderName;
         if (EnsureWritableDir(dir)) return dir;
     }
 
     const char* tmp = std::getenv("TMPDIR");
     if (tmp && *tmp) {
-        const std::string dir = std::string(tmp) + "/.deskhub";
+        const std::string dir = std::string(tmp) + "/" + kAppDataFolderName;
         if (EnsureWritableDir(dir)) return dir;
     }
 
-    const std::string local = ".deskhub";
+    const std::string local = kAppDataFolderName;
     return EnsureWritableDir(local) ? local : std::string();
 }
 

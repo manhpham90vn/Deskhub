@@ -30,7 +30,7 @@ ADB="$ANDROID_SDK/platform-tools/adb"
 AVDMANAGER="$ANDROID_SDK/cmdline-tools/latest/bin/avdmanager"
 SERIAL=""
 
-MACOS_BUNDLE=com.deskhub.macos
+MACOS_BUNDLE=com.deskhub.macos.debug
 MACOS_APP=out/build/macos/Debug/app.app
 MACOS_OUT=out/screenshots/macos
 

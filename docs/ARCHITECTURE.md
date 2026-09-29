@@ -750,6 +750,14 @@ line.
   `com.deskhub.macos` row — System Settings shows the permission granted while the
   copy just launched is denied, silently for Accessibility.
   `make reset-macos-permissions` clears every grant so the next launch asks again.
+  Debug builds therefore run as `com.deskhub.macos.debug` ("Deskhub Dev"), so only a
+  locally built Release copy still shares the row with the dmg.
+- **A Debug build never touches an installed release**: every Debug build of the app or
+  the CLI (`DESKHUB_DEV_BUILD`, set by CMake for the Debug configuration) keeps its data
+  in `~/.deskhub-dev` instead of `~/.deskhub`. Without it, a developer running a new build
+  on a machine that also has an older release installed deleted that release's allowed
+  clients (the new build removes retired files) and, on macOS, quit the running app
+  through the shared bundle id.
 - **macOS is a desktop build in CI and a signed one at release, never both at once**:
   `build-desktop` compiles the app ad-hoc-signed on every push, so a Cocoa change that
   no longer builds fails its own pull request; `deploy` reaches the same app through
