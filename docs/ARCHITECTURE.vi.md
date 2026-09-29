@@ -508,6 +508,19 @@ coverage của core.
   không còn tuyến tính, hoặc một allocation mới trong vòng poll đều xuất hiện dưới dạng một
   bước nhảy, dù chi phí CPU của cùng khối lượng công việc gần như không đổi.
 
+- **`QuicEndpoint::Poll` không bao giờ kết thúc bằng một lần đọc chặn.** Nó chỉ chờ gói
+  đầu tiên — 1 ms khi còn backlog, chính là nhịp điều tiết các đợt flush và các lần drain
+  stream, còn không thì chờ đúng khoảng mà bên gọi yêu cầu — và chỉ lấy từng gói tiếp theo
+  sau khi `WaitReadable(0)` báo đã có gói. Cách đọc cho đến khi hết receive timeout khiến
+  mỗi lần `Poll` phải trả thêm một lần timeout, dưới `sendMutex_`, sau gói cuối cùng.
+  Linux giữ đúng timeout 1 ms; trên Windows cùng lần chờ đó tốn hàng chục mili giây, và
+  `platform_tests` mất 700 s ở đó so với 100 s trên Linux. Vì vậy `Poll` với thời gian chờ
+  0 hoàn toàn không chờ trên một link đang rảnh: bên gọi poll trong vòng lặp phải chờ
+  trước (`WaitReadable`, không giữ lock) hoặc truyền vào một khoảng chờ, như
+  `platform_perf` đang làm. Tiêu chí drain-scaling của nó so sánh hai kích thước đều vượt
+  hạn mức drain 64 KiB, vì một kích thước nhỏ hơn hoàn tất mà không tốn nhịp nào và khiến
+  kích thước lớn trông như vượt tuyến tính.
+
 - **`FileHost` không gửi dữ liệu khi đang giữ lock của chính nó.** QUIC service loop chạy
   `QuicEndpoint::Poll` dưới `SessionTransport::sendMutex_`, và một connection đóng lại tại
   đó sẽ gọi trực tiếp vào `FileHost::OnPeerGone`, hàm này lấy `FileHost::mutex_`. Như vậy

@@ -510,6 +510,18 @@ line.
   scaling linearly, or a new allocation in the poll loop all show up as a jump even
   though the CPU cost of the same work would barely move.
 
+- **`QuicEndpoint::Poll` never ends on a blocking read**: it waits for the first packet
+  only — 1 ms while a backlog is pending, which is the tick that paces flush bursts and
+  stream drains, otherwise the wait its caller asked for — and takes each later packet
+  only once `WaitReadable(0)` says one is there. Reading until a receive timeout expired
+  made every `Poll` pay that timeout once more, under `sendMutex_`, after the last packet.
+  Linux honours a 1 ms timeout; on Windows the same wait cost tens of milliseconds, and
+  `platform_tests` took 700 s there against 100 s on Linux. `Poll` with a wait of 0
+  therefore does not wait at all on an idle link: a caller that polls in a loop waits
+  first (`WaitReadable`, unlocked) or passes a wait, as `platform_perf` does. Its
+  drain-scaling gate compares two sizes that both exceed the 64 KiB drain budget, because
+  a smaller one finishes without a single tick and makes the larger look superlinear.
+
 - **`FileHost` never sends while holding its own lock**: the QUIC service loop runs
   `QuicEndpoint::Poll` under `SessionTransport::sendMutex_`, and a connection that closes
   there calls straight back into `FileHost::OnPeerGone`, which takes `FileHost::mutex_`.

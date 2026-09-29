@@ -105,7 +105,7 @@ void TestSharedContainerGetsItsOwnPrivateFolder() {
     deskhubp::SetConfigDir("");
     deskhubp::SetAppDataDirInside(container.string());
     const auto expected = container / deskhubp::kAppDataFolderName;
-    Check(deskhubp::AppDataDirRef() == expected.string(),
+    Check(std::filesystem::path(deskhubp::AppDataDirRef()) == expected,
         "the data folder sits one level inside the container");
     Check(deskhubp::WriteAppDataFile(kTestFile, "inside") &&
               deskhubp::AppDataFilePath(kTestFile).parent_path() == expected,

@@ -20,6 +20,7 @@ namespace {
 
 constexpr uint16_t kPerfPort = 47897;
 constexpr int kHandshakeRounds = 400;
+constexpr uint32_t kServiceTickMs = 1;
 constexpr size_t kPumpRoundsCap = 200'000;
 constexpr size_t kTerminalRecordBytes = 512;
 constexpr size_t kThroughputChunkBytes = 16 * 1024;
@@ -75,8 +76,8 @@ struct LoopbackPair {
     }
 
     void Pump() {
-        client.Poll(NowUs(), 0);
-        server.Poll(NowUs(), 0);
+        client.Poll(NowUs(), kServiceTickMs);
+        server.Poll(NowUs(), kServiceTickMs);
     }
 
     void PumpUntilStreamed(uint64_t targetBytes) {
@@ -129,14 +130,14 @@ void RunQuicPerf() {
                          fresh.Connect(QuicSettings{}, target, "deskhub-perf",
                              HooksFor(freshSink));
                          for (int i = 0; i < kHandshakeRounds && !freshSink.connected; ++i) {
-                             fresh.Poll(NowUs(), 0);
-                             pair.server.Poll(NowUs(), 0);
+                             fresh.Poll(NowUs(), kServiceTickMs);
+                             pair.server.Poll(NowUs(), kServiceTickMs);
                          }
                          Consume(freshSink.connected ? 1 : 0);
                          fresh.CloseConnection(freshSink.conn, 0, "perf done");
                          for (int i = 0; i < 10; ++i) {
-                             fresh.Poll(NowUs(), 0);
-                             pair.server.Poll(NowUs(), 0);
+                             fresh.Poll(NowUs(), kServiceTickMs);
+                             pair.server.Poll(NowUs(), kServiceTickMs);
                          }
                          fresh.Close();
                      }});
@@ -177,7 +178,7 @@ void RunQuicPerf() {
                          pair.Pump();
                      }});
 
-    MeasureScaling(ScalingWorkload{"quic/stream-drain-scaling", "KB", 64, 256, 8.0,
+    MeasureScaling(ScalingWorkload{"quic/stream-drain-scaling", "KB", 256, 1024, 8.0,
         [&](uint64_t units) {
             uint64_t sent = 0;
             while (sent < units * kBytesPerKilobyte) {

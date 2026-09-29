@@ -46,6 +46,7 @@ constexpr uint64_t kMaxStreams = 64;
 constexpr uint64_t kDropLogIntervalUs = 1'000'000;
 constexpr uint64_t kQuietWarnStepUs = 5'000'000;
 constexpr uint64_t kPollGapWarnUs = 250'000;
+constexpr uint32_t kBacklogPollMs = 1;
 constexpr size_t kDatagramQueue = 512;
 constexpr size_t kMaxStreamOutbox = 4u << 20;
 constexpr size_t kMaxBulkStreamOutbox = 256u << 10;
@@ -683,17 +684,23 @@ struct QuicEndpoint::Impl {
         return socket_.WaitReadable(Backlogged() ? 0 : waitMs);
     }
 
+    void DrainSocket(uint32_t firstPacketWaitMs) {
+        uint8_t buf[kQuicMaxUdpPayload];
+        uint32_t waitMs = firstPacketWaitMs;
+        for (int i = 0; i < kPacketsPerPoll; ++i) {
+            if (!socket_.WaitReadable(waitMs)) return;
+            waitMs = 0;
+            NetAddr from{};
+            const int got = socket_.RecvFrom(buf, sizeof(buf), from);
+            if (got <= 0) return;
+            Receive(from, std::span<const uint8_t>(buf, size_t(got)));
+        }
+    }
+
     void Poll(uint32_t waitMs) {
         if (!open_) return;
         ReportPollGap();
-        socket_.SetRecvTimeout(Backlogged() || waitMs == 0 ? 1 : waitMs);
-        uint8_t buf[kQuicMaxUdpPayload];
-        for (int i = 0; i < kPacketsPerPoll; ++i) {
-            NetAddr from{};
-            const int got = socket_.RecvFrom(buf, sizeof(buf), from);
-            if (got <= 0) break;
-            Receive(from, std::span<const uint8_t>(buf, size_t(got)));
-        }
+        DrainSocket(Backlogged() ? kBacklogPollMs : waitMs);
         for (auto& [id, entry] : connections_) {
             if (quiche_conn_timeout_as_millis(entry.conn) == 0) quiche_conn_on_timeout(entry.conn);
         }

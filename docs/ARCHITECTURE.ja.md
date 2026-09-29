@@ -513,6 +513,19 @@ scaling の 2 つの判定とともに実行する（共有 runner には時間�
   反映するため、予算の縮小、処理の線形性の喪失、poll ループでの allocation の追加は、
   同じ処理の CPU コストがほとんど変わらない場合でも明確な変化として現れる。
 
+- **`QuicEndpoint::Poll` はブロックする読み取りで終わらない。** 待つのは最初のパケット
+  だけである。backlog が残っている間は 1 ms、これは flush のバーストと stream の処理を
+  律する tick であり、それ以外は呼び出し側が指定した時間だけ待つ。以降のパケットは
+  `WaitReadable(0)` が到着を示した場合にのみ読み取る。receive timeout が切れるまで読み
+  続ける方式では、すべての `Poll` が最後のパケットの後に、`sendMutex_` を保持したまま、
+  timeout をもう一度支払っていた。Linux は 1 ms の timeout を守るが、Windows では同じ
+  待機に数十ミリ秒かかり、`platform_tests` は Linux の 100 s に対して 700 s を要した。
+  したがって待ち時間 0 の `Poll` は、空いている link ではまったく待たない。ループで
+  poll する呼び出し側は、先に待つ（`WaitReadable`、lock なし）か、`platform_perf` の
+  ように待ち時間を渡す。その drain-scaling の判定は、どちらも 64 KiB の処理予算を
+  超える 2 つの規模を比較する。小さい規模は tick を一度も使わずに終わり、大きい規模を
+  超線形に見せてしまうからである。
+
 - **`FileHost` は自身の lock を保持したまま送信しない。** QUIC の service ループは
   `SessionTransport::sendMutex_` の下で `QuicEndpoint::Poll` を実行し、そこで閉じられた
   connection は `FileHost::OnPeerGone` を直接呼び出す。この関数は `FileHost::mutex_` を

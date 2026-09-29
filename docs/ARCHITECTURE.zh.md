@@ -439,6 +439,17 @@ runner 上与 base commit 的 A/B 结果（偏移仅作为警告，不导致失�
   处理预算乘以 1 ms 的 poll tick —— 因此预算被缩小、处理不再线性扩展，或 poll 循环中新
   增一次 allocation，都会表现为明显的跳变，即使同样工作的 CPU 开销几乎不变。
 
+- **`QuicEndpoint::Poll` 绝不以阻塞式读取收尾。** 它只等待第一个数据包 —— 存在 backlog
+  时等待 1 ms，这正是为 flush 突发与 stream 处理定速的 tick，否则等待调用方要求的时长
+  —— 之后的每个数据包都只在 `WaitReadable(0)` 确认已到达后才读取。此前一直读取到
+  receive timeout 到期的做法，使每次 `Poll` 在最后一个数据包之后、且在 `sendMutex_`
+  之下，都要再付出一次 timeout。Linux 会遵守 1 ms 的 timeout；在 Windows 上同样的等待
+  要耗费数十毫秒，`platform_tests` 在该平台耗时 700 s，而 Linux 为 100 s。因此等待时长
+  为 0 的 `Poll` 在空闲 link 上完全不等待：在循环中 poll 的调用方须先行等待
+  （`WaitReadable`，不持有 lock），或传入等待时长，`platform_perf` 即如此。其
+  drain-scaling 判定比较的两个规模都超过 64 KiB 的处理预算，因为较小的规模无需任何
+  tick 即可完成，会使较大的规模看似超线性。
+
 - **`FileHost` 不在持有自身 lock 时发送数据。** QUIC 的 service 循环在
   `SessionTransport::sendMutex_` 之下执行 `QuicEndpoint::Poll`，而在该处关闭的
   connection 会直接回调至 `FileHost::OnPeerGone`，后者会获取 `FileHost::mutex_`。因此
