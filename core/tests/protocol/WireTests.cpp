@@ -57,10 +57,6 @@ void TestWireRoundtrip() {
     Check(hp && hp->clientName == "a btab", "control characters are stripped from the name");
     h.clientName.clear();
 
-    Check(IsValidPasscode("0000") && IsValidPasscode("9999"), "all-digit passcodes are valid");
-    Check(!IsValidPasscode("123") && !IsValidPasscode("12345") && !IsValidPasscode("12a4"),
-        "wrong length or non-digits are invalid");
-
     HelloAck a{0xCAFE0001, 1920, 1080, 60, 20'000'000};
     n = BuildHelloAck(buf, a);
     auto ap = ParseHelloAck(PayloadOf(std::span<const uint8_t>(buf, n)));

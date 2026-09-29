@@ -18,7 +18,6 @@ struct ShareOptions {
     uint32_t desktopW = 0, desktopH = 0;
 
     uint16_t port = kDeskhubPort;
-    std::string passcode{};
     std::string bindIp{};
     std::string deviceName{};
     bool clipboardSync = false;

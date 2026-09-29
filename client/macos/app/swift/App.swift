@@ -79,7 +79,7 @@ private struct TerminalWindow: View {
             .frame(minWidth: 640, idealWidth: 900, maxWidth: .infinity,
                    minHeight: 400, idealHeight: 560, maxHeight: .infinity)
             .task {
-                if !model.open(address: request.address, passcode: request.passcode) {
+                if !model.open(address: request.address) {
                     dismiss()
                 }
             }

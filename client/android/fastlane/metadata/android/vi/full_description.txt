@@ -17,10 +17,10 @@ Deskhub stream màn hình máy tính Windows, macOS hoặc Linux của bạn san
 • Chia sẻ ngược màn hình điện thoại ở chế độ chỉ xem, để máy tính xem được — kèm âm thanh trên Android 10 trở lên
 
 <b>Cách dùng</b>
-Cài app Deskhub miễn phí lên máy tính bạn muốn điều khiển — tải từ trang dự án — rồi bấm chia sẻ ở đó. Mở Deskhub trên điện thoại, chạm vào máy đó trong danh sách hoặc nhập địa chỉ của nó, rồi nhập mã passcode 4 chữ số đang hiện trên máy tính — hoặc, nếu máy đó không đặt mã, chờ người ngồi tại máy duyệt cho bạn vào. Khi máy đã trả lời, chọn thứ muốn mở: màn hình, shell, hay truyền file. Chạy ngay trong mạng LAN; muốn dùng qua Internet thì bật Tailscale trên cả hai máy và kết nối bằng IP Tailscale.
+Cài app Deskhub miễn phí lên máy tính bạn muốn điều khiển — tải từ trang dự án — rồi bấm chia sẻ ở đó. Mở Deskhub trên điện thoại, sao chép public key của điện thoại trong mục Devices và thêm vào danh sách khóa được phép trên máy tính, rồi thêm máy tính bằng địa chỉ và khóa host của nó và kết nối. Khi máy đã trả lời, chọn thứ muốn mở: màn hình, shell, hay truyền file. Chạy ngay trong mạng LAN; muốn dùng qua Internet thì bật Tailscale trên cả hai máy và kết nối bằng IP Tailscale.
 
 <b>Cần biết</b>
-Mọi phiên đều được mã hoá đầu-cuối trên QUIC/TLS — video, âm thanh, thao tác bàn phím, file, clipboard và mọi thứ khác. Một máy tính bạn chưa từng kết nối phải cho bạn vào trước đã: hoặc bạn chứng minh mình biết passcode 4 chữ số của nó, hoặc người ngồi tại máy đó duyệt cho điện thoại của bạn. Sau đó điện thoại của bạn là một thiết bị đã ghép đôi mà máy tính nhận ra, và có thể bị thu hồi từ máy tính bất cứ lúc nào. Không có tài khoản và không có máy chủ nào của chúng tôi: điện thoại chỉ nói chuyện với chính máy tính của bạn.
+Mọi phiên đều được mã hoá đầu-cuối trên QUIC/TLS — video, âm thanh, thao tác bàn phím, file, clipboard và mọi thứ khác. Quyền truy cập dựa trên khóa: máy tính chỉ cho vào điện thoại có public key đã được chủ máy thêm, và điện thoại chỉ nói chuyện với máy tính có khóa host bạn đã ghim. Không có bước duyệt qua mạng, và khóa có thể bị thu hồi từ máy tính bất cứ lúc nào. Không có tài khoản và không có máy chủ nào của chúng tôi: điện thoại chỉ nói chuyện với chính máy tính của bạn.
 
 Chia sẻ âm thanh của điện thoại cần quyền mà Android gọi là <i>Micro</i>, vì API playback-capture của Android nằm sau quyền đó. Deskhub không bao giờ thu âm từ micro.
 

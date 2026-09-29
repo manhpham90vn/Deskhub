@@ -21,7 +21,6 @@ struct ShareBanner {
     bool hosting = false;
     uint16_t port = 0;
     bool viewOnly = false;
-    std::string passcodeNote;
     std::string bindWarning;
 };
 
@@ -146,7 +145,6 @@ public:
             terminalHost_.Running(), fileHost_.Running(), banner.port);
         if (fileHost_.Running())
             status += "\n" + deskhub::ui::TransferFolderNote(PathText(fileHost_.Directory()));
-        if (!banner.passcodeNote.empty()) status += "\n" + banner.passcodeNote;
         if (banner.screenSharing && banner.viewOnly)
             status += std::string("\n") + deskhub::ui::kViewOnlyNote;
         if (banner.hosting && !banner.bindWarning.empty()) status += "\n" + banner.bindWarning;

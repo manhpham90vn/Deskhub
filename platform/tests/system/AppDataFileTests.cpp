@@ -155,7 +155,7 @@ void TestAuthorizedKeyWritesOnlyPublishSuccessfulChanges() {
     const std::string damaged = valid + "damaged row\n";
     Check(deskhubp::WriteAppDataFile(deskhubp::kPairedDevicesFileName, damaged),
         "the isolated admission list can be corrupted for a regression test");
-    Check(deskhubp::CheckPairedDevice(key) == deskhub::PairVerdict::Unknown,
+    Check(deskhubp::TryLoadPairedDevices().value_or(deskhub::PairedDevices{}).Check(key) == deskhub::PairVerdict::Unknown,
         "a damaged admission list authorizes no key, even one on a valid row");
     Check(!deskhubp::RememberPairedDevice(key, "changed", 2000),
         "a normal update cannot overwrite a damaged admission list");
@@ -185,7 +185,7 @@ void TestAuthorizedKeyWritesOnlyPublishSuccessfulChanges() {
         "the authorized key file can be written again");
     const uint64_t beforeRevoke = deskhubp::PairedDevicesGeneration();
     Check(deskhubp::ForgetAllPairedDevices(), "revoke-all persists an empty allowlist");
-    Check(deskhubp::LoadPairedDevices().Size() == 0 &&
+    Check(deskhubp::TryLoadPairedDevices().value_or(deskhub::PairedDevices{}).Size() == 0 &&
               deskhubp::PairedDevicesGeneration() == beforeRevoke + 1,
         "successful revoke-all publishes one policy change");
 

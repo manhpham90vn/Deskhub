@@ -31,36 +31,17 @@ void TestEveryLabelSaysSomething() {
         ui::kNoDisplayTicked, ui::kNoDisplayFound, ui::kWaitingForDisplays,
         ui::kStopDisplayAction, ui::kDisconnectViewerAction,
         ui::kAllowControlLabel, ui::kViewOnlyNote, ui::kRequestControlLabel,
-        ui::kPasscodeLabel, ui::kClientPasscodePrompt, ui::kClientPasscodeHint,
-        ui::kClientIpPlaceholder, ui::kUdpPortLabel, ui::kPasscodeInvalid,
+        ui::kClientIpPlaceholder, ui::kUdpPortLabel,
         ui::kLanDevicesEmpty,
-        ui::kConnectPromptTitle, ui::kAppVersion, ui::kProjectUrl, ui::kProjectLinkLabel,
+        ui::kAppVersion, ui::kProjectUrl, ui::kProjectLinkLabel,
         ui::kRefreshNow, ui::kBindInterfaceLabel, ui::kBindAllInterfaces,
         ui::kBindNotConnectedNote, ui::kAutostartLabel,
         ui::kAutoShareLabel, ui::kClipboardSyncLabel, ui::kCloseToTrayLabel,
         ui::kTrayShowWindow, ui::kTrayHideWindow, ui::kTrayQuit,
         ui::kSettingsSectionVideo, ui::kSettingsSectionConnection, ui::kSettingsSectionSecurity,
         ui::kSettingsSectionSession, ui::kSettingsSectionLaunch,
-        ui::kAuthVersionMismatch,
-        ui::kPasscodeShareHeading, ui::kPasscodeSetNote, ui::kPasscodeUnsetNote,
-        ui::kPasscodeNoneSet, ui::kCopyPasscodeAction, ui::kPasscodeCopied};
+        ui::kAuthVersionMismatch};
     for (const char* s : labels) Check(s && *s, "every shared UI string is non-empty");
-    Check(Contains(ui::kClientPasscodeHint, "empty"),
-        "the client hint says the field may be left empty");
-}
-
-void TestPasscodeIsShownOnItsOwn() {
-    std::printf("[strings] the host shows the passcode as digits, not buried in a sentence...\n");
-    Check(ui::PasscodeDisplay("0417") == "0 4 1 7",
-        "the digits are spaced apart so they can be read off the screen");
-    Check(ui::PasscodeDisplay("") == std::string(ui::kPasscodeNoneSet),
-        "with no code set the panel says so instead of showing an empty gap");
-    Check(!Contains(ui::PasscodeShareNote("0417"), "0417"),
-        "the note beside it explains the code without repeating the digits");
-    Check(Contains(ui::PasscodeShareNote("0417"), "approval"),
-        "and still says a machine offering no code falls back to the owner's approval");
-    Check(std::string(ui::PasscodeShareNote("")) == ui::kPasscodeUnsetNote,
-        "with no code set the note promises the owner will be asked instead");
 }
 
 void TestBindFallbackNamesTheMissingNetwork() {
@@ -84,7 +65,7 @@ void TestQueryFailureExplainsWhatToCheck() {
     const std::string msg = ui::SourceQueryFailed("192.168.1.10:47777");
     Check(Contains(msg, "192.168.1.10:47777"), "the user can see which machine stayed silent");
     Check(Contains(msg, "sharing"), "a host that is not sharing is the most likely cause");
-    Check(Contains(msg, "passcode"), "a wrong passcode fails the exact same way");
+    Check(Contains(msg, "authorized"), "an unauthorized key fails the exact same way");
     Check(Contains(ui::SourceQueryFailed(""), "No reply"),
         "an empty address still produces a sentence, not a crash");
 
@@ -253,7 +234,6 @@ void TestOneHostIsOneAddressHoweverItIsSpelled() {
 
 void RunStringsTests() {
     TestEveryLabelSaysSomething();
-    TestPasscodeIsShownOnItsOwn();
     TestConnectingMentionsTheAddress();
     TestQueryFailureExplainsWhatToCheck();
     TestHostTitleOnlyShowsAKnownSize();

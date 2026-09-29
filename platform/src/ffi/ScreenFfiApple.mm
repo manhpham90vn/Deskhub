@@ -76,11 +76,11 @@ AppleScreenViewer& EngineOf(DHScreen* s) {
 }
 
 DHScreen* dh_screen_start(const char* address, uint8_t sourceId, void* surface,
-    const DHScreenCallbacks* callbacks, const char* passcode) {
+    const DHScreenCallbacks* callbacks) {
     uint32_t screenW = 0, screenH = 0;
     LocalScreenPixels(screenW, screenH);
     return deskhubp::StartFfiScreenSession<DHScreen, void*>(address, sourceId, surface,
-        callbacks, screenW, screenH, passcode);
+        callbacks, screenW, screenH);
 }
 
 void dh_screen_stop(DHScreen* s) {

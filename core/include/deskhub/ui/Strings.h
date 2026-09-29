@@ -80,24 +80,6 @@ inline constexpr const char* kCaptureUnavailableTitle = "Screen capture is not a
 inline constexpr const char* kNoDisplayTicked = "Tick at least one display to share.";
 inline constexpr const char* kStopDisplayAction = "Stop";
 inline constexpr const char* kDisconnectViewerAction = "Disconnect";
-inline constexpr const char* kPasscodeLabel = "Pairing passcode (4 digits, optional)";
-inline constexpr const char* kPasscodeHint =
-    "A machine types this once, the first time it connects, and is remembered by its key "
-    "afterwards. Leave it empty and you will be asked here instead, each time a new machine "
-    "wants in.";
-inline constexpr const char* kPasscodeShareHeading = "Pairing passcode";
-inline constexpr const char* kPasscodeSetNote =
-    "A machine pairing for the first time types this code \xE2\x80\x94 or asks for your approval "
-    "here if it offers none.";
-inline constexpr const char* kPasscodeUnsetNote =
-    "No passcode set \xE2\x80\x94 you will be asked here before a new machine is let in.";
-inline constexpr const char* kPasscodeNoneSet = "None";
-inline constexpr const char* kCopyPasscodeAction = "Copy passcode";
-inline constexpr const char* kPasscodeCopied = "Passcode copied";
-inline constexpr const char* kClientPasscodePrompt = "Passcode (4 digits):";
-inline constexpr const char* kClientPasscodeHint =
-    "Read the 4-digit code off the host \xE2\x80\x94 or leave it empty to ask the person at "
-    "that machine to let you in.";
 inline constexpr const char* kDeviceNameLabel = "Your name";
 inline constexpr const char* kConnectButton = "Connect";
 inline constexpr const char* kCopyButton = "Copy";
@@ -189,9 +171,6 @@ inline constexpr const char* kDevicesHeading = "Devices";
 inline constexpr const char* kDeviceColumnWhere = "Where";
 inline constexpr const char* kDeviceOnThisNetwork = "On this network";
 inline constexpr const char* kDeviceRecent = "Recent";
-inline constexpr const char* kConnectPromptTitle = "Connect to this device";
-inline constexpr const char* kPasscodeInvalid =
-    "The passcode must be exactly 4 digits (for example 0417).";
 
 inline constexpr const char* kTerminalSourceName = "Terminal";
 inline constexpr const char* kTerminalPickerLabel =
@@ -425,27 +404,13 @@ inline std::string ShareSummaryLine(bool screen, bool terminal, uint16_t port) {
     return ShareSummaryLine(screen, terminal, false, port);
 }
 
-inline const char* PasscodeShareNote(std::string_view passcode) {
-    return passcode.empty() ? kPasscodeUnsetNote : kPasscodeSetNote;
-}
-
-inline std::string PasscodeDisplay(std::string_view passcode) {
-    if (passcode.empty()) return kPasscodeNoneSet;
-    std::string spaced;
-    for (const char digit : passcode) {
-        if (!spaced.empty()) spaced += ' ';
-        spaced += digit;
-    }
-    return spaced;
-}
-
 inline std::string CouldNotConnectTo(std::string_view address) {
     return "Could not connect to " + std::string(address) + ".";
 }
 
 inline std::string SourceQueryFailed(std::string_view address) {
     return "No reply from " + std::string(address) +
-           " - check that the other machine is sharing and that the passcode matches.";
+           " - check that the other machine is sharing and has authorized this device's key.";
 }
 
 inline std::string SourceQueryEmpty(std::string_view address) {

@@ -120,7 +120,6 @@ interface FileSendDriver {
 
 class StandaloneFileSendDriver(
     private val address: String,
-    private val passcode: String,
     private val deviceName: String,
 ) : FileSendDriver {
     private var handle = 0L
@@ -130,7 +129,7 @@ class StandaloneFileSendDriver(
         release()
         lastError = NativeClient.sendCheck(paths)
         if (lastError.isNotEmpty()) return false
-        handle = NativeClient.sendStart(address, passcode, deviceName, paths)
+        handle = NativeClient.sendStart(address, deviceName, paths)
         if (handle == 0L) {
             lastError = NativeClient.couldNotConnect(address)
             return false

@@ -43,15 +43,14 @@ int dh_send_check(const char* const* paths, int count, char* error, int errorCap
     return 0;
 }
 
-DHSend* dh_send_start(const char* address, const char* passcode, const char* name,
-    const char* const* paths, int count) {
+DHSend* dh_send_start(const char* address, const char* name, const char* const* paths,
+    int count) {
     NetAddr host;
     if (!address || !ParseNetAddr(address, host)) return nullptr;
 
     deskhubp::FileTransferClientConfig config;
     config.host = host;
     config.hostLabel = address;
-    config.passcode = passcode ? passcode : "";
     config.clientName = name && *name ? name : deskhubp::SessionDeviceName();
     config.files = PathList(paths, count);
     if (config.files.empty()) return nullptr;

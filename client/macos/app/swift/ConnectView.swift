@@ -31,9 +31,6 @@ struct MainMenuView: View {
         StartPage.index().flatMap(DeskhubPage.init(rawValue:)) ?? .client
     @State private var shareAlert = ""
     @State private var accessibilityWarning = false
-    @State private var prompting: DeviceListRow?
-    @State private var promptPasscode = ""
-    @State private var promptPort = ""
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
@@ -85,15 +82,6 @@ struct MainMenuView: View {
             Button("OK", role: .cancel) {}
         } message: {
             Text(shareAlert)
-        }
-        .sheet(item: $prompting) { row in
-            PasscodePromptSheet(
-                address: row.addr,
-                port: $promptPort,
-                passcode: $promptPasscode,
-                onCancel: { prompting = nil },
-                onConnect: { confirmPrompt(row) }
-            )
         }
         .alert("Deskhub", isPresented: $accessibilityWarning) {
             Button("Share anyway") { Task { await doShare() } }
@@ -163,16 +151,6 @@ struct MainMenuView: View {
                         .frame(width: 80)
                         .onSubmit(beginConnect)
                         .disabled(connect.isConnecting)
-                }
-                GridRow {
-                    Text(DeskhubClient.string(DHStrClientPasscodePrompt))
-                    PasscodeField(
-                        passcode: $connect.passcode,
-                        width: 64,
-                        enabled: !connect.isConnecting,
-                        onSubmit: beginConnect
-                    )
-                    .help(DeskhubClient.string(DHStrClientPasscodeHint))
                 }
                 GridRow {
                     Text(DeskhubClient.string(DHStrDeviceNameLabel))
@@ -252,17 +230,8 @@ extension MainMenuView {
     }
 
     private func pick(_ row: DeviceListRow) {
-        promptPasscode = DeskhubClient.isValidPasscode(row.passcode)
-            ? row.passcode : connect.passcode
-        promptPort = DeskhubClient.addressPortText(row.addr)
-        prompting = row
-    }
-
-    private func confirmPrompt(_ row: DeviceListRow) {
-        prompting = nil
         connect.address = DeskhubClient.addressHost(row.addr)
-        connect.port = promptPort
-        connect.passcode = promptPasscode
+        connect.port = DeskhubClient.addressPortText(row.addr)
         beginConnect()
     }
 
@@ -273,12 +242,10 @@ extension MainMenuView {
         Task {
             guard let found = await connect.connectAuth() else { return }
             let address = connect.acceptedAddress
-            let passcode = connect.acceptedPasscode
-            await discovery.remember(address: address, passcode: passcode)
+            await discovery.remember(address: address)
             connect.forgetHost()
             openWindow(value: ConnectionRequest(
                 address: address,
-                passcode: passcode,
                 name: connect.deviceName,
                 sources: found.sources,
                 caps: found.caps,
@@ -289,18 +256,17 @@ extension MainMenuView {
 }
 
 @MainActor
-func openViewers(_ picked: [Source], address: String, passcode: String, control: Bool,
+func openViewers(_ picked: [Source], address: String, control: Bool,
                  openWindow: OpenWindowAction)
 {
     if picked.isEmpty {
         openWindow(value: ViewerRequest(
-            address: address, passcode: passcode, sourceId: 0, name: "", control: control
+            address: address, sourceId: 0, name: "", control: control
         ))
     } else {
         for source in picked {
             openWindow(value: ViewerRequest(
-                address: address, passcode: passcode, sourceId: source.id, name: source.name,
-                control: control
+                address: address, sourceId: source.id, name: source.name, control: control
             ))
         }
     }

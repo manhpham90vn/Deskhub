@@ -11,16 +11,6 @@ final class SharingModel {
     var maxDim = Int(SharingModel.stored.maxDim)
     var port = Int(SharingModel.stored.port)
     var allowInput = SharingModel.stored.allowInput
-    var passcode = DeskhubClient.cString(SharingModel.stored.passcode) {
-        didSet {
-            if passcode.isEmpty || DeskhubClient.isValidPasscode(passcode) {
-                lastValidPasscode = passcode
-            }
-        }
-    }
-
-    private var lastValidPasscode = DeskhubClient.cString(SharingModel.stored.passcode)
-
     var addresses: [LocalAddress] = []
 
     var isSharing = false
@@ -36,11 +26,6 @@ final class SharingModel {
     var hasScreenRecording = false
     var hasAccessibility = false
     var screenRecordingNeedsRelaunch = false
-
-    var acceptedPasscode: String {
-        passcode.isEmpty || DeskhubClient.isValidPasscode(passcode)
-            ? passcode : lastValidPasscode
-    }
 
     var clientControl = SharingModel.stored.clientControl
     var bindIp = DeskhubClient.buffered(64) { dh_bind_ip($0, $1) }
@@ -72,8 +57,7 @@ final class SharingModel {
         }
         var line = DeskhubClient.buffered(320) {
             dh_sharing_status(
-                portNum, acceptedPasscode, allowInput, sharingScreen, sharingTerminal,
-                sharingFiles, $0, $1
+                portNum, allowInput, sharingScreen, sharingTerminal, sharingFiles, $0, $1
             )
         }
         let bindWarning = DeskhubClient.buffered(256) { dh_share_bind_warning($0, $1) }
@@ -88,8 +72,7 @@ final class SharingModel {
             maxDim <= 0 ? 0 : UInt32(maxDim),
             UInt32(max(1, port)),
             allowInput,
-            clientControl,
-            acceptedPasscode
+            clientControl
         )
         dh_set_bind_ip(bindIp)
         dh_set_auto_share(autoShare)
@@ -163,10 +146,6 @@ final class SharingModel {
     func startSharing() async -> Bool {
         guard !isStarting, !isSharing else { return false }
         autoShareWaitNote = ""
-        guard passcode.isEmpty || DeskhubClient.isValidPasscode(passcode) else {
-            startError = DeskhubClient.string(DHStrPasscodeInvalid)
-            return false
-        }
         let terminal = shareTerminal
         let files = shareFiles
         if shareSources.isEmpty { await refreshShareSources() }
@@ -193,7 +172,6 @@ final class SharingModel {
             maxDim: maxDim <= 0 ? UInt32(0) : UInt32(maxDim),
             port: UInt16(max(1, min(65535, port))),
             allowInput: allowInput,
-            passcode: acceptedPasscode,
             terminal: terminal,
             files: files
         )

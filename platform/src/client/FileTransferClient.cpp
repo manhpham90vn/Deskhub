@@ -53,7 +53,6 @@ bool FileTransferClient::Start(const FileTransferClientConfig& config,
     HostLinkConfig linkConfig;
     linkConfig.host = config_.host;
     linkConfig.hostLabel = config_.hostLabel;
-    linkConfig.passcode = config_.passcode;
     linkConfig.clientName = config_.clientName;
     linkConfig.clientIdentityName = config_.clientIdentityName;
     linkConfig.authTimeoutMs = kAuthTimeoutMs;

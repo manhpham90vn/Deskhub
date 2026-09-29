@@ -10,7 +10,6 @@
 #include "deskhubp/media/DisplayEnum.h"
 #include "gtk/FileSendDialog.h"
 #include "gtk/GtkUtil.h"
-#include "gtk/PasscodeDialog.h"
 #include "gtk/TerminalWindow.h"
 #include "gtk/ViewerWindow.h"
 #include "deskhubp/net/NetInfo.h"
@@ -102,9 +101,9 @@ const char* const kStyleSheet =
     ".deskhub-banner-state { font-weight: bold; font-size: 1.1em; color: #6b7280; }"
     "label.deskhub-banner-state-busy { color: #1d4ed8; }"
     "label.deskhub-banner-state-live { color: #075e2b; }"
-    ".deskhub-passcode-card { padding: 10px; border-radius: 8px;"
+    ".deskhub-info-card { padding: 10px; border-radius: 8px;"
     " background-color: #eff4ff; }"
-    ".deskhub-passcode-code { font-family: monospace; font-weight: bold; font-size: 2.2em;"
+    ".deskhub-info-code { font-family: monospace; font-weight: bold; font-size: 2.2em;"
     " letter-spacing: 4px; color: #111827; }"
     ".deskhub-primary { font-weight: bold; color: #ffffff; background-image: none;"
     " background-color: #2563eb; border: none; }"
@@ -244,15 +243,6 @@ GtkWidget* Hint(const std::string& text) {
     gtk_label_set_line_wrap_mode(GTK_LABEL(label), PANGO_WRAP_WORD_CHAR);
     gtk_label_set_max_width_chars(GTK_LABEL(label), kHintWrapChars);
     return label;
-}
-
-GtkWidget* PasscodeEntry(const std::string& value) {
-    GtkWidget* entry = gtk_entry_new();
-    gtk_entry_set_text(GTK_ENTRY(entry), value.c_str());
-    gtk_entry_set_width_chars(GTK_ENTRY(entry), gint(deskhub::kPasscodeDigits));
-    gtk_entry_set_max_length(GTK_ENTRY(entry), gint(deskhub::kPasscodeDigits));
-    gtk_entry_set_input_purpose(GTK_ENTRY(entry), GTK_INPUT_PURPOSE_DIGITS);
-    return entry;
 }
 
 GtkWidget* Spin(uint32_t value, uint32_t maxValue) {
@@ -409,9 +399,9 @@ bool PickSources(GtkWindow* parent, const std::vector<deskhub::SourceInfo>& sour
 
 class ConnectionWindow {
 public:
-    ConnectionWindow(MainWindow* owner, std::string address, std::string passcode, NetAddr server,
+    ConnectionWindow(MainWindow* owner, std::string address, NetAddr server,
         deskhub::HostCaps caps, std::vector<deskhub::SourceInfo> sources, bool control)
-        : owner_(owner), address_(std::move(address)), passcode_(std::move(passcode)), server_(server), caps_(caps), sources_(std::move(sources)), control_(control) {
+        : owner_(owner), address_(std::move(address)), server_(server), caps_(caps), sources_(std::move(sources)), control_(control) {
         Build();
     }
 
@@ -503,22 +493,21 @@ private:
         if (!self->owner_ || self->sources_.empty()) return;
         std::vector<deskhub::SourceInfo> picked;
         if (!PickSources(GTK_WINDOW(self->window_), self->sources_, picked)) return;
-        self->owner_->OpenViewers(self->server_, self->passcode_, picked, self->control_);
+        self->owner_->OpenViewers(self->server_, picked, self->control_);
     }
 
     static void OnOpenShell(GtkButton*, gpointer user) {
         auto* self = static_cast<ConnectionWindow*>(user);
-        if (self->owner_) self->owner_->OpenShell(self->server_, self->passcode_);
+        if (self->owner_) self->owner_->OpenShell(self->server_);
     }
 
     static void OnOpenFiles(GtkButton*, gpointer user) {
         auto* self = static_cast<ConnectionWindow*>(user);
-        if (self->owner_) self->owner_->OpenFileSend(self->server_, self->passcode_);
+        if (self->owner_) self->owner_->OpenFileSend(self->server_);
     }
 
     MainWindow* owner_ = nullptr;
     std::string address_;
-    std::string passcode_;
     NetAddr server_{};
     deskhub::HostCaps caps_{};
     std::vector<deskhub::SourceInfo> sources_;
@@ -689,27 +678,12 @@ GtkWidget* MainWindow::BuildHostPage() {
     gtk_box_pack_start(GTK_BOX(hostBanner_), hostStatusLabel_, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(box), hostBanner_, FALSE, FALSE, 0);
 
-    hostPasscodeCard_ = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
-    gtk_box_set_homogeneous(GTK_BOX(hostPasscodeCard_), TRUE);
-    GtkWidget* passcodeSection = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
-    AddClass(passcodeSection, "deskhub-passcode-card");
-    GtkWidget* passcodeText = gtk_box_new(GTK_ORIENTATION_VERTICAL, 2);
-    gtk_box_pack_start(GTK_BOX(passcodeText), Hint(ui::kPasscodeShareHeading), FALSE, FALSE, 0);
-    hostPasscodeLabel_ = StyledLabel(std::string(), "deskhub-passcode-code");
-    gtk_label_set_selectable(GTK_LABEL(hostPasscodeLabel_), TRUE);
-    gtk_box_pack_start(GTK_BOX(passcodeText), hostPasscodeLabel_, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(passcodeSection), passcodeText, TRUE, TRUE, 0);
-    hostPasscodeCopy_ = gtk_button_new_with_label(ui::kCopyPasscodeAction);
-    gtk_widget_set_valign(hostPasscodeCopy_, GTK_ALIGN_CENTER);
-    g_signal_connect(hostPasscodeCopy_, "clicked", G_CALLBACK(OnCopyPasscodeClicked), this);
-    gtk_box_pack_start(GTK_BOX(passcodeSection), hostPasscodeCopy_, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(hostPasscodeCard_), passcodeSection, TRUE, TRUE, 0);
-
+    hostPortCard_ = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
     GtkWidget* portSection = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
-    AddClass(portSection, "deskhub-passcode-card");
+    AddClass(portSection, "deskhub-info-card");
     GtkWidget* portText = gtk_box_new(GTK_ORIENTATION_VERTICAL, 2);
     gtk_box_pack_start(GTK_BOX(portText), Hint(ui::kUdpPortLabel), FALSE, FALSE, 0);
-    hostPortLabel_ = StyledLabel(std::string(), "deskhub-passcode-code");
+    hostPortLabel_ = StyledLabel(std::string(), "deskhub-info-code");
     gtk_label_set_selectable(GTK_LABEL(hostPortLabel_), TRUE);
     gtk_box_pack_start(GTK_BOX(portText), hostPortLabel_, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(portSection), portText, TRUE, TRUE, 0);
@@ -717,8 +691,8 @@ GtkWidget* MainWindow::BuildHostPage() {
     gtk_widget_set_valign(hostPortCopy_, GTK_ALIGN_CENTER);
     g_signal_connect(hostPortCopy_, "clicked", G_CALLBACK(OnCopyPortClicked), this);
     gtk_box_pack_start(GTK_BOX(portSection), hostPortCopy_, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(hostPasscodeCard_), portSection, TRUE, TRUE, 0);
-    gtk_box_pack_start(GTK_BOX(box), hostPasscodeCard_, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(hostPortCard_), portSection, TRUE, TRUE, 0);
+    gtk_box_pack_start(GTK_BOX(box), hostPortCard_, FALSE, FALSE, 0);
 
     GtkWidget* pickerBox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 6);
     AddClass(pickerBox, "deskhub-picker");
@@ -950,14 +924,7 @@ GtkWidget* MainWindow::BuildClientPage() {
     g_signal_connect(portEntry_, "activate", G_CALLBACK(OnAddressActivate), this);
     gtk_grid_attach(GTK_GRID(grid), portEntry_, 1, 1, 1, 1);
 
-    gtk_grid_attach(GTK_GRID(grid), Label(ui::kClientPasscodePrompt), 0, 2, 1, 1);
-    passcodeEntry_ = PasscodeEntry(std::string());
-    gtk_widget_set_tooltip_text(passcodeEntry_, ui::kClientPasscodeHint);
-    gtk_widget_set_halign(passcodeEntry_, GTK_ALIGN_START);
-    g_signal_connect(passcodeEntry_, "activate", G_CALLBACK(OnAddressActivate), this);
-    gtk_grid_attach(GTK_GRID(grid), passcodeEntry_, 1, 2, 1, 1);
-
-    gtk_grid_attach(GTK_GRID(grid), Label(ui::kDeviceNameLabel), 0, 3, 1, 1);
+    gtk_grid_attach(GTK_GRID(grid), Label(ui::kDeviceNameLabel), 0, 2, 1, 1);
     deviceNameEntry_ = gtk_entry_new();
     const std::string initialName =
         settings_.deviceName.empty() ? deskhubp::LocalDeviceName() : settings_.deviceName;
@@ -1173,15 +1140,6 @@ void MainWindow::BuildHostSettings(GtkWidget* host) {
     gtk_box_pack_start(GTK_BOX(host), videoGrid, FALSE, FALSE, 0);
 
     gtk_box_pack_start(GTK_BOX(host), Section(ui::kSettingsSectionSecurity), FALSE, FALSE, 0);
-    GtkWidget* securityGrid = gtk_grid_new();
-    gtk_grid_set_row_spacing(GTK_GRID(securityGrid), 10);
-    gtk_grid_set_column_spacing(GTK_GRID(securityGrid), 14);
-    gtk_grid_attach(GTK_GRID(securityGrid), Label(ui::kPasscodeLabel), 0, 0, 1, 1);
-    hostPasscodeEntry_ = PasscodeEntry(settings_.passcode);
-    gtk_widget_set_halign(hostPasscodeEntry_, GTK_ALIGN_START);
-    gtk_grid_attach(GTK_GRID(securityGrid), hostPasscodeEntry_, 1, 0, 1, 1);
-    gtk_box_pack_start(GTK_BOX(host), securityGrid, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(host), Hint(ui::kPasscodeHint), FALSE, FALSE, 0);
     allowInputCheck_ = gtk_check_button_new_with_label(ui::kAllowControlLabel);
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(allowInputCheck_), settings_.allowInput);
     gtk_box_pack_start(GTK_BOX(host), allowInputCheck_, FALSE, FALSE, 0);
@@ -1258,7 +1216,6 @@ GtkWidget* MainWindow::BuildSettingsPage() {
     g_signal_connect(bitrateSpin_, "value-changed", G_CALLBACK(OnSettingChanged), this);
     g_signal_connect(portSpin_, "value-changed", G_CALLBACK(OnSettingChanged), this);
     g_signal_connect(qualityCombo_, "changed", G_CALLBACK(OnSettingChanged), this);
-    g_signal_connect(hostPasscodeEntry_, "changed", G_CALLBACK(OnSettingChanged), this);
     g_signal_connect(allowInputCheck_, "toggled", G_CALLBACK(OnSettingChanged), this);
     g_signal_connect(clipboardCheck_, "toggled", G_CALLBACK(OnSettingChanged), this);
     g_signal_connect(shareAudioCheck_, "toggled", G_CALLBACK(OnSettingChanged), this);
@@ -1307,12 +1264,12 @@ void MainWindow::ApplyHostState(HostShareState state, const std::string& detail)
         gtk_widget_hide(hostBanner_);
     else
         gtk_widget_show_all(hostBanner_);
-    ShowPasscodeCard();
-    gtk_widget_set_no_show_all(hostPasscodeCard_, !live);
+    ShowPortCard();
+    gtk_widget_set_no_show_all(hostPortCard_, !live);
     if (live)
-        gtk_widget_show_all(hostPasscodeCard_);
+        gtk_widget_show_all(hostPortCard_);
     else
-        gtk_widget_hide(hostPasscodeCard_);
+        gtk_widget_hide(hostPortCard_);
 
     RemoveClass(hostBanner_, "deskhub-banner-busy");
     RemoveClass(hostBanner_, "deskhub-banner-live");
@@ -1342,40 +1299,21 @@ void MainWindow::ShowIdleHostState() {
     ApplyHostState(HostShareState::kIdle, HostPortDetail());
 }
 
-const std::string& MainWindow::ShownPasscode() const {
-    return hosting_ ? sharePasscode_ : settings_.passcode;
-}
-
-void MainWindow::ShowPasscodeCard() {
+void MainWindow::ShowPortCard() {
     if (copiedRevertId_) {
         g_source_remove(copiedRevertId_);
         copiedRevertId_ = 0;
     }
-    const std::string& code = ShownPasscode();
-    gtk_label_set_text(GTK_LABEL(hostPasscodeLabel_), ui::PasscodeDisplay(code).c_str());
-    gtk_button_set_label(GTK_BUTTON(hostPasscodeCopy_), ui::kCopyPasscodeAction);
     gtk_label_set_text(GTK_LABEL(hostPortLabel_),
         std::to_string(hosting_ ? sharePort_ : Port()).c_str());
     gtk_button_set_label(GTK_BUTTON(hostPortCopy_), ui::kCopyButton);
-    gtk_widget_set_no_show_all(hostPasscodeCopy_, code.empty());
-    gtk_widget_set_visible(hostPasscodeCopy_, !code.empty());
 }
 
 gboolean MainWindow::OnCopiedRevertTimer(gpointer user) {
     MainWindow* self = static_cast<MainWindow*>(user);
     self->copiedRevertId_ = 0;
-    self->ShowPasscodeCard();
+    self->ShowPortCard();
     return G_SOURCE_REMOVE;
-}
-
-void MainWindow::OnCopyPasscodeClicked(GtkButton* b, gpointer user) {
-    MainWindow* self = static_cast<MainWindow*>(user);
-    const std::string& code = self->ShownPasscode();
-    if (code.empty()) return;
-    gtk_clipboard_set_text(gtk_clipboard_get(GDK_SELECTION_CLIPBOARD), code.c_str(), -1);
-    gtk_button_set_label(b, ui::kPasscodeCopied);
-    if (self->copiedRevertId_) g_source_remove(self->copiedRevertId_);
-    self->copiedRevertId_ = g_timeout_add(kCopiedRevertMs, OnCopiedRevertTimer, self);
 }
 
 void MainWindow::OnCopyPortClicked(GtkButton* b, gpointer user) {
@@ -1414,9 +1352,6 @@ void MainWindow::SaveSettings() {
     }
     settings_.startHidden = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(startHiddenCheck_));
     ApplyTrayMode();
-
-    const std::string passcode = ui::TrimAscii(gtk_entry_get_text(GTK_ENTRY(hostPasscodeEntry_)));
-    if (deskhub::IsValidPasscode(passcode)) settings_.passcode = passcode;
 
     deskhubp::SaveUiSettings(settings_);
     if (!hosting_ && !hostStarting_) ShowIdleHostState();
@@ -1498,35 +1433,15 @@ void MainWindow::OnDeviceRowActivated(GtkTreeView*, GtkTreePath* path, GtkTreeVi
     const gint* idx = gtk_tree_path_get_indices(path);
     if (!idx || idx[0] < 0 || size_t(idx[0]) >= self->deviceRows_.size()) return;
     const std::string addr = self->deviceRows_[size_t(idx[0])].addr;
-    self->ConnectWithPrompt(addr, ui::PasscodeForDevice(self->recent_, addr));
+    self->ConnectToDevice(addr);
 }
 
-void MainWindow::ConnectWithPrompt(const std::string& addr, std::string passcode) {
-    std::string target = addr;
-    if (!ShowPasscodeDialog(GTK_WINDOW(window_), target, passcode)) return;
-
-    const std::string code = ui::TrimAscii(passcode);
-    if (!code.empty() && !deskhub::IsValidPasscode(code)) {
-        ShowError(GTK_WINDOW(window_), "Deskhub", ui::kPasscodeInvalid);
-        return;
-    }
-
-    const uint16_t port = ui::AddressPort(target);
-    gtk_entry_set_text(GTK_ENTRY(addressEntry_), ui::AddressHost(target).c_str());
+void MainWindow::ConnectToDevice(const std::string& addr) {
+    const uint16_t port = ui::AddressPort(addr);
+    gtk_entry_set_text(GTK_ENTRY(addressEntry_), ui::AddressHost(addr).c_str());
     gtk_entry_set_text(GTK_ENTRY(portEntry_),
         std::to_string(port != 0 ? port : deskhub::kDeskhubPort).c_str());
-    gtk_entry_set_text(GTK_ENTRY(passcodeEntry_), code.c_str());
-    StartConnect(target, code);
-}
-
-bool MainWindow::ReadPasscode(GtkWidget* entry, std::string& out) {
-    out = ui::TrimAscii(gtk_entry_get_text(GTK_ENTRY(entry)));
-    if (out.empty() || deskhub::IsValidPasscode(out)) return true;
-
-    ShowError(GTK_WINDOW(window_), "Deskhub", ui::kPasscodeInvalid);
-    gtk_widget_grab_focus(entry);
-    out.clear();
-    return false;
+    StartConnect(addr);
 }
 
 void MainWindow::SetClientStatus(const std::string& text, bool isError) {
@@ -1561,15 +1476,12 @@ void MainWindow::OnConnectClicked(GtkButton*, gpointer user) {
         return;
     }
 
-    std::string passcode;
-    if (!self->ReadPasscode(self->passcodeEntry_, passcode)) return;
-
     const uint16_t port =
         ui::PortOrDefault(gtk_entry_get_text(GTK_ENTRY(self->portEntry_)));
-    self->StartConnect(ui::AddressWithPort(text, port), passcode);
+    self->StartConnect(ui::AddressWithPort(text, port));
 }
 
-void MainWindow::StartConnect(const std::string& addr, const std::string& passcode) {
+void MainWindow::StartConnect(const std::string& addr) {
     SetClientStatus(std::string(), false);
     std::string deviceName =
         ui::TruncateDeviceName(gtk_entry_get_text(GTK_ENTRY(deviceNameEntry_)));
@@ -1587,33 +1499,31 @@ void MainWindow::StartConnect(const std::string& addr, const std::string& passco
     }
 
     const bool started = connectDriver_.QueryAsync(
-        server, passcode, [this](const std::function<void()>& fn) { PostToUi(fn); },
-        [this, addr, passcode](const deskhubp::ConnectOutcome& outcome) {
-            OnSourcesReady(addr, passcode, outcome);
+        server, [this](const std::function<void()>& fn) { PostToUi(fn); },
+        [this, addr](const deskhubp::ConnectOutcome& outcome) {
+            OnSourcesReady(addr, outcome);
         });
     if (started) SetBusy(true, ui::kQueryingSources);
 }
 
-void MainWindow::OpenShell(const NetAddr& server, const std::string& passcode) {
+void MainWindow::OpenShell(const NetAddr& server) {
     TerminalLaunch launch;
     launch.address = server.ToString();
-    launch.passcode = passcode;
     launch.clientName = ClientDeviceName();
 
     if (!OpenTerminalWindow(GTK_WINDOW(window_), launch))
         SetClientStatus(ui::kTerminalUnreachable, true);
 }
 
-void MainWindow::OpenFileSend(const NetAddr& server, const std::string& passcode) {
+void MainWindow::OpenFileSend(const NetAddr& server) {
     const std::string clientName = ClientDeviceName();
 
     const std::string address = server.ToString();
     OpenFileSendWindow(GTK_WINDOW(window_), address,
-        MakeStandaloneFileSendTarget(server, address, passcode, clientName));
+        MakeStandaloneFileSendTarget(server, address, clientName));
 }
 
-void MainWindow::OnSourcesReady(const std::string& addr, const std::string& passcode,
-    const deskhubp::ConnectOutcome& outcome) {
+void MainWindow::OnSourcesReady(const std::string& addr, const deskhubp::ConnectOutcome& outcome) {
     SetBusy(false, nullptr);
 
     if (!outcome.ok) {
@@ -1621,11 +1531,11 @@ void MainWindow::OnSourcesReady(const std::string& addr, const std::string& pass
         return;
     }
 
-    ui::TouchRecentDevice(recent_, addr, int64_t(std::time(nullptr)), passcode);
+    ui::TouchRecentDevice(recent_, addr, int64_t(std::time(nullptr)));
     SaveRecentDevices();
     RefreshDeviceList();
 
-    OpenConnectionWindow(addr, passcode, outcome);
+    OpenConnectionWindow(addr, outcome);
 }
 
 ConnectionWindow* MainWindow::ConnectionFor(const std::string& addr) const {
@@ -1634,7 +1544,7 @@ ConnectionWindow* MainWindow::ConnectionFor(const std::string& addr) const {
     return nullptr;
 }
 
-void MainWindow::OpenConnectionWindow(const std::string& addr, const std::string& passcode,
+void MainWindow::OpenConnectionWindow(const std::string& addr,
     const deskhubp::ConnectOutcome& outcome) {
     if (ConnectionWindow* open = ConnectionFor(addr)) {
         open->Present();
@@ -1644,7 +1554,7 @@ void MainWindow::OpenConnectionWindow(const std::string& addr, const std::string
     NetAddr server{};
     if (!ParseNetAddr(addr, server)) return;
 
-    auto* window = new ConnectionWindow(this, addr, passcode, server, outcome.caps,
+    auto* window = new ConnectionWindow(this, addr, server, outcome.caps,
         outcome.sources, settings_.clientControl);
     connections_.push_back(window);
 }
@@ -1672,11 +1582,11 @@ std::string MainWindow::ClientDeviceName() const {
     return name;
 }
 
-void MainWindow::OpenViewers(const NetAddr& server, const std::string& passcode,
+void MainWindow::OpenViewers(const NetAddr& server,
     const std::vector<deskhub::SourceInfo>& picked, bool control) {
     int opened = 0;
     for (const deskhub::SourceInfo& source : picked) {
-        if (ViewerWindow::Open(server, source.sourceId, source.name, passcode, control,
+        if (ViewerWindow::Open(server, source.sourceId, source.name, control,
                 [this, alive = alive_] {
                     if (!alive->load()) return;
                     if (openViewers_.Closed()) ShowAfterSession();
@@ -1847,7 +1757,6 @@ void MainWindow::OnHostStarted(bool started, const std::string& error,
 
     screenSharing_ = !share_.sharingHost().Status().empty();
     sharePort_ = options.port;
-    sharePasscode_ = options.passcode;
     shareViewOnly_ = !options.allowInput;
     shareBindWarning_ = share_.sharingHost().BindWarning();
     if (terminalRequested_) share_.StartTerminalShare();
@@ -1873,7 +1782,6 @@ void MainWindow::ApplySharingBanner() {
     banner.hosting = hosting_;
     banner.port = sharePort_;
     banner.viewOnly = shareViewOnly_;
-    banner.passcodeNote = ui::PasscodeShareNote(sharePasscode_);
     banner.bindWarning = shareBindWarning_;
     ApplyHostState(HostShareState::kSharing, share_.BannerText(banner));
 }
@@ -1901,7 +1809,6 @@ void MainWindow::StopHosting() {
     filesRequested_ = false;
     shareViewOnly_ = false;
     sharePort_ = 0;
-    sharePasscode_.clear();
     shareBindWarning_.clear();
     hostStatus_.clear();
     tray_.SetSharing(false);

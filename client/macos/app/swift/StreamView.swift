@@ -4,7 +4,6 @@ import SwiftUI
 
 struct ViewerRequest: Codable, Hashable {
     var address: String
-    var passcode: String
     var sourceId: UInt8
     var name: String
     var control: Bool
@@ -18,7 +17,6 @@ struct ViewerWindow: View {
     init(request: ViewerRequest) {
         _model = State(initialValue: StreamModel(
             address: request.address,
-            passcode: request.passcode,
             sourceId: request.sourceId,
             sourceName: request.name,
             control: request.control

@@ -30,7 +30,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -68,12 +67,10 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.addPathNodes
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -121,9 +118,8 @@ class MainActivity : ComponentActivity() {
         if (debuggable) {
             startSection = sectionExtra(intent)
             intent?.getStringExtra("addr")?.let { addr ->
-                val passcode = intent.getStringExtra("passcode").orEmpty()
                 intent.removeExtra("addr")
-                openStream(addr, passcode, 0)
+                openStream(addr, 0)
             }
         }
 
@@ -134,8 +130,7 @@ class MainActivity : ComponentActivity() {
                         MainScreen(
                             initialSection = startSection,
                             initialAddress = lastAddress,
-                            initialPasscode = NativeClient.recentPasscode(lastAddress),
-                            onRemember = { addr, _ ->
+                            onRemember = { addr ->
                                 prefs.edit().putString("addr", addr).apply()
                             },
                             onOpenStream = ::openStream,
@@ -177,14 +172,12 @@ class MainActivity : ComponentActivity() {
 
     private fun openStream(
         addr: String,
-        passcode: String,
         sourceId: Int,
         sources: List<NativeClient.Source> = emptyList(),
     ) {
         startActivity(
             Intent(this, StreamActivity::class.java)
                 .putExtra("addr", addr)
-                .putExtra("passcode", passcode)
                 .putExtra("source", sourceId)
                 .putExtra("srcIds", sources.map { it.id }.toIntArray())
                 .putExtra("srcDisplayNames", sources.map { it.displayName }.toTypedArray())
@@ -192,14 +185,10 @@ class MainActivity : ComponentActivity() {
         )
     }
 
-    private fun openShell(
-        addr: String,
-        passcode: String,
-    ) {
+    private fun openShell(addr: String) {
         startActivity(
             Intent(this, TerminalActivity::class.java)
-                .putExtra("addr", addr)
-                .putExtra("passcode", passcode),
+                .putExtra("addr", addr),
         )
     }
 }
@@ -216,7 +205,6 @@ private val HeadingColor = darkThemeColor(NativeClient.THEME_HEADING)
 private val MutedColor = darkThemeColor(NativeClient.THEME_MUTED)
 private val OnlineColor = darkThemeColor(NativeClient.THEME_ONLINE)
 private val OfflineColor = darkThemeColor(NativeClient.THEME_OFFLINE)
-private val PasscodeCardColor = darkThemeColor(NativeClient.THEME_PASSCODE_CARD)
 private val PageColor = darkThemeColor(NativeClient.THEME_PAGE)
 
 private val DeskhubDarkColors =
@@ -344,28 +332,24 @@ private sealed interface Step {
 private fun MainScreen(
     initialSection: Section,
     initialAddress: String,
-    initialPasscode: String,
-    onRemember: (String, String) -> Unit,
-    onOpenStream: (String, String, Int, List<NativeClient.Source>) -> Unit,
-    onOpenShell: (String, String) -> Unit,
+    onRemember: (String) -> Unit,
+    onOpenStream: (String, Int, List<NativeClient.Source>) -> Unit,
+    onOpenShell: (String) -> Unit,
     onStartSharing: (HostService.ShareRequest) -> Unit,
     onStopSharing: () -> Unit,
 ) {
     var step by remember { mutableStateOf<Step>(Step.Address) }
     var address by remember { mutableStateOf(NativeClient.addressHost(initialAddress)) }
     var connectPort by remember { mutableStateOf(portFieldText(initialAddress)) }
-    var passcode by remember { mutableStateOf(initialPasscode) }
     var deviceName by remember {
         mutableStateOf(NativeClient.deviceName().ifBlank { Build.MODEL.orEmpty() })
     }
     var connectError by remember { mutableStateOf("") }
     var authed by remember { mutableStateOf<NativeClient.HostQuery?>(null) }
     var authedAddr by remember { mutableStateOf("") }
-    var authedCode by remember { mutableStateOf("") }
     var querySeq by remember { mutableStateOf(0L) }
     var deviceRows by remember { mutableStateOf(emptyList<NativeClient.DeviceRow>()) }
     var scanStatus by remember { mutableStateOf("") }
-    var pendingPick by remember { mutableStateOf<PendingPick?>(null) }
     var sendingTo by remember { mutableStateOf<FileSendDriver?>(null) }
     var section by remember { mutableStateOf(initialSection) }
     var port by remember { mutableStateOf(NativeClient.settingsPort()) }
@@ -384,11 +368,6 @@ private fun MainScreen(
             connectError = NativeClient.string(NativeClient.STR_INVALID_ADDRESS_HINT)
             return@connectLambda
         }
-        val code = passcode.trim()
-        if (code.isNotEmpty() && !NativeClient.isValidPasscode(code)) {
-            connectError = NativeClient.string(NativeClient.STR_PASSCODE_INVALID)
-            return@connectLambda
-        }
         connectError = ""
         authed = null
         deviceName = deviceName.trim().ifBlank { Build.MODEL.orEmpty() }
@@ -396,19 +375,18 @@ private fun MainScreen(
         val mine = Step.Querying(++querySeq)
         step = mine
         scope.launch {
-            val queried = NativeClient.queryHost(addr, code)
+            val queried = NativeClient.queryHost(addr)
             if (step != mine) return@launch
             step = Step.Address
             if (queried == null) {
                 connectError = NativeClient.sourceQueryFailed(addr)
                 return@launch
             }
-            onRemember(addr, code)
-            NativeClient.recentTouch(addr, code)
+            onRemember(addr)
+            NativeClient.recentTouch(addr)
             deviceRows = NativeClient.deviceRows()
             authed = queried
             authedAddr = addr
-            authedCode = code
         }
     }
 
@@ -416,7 +394,7 @@ private fun MainScreen(
         authed?.takeIf { it.sources.isNotEmpty() }?.let { query ->
             val decision = NativeClient.connectDecision(query.sources)
             if (decision >= 0) {
-                onOpenStream(authedAddr, authedCode, decision, query.sources)
+                onOpenStream(authedAddr, decision, query.sources)
             } else {
                 step = Step.Picking(query.sources)
             }
@@ -424,12 +402,12 @@ private fun MainScreen(
     }
 
     val openShell: () -> Unit = {
-        if (authed?.terminal == true) onOpenShell(authedAddr, authedCode)
+        if (authed?.terminal == true) onOpenShell(authedAddr)
     }
 
     val openFileSend: () -> Unit = {
         if (authed?.files == true) {
-            sendingTo = StandaloneFileSendDriver(authedAddr, authedCode, deviceName)
+            sendingTo = StandaloneFileSendDriver(authedAddr, deviceName)
         }
     }
 
@@ -438,9 +416,10 @@ private fun MainScreen(
         connectError = ""
     }
 
-    val pickDevice: (String, String) -> Unit = { addr, code ->
-        connectError = ""
-        pendingPick = PendingPick(addr, code)
+    val pickDevice: (String) -> Unit = { addr ->
+        address = NativeClient.addressHost(addr)
+        connectPort = portFieldText(addr)
+        connect(NativeClient.composeAddress(address, connectPort))
     }
 
     if (step is Step.Querying) {
@@ -496,11 +475,6 @@ private fun MainScreen(
                     connectPort = it
                     authed = null
                 },
-                passcode = passcode,
-                onPasscodeChange = {
-                    passcode = it
-                    authed = null
-                },
                 deviceName = deviceName,
                 onDeviceNameChange = { deviceName = it },
                 busy = step is Step.Querying,
@@ -531,76 +505,16 @@ private fun MainScreen(
                 sources = s.sources,
                 onPick = { source ->
                     step = Step.Address
-                    onOpenStream(authedAddr, authedCode, source.id, s.sources)
+                    onOpenStream(authedAddr, source.id, s.sources)
                 },
             )
     }
-
-    pendingPick?.let { pick ->
-        PasscodeDialog(
-            addr = pick.addr,
-            initial = pick.passcode,
-            onDismiss = { pendingPick = null },
-            onConfirm = { chosenAddr, code ->
-                pendingPick = null
-                address = NativeClient.addressHost(chosenAddr)
-                connectPort = portFieldText(chosenAddr)
-                passcode = code
-                connect(chosenAddr)
-            },
-        )
-    }
 }
-
-private data class PendingPick(
-    val addr: String,
-    val passcode: String,
-)
 
 private fun portFieldText(addr: String): String {
     val explicit = NativeClient.addressPort(addr)
     val port = if (explicit != 0) explicit else NativeClient.defaultPort()
     return port.toString()
-}
-
-@Composable
-private fun PasscodeCard(passcode: String) {
-    val context = LocalContext.current
-    val digits = remember(passcode) { NativeHost.passcodeDisplay(passcode) }
-    Column(
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .background(PasscodeCardColor, RoundedCornerShape(12.dp))
-                .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        Text(
-            NativeClient.string(NativeClient.STR_PASSCODE_SHARE_HEADING),
-            style = MaterialTheme.typography.labelLarge,
-            color = MutedColor,
-        )
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Text(
-                NativeHost.passcodeDisplay(passcode),
-                modifier = Modifier.weight(1f),
-                fontSize = 34.sp,
-                fontWeight = FontWeight.Bold,
-                fontFamily = FontFamily.Monospace,
-                letterSpacing = 2.sp,
-                color = HeadingColor,
-            )
-            if (passcode.isNotEmpty()) {
-                OutlinedButton(onClick = { copyToClipboard(context, passcode) }) {
-                    Text(NativeClient.string(NativeClient.STR_COPY_PASSCODE_ACTION))
-                }
-            }
-        }
-    }
 }
 
 private fun copyToClipboard(
@@ -616,65 +530,6 @@ private fun copyToClipboard(
 }
 
 @Composable
-private fun PasscodeDialog(
-    addr: String,
-    initial: String,
-    onDismiss: () -> Unit,
-    onConfirm: (String, String) -> Unit,
-) {
-    val host = NativeClient.addressHost(addr)
-    var typed by remember(addr, initial) { mutableStateOf(initial) }
-    var typedPort by remember(addr) { mutableStateOf(portFieldText(addr)) }
-    val ready = typed.trim().isEmpty() || NativeClient.isValidPasscode(typed.trim())
-    val confirm = {
-        if (ready) onConfirm(NativeClient.composeAddress(host, typedPort), typed.trim())
-    }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(NativeClient.string(NativeClient.STR_CONNECT_PROMPT_TITLE)) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(host, style = MaterialTheme.typography.titleMedium)
-                OutlinedTextField(
-                    value = typedPort,
-                    onValueChange = { entered ->
-                        typedPort = entered.filter { it.isDigit() }.take(5)
-                    },
-                    label = { Text(NativeClient.string(NativeClient.STR_UDP_PORT_LABEL)) },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                )
-                OutlinedTextField(
-                    value = typed,
-                    onValueChange = { entered ->
-                        typed =
-                            entered.filter { it.isDigit() }.take(NativeClient.passcodeDigits())
-                    },
-                    label = { Text(NativeClient.string(NativeClient.STR_CLIENT_PASSCODE_PROMPT)) },
-                    supportingText = {
-                        Text(NativeClient.string(NativeClient.STR_CLIENT_PASSCODE_HINT))
-                    },
-                    singleLine = true,
-                    keyboardOptions =
-                        KeyboardOptions(
-                            keyboardType = KeyboardType.NumberPassword,
-                            imeAction = ImeAction.Go,
-                        ),
-                    keyboardActions = KeyboardActions(onGo = { confirm() }),
-                )
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = confirm, enabled = ready) {
-                Text(NativeClient.string(NativeClient.STR_CONNECT_BUTTON))
-            }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
-    )
-}
-
-@Composable
 private fun HomeScreen(
     section: Section,
     onSectionChange: (Section) -> Unit,
@@ -682,8 +537,6 @@ private fun HomeScreen(
     onAddressChange: (String) -> Unit,
     connectPort: String,
     onConnectPortChange: (String) -> Unit,
-    passcode: String,
-    onPasscodeChange: (String) -> Unit,
     deviceName: String,
     onDeviceNameChange: (String) -> Unit,
     busy: Boolean,
@@ -696,7 +549,7 @@ private fun HomeScreen(
     onOpenFileSend: () -> Unit,
     deviceRows: List<NativeClient.DeviceRow>,
     scanStatus: String,
-    onPickDevice: (String, String) -> Unit,
+    onPickDevice: (String) -> Unit,
     onRescan: () -> Unit,
     onRefreshStatus: () -> Unit,
     port: Int,
@@ -713,8 +566,6 @@ private fun HomeScreen(
                         onAddressChange = onAddressChange,
                         connectPort = connectPort,
                         onConnectPortChange = onConnectPortChange,
-                        passcode = passcode,
-                        onPasscodeChange = onPasscodeChange,
                         deviceName = deviceName,
                         onDeviceNameChange = onDeviceNameChange,
                         busy = busy,
@@ -772,7 +623,6 @@ private fun HostScreen(
     onStartSharing: (HostService.ShareRequest) -> Unit,
     onStopSharing: () -> Unit,
 ) {
-    var passcode by remember { mutableStateOf(NativeHost.passcode()) }
     var state by remember { mutableStateOf(NativeHost.shareState) }
     var error by remember { mutableStateOf(NativeHost.shareError) }
     var rows by remember { mutableStateOf(emptyList<NativeHost.HostRow>()) }
@@ -784,7 +634,6 @@ private fun HostScreen(
             error = NativeHost.shareError
             rows = if (state == NativeHost.ShareState.SHARING) NativeHost.hostRows() else emptyList()
             addresses = NativeHost.localAddresses()
-            passcode = NativeHost.passcode()
             if (state == NativeHost.ShareState.SHARING && !NativeHost.isRunning()) onStopSharing()
             delay(POLL_INTERVAL_MS)
         }
@@ -818,8 +667,6 @@ private fun HostScreen(
                 delay(POLL_INTERVAL_MS)
             }
         }
-
-        PasscodeCard(passcode)
 
         var bindIp by remember { mutableStateOf(NativeHost.bindIp()) }
         var bindMenuOpen by remember { mutableStateOf(false) }
@@ -930,7 +777,6 @@ private fun HostScreen(
                         bitrateMbps = defaults.bitrateMbps,
                         maxDim = defaults.maxDim,
                         port = port,
-                        passcode = passcode,
                     ),
                 )
             },
@@ -950,7 +796,7 @@ private fun HostScreen(
 
         Text(
             if (sharing) {
-                NativeHost.sharingStatus(port, passcode, true, false)
+                NativeHost.sharingStatus(port, true, false)
             } else {
                 NativeHost.idleStatus(port)
             },
@@ -975,7 +821,7 @@ private fun HostScreen(
                 color = OnlineColor,
             )
             Text(
-                NativeHost.sharingStatus(port, passcode, false, true),
+                NativeHost.sharingStatus(port, false, true),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MutedColor,
             )
@@ -1187,40 +1033,6 @@ private fun SettingsScreen(
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
         )
 
-        SectionLabel(NativeClient.string(NativeClient.STR_SECTION_SECURITY))
-        var passcode by remember { mutableStateOf(NativeHost.passcode()) }
-        var hostIdle by remember { mutableStateOf(NativeHost.shareState == NativeHost.ShareState.IDLE) }
-        LaunchedEffect(Unit) {
-            while (true) {
-                hostIdle = NativeHost.shareState == NativeHost.ShareState.IDLE
-                delay(POLL_INTERVAL_MS)
-            }
-        }
-        val passcodeReady = passcode.isEmpty() || NativeClient.isValidPasscode(passcode)
-        OutlinedTextField(
-            value = passcode,
-            onValueChange = { typed ->
-                val digits = typed.filter { it.isDigit() }.take(NativeClient.passcodeDigits())
-                passcode = digits
-                if (digits.isEmpty() || NativeClient.isValidPasscode(digits)) {
-                    NativeHost.savePasscode(digits)
-                }
-            },
-            label = { Text(NativeClient.string(NativeClient.STR_PASSCODE_LABEL)) },
-            supportingText = { Text(NativeClient.string(NativeClient.STR_PASSCODE_HINT)) },
-            isError = !passcodeReady,
-            enabled = hostIdle,
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
-        )
-        if (!passcodeReady) {
-            Text(
-                NativeClient.string(NativeClient.STR_PASSCODE_INVALID),
-                color = MaterialTheme.colorScheme.error,
-            )
-        }
-
         SectionLabel(NativeClient.string(NativeClient.STR_SECTION_SESSION))
         var clipboardSync by remember { mutableStateOf(NativeClient.clipboardSync()) }
         SwitchRow(
@@ -1265,8 +1077,6 @@ private fun AddressScreen(
     onAddressChange: (String) -> Unit,
     connectPort: String,
     onConnectPortChange: (String) -> Unit,
-    passcode: String,
-    onPasscodeChange: (String) -> Unit,
     deviceName: String,
     onDeviceNameChange: (String) -> Unit,
     busy: Boolean,
@@ -1279,7 +1089,7 @@ private fun AddressScreen(
     onOpenFileSend: () -> Unit,
     deviceRows: List<NativeClient.DeviceRow>,
     scanStatus: String,
-    onPickDevice: (String, String) -> Unit,
+    onPickDevice: (String) -> Unit,
     onRescan: () -> Unit,
     onRefreshStatus: () -> Unit,
 ) {
@@ -1330,28 +1140,6 @@ private fun AddressScreen(
                     keyboardActions = KeyboardActions(onGo = { go() }),
                 )
             }
-
-            OutlinedTextField(
-                value = passcode,
-                onValueChange = { typed ->
-                    onPasscodeChange(
-                        typed.filter { it.isDigit() }.take(NativeClient.passcodeDigits()),
-                    )
-                },
-                label = { Text(NativeClient.string(NativeClient.STR_CLIENT_PASSCODE_PROMPT)) },
-                supportingText = {
-                    Text(NativeClient.string(NativeClient.STR_CLIENT_PASSCODE_HINT))
-                },
-                singleLine = true,
-                enabled = !busy,
-                modifier = Modifier.fillMaxWidth(),
-                keyboardOptions =
-                    KeyboardOptions(
-                        keyboardType = KeyboardType.NumberPassword,
-                        imeAction = ImeAction.Go,
-                    ),
-                keyboardActions = KeyboardActions(onGo = { go() }),
-            )
 
             OutlinedTextField(
                 value = deviceName,
@@ -1459,10 +1247,7 @@ private fun AddressScreen(
                     onRefreshStatus()
                     onRescan()
                 },
-                onPick = { addr ->
-                    val known = deviceRows.firstOrNull { it.addr == addr }?.passcode.orEmpty()
-                    onPickDevice(addr, known.ifEmpty { NativeClient.recentPasscode(addr) })
-                },
+                onPick = onPickDevice,
             )
         }
     }

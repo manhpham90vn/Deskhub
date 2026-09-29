@@ -21,7 +21,6 @@ struct SettingsPage: View {
         .onChange(of: sharing.bitrateMbps) { _, _ in sharing.save() }
         .onChange(of: sharing.maxDim) { _, _ in sharing.save() }
         .onChange(of: sharing.port) { _, _ in sharing.save() }
-        .onChange(of: sharing.passcode) { _, _ in sharing.save() }
         .onChange(of: sharing.allowInput) { _, _ in sharing.save() }
         .onChange(of: sharing.autoShare) { _, _ in sharing.save() }
         .onChange(of: sharing.autostart) { _, _ in sharing.applyAutostart() }
@@ -73,8 +72,6 @@ struct SettingsPage: View {
         case DHSettingPort:
             TextField("", value: $sharing.port, format: .number.grouping(.never))
                 .textFieldStyle(.roundedBorder).frame(width: 90)
-        case DHSettingPasscode:
-            PasscodeField(passcode: $sharing.passcode, width: 64)
         default:
             EmptyView()
         }
@@ -144,7 +141,7 @@ private struct SettingsBlock: Identifiable {
 private struct SettingsAreaModel: Identifiable {
     private static let layoutCapacity = 64
     private static let labelledInputs: [DHSettingField] = [
-        DHSettingFps, DHSettingBitrate, DHSettingQuality, DHSettingPort, DHSettingPasscode,
+        DHSettingFps, DHSettingBitrate, DHSettingQuality, DHSettingPort,
     ]
 
     let id: Int

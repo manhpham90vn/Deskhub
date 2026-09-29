@@ -92,11 +92,11 @@ struct DHTermSessionInfo {
     bool closable;
 };
 
-DHTermSession* dh_term_open(const char* address, const char* passcode, uint16_t cols,
-    uint16_t rows, const DHTermCallbacks* callbacks);
+DHTermSession* dh_term_open(const char* address, uint16_t cols, uint16_t rows,
+    const DHTermCallbacks* callbacks);
 
-DHTermSession* dh_term_open_deferred(const char* address, const char* passcode, uint16_t cols,
-    uint16_t rows, const DHTermCallbacks* callbacks);
+DHTermSession* dh_term_open_deferred(const char* address, uint16_t cols, uint16_t rows,
+    const DHTermCallbacks* callbacks);
 
 void dh_term_open_new(DHTermSession* s);
 

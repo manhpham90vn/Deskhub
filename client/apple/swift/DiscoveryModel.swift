@@ -16,7 +16,6 @@ nonisolated enum DeskhubDiscovery {
             { row in
                 DeviceListRow(
                     addr: DeskhubClient.cString(row.addr),
-                    passcode: DeskhubClient.cString(row.passcode),
                     origin: DeskhubClient.cString(row.origin),
                     status: DeskhubClient.cString(row.status),
                     ping: DeskhubClient.cString(row.ping),
@@ -27,12 +26,8 @@ nonisolated enum DeskhubDiscovery {
         )
     }
 
-    static func remember(address: String, passcode: String) {
-        dh_recent_touch(address, passcode)
-    }
-
-    static func passcode(for address: String) -> String {
-        DeskhubClient.buffered(16) { dh_recent_passcode(address, $0, $1) }
+    static func remember(address: String) {
+        dh_recent_touch(address)
     }
 }
 
@@ -54,9 +49,8 @@ final class DiscoveryModel {
         rescanNow()
     }
 
-    func remember(address: String, passcode: String) async {
-        await Task.detached { DeskhubDiscovery.remember(address: address, passcode: passcode) }
-            .value
+    func remember(address: String) async {
+        await Task.detached { DeskhubDiscovery.remember(address: address) }.value
         devices = await Task.detached { DeskhubDiscovery.deviceRows() }.value
     }
 }

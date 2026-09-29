@@ -33,7 +33,6 @@ add_executable(deskhub_app
     gtk/main.cpp
     gtk/FileSendDialog.cpp
     gtk/MainWindow.cpp
-    gtk/PasscodeDialog.cpp
     gtk/TerminalWindow.cpp
     gtk/TrayIcon.cpp
     gtk/ViewerWindow.cpp

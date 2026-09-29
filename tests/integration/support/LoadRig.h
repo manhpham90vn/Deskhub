@@ -58,7 +58,6 @@ struct Upload {
         deskhubp::FileTransferClientConfig config;
         config.host = NetAddr{0x7F000001u, port};
         config.hostLabel = config.host.ToString();
-        config.passcode = kTestPasscode;
         config.clientName = "load-test-sender";
         config.files = {file};
         return client.Start(config, deskhubp::FileTransferClientCallbacks{});
@@ -88,7 +87,6 @@ inline deskhubp::ScreenViewerConfig ViewerConfig(uint16_t port, bool wantsAudio)
     cfg.screenW = 1920;
     cfg.screenH = 1080;
     cfg.alwaysFocused = true;
-    cfg.passcode = kTestPasscode;
     cfg.wantsAudio = wantsAudio;
     return cfg;
 }

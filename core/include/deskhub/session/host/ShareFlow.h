@@ -32,7 +32,6 @@ inline media::ShareOptions ShareOptionsOf(const ui::UiSettings& settings, bool t
     options.maxDim = settings.maxDim;
     options.port = uint16_t(settings.port);
     options.allowInput = settings.allowInput;
-    options.passcode = settings.passcode;
     options.bindIp = settings.bindIp;
     options.deviceName = settings.deviceName;
     options.clipboardSync = settings.clipboardSync;

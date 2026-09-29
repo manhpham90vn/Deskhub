@@ -690,8 +690,7 @@ std::string MakeSettingsSoup() {
 bool SettingsWithinBounds(const ui::UiSettings& s) {
     return s.fps >= 1 && s.fps <= ui::kMaxSettingsFps && s.bitrateMbps >= 1 &&
            s.bitrateMbps <= ui::kMaxSettingsBitrateMbps && s.maxDim <= ui::kMaxSettingsDim &&
-           s.port >= 1 && s.port <= ui::kMaxSettingsPort &&
-           (s.passcode.empty() || IsValidPasscode(s.passcode));
+           s.port >= 1 && s.port <= ui::kMaxSettingsPort;
 }
 
 void TestUiSettingsFuzz() {
@@ -745,7 +744,6 @@ void TestRecentDevicesFuzz() {
         for (const auto& d : parsed) {
             ok = ok && !d.addr.empty();
             ok = ok && d.lastConnectedUnix >= 0;
-            ok = ok && (d.passcode.empty() || IsValidPasscode(d.passcode));
             ok = ok && addrs.insert(d.addr).second;
         }
         ok = ok && ui::ParseRecentDevices(ui::SerializeRecentDevices(parsed)) == parsed;

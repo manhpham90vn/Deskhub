@@ -51,7 +51,7 @@ WinScreenViewer& EngineOf(DHScreen* s) {
 }
 
 DHScreen* dh_screen_start(const char* address, uint8_t sourceId, void* surface,
-    const DHScreenCallbacks* callbacks, const char* passcode) {
+    const DHScreenCallbacks* callbacks) {
     if (!surface) return nullptr;
 
     NetAddr server{};
@@ -79,7 +79,6 @@ DHScreen* dh_screen_start(const char* address, uint8_t sourceId, void* surface,
     cfg.screenH = uint32_t(GetSystemMetrics(SM_CYVIRTUALSCREEN));
     cfg.alwaysFocused = true;
     cfg.statusSeparator = kStatusSeparator;
-    cfg.passcode = passcode ? passcode : "";
     cfg.displayName = deskhubp::SessionDeviceName();
     cfg.wantsAudio = deskhubp::LoadUiSettings().playAudio;
     cfg.onParams = [raw](uint32_t width, uint32_t height, uint8_t fps) {

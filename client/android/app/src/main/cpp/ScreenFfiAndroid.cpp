@@ -37,10 +37,10 @@ AndroidScreenViewer& EngineOf(DHScreen* s) {
 }
 
 DHScreen* dh_screen_start(const char* address, uint8_t sourceId, void* surface,
-    const DHScreenCallbacks* callbacks, const char* passcode) {
+    const DHScreenCallbacks* callbacks) {
     return deskhubp::StartFfiScreenSession<DHScreen, ANativeWindow*>(address, sourceId, surface,
         callbacks, g_screenW.load(std::memory_order_relaxed),
-        g_screenH.load(std::memory_order_relaxed), passcode);
+        g_screenH.load(std::memory_order_relaxed));
 }
 
 void dh_screen_stop(DHScreen* s) {

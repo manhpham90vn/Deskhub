@@ -58,8 +58,7 @@ struct DHTermSession {
     DHTermCallbacks callbacks{};
 };
 
-static DHTermSession* StartViewer(const char* address, const char* passcode, uint16_t cols,
-    uint16_t rows, uint32_t resumeId, bool deferOpen, const DHTermCallbacks* callbacks) {
+static DHTermSession* StartViewer(const char* address, uint16_t cols, uint16_t rows, uint32_t resumeId, bool deferOpen, const DHTermCallbacks* callbacks) {
     if (address == nullptr) return nullptr;
     NetAddr server;
     if (!ParseNetAddr(address, server)) return nullptr;
@@ -70,7 +69,6 @@ static DHTermSession* StartViewer(const char* address, const char* passcode, uin
     deskhubp::TerminalViewerConfig config;
     config.host = server;
     config.hostLabel = deskhub::ui::AddressHost(address);
-    config.passcode = passcode != nullptr ? passcode : "";
     config.clientName = deskhubp::SessionDeviceName();
     config.size = deskhub::TermSize{cols, rows};
     config.resumeId = resumeId;
@@ -110,14 +108,14 @@ static DHTermSession* StartViewer(const char* address, const char* passcode, uin
     return session;
 }
 
-DHTermSession* dh_term_open(const char* address, const char* passcode, uint16_t cols,
-    uint16_t rows, const DHTermCallbacks* callbacks) {
-    return StartViewer(address, passcode, cols, rows, 0, false, callbacks);
+DHTermSession* dh_term_open(const char* address, uint16_t cols, uint16_t rows,
+    const DHTermCallbacks* callbacks) {
+    return StartViewer(address, cols, rows, 0, false, callbacks);
 }
 
-DHTermSession* dh_term_open_deferred(const char* address, const char* passcode, uint16_t cols,
-    uint16_t rows, const DHTermCallbacks* callbacks) {
-    return StartViewer(address, passcode, cols, rows, 0, true, callbacks);
+DHTermSession* dh_term_open_deferred(const char* address, uint16_t cols, uint16_t rows,
+    const DHTermCallbacks* callbacks) {
+    return StartViewer(address, cols, rows, 0, true, callbacks);
 }
 
 void dh_term_stop(DHTermSession* s) {

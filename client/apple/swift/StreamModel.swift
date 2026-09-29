@@ -5,7 +5,6 @@ import Observation
 @MainActor @Observable
 final class StreamModel {
     let address: String
-    let passcode: String
     let control: Bool
     private(set) var sourceId: UInt8
     private(set) var sourceName: String
@@ -25,11 +24,8 @@ final class StreamModel {
 
     var reattaching: Bool { phase == .reattaching }
 
-    init(address: String, passcode: String, sourceId: UInt8, sourceName: String,
-         control: Bool = true)
-    {
+    init(address: String, sourceId: UInt8, sourceName: String, control: Bool = true) {
         self.address = address
-        self.passcode = passcode
         self.control = control
         self.sourceId = sourceId
         self.sourceName = sourceName
@@ -38,10 +34,9 @@ final class StreamModel {
     func start() async {
         let addr = address
         let sid = sourceId
-        let code = passcode
         let handlers = makeHandlers()
         let opened = await Task.detached {
-            ScreenSession.start(address: addr, sourceId: sid, passcode: code, handlers: handlers)
+            ScreenSession.start(address: addr, sourceId: sid, handlers: handlers)
         }.value
         guard let opened else {
             failedToStart = true

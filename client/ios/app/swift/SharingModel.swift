@@ -7,29 +7,15 @@ final class SharingModel {
 
     private static let pollInterval = Duration.milliseconds(1000)
 
-    var passcode: String
     var status = BroadcastStatus()
     var addresses: [LocalAddress] = []
     var bindIp = DeskhubClient.buffered(64) { dh_bind_ip($0, $1) }
-
-    private var lastValidPasscode: String
-
-    init() {
-        let stored = dh_settings_load()
-        passcode = DeskhubClient.cString(stored.passcode)
-        lastValidPasscode = DeskhubClient.cString(stored.passcode)
-    }
-
-    var acceptedPasscode: String {
-        passcode.isEmpty || DeskhubClient.isValidPasscode(passcode)
-            ? passcode : lastValidPasscode
-    }
 
     var screenStatusLine: String {
         let port = UInt16(dh_settings_load().port)
         if status.sharing {
             return DeskhubClient.buffered(320) {
-                dh_sharing_status(port, acceptedPasscode, false, true, false, false, $0, $1)
+                dh_sharing_status(port, false, true, false, false, $0, $1)
             }
         }
         return DeskhubClient.buffered(160) { dh_idle_host_status(port, $0, $1) }
@@ -39,22 +25,12 @@ final class SharingModel {
         guard FilesHost.shared.receiving else { return "" }
         let port = UInt16(dh_settings_load().port)
         return DeskhubClient.buffered(320) {
-            dh_sharing_status(port, acceptedPasscode, false, false, false, true, $0, $1)
+            dh_sharing_status(port, false, false, false, true, $0, $1)
         }
     }
 
     func saveBindIp() {
         dh_set_bind_ip(bindIp)
-    }
-
-    func savePasscode() {
-        guard passcode.isEmpty || DeskhubClient.isValidPasscode(passcode) else { return }
-        lastValidPasscode = passcode
-        let stored = dh_settings_load()
-        dh_settings_save(
-            stored.fps, stored.bitrateMbps, stored.maxDim, stored.port, stored.allowInput,
-            stored.clientControl, passcode
-        )
     }
 
     func poll() async {

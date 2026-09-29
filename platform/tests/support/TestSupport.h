@@ -2,8 +2,6 @@
 #include "deskhubp/system/AppDataFile.h"
 #include "deskhubp/system/HostIdentity.h"
 
-inline constexpr const char* kTestPasscode = "0417";
-
 inline bool ForgetHostIdentity() {
     deskhubp::RemoveAppDataFile(deskhubp::kHostCertFileName);
     deskhubp::RemoveAppDataFile(deskhubp::kHostKeyFileName);

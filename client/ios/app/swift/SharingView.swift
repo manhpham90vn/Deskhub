@@ -10,8 +10,6 @@ struct SharingView: View {
             VStack(alignment: .leading, spacing: 16) {
                 deskhubHeading(DeskhubClient.string(DHStrSidebarHost))
 
-                PasscodeCard(passcode: model.acceptedPasscode)
-
                 HStack(spacing: 12) {
                     Text(DeskhubClient.string(DHStrBindInterfaceLabel))
                     Spacer(minLength: 0)

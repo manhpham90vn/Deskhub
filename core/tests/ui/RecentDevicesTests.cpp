@@ -14,8 +14,8 @@ namespace {
 void TestRoundTrip() {
     std::printf("[recent] a saved list comes back exactly as it was...\n");
     std::vector<ui::RecentDevice> devices{
-        {"192.168.1.10", 1754300000, ""},
-        {"192.168.1.20:5000", 1754200000, ""},
+        {"192.168.1.10", 1754300000},
+        {"192.168.1.20:5000", 1754200000},
     };
     const std::string text = ui::SerializeRecentDevices(devices);
     Check(ui::ParseRecentDevices(text) == devices, "serialize then parse is identity");
@@ -23,16 +23,9 @@ void TestRoundTrip() {
 
 void TestLegacyPasscodesAreDiscarded() {
     std::printf("[recent] old passcodes are discarded while addresses remain...\n");
-    std::vector<ui::RecentDevice> devices;
-    ui::TouchRecentDevice(devices, "192.168.1.10", 100, "0417");
-    Check(devices.size() == 1 && devices[0].passcode.empty(),
-        "a supplied passcode is not kept in memory");
-
-    const std::vector<ui::RecentDevice> saved{{"192.168.1.50", 1754300000, "0417"}};
-    const std::string text = ui::SerializeRecentDevices(saved);
-    Check(text == "1754300000 192.168.1.50\n", "the retired field is omitted entirely");
-    Check(ui::ParseRecentDevices(text)[0].passcode.empty(),
-        "a saved address does not recreate a passcode");
+    const std::vector<ui::RecentDevice> saved{{"192.168.1.50", 1754300000}};
+    Check(ui::SerializeRecentDevices(saved) == "1754300000 192.168.1.50\n",
+        "a saved line carries only the time and the address");
 
     const auto reloaded = ui::ParseRecentDevices(
         "1754300000 192.168.1.40 9182\n"
@@ -41,12 +34,12 @@ void TestLegacyPasscodesAreDiscarded() {
         "  1754000000   192.168.1.43   5150  \n");
     Check(reloaded.size() == 4, "all four lines parse");
     if (reloaded.size() == 4) {
-        Check(reloaded[0].addr == "192.168.1.40" && reloaded[0].passcode.empty(),
+        Check(reloaded[0].addr == "192.168.1.40",
             "a code on an old line is discarded");
-        Check(reloaded[1].addr == "192.168.1.41" && reloaded[1].passcode.empty(),
+        Check(reloaded[1].addr == "192.168.1.41",
             "a malformed code is dropped but the device is kept");
-        Check(reloaded[2].passcode.empty(), "an old line without a code still parses");
-        Check(reloaded[3].addr == "192.168.1.43" && reloaded[3].passcode.empty(),
+        Check(reloaded[2].addr == "192.168.1.42", "an old line without a code still parses");
+        Check(reloaded[3].addr == "192.168.1.43",
             "runs of spaces around the fields do not swallow the address");
     }
 }
@@ -126,11 +119,10 @@ void TestRemove() {
 void TestDefaultPortSpellingsAreOneDevice() {
     std::printf("[recent] a bare address and one with the default port are the same device...\n");
     std::vector<ui::RecentDevice> devices;
-    ui::TouchRecentDevice(devices, "192.168.1.60:47777", 100, "0417");
+    ui::TouchRecentDevice(devices, "192.168.1.60:47777", 100);
 
-    ui::TouchRecentDevice(devices, "192.168.1.60", 200, "");
+    ui::TouchRecentDevice(devices, "192.168.1.60", 200);
     Check(devices.size() == 1, "touching the other spelling replaces the entry");
-    Check(devices[0].passcode.empty(), "the replacement has no passcode");
 
     ui::RemoveRecentDevice(devices, "192.168.1.60:47777");
     Check(devices.empty(), "removing either spelling removes the device");

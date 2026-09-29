@@ -19,7 +19,6 @@ struct FileSendHooks {
 
 struct FileSendLaunch {
     std::string address;
-    std::string passcode;
     std::string clientName;
 };
 

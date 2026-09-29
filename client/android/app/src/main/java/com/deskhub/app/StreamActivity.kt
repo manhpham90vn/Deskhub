@@ -91,7 +91,6 @@ class StreamActivity : ComponentActivity() {
     private var currentSourceId by mutableIntStateOf(0)
     private var sources: List<NativeClient.Source> = emptyList()
     private var address = ""
-    private var passcode = ""
 
     private val holderCallback =
         object : SurfaceHolder.Callback {
@@ -119,7 +118,6 @@ class StreamActivity : ComponentActivity() {
         }
 
         address = intent.getStringExtra("addr").orEmpty()
-        passcode = intent.getStringExtra("passcode").orEmpty()
         currentSourceId = intent.getIntExtra("source", 0)
         sources = readSources(intent)
         screenPx = NativeClient.screenSizePx(this)
@@ -129,7 +127,6 @@ class StreamActivity : ComponentActivity() {
                 currentSourceId,
                 screenPx.first,
                 screenPx.second,
-                passcode,
             )
 
         setContent {
@@ -170,7 +167,6 @@ class StreamActivity : ComponentActivity() {
                 sourceId,
                 screenPx.first,
                 screenPx.second,
-                passcode,
             )
     }
 

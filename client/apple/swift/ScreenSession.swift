@@ -23,7 +23,7 @@ final class ScreenSession: @unchecked Sendable {
     }
 
     static func start(
-        address: String, sourceId: UInt8, passcode: String, handlers: ScreenSessionHandlers
+        address: String, sourceId: UInt8, handlers: ScreenSessionHandlers
     ) -> ScreenSession? {
         let box = Unmanaged.passRetained(HandlerBox(handlers)).toOpaque()
 
@@ -44,7 +44,7 @@ final class ScreenSession: @unchecked Sendable {
             )
         }
 
-        guard let handle = dh_screen_start(address, sourceId, nil, &callbacks, passcode) else {
+        guard let handle = dh_screen_start(address, sourceId, nil, &callbacks) else {
             Unmanaged<HandlerBox>.fromOpaque(box).release()
             return nil
         }

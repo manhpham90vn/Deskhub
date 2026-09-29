@@ -7,7 +7,6 @@
 #include <vector>
 
 inline constexpr uint64_t kTestViewer = 0xC0A80001'0000ULL;
-inline constexpr const char* kTestPasscode = "0417";
 
 extern int g_failures;
 void Check(bool ok, const char* what);

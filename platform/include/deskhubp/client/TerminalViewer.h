@@ -35,7 +35,6 @@ enum class TerminalViewerState : uint8_t {
 struct TerminalViewerConfig {
     NetAddr host{};
     std::string hostLabel{};
-    std::string passcode{};
     std::string clientName{};
     std::string clientIdentityName{};
     deskhub::TermSize size{};

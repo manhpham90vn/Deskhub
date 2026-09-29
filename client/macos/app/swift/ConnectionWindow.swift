@@ -2,7 +2,6 @@ import SwiftUI
 
 struct ConnectionRequest: Codable, Hashable {
     var address: String
-    var passcode: String
     var name: String
     var sources: [Source]
     var caps: HostCaps
@@ -41,8 +40,8 @@ struct ConnectionWindow: View {
                 onCancel: { picking = false },
                 onPick: { chosen in
                     picking = false
-                    openViewers(chosen, address: request.address, passcode: request.passcode,
-                                control: control, openWindow: openWindow)
+                    openViewers(chosen, address: request.address, control: control,
+                                openWindow: openWindow)
                 }
             )
             .frame(width: 460, height: 340)
@@ -112,7 +111,7 @@ struct ConnectionWindow: View {
                     var stored = dh_settings_load()
                     stored.clientControl = on
                     dh_settings_save(stored.fps, stored.bitrateMbps, stored.maxDim, stored.port,
-                                     stored.allowInput, on, nil)
+                                     stored.allowInput, on)
                 }
             Button(action: openTerminalSession) {
                 Text(DeskhubClient.string(DHStrOpenShellLabel))
@@ -134,22 +133,18 @@ struct ConnectionWindow: View {
         if decision.showPicker {
             picking = true
         } else {
-            openViewers(request.sources, address: request.address, passcode: request.passcode,
-                        control: control, openWindow: openWindow)
+            openViewers(request.sources, address: request.address, control: control,
+                        openWindow: openWindow)
         }
     }
 
     private func openTerminalSession() {
         guard request.caps.terminal else { return }
-        openWindow(value: TerminalRequest(
-            address: request.address, passcode: request.passcode
-        ))
+        openWindow(value: TerminalRequest(address: request.address))
     }
 
     private func openFilesSession() {
         guard request.caps.files else { return }
-        openWindow(value: TransferRequest(
-            address: request.address, passcode: request.passcode, name: request.name
-        ))
+        openWindow(value: TransferRequest(address: request.address, name: request.name))
     }
 }

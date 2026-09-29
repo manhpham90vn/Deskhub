@@ -46,7 +46,6 @@ object NativeHost {
         bitrateMbps: Int,
         maxDim: Int,
         port: Int,
-        passcode: String,
         transferDir: String,
     ): Boolean
 
@@ -88,18 +87,11 @@ object NativeHost {
 
     private external fun nativeSharingStatus(
         port: Int,
-        passcode: String,
         screen: Boolean,
         files: Boolean,
     ): String
 
     private external fun nativeIdleStatus(port: Int): String
-
-    private external fun nativePasscode(): String
-
-    private external fun nativePasscodeDisplay(passcode: String): String
-
-    private external fun nativeSavePasscode(passcode: String)
 
     private external fun nativeShareDefaults(): IntArray
 
@@ -186,7 +178,6 @@ object NativeHost {
                     request.bitrateMbps,
                     request.maxDim,
                     request.port,
-                    request.passcode,
                     transferDir,
                 )
             if (ok) shareState = ShareState.SHARING
@@ -219,18 +210,11 @@ object NativeHost {
 
     fun sharingStatus(
         port: Int,
-        passcode: String,
         screen: Boolean,
         files: Boolean,
-    ): String = nativeSharingStatus(port, passcode, screen, files)
+    ): String = nativeSharingStatus(port, screen, files)
 
     fun idleStatus(port: Int): String = nativeIdleStatus(port)
-
-    fun passcode(): String = nativePasscode()
-
-    fun passcodeDisplay(passcode: String): String = nativePasscodeDisplay(passcode)
-
-    fun savePasscode(passcode: String) = nativeSavePasscode(passcode)
 
     fun shareDefaults(): ShareDefaults = nativeShareDefaults().let { ShareDefaults(it[0], it[1], it[2]) }
 

@@ -52,8 +52,7 @@ final class FilesHost {
     }
 
     private static func settingsSignature() -> String {
-        let stored = dh_settings_load()
-        return DeskhubClient.cString(stored.passcode) + "@" + String(stored.port)
+        String(dh_settings_load().port)
     }
 
     private func start() {
@@ -62,10 +61,7 @@ final class FilesHost {
         ReceivedFiles.removeStaleParts()
         dh_set_transfer_dir(dir.path)
         let stored = dh_settings_load()
-        let passcode = DeskhubClient.cString(stored.passcode)
-        receiving = dh_share_start(
-            nil, 0, 0, 0, 0, UInt16(stored.port), false, passcode, false, true
-        )
+        receiving = dh_share_start(nil, 0, 0, 0, 0, UInt16(stored.port), false, false, true)
         if receiving { activeSettings = FilesHost.settingsSignature() }
     }
 }

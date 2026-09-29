@@ -79,8 +79,7 @@ int dh_share_quality_presets(DHQualityPreset* out, int capacity);
 int dh_share_list_sources(DHShareSource* out, int capacity);
 
 bool dh_share_start(const DHShareSource* sources, int count, uint32_t fps, uint32_t bitrate_mbps,
-    uint32_t max_dim, uint16_t port, bool allow_input, const char* passcode, bool terminal,
-    bool files);
+    uint32_t max_dim, uint16_t port, bool allow_input, bool terminal, bool files);
 
 void dh_share_offer_audio(const int16_t* pcm, int samples);
 

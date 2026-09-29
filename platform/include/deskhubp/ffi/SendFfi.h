@@ -32,8 +32,8 @@ typedef struct {
 
 int dh_send_check(const char* const* paths, int count, char* error, int errorCapacity);
 
-DHSend* dh_send_start(const char* address, const char* passcode, const char* name,
-    const char* const* paths, int count);
+DHSend* dh_send_start(const char* address, const char* name, const char* const* paths,
+    int count);
 
 void dh_send_snapshot(DHSend* handle, DHSendProgress* out);
 

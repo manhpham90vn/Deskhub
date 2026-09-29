@@ -48,7 +48,7 @@ enum DeskhubPalette {
     static let panelIdle = theme(DHThemePanelIdle)
     static let panelBusy = theme(DHThemePanelBusy)
     static let panelLive = theme(DHThemePanelLive)
-    static let passcodeCard = theme(DHThemePasscodeCard)
+    static let infoCard = theme(DHThemeInfoCard)
 
     private static func theme(_ color: DHThemeColor) -> Color {
         adaptiveColor(
@@ -112,7 +112,6 @@ struct DeviceListView: View {
 
 struct DeviceListRow: Identifiable, Hashable, Sendable {
     let addr: String
-    let passcode: String
     let origin: String
     let ping: String
     let status: String
@@ -124,11 +123,10 @@ struct DeviceListRow: Identifiable, Hashable, Sendable {
         [origin, status, lastConnected].filter { !$0.isEmpty }.joined(separator: "  ")
     }
 
-    init(addr: String, passcode: String, origin: String, status: String, ping: String,
+    init(addr: String, origin: String, status: String, ping: String,
          lastConnected: String, online: Bool?)
     {
         self.addr = addr
-        self.passcode = passcode
         self.origin = origin
         self.status = status
         self.ping = ping

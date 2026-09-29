@@ -71,7 +71,7 @@ std::string StartSharing(uint32_t width, uint32_t height) {
         ok = dh_share_start(&source, 1, settings.fps ? settings.fps : defaults.fps,
             settings.bitrateMbps ? settings.bitrateMbps : defaults.bitrateMbps,
             settings.maxDim ? settings.maxDim : defaults.maxDim, uint16_t(settings.port), false,
-            settings.passcode, false, !transferDir.empty());
+            false, !transferDir.empty());
         if (ok || attempt + 1 == kPortHandoffTries) break;
         std::this_thread::sleep_for(kPortHandoffPause);
     }

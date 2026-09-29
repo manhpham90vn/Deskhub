@@ -37,7 +37,6 @@ void TestSettingsBecomeShareOptions() {
     settings.maxDim = 2560;
     settings.port = 47999;
     settings.allowInput = false;
-    settings.passcode = "0417";
     settings.bindIp = "192.168.1.10";
     settings.deviceName = "study pc";
     settings.clipboardSync = true;
@@ -48,8 +47,7 @@ void TestSettingsBecomeShareOptions() {
         "the picture settings carry over");
     Check(options.port == 47999, "so does the port");
     Check(!options.allowInput, "and the view-only switch");
-    Check(options.passcode == "0417" && options.bindIp == "192.168.1.10",
-        "and the passcode and the network");
+    Check(options.bindIp == "192.168.1.10", "and the network");
     Check(options.deviceName == "study pc", "and the name viewers see");
     Check(options.clipboardSync && !options.audio, "and the clipboard and sound switches");
     Check(options.terminal, "the shell is asked for separately, not read from the file");

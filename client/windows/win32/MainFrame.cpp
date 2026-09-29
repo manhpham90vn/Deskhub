@@ -27,7 +27,6 @@
 
 #include "MainFrame.h"
 
-#include "PasscodePrompt.h"
 #include "SourcePickerDialog.h"
 #include "FileSendWindow.h"
 #include "TerminalWindow.h"
@@ -106,7 +105,7 @@ const wxColour kViewerRowBg = ThemeColour(ui::ThemeColor::ViewerRow);
 const wxColour kBannerIdleBg = ThemeColour(ui::ThemeColor::PanelIdle);
 const wxColour kBannerLiveBg = ThemeColour(ui::ThemeColor::PanelLive);
 const wxColour kBannerBusyBg = ThemeColour(ui::ThemeColor::PanelBusy);
-const wxColour kPasscodeCardBg = ThemeColour(ui::ThemeColor::PasscodeCard);
+const wxColour kPortCardBg = ThemeColour(ui::ThemeColor::InfoCard);
 
 enum class HostShareState { kIdle,
     kStarting,
@@ -123,7 +122,7 @@ struct HostStateStyle {
 
 constexpr int kHostColumnCount = int(ui::kHostColumns.size());
 constexpr int kHostActionsWidth = ui::kHostActionWidth + ui::kHostCellGap + ui::kHostActionWidth;
-constexpr int kPasscodePointSize = 26;
+constexpr int kPortPointSize = 26;
 
 long WxAlign(ui::ColumnAlign align) {
     return align == ui::ColumnAlign::Trailing ? wxALIGN_RIGHT : wxALIGN_LEFT;
@@ -318,7 +317,6 @@ private:
     wxSizer* MakeTransferFolderRow(wxWindow* area, const char* label);
     void RefreshPairedDevices();
     void ForgetEveryDevice();
-    static wxTextCtrl* MakePasscodeCtrl(wxWindow* parent);
 
     void SelectPage(int page);
     void RefreshDeviceList();
@@ -332,11 +330,11 @@ private:
     std::filesystem::path TransferFolder() const;
     void StartHosting(const std::vector<ShareSource>& sources, const ShareOptions& options);
     void OnHostStarted(bool started, const std::string& error, uint16_t port,
-        bool allowInput, const std::string& passcode);
+        bool allowInput);
     void StopHosting();
     void StartFileShare();
     void ChooseTransferFolder();
-    void OpenFileSend(const NetAddr& server, const std::string& passcode);
+    void OpenFileSend(const NetAddr& server);
     void ApplySharingBanner();
     void OnHostTimer(wxTimerEvent& event);
     void OnClipboardTimer(wxTimerEvent& event);
@@ -354,25 +352,21 @@ private:
     void KickViewer(uint8_t sourceId, const std::string& viewerAddr);
     void ApplyHostState(HostShareState state, const wxString& detail);
     void ShowIdleHostState();
-    void ShowPasscodeCard();
-    const std::string& ShownPasscode() const;
-    void CopySharePasscode();
+    void ShowPortCard();
     void CopySharePort();
 
     void StartConnect(const std::string& addr);
-    void OpenShell(const NetAddr& server, const std::string& passcode);
+    void OpenShell(const NetAddr& server);
     std::string ClientDeviceName() const;
     void SetClientControl(bool on);
     void ForgetConnection(ConnectionFrame* frame);
     void SetClientStatus(const wxString& text, const wxColour& colour);
-    void ConnectWithPrompt(const std::string& addr, std::string passcode);
+    void ConnectToDevice(const std::string& addr);
     void RefreshDevicesNow();
     void OnListClick(wxMouseEvent& event);
     void ConnectRow(long row);
-    void OnSourcesReady(const std::string& addr, const std::string& passcode,
-        const deskhubp::ConnectOutcome& outcome);
-    void OpenConnectionWindow(const std::string& addr, const std::string& passcode,
-        const deskhubp::ConnectOutcome& outcome);
+    void OnSourcesReady(const std::string& addr, const deskhubp::ConnectOutcome& outcome);
+    void OpenConnectionWindow(const std::string& addr, const deskhubp::ConnectOutcome& outcome);
     ConnectionFrame* ConnectionFor(const std::string& addr) const;
     void CloseEveryConnection();
     void DeselectAllRows();
@@ -401,11 +395,8 @@ private:
     wxWindow* hostBannerBar_ = nullptr;
     wxStaticText* hostStateLabel_ = nullptr;
     wxStaticText* hostStatusLabel_ = nullptr;
-    wxPanel* hostPasscodePanel_ = nullptr;
     wxPanel* hostPortPanel_ = nullptr;
-    wxStaticText* hostPasscodeLabel_ = nullptr;
     wxStaticText* hostPortLabel_ = nullptr;
-    wxButton* hostPasscodeCopyBtn_ = nullptr;
     wxButton* hostPortCopyBtn_ = nullptr;
     wxStaticText* hostHint_ = nullptr;
     wxListCtrl* hostPicker_ = nullptr;
@@ -413,13 +404,11 @@ private:
     wxScrolledWindow* hostTable_ = nullptr;
     std::vector<HostRowView> hostRowViews_;
     wxButton* shareBtn_ = nullptr;
-    wxTextCtrl* clientPasscodeCtrl_ = nullptr;
     wxTextCtrl* deviceNameCtrl_ = nullptr;
     wxSpinCtrl* fpsCtrl_ = nullptr;
     wxSpinCtrl* bitrateCtrl_ = nullptr;
     wxSpinCtrl* portCtrl_ = nullptr;
     wxChoice* qualityChoice_ = nullptr;
-    wxTextCtrl* passcodeCtrl_ = nullptr;
     wxChoice* bindChoice_ = nullptr;
     std::map<ui::SettingField, wxCheckBox*> settingChecks_;
     wxStaticText* transferDirLabel_ = nullptr;
@@ -435,7 +424,6 @@ private:
     bool terminalRequested_ = false;
     bool filesRequested_ = false;
     uint16_t sharePort_ = 0;
-    std::string sharePasscode_;
     std::string shareBindWarning_;
     bool shareViewOnly_ = false;
     std::vector<ui::HostRow> hostRows_;
@@ -452,14 +440,13 @@ private:
     ShareTrigger shareTrigger_ = ShareTrigger::kUser;
     bool hosting_ = false;
     bool hostStarting_ = false;
-    bool prompting_ = false;
+    bool connectPending_ = false;
     std::shared_ptr<bool> alive_ = std::make_shared<bool>(true);
 };
 
 class ConnectionFrame final : public wxFrame {
 public:
-    ConnectionFrame(MainFrame* owner, std::string address, std::string passcode,
-        deskhub::HostCaps caps, std::vector<deskhub::SourceInfo> sources, bool control);
+    ConnectionFrame(MainFrame* owner, std::string address, deskhub::HostCaps caps, std::vector<deskhub::SourceInfo> sources, bool control);
 
     const std::string& Address() const {
         return address_;
@@ -472,7 +459,6 @@ private:
 
     MainFrame* owner_ = nullptr;
     std::string address_;
-    std::string passcode_;
     deskhub::HostCaps caps_{};
     std::vector<deskhub::SourceInfo> sources_;
     bool control_ = false;
@@ -508,7 +494,7 @@ MainFrame::MainFrame() : wxFrame(nullptr, wxID_ANY, ToWx(ui::kAppTitle)) {
     Bind(wxEVT_TIMER, &MainFrame::OnHostTimer, this, kHostTimerId);
     Bind(wxEVT_TIMER, &MainFrame::OnClipboardTimer, this, kClipTimerId);
     Bind(wxEVT_TIMER, &MainFrame::OnAutoShareTimer, this, kAutoShareTimerId);
-    Bind(wxEVT_TIMER, [this](wxTimerEvent&) { ShowPasscodeCard(); }, kCopiedTimerId);
+    Bind(wxEVT_TIMER, [this](wxTimerEvent&) { ShowPortCard(); }, kCopiedTimerId);
     Bind(wxEVT_DISPLAY_CHANGED, &MainFrame::OnDisplayChanged, this);
     Bind(wxEVT_CLOSE_WINDOW, &MainFrame::OnClose, this);
 
@@ -664,40 +650,17 @@ wxWindow* MainFrame::BuildHostPage(wxWindow* parent) {
     hostBanner_->SetSizer(bannerRow);
     sizer->Add(hostBanner_, wxSizerFlags().Expand().Border(wxLEFT | wxRIGHT | wxTOP, FromDIP(16)));
 
-    auto* shareDetails = new wxBoxSizer(wxHORIZONTAL);
-    hostPasscodePanel_ = new wxPanel(panel);
-    hostPasscodePanel_->SetBackgroundColour(kPasscodeCardBg);
-    auto* passcodeRow = new wxBoxSizer(wxHORIZONTAL);
-    auto* passcodeText = new wxBoxSizer(wxVERTICAL);
-    auto* passcodeHeading =
-        new wxStaticText(hostPasscodePanel_, wxID_ANY, ToWx(ui::kPasscodeShareHeading));
-    passcodeHeading->SetForegroundColour(kMutedText);
-    passcodeText->Add(passcodeHeading);
-    hostPasscodeLabel_ = new wxStaticText(hostPasscodePanel_, wxID_ANY, wxString());
-    wxFont passcodeFont = MonoFont(hostPasscodeLabel_).Bold();
-    passcodeFont.SetPointSize(kPasscodePointSize);
-    hostPasscodeLabel_->SetFont(passcodeFont);
-    passcodeText->Add(hostPasscodeLabel_, wxSizerFlags().Border(wxTOP, FromDIP(2)));
-    passcodeRow->Add(passcodeText, wxSizerFlags(1).Expand().Border(wxALL, FromDIP(10)));
-
-    hostPasscodeCopyBtn_ = new wxButton(hostPasscodePanel_, wxID_ANY,
-        ToWx(ui::kCopyPasscodeAction));
-    hostPasscodeCopyBtn_->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { CopySharePasscode(); });
-    passcodeRow->Add(hostPasscodeCopyBtn_,
-        wxSizerFlags().CentreVertical().Border(wxRIGHT, FromDIP(10)));
-
-    hostPasscodePanel_->SetSizer(passcodeRow);
-    shareDetails->Add(hostPasscodePanel_, wxSizerFlags(1).Expand());
-
     hostPortPanel_ = new wxPanel(panel);
-    hostPortPanel_->SetBackgroundColour(kPasscodeCardBg);
+    hostPortPanel_->SetBackgroundColour(kPortCardBg);
     auto* portRow = new wxBoxSizer(wxHORIZONTAL);
     auto* portText = new wxBoxSizer(wxVERTICAL);
     auto* portHeading = new wxStaticText(hostPortPanel_, wxID_ANY, ToWx(ui::kUdpPortLabel));
     portHeading->SetForegroundColour(kMutedText);
     portText->Add(portHeading);
     hostPortLabel_ = new wxStaticText(hostPortPanel_, wxID_ANY, wxString());
-    hostPortLabel_->SetFont(passcodeFont);
+    wxFont portFont = MonoFont(hostPortLabel_).Bold();
+    portFont.SetPointSize(kPortPointSize);
+    hostPortLabel_->SetFont(portFont);
     portText->Add(hostPortLabel_, wxSizerFlags().Border(wxTOP, FromDIP(2)));
     portRow->Add(portText, wxSizerFlags(1).Expand().Border(wxALL, FromDIP(10)));
     hostPortCopyBtn_ = new wxButton(hostPortPanel_, wxID_ANY, ToWx(ui::kCopyButton));
@@ -705,9 +668,7 @@ wxWindow* MainFrame::BuildHostPage(wxWindow* parent) {
     portRow->Add(hostPortCopyBtn_,
         wxSizerFlags().CentreVertical().Border(wxRIGHT, FromDIP(10)));
     hostPortPanel_->SetSizer(portRow);
-    shareDetails->Add(hostPortPanel_,
-        wxSizerFlags(1).Expand().Border(wxLEFT, FromDIP(10)));
-    sizer->Add(shareDetails,
+    sizer->Add(hostPortPanel_,
         wxSizerFlags().Expand().Border(wxLEFT | wxRIGHT | wxTOP, FromDIP(16)));
 
     hostPicker_ = new wxListCtrl(panel, wxID_ANY, wxDefaultPosition, wxDefaultSize,
@@ -797,14 +758,6 @@ void MainFrame::RebuildHostAddressRows() {
     RelayoutHostPage();
 }
 
-wxTextCtrl* MainFrame::MakePasscodeCtrl(wxWindow* parent) {
-    auto* ctrl = new wxTextCtrl(parent, wxID_ANY, wxString(), wxDefaultPosition,
-        parent->FromDIP(wxSize(64, -1)), wxTE_PROCESS_ENTER,
-        wxTextValidator(wxFILTER_DIGITS));
-    ctrl->SetMaxLength(deskhub::kPasscodeDigits);
-    return ctrl;
-}
-
 wxWindow* MainFrame::BuildClientPage(wxWindow* parent) {
     auto* panel = new wxScrolledWindow(parent);
     panel->SetBackgroundColour(*wxWHITE);
@@ -842,14 +795,6 @@ wxWindow* MainFrame::BuildClientPage(wxWindow* parent) {
         FromDIP(wxSize(80, -1)), wxTE_PROCESS_ENTER);
     connectPortCtrl_->Bind(wxEVT_TEXT_ENTER, connectNow);
     grid->Add(connectPortCtrl_, wxSizerFlags().CentreVertical());
-
-    grid->Add(new wxStaticText(form, wxID_ANY, ToWx(ui::kClientPasscodePrompt)),
-        wxSizerFlags().CentreVertical());
-    clientPasscodeCtrl_ = MakePasscodeCtrl(form);
-    clientPasscodeCtrl_->SetName("passcode-field");
-    clientPasscodeCtrl_->SetToolTip(ToWx(ui::kClientPasscodeHint));
-    clientPasscodeCtrl_->Bind(wxEVT_TEXT_ENTER, connectNow);
-    grid->Add(clientPasscodeCtrl_, wxSizerFlags().CentreVertical());
 
     grid->Add(new wxStaticText(form, wxID_ANY, ToWx(ui::kDeviceNameLabel)),
         wxSizerFlags().CentreVertical());
@@ -1092,11 +1037,6 @@ void MainFrame::AddSetting(const SettingsArea& area, const ui::SettingsEntry& en
                 wxDefaultSize, wxSP_ARROW_KEYS, 1, int(ui::kMaxSettingsPort), int(settings_.port));
             AddLabelledSetting(area, grid, entry.text, portCtrl_);
             return;
-        case ui::SettingField::Passcode:
-            passcodeCtrl_ = MakePasscodeCtrl(parent);
-            passcodeCtrl_->SetValue(ToWx(settings_.passcode));
-            AddLabelledSetting(area, grid, entry.text, passcodeCtrl_);
-            return;
         case ui::SettingField::TransferFolder:
             grid = nullptr;
             area.sizer->Add(MakeTransferFolderRow(parent, entry.text),
@@ -1164,7 +1104,6 @@ wxWindow* MainFrame::BuildSettingsPage(wxWindow* parent) {
     portCtrl_->Bind(wxEVT_SPINCTRL, [this](wxSpinEvent&) { SaveSettings(); });
     portCtrl_->Bind(wxEVT_TEXT, [this](wxCommandEvent&) { SaveSettings(); });
     qualityChoice_->Bind(wxEVT_CHOICE, [this](wxCommandEvent&) { SaveSettings(); });
-    passcodeCtrl_->Bind(wxEVT_TEXT, [this](wxCommandEvent&) { SaveSettings(); });
 
     panel->SetSizer(sizer);
     panel->FitInside();
@@ -1442,8 +1381,7 @@ void MainFrame::ApplyHostState(HostShareState state, const wxString& detail) {
     hostStatusLabel_->Show(!detail.empty());
     hostStatusLabel_->SetBackgroundColour(style.background);
     hostBanner_->Show(state != HostShareState::kIdle);
-    ShowPasscodeCard();
-    hostPasscodePanel_->Show(live);
+    ShowPortCard();
     hostPortPanel_->Show(live);
     hostBannerBar_->SetBackgroundColour(style.tint);
     hostBanner_->SetBackgroundColour(style.background);
@@ -1464,26 +1402,11 @@ void MainFrame::ShowIdleHostState() {
         ToWx(ui::UdpPortLine(uint16_t(settings_.port)) + "."));
 }
 
-const std::string& MainFrame::ShownPasscode() const {
-    return hosting_ ? sharePasscode_ : settings_.passcode;
-}
-
-void MainFrame::ShowPasscodeCard() {
+void MainFrame::ShowPortCard() {
     copiedTimer_.Stop();
-    hostPasscodeLabel_->SetLabel(ToWx(ui::PasscodeDisplay(ShownPasscode())));
-    hostPasscodeCopyBtn_->SetLabel(ToWx(ui::kCopyPasscodeAction));
-    hostPasscodeCopyBtn_->Show(!ShownPasscode().empty());
     hostPortLabel_->SetLabel(ToWx(std::to_string(hosting_ ? sharePort_ : settings_.port)));
     hostPortCopyBtn_->SetLabel(ToWx(ui::kCopyButton));
-    hostPasscodePanel_->Layout();
     hostPortPanel_->Layout();
-}
-
-void MainFrame::CopySharePasscode() {
-    if (ShownPasscode().empty()) return;
-    CopyTextToClipboard(HWND(GetHandle()), ToWx(ShownPasscode()));
-    hostPasscodeCopyBtn_->SetLabel(ToWx(ui::kPasscodeCopied));
-    copiedTimer_.StartOnce(kCopiedRevertMs);
 }
 
 void MainFrame::CopySharePort() {
@@ -1581,7 +1504,6 @@ void MainFrame::ApplySharingBanner() {
     banner.hosting = hosting_;
     banner.port = sharePort_;
     banner.viewOnly = shareViewOnly_;
-    banner.passcodeNote = ui::PasscodeShareNote(sharePasscode_);
     banner.bindWarning = shareBindWarning_;
     ApplyHostState(HostShareState::kSharing, ToWx(share_.BannerText(banner)));
 }
@@ -1603,14 +1525,12 @@ void MainFrame::StartHosting(const std::vector<ShareSource>& sources,
                 if (*alive) fn();
             });
         },
-        [this, port = options.port, allowInput = options.allowInput,
-            passcode = options.passcode](bool started, const std::string& error) {
-            OnHostStarted(started, error, port, allowInput, passcode);
-        });
+        [this, port = options.port, allowInput = options.allowInput](bool started,
+            const std::string& error) { OnHostStarted(started, error, port, allowInput); });
 }
 
 void MainFrame::OnHostStarted(bool started, const std::string& error, uint16_t port,
-    bool allowInput, const std::string& passcode) {
+    bool allowInput) {
     hostStarting_ = false;
     shareBtn_->Enable();
 
@@ -1626,7 +1546,6 @@ void MainFrame::OnHostStarted(bool started, const std::string& error, uint16_t p
     hosting_ = true;
     screenSharing_ = !share_.sharingHost().Status().empty();
     sharePort_ = port;
-    sharePasscode_ = passcode;
     shareViewOnly_ = !allowInput;
     shareBindWarning_ = share_.sharingHost().BindWarning();
     if (terminalRequested_) share_.StartTerminalShare();
@@ -1670,7 +1589,6 @@ void MainFrame::StopHosting() {
     terminalRequested_ = false;
     filesRequested_ = false;
     pendingClipboard_.reset();
-    sharePasscode_.clear();
     shareBindWarning_.clear();
     shareViewOnly_ = false;
     hostStatus_.clear();
@@ -1776,19 +1694,17 @@ std::string MainFrame::ClientDeviceName() const {
     return name;
 }
 
-void MainFrame::OpenFileSend(const NetAddr& server, const std::string& passcode) {
+void MainFrame::OpenFileSend(const NetAddr& server) {
     FileSendLaunch launch;
     launch.address = server.ToString();
-    launch.passcode = passcode;
     launch.clientName = ClientDeviceName();
 
     std::thread([launch] { RunStandaloneFileSend(launch); }).detach();
 }
 
-void MainFrame::OpenShell(const NetAddr& server, const std::string& passcode) {
+void MainFrame::OpenShell(const NetAddr& server) {
     TerminalLaunch launch;
     launch.address = server.ToString();
-    launch.passcode = passcode;
     launch.clientName = ClientDeviceName();
 
     if (!OpenTerminalWindow(this, launch))
@@ -1818,25 +1734,15 @@ void MainFrame::StartConnect(const std::string& rawAddr) {
         return;
     }
 
-    const std::string passcode =
-        ui::TrimAscii(std::string(clientPasscodeCtrl_->GetValue().utf8_str()));
-    if (!passcode.empty() && !deskhub::IsValidPasscode(passcode)) {
-        wxMessageBox(ToWx(ui::kPasscodeInvalid), "Deskhub", wxOK | wxICON_ERROR, this);
-        clientPasscodeCtrl_->SetFocus();
-        return;
-    }
-
     const bool started = connectDriver_.QueryAsync(
-        server, passcode,
+        server,
         [alive = alive_](std::function<void()> fn) {
             if (!wxTheApp) return;
             wxTheApp->CallAfter([alive, fn = std::move(fn)] {
                 if (*alive) fn();
             });
         },
-        [this, addr, passcode](const deskhubp::ConnectOutcome& outcome) {
-            OnSourcesReady(addr, passcode, outcome);
-        });
+        [this, addr](const deskhubp::ConnectOutcome& outcome) { OnSourcesReady(addr, outcome); });
     if (!started) {
         SetClientStatus(ToWx(ui::kQueryingSources), kMutedText);
         return;
@@ -1853,36 +1759,33 @@ void MainFrame::OnListClick(wxMouseEvent& event) {
     event.Skip();
     int flags = 0;
     const long row = deviceList_->HitTest(event.GetPosition(), flags);
-    LOGI("[UI] device list click: row %ld%s.", row, prompting_ ? " (prompt already open)" : "");
+    LOGI("[UI] device list click: row %ld%s.", row,
+        connectPending_ ? " (connect already pending)" : "");
 
-    if (row == wxNOT_FOUND || prompting_) return;
+    if (row == wxNOT_FOUND || connectPending_) return;
 
-    prompting_ = true;
+    connectPending_ = true;
     CallAfter([this, row] {
         ConnectRow(row);
-        prompting_ = false;
+        connectPending_ = false;
     });
 }
 
 void MainFrame::ConnectRow(long row) {
     if (row < 0 || size_t(row) >= deviceRows_.size()) return;
     const std::string addr = deviceRows_[size_t(row)].addr;
-    ConnectWithPrompt(addr, ui::PasscodeForDevice(recent_, addr));
+    ConnectToDevice(addr);
 }
 
-void MainFrame::ConnectWithPrompt(const std::string& addr, std::string passcode) {
-    std::string target = addr;
-    if (!ShowPasscodePrompt(this, target, passcode)) return;
-    const uint16_t port = ui::AddressPort(target);
-    addrCtrl_->ChangeValue(ToWx(ui::AddressHost(target)));
+void MainFrame::ConnectToDevice(const std::string& addr) {
+    const uint16_t port = ui::AddressPort(addr);
+    addrCtrl_->ChangeValue(ToWx(ui::AddressHost(addr)));
     connectPortCtrl_->ChangeValue(
         ToWx(std::to_string(port != 0 ? port : deskhub::kDeskhubPort)));
-    clientPasscodeCtrl_->ChangeValue(ToWx(ui::TrimAscii(passcode)));
-    StartConnect(target);
+    StartConnect(addr);
 }
 
-void MainFrame::OnSourcesReady(const std::string& addr, const std::string& passcode,
-    const deskhubp::ConnectOutcome& outcome) {
+void MainFrame::OnSourcesReady(const std::string& addr, const deskhubp::ConnectOutcome& outcome) {
     connectBtn_->Enable();
     SetClientStatus(wxString(), kMutedText);
     DeselectAllRows();
@@ -1892,11 +1795,11 @@ void MainFrame::OnSourcesReady(const std::string& addr, const std::string& passc
         return;
     }
 
-    ui::TouchRecentDevice(recent_, addr, NowUnixSeconds(), passcode);
+    ui::TouchRecentDevice(recent_, addr, NowUnixSeconds());
     SaveRecentDevices();
     RefreshDeviceList();
 
-    OpenConnectionWindow(addr, passcode, outcome);
+    OpenConnectionWindow(addr, outcome);
 }
 
 ConnectionFrame* MainFrame::ConnectionFor(const std::string& addr) const {
@@ -1905,7 +1808,7 @@ ConnectionFrame* MainFrame::ConnectionFor(const std::string& addr) const {
     return nullptr;
 }
 
-void MainFrame::OpenConnectionWindow(const std::string& addr, const std::string& passcode,
+void MainFrame::OpenConnectionWindow(const std::string& addr,
     const deskhubp::ConnectOutcome& outcome) {
     if (ConnectionFrame* open = ConnectionFor(addr)) {
         open->Raise();
@@ -1913,7 +1816,7 @@ void MainFrame::OpenConnectionWindow(const std::string& addr, const std::string&
         return;
     }
 
-    auto* frame = new ConnectionFrame(this, addr, passcode, outcome.caps, outcome.sources,
+    auto* frame = new ConnectionFrame(this, addr, outcome.caps, outcome.sources,
         settings_.clientControl);
     const int cascade = FromDIP(kConnectionWindowCascade) * int(connections_.size());
     frame->Move(GetPosition() + wxPoint(FromDIP(48) + cascade, FromDIP(48) + cascade));
@@ -1950,8 +1853,6 @@ void MainFrame::SaveSettings() {
     const bool autostartWas = settings_.autostart;
     for (const auto& [field, check] : settingChecks_)
         if (bool* flag = ui::SettingFlag(settings_, field)) *flag = check->GetValue();
-    const std::string passcode(passcodeCtrl_->GetValue().utf8_str());
-    if (passcode.empty() || deskhub::IsValidPasscode(passcode)) settings_.passcode = passcode;
     const int quality = qualityChoice_->GetSelection();
     if (quality != wxNOT_FOUND)
         settings_.maxDim = deskhub::media::QualityPresetMaxDim(size_t(quality),
@@ -1996,9 +1897,9 @@ void MainFrame::OnClose(wxCloseEvent& event) {
     event.Skip();
 }
 
-ConnectionFrame::ConnectionFrame(MainFrame* owner, std::string address, std::string passcode,
-    deskhub::HostCaps caps, std::vector<deskhub::SourceInfo> sources, bool control)
-    : wxFrame(nullptr, wxID_ANY, ToWx(address)), owner_(owner), address_(std::move(address)), passcode_(std::move(passcode)), caps_(caps), sources_(std::move(sources)), control_(control) {
+ConnectionFrame::ConnectionFrame(MainFrame* owner, std::string address, deskhub::HostCaps caps,
+    std::vector<deskhub::SourceInfo> sources, bool control)
+    : wxFrame(nullptr, wxID_ANY, ToWx(address)), owner_(owner), address_(std::move(address)), caps_(caps), sources_(std::move(sources)), control_(control) {
     SetIcon(wxICON(deskhub_app_icon));
     SetBackgroundColour(*wxWHITE);
 
@@ -2080,19 +1981,20 @@ void ConnectionFrame::OpenDesktopSession() {
     if (sources_.empty()) return;
     std::vector<deskhub::SourceInfo> picked;
     if (!ShowSourcePickerDialog(HWND(GetHandle()), sources_, picked)) return;
-    std::thread([addr = address_, passcode = passcode_, picked = std::move(picked),
-                    control = control_] { RunViewer(addr, picked, control, passcode); })
+    std::thread([addr = address_, picked = std::move(picked), control = control_] {
+        RunViewer(addr, picked, control);
+    })
         .detach();
 }
 
 void ConnectionFrame::OpenShellSession() {
     NetAddr server{};
-    if (ParseNetAddr(address_, server)) owner_->OpenShell(server, passcode_);
+    if (ParseNetAddr(address_, server)) owner_->OpenShell(server);
 }
 
 void ConnectionFrame::OpenFileSendSession() {
     NetAddr server{};
-    if (ParseNetAddr(address_, server)) owner_->OpenFileSend(server, passcode_);
+    if (ParseNetAddr(address_, server)) owner_->OpenFileSend(server);
 }
 
 wxMenu* DeskhubTrayIcon::CreatePopupMenu() {

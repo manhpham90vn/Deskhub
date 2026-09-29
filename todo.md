@@ -47,14 +47,15 @@ Trạng thái: đang triển khai; các ô chưa đánh dấu vẫn còn phải 
 - [x] Thao tác xóa toàn bộ `authorized_keys` hoặc `paired_devices` cũ kiểm tra file dưới khóa trước khi ghi; file đang kích hoạt nhưng bị thiếu/hỏng được giữ lại để sửa và thao tác thất bại không tăng generation. Bổ sung test reload lỗi và xóa toàn bộ. Test reconnect qua QUIC xác nhận phiên mới không kế thừa admission và phải ký lại; QUIC hiện không bật 0-RTT hay dùng session ticket.
 - [x] Import OpenSSH private key Ed25519/P-256 qua parser RustCrypto `ssh-key` tích hợp trong patch quiche; hỗ trợ khóa mã hóa bằng passphrase nhập qua stdin. Test bằng khóa `ssh-keygen` thật, gồm passphrase sai, khóa RSA không hỗ trợ, dữ liệu cắt ngắn và cặp khóa không khớp. Bộ test platform, `make test`, `make lint-cpp`, build CLI và build quiche cho iOS arm64 đã qua.
 - [x] Hoàn tất chính sách lưu khóa ở mục 4 theo lựa chọn file riêng cho host nền macOS/Linux: thư mục cấu hình POSIX kiểm tra theo file descriptor, Windows có ACL riêng; mọi đường ghi app data nay ghi tạm với quyền chặt rồi thay thế atomic. Broadcast iOS không tạo identity ngoài App Group khi container lỗi. Build iOS Simulator và Android Debug, platform tests, lint C++/Swift/Kotlin đã qua; build/test Windows cần gate Windows ở mục 9.
+- [x] Gỡ passcode khỏi mọi tầng còn lại: `HostLinkConfig`/`ScreenViewerConfig`/`TerminalViewerConfig`/`FileTransferClientConfig`, `QuerySources`, `ShareOptions`, `UiSettings`, `RecentDevice`, `SettingField`, chuỗi UI và hằng số `kPasscodeDigits`/`IsValidPasscode`. FFI bỏ tham số passcode của `dh_list_sources`, `dh_screen_start`, `dh_send_start`, `dh_share_start`, `dh_term_open*`, `dh_recent_touch`, `dh_settings_save`, `dh_sharing_status`; xóa `dh_is_valid_passcode`, `dh_passcode_digits`, `dh_recent_passcode`, `dh_passcode_display` và string ID passcode. Màu thẻ đổi tên thành `InfoCard` cho thẻ cổng. Linux, Windows, Android, macOS/iOS bỏ ô passcode khi kết nối, thẻ passcode trên trang chia sẻ, dòng passcode trong Settings và hộp thoại nhập passcode; bấm thiết bị trong danh sách kết nối thẳng tới địa chỉ đã lưu. Sửa golden vector auth trong integration test theo `kAuthVersion = 6`; xóa `CheckPairedDevice`, `LoadPairedDevices`, string ID `ConnectPromptTitle`/`SettingsSectionSecurity` không còn nơi dùng; sửa ba lỗi clang-tidy ở `Transcript.cpp` và `ClientIdentity.cpp`. Mô tả App Store/Play Store chuyển sang cấp quyền bằng khóa. Trên Linux đã qua `make test`, platform tests, integration tests, `make lint`, `make lint-tidy`, `make build-linux` và `make build-android` (kèm Android Lint); Windows và macOS/iOS chưa build được cục bộ. GUI chưa có cách ghim khóa host (mục 6.1), nên client GUI chưa kết nối được tới host mới cho tới khi có trang “Host đã lưu”.
 
-Đã có nhiều identity client riêng, host profile và import OpenSSH/PKCS#8. Luồng auth mới không mở popup xác nhận kết nối; hàng đợi và API trả lời approval đã được gỡ. Trường passcode trong UI/API và các message beacon discovery còn trong code; phải gỡ tiếp trước khi coi là hoàn tất. File settings/recent cũ được làm sạch khi nạp thành công; nếu ghi thất bại, file cũ còn nguyên để thử lại. Migration cấu hình mới có version vẫn cần làm.
+Đã có nhiều identity client riêng, host profile và import OpenSSH/PKCS#8. Luồng auth mới không mở popup xác nhận kết nối; hàng đợi và API trả lời approval đã được gỡ. Passcode đã được gỡ khỏi code sản phẩm (chỉ còn đường migration xóa khóa `passcode=` trong file settings cũ); các message beacon discovery còn trong code và phải gỡ tiếp. File settings/recent cũ được làm sạch khi nạp thành công; nếu ghi thất bại, file cũ còn nguyên để thử lại. Migration cấu hình mới có version vẫn cần làm.
 
 Gate chưa qua trọn vẹn: build macOS có ký cần chứng chỉ phát triển. Sau khi chuyển wire auth sang version 6 và ràng buộc chữ ký với phiên QUIC/TLS, `make test`, `make lint`, `make test-platform`, `make test-integration` và `make build-cli` đã qua trên Linux. Lần chạy platform đầu sau thay đổi còn lỗi ở test terminal thiếu định danh phiên và đã sửa; một lần chạy kế tiếp lỗi timeout ở test ping/reconnect, lần lặp lại qua. Lỗi terminal FFI trước đó được truy ra shell mặc định mở wizard zsh trong HOME thử nghiệm; test đã dùng `/bin/sh` và output riêng dòng. Build macOS không ký đã qua ở lượt trước, chưa chạy lại sau thay đổi này.
 
 ## 1. Phạm vi đã chốt
 
-- [ ] Bỏ hoàn toàn passcode dùng để kết nối/pair, SPAKE2 và dữ liệu passcode được lưu.
+- [x] Bỏ hoàn toàn passcode dùng để kết nối/pair, SPAKE2 và dữ liệu passcode được lưu. Tài liệu sản phẩm còn mô tả passcode và được xử lý ở mục 10.
 - [x] Bỏ popup duyệt kết nối, hàng đợi yêu cầu duyệt và chế độ tự chấp nhận máy lạ. Cờ `allow_new_pairings` còn trong settings cũ nhưng không được handshake đọc; xóa cùng migration settings.
 - [ ] Mọi kết nối phải xác thực bằng chữ ký từ private key tương ứng với public key đã được cấp quyền.
 - [ ] Cho phép thiết bị tự tạo khóa hoặc import private key có sẵn bên ngoài.
@@ -179,7 +180,7 @@ Tên file và lệnh bên dưới là thiết kế dự kiến cần thống nh�
 - [ ] Trang “Host đã lưu”: nhập alias, địa chỉ/cổng, khóa host tin cậy và chọn khóa client.
 - [ ] Kết nối từ danh sách host đã lưu; hiển thị lỗi trong trạng thái kết nối, không mở popup xin duyệt/trust.
 - [ ] Cập nhật Swift dùng chung macOS/iOS, Android, Linux và Windows cùng một hành vi.
-- [ ] Xóa trường passcode, nút scan, switch cho phép pair máy mới và các màn hình yêu cầu duyệt.
+- [x] Xóa trường passcode, nút scan, switch cho phép pair máy mới và các màn hình yêu cầu duyệt. Nút làm mới còn lại chỉ nạp lại danh sách đã lưu, không quét mạng.
 - [ ] Chỉ lưu/hiển thị “last seen” dựa trên tương tác đã xác thực; không probe plaintext để cập nhật trạng thái danh sách.
 
 ### 6.2. CLI dự kiến
@@ -203,7 +204,7 @@ deskhub-cli connect office
 - [x] `--config-dir` dùng chung cho mọi lệnh; thư mục không truy cập được trả lỗi rõ.
 - [x] API lưu host trong `platform/` không gọi UI, không đọc stdin, không phụ thuộc event loop GUI.
 - [x] `connect`, `sources`, `shell`, `send` nhận alias host đã lưu, dùng địa chỉ, identity và pin của cùng profile.
-- [ ] Bỏ `scan`, tùy chọn passcode, biến môi trường passcode, cơ chế approval/auto-allow và tùy chọn bỏ qua kiểm tra host key.
+- [x] Bỏ `scan`, tùy chọn passcode, biến môi trường passcode, cơ chế approval/auto-allow và tùy chọn bỏ qua kiểm tra host key.
 - [x] Bỏ lệnh `probe` và tùy chọn `--timeout` chỉ dùng cho probe; không còn probe UDP công khai.
 
 ## 7. Loại bỏ LAN discovery
@@ -230,7 +231,7 @@ Bỏ discovery giảm dữ liệu công khai và đường xử lý trước aut
 - [ ] Có thể tái sử dụng khóa P-256 cũ cho danh tính client chuyển tiếp nếu parser mới hỗ trợ; phải là lựa chọn rõ ràng để sau này tách/đổi khóa client không làm đổi TLS host.
 - [ ] Giữ các pin host cũ nếu chuyển đổi được với đúng encoding fingerprint; đánh dấu rõ pin legacy và không làm mất kiểm tra khóa khi đọc cấu hình cũ.
 - [ ] Địa chỉ recent không kèm pin chỉ được chuyển thành mục chưa cấu hình xong; không tự trở thành host tin cậy.
-- [ ] Xóa passcode khỏi settings/recent store, CLI/env, FFI, log và serialization; không tạo bản backup mới chứa passcode/private key dạng rõ.
+- [x] Xóa passcode khỏi settings/recent store, CLI/env, FFI, log và serialization; không tạo bản backup mới chứa passcode/private key dạng rõ.
 - [ ] Thông báo tương thích rõ cho client/server cũ. Bản mới không cho phép cơ chế cũ để giữ tương thích.
 - [ ] Khi danh sách khóa mới chưa được cấu hình, host từ chối truy cập và hướng dẫn quản trị viên thêm public key cục bộ.
 

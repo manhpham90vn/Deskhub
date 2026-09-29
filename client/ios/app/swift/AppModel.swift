@@ -14,9 +14,8 @@ final class AppModel {
     private(set) var terminal: TerminalModel?
     var fileSend: FileSendModel?
 
-    func beginConnect(to address: String, passcode: String) {
+    func beginConnect(to address: String) {
         connect.address = address
-        connect.passcode = passcode
         beginConnect()
     }
 
@@ -25,9 +24,7 @@ final class AppModel {
         connect.saveDeviceName()
         Task {
             guard let found = await connect.connectAuth() else { return }
-            await discovery.remember(
-                address: connect.acceptedAddress, passcode: connect.acceptedPasscode
-            )
+            await discovery.remember(address: connect.acceptedAddress)
             sources = found.sources
         }
     }
@@ -56,8 +53,7 @@ final class AppModel {
         connect.connectError = ""
         let address = connect.acceptedAddress
         let model = StreamModel(
-            address: address, passcode: connect.acceptedPasscode, sourceId: sourceId,
-            sourceName: sourceName(of: sourceId)
+            address: address, sourceId: sourceId, sourceName: sourceName(of: sourceId)
         )
         stream = model
         screen = .stream
@@ -89,7 +85,6 @@ final class AppModel {
         connect.saveDeviceName()
         let sender = FileSendModel()
         sender.address = connect.acceptedAddress
-        sender.passcode = connect.acceptedPasscode
         sender.deviceName = connect.deviceName
         fileSend = sender
     }
@@ -105,7 +100,7 @@ final class AppModel {
         connect.saveDeviceName()
         let address = connect.acceptedAddress
         let model = TerminalModel()
-        guard model.open(address: address, passcode: connect.acceptedPasscode) else {
+        guard model.open(address: address) else {
             connect.connectError = DeskhubClient.couldNotConnect(address)
             return
         }

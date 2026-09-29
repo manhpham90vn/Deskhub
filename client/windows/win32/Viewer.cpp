@@ -219,8 +219,7 @@ void RegisterClasses() {
 }
 
 std::unique_ptr<ViewerFrame> OpenFrame(const std::string& addr, uint8_t sourceId,
-    const std::string& nameUtf8, deskhub::OpenViewerCount& openCount, bool control,
-    const std::string& passcode) {
+    const std::string& nameUtf8, deskhub::OpenViewerCount& openCount, bool control) {
     auto f = std::make_unique<ViewerFrame>();
 
     f->openCount = &openCount;
@@ -268,8 +267,7 @@ std::unique_ptr<ViewerFrame> OpenFrame(const std::string& addr, uint8_t sourceId
         PostMessageW(fr->hwnd, WM_APP_CLOSED, 0, 0);
     };
 
-    f->session = dh_screen_start(addr.c_str(), sourceId, f->video, &callbacks,
-        passcode.c_str());
+    f->session = dh_screen_start(addr.c_str(), sourceId, f->video, &callbacks);
     if (!f->session) {
         DestroyWindow(f->hwnd);
         return nullptr;
@@ -291,13 +289,13 @@ std::unique_ptr<ViewerFrame> OpenFrame(const std::string& addr, uint8_t sourceId
 }
 
 void RunViewer(const std::string& addrUtf8, const std::vector<deskhub::SourceInfo>& sources,
-    bool control, const std::string& passcode) {
+    bool control) {
     RegisterClasses();
     deskhub::OpenViewerCount openFrames;
 
     std::vector<std::unique_ptr<ViewerFrame>> frames;
     for (const auto& s : sources)
-        if (auto f = OpenFrame(addrUtf8, s.sourceId, s.name, openFrames, control, passcode))
+        if (auto f = OpenFrame(addrUtf8, s.sourceId, s.name, openFrames, control))
             frames.push_back(std::move(f));
     if (frames.empty()) {
         MessageBoxW(nullptr, FromUtf8(deskhub::ui::kViewerOpenFailed).c_str(), L"Deskhub",

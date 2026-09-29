@@ -145,15 +145,6 @@ inline constexpr uint16_t kClientWantsAudio = 1u << 0;
 
 inline constexpr size_t kMaxClientNameBytes = 64;
 
-inline constexpr size_t kPasscodeDigits = 4;
-
-inline constexpr bool IsValidPasscode(std::string_view p) {
-    if (p.size() != kPasscodeDigits) return false;
-    for (char c : p)
-        if (c < '0' || c > '9') return false;
-    return true;
-}
-
 struct Hello {
     uint32_t clientId;
     uint16_t maxWidth;

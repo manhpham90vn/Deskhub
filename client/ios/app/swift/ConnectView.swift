@@ -3,10 +3,6 @@ import SwiftUI
 struct ConnectView: View {
     @Bindable var model: AppModel
 
-    @State private var prompting: DeviceListRow?
-    @State private var promptPasscode = ""
-    @State private var promptPort = ""
-
     private var connected: Bool { model.connect.authed != nil }
 
     private var connectedRow: DeviceListRow? {
@@ -73,15 +69,6 @@ struct ConnectView: View {
             Button("OK", role: .cancel) { model.connect.connectError = "" }
         } message: {
             Text(model.connect.connectError)
-        }
-        .sheet(item: $prompting) { row in
-            PasscodePromptSheet(
-                address: row.addr,
-                port: $promptPort,
-                passcode: $promptPasscode,
-                onCancel: { prompting = nil },
-                onConnect: { confirmPrompt(row) }
-            )
         }
         .task { model.discovery.start() }
     }
@@ -165,17 +152,6 @@ struct ConnectView: View {
                 .frame(width: 90)
             }
 
-            VStack(alignment: .leading, spacing: 4) {
-                PasscodeField(
-                    passcode: $model.connect.passcode,
-                    prompt: DeskhubClient.string(DHStrClientPasscodePrompt)
-                )
-
-                Text(DeskhubClient.string(DHStrClientPasscodeHint))
-                    .font(.caption)
-                    .foregroundStyle(DeskhubPalette.muted)
-            }
-
             TextField("Your name", text: $model.connect.deviceName)
                 .textFieldStyle(.roundedBorder)
                 .autocorrectionDisabled()
@@ -200,17 +176,9 @@ struct ConnectView: View {
     }
 
     private func pick(_ row: DeviceListRow) {
-        promptPasscode = DeskhubClient.isValidPasscode(row.passcode)
-            ? row.passcode : model.connect.passcode
-        promptPort = DeskhubClient.addressPortText(row.addr)
-        prompting = row
-    }
-
-    private func confirmPrompt(_ row: DeviceListRow) {
-        prompting = nil
         let addr = DeskhubClient.composeAddress(
-            DeskhubClient.addressHost(row.addr), portText: promptPort
+            DeskhubClient.addressHost(row.addr), portText: DeskhubClient.addressPortText(row.addr)
         )
-        model.beginConnect(to: addr, passcode: promptPasscode)
+        model.beginConnect(to: addr)
     }
 }

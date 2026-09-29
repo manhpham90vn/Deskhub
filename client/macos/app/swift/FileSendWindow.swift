@@ -2,7 +2,6 @@ import SwiftUI
 
 struct TransferRequest: Codable, Hashable {
     var address: String
-    var passcode: String
     var name: String
 }
 
@@ -20,7 +19,6 @@ struct FileSendWindow: View {
             .navigationSubtitle(request.address)
             .onAppear {
                 sender.address = request.address
-                sender.passcode = request.passcode
                 sender.deviceName = request.name
             }
             .onDisappear { sender.forgetTransfer() }

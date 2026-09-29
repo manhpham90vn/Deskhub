@@ -38,10 +38,6 @@ inline deskhub::ui::UiSettings LoadUiSettings() {
     return settings;
 }
 
-inline std::string HostPasscode() {
-    return LoadUiSettings().passcode;
-}
-
 inline std::string SessionDeviceName() {
     const std::string name = LoadUiSettings().deviceName;
     return name.empty() ? LocalDeviceName() : name;

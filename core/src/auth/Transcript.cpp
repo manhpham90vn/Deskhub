@@ -8,6 +8,8 @@ namespace deskhub {
 namespace {
 
 constexpr std::string_view kDomain = "Deskhub/auth/signature";
+constexpr size_t kFieldCount = 5;
+constexpr size_t kFieldLengthBytes = 4;
 
 void AppendField(std::vector<uint8_t>& out, std::span<const uint8_t> field) {
     const uint32_t size = uint32_t(field.size());
@@ -30,7 +32,7 @@ std::vector<uint8_t> AuthTranscript(AuthRole role,
         return {};
 
     std::vector<uint8_t> out;
-    out.reserve(5 * 4 + kDomain.size() + 2 + sessionId.size() + clientPublicKey.size() +
+    out.reserve(kFieldCount * kFieldLengthBytes + kDomain.size() + 2 + sessionId.size() + clientPublicKey.size() +
                 hostFingerprint.bytes.size());
     AppendField(out, std::span<const uint8_t>(
                          reinterpret_cast<const uint8_t*>(kDomain.data()), kDomain.size()));

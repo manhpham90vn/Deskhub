@@ -28,7 +28,7 @@ final class SettingsModel {
         let stored = dh_settings_load()
         dh_settings_save(
             stored.fps, stored.bitrateMbps, stored.maxDim, UInt32(acceptedPort),
-            stored.allowInput, clientControl, nil
+            stored.allowInput, clientControl
         )
         dh_set_clipboard_sync(clipboardSync)
         dh_set_share_audio(shareAudio)

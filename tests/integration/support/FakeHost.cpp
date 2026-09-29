@@ -80,13 +80,12 @@ void SharingHost::StopTone() {
 }
 
 bool SharingHost::Start(const std::vector<deskhub::media::ShareSource>& sources, uint16_t port,
-    uint32_t fps, uint32_t maxDim, const std::string& passcode, bool allowInput, bool audio) {
+    uint32_t fps, uint32_t maxDim, bool allowInput, bool audio) {
     deskhub::media::ShareOptions opt;
     opt.fps = fps;
     opt.maxDim = maxDim;
     opt.bitrateMbps = 8;
     opt.port = port;
-    opt.passcode = passcode;
     opt.allowInput = allowInput;
     opt.audio = audio;
 

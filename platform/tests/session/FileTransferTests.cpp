@@ -31,7 +31,6 @@
 namespace {
 
 constexpr uint16_t kFileTestPort = 47836;
-constexpr const char* kFilePasscode = "0417";
 constexpr uint32_t kAuthTimeoutMs = 4000;
 
 std::filesystem::path Scratch(const std::string& leaf) {
@@ -545,12 +544,12 @@ void TestTheSendSurfaceTheClientPageDrives() {
     Check(deskhubp::RememberTrustedHost(address, address, identity.fingerprint,
               NowUnixSeconds()),
         "the host public key is pinned");
-    Check(dh_send_start("nonsense", kFilePasscode, "page", paths, 1) == nullptr,
+    Check(dh_send_start("nonsense", "page", paths, 1) == nullptr,
         "an address that cannot be read starts nothing");
-    Check(dh_send_start(address.c_str(), kFilePasscode, "page", nullptr, 0) == nullptr,
+    Check(dh_send_start(address.c_str(), "page", nullptr, 0) == nullptr,
         "and neither does an empty batch");
 
-    DHSend* send = dh_send_start(address.c_str(), kFilePasscode, "client-page", paths, 1);
+    DHSend* send = dh_send_start(address.c_str(), "client-page", paths, 1);
     Check(send != nullptr, "a sound batch starts");
     if (send == nullptr) return;
 
@@ -607,7 +606,7 @@ void TestASenderRejectsAChangedHostKey() {
     const std::string path = file.string();
     const char* paths[] = {path.c_str()};
 
-    DHSend* send = dh_send_start(endpoint.c_str(), kFilePasscode, "client-page", paths, 1);
+    DHSend* send = dh_send_start(endpoint.c_str(), "client-page", paths, 1);
     Check(send != nullptr, "the batch starts");
     if (send == nullptr) return;
 
@@ -662,7 +661,6 @@ void TestTheDesktopSendSurfaceRejectsTheChangedKey() {
     deskhubp::FileTransferClientConfig config;
     config.host = server;
     config.hostLabel = endpoint;
-    config.passcode = kFilePasscode;
     config.clientName = "file-test-window";
     config.files = {file};
 

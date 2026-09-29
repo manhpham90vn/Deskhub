@@ -72,7 +72,6 @@ struct TerminalPeer {
         deskhubp::TerminalViewerConfig cfg;
         cfg.host = NetAddr{0x7F000001u, port};
         cfg.hostLabel = "load-test-host";
-        cfg.passcode = kTestPasscode;
         cfg.clientName = "load-test";
         cfg.size = deskhub::TermSize{120, 30};
 

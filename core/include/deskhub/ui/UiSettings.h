@@ -15,7 +15,6 @@ struct UiSettings {
     uint32_t port = kDeskhubPort;
     bool allowInput = true;
     bool clientControl = true;
-    std::string passcode{};
     std::string deviceName{};
     std::string bindIp{};
     bool autostart = false;

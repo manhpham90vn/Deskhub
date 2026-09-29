@@ -140,8 +140,8 @@ void PrintGrid(DHTermSession* session) {
 void TestNullHandlesAndBadAddressesAreHarmless() {
     std::printf("[termffi] a null handle or a bad address never turns into a crash...\n");
     DHTermCallbacks callbacks{};
-    Check(dh_term_open(nullptr, "", 80, 24, &callbacks) == nullptr, "no address opens nothing");
-    Check(dh_term_open("not-an-address", "", 80, 24, &callbacks) == nullptr,
+    Check(dh_term_open(nullptr, 80, 24, &callbacks) == nullptr, "no address opens nothing");
+    Check(dh_term_open("not-an-address", 80, 24, &callbacks) == nullptr,
         "an address that does not parse opens nothing");
 
     Check(dh_term_state(nullptr) == DHTermIdle, "a null session is idle, not undefined");
@@ -213,7 +213,7 @@ void RunTerminalFfiTests() {
     Check(deskhubp::RememberTrustedHost(address, address, identity.fingerprint,
               NowUnixSeconds()),
         "the host public key is pinned before opening the terminal");
-    DHTermSession* session = dh_term_open(address.c_str(), kTestPasscode, 80, 24, &callbacks);
+    DHTermSession* session = dh_term_open(address.c_str(), 80, 24, &callbacks);
     Check(session != nullptr, "the C ABI opens a shell session");
     if (session == nullptr) {
         rig.Stop();
@@ -294,7 +294,7 @@ void RunTerminalFfiTests() {
         "stopping the viewer leaves the shell on the host, detached rather than ended");
 
     DHTermSession* picker =
-        dh_term_open_deferred(address.c_str(), kTestPasscode, 80, 24, &callbacks);
+        dh_term_open_deferred(address.c_str(), 80, 24, &callbacks);
     Check(picker != nullptr, "a second session opens without asking for a shell of its own");
     if (picker != nullptr) {
         Check(WaitForMs([picker] { return dh_term_sessions_known(picker); }, 20000),

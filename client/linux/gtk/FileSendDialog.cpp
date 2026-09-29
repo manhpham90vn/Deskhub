@@ -257,11 +257,10 @@ GtkWidget* MutedLabel(const std::string& text) {
 }
 
 std::unique_ptr<FileSendTarget> MakeStandaloneFileSendTarget(const NetAddr& server,
-    const std::string& address, const std::string& passcode, const std::string& clientName) {
+    const std::string& address, const std::string& clientName) {
     deskhubp::FileTransferClientConfig config;
     config.host = server;
     config.hostLabel = address;
-    config.passcode = passcode;
     config.clientName = clientName;
     return std::make_unique<StandaloneTarget>(std::move(config));
 }

@@ -8,11 +8,9 @@ extern "C" {
 #endif
 
 #define DH_ADDR_CAP 64
-#define DH_PASSCODE_CAP 8
 
 typedef struct {
     char addr[DH_ADDR_CAP];
-    char passcode[DH_PASSCODE_CAP];
     char origin[20];
     char status[16];
     char ping[16];
@@ -28,11 +26,9 @@ typedef struct {
     uint32_t port;
     bool allowInput;
     bool clientControl;
-    char passcode[DH_PASSCODE_CAP];
 } DHUiSettings;
 
-void dh_recent_touch(const char* address, const char* passcode);
-int dh_recent_passcode(const char* address, char* out, int capacity);
+void dh_recent_touch(const char* address);
 
 typedef enum {
     DHSettingsEntryArea = 0,
@@ -46,18 +42,17 @@ typedef enum {
     DHSettingFps = 1,
     DHSettingBitrate = 2,
     DHSettingQuality = 3,
-    DHSettingPasscode = 4,
-    DHSettingAllowInput = 5,
-    DHSettingShareAudio = 6,
-    DHSettingTransferFolder = 7,
-    DHSettingAutoShare = 8,
-    DHSettingPermissions = 9,
-    DHSettingPlayAudio = 10,
-    DHSettingPort = 11,
-    DHSettingClipboardSync = 12,
-    DHSettingKeepAwake = 13,
-    DHSettingAutostart = 14,
-    DHSettingCloseToTray = 15,
+    DHSettingAllowInput = 4,
+    DHSettingShareAudio = 5,
+    DHSettingTransferFolder = 6,
+    DHSettingAutoShare = 7,
+    DHSettingPermissions = 8,
+    DHSettingPlayAudio = 9,
+    DHSettingPort = 10,
+    DHSettingClipboardSync = 11,
+    DHSettingKeepAwake = 12,
+    DHSettingAutostart = 13,
+    DHSettingCloseToTray = 14,
 } DHSettingField;
 
 typedef struct {
@@ -72,7 +67,7 @@ int dh_settings_area_bar_width(void);
 
 DHUiSettings dh_settings_load(void);
 void dh_settings_save(uint32_t fps, uint32_t bitrate_mbps, uint32_t max_dim, uint32_t port,
-    bool allow_input, bool client_control, const char* passcode);
+    bool allow_input, bool client_control);
 
 int dh_device_rows(DHDeviceRow* out, int capacity);
 bool dh_same_device_addr(const char* a, const char* b);
@@ -112,9 +107,8 @@ void dh_set_keep_awake(bool on);
 int dh_version_line(char* out, int capacity);
 const char* dh_local_addresses(void);
 int dh_idle_host_status(uint16_t port, char* out, int capacity);
-int dh_sharing_status(uint16_t port, const char* passcode, bool allow_input, bool screen,
-    bool terminal, bool files, char* out, int capacity);
-int dh_passcode_display(const char* passcode, char* out, int capacity);
+int dh_sharing_status(uint16_t port, bool allow_input, bool screen, bool terminal, bool files,
+    char* out, int capacity);
 
 typedef struct {
     char name[80];

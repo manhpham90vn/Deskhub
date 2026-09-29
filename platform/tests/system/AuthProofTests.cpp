@@ -112,12 +112,12 @@ void TestThePairedListOutlivesTheProcess() {
         stranger.bytes[i] = uint8_t(i + 200);
     }
 
-    Check(deskhubp::CheckPairedDevice(laptop) == deskhub::PairVerdict::Unknown,
+    Check(deskhubp::TryLoadPairedDevices().value_or(deskhub::PairedDevices{}).Check(laptop) == deskhub::PairVerdict::Unknown,
         "nothing is paired to begin with");
     Check(deskhubp::RememberPairedDevice(laptop, "manh laptop", 1000), "pairing writes the file");
-    Check(deskhubp::CheckPairedDevice(laptop) == deskhub::PairVerdict::Paired,
-        "and reading it back lets that machine straight in - no passcode consulted");
-    Check(deskhubp::CheckPairedDevice(stranger) == deskhub::PairVerdict::Unknown,
+    Check(deskhubp::TryLoadPairedDevices().value_or(deskhub::PairedDevices{}).Check(laptop) == deskhub::PairVerdict::Paired,
+        "and reading it back lets that machine straight in");
+    Check(deskhubp::TryLoadPairedDevices().value_or(deskhub::PairedDevices{}).Check(stranger) == deskhub::PairVerdict::Unknown,
         "while a machine that never paired is still a stranger");
 
     Check(deskhubp::TouchPairedDevice(laptop, "manh laptop", 2000), "a visit is recorded");
@@ -125,15 +125,15 @@ void TestThePairedListOutlivesTheProcess() {
         "but a stranger's visit is not");
 
     Check(deskhubp::ForgetPairedDevice(laptop), "forgetting it reports that it did something");
-    Check(deskhubp::CheckPairedDevice(laptop) == deskhub::PairVerdict::Unknown,
+    Check(deskhubp::TryLoadPairedDevices().value_or(deskhub::PairedDevices{}).Check(laptop) == deskhub::PairVerdict::Unknown,
         "and that machine has to pair again - this is what revoking means");
     Check(!deskhubp::ForgetPairedDevice(laptop), "forgetting it twice changes nothing");
 
     deskhubp::RememberPairedDevice(laptop, "laptop", 3000);
     deskhubp::RememberPairedDevice(stranger, "phone", 3000);
-    Check(deskhubp::LoadPairedDevices().Size() == 2, "two machines are on the list");
+    Check(deskhubp::TryLoadPairedDevices().value_or(deskhub::PairedDevices{}).Size() == 2, "two machines are on the list");
     deskhubp::ForgetAllPairedDevices();
-    Check(deskhubp::LoadPairedDevices().Size() == 0, "and the big red button clears all of them");
+    Check(deskhubp::TryLoadPairedDevices().value_or(deskhub::PairedDevices{}).Size() == 0, "and the big red button clears all of them");
 
     if (!saved.empty()) deskhubp::WriteAppDataFile(deskhubp::kPairedDevicesFileName, saved);
 }

@@ -27,7 +27,7 @@ jint PackRgb(uint8_t r, uint8_t g, uint8_t b) {
 extern "C" {
 
 JNIEXPORT jboolean JNICALL Java_com_deskhub_app_NativeTerminal_nativeOpen(JNIEnv* env, jobject,
-    jstring addr, jstring passcode, jint cols, jint rows) {
+    jstring addr, jint cols, jint rows) {
     if (g_term != nullptr) {
         dh_term_stop(g_term);
         g_term = nullptr;
@@ -35,9 +35,7 @@ JNIEXPORT jboolean JNICALL Java_com_deskhub_app_NativeTerminal_nativeOpen(JNIEnv
     DHTermCallbacks callbacks{};
     callbacks.onTrustAsked = HoldTrustDecision;
     const std::string address = deskhubj::FromJString(env, addr);
-    const std::string code = deskhubj::FromJString(env, passcode);
-    g_term = dh_term_open_deferred(address.c_str(), code.c_str(), uint16_t(cols),
-        uint16_t(rows), &callbacks);
+    g_term = dh_term_open_deferred(address.c_str(), uint16_t(cols), uint16_t(rows), &callbacks);
     return g_term != nullptr ? JNI_TRUE : JNI_FALSE;
 }
 

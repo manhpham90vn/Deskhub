@@ -328,7 +328,6 @@ void RunStandaloneFileSend(const FileSendLaunch& launch) {
         deskhubp::FileTransferClientConfig config;
         config.host = server;
         config.hostLabel = launch.address;
-        config.passcode = launch.passcode;
         config.clientName = launch.clientName;
         config.files = files;
         if (!client.Start(config, deskhubp::FileTransferClientCallbacks{})) {

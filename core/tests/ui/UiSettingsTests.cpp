@@ -97,16 +97,15 @@ void TestDeviceNamePersistence() {
 
 void TestLegacySettingsAreDiscarded() {
     std::printf("[settings] retired authentication fields are discarded...\n");
-    ui::UiSettings s;
-    s.passcode = "0417";
-    const std::string text = ui::SerializeUiSettings(s);
+    const std::string text = ui::SerializeUiSettings(ui::UiSettings{});
     Check(text.find("passcode=") == std::string::npos,
         "a passcode is not serialized");
     Check(text.find("allow_new_pairings=") == std::string::npos,
         "the old pairing switch is not serialized");
     const ui::UiSettings legacy = ui::ParseUiSettings(
         "passcode=0417\nallow_new_pairings=0\nname=Older host\n");
-    Check(legacy.passcode.empty(), "retired values from an old file are ignored");
+    Check(ui::SerializeUiSettings(legacy).find("0417") == std::string::npos,
+        "retired values from an old file are ignored");
     Check(legacy.deviceName == "Older host", "other settings remain available");
 }
 

@@ -25,7 +25,7 @@ typedef struct {
 } DHScreenCallbacks;
 
 DHScreen* dh_screen_start(const char* address, uint8_t sourceId, void* surface,
-    const DHScreenCallbacks* callbacks, const char* passcode);
+    const DHScreenCallbacks* callbacks);
 
 void dh_screen_stop(DHScreen* s);
 

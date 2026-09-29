@@ -60,7 +60,7 @@ constexpr ThemePair kThemePairs[] = {
     ThemePair{DHThemePanelIdle, deskhub::ui::ThemeColor::PanelIdle},
     ThemePair{DHThemePanelBusy, deskhub::ui::ThemeColor::PanelBusy},
     ThemePair{DHThemePanelLive, deskhub::ui::ThemeColor::PanelLive},
-    ThemePair{DHThemePasscodeCard, deskhub::ui::ThemeColor::PasscodeCard},
+    ThemePair{DHThemeInfoCard, deskhub::ui::ThemeColor::InfoCard},
 };
 
 static_assert(std::size(kThemePairs) == size_t(deskhub::ui::ThemeColor::Count),
@@ -116,13 +116,6 @@ const char* dh_string(DHStringId id) {
         case DHStrQueryingSources: return deskhub::ui::kQueryingSources;
         case DHStrViewerOpenFailed: return deskhub::ui::kViewerOpenFailed;
         case DHStrConnectionEndedTitle: return deskhub::ui::kConnectionEndedTitle;
-        case DHStrClientPasscodePrompt: return deskhub::ui::kClientPasscodePrompt;
-        case DHStrClientPasscodeHint: return deskhub::ui::kClientPasscodeHint;
-        case DHStrPasscodeInvalid: return deskhub::ui::kPasscodeInvalid;
-        case DHStrPasscodeLabel: return deskhub::ui::kPasscodeLabel;
-        case DHStrPasscodeShareHeading: return deskhub::ui::kPasscodeShareHeading;
-        case DHStrCopyPasscodeAction: return deskhub::ui::kCopyPasscodeAction;
-        case DHStrPasscodeCopied: return deskhub::ui::kPasscodeCopied;
         case DHStrReceivingFilesState: return deskhub::ui::kReceivingFilesState;
         case DHStrMobileTakesFilesNote: return deskhub::ui::kMobileTakesFilesNote;
         case DHStrOpenFolderAction: return deskhub::ui::kOpenFolderAction;
@@ -138,7 +131,6 @@ const char* dh_string(DHStringId id) {
         case DHStrProjectLinkLabel: return deskhub::ui::kProjectLinkLabel;
         case DHStrRequestControlLabel: return deskhub::ui::kRequestControlLabel;
         case DHStrClientIpPlaceholder: return deskhub::ui::kClientIpPlaceholder;
-        case DHStrConnectPromptTitle: return deskhub::ui::kConnectPromptTitle;
         case DHStrNoDisplayTicked: return deskhub::ui::kNoDisplayTicked;
         case DHStrShareStateOn: return deskhub::ui::kShareStateOn;
         case DHStrShareStateOff: return deskhub::ui::kShareStateOff;
@@ -159,7 +151,6 @@ const char* dh_string(DHStringId id) {
         case DHStrTrayQuit: return deskhub::ui::kTrayQuit;
         case DHStrBindNotConnectedNote: return deskhub::ui::kBindNotConnectedNote;
         case DHStrSettingsSectionConnection: return deskhub::ui::kSettingsSectionConnection;
-        case DHStrSettingsSectionSecurity: return deskhub::ui::kSettingsSectionSecurity;
         case DHStrSettingsSectionSession: return deskhub::ui::kSettingsSectionSession;
         case DHStrKeepAwakeLabel: return deskhub::ui::kKeepAwakeLabel;
         case DHStrSidebarDevices: return deskhub::ui::kSidebarDevices;
@@ -197,7 +188,6 @@ const char* dh_string(DHStringId id) {
         case DHStrMobileHostNote: return deskhub::ui::kMobileHostNote;
         case DHStrWaitingForDisplays: return deskhub::ui::kWaitingForDisplays;
         case DHStrNoDisplayFound: return deskhub::ui::kNoDisplayFound;
-        case DHStrPasscodeHint: return deskhub::ui::kPasscodeHint;
         case DHStrDevicesHeading: return deskhub::ui::kDevicesHeading;
         case DHStrDeviceColumnWhere: return deskhub::ui::kDeviceColumnWhere;
         case DHStrDeviceNameLabel: return deskhub::ui::kDeviceNameLabel;
@@ -316,14 +306,6 @@ int dh_viewer_base_title(const char* sourceName, char* out, int capacity) {
     return int(std::strlen(out));
 }
 
-bool dh_is_valid_passcode(const char* passcode) {
-    return passcode && deskhub::IsValidPasscode(passcode);
-}
-
-int dh_passcode_digits(void) {
-    return int(deskhub::kPasscodeDigits);
-}
-
 int dh_max_sources(void) {
     return int(deskhub::kMaxSources);
 }
@@ -346,8 +328,7 @@ DHAutoShareStep dh_auto_share_step(bool displays_ready, uint32_t waited_ms) {
     return DHAutoShareKeepWaiting;
 }
 
-int dh_list_sources(const char* address, DHSourceInfo* out, int capacity, const char* passcode,
-    DHHostCaps* out_caps) {
+int dh_list_sources(const char* address, DHSourceInfo* out, int capacity, DHHostCaps* out_caps) {
     if (out_caps) *out_caps = DHHostCaps{false, false, false, false};
     if (!address || !out || capacity <= 0) return DH_SOURCE_QUERY_FAILED;
 
@@ -359,7 +340,7 @@ int dh_list_sources(const char* address, DHSourceInfo* out, int capacity, const 
 
     std::vector<deskhub::SourceInfo> sources;
     deskhub::HostCaps caps{};
-    if (!QuerySources(server, sources, passcode ? passcode : "", nullptr, &caps))
+    if (!QuerySources(server, sources, nullptr, &caps))
         return DH_SOURCE_QUERY_FAILED;
     if (out_caps)
         *out_caps = DHHostCaps{caps.acceptsInput, caps.terminal, caps.audio, caps.files};

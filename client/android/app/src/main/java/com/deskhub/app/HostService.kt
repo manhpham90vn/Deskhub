@@ -173,7 +173,6 @@ class HostService : Service() {
         val bitrateMbps: Int,
         val maxDim: Int,
         val port: Int,
-        val passcode: String,
     ) {
         companion object {
             fun from(intent: Intent) =
@@ -182,7 +181,6 @@ class HostService : Service() {
                     bitrateMbps = intent.getIntExtra(EXTRA_BITRATE, 0),
                     maxDim = intent.getIntExtra(EXTRA_MAX_DIM, 0),
                     port = intent.getIntExtra(EXTRA_PORT, 0),
-                    passcode = intent.getStringExtra(EXTRA_PASSCODE).orEmpty(),
                 )
         }
     }
@@ -196,7 +194,6 @@ class HostService : Service() {
         private const val EXTRA_BITRATE = "bitrateMbps"
         private const val EXTRA_MAX_DIM = "maxDim"
         private const val EXTRA_PORT = "port"
-        private const val EXTRA_PASSCODE = "passcode"
         private const val ACTION_STOP = "com.deskhub.app.STOP_SHARING"
 
         fun start(
@@ -213,7 +210,6 @@ class HostService : Service() {
                     .putExtra(EXTRA_BITRATE, request.bitrateMbps)
                     .putExtra(EXTRA_MAX_DIM, request.maxDim)
                     .putExtra(EXTRA_PORT, request.port)
-                    .putExtra(EXTRA_PASSCODE, request.passcode)
             ContextCompat.startForegroundService(context, intent)
         }
 

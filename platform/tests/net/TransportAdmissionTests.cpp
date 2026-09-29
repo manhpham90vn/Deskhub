@@ -462,7 +462,7 @@ void TestForgettingADeviceClosesItsLiveConnection() {
     Check(started, "the viewer is let in and paired");
     if (!started) return;
     const NetAddr peer = rig.Peer();
-    Check(deskhubp::CheckPairedDevice(rig.machines.viewer.fingerprint) ==
+    Check(deskhubp::TryLoadPairedDevices().value_or(deskhub::PairedDevices{}).Check(rig.machines.viewer.fingerprint) ==
               deskhub::PairVerdict::Paired,
         "the authorized key remains on the paired list");
 

@@ -68,8 +68,7 @@ struct Session {
         file = WriteBytes(source, "bulk.bin", payload);
 
         port = NextTestPort();
-        if (!host.Start({fake::Source("Display 1", 1280, 720, 1)}, port, 30, 1920,
-                kTestPasscode, true, audio)) {
+        if (!host.Start({fake::Source("Display 1", 1280, 720, 1)}, port, 30, 1920, true, audio)) {
             Check(false, "the host could not start");
             return false;
         }

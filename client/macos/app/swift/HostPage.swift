@@ -36,7 +36,7 @@ struct HostPage: View {
             }
 
             if sharing.isSharing || sharing.isStarting {
-                PasscodeCard(passcode: sharing.acceptedPasscode, port: sharing.port)
+                PortCard(port: sharing.port)
             }
 
             if sharing.isSharing {

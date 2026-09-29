@@ -85,9 +85,9 @@ private:
     bool Sharing() const;
     void StartFileShare();
     std::filesystem::path TransferFolder() const;
-    void OpenFileSend(const NetAddr& server, const std::string& passcode);
+    void OpenFileSend(const NetAddr& server);
     void ApplySharingBanner();
-    void OpenShell(const NetAddr& server, const std::string& passcode);
+    void OpenShell(const NetAddr& server);
 
     void LoadSettings();
     void SaveSettings();
@@ -97,20 +97,17 @@ private:
 
     void RefreshDeviceList();
 
-    void ConnectWithPrompt(const std::string& addr, std::string passcode);
-    void StartConnect(const std::string& addr, const std::string& passcode);
-    void OnSourcesReady(const std::string& addr, const std::string& passcode,
-        const deskhubp::ConnectOutcome& outcome);
-    void OpenConnectionWindow(const std::string& addr, const std::string& passcode,
-        const deskhubp::ConnectOutcome& outcome);
+    void ConnectToDevice(const std::string& addr);
+    void StartConnect(const std::string& addr);
+    void OnSourcesReady(const std::string& addr, const deskhubp::ConnectOutcome& outcome);
+    void OpenConnectionWindow(const std::string& addr, const deskhubp::ConnectOutcome& outcome);
     ConnectionWindow* ConnectionFor(const std::string& addr) const;
     void ForgetConnection(ConnectionWindow* window);
     void CloseEveryConnection();
     void SetClientControl(bool on);
     std::string ClientDeviceName() const;
-    void OpenViewers(const NetAddr& server, const std::string& passcode,
-        const std::vector<deskhub::SourceInfo>& picked, bool control);
-    bool ReadPasscode(GtkWidget* entry, std::string& out);
+    void OpenViewers(const NetAddr& server, const std::vector<deskhub::SourceInfo>& picked,
+        bool control);
 
     void OnShare(ShareTrigger trigger = ShareTrigger::kUser);
     void BeginAutoShare();
@@ -129,8 +126,7 @@ private:
     std::string HostPortDetail() const;
     void ApplyHostState(HostShareState state, const std::string& detail);
     void ShowIdleHostState();
-    void ShowPasscodeCard();
-    const std::string& ShownPasscode() const;
+    void ShowPortCard();
     void RefreshDisplayChoices();
     void ShowHostTable(bool sharing);
     bool TerminalTicked() const;
@@ -162,7 +158,6 @@ private:
     static void OnConnectClicked(GtkButton* b, gpointer user);
     static void OnAddressActivate(GtkEntry* e, gpointer user);
     static void OnCopyClicked(GtkButton* b, gpointer user);
-    static void OnCopyPasscodeClicked(GtkButton* b, gpointer user);
     static void OnCopyPortClicked(GtkButton* b, gpointer user);
     static gboolean OnCopiedRevertTimer(gpointer user);
     static void OnSettingChanged(GtkWidget* w, gpointer user);
@@ -186,9 +181,7 @@ private:
     GtkWidget* hostBanner_ = nullptr;
     GtkWidget* hostStateLabel_ = nullptr;
     GtkWidget* hostStatusLabel_ = nullptr;
-    GtkWidget* hostPasscodeCard_ = nullptr;
-    GtkWidget* hostPasscodeLabel_ = nullptr;
-    GtkWidget* hostPasscodeCopy_ = nullptr;
+    GtkWidget* hostPortCard_ = nullptr;
     GtkWidget* hostPortLabel_ = nullptr;
     GtkWidget* hostPortCopy_ = nullptr;
     guint copiedRevertId_ = 0;
@@ -208,7 +201,6 @@ private:
 
     GtkWidget* addressEntry_ = nullptr;
     GtkWidget* portEntry_ = nullptr;
-    GtkWidget* passcodeEntry_ = nullptr;
     GtkWidget* deviceNameEntry_ = nullptr;
     GtkWidget* connectButton_ = nullptr;
     GtkWidget* clientStatusLabel_ = nullptr;
@@ -227,7 +219,6 @@ private:
     GtkWidget* bitrateSpin_ = nullptr;
     GtkWidget* portSpin_ = nullptr;
     GtkWidget* qualityCombo_ = nullptr;
-    GtkWidget* hostPasscodeEntry_ = nullptr;
     GtkWidget* allowInputCheck_ = nullptr;
     GtkWidget* bindCombo_ = nullptr;
     GtkWidget* autoShareCheck_ = nullptr;
@@ -264,7 +255,6 @@ private:
     bool filesRequested_ = false;
     bool shareViewOnly_ = false;
     uint16_t sharePort_ = 0;
-    std::string sharePasscode_;
     std::string shareBindWarning_;
 
     deskhub::OpenViewerCount openViewers_;

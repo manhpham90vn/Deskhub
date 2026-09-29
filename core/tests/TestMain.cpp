@@ -78,8 +78,6 @@ int main() {
     std::printf("--- session: the link's own ping, loss and quality reading ---\n");
     RunLinkPulseTests();
 
-    std::printf("--- session: passcode attempt throttle ---\n");
-
     std::printf("--- input ---\n");
     RunInputTests();
 
@@ -228,8 +226,6 @@ int main() {
 
     std::printf("--- ui: waiting for the desktop before an automatic share ---\n");
     RunAutoShareGateTests();
-
-    std::printf("--- ui: passcodes stored on disk ---\n");
 
     std::printf("--- ui: one colour theme for every app ---\n");
     RunThemeTests();

@@ -40,7 +40,6 @@ deskhubp::ScreenViewerConfig ViewerConfig(uint16_t port, uint8_t sourceId) {
     cfg.screenW = 1920;
     cfg.screenH = 1080;
     cfg.alwaysFocused = true;
-    cfg.passcode = kTestPasscode;
     return cfg;
 }
 
@@ -395,7 +394,7 @@ void TestSourceDiscoveryBeforeAnySession() {
     }
 
     std::vector<deskhub::SourceInfo> sources;
-    Check(QuerySources(HostAddr(port), sources, kTestPasscode), "LIST_SOURCES was answered");
+    Check(QuerySources(HostAddr(port), sources), "LIST_SOURCES was answered");
     Check(sources.size() == 2, "both shared sources come back");
     if (sources.size() == 2) {
         Check(sources[0].name == "Display 1" && sources[1].name == "Display 2",
@@ -415,15 +414,14 @@ void TestAViewerLearnsWhatTheHostCannotDo() {
     const uint16_t port = NextTestPort();
 
     fake::SharingHost host;
-    if (!host.Start({fake::Source("Pixel", 1080, 2400, 1)}, port, 30, 1920, kTestPasscode,
-            false)) {
+    if (!host.Start({fake::Source("Pixel", 1080, 2400, 1)}, port, 30, 1920, false)) {
         Check(false, "the host could not start");
         return;
     }
 
     std::vector<deskhub::SourceInfo> sources;
     deskhub::HostCaps caps{};
-    Check(QuerySources(HostAddr(port), sources, kTestPasscode, nullptr, &caps),
+    Check(QuerySources(HostAddr(port), sources, nullptr, &caps),
         "the phone answers the query");
     Check(!caps.acceptsInput,
         "a host that injects no input says so, so the control tick can be called out");
@@ -434,14 +432,13 @@ void TestAViewerLearnsWhatTheHostCannotDo() {
 
     const uint16_t deskPort = NextTestPort();
     fake::SharingHost desktop;
-    if (!desktop.Start({fake::Source("Display 1", 1280, 720, 1)}, deskPort, 30, 1920,
-            kTestPasscode, true)) {
+    if (!desktop.Start({fake::Source("Display 1", 1280, 720, 1)}, deskPort, 30, 1920, true)) {
         Check(false, "the desktop host could not start");
         return;
     }
     sources.clear();
     caps = deskhub::HostCaps{};
-    Check(QuerySources(HostAddr(deskPort), sources, kTestPasscode, nullptr, &caps),
+    Check(QuerySources(HostAddr(deskPort), sources, nullptr, &caps),
         "a desktop answers the same query");
     Check(caps.acceptsInput, "and a host that does take input is not mistaken for a phone");
 

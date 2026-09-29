@@ -36,7 +36,6 @@ enum class HostLinkState : uint8_t {
 struct HostLinkConfig {
     NetAddr host{};
     std::string hostLabel{};
-    std::string passcode{};
     std::string clientName{};
     std::string clientIdentityName{};
     bool recoverLink = false;

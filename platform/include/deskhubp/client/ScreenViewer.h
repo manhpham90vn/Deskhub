@@ -53,7 +53,6 @@ struct ScreenViewerConfig {
     bool alwaysFocused = false;
     bool wantsAudio = false;
     const char* statusSeparator = "  ";
-    std::string passcode;
     std::string displayName;
     std::string hostLabel;
     std::string clientIdentityName;
@@ -98,7 +97,6 @@ public:
         HostLinkConfig linkConfig;
         linkConfig.host = cfg_.server;
         linkConfig.hostLabel = HostLabel();
-        linkConfig.passcode = cfg_.passcode;
         linkConfig.clientName =
             cfg_.displayName.empty() ? SessionDeviceName() : cfg_.displayName;
         linkConfig.clientIdentityName = cfg_.clientIdentityName;

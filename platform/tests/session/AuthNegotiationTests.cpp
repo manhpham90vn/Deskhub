@@ -75,7 +75,7 @@ void TestUnknownKeyNeverRequestsApproval() {
     Check(host.State() == deskhubp::HostAuthState::Settled,
         "the host does not wait for approval");
     Check(challenge && !client.Answer(*challenge), "the client cannot answer a denial");
-    Check(deskhubp::CheckPairedDevice(machines.client.fingerprint) ==
+    Check(deskhubp::TryLoadPairedDevices().value_or(deskhub::PairedDevices{}).Check(machines.client.fingerprint) ==
               deskhub::PairVerdict::Unknown,
         "the unlisted key is never added automatically");
 }

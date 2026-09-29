@@ -70,7 +70,7 @@ void TestAPlainUdpImpostorIsNotBelieved() {
 
     std::vector<deskhub::SourceInfo> out;
     deskhub::AuthResultCode code = deskhub::AuthResultCode::Accepted;
-    const bool ok = QuerySources(NetAddr{kLoopbackIp, port}, out, std::string(), &code);
+    const bool ok = QuerySources(NetAddr{kLoopbackIp, port}, out, &code);
     responder.join();
 
     Check(!ok, "the query fails rather than trusting whatever answered");

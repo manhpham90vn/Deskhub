@@ -26,8 +26,7 @@ public:
     }
 
     bool Start(const std::vector<deskhub::media::ShareSource>& sources, uint16_t port,
-        uint32_t fps = 30, uint32_t maxDim = 1920, const std::string& passcode = kTestPasscode,
-        bool allowInput = true, bool audio = false);
+        uint32_t fps = 30, uint32_t maxDim = 1920, bool allowInput = true, bool audio = false);
 
     void Stop() {
         StopTone();

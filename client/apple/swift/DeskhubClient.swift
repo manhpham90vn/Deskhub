@@ -21,10 +21,6 @@ nonisolated enum DeskhubClient {
         buffered(320) { dh_host_title(address, width, height, $0, $1) }
     }
 
-    static func passcodeDisplay(_ passcode: String) -> String {
-        buffered(32) { dh_passcode_display(passcode, $0, $1) }
-    }
-
     static func zoomLabel(_ zoom: Double) -> String {
         buffered(32) { dh_zoom_label(zoom, $0, $1) }
     }
@@ -121,23 +117,11 @@ nonisolated enum DeskhubClient {
         Int(dh_max_transfer_files())
     }
 
-    static var passcodeDigits: Int {
-        Int(dh_passcode_digits())
-    }
-
-    static func isValidPasscode(_ passcode: String) -> Bool {
-        dh_is_valid_passcode(passcode)
-    }
-
-    static func passcodeInput(_ typed: String) -> String {
-        String(typed.filter(\.isASCII).filter(\.isNumber).prefix(passcodeDigits))
-    }
-
-    static func listSources(address: String, passcode: String) -> HostQuery? {
+    static func listSources(address: String) -> HostQuery? {
         var buf = [DHSourceInfo](repeating: DHSourceInfo(), count: Int(dh_max_sources()))
         var caps = DHHostCaps()
         let count = buf.withUnsafeMutableBufferPointer { ptr in
-            dh_list_sources(address, ptr.baseAddress, Int32(ptr.count), passcode, &caps)
+            dh_list_sources(address, ptr.baseAddress, Int32(ptr.count), &caps)
         }
         guard count >= 0 else { return nil }
         let sources = buf.prefix(Int(count)).map { info in

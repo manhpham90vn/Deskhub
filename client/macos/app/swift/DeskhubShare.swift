@@ -15,7 +15,6 @@ struct ShareOptions: Sendable {
     let maxDim: UInt32
     let port: UInt16
     let allowInput: Bool
-    let passcode: String
     var terminal: Bool = false
     var files: Bool = false
 }
@@ -94,8 +93,7 @@ nonisolated enum DeskhubShare {
         return raw.withUnsafeMutableBufferPointer { ptr in
             dh_share_start(
                 ptr.baseAddress, Int32(ptr.count), options.fps, options.bitrateMbps,
-                options.maxDim, options.port, options.allowInput, options.passcode,
-                options.terminal, options.files
+                options.maxDim, options.port, options.allowInput, options.terminal, options.files
             )
         }
     }

@@ -831,7 +831,6 @@ void TestViewerTrustsThenRunsAShell() {
     deskhubp::TerminalViewerConfig viewerConfig;
     viewerConfig.host = NetAddr{0x7F000001u, uint16_t(kTestPort + 1)};
     viewerConfig.hostLabel = "deskhub-test";
-    viewerConfig.passcode = kTestPasscode;
     viewerConfig.clientName = "shared-viewer";
     viewerConfig.size = deskhub::TermSize{80, 24};
     const auto clientKey = deskhubp::LoadOrCreateClientIdentity();

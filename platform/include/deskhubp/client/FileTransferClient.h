@@ -32,7 +32,6 @@ enum class FileTransferClientState : uint8_t {
 struct FileTransferClientConfig {
     NetAddr host{};
     std::string hostLabel{};
-    std::string passcode{};
     std::string clientName{};
     std::string clientIdentityName{};
     std::vector<std::filesystem::path> files{};

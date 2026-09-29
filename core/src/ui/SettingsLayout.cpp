@@ -30,8 +30,6 @@ constexpr SettingsEntry kDesktopLayout[] = {
     Setting(SettingField::Bitrate, kBitrateLabel),
     Setting(SettingField::Quality, kQualityLabel),
     Section(kSettingsSectionSecurity),
-    Setting(SettingField::Passcode, kPasscodeLabel),
-    Hint(kPasscodeHint),
     Setting(SettingField::AllowInput, kAllowControlLabel),
     Section(kSettingsSectionSession),
     Setting(SettingField::ShareAudio, kShareAudioLabel),
@@ -73,7 +71,6 @@ bool* SettingFlag(UiSettings& settings, SettingField field) {
         case SettingField::Fps:
         case SettingField::Bitrate:
         case SettingField::Quality:
-        case SettingField::Passcode:
         case SettingField::TransferFolder:
         case SettingField::Permissions:
         case SettingField::Port:

@@ -307,7 +307,6 @@ private:
         deskhubp::TerminalViewerConfig config;
         config.host = host;
         config.hostLabel = ui::AddressHost(launch.address);
-        config.passcode = launch.passcode;
         config.clientName = launch.clientName;
         config.size = CellsFor(kInitialGridW, kInitialGridH);
         config.deferOpen = true;

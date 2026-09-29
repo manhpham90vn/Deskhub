@@ -127,7 +127,7 @@ std::string ReadPrivateKey(std::string_view fileName) {
 int ReadPassphrase(char* output, int capacity, int, void* user) {
     const auto* secret = static_cast<const std::string*>(user);
     if (!secret || secret->empty() || secret->size() > size_t(capacity)) return 0;
-    std::memcpy(output, secret->data(), secret->size());
+    std::copy(secret->begin(), secret->end(), output);
     return int(secret->size());
 }
 
@@ -172,8 +172,7 @@ PkeyPtr ParsePrivateKey(std::string_view pem, std::string_view passphrase) {
                 CRYPTO_memcmp(publicKey.data(), decoded.public_key, publicKey.size()) != 0)
                 return nullptr;
             PkeyPtr key(EVP_PKEY_new());
-            if (!key || EVP_PKEY_assign_EC_KEY(key.get(), ec.get()) != 1) return nullptr;
-            ec.release();
+            if (!key || EVP_PKEY_set1_EC_KEY(key.get(), ec.get()) != 1) return nullptr;
             return key;
         };
         PkeyPtr key = build();

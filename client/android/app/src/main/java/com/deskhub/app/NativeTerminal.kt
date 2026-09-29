@@ -76,7 +76,6 @@ object NativeTerminal {
 
     private external fun nativeOpen(
         addr: String,
-        passcode: String,
         cols: Int,
         rows: Int,
     ): Boolean
@@ -126,10 +125,9 @@ object NativeTerminal {
 
     fun open(
         addr: String,
-        passcode: String,
         cols: Int,
         rows: Int,
-    ): Boolean = nativeOpen(addr, passcode, cols, rows)
+    ): Boolean = nativeOpen(addr, cols, rows)
 
     fun stop() = nativeStop()
 

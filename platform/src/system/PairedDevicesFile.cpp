@@ -75,18 +75,9 @@ uint64_t PairedDevicesGeneration() {
     return Generation().load(std::memory_order_acquire);
 }
 
-deskhub::PairedDevices LoadPairedDevices() {
-    const std::lock_guard<std::mutex> lock(PairedDevicesMutex());
-    return LoadPairedDevicesLocked().value_or(deskhub::PairedDevices{});
-}
-
 std::optional<deskhub::PairedDevices> TryLoadPairedDevices() {
     const std::lock_guard<std::mutex> lock(PairedDevicesMutex());
     return LoadPairedDevicesLocked();
-}
-
-deskhub::PairVerdict CheckPairedDevice(const deskhub::Fingerprint& fingerprint) {
-    return LoadPairedDevices().Check(fingerprint);
 }
 
 bool RememberPairedDevice(const deskhub::Fingerprint& fingerprint, std::string_view name,

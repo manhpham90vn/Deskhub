@@ -10,7 +10,6 @@ class TerminalHost;
 
 struct TerminalLaunch {
     std::string address{};
-    std::string passcode{};
     std::string clientName{};
 };
 

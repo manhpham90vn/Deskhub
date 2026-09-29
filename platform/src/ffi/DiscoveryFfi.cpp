@@ -96,7 +96,6 @@ constexpr FieldPair kFieldPairs[] = {
     FieldPair{DHSettingFps, ui::SettingField::Fps},
     FieldPair{DHSettingBitrate, ui::SettingField::Bitrate},
     FieldPair{DHSettingQuality, ui::SettingField::Quality},
-    FieldPair{DHSettingPasscode, ui::SettingField::Passcode},
     FieldPair{DHSettingAllowInput, ui::SettingField::AllowInput},
     FieldPair{DHSettingShareAudio, ui::SettingField::ShareAudio},
     FieldPair{DHSettingTransferFolder, ui::SettingField::TransferFolder},
@@ -128,18 +127,11 @@ static_assert(FfiSettingsLayoutMirrorsCore(),
 
 extern "C" {
 
-void dh_recent_touch(const char* address, const char* passcode) {
+void dh_recent_touch(const char* address) {
     if (!address || !*address) return;
     std::lock_guard<std::mutex> lk(g_mutex);
-    ui::TouchRecentDevice(Recent(), address, int64_t(std::time(nullptr)),
-        passcode ? passcode : "");
+    ui::TouchRecentDevice(Recent(), address, int64_t(std::time(nullptr)));
     SaveRecent();
-}
-
-int dh_recent_passcode(const char* address, char* out, int capacity) {
-    if (!address || !out || capacity <= 0) return 0;
-    std::lock_guard<std::mutex> lk(g_mutex);
-    return FillText(out, capacity, ui::PasscodeForDevice(Recent(), address));
 }
 
 int dh_settings_layout(DHSettingsEntry* out, int capacity) {
@@ -169,12 +161,11 @@ DHUiSettings dh_settings_load(void) {
     out.port = loaded.port;
     out.allowInput = loaded.allowInput;
     out.clientControl = loaded.clientControl;
-    deskhubp::CopyToBuf(out.passcode, sizeof(out.passcode), loaded.passcode);
     return out;
 }
 
 void dh_settings_save(uint32_t fps, uint32_t bitrate_mbps, uint32_t max_dim, uint32_t port,
-    bool allow_input, bool client_control, const char* passcode) {
+    bool allow_input, bool client_control) {
     ui::UiSettings out = deskhubp::LoadUiSettings();
     out.fps = fps;
     out.bitrateMbps = bitrate_mbps;
@@ -182,7 +173,6 @@ void dh_settings_save(uint32_t fps, uint32_t bitrate_mbps, uint32_t max_dim, uin
     out.port = port;
     out.allowInput = allow_input;
     out.clientControl = client_control;
-    if (passcode && deskhub::IsValidPasscode(passcode)) out.passcode = passcode;
     deskhubp::SaveUiSettings(out);
 }
 
@@ -194,8 +184,6 @@ int dh_device_rows(DHDeviceRow* out, int capacity) {
     for (int i = 0; i < count; ++i) {
         const ui::DeviceRow& row = rows[size_t(i)];
         deskhubp::CopyToBuf(out[i].addr, sizeof(out[i].addr), row.addr);
-        deskhubp::CopyToBuf(out[i].passcode, sizeof(out[i].passcode),
-            ui::PasscodeForDevice(Recent(), row.addr));
         deskhubp::CopyToBuf(out[i].origin, sizeof(out[i].origin),
             ui::DeviceOriginLabel(row.origin));
         deskhubp::CopyToBuf(out[i].status, sizeof(out[i].status), "-");
@@ -343,16 +331,11 @@ int dh_idle_host_status(uint16_t port, char* out, int capacity) {
     return FillText(out, capacity, ui::UdpPortLine(port) + ".");
 }
 
-int dh_sharing_status(uint16_t port, const char* passcode, bool allow_input, bool screen,
-    bool terminal, bool files, char* out, int capacity) {
+int dh_sharing_status(uint16_t port, bool allow_input, bool screen, bool terminal, bool files,
+    char* out, int capacity) {
     std::string text = ui::ShareSummaryLine(screen, terminal, files, port);
-    text += std::string("\n") + ui::PasscodeShareNote(passcode ? passcode : "");
     if (screen && !allow_input) text += std::string("\n") + ui::kViewOnlyNote;
     return FillText(out, capacity, text);
-}
-
-int dh_passcode_display(const char* passcode, char* out, int capacity) {
-    return FillText(out, capacity, ui::PasscodeDisplay(passcode ? passcode : ""));
 }
 
 int dh_paired_devices(DHPairedDevice* out, int capacity) {

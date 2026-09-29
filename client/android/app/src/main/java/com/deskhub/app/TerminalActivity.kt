@@ -68,14 +68,13 @@ class TerminalActivity : ComponentActivity() {
         }
 
         val addr = intent.getStringExtra("addr").orEmpty()
-        val passcode = intent.getStringExtra("passcode").orEmpty()
 
         setContent {
             MaterialTheme(colorScheme = darkColorScheme()) {
                 var attempt by remember { mutableIntStateOf(0) }
                 val opened =
                     remember(attempt) {
-                        NativeTerminal.open(addr, passcode, DEFAULT_COLS, DEFAULT_ROWS)
+                        NativeTerminal.open(addr, DEFAULT_COLS, DEFAULT_ROWS)
                     }
                 TerminalScreen(
                     address = addr,

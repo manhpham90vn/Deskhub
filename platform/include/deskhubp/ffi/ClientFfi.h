@@ -102,10 +102,6 @@ typedef enum {
     DHStrSessionEnded = 18,
     DHStrShareStartFailed = 19,
     DHStrScreenRecordingRequired = 20,
-    DHStrClientPasscodePrompt = 21,
-    DHStrClientPasscodeHint = 22,
-    DHStrPasscodeInvalid = 23,
-    DHStrPasscodeLabel = 24,
     DHStrSidebarHost = 29,
     DHStrSidebarClient = 30,
     DHStrSidebarSettings = 31,
@@ -115,7 +111,6 @@ typedef enum {
     DHStrProjectLinkLabel = 37,
     DHStrRequestControlLabel = 39,
     DHStrClientIpPlaceholder = 40,
-    DHStrConnectPromptTitle = 41,
     DHStrNoDisplayTicked = 43,
     DHStrShareClampWarning = 46,
     DHStrShareStateOn = 47,
@@ -138,7 +133,6 @@ typedef enum {
     DHStrTrayQuit = 69,
     DHStrBindNotConnectedNote = 70,
     DHStrSettingsSectionConnection = 72,
-    DHStrSettingsSectionSecurity = 73,
     DHStrSettingsSectionSession = 74,
     DHStrKeepAwakeLabel = 76,
     DHStrSidebarDevices = 80,
@@ -160,7 +154,6 @@ typedef enum {
     DHStrTerminalExtraKeysHint = 108,
     DHStrPickSourcesHint = 109,
     DHStrPairedForgetNote = 110,
-    DHStrPasscodeHint = 112,
     DHStrDevicesHeading = 113,
     DHStrDeviceColumnWhere = 114,
     DHStrDeviceNameLabel = 115,
@@ -193,9 +186,6 @@ typedef enum {
     DHStrShellPickerNew = 161,
     DHStrShellPickerClose = 162,
     DHStrShellPickerCloseAsk = 163,
-    DHStrPasscodeShareHeading = 164,
-    DHStrCopyPasscodeAction = 166,
-    DHStrPasscodeCopied = 167,
     DHStrReceivingFilesState = 168,
     DHStrMobileTakesFilesNote = 169,
     DHStrOpenFolderAction = 170,
@@ -227,7 +217,7 @@ typedef enum {
     DHThemePanelIdle = 22,
     DHThemePanelBusy = 23,
     DHThemePanelLive = 24,
-    DHThemePasscodeCard = 25,
+    DHThemeInfoCard = 25,
 } DHThemeColor;
 
 const char* dh_string(DHStringId id);
@@ -246,12 +236,7 @@ bool dh_is_escape_vk(int32_t vk);
 
 bool dh_parse_address(const char* address);
 
-int dh_list_sources(const char* address, DHSourceInfo* out, int capacity, const char* passcode,
-    DHHostCaps* out_caps);
-
-bool dh_is_valid_passcode(const char* passcode);
-
-int dh_passcode_digits(void);
+int dh_list_sources(const char* address, DHSourceInfo* out, int capacity, DHHostCaps* out_caps);
 
 int dh_max_sources(void);
 

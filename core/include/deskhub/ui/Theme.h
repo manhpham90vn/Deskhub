@@ -37,7 +37,7 @@ enum class ThemeColor : uint8_t {
     PanelIdle,
     PanelBusy,
     PanelLive,
-    PasscodeCard,
+    InfoCard,
     Count,
 };
 

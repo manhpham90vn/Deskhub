@@ -5,12 +5,12 @@ import Observation
 final class RemoteTerminalFeed: TerminalFeed {
     private var handle: OpaquePointer?
 
-    init?(address: String, passcode: String, cols: UInt16, rows: UInt16, picker: Bool = true) {
+    init?(address: String, cols: UInt16, rows: UInt16, picker: Bool = true) {
         var callbacks = DHTermCallbacks()
         callbacks.onTrustAsked = { _, _, _ in }
         let opened = picker
-            ? dh_term_open_deferred(address, passcode, cols, rows, &callbacks)
-            : dh_term_open(address, passcode, cols, rows, &callbacks)
+            ? dh_term_open_deferred(address, cols, rows, &callbacks)
+            : dh_term_open(address, cols, rows, &callbacks)
         guard let opened else { return nil }
         handle = opened
     }
@@ -109,11 +109,9 @@ final class TerminalModel {
     var latchAlt = false
     private(set) var scrollOffset = 0
 
-    func open(address: String, passcode: String, cols: UInt16 = 100, rows: UInt16 = 30) -> Bool {
+    func open(address: String, cols: UInt16 = 100, rows: UInt16 = 30) -> Bool {
         stop()
-        guard let opened = RemoteTerminalFeed(
-            address: address, passcode: passcode, cols: cols, rows: rows
-        ) else {
+        guard let opened = RemoteTerminalFeed(address: address, cols: cols, rows: rows) else {
             return false
         }
         attach(opened)

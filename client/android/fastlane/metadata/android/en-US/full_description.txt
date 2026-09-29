@@ -17,10 +17,10 @@ Deskhub streams the screen of your Windows, macOS or Linux computer to your phon
 • Share this phone's screen the other way round, view-only, so a computer can watch it — with its sound on Android 10 and later
 
 <b>How it works</b>
-Install the free Deskhub app on the computer you want to reach (download from the project page) and start sharing there. Open Deskhub on your phone, tap that computer in the list or type its address, and enter the 4-digit passcode it displays — or, if it is set up without one, wait for the person at the computer to let you in. Once it answers, pick what to open: its screen, a shell, or file transfer. Works on your local network out of the box; for access over the Internet, pair it with Tailscale and connect via your Tailscale IP.
+Install the free Deskhub app on the computer you want to reach (download from the project page) and start sharing there. Open Deskhub on your phone, copy this phone's public key from Devices and add it to the computer's list of allowed keys, then add the computer by its address and host key and connect. Once it answers, pick what to open: its screen, a shell, or file transfer. Works on your local network out of the box; for access over the Internet, pair it with Tailscale and connect via your Tailscale IP.
 
 <b>Good to know</b>
-Every session is encrypted end to end over QUIC/TLS — video, sound, keystrokes, files, clipboard and everything else. A computer you have never connected to before must let you in first: either you prove you know its 4-digit passcode, or the person sitting at it approves your phone. After that your phone is a paired device it recognises, and it can be revoked from the computer at any time. There are no accounts and no servers of ours: your phone talks only to your own computer.
+Every session is encrypted end to end over QUIC/TLS — video, sound, keystrokes, files, clipboard and everything else. Access is key-based: the computer only lets in a phone whose public key its owner has added, and your phone only talks to a computer whose host key you have pinned. Nothing is approved over the network, and a key can be revoked from the computer at any time. There are no accounts and no servers of ours: your phone talks only to your own computer.
 
 Sharing this phone's sound needs the permission Android labels <i>Microphone</i>, because that is what its playback-capture API is gated behind. Deskhub never records a microphone.
 

@@ -26,7 +26,6 @@
 namespace {
 
 constexpr uint16_t kLinkTestPort = 47845;
-constexpr const char* kLinkPasscode = "0417";
 
 bool WaitUntil(const std::function<bool()>& done, int millis) {
     for (int i = 0; i < millis; ++i) {
@@ -106,12 +105,11 @@ struct LinkHostRig {
     }
 };
 
-deskhubp::HostLinkConfig LinkConfig(const char* passcode) {
+deskhubp::HostLinkConfig LinkConfig() {
     deskhubp::HostLinkConfig config;
     const std::string endpoint = std::string("127.0.0.1:") + std::to_string(kLinkTestPort);
     ParseNetAddr(endpoint, config.host);
     config.hostLabel = endpoint;
-    config.passcode = passcode;
     config.clientName = "link-test-client";
     config.authTimeoutMs = 5000;
     return config;
@@ -122,7 +120,7 @@ void TestALinkAdmitsOnceAndRoutesByChannel() {
     const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity("link-test-host");
     LinkHostRig host;
     Check(host.Start(identity), "the host rig listens");
-    const deskhubp::HostLinkConfig config = LinkConfig(kLinkPasscode);
+    const deskhubp::HostLinkConfig config = LinkConfig();
     Check(deskhubp::RememberTrustedHost(config.hostLabel, "127.0.0.1",
               identity.fingerprint, NowUnixSeconds()),
         "the host key is pinned before connecting");
@@ -145,7 +143,7 @@ void TestALinkAdmitsOnceAndRoutesByChannel() {
               10000),
         "the link is admitted inside the deadline");
     Check(readyCalls.load(std::memory_order_relaxed) == 1, "and says so exactly once");
-    Check(deskhubp::CheckTrustedHost(LinkConfig(kLinkPasscode).hostLabel, identity.fingerprint) ==
+    Check(deskhubp::CheckTrustedHost(LinkConfig().hostLabel, identity.fingerprint) ==
               deskhub::TrustVerdict::Trusted,
         "the configured host key remains pinned");
 
@@ -170,7 +168,7 @@ void TestALinkRejectsUnknownAndChangedHostKeys() {
     LinkHostRig host;
     Check(host.Start(identity), "the host rig listens");
 
-    deskhubp::HostLinkConfig config = LinkConfig(kLinkPasscode);
+    deskhubp::HostLinkConfig config = LinkConfig();
     deskhubp::ForgetTrustedHost(config.hostLabel);
     deskhubp::HostLink unknown;
     Check(unknown.Start(config, deskhubp::HostLinkCallbacks{}), "an unconfigured link starts");
@@ -208,7 +206,7 @@ void TestALinkReportsARefusal() {
     Check(host.Start(identity), "the host rig listens");
     const auto client = deskhubp::LoadOrCreateClientIdentity();
     Check(deskhubp::ForgetPairedDevice(client.fingerprint), "the client key is revoked");
-    const auto config = LinkConfig("");
+    const auto config = LinkConfig();
     Check(deskhubp::RememberTrustedHost(config.hostLabel, "127.0.0.1",
               identity.fingerprint, NowUnixSeconds()),
         "the host key is pinned separately");
@@ -253,7 +251,7 @@ void TestALinkUsesTheSelectedClientIdentity() {
     Check(deskhubp::ForgetPairedDevice(fallback.fingerprint),
         "the default key is not authorized for this connection");
 
-    auto config = LinkConfig("");
+    auto config = LinkConfig();
     Check(deskhubp::RememberTrustedHostProfile(config.hostLabel, "selected-key-host",
               identity.fingerprint, "phone", NowUnixSeconds()),
         "the host profile pins its key and selects the phone identity");
@@ -275,7 +273,7 @@ void TestALinkRecoversAndSaysItResumed() {
     auto host = std::make_unique<LinkHostRig>();
     Check(host->Start(identity), "the host rig listens");
 
-    deskhubp::HostLinkConfig config = LinkConfig(kLinkPasscode);
+    deskhubp::HostLinkConfig config = LinkConfig();
     config.recoverLink = true;
     config.recoverGraceUs = uint64_t{30} * 1000 * 1000;
 
@@ -312,7 +310,7 @@ void TestTheLinkPingsOnItsOwn() {
     Check(host.Start(identity), "the host rig listens");
 
     deskhubp::HostLink link;
-    Check(link.Start(LinkConfig(kLinkPasscode), deskhubp::HostLinkCallbacks{}), "the link starts");
+    Check(link.Start(LinkConfig(), deskhubp::HostLinkCallbacks{}), "the link starts");
     Check(WaitUntil([&host] { return host.pongsSent.load(std::memory_order_relaxed) >= 2; },
               10000),
         "pings keep arriving and the host answers each one");
@@ -327,7 +325,7 @@ void TestARequestedRedialResumes() {
     LinkHostRig host;
     Check(host.Start(identity), "the host rig listens");
 
-    deskhubp::HostLinkConfig config = LinkConfig(kLinkPasscode);
+    deskhubp::HostLinkConfig config = LinkConfig();
     config.recoverLink = true;
     config.recoverGraceUs = uint64_t{30} * 1000 * 1000;
 
@@ -361,7 +359,7 @@ void TestAHostThatStopsAnsweringPingsReadsAsLost() {
     LinkHostRig host;
     Check(host.Start(identity), "the host rig listens");
 
-    deskhubp::HostLinkConfig config = LinkConfig(kLinkPasscode);
+    deskhubp::HostLinkConfig config = LinkConfig();
     config.recoverLink = true;
     config.recoverGraceUs = uint64_t{30} * 1000 * 1000;
 

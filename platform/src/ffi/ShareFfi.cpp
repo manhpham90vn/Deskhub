@@ -115,8 +115,7 @@ int dh_share_list_sources(DHShareSource* out, int capacity) {
 }
 
 bool dh_share_start(const DHShareSource* sources, int count, uint32_t fps, uint32_t bitrate_mbps,
-    uint32_t max_dim, uint16_t port, bool allow_input, const char* passcode, bool terminal,
-    bool files) {
+    uint32_t max_dim, uint16_t port, bool allow_input, bool terminal, bool files) {
     if ((!sources || count <= 0) && !terminal && !files) return false;
 
     std::vector<ShareSource> list;
@@ -133,10 +132,6 @@ bool dh_share_start(const DHShareSource* sources, int count, uint32_t fps, uint3
     opt.allowInput = allow_input;
     opt.terminal = terminal;
     opt.files = files;
-    const std::string typedPasscode = passcode ? passcode : "";
-    opt.passcode = typedPasscode.empty() || deskhub::IsValidPasscode(typedPasscode)
-                       ? typedPasscode
-                       : deskhubp::HostPasscode();
     std::filesystem::path transferDir;
     {
         const deskhub::ui::UiSettings stored = deskhubp::LoadUiSettings();

@@ -38,10 +38,6 @@ final class ConnectModel {
         didSet { if port != oldValue { authed = nil } }
     }
 
-    var passcode: String = DeskhubDiscovery.passcode(for: ConnectModel.lastAddress) {
-        didSet { if passcode != oldValue { authed = nil } }
-    }
-
     var deviceName: String = ConnectModel.initialDeviceName
     private(set) var isConnecting = false
     var connectError = ""
@@ -52,10 +48,6 @@ final class ConnectModel {
     var canOpenDesktop: Bool { !(authed?.sources.isEmpty ?? true) }
     var canOpenShell: Bool { authed?.caps.terminal ?? false }
     var canOpenFiles: Bool { authed?.caps.files ?? false }
-
-    var acceptedPasscode: String {
-        DeskhubClient.isValidPasscode(passcode) ? passcode : ""
-    }
 
     func saveDeviceName() {
         deviceName = deviceName.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -72,10 +64,6 @@ final class ConnectModel {
                 + " " + DeskhubClient.string(DHStrInvalidAddressHint)
             return nil
         }
-        guard passcode.isEmpty || DeskhubClient.isValidPasscode(passcode) else {
-            connectError = DeskhubClient.string(DHStrPasscodeInvalid)
-            return nil
-        }
         address = DeskhubClient.addressHost(accepted)
         port = DeskhubClient.addressPortText(accepted)
         acceptedAddress = accepted
@@ -89,10 +77,9 @@ final class ConnectModel {
         let mine = attempt
         authed = nil
         guard let accepted = acceptAddress() else { return nil }
-        let code = acceptedPasscode
         isConnecting = true
         let found = await Task.detached {
-            DeskhubClient.listSources(address: accepted, passcode: code)
+            DeskhubClient.listSources(address: accepted)
         }.value
         guard mine == attempt else { return nil }
         isConnecting = false

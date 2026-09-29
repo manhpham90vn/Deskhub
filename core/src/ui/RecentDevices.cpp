@@ -80,22 +80,13 @@ std::string SerializeRecentDevices(const std::vector<RecentDevice>& devices) {
     return out;
 }
 
-void TouchRecentDevice(std::vector<RecentDevice>& devices, std::string_view addr,
-    int64_t nowUnix, std::string_view) {
+void TouchRecentDevice(std::vector<RecentDevice>& devices, std::string_view addr, int64_t nowUnix) {
     const std::string trimmed = TrimAscii(addr);
     if (trimmed.empty()) return;
 
     RemoveRecentDevice(devices, trimmed);
-    devices.insert(devices.begin(), RecentDevice{trimmed, nowUnix, {}});
+    devices.insert(devices.begin(), RecentDevice{trimmed, nowUnix});
     if (devices.size() > kMaxRecentDevices) devices.resize(kMaxRecentDevices);
-}
-
-std::string PasscodeForDevice(const std::vector<RecentDevice>& devices, std::string_view addr) {
-    const std::string wanted = NormalizedDeviceAddr(addr);
-    if (wanted.empty()) return {};
-    for (const RecentDevice& d : devices)
-        if (NormalizedDeviceAddr(d.addr) == wanted) return d.passcode;
-    return {};
 }
 
 void RemoveRecentDevice(std::vector<RecentDevice>& devices, std::string_view addr) {

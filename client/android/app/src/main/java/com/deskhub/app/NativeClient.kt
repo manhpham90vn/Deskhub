@@ -41,10 +41,6 @@ object NativeClient {
     const val STR_QUERYING_SOURCES = 12
     const val STR_INVALID_ADDRESS_HINT = 17
     const val STR_SESSION_ENDED = 18
-    const val STR_CLIENT_PASSCODE_PROMPT = 21
-    const val STR_CLIENT_PASSCODE_HINT = 22
-    const val STR_PASSCODE_INVALID = 23
-    const val STR_CONNECT_PROMPT_TITLE = 41
     const val STR_PROJECT_URL = 36
     const val STR_PROJECT_LINK_LABEL = 37
     const val STR_CLIENT_HEADING = 33
@@ -61,7 +57,6 @@ object NativeClient {
     const val STR_NOTHING_SHARED = 10
     const val STR_STOP_SHARING = 11
     const val STR_SHARE_START_FAILED = 19
-    const val STR_PASSCODE_LABEL = 24
     const val STR_SHARE_STATE_ON = 47
     const val STR_SHARE_STATE_OFF = 48
     const val STR_RECEIVING_FILES_STATE = 168
@@ -78,7 +73,6 @@ object NativeClient {
     const val THEME_ONLINE = 10
     const val THEME_OFFLINE = 11
     const val THEME_PAGE = 15
-    const val THEME_PASSCODE_CARD = 25
     const val STR_CLIENT_SETTINGS_HINT = 58
     const val STR_REFRESH_NOW = 51
     const val STR_UDP_PORT_LABEL = 59
@@ -89,9 +83,7 @@ object NativeClient {
     const val STR_PLAY_AUDIO_LABEL = 131
     const val STR_BIND_NOT_CONNECTED = 70
     const val STR_SECTION_CONNECTION = 72
-    const val STR_SECTION_SECURITY = 73
     const val STR_SECTION_SESSION = 74
-    const val STR_PASSCODE_HINT = 112
     const val STR_KEEP_AWAKE_LABEL = 76
     const val STR_SIDEBAR_DEVICES = 80
     const val STR_PAIRED_HEADING = 81
@@ -123,8 +115,6 @@ object NativeClient {
     const val STR_SHELL_PICKER_NEW = 161
     const val STR_SHELL_PICKER_CLOSE = 162
     const val STR_SHELL_PICKER_CLOSE_ASK = 163
-    const val STR_PASSCODE_SHARE_HEADING = 164
-    const val STR_COPY_PASSCODE_ACTION = 166
 
     private external fun nativeString(id: Int): String
 
@@ -220,21 +210,11 @@ object NativeClient {
 
     private external fun nativeListSources(
         addr: String,
-        passcode: String,
         capsOut: BooleanArray,
     ): Array<Source>?
 
-    private external fun nativeIsValidPasscode(passcode: String): Boolean
-
-    private external fun nativePasscodeDigits(): Int
-
-    fun isValidPasscode(passcode: String): Boolean = nativeIsValidPasscode(passcode)
-
-    fun passcodeDigits(): Int = nativePasscodeDigits()
-
     data class DeviceRow(
         val addr: String,
-        val passcode: String,
         val origin: String,
         val status: String,
         val ping: String,
@@ -327,7 +307,6 @@ object NativeClient {
 
     private external fun nativeSendStart(
         addr: String,
-        passcode: String,
         name: String,
         paths: Array<String>,
     ): Long
@@ -346,10 +325,9 @@ object NativeClient {
 
     fun sendStart(
         addr: String,
-        passcode: String,
         name: String,
         paths: List<String>,
-    ): Long = nativeSendStart(addr, passcode, name, paths.toTypedArray())
+    ): Long = nativeSendStart(addr, name, paths.toTypedArray())
 
     fun sendSnapshot(handle: Long): Transfer = nativeSendSnapshot(handle) ?: Transfer()
 
@@ -387,28 +365,17 @@ object NativeClient {
 
     private external fun nativeDeviceRows(): Array<DeviceRow>
 
-    private external fun nativeRecentTouch(
-        addr: String,
-        passcode: String,
-    )
-
-    private external fun nativeRecentPasscode(addr: String): String
+    private external fun nativeRecentTouch(addr: String)
 
     suspend fun deviceRows(): List<DeviceRow> = withContext(Dispatchers.IO) { nativeDeviceRows().toList() }
 
-    suspend fun recentTouch(
-        addr: String,
-        passcode: String,
-    ) = withContext(Dispatchers.IO) { nativeRecentTouch(addr, passcode) }
-
-    fun recentPasscode(addr: String): String = nativeRecentPasscode(addr)
+    suspend fun recentTouch(addr: String) = withContext(Dispatchers.IO) { nativeRecentTouch(addr) }
 
     external fun nativeStart(
         addr: String,
         sourceId: Int,
         screenW: Int,
         screenH: Int,
-        passcode: String,
     ): Long
 
     external fun nativeStop(handle: Long)
@@ -802,13 +769,10 @@ object NativeClient {
         val files: Boolean,
     )
 
-    suspend fun queryHost(
-        addr: String,
-        passcode: String,
-    ): HostQuery? =
+    suspend fun queryHost(addr: String): HostQuery? =
         withContext(Dispatchers.IO) {
             val caps = BooleanArray(2)
-            val sources = nativeListSources(addr, passcode, caps) ?: return@withContext null
+            val sources = nativeListSources(addr, caps) ?: return@withContext null
             HostQuery(sources.toList(), caps[0], caps[1])
         }
 }

@@ -20,7 +20,6 @@ enum class SettingField : uint8_t {
     Fps,
     Bitrate,
     Quality,
-    Passcode,
     AllowInput,
     ShareAudio,
     TransferFolder,

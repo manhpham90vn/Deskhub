@@ -51,7 +51,7 @@ constexpr std::array<ThemeEntry, size_t(ThemeColor::Count)> kTheme{{
     Pair(ThemeColor::PanelIdle, 0xf3f4f6, 0x1f2937),
     Pair(ThemeColor::PanelBusy, 0xebf3ff, 0x172554),
     Pair(ThemeColor::PanelLive, 0xe8faef, 0x052e16),
-    Pair(ThemeColor::PasscodeCard, 0xeff4ff, 0x111827),
+    Pair(ThemeColor::InfoCard, 0xeff4ff, 0x111827),
 }};
 
 constexpr bool EveryColorSitsAtItsOwnIndex() {

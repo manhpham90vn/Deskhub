@@ -8,7 +8,6 @@ import SwiftUI
 
 struct TerminalRequest: Codable, Hashable {
     var address: String
-    var passcode: String
 }
 
 private var termCellSize: CGSize {

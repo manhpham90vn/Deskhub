@@ -86,7 +86,7 @@ ExitCode RunSources(const Command& command) {
     std::vector<deskhub::SourceInfo> sources;
     deskhub::AuthResultCode code = deskhub::AuthResultCode::NotPaired;
     deskhub::HostCaps caps{};
-    if (!QuerySources(server, sources, {}, &code, &caps,
+    if (!QuerySources(server, sources, &code, &caps,
             command.identityName.value_or(""))) {
         PrintError(deskhub::ui::AuthRefusalText(code));
         return ExitCode::Refused;

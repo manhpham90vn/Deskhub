@@ -259,28 +259,28 @@ std::vector<Vector> AllVectors() {
                      m.clientName = "Tablet 01";
                      return BuildAuthStart(out, m);
                  },
-        "0360000000000000000008a1a2a3a4a5a6a7a8095461626c657420303105"});
+        "0360000000000000000008a1a2a3a4a5a6a7a8095461626c657420303106"});
 
     v.push_back({"AUTH_CHALLENGE", [](std::span<uint8_t> out) {
                      AuthChallenge m;
                      m.mode = AuthMode::Signature;
                      return BuildAuthChallenge(out, m);
                  },
-        "03610000000000000501"});
+        "03610000000000000601"});
 
     v.push_back({"AUTH_RESPONSE", [](std::span<uint8_t> out) {
                      AuthResponse m;
                      m.proof = {0xD1, 0xD2, 0xD3, 0xD4, 0xD5};
                      return BuildAuthResponse(out, m);
                  },
-        "0362000000000000050005d1d2d3d4d5"});
+        "0362000000000000060005d1d2d3d4d5"});
 
     v.push_back({"AUTH_RESULT", [](std::span<uint8_t> out) {
                      AuthResult m;
                      m.code = AuthResultCode::NotPaired;
                      return BuildAuthResult(out, m);
                  },
-        "03630000000000000501"});
+        "03630000000000000601"});
 
     v.push_back({"RECORD", [](std::span<uint8_t> out) {
                      uint8_t inner[kMaxDatagram];

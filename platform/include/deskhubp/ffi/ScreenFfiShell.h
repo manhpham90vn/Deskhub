@@ -63,8 +63,7 @@ struct FfiScreenSession {
 
 template <class Session, class Surface>
 Session* StartFfiScreenSession(const char* address, uint8_t sourceId, void* surface,
-    const DHScreenCallbacks* callbacks, uint32_t screenW, uint32_t screenH,
-    const char* passcode = nullptr) {
+    const DHScreenCallbacks* callbacks, uint32_t screenW, uint32_t screenH) {
     NetAddr server;
     if (!ParseScreenAddress(address, server)) return nullptr;
 
@@ -77,7 +76,6 @@ Session* StartFfiScreenSession(const char* address, uint8_t sourceId, void* surf
     cfg.sourceId = sourceId;
     cfg.screenW = screenW;
     cfg.screenH = screenH;
-    cfg.passcode = passcode ? passcode : "";
     cfg.displayName = SessionDeviceName();
     cfg.wantsAudio = LoadUiSettings().playAudio;
     cfg.onParams = [raw](uint32_t width, uint32_t height, uint8_t) {
