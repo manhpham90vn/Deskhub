@@ -28,6 +28,7 @@ ANDROID_SDK="${ANDROID_HOME:-$HOME/Library/Android/sdk}"
 EMULATOR="$ANDROID_SDK/emulator/emulator"
 ADB="$ANDROID_SDK/platform-tools/adb"
 AVDMANAGER="$ANDROID_SDK/cmdline-tools/latest/bin/avdmanager"
+ANDROID_STUDIO_JDK="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
 SERIAL=""
 
 MACOS_BUNDLE=com.deskhub.macos.debug
@@ -66,8 +67,25 @@ sim_udid() {
     xcrun simctl list devices available | grep -F "$1 (" | grep -oE '[0-9A-F-]{36}' | head -1
 }
 
+newest_ios_runtime() {
+    xcrun simctl list runtimes available | grep -oE 'com\.apple\.CoreSimulator\.SimRuntime\.iOS-[0-9-]+' | tail -1
+}
+
+ensure_simulator() {
+    local sim=$1 runtime
+    if sim_udid "$sim" >/dev/null; then
+        return 0
+    fi
+    runtime=$(newest_ios_runtime) ||
+        die "no iOS simulator runtime installed - add one in Xcode (Settings > Components)"
+    echo "== creating simulator $sim"
+    xcrun simctl create "$sim" "$sim" "$runtime" >/dev/null ||
+        die "could not create simulator \"$sim\" - this Xcode has no device type of that name, see: xcrun simctl list devicetypes"
+}
+
 shoot_simulator() {
     local sim=$1 prefix=$2 size=$3 udid index file
+    ensure_simulator "$sim"
     udid=$(sim_udid "$sim") ||
         die "simulator \"$sim\" not found - create it in Xcode (Window > Devices and Simulators)"
     echo "== $sim"
@@ -300,10 +318,20 @@ run_ios() {
     mirror_ios_shots
 }
 
+use_android_studio_jdk() {
+    if [ -n "${JAVA_HOME:-}" ]; then
+        return 0
+    fi
+    [ -x "$ANDROID_STUDIO_JDK/bin/java" ] ||
+        die "JAVA_HOME is not set and Android Studio's JDK is not at $ANDROID_STUDIO_JDK - install a JDK or set JAVA_HOME"
+    export JAVA_HOME="$ANDROID_STUDIO_JDK"
+}
+
 run_android() {
     if [ ! -x "$EMULATOR" ] || [ ! -x "$ADB" ]; then
         die "Android SDK not found at $ANDROID_SDK - run make bootstrap or set ANDROID_HOME"
     fi
+    use_android_studio_jdk
     make build-android
     ensure_avd "$PHONE_AVD" "$PHONE_DEVICE" "$PHONE_IMAGE"
     shoot_emulator "$PHONE_AVD" "$PLAY_IMAGES/phoneScreenshots" "$PHONE_SIZE"
