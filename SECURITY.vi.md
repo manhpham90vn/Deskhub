@@ -192,8 +192,8 @@ fingerprint đã ghim, tên và client key dùng cho host đó) và, trên Linux
 ý nghĩa với phiên desktop của bạn và không được truyền đi). Không có passcode nào được lưu
 ở bất cứ đâu. Trên hệ POSIX, thư mục được tạo với quyền `0700` và mọi file `0600`, được ghi
 atomic; trên Windows, chúng chỉ cho phép tài khoản của bạn, SYSTEM và Administrators truy
-cập. App di động lưu cùng các file đó trong sandbox riêng — trên iOS là trong app group
-container, trên Android là trong internal storage của app. Hãy coi thư mục đó là nội dung
+cập. App di động lưu cùng các file đó trong sandbox riêng — trên iOS là thư mục `.deskhub` bên
+trong app group container, trên Android là trong internal storage của app. Hãy coi thư mục đó là nội dung
 mà mọi tiến trình chạy dưới tài khoản của bạn đều đọc được.
 
 File `authorized_keys` hoặc `known_hosts` không đọc được sẽ không bị suy đoán: trong khi

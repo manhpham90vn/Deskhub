@@ -272,24 +272,17 @@ Windows ポータブル版と Linux app は引き続き単一ファイルであ�
 1. [`VERSION`](../VERSION) を更新する。tag とファイルが一致しない場合、
    `scripts/check-version.sh` が deploy を失敗させる。
 2. 今回の変更が影響するドキュメントを、全言語分、同一の commit で更新する。
-3. `vX.Y.Z` の tag を作成して push する。`.github/workflows/deploy.yml` が全
+3. release notes（後述）を書いて commit する。
+4. `vX.Y.Z` の tag を作成して push する。`.github/workflows/deploy.yml` が全
    プラットフォームを build し、GitHub Release を作成し、iOS を TestFlight へ、macOS
    を notarization へ、Android を Play の internal track へ送る。
 
-**Release notes は、前回の tag から今回の tag までの commit subject から生成される。**
-担当するのは `scripts/changelog.sh` である。ある tag が何を生成するかは手元で確認でき
-る。
-
-```bash
-scripts/changelog.sh v5.0.0     # 引数を省略すると HEAD の tag を使用する
-```
-
-したがって commit subject は利用者が読む文章であり、その先頭に付ける
-conventional-commit の type が、どのセクションに分類されるかを決める。完全な対応表、
-それを上書きする規則、実例は
-[`.claude/skills/commit/SKILL.md`](../.claude/skills/commit/SKILL.md) にある。subject
-を書く前に参照すること。空のセクションは release に含まれず、
-`INCLUDE_INTERNAL=1 scripts/changelog.sh` で省かれた commit を確認できる。
+**Release notes は手書きする。** tag ごとに 1 ファイル、`packaging/release-notes/vX.Y.Z.md`
+で、ファイル名は tag と完全に一致させる。このファイルがそのまま GitHub Release の本文となり、
+その後にインストールガイドとセキュリティモデルを指す固定の footer が続く。冒頭には更新後に
+利用者が行うべきこと（breaking change、再接続の方法）を書き、その後に新機能と修正を書く。
+tag に対応するファイルがない場合、`scripts/check-release-notes.sh` が何も build しないうちに
+deploy を失敗させるので、tag を作る前に commit しておくこと。
 
 ### Package manager
 

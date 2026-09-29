@@ -191,8 +191,8 @@ client key to use) and, on Linux, `portal-restore-token.txt` (the desktop's own 
 the screens you picked, meaningful only to your desktop session and never transmitted).
 No passcode is stored anywhere. On POSIX systems the folder is created `0700` and every
 file `0600`, written atomically; on Windows they are restricted to your user, SYSTEM and
-Administrators. The mobile apps keep the same files inside their own sandbox — on iOS in
-the app group container, on Android in the app's internal storage. Treat that folder as
+Administrators. The mobile apps keep the same files inside their own sandbox — on iOS in a
+`.deskhub` folder inside the app group container, on Android in the app's internal storage. Treat that folder as
 readable by anything running as you.
 
 An `authorized_keys` or `known_hosts` file that cannot be read is not guessed at: while it

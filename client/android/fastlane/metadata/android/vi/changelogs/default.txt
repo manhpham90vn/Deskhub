@@ -1,6 +1,3 @@
-• Âm thanh — nghe được máy tính bạn đang xem phát gì
-• Truyền file hai chiều: gửi sang máy tính, và nhận lại thứ máy tính gửi. Ảnh vào Pictures/Deskhub, video vào Movies/Deskhub, còn lại vào Download/Deskhub, kèm thông báo
-• Điện thoại nhận file ngay từ lúc mở app
-• Kết nối một lần, rồi chọn: màn hình, shell, hay truyền file
-• Có ping trực tiếp và nút Ngắt kết nối; phiên rớt mạng tự nối lại
-• Sửa lỗi và cải thiện độ ổn định
+• Deskhub 7 đăng nhập bằng khoá, giống SSH. Không còn passcode và ghép đôi; 7.x không kết nối được với 6.x, nên hãy cập nhật mọi thiết bị
+• Các lần ghép đôi trước không được giữ lại: cần cho phép lại từng client
+• Để kết nối: sao chép khoá ở Devices → My keys, dán vào máy tính ở Devices → Clients allowed to connect rồi bấm Allow, sau đó nhập địa chỉ máy đó ở đây và bấm Trust and connect

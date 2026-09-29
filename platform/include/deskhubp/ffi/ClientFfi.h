@@ -334,7 +334,7 @@ int dh_view_only_subtitle(const char* statusLine, char* out, int capacity);
 
 int dh_invalid_address_line(const char* address, char* out, int capacity);
 
-void dh_set_data_dir(const char* dir);
+void dh_use_shared_container(const char* container);
 
 void dh_viewer_opened(void);
 

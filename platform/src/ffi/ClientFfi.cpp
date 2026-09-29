@@ -540,8 +540,8 @@ int dh_invalid_address_line(const char* address, char* out, int capacity) {
     return int(std::strlen(out));
 }
 
-void dh_set_data_dir(const char* dir) {
-    deskhubp::SetAppDataDir(dir ? std::string(dir) : std::string());
+void dh_use_shared_container(const char* container) {
+    deskhubp::SetAppDataDirInside(container ? std::string(container) : std::string());
 }
 
 void dh_viewer_opened() {

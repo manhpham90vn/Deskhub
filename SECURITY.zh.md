@@ -162,7 +162,7 @@ fingerprint、名称以及所使用的 client key），以及 Linux 上的
 `portal-restore-token.txt`（桌面针对所选屏幕签发的 token，仅对你的桌面 session 有意义，
 不会被传输）。任何地方都不保存 passcode。在 POSIX 系统上，该文件夹以 `0700` 创建，每个
 文件为 `0600`，并以原子方式写入；在 Windows 上仅限你的用户、SYSTEM 与 Administrators
-访问。移动端 app 将相同的文件保存在自身沙箱中，iOS 上为 app group 容器，Android 上为 app
+访问。移动端 app 将相同的文件保存在自身沙箱中，iOS 上为 app group 容器内的 `.deskhub` 文件夹，Android 上为 app
 的内部存储。请将该文件夹视为以你的身份运行的任何程序均可读取的内容。
 
 无法读取的 `authorized_keys` 或 `known_hosts` 文件不会被猜测：在其无法读取期间，host

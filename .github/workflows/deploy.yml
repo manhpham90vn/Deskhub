@@ -28,6 +28,9 @@ jobs:
       - name: Tag must match VERSION
         run: scripts/check-version.sh
 
+      - name: Tag must have release notes
+        run: scripts/check-release-notes.sh
+
   build-desktop:
     needs: verify-tag
     uses: ./.github/workflows/build-desktop.yml
@@ -75,8 +78,9 @@ jobs:
 
       - name: Write release notes
         run: |
-          scripts/changelog.sh "$GITHUB_REF_NAME" > out/release-notes.md
+          cp "packaging/release-notes/${GITHUB_REF_NAME}.md" out/release-notes.md
           cat >> out/release-notes.md <<'EOF'
+
           ---
 
           📦 **Installing** — every platform, one page: [INSTALL.md](https://github.com/manhpham90vn/Deskhub/blob/main/docs/INSTALL.md).
@@ -85,8 +89,8 @@ jobs:
           The macOS dmg and the Android apk are attached by their own jobs and may show up a few minutes later;
           iOS ships through [TestFlight](https://testflight.apple.com/join/7qY7wgpd).
 
-          🔒 **Before you share a screen** — sessions are encrypted (QUIC/TLS) and admission is a pairing handshake,
-          but that is still a small secret on an open port: use a network you trust or a VPN, and never port-forward
+          🔒 **Before you share a screen** — sessions are encrypted (QUIC/TLS) and a host admits only the client keys
+          you allow, but it is still a service on an open port: use a network you trust or a VPN, and never port-forward
           UDP 47777. Full threat model in [SECURITY.md](https://github.com/manhpham90vn/Deskhub/blob/main/SECURITY.md).
           EOF
 

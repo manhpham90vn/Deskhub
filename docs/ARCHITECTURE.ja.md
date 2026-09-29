@@ -274,7 +274,7 @@ FFI の `dh_list_sources` は host が応答したときにのみそこへ記録
 ## 7. ディスク上のデータ
 
 すべてのデータは利用者の Deskhub フォルダ（`~/.deskhub`、`%USERPROFILE%\.deskhub`、
-iOS では App Group のコンテナ、Android では内部ストレージ。`DESKHUB_CONFIG_DIR` または
+iOS では App Group のコンテナ内の `.deskhub` フォルダ、Android では内部ストレージ。`DESKHUB_CONFIG_DIR` または
 CLI の `--config-dir` で変更できる）に置かれる。`host_key.pem` と `host_cert.pem`（host
 identity）、`client_key.pem` と `client_key.<name>.pem`（client key。Windows では DPAPI
 で保護）、`authorized_keys`（この host が受け入れる client key）、`known_hosts`（信頼
@@ -765,6 +765,13 @@ scaling の 2 つの判定とともに実行する（共有 runner には時間�
   新しい build を動かしたとき、新しい build がその release の許可済み client 一覧を削除し
   （新しい build は廃止したファイルを削除する）、macOS では共有する bundle id のせいで
   実行中の app まで終了させていた。
+- **iOS は Deskhub フォルダを App Group のコンテナ内の一段下に置く**：データフォルダは
+  Deskhub が所有し `0700` に保てるものでなければならないが、コンテナのルートは iOS のもので、
+  iOS はそのモード変更を拒否する。ルートを直接指していたときは、key、`known_hosts`、
+  `authorized_keys` の読み書きがすべて "cannot be read" または "could not be saved" で
+  失敗した。app と broadcast extension はどちらもコンテナを `SetAppDataDirInside` に渡し、
+  これがデスクトップと同じ `.deskhub`（または `.deskhub-dev`）という名前を付け足すので、
+  両者は引き続き同じフォルダを共有する。
 - **macOS は CI ではデスクトップ build、release では署名 build であり、同時に両方を行わ
   ない。** `build-desktop` は push のたびに app を ad-hoc 署名でコンパイルするため、
   build できなくなった Cocoa の変更はその pull request で失敗する。`deploy` は

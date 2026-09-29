@@ -270,7 +270,8 @@ apps no longer touch the list themselves and `dh_recent_touch` is gone. The old
 ## 7. Data on disk
 
 Everything lives in the user's Deskhub folder (`~/.deskhub`,
-`%USERPROFILE%\.deskhub`, the App Group container on iOS, internal storage on Android;
+`%USERPROFILE%\.deskhub`, a `.deskhub` folder inside the App Group container on iOS,
+internal storage on Android;
 `DESKHUB_CONFIG_DIR` or the CLI's `--config-dir` override it): `host_key.pem` +
 `host_cert.pem` (host identity), `client_key.pem` + `client_key.<name>.pem` (client keys,
 DPAPI-protected on Windows), `authorized_keys` (client keys this host admits),
@@ -758,6 +759,13 @@ line.
   on a machine that also has an older release installed deleted that release's allowed
   clients (the new build removes retired files) and, on macOS, quit the running app
   through the shared bundle id.
+- **iOS keeps its Deskhub folder one level inside the App Group container**: the data
+  folder must be one Deskhub can hold at `0700` and own, and the container's root belongs
+  to iOS, which refuses to change its mode. Pointed at the root itself, every key,
+  `known_hosts` and `authorized_keys` read or write failed with "cannot be read" or
+  "could not be saved". The app and the broadcast extension both hand the container to
+  `SetAppDataDirInside`, which appends the same `.deskhub` (or `.deskhub-dev`) name the
+  desktop uses, so they still share one folder.
 - **macOS is a desktop build in CI and a signed one at release, never both at once**:
   `build-desktop` compiles the app ad-hoc-signed on every push, so a Cocoa change that
   no longer builds fails its own pull request; `deploy` reaches the same app through

@@ -1,6 +1,3 @@
-• Sound — hear what the computer you are watching is playing
-• Files both ways: send them to the computer, and take what it sends back. Photos to Pictures/Deskhub, videos to Movies/Deskhub, the rest to Download/Deskhub, with a notification
-• Your phone takes files from the moment the app is open
-• Connect once, then choose: its screen, a shell, or file transfer
-• Live ping and a Disconnect button; a dropped session reattaches itself
-• Stability and streaming fixes
+• Deskhub 7 signs in with keys, like SSH. Passcodes and pairing are gone; 7.x cannot connect to 6.x, so update every device
+• Earlier pairings are not kept: allow each client again
+• To connect: copy your key under Devices → My keys, paste it on the computer under Devices → Clients allowed to connect and press Allow, then type its address here and press Trust and connect

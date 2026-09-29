@@ -247,22 +247,16 @@ Windows 便携版和 Linux app 仍是单文件。
 1. 提升 [`VERSION`](../VERSION)。当 tag 与该文件不一致时，`scripts/check-version.sh` 会
    使 deploy 失败。
 2. 在同一个 commit 中，更新本次改动涉及的文档，包含所有语言版本。
-3. 打 `vX.Y.Z` tag 并 push。`.github/workflows/deploy.yml` 会构建所有平台、创建 GitHub
+3. 编写 release notes（见下文）并提交。
+4. 打 `vX.Y.Z` tag 并 push。`.github/workflows/deploy.yml` 会构建所有平台、创建 GitHub
    Release、将 iOS 发送至 TestFlight、将 macOS 送经 notarization，并将 Android 推送至
    Play 的 internal track。
 
-**Release notes 由上一个 tag 到当前 tag 之间的 commit subject 生成**，由
-`scripts/changelog.sh` 负责。可在本地查看某个 tag 将生成的内容：
-
-```bash
-scripts/changelog.sh v5.0.0     # 不带参数时使用 HEAD 上的 tag
-```
-
-因此 commit subject 是面向用户的内容，其前缀的 conventional-commit type 决定它归入哪一
-节。完整的对应关系、覆盖这些规则的例外情形以及实例，见
-[`.claude/skills/commit/SKILL.md`](../.claude/skills/commit/SKILL.md)，撰写 subject 前
-应先阅读。空的小节不会出现在 release 中，`INCLUDE_INTERNAL=1 scripts/changelog.sh` 可
-查看被略去的 commit。
+**Release notes 为手写**，每个 tag 一个文件：`packaging/release-notes/vX.Y.Z.md`，文件名须与
+tag 完全一致。该文件即 GitHub Release 的正文，其后附一段固定的 footer，指向安装指南与安全
+模型。开头应先写用户更新后必须做的事 —— breaking change、如何重新连接 —— 然后才是新增与
+修复的内容。若 tag 没有对应文件，`scripts/check-release-notes.sh` 会在构建任何东西之前使
+deploy 失败，因此须在打 tag 前提交该文件。
 
 ### Package manager
 

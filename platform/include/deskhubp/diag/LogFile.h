@@ -46,6 +46,11 @@ inline void SetAppDataDir(std::string dir) {
     AppDataDirRef() = std::move(dir);
 }
 
+inline void SetAppDataDirInside(const std::string& sharedContainer) {
+    SetAppDataDir(sharedContainer.empty() ? std::string()
+                                          : sharedContainer + "/" + kAppDataFolderName);
+}
+
 inline std::string LogFileName() {
     const std::time_t now = std::time(nullptr);
     std::tm tm{};

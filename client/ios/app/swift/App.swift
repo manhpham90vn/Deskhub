@@ -4,7 +4,7 @@ import SwiftUI
 struct DeskhubApp: App {
     init() {
         if let container = BroadcastStatus.containerURL?.path {
-            dh_set_data_dir(container)
+            dh_use_shared_container(container)
         }
         NotificationBanners.shared.install()
         if !StartPage.isScreenshotRun {

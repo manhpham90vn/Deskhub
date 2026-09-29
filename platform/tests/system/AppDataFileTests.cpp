@@ -1,6 +1,7 @@
 #include "Tests.h"
 #include "support/TestSupport.h"
 
+#include "deskhubp/diag/LogFile.h"
 #include "deskhubp/system/AppDataFile.h"
 #include "deskhubp/system/AuthorizedKeysFile.h"
 #include "deskhubp/system/ClientIdentity.h"
@@ -89,6 +90,33 @@ void TestConfigDirectoryCanBeSeparateFromLogs() {
     deskhubp::SetAppDataDir(oldAppDir);
     std::error_code error;
     std::filesystem::remove_all(root, error);
+}
+
+void TestSharedContainerGetsItsOwnPrivateFolder() {
+    std::printf("[appdata] a shared container holds the data in a folder of its own...\n");
+    const auto container = UniqueTempDir("deskhub-container-");
+    if (container.empty()) {
+        Check(false, "the shared container test has a unique location");
+        return;
+    }
+    std::filesystem::create_directory(container);
+    const std::string oldAppDir = deskhubp::AppDataDirRef();
+    const std::string oldConfigDir = deskhubp::ConfigDirRef();
+    deskhubp::SetConfigDir("");
+    deskhubp::SetAppDataDirInside(container.string());
+    const auto expected = container / deskhubp::kAppDataFolderName;
+    Check(deskhubp::AppDataDirRef() == expected.string(),
+        "the data folder sits one level inside the container");
+    Check(deskhubp::WriteAppDataFile(kTestFile, "inside") &&
+              deskhubp::AppDataFilePath(kTestFile).parent_path() == expected,
+        "config files land in the private folder, not the container root");
+    deskhubp::SetAppDataDirInside("");
+    Check(deskhubp::AppDataDirRef().empty(), "no container falls back to the default folder");
+
+    deskhubp::SetConfigDir(oldConfigDir);
+    deskhubp::SetAppDataDir(oldAppDir);
+    std::error_code error;
+    std::filesystem::remove_all(container, error);
 }
 
 void TestUnknownSettingsKeysAreIgnored() {
@@ -400,6 +428,7 @@ void RunAppDataFileTests() {
     TestRoundTrip();
     TestMissingFileReadsAsEmpty();
     TestConfigDirectoryCanBeSeparateFromLogs();
+    TestSharedContainerGetsItsOwnPrivateFolder();
     TestUnknownSettingsKeysAreIgnored();
     TestADamagedAuthorizedKeysFileDeniesThenStartsFresh();
     TestAuthorizedClientsAreListedAndForgotten();

@@ -1,8 +1,4 @@
-• Sound — hear what the computer you are watching is playing, in step with the picture
-• Files both ways: send them to the computer, and take what it sends back. Photos and videos go to your photo library, everything else to the Files app, and a banner names what arrived
-• Your iPhone or iPad takes files from the moment the app is open, even while it is sharing its screen
-• Connect once, then choose what to open: its screen, a shell, or file transfer
-• A live connection line with the host's ping and a Disconnect button
-• A session that loses the network now reattaches by itself instead of ending
-• Sharing this device's screen now carries the sound your apps play
-• Stability and streaming fixes
+• Deskhub 7 signs in with keys, the way SSH does. Passcodes and pairing are gone, and a 7.x device cannot connect to a 6.x one, so update every device
+• Earlier pairings are not carried over: allow each client again. Your settings start from their defaults once
+• To connect: on this device open Devices → My keys and press Copy public key beside "default". On the computer, paste it under Devices → Clients allowed to connect, then press Allow. Back here, type the computer's address, check the fingerprint against its host key, and press Trust and connect
+• The device name now lives in Settings and labels your key

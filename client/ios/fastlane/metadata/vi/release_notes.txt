@@ -1,8 +1,4 @@
-• Âm thanh — nghe được máy tính bạn đang xem phát gì, khớp với hình
-• Truyền file hai chiều: gửi sang máy tính, và nhận lại thứ máy tính gửi. Ảnh và video vào thư viện ảnh, mọi thứ khác vào app Files, kèm thông báo cho biết vừa nhận được gì
-• iPhone hay iPad nhận file ngay từ lúc mở app, kể cả khi đang chia sẻ màn hình
-• Kết nối một lần, rồi chọn thứ muốn mở: màn hình, shell, hay truyền file
-• Dòng trạng thái kết nối có ping của máy chủ và nút Ngắt kết nối
-• Phiên bị rớt mạng giờ tự nối lại thay vì kết thúc
-• Chia sẻ màn hình thiết bị này giờ kèm cả âm thanh các app đang phát
-• Sửa lỗi và cải thiện độ ổn định khi stream
+• Deskhub 7 đăng nhập bằng khoá, giống SSH. Không còn passcode và ghép đôi, và thiết bị 7.x không kết nối được với thiết bị 6.x, nên hãy cập nhật mọi thiết bị
+• Các lần ghép đôi trước không được giữ lại: cần cho phép lại từng client. Cài đặt của bạn trở về mặc định một lần
+• Để kết nối: trên thiết bị này mở Devices → My keys và bấm Copy public key cạnh "default". Trên máy tính, dán nó vào Devices → Clients allowed to connect rồi bấm Allow. Quay lại đây, nhập địa chỉ máy tính, so fingerprint với host key của máy đó, rồi bấm Trust and connect
+• Tên thiết bị giờ nằm trong Settings và được dùng làm nhãn cho khoá của bạn

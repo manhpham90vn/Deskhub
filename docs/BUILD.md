@@ -263,22 +263,17 @@ app remain single files.
 1. Bump [`VERSION`](../VERSION) — `scripts/check-version.sh` fails the deploy if the tag
    and the file disagree.
 2. Update the documents the change touches, in both languages, in the same commit.
-3. Tag `vX.Y.Z` and push it. `.github/workflows/deploy.yml` builds every platform, creates
+3. Write the release notes (below) and commit them.
+4. Tag `vX.Y.Z` and push it. `.github/workflows/deploy.yml` builds every platform, creates
    the GitHub Release, ships iOS to TestFlight, macOS through notarization, and Android to
    the Play internal track.
 
-**Release notes are generated from the commit subjects** between the previous tag and this
-one, by `scripts/changelog.sh`. Run it locally to see what a tag would produce:
-
-```bash
-scripts/changelog.sh v5.0.0     # or with no argument, for the tag at HEAD
-```
-
-Which means commit subjects are user-facing, and the conventional-commit type in front of
-one decides the section it lands in. The full mapping, the rules that override it and
-worked examples live in [`.claude/skills/commit/SKILL.md`](../.claude/skills/commit/SKILL.md)
-— read it before writing a subject. Empty sections are left out of the release, and
-`INCLUDE_INTERNAL=1 scripts/changelog.sh` shows the commits that were omitted.
+**Release notes are written by hand**, one file per tag: `packaging/release-notes/vX.Y.Z.md`,
+the file name matching the tag exactly. That file is the GitHub Release body, followed by a
+fixed footer that points at the install guide and the security model. Lead with what users
+must do after updating — breaking changes, how to reconnect — then what is new and what is
+fixed. `scripts/check-release-notes.sh` fails the deploy before anything is built when the
+tag has no such file, so commit it before tagging.
 
 ### Package managers
 

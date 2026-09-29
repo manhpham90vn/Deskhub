@@ -192,7 +192,7 @@ token。自身のデスクトップ session にのみ意味を持ち、送信さ
 passcode はどこにも保存されない。POSIX システムではフォルダは `0700`、各ファイルは
 `0600` で作成され、atomic に書き込まれる。Windows では利用者本人、SYSTEM、
 Administrators のみに制限される。モバイルの app は同じファイルを自身のサンドボックス内
-に保持し、iOS では app group のコンテナ、Android では app の内部ストレージに置く。この
+に保持し、iOS では app group のコンテナ内の `.deskhub` フォルダ、Android では app の内部ストレージに置く。この
 フォルダは、自分の権限で動作するあらゆるプログラムから読み取り可能なものとして扱うこと。
 
 読み取れない `authorized_keys` や `known_hosts` の内容を推測で補うことはない。読み取れ

@@ -269,7 +269,8 @@ các app không còn tự cập nhật danh sách và `dh_recent_touch` đã b�
 ## 7. Dữ liệu trên đĩa
 
 Mọi dữ liệu nằm trong thư mục Deskhub của người dùng (`~/.deskhub`,
-`%USERPROFILE%\.deskhub`, App Group container trên iOS, internal storage trên Android;
+`%USERPROFILE%\.deskhub`, thư mục `.deskhub` bên trong App Group container trên iOS,
+internal storage trên Android;
 `DESKHUB_CONFIG_DIR` hoặc `--config-dir` của CLI ghi đè vị trí này): `host_key.pem` và
 `host_cert.pem` (host identity), `client_key.pem` và `client_key.<name>.pem` (client key,
 được bảo vệ bằng DPAPI trên Windows), `authorized_keys` (các client key mà host này chấp
@@ -755,6 +756,13 @@ coverage của core.
   thay vì `~/.deskhub`. Nếu không, khi chạy bản build mới trên máy đang cài một bản release
   cũ, bản mới đã xoá danh sách client được phép của bản release đó (bản mới xoá các file cũ)
   và trên macOS còn tắt luôn app đang chạy vì dùng chung bundle id.
+- **iOS đặt thư mục Deskhub sâu thêm một cấp bên trong App Group container**: thư mục dữ
+  liệu phải là thư mục Deskhub sở hữu và giữ được ở quyền `0700`, còn thư mục gốc của
+  container thuộc về iOS, và iOS từ chối đổi quyền của nó. Khi trỏ thẳng vào thư mục gốc,
+  mọi lần đọc hoặc ghi key, `known_hosts` và `authorized_keys` đều lỗi "cannot be read"
+  hoặc "could not be saved". App và broadcast extension đều đưa container cho
+  `SetAppDataDirInside`, hàm này nối thêm đúng tên `.deskhub` (hoặc `.deskhub-dev`) mà bản
+  desktop dùng, nên cả hai vẫn dùng chung một thư mục.
 - **macOS được build ở dạng desktop trong CI và ở dạng đã ký khi release, không đồng thời
   cả hai.** `build-desktop` compile app với chữ ký ad-hoc ở mỗi lần push, nên một thay đổi
   Cocoa không build được sẽ fail ngay trên pull request tương ứng. `deploy` xử lý cùng app

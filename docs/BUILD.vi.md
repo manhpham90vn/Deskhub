@@ -269,22 +269,17 @@ Windows portable và app Linux vẫn là file đơn lẻ.
    và file không khớp.
 2. Cập nhật các tài liệu chịu ảnh hưởng của thay đổi này, ở tất cả các ngôn ngữ, trong
    cùng một commit.
-3. Tạo tag `vX.Y.Z` và push. `.github/workflows/deploy.yml` build mọi nền tảng, tạo GitHub
+3. Viết release notes (xem bên dưới) và commit.
+4. Tạo tag `vX.Y.Z` và push. `.github/workflows/deploy.yml` build mọi nền tảng, tạo GitHub
    Release, đưa iOS lên TestFlight, macOS qua notarization, và Android lên track internal
    của Play.
 
-**Release notes được sinh từ các commit subject** nằm giữa tag trước và tag hiện tại, bởi
-`scripts/changelog.sh`. Có thể chạy tại máy để xem một tag sẽ sinh ra nội dung gì:
-
-```bash
-scripts/changelog.sh v5.0.0     # hoặc không tham số, cho tag tại HEAD
-```
-
-Nghĩa là commit subject là nội dung người dùng đọc, và conventional-commit type đứng trước
-nó quyết định mục mà nó thuộc về. Bảng ánh xạ đầy đủ, các quy tắc ghi đè và ví dụ cụ thể
-nằm trong [`.claude/skills/commit/SKILL.md`](../.claude/skills/commit/SKILL.md); cần đọc
-trước khi viết subject. Các mục rỗng không xuất hiện trong bản release, và
-`INCLUDE_INTERNAL=1 scripts/changelog.sh` hiển thị những commit đã bị bỏ qua.
+**Release notes được viết tay**, mỗi tag một file: `packaging/release-notes/vX.Y.Z.md`, tên
+file trùng khớp tuyệt đối với tag. File đó chính là nội dung của GitHub Release, theo sau là
+một đoạn footer cố định trỏ tới hướng dẫn cài đặt và mô hình bảo mật. Hãy mở đầu bằng những
+việc người dùng phải làm sau khi cập nhật — breaking change, cách kết nối lại — rồi mới tới
+những gì mới và những gì đã sửa. `scripts/check-release-notes.sh` làm fail bước deploy trước
+khi build bất cứ thứ gì nếu tag không có file này, nên cần commit nó trước khi tạo tag.
 
 ### Package manager
 

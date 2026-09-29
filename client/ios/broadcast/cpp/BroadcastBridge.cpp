@@ -234,7 +234,7 @@ CVPixelBufferRef RotatedCopy(CVPixelBufferRef src, uint32_t cgOrientation) {
 }
 
 void dhb_start_broadcast(const char* containerPath, const char* screenName) {
-    deskhubp::SetAppDataDir(containerPath ? std::string(containerPath) : std::string());
+    deskhubp::SetAppDataDirInside(containerPath ? std::string(containerPath) : std::string());
     ScreenCapture::BeginBroadcast();
 
     std::lock_guard<std::mutex> lk(g_startMutex);

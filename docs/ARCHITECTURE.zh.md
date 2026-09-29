@@ -242,8 +242,8 @@ source 记录之后，payload 还携带 host 的设备名称（一个长度字�
 
 ## 7. 磁盘上的数据
 
-全部数据位于用户的 Deskhub 文件夹（`~/.deskhub`、`%USERPROFILE%\.deskhub`、iOS 上的
-App Group container、Android 上的内部存储；`DESKHUB_CONFIG_DIR` 或 CLI 的
+全部数据位于用户的 Deskhub 文件夹（`~/.deskhub`、`%USERPROFILE%\.deskhub`、iOS 上
+App Group container 内的 `.deskhub` 文件夹、Android 上的内部存储；`DESKHUB_CONFIG_DIR` 或 CLI 的
 `--config-dir` 可覆盖该位置）：`host_key.pem` 与 `host_cert.pem`（host identity）、
 `client_key.pem` 与 `client_key.<name>.pem`（client key，Windows 上以 DPAPI 保护）、
 `authorized_keys`（本 host 接受的 client key）、`known_hosts`（受信任的 host 及其
@@ -640,6 +640,12 @@ runner 上与 base commit 的 A/B 结果（偏移仅作为警告，不导致失�
   设置 `DESKHUB_DEV_BUILD`）把数据保存在 `~/.deskhub-dev` 而不是 `~/.deskhub`。否则，在同时
   装有旧正式版的机器上运行新构建时，新构建会删除该正式版允许的 client 列表（新构建会删除
   已淘汰的文件），并且在 macOS 上还会因共用 bundle id 而退出正在运行的 app。
+- **iOS 把 Deskhub 文件夹放在 App Group container 内再深一层**：数据文件夹必须由 Deskhub
+  拥有并能保持 `0700`，而 container 的根目录属于 iOS，iOS 拒绝修改它的权限。直接指向根目录
+  时，所有对 key、`known_hosts` 与 `authorized_keys` 的读写都会以 "cannot be read" 或
+  "could not be saved" 失败。app 与 broadcast extension 都把 container 交给
+  `SetAppDataDirInside`，它追加与桌面端相同的 `.deskhub`（或 `.deskhub-dev`）名称，因此两者
+  仍共用同一个文件夹。
 - **macOS 在 CI 中为桌面构建，在 release 时为签名构建，两者不同时进行。**
   `build-desktop` 在每次 push 时以 ad-hoc 签名编译 app，因此无法构建的 Cocoa 改动会在其
   自身的 pull request 上失败；`deploy` 通过 `release-macos` 处理同一个 app，即 fastlane
