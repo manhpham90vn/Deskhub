@@ -451,7 +451,7 @@ void ParseKey(Command& command, Cursor& cursor) {
         return;
     }
     if (!More(cursor) || IsFlagToken(Look(cursor))) {
-        command.error = "key needs generate, import, public, or list";
+        command.error = "key needs generate, import, public, delete, or list";
         return;
     }
     const std::string_view action = Take(cursor);
@@ -463,8 +463,10 @@ void ParseKey(Command& command, Cursor& cursor) {
         command.devices = DevicesAction::Import;
     else if (action == "public")
         command.devices = DevicesAction::Public;
+    else if (action == "delete")
+        command.devices = DevicesAction::DeleteKey;
     else {
-        command.error = "key needs generate, import, public, or list";
+        command.error = "key needs generate, import, public, delete, or list";
         return;
     }
     while (More(cursor)) {
@@ -500,6 +502,8 @@ void ParseKey(Command& command, Cursor& cursor) {
         command.error = "key import needs --name NAME and --file PATH";
     if (command.devices == DevicesAction::Public && command.keyName.empty())
         command.error = "key public needs --name NAME";
+    if (command.devices == DevicesAction::DeleteKey && command.keyName.empty())
+        command.error = "key delete needs --name NAME";
 }
 
 void ParseAccess(Command& command, Cursor& cursor) {
@@ -510,7 +514,7 @@ void ParseAccess(Command& command, Cursor& cursor) {
         return;
     }
     if (!More(cursor) || IsFlagToken(Look(cursor))) {
-        command.error = "access needs add, list, or remove";
+        command.error = "access needs add, list, remove, or clear";
         return;
     }
     const std::string_view action = Take(cursor);
@@ -520,8 +524,10 @@ void ParseAccess(Command& command, Cursor& cursor) {
         command.devices = DevicesAction::List;
     else if (action == "remove")
         command.devices = DevicesAction::Forget;
+    else if (action == "clear")
+        command.devices = DevicesAction::ForgetAll;
     else {
-        command.error = "access needs add, list, or remove";
+        command.error = "access needs add, list, remove, or clear";
         return;
     }
     while (More(cursor)) {
@@ -1165,6 +1171,9 @@ std::string UsageText(Verb verb) {
                    " key public --name NAME\n"
                    "       " +
                    program +
+                   " key delete --name NAME\n"
+                   "       " +
+                   program +
                    " key list [--json]\n"
                    "       " +
                    program +
@@ -1175,6 +1184,9 @@ std::string UsageText(Verb verb) {
                    "       " +
                    program +
                    " access remove --fingerprint SHA256:...\n"
+                   "       " +
+                   program +
+                   " access clear\n"
                    "       " +
                    program +
                    " devices [list]\n"

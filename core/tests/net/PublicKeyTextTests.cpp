@@ -100,10 +100,117 @@ void TestAuthorizedKeysRejectDuplicatesAndDamage() {
         "an empty authorized list authorizes nobody");
 }
 
+void TestKeyTextIsNormalised() {
+    std::printf("[public key] pasted key text is normalised to one canonical line...\n");
+    const auto original = Ed25519Key();
+    const std::string canonical = deskhub::FormatPublicKeyText(original);
+    const std::string body = canonical.substr(0, canonical.find(" laptop a"));
+    const auto messy = deskhub::ParsePublicKeyText("  \t" + body + " \t  laptop a \r\n");
+    Check(messy && messy->blob == original.blob && messy->label == "laptop a",
+        "surrounding and separating whitespace does not change the key or its label");
+    Check(messy && deskhub::FormatPublicKeyText(*messy) == canonical,
+        "and it is written back in the canonical single-space form");
+    const auto unlabelled = deskhub::ParsePublicKeyText(body);
+    Check(unlabelled && unlabelled->label.empty() &&
+              deskhub::FormatPublicKeyText(*unlabelled) == body,
+        "a key without a comment has an empty label and no trailing space");
+
+    const auto list = deskhub::ParseAuthorizedKeys("\r\n# a comment\r\n\r\n" + canonical +
+                                                   "\r\n");
+    Check(list && list->Keys().size() == 1,
+        "CRLF line endings, blank lines and comments are accepted in authorized_keys");
+    Check(list && deskhub::SerializeAuthorizedKeys(*list) == canonical + "\n",
+        "and the list is rewritten without them");
+}
+
+void TestDamagedKeyBytesAreRejected() {
+    std::printf("[public key] damaged key bytes and labels are refused...\n");
+    const std::string canonical = deskhub::FormatPublicKeyText(Ed25519Key());
+    const std::string body = canonical.substr(0, canonical.find(" laptop a"));
+
+    std::string foreign = body;
+    foreign[20] = '!';
+    Check(!deskhub::ParsePublicKeyText(foreign),
+        "a character outside the base64 alphabet is refused");
+    Check(!deskhub::ParsePublicKeyText(body.substr(0, body.size() - 4)),
+        "a truncated key blob is refused");
+    Check(!deskhub::ParsePublicKeyText("ssh-ed25519"), "a type with no key is refused");
+    Check(!deskhub::ParsePublicKeyText("ecdsa-sha2-nistp256 " + body.substr(12)),
+        "the text type must name the algorithm inside the blob");
+    Check(!deskhub::ParsePublicKeyText(body + " " + std::string(65, 'x')),
+        "an over-long label is refused");
+    Check(deskhub::ParsePublicKeyText(body + " " + std::string(64, 'x')).has_value(),
+        "a label at the limit is kept");
+    Check(!deskhub::ParsePublicKeyText(body + " a\x7f" + "b"),
+        "a DEL character in the label is refused");
+    Check(!deskhub::ParsePublicKeyText(body + " a\x01" + "b"),
+        "a control character in the label is refused");
+
+    auto compressed = P256Key();
+    compressed.blob[compressed.blob.size() - 65] = 2;
+    Check(deskhub::FormatPublicKeyText(compressed).empty(),
+        "a compressed P-256 point is not a supported key");
+    auto otherCurve = deskhub::PublicKeyText{};
+    otherCurve.algorithm = deskhub::PublicKeyAlgorithm::EcdsaP256;
+    AddString(otherCurve.blob, "ecdsa-sha2-nistp256");
+    AddString(otherCurve.blob, "nistp384");
+    std::string point(65, 'x');
+    point[0] = 4;
+    AddString(otherCurve.blob, point);
+    Check(deskhub::FormatPublicKeyText(otherCurve).empty(),
+        "a P-256 key type naming another curve is refused");
+    auto shortKey = deskhub::PublicKeyText{};
+    AddString(shortKey.blob, "ssh-ed25519");
+    AddString(shortKey.blob, std::string(31, 'x'));
+    Check(deskhub::FormatPublicKeyText(shortKey).empty(), "a 31-byte Ed25519 key is refused");
+    auto overstated = deskhub::PublicKeyText{};
+    AddString(overstated.blob, "ssh-ed25519");
+    overstated.blob.insert(overstated.blob.end(), {0, 0, 1, 0});
+    overstated.blob.insert(overstated.blob.end(), 32, 'x');
+    Check(deskhub::FormatPublicKeyText(overstated).empty(),
+        "a length prefix longer than the data is refused");
+}
+
+deskhub::PublicKeyText NumberedKey(size_t index) {
+    auto key = Ed25519Key();
+    key.blob[key.blob.size() - 1] = uint8_t(index);
+    key.blob[key.blob.size() - 2] = uint8_t(index >> 8);
+    key.label = {};
+    return key;
+}
+
+void TestAuthorizedKeysAreBounded() {
+    std::printf("[public key] the authorized list is bounded and edits by key...\n");
+    deskhub::AuthorizedKeys keys;
+    for (size_t i = 0; i < deskhub::kMaxAuthorizedKeys; ++i)
+        Check(keys.Add(NumberedKey(i)), "keys up to the limit are accepted");
+    Check(!keys.Add(NumberedKey(deskhub::kMaxAuthorizedKeys)),
+        "one more key than the limit is refused");
+    const std::string full = deskhub::SerializeAuthorizedKeys(keys);
+    Check(deskhub::ParseAuthorizedKeys(full).has_value(), "a full list reads back");
+    Check(!deskhub::ParseAuthorizedKeys(
+              full + deskhub::FormatPublicKeyText(NumberedKey(deskhub::kMaxAuthorizedKeys)) +
+              "\n"),
+        "a file with more keys than the limit is refused as a whole");
+
+    auto relabelled = NumberedKey(3);
+    relabelled.label = "renamed";
+    Check(!keys.Add(relabelled), "the same key under another label is a duplicate");
+    Check(keys.Remove(relabelled), "removal matches the key bytes, not the label");
+    Check(!keys.Contains(NumberedKey(3)), "and the key is gone");
+    Check(!keys.Remove(NumberedKey(3)), "removing it twice reports nothing removed");
+
+    deskhub::PublicKeyText invalid;
+    Check(!keys.Add(invalid), "an empty key blob is never added");
+}
+
 }
 
 void RunPublicKeyTextTests() {
     TestValidKeysRoundTrip();
     TestMalformedKeysAreRejected();
     TestAuthorizedKeysRejectDuplicatesAndDamage();
+    TestKeyTextIsNormalised();
+    TestDamagedKeyBytesAreRejected();
+    TestAuthorizedKeysAreBounded();
 }

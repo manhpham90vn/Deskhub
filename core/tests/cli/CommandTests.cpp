@@ -491,6 +491,18 @@ void TestAcceptNewHostKey() {
         "the flag takes no value");
 }
 
+void TestKeyDeleteAndAccessClear() {
+    std::printf("[cli] keys can be deleted and every client removed from the command line...\n");
+    const cli::Command removed = Parse({"key", "delete", "--name", "work"});
+    Check(removed.error.empty() && removed.devices == cli::DevicesAction::DeleteKey &&
+              removed.keyName == "work",
+        "key delete names the key to delete");
+    Check(!Parse({"key", "delete"}).error.empty(), "key delete without a name is refused");
+    const cli::Command cleared = Parse({"access", "clear"});
+    Check(cleared.error.empty() && cleared.devices == cli::DevicesAction::ForgetAll,
+        "access clear removes every allowed client");
+}
+
 void TestUsageText() {
     std::printf("[cli] every command can explain itself...\n");
     Check(cli::UsageText().find("deskhub-cli") != std::string::npos, "the summary names the program");
@@ -534,5 +546,6 @@ void RunCliCommandTests() {
     TestApplyShareOptions();
     TestPickDisplays();
     TestAcceptNewHostKey();
+    TestKeyDeleteAndAccessClear();
     TestUsageText();
 }

@@ -9,6 +9,7 @@
 #include "deskhubp/system/Clock.h"
 #include "deskhubp/system/HostIdentity.h"
 #include "deskhubp/system/AuthorizedKeysFile.h"
+#include "deskhubp/system/ClientIdentity.h"
 
 #include <array>
 #include <atomic>
@@ -17,6 +18,7 @@
 #include <memory>
 #include <string>
 #include <thread>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -80,6 +82,7 @@ struct AdmissionRig {
     deskhubp::SessionTransport viewer{};
     NetAddr target{0x7F000001u, kAdmissionPort};
     std::atomic<uint64_t> admitted{0};
+    std::atomic<int> delivered{0};
     std::atomic<bool> stop{false};
     std::thread pump{};
 
@@ -112,22 +115,31 @@ struct AdmissionRig {
             uint8_t buf[deskhub::kMaxRecordSize];
             while (!stop.load(std::memory_order_acquire)) {
                 NetAddr from;
-                host.RecvFrom(buf, sizeof(buf), from);
+                if (host.RecvFrom(buf, sizeof(buf), from) > 0)
+                    delivered.fetch_add(1, std::memory_order_relaxed);
             }
         });
 
         if (!viewer.Connect(deskhubp::QuicSettings{}, target, "admission-host")) return false;
         if (!viewer.WaitEstablished(target, kAuthTimeoutMs)) return false;
         if (!authenticate) return true;
-
-        deskhubp::ClientAuthConfig client;
-        client.identity = machines.viewer;
-        client.hostFingerprint = machines.host.fingerprint;
-        client.clientName = "admission-viewer";
-        deskhub::AuthResultCode code = deskhub::AuthResultCode::NotPaired;
-        if (!viewer.RunClientAuth(target, std::move(client), kAuthTimeoutMs, code))
-            return false;
+        if (!SignIn(viewer, machines.viewer)) return false;
         return WaitUntil([this] { return Peer().Pack() != 0; }, kSettleMillis);
+    }
+
+    bool SignIn(deskhubp::SessionTransport& client, const deskhubp::HostIdentity& identity) {
+        deskhubp::ClientAuthConfig config;
+        config.identity = identity;
+        config.hostFingerprint = machines.host.fingerprint;
+        config.clientName = "admission-viewer";
+        deskhub::AuthResultCode code = deskhub::AuthResultCode::NotPaired;
+        return client.RunClientAuth(target, std::move(config), kAuthTimeoutMs, code);
+    }
+
+    bool Dial(deskhubp::SessionTransport& client) const {
+        client.SetRecvTimeout(1);
+        return client.Connect(deskhubp::QuicSettings{}, target, "admission-host") &&
+               client.WaitEstablished(target, kAuthTimeoutMs);
     }
 
     NetAddr Peer() const {
@@ -178,9 +190,10 @@ bool BeginWithoutAnswer(deskhubp::SessionTransport& viewer, const NetAddr& targe
         kSettleMillis);
 }
 
-bool SendInvalidProof(deskhubp::SessionTransport& viewer, const NetAddr& target) {
+bool SendProof(deskhubp::SessionTransport& viewer, const NetAddr& target,
+    std::vector<uint8_t> proof) {
     deskhub::AuthResponse response;
-    response.proof.assign(64, 0);
+    response.proof = std::move(proof);
     std::vector<uint8_t> message(deskhub::kMaxRecordSize);
     message.resize(deskhub::BuildAuthResponse(message, response));
     if (message.empty() || !viewer.SendRecord(target, message)) return false;
@@ -197,6 +210,62 @@ bool SendInvalidProof(deskhubp::SessionTransport& viewer, const NetAddr& target)
             return result && result->code == deskhub::AuthResultCode::BadSignature;
         },
         kSettleMillis);
+}
+
+bool SendInvalidProof(deskhubp::SessionTransport& viewer, const NetAddr& target) {
+    return SendProof(viewer, target, std::vector<uint8_t>(64, 0));
+}
+
+using MessageBuilder = std::function<size_t(std::span<uint8_t>)>;
+
+bool SendBuilt(deskhubp::SessionTransport& viewer, const NetAddr& target, uint64_t stream,
+    const MessageBuilder& build) {
+    std::vector<uint8_t> message(deskhub::kMaxRecordSize);
+    message.resize(build(message));
+    return !message.empty() && viewer.SendRecordOn(target, stream, message);
+}
+
+std::vector<std::pair<uint64_t, MessageBuilder>> PrivilegedRequests() {
+    deskhub::TermOpen open;
+    open.size = deskhub::TermSize{80, 24};
+    open.clientName = "pre-auth";
+    deskhub::FileOffer offer;
+    offer.batchId = 1;
+    offer.files.push_back(deskhub::TransferFile{4, "note.txt"});
+    deskhub::Hello hello{};
+    hello.clientId = 1;
+    hello.maxWidth = 1280;
+    hello.maxHeight = 720;
+    const uint64_t control = deskhubp::kQuicControlStream;
+    return {
+        {control, [](std::span<uint8_t> out) { return deskhub::BuildListSources(out); }},
+        {control, [hello](std::span<uint8_t> out) { return deskhub::BuildHello(out, hello); }},
+        {control, [open](std::span<uint8_t> out) { return deskhub::BuildTermOpen(out, open); }},
+        {control, [](std::span<uint8_t> out) { return deskhub::BuildTermList(out); }},
+        {deskhubp::kQuicFileStream,
+            [offer](std::span<uint8_t> out) { return deskhub::BuildFileOffer(out, offer); }},
+        {control,
+            [](std::span<uint8_t> out) {
+                const deskhub::InputEvent key{deskhub::InputType::Key, 1, 30, 0, 1, 0};
+                return deskhub::BuildInputEvents(out, 1, 1, std::span(&key, 1));
+            }},
+        {control,
+            [](std::span<uint8_t> out) {
+                const std::array<uint8_t, 4> text{'p', 'a', 's', 't'};
+                deskhub::ClipboardChunkView clip;
+                clip.revision = 1;
+                clip.chunkCount = 1;
+                clip.payload = text;
+                return deskhub::BuildClipboardChunk(out, 1, clip);
+            }},
+    };
+}
+
+bool SendEveryPrivilegedRequest(deskhubp::SessionTransport& viewer, const NetAddr& target) {
+    bool sent = true;
+    for (const auto& [stream, build] : PrivilegedRequests())
+        sent = SendBuilt(viewer, target, stream, build) && sent;
+    return sent;
 }
 
 void TestRepeatedBadProofsAreLimited() {
@@ -499,6 +568,168 @@ void TestExternalKeyRevocationClosesItsLiveConnection() {
         "the host still notices the edit and withdraws admission");
 }
 
+NetAddr LoopbackPeer(const deskhubp::SessionTransport& client) {
+    return NetAddr{0x7F000001u, client.LocalPort()};
+}
+
+bool ClosedByHost(deskhubp::SessionTransport& client, const NetAddr& target) {
+    return WaitUntil(
+        [&] {
+            uint8_t buf[deskhub::kMaxRecordSize];
+            NetAddr from;
+            client.RecvFrom(buf, sizeof(buf), from);
+            return !client.Established(target);
+        },
+        kSettleMillis);
+}
+
+void TestNothingReachesTheHostBeforeAuthentication() {
+    std::printf("[admission] no source list, shell, file, input or clipboard before auth...\n");
+    if (Skipped("admission")) return;
+    const SavedState guard;
+    AdmissionRig rig;
+    const bool started = rig.Start(false);
+    Check(started, "the viewer establishes QUIC without authenticating");
+    if (!started) return;
+    const size_t requests = PrivilegedRequests().size();
+
+    Check(SendEveryPrivilegedRequest(rig.viewer, rig.target),
+        "the viewer sends every privileged request over the encrypted connection");
+    SleepUs(kQuietMillis * 1000);
+    Check(rig.delivered.load() == 0,
+        "the host application receives none of them before authentication");
+
+    deskhubp::SessionTransport refused;
+    Check(rig.Dial(refused), "a client with an unlisted key connects");
+    Check(!rig.SignIn(refused, rig.machines.impostor), "and is refused");
+    SendEveryPrivilegedRequest(refused, rig.target);
+    SleepUs(kQuietMillis * 1000);
+    Check(rig.delivered.load() == 0,
+        "a refused key cannot reach any of them either");
+
+    Check(rig.SignIn(rig.viewer, rig.machines.viewer),
+        "the first viewer then signs in on the same connection");
+    Check(SendEveryPrivilegedRequest(rig.viewer, rig.target), "and repeats the requests");
+    Check(WaitUntil([&] { return size_t(rig.delivered.load()) >= requests; }, kSettleMillis),
+        "only now does the host application receive them");
+}
+
+void TestAnAnswerBeforeAStartIsIgnored() {
+    std::printf("[admission] auth messages out of order admit nobody...\n");
+    if (Skipped("admission")) return;
+    const SavedState guard;
+    AdmissionRig rig;
+    const bool started = rig.Start(false);
+    Check(started, "the viewer establishes QUIC without authenticating");
+    if (!started) return;
+    const NetAddr peer = LoopbackPeer(rig.viewer);
+
+    deskhub::AuthResponse response;
+    response.proof.assign(64, 0x11);
+    deskhub::AuthResult accepted;
+    accepted.code = deskhub::AuthResultCode::Accepted;
+    deskhub::AuthChallenge challenge;
+    challenge.mode = deskhub::AuthMode::Signature;
+    const uint64_t control = deskhubp::kQuicControlStream;
+    Check(SendBuilt(rig.viewer, rig.target, control,
+              [&](std::span<uint8_t> out) { return deskhub::BuildAuthResponse(out, response); }),
+        "a response is sent before any start");
+    Check(SendBuilt(rig.viewer, rig.target, control,
+              [&](std::span<uint8_t> out) { return deskhub::BuildAuthResult(out, accepted); }),
+        "a client claims an acceptance of its own");
+    Check(SendBuilt(rig.viewer, rig.target, control,
+              [&](std::span<uint8_t> out) { return deskhub::BuildAuthChallenge(out, challenge); }),
+        "and sends the host a challenge");
+    SleepUs(kQuietMillis * 1000);
+    Check(!rig.host.Authenticated(peer) && rig.Peer().Pack() == 0,
+        "none of the out-of-order messages admits the connection");
+    Check(rig.delivered.load() == 0, "and none reaches the host application");
+    Check(rig.SignIn(rig.viewer, rig.machines.viewer) &&
+              WaitUntil([&] { return rig.host.Authenticated(peer); }, kSettleMillis),
+        "a proper handshake afterwards is still what admits it");
+}
+
+void TestAProofForAnotherConnectionIsRefused() {
+    std::printf("[admission] a valid signature made for another connection is refused...\n");
+    if (Skipped("admission")) return;
+    const SavedState guard;
+    AdmissionRig rig;
+    const bool started = rig.Start(false);
+    Check(started, "the viewer establishes QUIC without authenticating");
+    if (!started) return;
+    Check(BeginWithoutAnswer(rig.viewer, rig.target, rig.machines.viewer),
+        "the authorized key receives a challenge");
+
+    deskhub::AuthSessionId elsewhere{};
+    elsewhere.fill(0x41);
+    const deskhubp::ClientIdentity client(rig.machines.viewer);
+    const auto transcript = deskhub::AuthTranscript(deskhub::AuthRole::Client, elsewhere,
+        client.publicKey, rig.machines.host.fingerprint);
+    Check(SendProof(rig.viewer, rig.target, deskhubp::SignWithClientIdentity(client, transcript)),
+        "the real key's signature bound to another TLS session is rejected as a bad signature");
+    Check(rig.Peer().Pack() == 0 && !rig.host.Authenticated(LoopbackPeer(rig.viewer)),
+        "and the connection is not admitted");
+}
+
+void TestAKeySwapMidHandshakeClosesTheConnection() {
+    std::printf("[admission] a second key offered mid-handshake ends the connection...\n");
+    if (Skipped("admission")) return;
+    const SavedState guard;
+    AdmissionRig rig;
+    const bool started = rig.Start(false);
+    Check(started, "the viewer establishes QUIC without authenticating");
+    if (!started) return;
+    Check(GrantClientKey(rig.machines.impostor), "a second key is authorized too");
+    Check(BeginWithoutAnswer(rig.viewer, rig.target, rig.machines.viewer),
+        "the first key receives a challenge");
+
+    deskhub::AuthStart swap;
+    swap.publicKey = deskhubp::IdentityPublicKey(rig.machines.impostor);
+    swap.clientName = "swapped";
+    Check(SendBuilt(rig.viewer, rig.target, deskhubp::kQuicControlStream,
+              [&](std::span<uint8_t> out) { return deskhub::BuildAuthStart(out, swap); }),
+        "the client offers a different key before answering");
+    Check(ClosedByHost(rig.viewer, rig.target), "the host closes the connection");
+    Check(rig.Peer().Pack() == 0, "and admits neither key");
+}
+
+void TestRevokingAKeyClosesEveryConnectionItHolds() {
+    std::printf("[admission] revoking a key cuts every connection it holds, and only those...\n");
+    if (Skipped("admission")) return;
+    const SavedState guard;
+    AdmissionRig rig;
+    const bool started = rig.Start();
+    Check(started, "the first connection is admitted");
+    if (!started) return;
+
+    deskhubp::SessionTransport second;
+    Check(rig.Dial(second) && rig.SignIn(second, rig.machines.viewer),
+        "the same key opens and authenticates a second connection");
+    deskhubp::SessionTransport bystander;
+    Check(GrantClientKey(rig.machines.impostor) && rig.Dial(bystander) &&
+              rig.SignIn(bystander, rig.machines.impostor),
+        "another authorized key holds a third connection");
+    const NetAddr first = LoopbackPeer(rig.viewer);
+    const NetAddr other = LoopbackPeer(second);
+    const NetAddr third = LoopbackPeer(bystander);
+    Check(WaitUntil(
+              [&] {
+                  return rig.host.Authenticated(first) && rig.host.Authenticated(other) &&
+                         rig.host.Authenticated(third);
+              },
+              kSettleMillis),
+        "all three are admitted");
+
+    Check(deskhubp::ForgetAuthorizedClient(rig.machines.viewer.fingerprint),
+        "the shared key is revoked");
+    Check(WaitUntil([&] { return !rig.host.Authenticated(first) && !rig.host.Authenticated(other); },
+              kSettleMillis),
+        "both of its connections lose admission");
+    Check(ClosedByHost(rig.viewer, rig.target) && ClosedByHost(second, rig.target),
+        "and both are closed");
+    Check(rig.host.Authenticated(third), "the other key's connection is untouched");
+}
+
 }
 
 void RunTransportAdmissionTests() {
@@ -510,4 +741,9 @@ void RunTransportAdmissionTests() {
     TestAnOldAuthStartIsRefused();
     TestForgettingADeviceClosesItsLiveConnection();
     TestExternalKeyRevocationClosesItsLiveConnection();
+    TestNothingReachesTheHostBeforeAuthentication();
+    TestAnAnswerBeforeAStartIsIgnored();
+    TestAProofForAnotherConnectionIsRefused();
+    TestAKeySwapMidHandshakeClosesTheConnection();
+    TestRevokingAKeyClosesEveryConnectionItHolds();
 }

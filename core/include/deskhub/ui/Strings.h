@@ -172,7 +172,8 @@ inline constexpr const char* kPairedHint =
     "Paste the public key of each device that may connect. Only keys listed here get in; "
     "nothing is approved over the network.";
 inline constexpr const char* kPairedEmpty =
-    "(no client keys allowed yet)";
+    "No device can connect to this machine yet. Ask the person connecting for their public "
+    "key (Devices > My keys > Copy public key), paste it above and press Allow.";
 inline constexpr const char* kPairedForget =
     "Remove";
 inline constexpr const char* kPairedForgetAll =

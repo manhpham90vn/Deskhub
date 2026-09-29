@@ -267,6 +267,9 @@ window layer，程序会明确报告这一点。此类用途请使用 app。
    host 的 Devices 页上的 **This machine's host key** 核对，然后点击 *Trust and connect*。
    此后该 host 会列在 **Trusted hosts** 下。
 
+[Key 与访问权限](#-key-与访问权限)一节逐步介绍 app 与 CLI 中的每一步，以及额外的 key、脚本、
+撤销与轮换。
+
 不会通过 network 进行任何批准，Deskhub 也从不 scan network。若某个受信任 host 的 key
 发生变化，连接会被直接拒绝；只有在确知其 key 变更原因时，才从 *Trusted hosts* 中移除该
 host，然后重新信任。
@@ -279,14 +282,138 @@ connect 某个 host 时会信任其出示的 key。远程访问时，可在两�
 [`SECURITY.zh.md`](../SECURITY.zh.md) 给出完整的 threat model、保护范围以及漏洞报告
 方式。
 
+## 🔑 Key 与访问权限
+
+Deskhub 用密钥对登录，方式与 SSH 相同。每台 connect 的设备都有一个 **client key**，每个
+host 都有一个 **host key**。host 只放行其列表中的 client key，client 只 connect 到其已信任
+key 的 host。所有相关操作都在 **Devices** 页上，分为 *When this machine is the host* 与
+*When this machine is the client* 两部分。下面每一步都有对应的 `deskhub-cli` 命令；app 与
+CLI 读取同一组文件，因此在一边所做的更改会出现在另一边。
+
+### 你的 key
+
+你的 key 位于 **Devices** → *When this machine is the client* → **My keys**。private 部分
+从不离开本机。
+
+- **`default` key。** app 在你首次打开 Devices 页时创建名为 `default` 的 key，CLI 则在首次
+  connect 任何机器或用 `deskhub-cli key public --name default` 打印它时创建。大多数人不需要
+  其他 key。
+- **更多 key。** 点击 *New key* 并为其命名（CLI：`deskhub-cli key generate --name NAME`）。
+  若想撤销某个 host 的访问而不影响其他 host，可使用单独的 key。
+- **已有的 key。** 点击 *Import key…*，选择 private key 文件，为其命名；若文件已加密，再输入
+  passphrase（CLI：`deskhub-cli key import --name NAME --file PATH`，加上
+  `--passphrase-stdin` 可从标准输入读取 passphrase）。Deskhub 可读取包含 Ed25519 或
+  ECDSA P-256 key 的 OpenSSH（`ssh-keygen`）与 PKCS#8 文件；不支持 RSA。passphrase 仅在
+  import 时用于解开文件 —— 不会被保存，也从不发送给 host。
+- **你的 public key。** 点击某个 key 旁的 *Copy public key*（CLI：
+  `deskhub-cli key public --name NAME`）。你会得到一行形如 `ssh-ed25519 AAAA… laptop` 的
+  内容；末尾的标签是本设备的名称，在 **Settings** → *General* → **Device name** 中设置，
+  host 的所有者可据此分辨这是谁的 key。这一行就是你发给 host 所有者的内容 —— 可以放心分享。
+- **删除 key。** 点击其旁边的 *Delete*。`default` key 不能删除，受信任的 host 仍在使用的
+  key 也不能删除 —— 请先让该 host 改用其他 key。已删除的 private key 无法恢复。CLI 可用
+  `deskhub-cli key list` 列出 key，用 `deskhub-cli key delete --name NAME` 删除，规则相同。
+
+### 允许设备 connect
+
+在 host 上：
+
+1. 向将要 connect 的人索取其 public key 行（见[你的 key](#你的-key)）。
+2. 打开 **Devices** → *When this machine is the host* → **Clients allowed to connect to
+   this machine**，粘贴该行并点击 *Allow*。仅接受 Ed25519 与 ECDSA P-256 public key。
+3. 该 key 随即带着标签出现在列表中。key 旁的 *Remove* 将其移除；*Remove every client* 在
+   确认后清空整个列表。
+
+在 command line 中，将该行 pipe 给 `access add`：
+
+```sh
+deskhub-cli key public --name default                          # 在 client 上
+deskhub-cli access add --stdin                                 # 在 host 上：粘贴后按 Ctrl-D
+deskhub-cli key public --name default | ssh me@host deskhub-cli access add --stdin
+deskhub-cli access list                                        # 在 host 上
+deskhub-cli access remove --fingerprint SHA256:…               # 在 host 上
+```
+
+`deskhub-cli access clear` 的作用与 *Remove every client* 相同。
+
+### 首次 connect
+
+1. 在 client 上输入 host 的地址（`192.168.1.10`；host 不使用 47777 时写
+   `192.168.1.10:PORT`），然后点击 *Connect*。
+2. **New host** 对话框显示 host key 的 fingerprint，形如 `SHA256:…`。
+3. 在 host 上打开 **Devices** → *When this machine is the host* → **This machine's host
+   key**（*Copy* 可将其复制到剪贴板）。通过你已信任的渠道核对两个 fingerprint —— 当面、
+   电话，或确认是对方本人的聊天。
+4. 一致则点击 *Trust and connect*；不一致则点击 *Cancel*。
+
+此后该 host 列在 **Trusted hosts** 下，并注明它使用的 client key，之后的连接不再弹出该
+对话框。
+
+**提前固定 host。** 用 CLI 可在首次连接前保存 host key，从而无需对话框：
+
+```sh
+deskhub-cli host-key public                                    # 在 host 上
+deskhub-cli host add office --address 192.168.1.10 --identity default --host-key-stdin
+```
+
+将 host 输出的那一行粘贴到第二条命令中（在 client 上），然后按 Ctrl-D。`office` 是你自选
+的 alias：`connect office`、`sources office`、`shell office` 和 `send office FILE` 都接受
+它。`deskhub-cli host list` 显示所有已保存的 host，包括在 app 中信任的 host —— 它们会得到
+一个由地址生成的 alias，例如 `192-168-1-10-47777`。`host update ALIAS` 可修改地址
+（`--address`）、client key（`--identity`）或固定的 host key（`--host-key-stdin`）；
+`host remove ALIAS` 删除该 host。app 使用 `default` connect 新 host；若要为某个 host 使用
+其他 key，请在这里用 `--identity` 设置 —— app 也会随之使用它。
+
+### 脚本与 command line
+
+- **未知 host 会被拒绝。** `sources`、`connect`、`shell` 与 `send` 不会与尚未保存 key 的
+  host 通信，而是打印其 fingerprint；与 host 核对后，加上 `--accept-new-host-key` 重新
+  运行即可保存。该 flag 只保存首次见到的 key —— key *已变更* 的 host 始终会被拒绝。
+- **选择 key。** `--identity NAME` 为单条命令选择 client key。不指定时使用已保存 host
+  的 key，若该 host 没有则使用 `default`。
+- **独立的配置。** `--config-dir DIR`（放在命令之前或之后均可）或环境变量
+  `DESKHUB_CONFIG_DIR` 让 CLI 使用另一个目录中的 key、允许的 client、受信任的 host 与
+  settings —— 适用于 service account 或测试环境。
+- **Exit code。** 脚本可通过 exit code 区分连接被拒、host key 变更与其他失败；各代码列在
+  `BUILD.zh.md` 的 [Command line client](BUILD.zh.md#command-line-client) 一节。列出信息的
+  命令支持 `--json`。
+
+### 撤销与轮换 key
+
+**撤销某台设备。** 在 host 上点击其 key 旁的 *Remove*，或运行
+`deskhub-cli access remove --fingerprint SHA256:…`。该设备打开的所有 session 立即结束，
+在其 key 被重新允许之前无法再次 connect。
+
+**轮换 client key。**
+
+1. 创建新 key：*New key*，或 `deskhub-cli key generate --name NAME`。
+2. 请每个应接受它的 host 允许其 public key。
+3. 让受信任的 host 使用新 key：`deskhub-cli host update ALIAS --identity NAME`，或移除该
+   host 后用 `host add … --identity NAME` 重新添加。connect 一次以确认。
+4. 请 host 所有者移除旧 key，然后在本机 *Delete* 旧 key。
+
+**host 的 key 变更时。** Deskhub 拒绝 connect，并提示 "This host's key has changed"。这
+发生在 host 重装了 Deskhub 或丢失了 settings 目录时 —— 也可能是另一台机器在该地址上应答。
+只有在确知 key 变更原因时，才从 **Trusted hosts** 中移除该 host（*Remove*，或
+`deskhub-cli host remove ALIAS`），再次 connect，并像首次连接那样核对新的 fingerprint。
+使用 CLI 时，`host update ALIAS --host-key-stdin` 可直接固定新 key。
+
+### 从旧版 Deskhub 升级
+
+不做任何迁移。旧版 Deskhub 的 passcode 和已配对设备列表不会保留：请按上文所述创建或复制
+key，在每个 host 上允许它们，并重新信任每个 host。两台机器都需要本版本 —— 任何一方运行旧版
+Deskhub 都无法 connect，并会被拒绝，提示 "That machine uses an incompatible
+authentication version"。
+
 ## 🆘 出现问题时
 
 - **找不到可连接的机器** —— 两台机器必须位于同一 network（或同一 Tailscale tailnet），
   且 host 侧的 UDP 47777 必须开放。
 - **"This device's key is not authorized on that machine yet"** —— host 的列表中没有本机的
-  client key；请在 host 的 Devices 页上允许其 public key。由旧版 Deskhub 允许的 client
-  必须重新允许。
-- **"This host's key has changed"** —— 见[共享屏幕之前](#-共享屏幕之前)。
+  client key；请在 host 的 Devices 页上允许其 public key —— 见
+  [允许设备 connect](#允许设备-connect)。由旧版 Deskhub 允许的 client 必须重新允许。
+- **"This host's key has changed"** —— 见[撤销与轮换 key](#撤销与轮换-key)。
+- **"That machine uses an incompatible authentication version"** —— 有一方运行的是旧版
+  Deskhub；请更新两台机器。见[从旧版 Deskhub 升级](#从旧版-deskhub-升级)。
 - **Linux：share 立即失败** —— 运行 `vainfo | grep -E 'H264.*Enc'`。结果为空说明本机没
   有可用的 H.264 encoder，无法作为 host。
 - **Linux：指针不移动** —— 缺少第 3 条中的 `/dev/uinput` rule。

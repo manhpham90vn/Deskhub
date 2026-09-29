@@ -7,7 +7,7 @@ endif()
 add_executable(deskhub_cli
     Main.cpp
     Output.cpp
-    DiscoverCommands.cpp
+    SourcesCommands.cpp
     StoreCommands.cpp
     ShareCommand.cpp
     SendCommand.cpp

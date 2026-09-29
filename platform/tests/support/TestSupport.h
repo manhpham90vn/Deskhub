@@ -4,6 +4,9 @@
 #include "deskhubp/system/ClientIdentity.h"
 #include "deskhubp/system/HostIdentity.h"
 
+#include <filesystem>
+#include <string>
+
 inline bool ForgetHostIdentity() {
     deskhubp::RemoveAppDataFile(deskhubp::kHostCertFileName);
     deskhubp::RemoveAppDataFile(deskhubp::kHostKeyFileName);
@@ -18,6 +21,19 @@ inline bool GrantClientKey(const deskhubp::ClientIdentity& identity) {
 inline bool RevokeAllClientKeys() {
     return deskhubp::ClearAuthorizedKeys();
 }
+
+std::filesystem::path UniqueTempDir(const std::string& prefix);
+
+struct IsolatedAppData {
+    std::filesystem::path dir{};
+    std::string previous = deskhubp::AppDataDirRef();
+
+    explicit IsolatedAppData(const std::string& prefix);
+    ~IsolatedAppData();
+
+    IsolatedAppData(const IsolatedAppData&) = delete;
+    IsolatedAppData& operator=(const IsolatedAppData&) = delete;
+};
 
 extern int g_failures;
 void Check(bool ok, const char* what);

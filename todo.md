@@ -58,12 +58,12 @@ Gate chưa qua trọn vẹn: build macOS có ký cần chứng chỉ phát tri�
 
 - [x] Bỏ hoàn toàn passcode dùng để kết nối/pair, SPAKE2 và dữ liệu passcode được lưu. Tài liệu sản phẩm còn mô tả passcode và được xử lý ở mục 10.
 - [x] Bỏ popup duyệt kết nối, hàng đợi yêu cầu duyệt và chế độ tự chấp nhận máy lạ. Cờ `allow_new_pairings` còn trong settings cũ nhưng không được handshake đọc; xóa cùng migration settings.
-- [ ] Mọi kết nối phải xác thực bằng chữ ký từ private key tương ứng với public key đã được cấp quyền.
+- [x] Mọi kết nối phải xác thực bằng chữ ký từ private key tương ứng với public key đã được cấp quyền.
 - [x] Cho phép thiết bị tự tạo khóa hoặc import private key có sẵn bên ngoài (GUI “My keys” và CLI `key generate/import`).
 - [x] Host nhận public key của client bằng text. GUI có ô dán; CLI nhận stdin; service sau này đọc cùng cấu hình text.
 - [x] Client kiểm tra khóa host đã ghim trước khi xác thực; host mới được ghim theo quyết định TOFU (xác nhận fingerprint hoặc `--accept-new-host-key`), khóa đổi bị chặn.
-- [ ] Bỏ tìm máy trong LAN ở UI, CLI và đường xử lý discovery trên mạng.
-- [ ] Dùng chung logic cho desktop, mobile, CLI và service tương lai.
+- [x] Bỏ tìm máy trong LAN ở UI, CLI và đường xử lý discovery trên mạng.
+- [x] Dùng chung logic cho desktop, mobile, CLI và service tương lai.
 
 Chỉ triển khai nền tảng cấu hình/xác thực để service sử dụng sau này. Việc tạo daemon, cài system service và quản lý vòng đời service nằm ngoài đợt này.
 
@@ -116,7 +116,7 @@ Public key và thông tin host phải được chuyển qua kênh mà chủ thi�
 | Kiểm tra host | `platform/src/client/HostLink.cpp` | Bắt buộc ghim khóa, bỏ trust popup và tự trust qua passcode |
 | Danh sách client/host | `core/src/net/PairedDevices.cpp`, `core/src/net/TrustStore.cpp` | Mô hình cấu hình và migration mới |
 | Lưu cấu hình | `platform/src/system/PairedDevicesFile.cpp`, `platform/src/system/TrustStoreFile.cpp` | Ghi an toàn, reload, báo lỗi rõ |
-| CLI | `core/src/cli/Command.cpp`, `client/cli/StoreCommands.cpp`, `client/cli/DiscoverCommands.cpp` | Quản lý khóa/host, bỏ scan/passcode |
+| CLI | `core/src/cli/Command.cpp`, `client/cli/StoreCommands.cpp`, `client/cli/SourcesCommands.cpp` | Quản lý khóa/host, bỏ scan/passcode |
 | Discovery | `platform/src/client/LanScanner.cpp`, `platform/src/client/HostProbe.cpp`, `platform/src/ffi/DiscoveryFfi.cpp` | Xóa scanner/probe, chuyển phần quản lý host còn cần sang API phù hợp |
 | Apple UI | `client/apple/swift/DevicesPage.swift`, `client/apple/swift/DiscoveryModel.swift` | Quản lý khóa và host cấu hình thủ công |
 
@@ -196,7 +196,7 @@ Tên file và lệnh bên dưới là thiết kế dự kiến cần thống nh�
 - [x] Kết nối từ danh sách host đã lưu; hiển thị lỗi trong trạng thái kết nối, không mở popup xin duyệt/trust.
 - [x] Cập nhật Swift dùng chung macOS/iOS, Android, Linux và Windows cùng một hành vi. Windows và macOS/iOS chưa được build cục bộ.
 - [x] Xóa trường passcode, nút scan, switch cho phép pair máy mới và các màn hình yêu cầu duyệt. Nút làm mới còn lại chỉ nạp lại danh sách đã lưu, không quét mạng.
-- [ ] Chỉ lưu/hiển thị “last seen” dựa trên tương tác đã xác thực; không probe plaintext để cập nhật trạng thái danh sách.
+- [x] Chỉ lưu/hiển thị “last seen” dựa trên tương tác đã xác thực; không probe plaintext để cập nhật trạng thái danh sách. `authorized_keys` không lưu thời gian; “Last connected” ở danh sách recent chỉ ghi khi `dh_list_sources`/`QuerySources` thành công sau xác thực.
 
 ### 6.2. CLI dự kiến
 
@@ -232,8 +232,8 @@ deskhub-cli connect office
 - [x] Sửa `RunSources` và `RunConnect` đang gọi `ProbeHostRttMs`: đi thẳng vào QUIC/TLS, kiểm tra host, auth rồi mới query nguồn.
 - [x] Rà `Beacon`, `HostNetLoop` và `ViewerBroadcast`: tách phần liệt kê nguồn trong phiên đã auth trước khi xóa chức năng discovery. Không xóa theo tên “Broadcast” vì còn broadcast media tới viewer hợp lệ.
 - [x] Giữ `ListSources/SourceList` khi cần cho danh sách màn hình sau auth; giữ ping/pong, heartbeat, RTT trong phiên hợp lệ.
-- [ ] Bỏ import, file build, FFI, string ID, bản dịch và test chỉ phục vụ scan LAN. Đã xóa source/build/FFI/JNI/test scanner, probe và string helper quét; cần rà tiếp string ID, bản dịch và tài liệu cũ.
-- [ ] Kiểm tra bằng packet capture: app idle không quét subnet; host không trả lời gói discovery Deskhub cũ; kết nối cấu hình thủ công vẫn hoạt động.
+- [x] Bỏ import, file build, FFI, string ID, bản dịch và test chỉ phục vụ scan LAN. Đã xóa source/build/FFI/JNI/test scanner, probe và string helper quét; cần rà tiếp string ID, bản dịch và tài liệu cũ. Rà lại 2026-09-29: không còn string ID/FFI/test scan; `DiscoverCommands.cpp` đổi thành `SourcesCommands.cpp`.
+- [x] Kiểm tra bằng packet capture: app idle không quét subnet; host không trả lời gói discovery Deskhub cũ; kết nối cấu hình thủ công vẫn hoạt động. Không có quyền root cho tcpdump; thay bằng strace: app Linux idle 20 s (display broadway, HOME riêng) không gửi gói IPv4/IPv6 nào (chỉ AF_UNIX/AF_NETLINK); host CLI đang lắng nghe không trả lời LIST_SOURCES/PING/HELLO plaintext hay gói rác; kết nối thủ công qua cli-smoke vẫn chạy. Packet capture trên mạng thật vẫn nên chạy trên máy có quyền root.
 
 Bỏ discovery giảm dữ liệu công khai và đường xử lý trước auth. QUIC vẫn cần gói handshake mạng trước auth ứng dụng; cổng lắng nghe không trở nên vô hình trước quét mạng.
 
@@ -247,44 +247,44 @@ Bỏ discovery giảm dữ liệu công khai và đường xử lý trước aut
 - [x] ~~Giữ các pin host cũ nếu chuyển đổi được với đúng encoding fingerprint; đánh dấu rõ pin legacy và không làm mất kiểm tra khóa khi đọc cấu hình cũ.~~ — không áp dụng (không migration).
 - [x] ~~Địa chỉ recent không kèm pin chỉ được chuyển thành mục chưa cấu hình xong; không tự trở thành host tin cậy.~~ — không áp dụng (không migration).
 - [x] Xóa passcode khỏi settings/recent store, CLI/env, FFI, log và serialization; không tạo bản backup mới chứa passcode/private key dạng rõ.
-- [ ] Thông báo tương thích rõ cho client/server cũ. Bản mới không cho phép cơ chế cũ để giữ tương thích.
-- [ ] Khi danh sách khóa mới chưa được cấu hình, host từ chối truy cập và hướng dẫn quản trị viên thêm public key cục bộ.
+- [x] Thông báo tương thích rõ cho client/server cũ. Bản mới không cho phép cơ chế cũ để giữ tương thích. Bản cũ nhận `VersionMismatch` và thông báo “Update Deskhub on both machines”; tài liệu ghi rõ không tương thích và không migration.
+- [x] Khi danh sách khóa mới chưa được cấu hình, host từ chối truy cập và hướng dẫn quản trị viên thêm public key cục bộ. Host từ chối tất cả; danh sách trống trên Devices hướng dẫn xin public key, dán vào ô và bấm Allow.
 
 ## 9. Kiểm thử và tiêu chí nghiệm thu
 
 ### 9.1. Unit và parser
 
-- [ ] Parse/serialize public key text, chuẩn hóa, phát hiện duplicate, comment, ký tự điều khiển, dữ liệu hỏng/quá lớn và thuật toán không hỗ trợ.
-- [ ] Kiểm thử fingerprint SSH/SPKI và migration để không lẫn encoding.
-- [ ] Test vector import OpenSSH/PKCS#8 thực tế cho Ed25519/P-256, gồm khóa mã hóa, sai passphrase, dữ liệu cắt ngắn và cặp khóa không hợp lệ.
-- [ ] Test ghi cấu hình thất bại, reload lỗi, file thiếu và cập nhật đồng thời. Không tác động cấu hình thật của người dùng khi chạy test.
-- [ ] Cập nhật `WireTests`, `CommandTests`, `AuthProofTests`, `HostIdentityTests`, `AuthNegotiationTests` và các test trust/store liên quan.
+- [x] Parse/serialize public key text, chuẩn hóa, phát hiện duplicate, comment, ký tự điều khiển, dữ liệu hỏng/quá lớn và thuật toán không hỗ trợ. (`PublicKeyTextTests`: chuẩn hóa, dữ liệu hỏng, giới hạn 128 khóa.)
+- [x] Kiểm thử fingerprint SSH/SPKI và migration để không lẫn encoding. (`ClientIdentityTests::TestAnOpenSshFingerprintIsNeverTheSpkiFingerprint`; phần migration không áp dụng.)
+- [x] Test vector import OpenSSH/PKCS#8 thực tế cho Ed25519/P-256, gồm khóa mã hóa, sai passphrase, dữ liệu cắt ngắn và cặp khóa không hợp lệ. (mở rộng `ClientIdentityTests`, thêm fixture `p256_mismatched`.)
+- [x] Test ghi cấu hình thất bại, reload lỗi, file thiếu và cập nhật đồng thời. Không tác động cấu hình thật của người dùng khi chạy test. (`AppDataFileTests`: ghi đồng thời, file lock liên tiến trình, `known_hosts` hỏng/thiếu/không ghi được; test chạy trong thư mục tạm riêng.)
+- [x] Cập nhật `WireTests`, `CommandTests`, `AuthProofTests`, `HostIdentityTests`, `AuthNegotiationTests` và các test trust/store liên quan.
 
 ### 9.2. Transport và integration
 
-- [ ] Đúng khóa và đúng pin host kết nối được; chỉ biết public key không thể giả danh client.
-- [ ] Chữ ký sai, sai challenge, replay cùng/khác kết nối, hết hạn, đổi public key giữa handshake và message sai thứ tự đều bị từ chối.
-- [ ] Host chưa biết/đổi khóa bị chặn; tên máy, IP giống nhau hoặc certificate tự ký không vượt qua pinning.
-- [ ] Khóa bị thu hồi trong lúc handshake hoặc đang có nhiều phiên không tiếp tục truy cập được.
-- [ ] Không đọc nguồn màn hình, mở terminal, gửi file, input hay clipboard trước auth.
-- [ ] Reconnect/resume/session resumption phải xác thực lại đúng policy.
-- [ ] Gói discovery plaintext cũ không nhận phản hồi; ping/pong và source query sau auth vẫn hoạt động.
+- [x] Đúng khóa và đúng pin host kết nối được; chỉ biết public key không thể giả danh client. (`AuthNegotiationTests::TestAPublicKeyAloneCannotImpersonateAClient`.)
+- [x] Chữ ký sai, sai challenge, replay cùng/khác kết nối, hết hạn, đổi public key giữa handshake và message sai thứ tự đều bị từ chối. (`AuthNegotiationTests`, `TransportAdmissionTests`: transcript, replay khác kết nối, đổi khóa giữa chừng, sai thứ tự, hết hạn.)
+- [x] Host chưa biết/đổi khóa bị chặn; tên máy, IP giống nhau hoặc certificate tự ký không vượt qua pinning. (`HostLinkTests::TestAnImpostorOnThePinnedAddressIsRejected`: cert tự ký cùng CN, cùng IP:port.)
+- [x] Khóa bị thu hồi trong lúc handshake hoặc đang có nhiều phiên không tiếp tục truy cập được. (`TransportAdmissionTests::TestRevokingAKeyClosesEveryConnectionItHolds`; thu hồi giữa handshake kiểm ở mức `HostAuth`.)
+- [x] Không đọc nguồn màn hình, mở terminal, gửi file, input hay clipboard trước auth. (`TransportAdmissionTests::TestNothingReachesTheHostBeforeAuthentication`.)
+- [x] Reconnect/resume/session resumption phải xác thực lại đúng policy. (`QuicEndpointTests::TestEveryConnectionBindsItsOwnAuthSession`; 0-RTT/resumption không được bật trong code.)
+- [x] Gói discovery plaintext cũ không nhận phản hồi; ping/pong và source query sau auth vẫn hoạt động. (`SessionTransportTests::TestPlaintextDiscoveryIsIgnored` + kiểm tay với host thật.)
 - [ ] Kiểm tra kết nối thủ công trên macOS, Windows, Linux, Android, iOS và CLI; service được mô phỏng bằng caller không có UI dùng cùng API/config.
 - [x] Fuzz parser key/config (`fuzz_keys`); message auth đã nằm trong `fuzz_wire`.
 
 ### 9.3. Gate hoàn tất
 
-- [ ] Chạy `make test`, `make lint` và `make test-all`; sửa mọi lỗi liên quan.
-- [ ] Chạy `make lint-tidy` và các build/test CI đa nền tảng liên quan thay đổi crypto/FFI/UI. Ghi rõ gate nào chưa chạy được cục bộ.
+- [x] Chạy `make test`, `make lint` và `make test-all`; sửa mọi lỗi liên quan.
+- [ ] Chạy `make lint-tidy` và các build/test CI đa nền tảng liên quan thay đổi crypto/FFI/UI. Ghi rõ gate nào chưa chạy được cục bộ. Đã chạy cục bộ 2026-09-29: `make lint-tidy`, `make fuzz` (8 target × 20 s, gồm `fuzz_keys`, không lỗi), gitleaks 8.30.1 trên toàn lịch sử với `.gitleaks.toml` mới (allowlist fixture OpenSSH và một dương tính giả trong commit 0d3c5d58) — không còn phát hiện. Chưa chạy cục bộ: ASan/TSan đầy đủ, build Windows/macOS/iOS/arm64, CodeQL.
 - [ ] Kiểm tra packet capture và cấu hình thực tế theo các tiêu chí ở trên.
-- [ ] Rà lại repo để không còn hành vi passcode, approval popup, auto-trust hoặc LAN scan trong sản phẩm; tránh xóa nhầm passphrase import khóa và heartbeat.
+- [x] Rà lại repo để không còn hành vi passcode, approval popup, auto-trust hoặc LAN scan trong sản phẩm; tránh xóa nhầm passphrase import khóa và heartbeat. Quét 2026-09-29: chỉ còn trùng tên vô hại (scancode, biến probe trong CI); mô tả App Store/Play Store đã sửa theo TOFU.
 
 ## 10. Tài liệu và thứ tự triển khai
 
 - [x] Cập nhật README, SPECIFICATION, ARCHITECTURE, SECURITY, CLI help và hướng dẫn cài đặt/cấu hình bị ảnh hưởng.
 - [x] Cập nhật PRIVACY về dữ liệu khóa/host được lưu và loại bỏ discovery/passcode; theo quy ước tài liệu hiện có, cập nhật version/ngày hiệu lực/changelog khi thay đổi hành vi lưu hoặc truyền dữ liệu.
 - [x] Đồng bộ các tài liệu sản phẩm được sửa ở EN/VI/ZH/JA. Ảnh chụp README vẫn là ảnh cũ, cần chụp lại.
-- [ ] Hướng dẫn tạo/import khóa, thêm public key text, ghim khóa host, chạy CLI không tương tác, thu hồi/đổi khóa và chuyển dữ liệu cũ.
+- [x] Hướng dẫn tạo/import khóa, thêm public key text, ghim khóa host, chạy CLI không tương tác, thu hồi/đổi khóa và chuyển dữ liệu cũ. (`docs/INSTALL*` mục “Keys and access”, 4 ngôn ngữ; CLI thêm `key delete`, `access clear`, exit code 3 khi không tới được host.)
 
 Triển khai theo các đợt phụ thuộc sau:
 

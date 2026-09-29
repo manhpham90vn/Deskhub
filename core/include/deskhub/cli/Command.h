@@ -33,7 +33,8 @@ enum class DevicesAction { List,
     Generate,
     Identities,
     Forget,
-    ForgetAll };
+    ForgetAll,
+    DeleteKey };
 
 enum class TrustAction { List,
     Add,

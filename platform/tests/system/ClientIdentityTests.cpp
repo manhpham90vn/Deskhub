@@ -4,12 +4,16 @@
 #include "deskhubp/system/AppDataFile.h"
 #include "deskhubp/system/AuthProof.h"
 #include "deskhubp/system/ClientIdentity.h"
-#include "deskhubp/system/Random.h"
+#include "deskhubp/client/HostProfiles.h"
+#include "deskhubp/system/AuthorizedKeysFile.h"
+#include "deskhubp/system/TrustStoreFile.h"
+#include "deskhub/net/AuthorizedKeys.h"
 
 #include <openssl/bio.h>
 #include <openssl/evp.h>
 #include <openssl/nid.h>
 #include <openssl/pem.h>
+#include <openssl/sha.h>
 
 #include <array>
 #include <cstdio>
@@ -137,9 +141,25 @@ void TestOpenSshPrivateKeyImport() {
         "an unsupported OpenSSH RSA key is refused");
     Check(!deskhubp::ImportClientIdentity(OpenSshFixture("ed25519_mismatched"), {}),
         "an OpenSSH private key with a mismatched public key is refused");
+    Check(!deskhubp::ImportClientIdentity(OpenSshFixture("p256_mismatched"), {}),
+        "an OpenSSH P-256 private key with a mismatched public point is refused");
+    const auto encryptedP256 = OpenSshFixture("p256_encrypted");
+    Check(!deskhubp::ImportClientIdentity(encryptedP256, {}),
+        "an encrypted OpenSSH P-256 key requires its passphrase");
+    Check(!deskhubp::ImportClientIdentity(encryptedP256, "wrong"),
+        "a wrong OpenSSH P-256 passphrase is refused");
     const auto plain = OpenSshFixture("ed25519");
     Check(plain.size() > 100 && !deskhubp::ImportClientIdentity(plain.substr(0, 100), {}),
         "a truncated OpenSSH key is refused");
+    const auto plainP256 = OpenSshFixture("p256");
+    const size_t footer = plainP256.find("-----END");
+    Check(footer != std::string::npos && footer > 200 &&
+              !deskhubp::ImportClientIdentity(
+                  plainP256.substr(0, footer - 100) + "\n" + plainP256.substr(footer), {}),
+        "an OpenSSH P-256 key cut short but still framed is refused");
+    Check(!deskhubp::ImportClientIdentity(encrypted.substr(0, encrypted.size() / 2),
+              "correct passphrase"),
+        "a truncated encrypted OpenSSH key is refused even with its passphrase");
     Check(deskhubp::LoadClientIdentity().fingerprint == latest.fingerprint,
         "failed OpenSSH imports preserve the active identity");
 }
@@ -174,6 +194,15 @@ void TestClientKeyIsSeparateAndStable() {
     Check(!encrypted.empty(), "a password-protected PKCS#8 fixture can be made");
     Check(!deskhubp::ImportClientIdentity(encrypted, "wrong"),
         "a wrong key passphrase cannot replace the identity");
+    Check(!deskhubp::ImportClientIdentity(encrypted, {}),
+        "an encrypted PKCS#8 key without its passphrase is refused");
+    Check(!deskhubp::ImportClientIdentity(encrypted.substr(0, encrypted.size() / 2),
+              "correct passphrase"),
+        "a truncated encrypted PKCS#8 key is refused even with its passphrase");
+    Check(!deskhubp::ImportClientIdentity(first.keyPem.substr(0, first.keyPem.size() - 40), {}),
+        "a truncated PKCS#8 key is refused");
+    Check(deskhubp::LoadClientIdentity().fingerprint == first.fingerprint,
+        "failed PKCS#8 imports keep the active identity");
     Check(deskhubp::ImportClientIdentity(encrypted, "correct passphrase"),
         "the right passphrase unlocks an encrypted external key");
 
@@ -189,20 +218,11 @@ void TestClientKeyIsSeparateAndStable() {
 }
 
 void TestNamedClientKeysStaySeparate() {
-    std::array<uint8_t, 8> suffix{};
-    if (!RandomBytes(suffix.data(), suffix.size())) {
+    const IsolatedAppData isolated("deskhub-client-keys-");
+    if (isolated.dir.empty()) {
         Check(false, "the named identity test has a unique directory");
         return;
     }
-    std::string name = "deskhub-client-keys-";
-    constexpr char digits[] = "0123456789abcdef";
-    for (uint8_t byte : suffix) {
-        name += digits[byte >> 4];
-        name += digits[byte & 15];
-    }
-    const auto dir = std::filesystem::temp_directory_path() / name;
-    const std::string previous = deskhubp::AppDataDirRef();
-    deskhubp::SetAppDataDir(dir.string());
 
     const auto first = deskhubp::LoadOrCreateClientIdentity();
     const auto second = deskhubp::GenerateClientIdentity("laptop-a");
@@ -250,10 +270,61 @@ void TestNamedClientKeysStaySeparate() {
     const auto damaged = deskhubp::ListClientIdentities();
     Check(damaged.size() == 3 && damaged[2].name == "phone" && !damaged[2].valid,
         "listing identifies an unusable named key without hiding it");
+}
 
-    deskhubp::SetAppDataDir(previous);
-    std::error_code error;
-    std::filesystem::remove_all(dir, error);
+constexpr std::string_view kSshKeygenEd25519Fingerprint =
+    "SHA256:onYT8tlTCNlJX2Imf8cznmKswcuS77w/ztQFhRX3h+8";
+
+deskhub::Fingerprint OpenSshBlobFingerprint(std::string_view publicKeyText) {
+    deskhub::Fingerprint fingerprint;
+    const auto parsed = deskhub::ParsePublicKeyText(publicKeyText);
+    if (!parsed) return fingerprint;
+    SHA256(parsed->blob.data(), parsed->blob.size(), fingerprint.bytes.data());
+    return fingerprint;
+}
+
+void TestAnOpenSshFingerprintIsNeverTheSpkiFingerprint() {
+    std::printf("[client identity] an ssh-keygen fingerprint is never mistaken for ours...\n");
+    if (!deskhubp::QuicAvailable()) return;
+    const IsolatedAppData isolated("deskhub-fingerprint-encoding-");
+    if (isolated.dir.empty()) {
+        Check(false, "the fingerprint encoding test has a unique directory");
+        return;
+    }
+    const std::string publicKey = OpenSshFixture("ed25519.pub");
+    Check(!publicKey.empty(), "the OpenSSH public key fixture can be read");
+    if (publicKey.empty()) return;
+
+    const deskhub::Fingerprint sshStyle = OpenSshBlobFingerprint(publicKey);
+    Check(deskhub::FormatFingerprint(sshStyle) == kSshKeygenEd25519Fingerprint,
+        "hashing the OpenSSH key blob reproduces what ssh-keygen -lf prints");
+    const auto spki = deskhubp::PublicKeySpkiFromText(publicKey);
+    const auto ours = deskhubp::FingerprintOfPublicKey(spki);
+    Check(ours.has_value() && *ours != sshStyle,
+        "the Deskhub fingerprint hashes the SPKI DER, so the two never coincide");
+    Check(deskhubp::ParseHostKeyText(publicKey) == ours,
+        "a pasted public key is pinned by its SPKI fingerprint");
+    const auto pasted = deskhubp::ParseHostKeyText(kSshKeygenEd25519Fingerprint);
+    Check(pasted == sshStyle && pasted != ours,
+        "a pasted ssh-keygen fingerprint stays the blob hash and is not rewritten into ours");
+
+    const std::string endpoint = "127.0.0.1:47999";
+    Check(deskhubp::RememberTrustedHost(endpoint, "ssh-style", sshStyle, 1),
+        "a host pinned with the ssh-keygen value is saved as typed");
+    Check(ours && deskhubp::CheckTrustedHost(endpoint, *ours) == deskhub::TrustVerdict::Changed,
+        "and the key it was taken from does not satisfy that pin");
+
+    Check(deskhubp::RememberAuthorizedKey(publicKey), "the public key is authorized");
+    const auto clients = deskhubp::ListAuthorizedClients();
+    Check(clients && clients->size() == 1 && ours && (*clients)[0].fingerprint == *ours,
+        "the authorized list reports the SPKI fingerprint");
+    Check(!deskhubp::ForgetAuthorizedClient(sshStyle),
+        "revoking by the ssh-keygen value matches nothing");
+    Check(deskhubp::IsClientKeyAuthorized(spki), "so the key keeps its access");
+    Check(!deskhub::ParseAuthorizedKeys(std::string(kSshKeygenEd25519Fingerprint) + "\n"),
+        "an authorized_keys row holding a fingerprint instead of a key is refused");
+    Check(ours && deskhubp::ForgetAuthorizedClient(*ours) && !deskhubp::IsClientKeyAuthorized(spki),
+        "revoking by the SPKI fingerprint removes the key");
 }
 
 }
@@ -262,4 +333,5 @@ void RunClientIdentityTests() {
     TestClientKeyIsSeparateAndStable();
     TestOpenSshPrivateKeyImport();
     TestNamedClientKeysStaySeparate();
+    TestAnOpenSshFingerprintIsNeverTheSpkiFingerprint();
 }

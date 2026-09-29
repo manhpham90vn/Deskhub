@@ -13,12 +13,22 @@ struct SourceQueryRequest {
     bool acceptNewHostKey = false;
 };
 
+enum class SourceQueryFailure {
+    None,
+    Unreachable,
+    UntrustedHost,
+    HostKeyChanged,
+    Refused,
+    LocalError,
+};
+
 struct SourceQueryReply {
     std::vector<deskhub::SourceInfo> sources{};
     deskhub::HostCaps caps{};
     std::string hostName{};
     std::string failure{};
     std::optional<deskhub::Fingerprint> unknownHostKey{};
+    SourceQueryFailure failureKind = SourceQueryFailure::None;
 };
 
 bool QuerySources(const NetAddr& server, SourceQueryReply& reply,

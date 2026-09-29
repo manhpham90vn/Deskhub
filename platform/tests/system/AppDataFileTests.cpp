@@ -4,13 +4,19 @@
 #include "deskhubp/system/AppDataFile.h"
 #include "deskhubp/system/AuthorizedKeysFile.h"
 #include "deskhubp/system/ClientIdentity.h"
-#include "deskhubp/system/Random.h"
+#include "deskhubp/system/Clock.h"
+#include "deskhubp/system/ConfigFileLock.h"
+#include "deskhubp/system/TrustStoreFile.h"
 #include "deskhubp/system/UiSettingsStore.h"
+#include "deskhub/net/PublicKeyText.h"
 
-#include <array>
+#include <atomic>
 #include <cstdio>
 #include <filesystem>
+#include <string>
 #include <system_error>
+#include <thread>
+#include <vector>
 
 #ifndef _WIN32
 #include <sys/stat.h>
@@ -40,18 +46,11 @@ void TestMissingFileReadsAsEmpty() {
 }
 
 void TestConfigDirectoryCanBeSeparateFromLogs() {
-    std::array<uint8_t, 8> suffix{};
-    if (!RandomBytes(suffix.data(), suffix.size())) {
+    const auto root = UniqueTempDir("deskhub-config-dir-");
+    if (root.empty()) {
         Check(false, "the separate config directory test has a unique location");
         return;
     }
-    std::string name = "deskhub-config-dir-";
-    constexpr char digits[] = "0123456789abcdef";
-    for (uint8_t byte : suffix) {
-        name += digits[byte >> 4];
-        name += digits[byte & 15];
-    }
-    const auto root = std::filesystem::temp_directory_path() / name;
     std::filesystem::create_directory(root);
     const std::string oldAppDir = deskhubp::AppDataDirRef();
     const std::string oldConfigDir = deskhubp::ConfigDirRef();
@@ -91,36 +90,6 @@ void TestConfigDirectoryCanBeSeparateFromLogs() {
     std::error_code error;
     std::filesystem::remove_all(root, error);
 }
-
-std::filesystem::path UniqueTempDir(const std::string& prefix) {
-    std::array<uint8_t, 8> suffix{};
-    if (!RandomBytes(suffix.data(), suffix.size())) return {};
-    std::string name = prefix;
-    constexpr char digits[] = "0123456789abcdef";
-    for (uint8_t byte : suffix) {
-        name += digits[byte >> 4];
-        name += digits[byte & 15];
-    }
-    return std::filesystem::temp_directory_path() / name;
-}
-
-struct IsolatedAppData {
-    std::filesystem::path dir{};
-    std::string previous = deskhubp::AppDataDirRef();
-
-    explicit IsolatedAppData(const std::string& prefix) : dir(UniqueTempDir(prefix)) {
-        if (!dir.empty()) deskhubp::SetAppDataDir(dir.string());
-    }
-
-    ~IsolatedAppData() {
-        deskhubp::SetAppDataDir(previous);
-        std::error_code error;
-        if (!dir.empty()) std::filesystem::remove_all(dir, error);
-    }
-
-    IsolatedAppData(const IsolatedAppData&) = delete;
-    IsolatedAppData& operator=(const IsolatedAppData&) = delete;
-};
 
 void TestUnknownSettingsKeysAreIgnored() {
     std::printf("[appdata] settings keys this version does not know are ignored...\n");
@@ -272,6 +241,159 @@ void TestAuthorizedClientsAreListedAndForgotten() {
         "an intentionally empty authorized_keys file denies every client");
 }
 
+constexpr size_t kWritersPerStore = 2;
+constexpr size_t kEntriesPerWriter = 16;
+constexpr uint64_t kLockHeldUs = 300'000;
+
+void AppendSshString(std::vector<uint8_t>& out, std::string_view value) {
+    const auto length = uint32_t(value.size());
+    for (int shift = 24; shift >= 0; shift -= 8) out.push_back(uint8_t(length >> shift));
+    out.insert(out.end(), value.begin(), value.end());
+}
+
+std::string SyntheticKeyText(size_t writer, size_t entry) {
+    deskhub::PublicKeyText key;
+    key.algorithm = deskhub::PublicKeyAlgorithm::Ed25519;
+    std::string raw(32, 'k');
+    raw[0] = char('a' + writer);
+    raw[1] = char('a' + entry);
+    AppendSshString(key.blob, "ssh-ed25519");
+    AppendSshString(key.blob, raw);
+    return deskhub::FormatPublicKeyText(key);
+}
+
+deskhub::Fingerprint SyntheticFingerprint(size_t writer, size_t entry) {
+    deskhub::Fingerprint fingerprint;
+    fingerprint.bytes.fill(0x5a);
+    fingerprint.bytes[0] = uint8_t(writer + 1);
+    fingerprint.bytes[1] = uint8_t(entry + 1);
+    return fingerprint;
+}
+
+std::string SyntheticEndpoint(size_t writer, size_t entry) {
+    return "10.0." + std::to_string(writer) + "." + std::to_string(entry + 1) + ":47777";
+}
+
+template <typename Write>
+size_t RunWritersTogether(Write write) {
+    std::atomic<size_t> succeeded{0};
+    std::atomic<bool> go{false};
+    std::vector<std::thread> writers;
+    for (size_t writer = 0; writer < kWritersPerStore; ++writer)
+        writers.emplace_back([&, writer] {
+            while (!go.load(std::memory_order_acquire)) std::this_thread::yield();
+            for (size_t entry = 0; entry < kEntriesPerWriter; ++entry)
+                if (write(writer, entry)) succeeded.fetch_add(1, std::memory_order_relaxed);
+        });
+    go.store(true, std::memory_order_release);
+    for (std::thread& writer : writers) writer.join();
+    return succeeded.load();
+}
+
+void TestConcurrentEditsNeverLoseAnEntry() {
+    std::printf("[appdata] two writers editing the key and host lists at once lose nothing...\n");
+    const IsolatedAppData isolated("deskhub-concurrent-");
+    if (isolated.dir.empty()) {
+        Check(false, "the concurrent edit test has a unique directory");
+        return;
+    }
+    const size_t expected = kWritersPerStore * kEntriesPerWriter;
+
+    const size_t keysAdded = RunWritersTogether([](size_t writer, size_t entry) {
+        return deskhubp::RememberAuthorizedKey(SyntheticKeyText(writer, entry));
+    });
+    Check(keysAdded == expected, "every concurrent authorized key write reports success");
+    const auto keys = deskhubp::LoadAuthorizedKeys();
+    Check(keys && keys->Keys().size() == expected,
+        "and every key is in the file afterwards, none overwritten by the other writer");
+
+    const size_t hostsAdded = RunWritersTogether([](size_t writer, size_t entry) {
+        return deskhubp::RememberTrustedHost(SyntheticEndpoint(writer, entry), "host",
+            SyntheticFingerprint(writer, entry), 1);
+    });
+    Check(hostsAdded == expected, "every concurrent host pin write reports success");
+    const auto hosts = deskhubp::TryLoadTrustStore();
+    Check(hosts && hosts->Size() == expected, "and every pin is in known_hosts afterwards");
+    bool allPinned = hosts.has_value();
+    for (size_t writer = 0; writer < kWritersPerStore && hosts; ++writer)
+        for (size_t entry = 0; entry < kEntriesPerWriter; ++entry)
+            allPinned = allPinned &&
+                        hosts->Check(SyntheticEndpoint(writer, entry),
+                            SyntheticFingerprint(writer, entry)) ==
+                            deskhub::TrustVerdict::Trusted;
+    Check(allPinned, "each endpoint keeps the key its own writer pinned");
+}
+
+void TestAnotherProcessHoldingTheFileLockIsWaitedFor() {
+    std::printf("[appdata] an edit waits while another process holds the config lock...\n");
+    const IsolatedAppData isolated("deskhub-config-lock-");
+    if (isolated.dir.empty()) {
+        Check(false, "the config lock test has a unique directory");
+        return;
+    }
+    std::atomic<bool> finished{false};
+    std::atomic<bool> saved{false};
+    std::thread writer;
+    {
+        const deskhubp::ConfigFileLock otherProcess(deskhubp::kAuthorizedKeysFileName);
+        Check(otherProcess.Valid(), "the lock another process would take is held");
+        writer = std::thread([&] {
+            saved.store(deskhubp::RememberAuthorizedKey(SyntheticKeyText(0, 0)),
+                std::memory_order_release);
+            finished.store(true, std::memory_order_release);
+        });
+        SleepUs(kLockHeldUs);
+        Check(!finished.load(std::memory_order_acquire),
+            "the edit does not proceed while the lock is held");
+        Check(deskhubp::ReadAppDataFile(deskhubp::kAuthorizedKeysFileName).empty(),
+            "and nothing is written underneath the lock holder");
+    }
+    writer.join();
+    Check(saved.load(std::memory_order_acquire), "once the lock is released the edit completes");
+    const auto keys = deskhubp::LoadAuthorizedKeys();
+    Check(keys && keys->Keys().size() == 1, "and the key is saved exactly once");
+}
+
+void TestKnownHostsFailuresNeverGrantTrust() {
+    std::printf("[appdata] a missing, damaged or unwritable known_hosts grants no trust...\n");
+    const IsolatedAppData isolated("deskhub-known-hosts-");
+    if (isolated.dir.empty()) {
+        Check(false, "the known_hosts test has a unique directory");
+        return;
+    }
+    const std::string endpoint = SyntheticEndpoint(0, 0);
+    const deskhub::Fingerprint pinned = SyntheticFingerprint(0, 0);
+
+    const auto missing = deskhubp::TryLoadTrustStore();
+    Check(missing && missing->Size() == 0, "a missing known_hosts reads as an empty list");
+    Check(deskhubp::CheckTrustedHost(endpoint, pinned) == deskhub::TrustVerdict::Unknown,
+        "and trusts nobody");
+
+    Check(deskhubp::RememberTrustedHost(endpoint, "host", pinned, 1), "a host is pinned");
+    const std::string valid = deskhubp::ReadAppDataFile(deskhubp::kTrustStoreFileName);
+    Check(deskhubp::WriteAppDataFile(deskhubp::kTrustStoreFileName, valid + "damaged row\n"),
+        "known_hosts is damaged behind the app's back");
+    Check(!deskhubp::TryLoadTrustStore(), "a reload reports the damage instead of a partial list");
+    Check(deskhubp::CheckTrustedHost(endpoint, pinned) == deskhub::TrustVerdict::Unknown,
+        "and even the valid row no longer vouches for the host");
+
+    const auto target = deskhubp::AppDataFilePath(deskhubp::kTrustStoreFileName);
+    std::error_code error;
+    std::filesystem::remove(target, error);
+    std::filesystem::create_directory(target, error);
+    Check(!error, "a directory blocks replacement of known_hosts");
+    Check(!deskhubp::RememberTrustedHost(endpoint, "host", pinned, 1),
+        "a failed known_hosts write reports failure");
+    Check(!deskhubp::TryLoadTrustStore() &&
+              deskhubp::CheckTrustedHost(endpoint, pinned) == deskhub::TrustVerdict::Unknown,
+        "and an unreadable store trusts nobody");
+
+    std::filesystem::remove(target, error);
+    Check(deskhubp::RememberTrustedHost(endpoint, "host", pinned, 1) &&
+              deskhubp::CheckTrustedHost(endpoint, pinned) == deskhub::TrustVerdict::Trusted,
+        "once the path is writable again the pin is saved and read back");
+}
+
 }
 
 void RunAppDataFileTests() {
@@ -281,4 +403,7 @@ void RunAppDataFileTests() {
     TestUnknownSettingsKeysAreIgnored();
     TestADamagedAuthorizedKeysFileDeniesThenStartsFresh();
     TestAuthorizedClientsAreListedAndForgotten();
+    TestConcurrentEditsNeverLoseAnEntry();
+    TestAnotherProcessHoldingTheFileLockIsWaitedFor();
+    TestKnownHostsFailuresNeverGrantTrust();
 }

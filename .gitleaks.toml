@@ -1,0 +1,16 @@
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Throwaway OpenSSH keys generated with ssh-keygen as import test vectors; they protect nothing"
+paths = [
+    '''^platform/tests/fixtures/openssh/''',
+]
+
+[[allowlists]]
+description = "Source that only compares against PEM header strings; no key material"
+condition = "AND"
+commits = ["0d3c5d58cc25239de11a84654073322579a15899"]
+paths = [
+    '''^client/cli/StoreCommands\.cpp$''',
+]

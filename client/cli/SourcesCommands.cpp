@@ -82,6 +82,14 @@ ExitCode ReportQueryFailure(const SourceQueryReply& reply) {
     PrintConnectFailure(reply.failure);
     if (reply.unknownHostKey)
         PrintError(deskhub::ui::NewHostKeyCliHint(deskhub::FormatFingerprint(*reply.unknownHostKey)));
+    switch (reply.failureKind) {
+        case SourceQueryFailure::Unreachable: return ExitCode::Unreachable;
+        case SourceQueryFailure::HostKeyChanged: return ExitCode::KeyChanged;
+        case SourceQueryFailure::LocalError: return ExitCode::Failed;
+        case SourceQueryFailure::None:
+        case SourceQueryFailure::UntrustedHost:
+        case SourceQueryFailure::Refused: break;
+    }
     return ExitCode::Refused;
 }
 

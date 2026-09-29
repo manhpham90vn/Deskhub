@@ -8,12 +8,14 @@
 #include "deskhubp/system/HostIdentity.h"
 
 #include <cstdio>
+#include <optional>
 #include <string>
 #include <vector>
 
 namespace {
 
 constexpr uint16_t kTestPort = 47791;
+constexpr uint16_t kReconnectPort = 47875;
 constexpr int kMaxRounds = 400;
 
 struct Peer {
@@ -290,6 +292,57 @@ void TestUnstartedEndpointIsHarmless() {
     Check(true, "polling and closing it does nothing at all");
 }
 
+std::optional<deskhub::AuthSessionId> DialAndExport(Peer& server, const NetAddr& target) {
+    Peer client;
+    if (!client.endpoint.Connect(deskhubp::QuicSettings{}, target, "deskhub-test",
+            HooksFor(client)))
+        return std::nullopt;
+    server.connected = false;
+    for (int i = 0; i < kMaxRounds && !(server.connected && client.connected); ++i)
+        Pump(client, server, 1);
+    if (!client.connected || !server.connected) return std::nullopt;
+    const auto clientSession = client.endpoint.ExportAuthSessionId(client.conn);
+    const auto hostSession = server.endpoint.ExportAuthSessionId(server.conn);
+    client.endpoint.CloseConnection(client.conn, 0, "done");
+    Pump(client, server, 20);
+    client.endpoint.Close();
+    if (!clientSession || !hostSession || *clientSession != *hostSession) return std::nullopt;
+    return clientSession;
+}
+
+void TestEveryConnectionBindsItsOwnAuthSession() {
+    std::printf("[quic] a reconnect gets a fresh auth session, never a resumed one...\n");
+    if (!deskhubp::QuicAvailable()) return;
+
+    const std::string savedCert = deskhubp::ReadAppDataFile(deskhubp::kHostCertFileName);
+    const std::string savedKey = deskhubp::ReadAppDataFile(deskhubp::kHostKeyFileName);
+    ForgetHostIdentity();
+    const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity("deskhub-test");
+    Check(identity.Valid(), "the host has an identity to present");
+
+    Peer server;
+    deskhubp::QuicSettings settings;
+    settings.certPemPath = identity.certPath;
+    settings.keyPemPath = identity.keyPath;
+    const NetAddr target{0x7F000001u, kReconnectPort};
+    const bool listening = identity.Valid() &&
+                           server.endpoint.Listen(settings, "127.0.0.1", target.port,
+                               HooksFor(server));
+    Check(listening, "the host listens");
+    if (listening) {
+        const auto first = DialAndExport(server, target);
+        const auto second = DialAndExport(server, target);
+        Check(first.has_value() && second.has_value(),
+            "both connections complete a full handshake and agree on their session id");
+        Check(first && second && *first != *second,
+            "a reconnect exports a different id, so no proof carries over to it");
+        server.endpoint.Close();
+    }
+
+    if (!savedCert.empty()) deskhubp::WriteAppDataFile(deskhubp::kHostCertFileName, savedCert);
+    if (!savedKey.empty()) deskhubp::WriteAppDataFile(deskhubp::kHostKeyFileName, savedKey);
+}
+
 }
 
 void RunQuicEndpointTests() {
@@ -297,4 +350,5 @@ void RunQuicEndpointTests() {
     TestARefusedStreamIsResetNotTruncated();
     TestAFloodedStreamIsDrainedInBoundedSlices();
     TestUnstartedEndpointIsHarmless();
+    TestEveryConnectionBindsItsOwnAuthSession();
 }

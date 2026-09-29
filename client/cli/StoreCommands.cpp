@@ -158,7 +158,9 @@ ExitCode RunDevices(const Command& command) {
     }
 
     if (command.devices == DevicesAction::Public) {
-        const deskhubp::ClientIdentity identity = command.keyName.empty()
+        const bool defaultKey =
+            command.keyName.empty() || command.keyName == deskhub::ui::kDefaultIdentityName;
+        const deskhubp::ClientIdentity identity = defaultKey
                                                       ? deskhubp::LoadOrCreateClientIdentity()
                                                       : deskhubp::LoadClientIdentity(command.keyName);
         const std::string publicKey = deskhubp::ClientPublicKeyLine(identity, command.keyName);
@@ -223,6 +225,17 @@ ExitCode RunDevices(const Command& command) {
             return ExitCode::Failed;
         }
         if (!command.quiet) PrintLine(deskhub::FormatFingerprint(*fingerprint));
+        return ExitCode::Ok;
+    }
+
+    if (command.devices == DevicesAction::DeleteKey) {
+        const deskhub::ui::ClientKeyError error = deskhubp::DeleteClientKey(command.keyName);
+        if (error != deskhub::ui::ClientKeyError::None) {
+            PrintError(deskhub::ui::ClientKeyErrorText(error));
+            return error == deskhub::ui::ClientKeyError::WriteFailed ? ExitCode::Failed
+                                                                     : ExitCode::Usage;
+        }
+        if (!command.quiet) PrintLine("Key deleted.");
         return ExitCode::Ok;
     }
 

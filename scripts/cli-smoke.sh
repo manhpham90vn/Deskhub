@@ -54,13 +54,21 @@ cp "$WORK/out" "$WORK/host.pub"
 expect_code 0 "$CLI" key generate --name stranger
 
 echo "== nobody is listening"
-expect_code 4 "$CLI" sources "127.0.0.1:$((PORT + 1))"
+expect_code 3 "$CLI" sources "127.0.0.1:$((PORT + 1))"
 grep -q "Could not reach" "$WORK/err" || fail "an unreachable host was not reported as unreachable"
 
 case "$(uname -s)" in
     MINGW* | MSYS* | CYGWIN*)
         echo "== the rest needs POSIX signals - skipping on Windows"
-        echo "cli-smoke: OK"
+        echo "== keys are deleted and access is cleared"
+expect_code 2 "$CLI" key delete --name default
+expect_code 0 "$CLI" key delete --name stranger
+expect_code 2 "$CLI" key delete --name stranger
+expect_code 0 "$CLI" access clear
+expect_code 0 "$CLI" access list --json
+grep -q '^\[\]$' "$WORK/out" || fail "access clear left a client key behind"
+
+echo "cli-smoke: OK"
         exit 0
         ;;
 esac
@@ -202,5 +210,13 @@ cmp -s "$WORK/notes.txt" "$ONLY_LANDING/notes.txt" ||
 
 kill -INT "$ONLY_PID"
 wait "$ONLY_PID" || fail "the file-only host did not stop cleanly on an interrupt"
+
+echo "== keys are deleted and access is cleared"
+expect_code 2 "$CLI" key delete --name default
+expect_code 0 "$CLI" key delete --name stranger
+expect_code 2 "$CLI" key delete --name stranger
+expect_code 0 "$CLI" access clear
+expect_code 0 "$CLI" access list --json
+grep -q '^\[\]$' "$WORK/out" || fail "access clear left a client key behind"
 
 echo "cli-smoke: OK"

@@ -390,6 +390,54 @@ void TestAHostThatStopsAnsweringPingsReadsAsLost() {
     host.Shutdown();
 }
 
+void TestAnImpostorOnThePinnedAddressIsRejected() {
+    std::printf("[hostlink] a self-signed impostor at the pinned address does not pass...\n");
+    const deskhubp::HostIdentity real = deskhubp::LoadOrCreateHostIdentity("link-test-host");
+    const std::string savedCert = deskhubp::ReadAppDataFile(deskhubp::kHostCertFileName);
+    const std::string savedKey = deskhubp::ReadAppDataFile(deskhubp::kHostKeyFileName);
+    const deskhubp::HostLinkConfig config = LinkConfig();
+    Check(deskhubp::RememberTrustedHost(config.hostLabel, "127.0.0.1", real.fingerprint,
+              NowUnixSeconds()),
+        "the real host key is pinned for this address");
+
+    ForgetHostIdentity();
+    const deskhubp::HostIdentity impostor = deskhubp::LoadOrCreateHostIdentity("link-test-host");
+    Check(impostor.Valid() && impostor.fingerprint != real.fingerprint,
+        "an impostor makes its own self-signed certificate under the same host name");
+    LinkHostRig host;
+    Check(host.Start(impostor), "and listens on the same IP and port");
+
+    deskhubp::HostLink link;
+    Check(link.Start(config, deskhubp::HostLinkCallbacks{}), "the client dials the pinned address");
+    Check(WaitUntil([&link] { return link.Settled(); }, 10000), "the link settles");
+    Check(link.State() == deskhubp::HostLinkState::Failed &&
+              link.Message() == deskhub::ui::kAuthHostKeyChanged,
+        "a matching address and host name do not stand in for the pinned key");
+    Check(deskhubp::CheckTrustedHost(config.hostLabel, real.fingerprint) ==
+              deskhub::TrustVerdict::Trusted,
+        "and the pin still names the real host");
+    link.Stop();
+    host.Shutdown();
+
+    deskhubp::HostLinkConfig accepting = config;
+    accepting.acceptNewHostKey = true;
+    LinkHostRig again;
+    Check(again.Start(impostor), "the impostor listens again");
+    deskhubp::HostLink eager;
+    Check(eager.Start(accepting, deskhubp::HostLinkCallbacks{}),
+        "a client that accepts new host keys dials it");
+    Check(WaitUntil([&eager] { return eager.Settled(); }, 10000), "that link settles too");
+    Check(eager.State() == deskhubp::HostLinkState::Failed,
+        "accepting new keys never replaces a pinned one");
+    eager.Stop();
+    again.Shutdown();
+
+    Check(deskhubp::WriteAppDataFile(deskhubp::kHostCertFileName, savedCert) &&
+              deskhubp::WriteAppDataFile(deskhubp::kHostKeyFileName, savedKey) &&
+              deskhubp::LoadHostIdentity().fingerprint == real.fingerprint,
+        "the real host identity is restored for the tests that follow");
+}
+
 }
 
 void TestANewHostKeyIsSavedOnlyWhenAsked() {
@@ -442,6 +490,7 @@ void TestANewHostKeyIsSavedOnlyWhenAsked() {
 void RunHostLinkTests() {
     TestALinkAdmitsOnceAndRoutesByChannel();
     TestALinkRejectsUnknownAndChangedHostKeys();
+    TestAnImpostorOnThePinnedAddressIsRejected();
     TestANewHostKeyIsSavedOnlyWhenAsked();
     TestALinkReportsARefusal();
     TestALinkUsesTheSelectedClientIdentity();

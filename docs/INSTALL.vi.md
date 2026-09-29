@@ -283,6 +283,9 @@ connect:
    host: đối chiếu nó với **This machine's host key** trên trang Devices của host, rồi bấm
    *Trust and connect*. Từ đó trở đi, host nằm trong **Trusted hosts**.
 
+[Key và quyền truy cập](#-key-và-quyền-truy-cập) hướng dẫn từng bước trên app và CLI,
+cùng với key bổ sung, script, thu hồi và thay key.
+
 Không có gì được chấp thuận qua network và Deskhub không bao giờ scan network. Nếu key của
 một host đã trust thay đổi, connection bị từ chối ngay; chỉ gỡ host đó khỏi *Trusted hosts*
 khi bạn biết vì sao key của nó thay đổi, rồi trust lại.
@@ -295,14 +298,150 @@ thể cài [Tailscale](https://tailscale.com) trên cả hai máy và connect t�
 [`SECURITY.vi.md`](../SECURITY.vi.md) mô tả đầy đủ threat model, phạm vi được bảo vệ và
 cách báo lỗ hổng.
 
+## 🔑 Key và quyền truy cập
+
+Deskhub đăng nhập bằng cặp key, giống SSH. Mỗi thiết bị connect có một **client key**, và
+mỗi host có một **host key**. Host chỉ cho vào những client key có trong danh sách của nó,
+còn client chỉ connect tới host có key mà nó đã trust. Mọi thứ nằm trên trang **Devices**,
+chia thành *When this machine is the host* và *When this machine is the client*. Mỗi bước
+bên dưới đều có lệnh `deskhub-cli` tương ứng; app và CLI đọc chung các file, nên thay đổi
+ở bên này sẽ hiện ra ở bên kia.
+
+### Key của bạn
+
+Key của bạn nằm ở **Devices** → *When this machine is the client* → **My keys**. Nửa
+private không bao giờ rời khỏi máy.
+
+- **Key `default`.** App tạo key tên `default` ở lần đầu bạn mở trang Devices, còn CLI tạo
+  nó ở lần đầu connect tới bất kỳ đâu hoặc khi in nó bằng
+  `deskhub-cli key public --name default`. Phần lớn người dùng không cần key nào khác.
+- **Thêm key.** Bấm *New key* và đặt tên (CLI: `deskhub-cli key generate --name NAME`).
+  Dùng key riêng khi bạn muốn thu hồi quyền truy cập của một host mà không ảnh hưởng các
+  host khác.
+- **Key có sẵn.** Bấm *Import key…*, chọn file private key, đặt tên và, nếu file được
+  encrypt, nhập passphrase (CLI: `deskhub-cli key import --name NAME --file PATH`, thêm
+  `--passphrase-stdin` để đọc passphrase từ standard input). Deskhub đọc file OpenSSH
+  (`ssh-keygen`) và PKCS#8 chứa key Ed25519 hoặc ECDSA P-256; RSA không được hỗ trợ.
+  Passphrase chỉ dùng để mở file trong lúc import — nó không được lưu và không bao giờ
+  được gửi tới host.
+- **Public key của bạn.** Bấm *Copy public key* cạnh một key (CLI:
+  `deskhub-cli key public --name NAME`). Bạn nhận được một dòng như
+  `ssh-ed25519 AAAA… laptop`; nhãn ở cuối là tên thiết bị này, đặt ở **Settings** →
+  *General* → **Device name**, để chủ host biết key đó của ai. Dòng này là thứ bạn gửi cho
+  chủ host — chia sẻ nó là an toàn.
+- **Xoá key.** Bấm *Delete* cạnh key đó. Không xoá được key `default`, và cũng không xoá
+  được key mà một host đã trust vẫn đang dùng — hãy chuyển host đó sang key khác trước.
+  Private key đã xoá không khôi phục được. Trên CLI: `deskhub-cli key list` và
+  `deskhub-cli key delete --name NAME`, cùng các quy tắc trên.
+
+### Cho phép một thiết bị connect
+
+Trên host:
+
+1. Xin người sẽ connect dòng public key của họ (xem [Key của bạn](#key-của-bạn)).
+2. Mở **Devices** → *When this machine is the host* → **Clients allowed to connect to
+   this machine**, dán dòng đó vào và bấm *Allow*. Chỉ chấp nhận public key Ed25519 và
+   ECDSA P-256.
+3. Key giờ hiện trong danh sách kèm nhãn. *Remove* cạnh một key sẽ gỡ nó; *Remove every
+   client* xoá sạch danh sách sau khi hỏi xác nhận.
+
+Từ command line, pipe dòng đó vào `access add`:
+
+```sh
+deskhub-cli key public --name default                          # trên client
+deskhub-cli access add --stdin                                 # trên host: dán, rồi Ctrl-D
+deskhub-cli key public --name default | ssh me@host deskhub-cli access add --stdin
+deskhub-cli access list                                        # trên host
+deskhub-cli access remove --fingerprint SHA256:…               # trên host
+```
+
+`deskhub-cli access clear` làm điều tương tự *Remove every client*.
+
+### Connect lần đầu
+
+1. Trên client, nhập địa chỉ của host (`192.168.1.10`, hoặc `192.168.1.10:PORT` khi host
+   không dùng 47777) và bấm *Connect*.
+2. Hộp thoại **New host** hiển thị fingerprint host key, dạng `SHA256:…`.
+3. Trên host, mở **Devices** → *When this machine is the host* → **This machine's host
+   key** (*Copy* đưa nó vào clipboard). Đối chiếu hai fingerprint qua một kênh bạn đã tin
+   — gặp trực tiếp, gọi điện, hoặc chat mà bạn biết chắc là của họ.
+4. Nếu khớp, bấm *Trust and connect*. Nếu không khớp, bấm *Cancel*.
+
+Host giờ nằm trong **Trusted hosts**, kèm client key nó dùng, và các lần connect sau sẽ
+bỏ qua hộp thoại.
+
+**Pin host từ trước.** Với CLI, bạn có thể lưu host key trước lần connect đầu tiên, nên
+không cần hộp thoại:
+
+```sh
+deskhub-cli host-key public                                    # trên host
+deskhub-cli host add office --address 192.168.1.10 --identity default --host-key-stdin
+```
+
+Dán dòng của host vào lệnh thứ hai (trên client), rồi Ctrl-D. `office` là alias do bạn
+chọn: `connect office`, `sources office`, `shell office` và `send office FILE` đều nhận
+nó. `deskhub-cli host list` hiển thị mọi host đã lưu, kể cả các host được trust từ app —
+chúng được đặt alias theo địa chỉ, ví dụ `192-168-1-10-47777`. `host update ALIAS` đổi địa
+chỉ (`--address`), client key (`--identity`) hoặc host key đã pin (`--host-key-stdin`);
+`host remove ALIAS` bỏ host đó. App connect tới host mới bằng `default`; để dùng key khác
+cho một host, đặt nó ở đây bằng `--identity` — app cũng sẽ dùng key đó.
+
+### Script và command line
+
+- **Host lạ bị từ chối.** `sources`, `connect`, `shell` và `send` không làm việc với host
+  chưa được lưu key. Thay vào đó chúng in fingerprint của host; đối chiếu với host, rồi
+  chạy lại với `--accept-new-host-key` để lưu nó. Cờ này chỉ lưu key được thấy lần đầu —
+  host có key *đã thay đổi* luôn bị từ chối.
+- **Chọn key.** `--identity NAME` chọn client key cho một lệnh. Không có cờ này thì dùng
+  key của host đã lưu, và `default` cho host chưa có key nào.
+- **Cấu hình riêng.** `--config-dir DIR` (đặt trước hoặc sau lệnh) hoặc biến môi trường
+  `DESKHUB_CONFIG_DIR` trỏ CLI tới một thư mục khác chứa key, client được phép, host đã
+  trust và settings — tiện cho service account hoặc môi trường test.
+- **Exit code.** Script có thể phân biệt connection bị từ chối hay host key đã thay đổi
+  với các lỗi khác qua exit code; danh sách mã nằm ở mục
+  [Command line client](BUILD.vi.md#command-line-client) trong `BUILD.vi.md`. Các lệnh liệt
+  kê hỗ trợ `--json`.
+
+### Thu hồi và thay key
+
+**Thu hồi một thiết bị.** Trên host, bấm *Remove* cạnh key của nó, hoặc chạy
+`deskhub-cli access remove --fingerprint SHA256:…`. Mọi session thiết bị đó đang mở kết
+thúc ngay lập tức, và nó không connect lại được cho đến khi key của nó được cho phép lại.
+
+**Thay client key.**
+
+1. Tạo key mới: *New key*, hoặc `deskhub-cli key generate --name NAME`.
+2. Nhờ mỗi host cần chấp nhận key này cho phép public key của nó.
+3. Cho host đã trust dùng key mới: `deskhub-cli host update ALIAS --identity NAME`, hoặc
+   gỡ host rồi thêm lại bằng `host add … --identity NAME`. Connect một lần để kiểm tra.
+4. Nhờ chủ host gỡ key cũ, rồi *Delete* key cũ trên máy này.
+
+**Khi key của host thay đổi.** Deskhub từ chối connect và báo
+"This host's key has changed". Điều này xảy ra khi host cài lại Deskhub hoặc mất thư mục
+settings — hoặc khi một máy khác đang trả lời ở địa chỉ đó. Chỉ khi bạn biết vì sao key
+thay đổi, hãy gỡ host khỏi **Trusted hosts** (*Remove*, hoặc
+`deskhub-cli host remove ALIAS`), connect lại và đối chiếu fingerprint mới như lần connect
+đầu tiên. Với CLI, `host update ALIAS --host-key-stdin` pin trực tiếp key mới.
+
+### Chuyển từ Deskhub cũ
+
+Không có gì được migrate. Passcode và danh sách thiết bị đã pair từ các phiên bản Deskhub
+cũ không được giữ lại: hãy tạo hoặc copy key, cho phép chúng trên từng host và trust lại
+từng host như mô tả ở trên. Cả hai máy đều cần phiên bản này — Deskhub cũ ở bất kỳ bên nào
+cũng không connect được và bị từ chối với thông báo "That machine uses an incompatible
+authentication version".
+
 ## 🆘 Khi gặp sự cố
 
 - **Không tìm thấy máy nào để connect** — hai máy phải nằm trên cùng network (hoặc cùng
   tailnet Tailscale), và UDP 47777 phải được mở ở phía host.
 - **"This device's key is not authorized on that machine yet"** — host không có client key này
-  trong danh sách; hãy cho phép public key của nó trên trang Devices của host. Các client
-  được một phiên bản Deskhub cũ cho phép phải được cho phép lại.
-- **"This host's key has changed"** — xem [Trước khi share màn hình](#-trước-khi-share-màn-hình).
+  trong danh sách; hãy cho phép public key của nó trên trang Devices của host — xem
+  [Cho phép một thiết bị connect](#cho-phép-một-thiết-bị-connect). Các client được một
+  phiên bản Deskhub cũ cho phép phải được cho phép lại.
+- **"This host's key has changed"** — xem [Thu hồi và thay key](#thu-hồi-và-thay-key).
+- **"That machine uses an incompatible authentication version"** — một bên đang chạy
+  Deskhub cũ; hãy cập nhật cả hai máy. Xem [Chuyển từ Deskhub cũ](#chuyển-từ-deskhub-cũ).
 - **Linux: share thất bại ngay lập tức** — chạy `vainfo | grep -E 'H264.*Enc'`. Kết quả
   rỗng nghĩa là máy này không có H.264 encoder dùng được và không thể host.
 - **Linux: con trỏ không di chuyển** — thiếu rule `/dev/uinput` ở mục 3.

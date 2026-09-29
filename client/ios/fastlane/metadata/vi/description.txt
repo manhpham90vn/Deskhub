@@ -17,10 +17,10 @@ TÍNH NĂNG
 • Chia sẻ ngược màn hình thiết bị này ở chế độ chỉ xem, kèm âm thanh các app đang phát, để máy tính xem được
 
 CÁCH DÙNG
-Cài app Deskhub miễn phí lên máy tính bạn muốn điều khiển — tải từ trang dự án — rồi bấm chia sẻ ở đó. Mở Deskhub trên thiết bị, sao chép public key của thiết bị trong mục Devices và thêm vào danh sách khóa được phép trên máy tính, rồi thêm máy tính bằng địa chỉ và khóa host của nó và kết nối. Khi máy đã trả lời, chọn thứ muốn mở: màn hình, shell, hay truyền file. Chạy ngay trong mạng LAN; muốn dùng qua Internet thì bật Tailscale trên cả hai máy và kết nối bằng IP Tailscale.
+Cài app Deskhub miễn phí lên máy tính bạn muốn điều khiển — tải từ trang dự án — rồi bấm chia sẻ ở đó. Mở Deskhub trên thiết bị, sao chép public key của thiết bị trong mục Devices và thêm vào danh sách khóa được phép trên máy tính, rồi nhập địa chỉ của máy tính và kết nối. Lần đầu tiên, so fingerprint Deskhub hiển thị với fingerprint trên trang Devices của máy tính rồi xác nhận tin cậy. Khi máy đã trả lời, chọn thứ muốn mở: màn hình, shell, hay truyền file. Chạy ngay trong mạng LAN; muốn dùng qua Internet thì bật Tailscale trên cả hai máy và kết nối bằng IP Tailscale.
 
 CẦN BIẾT
-Mọi phiên đều được mã hoá đầu-cuối trên QUIC/TLS — video, âm thanh, thao tác bàn phím, file, clipboard và mọi thứ khác. Quyền truy cập dựa trên khóa: máy tính chỉ cho vào thiết bị có public key đã được chủ máy thêm, và thiết bị chỉ nói chuyện với máy tính có khóa host bạn đã ghim. Không có bước duyệt qua mạng, và khóa có thể bị thu hồi từ máy tính bất cứ lúc nào. Không có tài khoản và không có máy chủ nào của chúng tôi: thiết bị chỉ nói chuyện với chính máy tính của bạn.
+Mọi phiên đều được mã hoá đầu-cuối trên QUIC/TLS — video, âm thanh, thao tác bàn phím, file, clipboard và mọi thứ khác. Quyền truy cập dựa trên khóa: máy tính chỉ cho vào thiết bị có public key đã được chủ máy thêm, và thiết bị ghi nhớ khóa host của từng máy tính sau khi bạn xác nhận ở lần đầu — nếu khóa đó thay đổi, Deskhub từ chối kết nối. Không có bước duyệt qua mạng, và khóa có thể bị thu hồi từ máy tính bất cứ lúc nào. Không có tài khoản và không có máy chủ nào của chúng tôi: thiết bị chỉ nói chuyện với chính máy tính của bạn.
 
 YÊU CẦU
 • Một máy tính chạy Windows 10 trở lên (x64), macOS 14 trở lên, hoặc bản Linux desktop hiện hành (glibc 2.35+), có cài app Deskhub miễn phí

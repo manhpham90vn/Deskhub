@@ -13,12 +13,25 @@ constexpr uint32_t kHandshakeTimeoutMs = 5'000;
 constexpr uint32_t kAuthTimeoutMs = 65'000;
 constexpr uint64_t kListTimeoutUs = 5'000'000;
 constexpr uint32_t kPollWaitMs = 2;
+
+SourceQueryFailure FailureKindOf(const deskhubp::HostLink& link) {
+    if (link.State() == deskhubp::HostLinkState::Refused) return SourceQueryFailure::Refused;
+    if (link.FingerprintText().empty()) return SourceQueryFailure::Unreachable;
+    switch (link.Verdict()) {
+        case deskhub::TrustVerdict::Unknown: return SourceQueryFailure::UntrustedHost;
+        case deskhub::TrustVerdict::Changed: return SourceQueryFailure::HostKeyChanged;
+        case deskhub::TrustVerdict::Trusted: break;
+    }
+    return SourceQueryFailure::LocalError;
+}
+
 }
 
 bool QuerySources(const NetAddr& server, SourceQueryReply& reply,
     const SourceQueryRequest& request) {
     reply = SourceQueryReply{};
     reply.failure = deskhub::ui::SourceQueryFailed(server.ToString());
+    reply.failureKind = SourceQueryFailure::Unreachable;
 
     if (!deskhubp::QuicAvailable()) {
         LOGE("[Sources] This build has no QUIC library.");
@@ -51,6 +64,7 @@ bool QuerySources(const NetAddr& server, SourceQueryReply& reply,
         if (!reason.empty()) reply.failure = reason;
         if (link.Verdict() == deskhub::TrustVerdict::Unknown)
             reply.unknownHostKey = deskhub::ParseFingerprint(link.FingerprintText());
+        reply.failureKind = FailureKindOf(link);
     }
     if (link.State() == deskhubp::HostLinkState::Refused) {
         LOGW("[Sources] %s did not let this machine in.", server.ToString().c_str());
@@ -84,6 +98,7 @@ bool QuerySources(const NetAddr& server, SourceQueryReply& reply,
         reply.caps = deskhub::HostCapsOfFlags(h->flags);
         reply.hostName = deskhub::ParseSourceListHostName(deskhub::PayloadOf(span));
         reply.failure.clear();
+        reply.failureKind = SourceQueryFailure::None;
         LOGI("[Sources] Host is sharing %zu source(s).", reply.sources.size());
         return true;
     }

@@ -17,10 +17,10 @@ FEATURES
 • Share this device's screen the other way round, view-only and with the sound your apps play, so a computer can watch it
 
 HOW IT WORKS
-Install the free Deskhub app on the computer you want to reach (download from the project page) and start sharing there. Open Deskhub on your device, copy this device's public key from Devices and add it to the computer's list of allowed keys, then add the computer by its address and host key and connect. Once it answers, pick what to open: its screen, a shell, or file transfer. Works on your local network out of the box; for access over the Internet, pair it with Tailscale and connect via your Tailscale IP.
+Install the free Deskhub app on the computer you want to reach (download from the project page) and start sharing there. Open Deskhub on your device, copy this device's public key from Devices and add it to the computer's list of allowed keys, then type the computer's address and connect. The first time, compare the fingerprint Deskhub shows with the one on the computer's Devices page and trust it. Once it answers, pick what to open: its screen, a shell, or file transfer. Works on your local network out of the box; for access over the Internet, pair it with Tailscale and connect via your Tailscale IP.
 
 GOOD TO KNOW
-Every session is encrypted end to end over QUIC/TLS — video, sound, keystrokes, files, clipboard and everything else. Access is key-based: the computer only lets in a device whose public key its owner has added, and your device only talks to a computer whose host key you have pinned. Nothing is approved over the network, and a key can be revoked from the computer at any time. There are no accounts and no servers of ours: your device talks only to your own computer.
+Every session is encrypted end to end over QUIC/TLS — video, sound, keystrokes, files, clipboard and everything else. Access is key-based: the computer only lets in a device whose public key its owner has added, and your device remembers each computer's host key after you confirm it the first time — if that key ever changes, Deskhub refuses to connect. Nothing is approved over the network, and a key can be revoked from the computer at any time. There are no accounts and no servers of ours: your device talks only to your own computer.
 
 REQUIREMENTS
 • A computer running Windows 10 or later (x64), macOS 14 or later, or a current Linux desktop (glibc 2.35+), with the free Deskhub app
