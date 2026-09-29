@@ -87,9 +87,20 @@ begin
   until Separator = 0;
 end;
 
+function EndsWithDirectory(const Value, Directory: String): Boolean;
+var
+  Start: Integer;
+begin
+  Result := False;
+  Start := Length(Value) - Length(Directory) + 1;
+  if Start < 2 then Exit;
+  if Value[Start - 1] <> ';' then Exit;
+  Result := SameText(Copy(Value, Start, Length(Directory)), Directory);
+end;
+
 procedure CurStepChanged(CurStep: TSetupStep);
 var
-  Existing, NewPath, Directory: String;
+  Existing, NewPath, Directory, Marker: String;
 begin
   if CurStep <> ssPostInstall then Exit;
   Directory := ExpandConstant('{app}');
@@ -98,12 +109,16 @@ begin
   if ContainsPath(Existing, Directory) then Exit;
 
   NewPath := Existing;
+  Marker := '1';
   if NewPath <> '' then
   begin
-    if NewPath[Length(NewPath)] <> ';' then NewPath := NewPath + ';';
+    if NewPath[Length(NewPath)] = ';' then
+      Marker := '2'
+    else
+      NewPath := NewPath + ';';
   end;
   NewPath := NewPath + Directory;
-  if not RegWriteStringValue(HKCU, MarkerKey, 'PathAdded', '1') then
+  if not RegWriteStringValue(HKCU, MarkerKey, 'PathAdded', Marker) then
     RaiseException('Could not record the DeskHub CLI PATH change.');
   if not RegWriteExpandStringValue(HKCU, PathKey, 'Path', NewPath) then
   begin
@@ -119,11 +134,14 @@ var
 begin
   if CurUninstallStep <> usPostUninstall then Exit;
   if not RegQueryStringValue(HKCU, MarkerKey, 'PathAdded', Marker) then Exit;
-  if Marker <> '1' then Exit;
+  if (Marker <> '1') and (Marker <> '2') then Exit;
   Directory := ExpandConstant('{app}');
   if RegQueryStringValue(HKCU, PathKey, 'Path', Existing) then
   begin
-    NewPath := RemovePath(Existing, Directory);
+    if (Marker = '2') and EndsWithDirectory(Existing, Directory) then
+      NewPath := Copy(Existing, 1, Length(Existing) - Length(Directory))
+    else
+      NewPath := RemovePath(Existing, Directory);
     if NewPath <> Existing then
     begin
       if NewPath = '' then
