@@ -115,7 +115,6 @@ inline constexpr const char* kTrayShowWindow = "Show Deskhub";
 inline constexpr const char* kTrayHideWindow = "Hide window";
 inline constexpr const char* kTrayQuit = "Quit Deskhub";
 inline constexpr const char* kLanDevicesEmpty = "Saved devices appear here after a connection.";
-inline constexpr const char* kRefreshNow = "Refresh now";
 inline constexpr const char* kAuthNotPaired =
     "This device's key is not authorized on that machine yet. To fix it: on this device "
     "open Devices > My keys and press Copy public key (use the key this host connects with); "

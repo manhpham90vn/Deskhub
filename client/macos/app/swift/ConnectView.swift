@@ -118,9 +118,7 @@ struct MainMenuView: View {
             .tint(DeskhubPalette.accent)
             .disabled(connect.address.isEmpty || connect.isConnecting)
 
-            deskhubHeadingRow(DeskhubClient.string(DHStrDevicesHeading)) {
-                recent.refresh()
-            }
+            deskhubHeading(DeskhubClient.string(DHStrDevicesHeading))
             DeviceTable(
                 rows: recent.devices,
                 enabled: !connect.isConnecting,

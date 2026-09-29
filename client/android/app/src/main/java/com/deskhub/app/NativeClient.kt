@@ -73,7 +73,6 @@ object NativeClient {
     const val THEME_ONLINE = 10
     const val THEME_PAGE = 15
     const val STR_CLIENT_SETTINGS_HINT = 58
-    const val STR_REFRESH_NOW = 51
     const val STR_UDP_PORT_LABEL = 59
     const val STR_BIND_INTERFACE_LABEL = 61
     const val STR_BIND_ALL_INTERFACES = 62

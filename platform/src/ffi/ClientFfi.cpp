@@ -162,7 +162,6 @@ const char* dh_string(DHStringId id) {
         case DHStrShareStateOff: return deskhub::ui::kShareStateOff;
         case DHStrStartSharing: return deskhub::ui::kStartSharing;
         case DHStrStartingShare: return deskhub::ui::kStartingShare;
-        case DHStrRefreshNow: return deskhub::ui::kRefreshNow;
         case DHStrStopDisplayAction: return deskhub::ui::kStopDisplayAction;
         case DHStrDisconnectViewerAction: return deskhub::ui::kDisconnectViewerAction;
         case DHStrNotSharing: return deskhub::ui::kNotSharing;

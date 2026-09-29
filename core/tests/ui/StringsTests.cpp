@@ -34,7 +34,7 @@ void TestEveryLabelSaysSomething() {
         ui::kClientIpPlaceholder, ui::kUdpPortLabel,
         ui::kLanDevicesEmpty,
         ui::kAppVersion, ui::kProjectUrl, ui::kProjectLinkLabel,
-        ui::kRefreshNow, ui::kBindInterfaceLabel, ui::kBindAllInterfaces,
+        ui::kBindInterfaceLabel, ui::kBindAllInterfaces,
         ui::kBindNotConnectedNote, ui::kAutostartLabel,
         ui::kAutoShareLabel, ui::kClipboardSyncLabel, ui::kCloseToTrayLabel,
         ui::kTrayShowWindow, ui::kTrayHideWindow, ui::kTrayQuit,

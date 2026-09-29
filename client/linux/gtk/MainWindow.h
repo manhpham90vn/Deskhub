@@ -183,7 +183,6 @@ private:
     static gboolean OnCopiedRevertTimer(gpointer user);
     static void OnSettingChanged(GtkWidget* w, gpointer user);
     static void OnBindChanged(GtkWidget* w, gpointer user);
-    static void OnRefreshDevicesClicked(GtkButton* b, gpointer user);
     static void OnForgetDeviceClicked(GtkButton* b, gpointer user);
     static void OnForgetAllClicked(GtkButton* b, gpointer user);
     static void OnFilesTickToggled(GtkToggleButton* b, gpointer user);

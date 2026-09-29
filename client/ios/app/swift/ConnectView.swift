@@ -30,9 +30,7 @@ struct ConnectView: View {
                     .tint(DeskhubPalette.accent)
                     .disabled(model.connect.address.isEmpty || model.connect.isConnecting)
 
-                    deskhubHeadingRow(DeskhubClient.string(DHStrDevicesHeading)) {
-                        model.recent.refresh()
-                    }
+                    deskhubHeading(DeskhubClient.string(DHStrDevicesHeading))
                     DeviceListView(
                         rows: model.recent.devices,
                         enabled: !model.connect.isConnecting,

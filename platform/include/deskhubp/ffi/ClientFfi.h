@@ -117,7 +117,6 @@ typedef enum {
     DHStrShareStateOff = 48,
     DHStrStartSharing = 49,
     DHStrStartingShare = 50,
-    DHStrRefreshNow = 51,
     DHStrStopDisplayAction = 52,
     DHStrDisconnectViewerAction = 53,
     DHStrNotSharing = 55,

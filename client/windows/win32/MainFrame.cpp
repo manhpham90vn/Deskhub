@@ -165,20 +165,6 @@ HostStateStyle StyleFor(HostShareState state) {
     return {ui::kShareStateOff, kMutedText, kBannerIdleBg};
 }
 
-wxSizer* MakeHeadingRow(wxWindow* parent, const char* heading, const wxString& action,
-    std::function<void()> onClick) {
-    auto* row = new wxBoxSizer(wxHORIZONTAL);
-    row->Add(MakeHeading(parent, heading), wxSizerFlags().CentreVertical());
-    row->AddStretchSpacer(1);
-
-    auto* button = new wxButton(parent, wxID_ANY, action);
-    button->SetMinSize(parent->FromDIP(wxSize(110, 30)));
-    button->Bind(wxEVT_BUTTON,
-        [onClick = std::move(onClick)](wxCommandEvent&) { onClick(); });
-    row->Add(button, wxSizerFlags().CentreVertical());
-    return row;
-}
-
 struct TableRow {
     wxPanel* panel = nullptr;
     wxBoxSizer* cells = nullptr;
@@ -459,7 +445,6 @@ private:
     void ForgetConnection(ConnectionFrame* frame);
     void SetClientStatus(const wxString& text, const wxColour& colour);
     void ConnectToDevice(const std::string& addr);
-    void RefreshDevicesNow();
     void OnListClick(wxMouseEvent& event);
     void ConnectRow(long row);
     void OnSourcesReady(const std::string& addr, const deskhubp::ConnectOutcome& outcome);
@@ -928,9 +913,8 @@ wxWindow* MainFrame::BuildClientPage(wxWindow* parent) {
     devices->SetBackgroundColour(*wxWHITE);
     auto* devicesSizer = new wxBoxSizer(wxVERTICAL);
 
-    devicesSizer->Add(MakeHeadingRow(devices, ui::kDevicesHeading, ToWx(ui::kRefreshNow),
-                          [this] { RefreshDevicesNow(); }),
-        wxSizerFlags().Expand().Border(wxTOP, FromDIP(16)));
+    devicesSizer->Add(MakeHeading(devices, ui::kDevicesHeading),
+        wxSizerFlags().Border(wxTOP, FromDIP(16)));
 
     deviceList_ = new wxListCtrl(devices, wxID_ANY, wxDefaultPosition, wxDefaultSize,
         wxLC_REPORT | wxLC_SINGLE_SEL);
@@ -2092,10 +2076,6 @@ void MainFrame::StartConnect(const std::string& rawAddr) {
     }
     connectBtn_->Disable();
     SetClientStatus(ToWx(ui::kQueryingSources), kMutedText);
-}
-
-void MainFrame::RefreshDevicesNow() {
-    RefreshDeviceList();
 }
 
 void MainFrame::OnListClick(wxMouseEvent& event) {

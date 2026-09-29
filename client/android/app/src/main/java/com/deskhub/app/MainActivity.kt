@@ -294,23 +294,6 @@ private fun SectionLabel(text: String) {
     )
 }
 
-@Composable
-private fun HeadingRow(
-    text: String,
-    onRefresh: () -> Unit,
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Heading(text, modifier = Modifier.weight(1f))
-        TextButton(onClick = onRefresh) {
-            Text(NativeClient.string(NativeClient.STR_REFRESH_NOW))
-        }
-    }
-}
-
 private enum class Section(
     val labelId: Int,
     val icon: ImageVector,
@@ -509,7 +492,6 @@ private fun MainScreen(
                 onOpenFileSend = openFileSend,
                 deviceRows = deviceRows,
                 onPickDevice = pickDevice,
-                onRefreshDevices = { scope.launch { deviceRows = NativeClient.deviceRows() } },
                 port = port,
                 onPortChange = { chosen ->
                     NativeClient.setSettingsPort(chosen)
@@ -593,7 +575,6 @@ private fun HomeScreen(
     onOpenFileSend: () -> Unit,
     deviceRows: List<NativeClient.DeviceRow>,
     onPickDevice: (String) -> Unit,
-    onRefreshDevices: () -> Unit,
     port: Int,
     onPortChange: (Int) -> Unit,
     onStartSharing: (HostService.ShareRequest) -> Unit,
@@ -618,7 +599,6 @@ private fun HomeScreen(
                         onOpenFileSend = onOpenFileSend,
                         deviceRows = deviceRows,
                         onPickDevice = onPickDevice,
-                        onRefreshDevices = onRefreshDevices,
                     )
 
                 Section.HOST ->
@@ -1552,7 +1532,6 @@ private fun AddressScreen(
     onOpenFileSend: () -> Unit,
     deviceRows: List<NativeClient.DeviceRow>,
     onPickDevice: (String) -> Unit,
-    onRefreshDevices: () -> Unit,
 ) {
     val trimmed = address.trim()
     val ready = trimmed.isNotEmpty() && !busy
@@ -1676,7 +1655,6 @@ private fun AddressScreen(
                 heading = NativeClient.string(NativeClient.STR_DEVICES_HEADING),
                 rows = deviceRows,
                 enabled = !busy,
-                onRefresh = onRefreshDevices,
                 onPick = onPickDevice,
             )
         }
@@ -1728,11 +1706,10 @@ private fun DeviceSection(
     heading: String,
     rows: List<NativeClient.DeviceRow>,
     enabled: Boolean,
-    onRefresh: () -> Unit,
     onPick: (String) -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        HeadingRow(heading, onRefresh)
+        Heading(heading)
 
         for (row in rows) {
             Column(

@@ -9,6 +9,9 @@ MACOS_ZIP     := $(MACOS_DIST)/Deskhub.zip
 MACOS_DMG     := $(MACOS_DIST)/Deskhub.dmg
 MACOS_DMG_SRC := $(MACOS_DIST)/dmg
 
+MACOS_DEV_IDENTITIES := $(shell security find-identity -v -p codesigning 2>/dev/null | grep -E 'Apple Development|Mac Developer')
+MACOS_SIGN ?= $(if $(MACOS_DEV_IDENTITIES),,adhoc)
+
 ifeq ($(MACOS_SIGN),adhoc)
 MACOS_SIGN_FLAGS := CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM=
 endif

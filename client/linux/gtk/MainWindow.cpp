@@ -280,17 +280,6 @@ std::optional<std::string> ReadChosenFile(GtkWindow* parent) {
     return contents;
 }
 
-GtkWidget* HeadingRow(const char* heading, GCallback onRefresh, gpointer user) {
-    GtkWidget* row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
-    gtk_box_pack_start(GTK_BOX(row), Heading(heading), FALSE, FALSE, 0);
-
-    GtkWidget* refresh = gtk_button_new_with_label(ui::kRefreshNow);
-    gtk_widget_set_size_request(refresh, 110, 30);
-    g_signal_connect(refresh, "clicked", onRefresh, user);
-    gtk_box_pack_end(GTK_BOX(row), refresh, FALSE, FALSE, 0);
-    return row;
-}
-
 GtkWidget* Hint(const std::string& text) {
     GtkWidget* label = StyledLabel(text, "deskhub-hint");
     gtk_label_set_line_wrap(GTK_LABEL(label), TRUE);
@@ -992,9 +981,7 @@ GtkWidget* MainWindow::BuildClientPage() {
     gtk_box_pack_start(GTK_BOX(box), clientStatusLabel_, FALSE, FALSE, 0);
 
     devicesBox_ = gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
-    gtk_box_pack_start(GTK_BOX(devicesBox_),
-        HeadingRow(ui::kDevicesHeading, G_CALLBACK(OnRefreshDevicesClicked), this), FALSE, FALSE,
-        0);
+    gtk_box_pack_start(GTK_BOX(devicesBox_), Heading(ui::kDevicesHeading), FALSE, FALSE, 0);
 
     deviceStore_ =
         gtk_list_store_new(4, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING);
@@ -1729,11 +1716,6 @@ void MainWindow::OnSettingChanged(GtkWidget*, gpointer user) {
     auto* self = static_cast<MainWindow*>(user);
     if (self->loadingSettings_) return;
     self->SaveSettings();
-}
-
-void MainWindow::OnRefreshDevicesClicked(GtkButton*, gpointer user) {
-    auto* self = static_cast<MainWindow*>(user);
-    self->RefreshDeviceList();
 }
 
 void MainWindow::RefreshDeviceList() {
