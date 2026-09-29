@@ -74,10 +74,20 @@ struct Pty::Impl {
         }
     }
 
-    void EndChild() {
+    void CloseMaster() {
+        if (master < 0) return;
+        close(master);
+        master = -1;
+    }
+
+    void HangUp() {
         if (child <= 0) return;
         exited = false;
         kill(child, SIGHUP);
+    }
+
+    void ReapOrKill() {
+        if (child <= 0) return;
         if (ReapWithin(kHangupGraceUs)) return;
         LOGW(
             "pty: the shell ignored the hangup for %llu ms and was killed, because a child "
@@ -88,11 +98,9 @@ struct Pty::Impl {
     }
 
     void Shutdown() {
-        EndChild();
-        if (master >= 0) {
-            close(master);
-            master = -1;
-        }
+        HangUp();
+        CloseMaster();
+        ReapOrKill();
     }
 };
 

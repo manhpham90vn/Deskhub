@@ -964,4 +964,8 @@ coverage của core.
   vẫn giữ bản sao của nó, và chính lệnh `bind` đó hỏng ở mọi lần chạy ASan kể từ khi
   service loop không còn tốn một mili giây cho mỗi lần poll và test kế tiếp bắt đầu sớm
   hơn. Vì vậy `Shutdown` thu hồi tiến trình con trong tối đa 200 ms sau hangup và kill sau
-  khoảng đó, nhờ vậy một terminal đã đóng cũng không còn để lại zombie.
+  khoảng đó, nhờ vậy một terminal đã đóng cũng không còn để lại zombie. Master được đóng
+  trước khoảng chờ đó chứ không phải sau: trên macOS, một shell đang thoát sẽ kẹt ở bước
+  đóng terminal của nó cho tới khi phần output chưa ai đọc được xả hết, nên khi master còn
+  mở thì ngay cả tiến trình con đã bị kill cũng không bao giờ thoát xong, lệnh `waitpid`
+  cuối cùng không bao giờ trả về, và mọi job test trên macOS đều chạy tới hết timeout.

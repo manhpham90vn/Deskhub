@@ -964,4 +964,8 @@ line.
   holds its copy, and the same `bind` failed on every ASan run once the service loop
   stopped spending a millisecond per poll and the next test started sooner. `Shutdown`
   therefore reaps the child for up to 200 ms after the hangup and kills it after that,
-  which also stops a closed terminal leaving a zombie behind.
+  which also stops a closed terminal leaving a zombie behind. The master is closed before
+  that wait, not after it: on macOS a shell that is exiting blocks in the close of its
+  terminal until output nobody has read is drained, so with the master still open even
+  the killed child never finished exiting, the final `waitpid` never returned, and every
+  macOS test job ran into its timeout.

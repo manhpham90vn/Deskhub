@@ -809,4 +809,7 @@ runner 上与 base commit 的 A/B 结果（偏移仅作为警告，不导致失�
   不过 close-on-exec 仍留有一段空隙：处于 `forkpty` 与 `exec` 之间的子进程仍持有其副本，
   自 service 循环不再为每次 poll 耗费一毫秒、下一个测试更早开始起，同一个 `bind` 在每次
   ASan 运行中都失败。因此 `Shutdown` 在 hangup 之后最多用 200 ms 回收子进程，超时则
-  kill，这也使已关闭的终端不再留下 zombie。
+  kill，这也使已关闭的终端不再留下 zombie。master 在这段等待之前关闭，而不是之后：在
+  macOS 上，正在退出的 shell 会阻塞在关闭其终端的步骤上，直到无人读取的输出被排空，因此
+  只要 master 仍然打开，即使被 kill 的子进程也无法完成退出，最后的 `waitpid` 永不返回，
+  macOS 上的每个测试 job 都会一直运行到超时。
