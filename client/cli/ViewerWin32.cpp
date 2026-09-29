@@ -8,7 +8,7 @@ namespace deskhubcli {
 
 ExitCode RunViewers(const ViewRequest& request) {
     WatchForInterrupt();
-    RunViewer(request.hostLabel, request.sources, request.control, {});
+    RunViewer(request.hostLabel, request.sources, request.control);
     return ExitCode::Ok;
 }
 

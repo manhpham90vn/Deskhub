@@ -95,7 +95,7 @@ std::string NewP256PrivateKey() {
 }
 
 std::string OpenSshFixture(std::string_view name) {
-    const auto path = std::filesystem::path(DESKHUB_TEST_FIXTURES_DIR) / "openssh" /
+    const auto path = TestFixturesDir() / "openssh" /
                       std::string(name);
     std::ifstream input(path, std::ios::binary);
     if (!input) return {};

@@ -420,11 +420,11 @@ void TestABatchCrossesARealConnection() {
     HostRig host;
     Check(host.Start(identity, landing), "the host takes files in");
 
-    const std::vector<uint8_t> small = Pattern(64, 1);
+    const std::vector<uint8_t> notes = Pattern(64, 1);
     const std::vector<uint8_t> big = Pattern(deskhub::kMaxFileChunkBytes * 9 + 123, 2);
     const std::vector<uint8_t> empty;
     const std::vector<std::filesystem::path> paths{
-        WriteFile(source, "notes.txt", small),
+        WriteFile(source, "notes.txt", notes),
         WriteFile(source, "payload.bin", big),
         WriteFile(source, "nothing.dat", empty),
     };
@@ -438,7 +438,7 @@ void TestABatchCrossesARealConnection() {
     Check(viewer.state == deskhub::FileSenderState::Done, "and finishes as done");
     Check(host.files.Transfers().size() == 1, "the host lists the viewer that sent them");
 
-    Check(ReadFile(landing / "notes.txt") == small, "the small file is byte for byte");
+    Check(ReadFile(landing / "notes.txt") == notes, "the small file is byte for byte");
     Check(ReadFile(landing / "payload.bin") == big, "the multi-chunk file is byte for byte");
     Check(std::filesystem::exists(landing / "nothing.dat"), "the empty file exists");
     std::error_code sizeError;

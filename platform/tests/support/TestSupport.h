@@ -23,6 +23,7 @@ inline bool RevokeAllClientKeys() {
 }
 
 std::filesystem::path UniqueTempDir(const std::string& prefix);
+std::filesystem::path TestFixturesDir();
 
 struct IsolatedAppData {
     std::filesystem::path dir{};

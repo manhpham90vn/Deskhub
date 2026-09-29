@@ -1,5 +1,6 @@
 #include "support/TestSupport.h"
 
+#include "deskhubp/system/Environment.h"
 #include "deskhubp/system/Random.h"
 
 #include <array>
@@ -13,6 +14,12 @@ void Check(bool ok, const char* what) {
         ++g_failures;
         std::printf("  FAIL: %s\n", what);
     }
+}
+
+std::filesystem::path TestFixturesDir() {
+    const std::string fromEnvironment = deskhubp::EnvValue("DESKHUB_TEST_FIXTURES_DIR");
+    return fromEnvironment.empty() ? std::filesystem::path(DESKHUB_TEST_FIXTURES_DIR)
+                                   : std::filesystem::path(fromEnvironment);
 }
 
 std::filesystem::path UniqueTempDir(const std::string& prefix) {
