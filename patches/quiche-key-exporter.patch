@@ -1,8 +1,20 @@
+diff --git a/quiche/Cargo.toml b/quiche/Cargo.toml
+index 2bce96d..9e853c1 100644
+--- a/quiche/Cargo.toml
++++ b/quiche/Cargo.toml
+@@ -78,6 +78,7 @@ libm = "0.2"
+ log = { workspace = true, features = ["std"] }
+ octets = { workspace = true, features = ["huffman_hpack"] }
+ qlog = { workspace = true, optional = true }
++ssh-key = { version = "=0.6.7", features = ["encryption", "p256", "ed25519"] }
+ serde = { workspace = true, optional = true }
+ serde_json = { version = "1.0", optional = true }
+ serde_with = { workspace = true, features = ["macros"], optional = true }
 diff --git a/quiche/include/quiche.h b/quiche/include/quiche.h
-index 3afa20e..1777bd3 100644
+index 3afa20e..d2e6142 100644
 --- a/quiche/include/quiche.h
 +++ b/quiche/include/quiche.h
-@@ -510,6 +510,10 @@ void quiche_conn_application_proto(const quiche_conn *conn, const uint8_t **out,
+@@ -510,6 +510,21 @@ void quiche_conn_application_proto(const quiche_conn *conn, const uint8_t **out,
  // Returns the peer's leaf certificate (if any) as a DER-encoded buffer.
  void quiche_conn_peer_cert(const quiche_conn *conn, const uint8_t **out, size_t *out_len);
  
@@ -10,14 +22,25 @@ index 3afa20e..1777bd3 100644
 +                                       size_t out_len, const uint8_t *label,
 +                                       size_t label_len);
 +
++typedef struct {
++    uint32_t kind;
++    uint8_t private_key[32];
++    uint8_t public_key[65];
++    size_t public_key_len;
++} quiche_openssh_private_key;
++
++int quiche_parse_openssh_private_key(const uint8_t *pem, size_t pem_len,
++                                     const uint8_t *passphrase, size_t passphrase_len,
++                                     quiche_openssh_private_key *out);
++
  // Returns the serialized cryptographic session for the connection.
  void quiche_conn_session(const quiche_conn *conn, const uint8_t **out, size_t *out_len);
  
 diff --git a/quiche/src/ffi.rs b/quiche/src/ffi.rs
-index 3306b61..a4593e6 100644
+index 3306b61..b833585 100644
 --- a/quiche/src/ffi.rs
 +++ b/quiche/src/ffi.rs
-@@ -1206,6 +1206,21 @@ pub extern "C" fn quiche_conn_peer_cert(
+@@ -1206,6 +1206,81 @@ pub extern "C" fn quiche_conn_peer_cert(
      }
  }
  
@@ -34,6 +57,66 @@ index 3306b61..a4593e6 100644
 +    let output = unsafe { slice::from_raw_parts_mut(out, out_len) };
 +    let label = unsafe { slice::from_raw_parts(label, label_len) };
 +    if conn.handshake.export_keying_material(output, label) { 0 } else { -1 }
++}
++
++#[repr(C)]
++pub struct OpenSshPrivateKey {
++    kind: u32,
++    private_key: [u8; 32],
++    public_key: [u8; 65],
++    public_key_len: size_t,
++}
++
++#[no_mangle]
++pub extern "C" fn quiche_parse_openssh_private_key(
++    pem: *const u8, pem_len: size_t, passphrase: *const u8,
++    passphrase_len: size_t, out: *mut OpenSshPrivateKey,
++) -> c_int {
++    use ssh_key::private::{EcdsaKeypair, KeypairData};
++
++    if pem.is_null() || out.is_null() || pem_len == 0 || pem_len > 65536 ||
++        passphrase_len > 4096 || (passphrase.is_null() && passphrase_len != 0) {
++        return -1;
++    }
++    unsafe { ptr::write_bytes(out, 0, 1) };
++    let pem = unsafe { slice::from_raw_parts(pem, pem_len) };
++    let Ok(parsed) = ssh_key::PrivateKey::from_openssh(pem) else {
++        return -1;
++    };
++    let key = if parsed.is_encrypted() {
++        if passphrase.is_null() || passphrase_len == 0 { return -1; }
++        let secret = unsafe { slice::from_raw_parts(passphrase, passphrase_len) };
++        let Ok(decrypted) = parsed.decrypt(secret) else { return -1; };
++        decrypted
++    } else {
++        parsed
++    };
++
++    let mut result = OpenSshPrivateKey {
++        kind: 0,
++        private_key: [0; 32],
++        public_key: [0; 65],
++        public_key_len: 0,
++    };
++    match key.key_data() {
++        KeypairData::Ed25519(pair) => {
++            result.kind = 1;
++            result.private_key.copy_from_slice(pair.private.as_ref());
++            result.public_key[..32].copy_from_slice(pair.public.as_ref());
++            result.public_key_len = 32;
++        }
++        KeypairData::Ecdsa(EcdsaKeypair::NistP256 { private, public }) => {
++            let bytes: &[u8] = public.as_ref();
++            if bytes.len() != 65 { return -1; }
++            result.kind = 2;
++            result.private_key.copy_from_slice(private.as_ref());
++            result.public_key.copy_from_slice(bytes);
++            result.public_key_len = 65;
++        }
++        _ => return -2,
++    }
++    unsafe { ptr::write(out, result) };
++    0
 +}
 +
  #[no_mangle]

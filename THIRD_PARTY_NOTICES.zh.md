@@ -104,11 +104,13 @@ driver 里（`nvEncodeAPI64.dll`），在运行时解析；它没有被捆绑。
 | --- | --- | --- |
 | [quiche](https://github.com/cloudflare/quiche) 0.29.3 | BSD-2-Clause | **静态** |
 | [BoringSSL](https://boringssl.googlesource.com/boringssl/)（由 quiche 捆绑） | OpenSSL / ISC 风格 | **静态** |
+| [RustCrypto ssh-key](https://github.com/RustCrypto/SSH) 0.6.7 | Apache-2.0 OR MIT | **静态** |
 
-Deskhub 的 encrypt transport 内嵌了 Cloudflare 的 quiche，由
-[`scripts/build-quiche.sh`](scripts/build-quiche.sh) 从钉死到确切版本和 commit 的、未经
-修改的上游 source 构建。quiche 自带一份 BoringSSL（通过 `boring` crate），它提供 TLS 以
-及 Deskhub pairing 背后的密码学。两者都静态 link 进每一个 app。两个库都没有被修改。
+Deskhub 的加密 transport 内嵌 Cloudflare quiche，由
+[`scripts/build-quiche.sh`](scripts/build-quiche.sh) 固定版本和 commit。构建时应用
+[`patches/quiche-key-exporter.patch`](patches/quiche-key-exporter.patch)，用于导出 TLS
+密钥材料并通过 RustCrypto `ssh-key` 解析 OpenSSH 私钥。quiche 自带 BoringSSL（通过
+`boring` crate）。这些库静态 link 进每一个 app。
 
 ## Audio codec（所有 app）
 

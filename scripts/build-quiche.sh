@@ -251,7 +251,7 @@ build_target() {
     local stamp="$out/.stamp"
     local artifact want
     artifact=$(artifact_of "$target")
-    want="$QUICHE_COMMIT+exporter-v1"
+    want="$QUICHE_COMMIT+$(git hash-object "$EXPORTER_PATCH")"
     is_msvc_target "$target" && want="$want+crt-static"
     rust_checks_wanted && want="$want+checks"
 

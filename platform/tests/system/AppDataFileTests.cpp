@@ -13,6 +13,10 @@
 #include <filesystem>
 #include <system_error>
 
+#ifndef _WIN32
+#include <sys/stat.h>
+#endif
+
 namespace {
 
 constexpr const char* kTestFile = "platform-test-appdata.txt";
@@ -59,6 +63,29 @@ void TestConfigDirectoryCanBeSeparateFromLogs() {
     Check(deskhubp::AppDataFilePath(kTestFile).parent_path() == root / "config" &&
               deskhubp::LogDir() == (root / "logs").string(),
         "the config and log paths remain independent");
+
+#ifndef _WIN32
+    const auto config = root / "config";
+    struct stat mode{};
+    Check(::stat(config.c_str(), &mode) == 0 && (mode.st_mode & 0777) == 0700,
+        "the service config directory belongs to its user alone");
+    const auto stored = config / kTestFile;
+    Check(::stat(stored.c_str(), &mode) == 0 && (mode.st_mode & 0777) == 0600,
+        "a general app data write creates an owner-only file");
+    Check(::chmod(config.c_str(), 0777) == 0 && deskhubp::ConfigDir() == config.string() &&
+              ::stat(config.c_str(), &mode) == 0 && (mode.st_mode & 0777) == 0700,
+        "an existing permissive config directory is restricted before use");
+    const auto link = root / "config-link";
+    std::error_code linkError;
+    std::filesystem::create_directory_symlink(config, link, linkError);
+    Check(!linkError, "the test creates a symlink to the config directory");
+    if (!linkError) {
+        deskhubp::SetConfigDir(link.string());
+        Check(deskhubp::ConfigDir().empty() &&
+                  !deskhubp::WriteAppDataFileAtomic(kTestFile, "via-link"),
+            "a symlink cannot stand in for the private config directory");
+    }
+#endif
 
     deskhubp::SetConfigDir(oldConfigDir);
     deskhubp::SetAppDataDir(oldAppDir);
@@ -132,6 +159,11 @@ void TestAuthorizedKeyWritesOnlyPublishSuccessfulChanges() {
         "a damaged admission list authorizes no key, even one on a valid row");
     Check(!deskhubp::RememberPairedDevice(key, "changed", 2000),
         "a normal update cannot overwrite a damaged admission list");
+    const uint64_t generationBeforeDamagedRevoke = deskhubp::PairedDevicesGeneration();
+    Check(!deskhubp::ForgetAllPairedDevices(),
+        "revoke-all cannot overwrite a damaged admission list");
+    Check(deskhubp::PairedDevicesGeneration() == generationBeforeDamagedRevoke,
+        "a failed revoke-all does not publish a policy change");
     Check(deskhubp::ReadAppDataFile(deskhubp::kPairedDevicesFileName) == damaged,
         "the damaged list remains available for repair");
     Check(deskhubp::WriteAppDataFile(deskhubp::kPairedDevicesFileName, valid),
@@ -186,6 +218,17 @@ void TestPublicKeyAllowlistOverridesLegacyFingerprints() {
             "a fingerprint-only legacy entry exists");
         Check(deskhubp::IsClientKeyAuthorized(first.publicKey),
             "a legacy key remains authorized until the new store is configured");
+        const std::string validLegacy =
+            deskhubp::ReadAppDataFile(deskhubp::kPairedDevicesFileName);
+        Check(deskhubp::WriteAppDataFile(deskhubp::kPairedDevicesFileName,
+                  validLegacy + "invalid row\n"),
+            "the legacy allowlist can be damaged for a reload check");
+        Check(deskhubp::CheckClientKeyAuthorization(first.publicKey) ==
+                      deskhubp::ClientKeyAuthorization::ConfigError &&
+                  !deskhubp::LoadEffectiveAuthorizedDevices(),
+            "a damaged legacy allowlist reports a configuration error instead of an empty list");
+        Check(deskhubp::WriteAppDataFile(deskhubp::kPairedDevicesFileName, validLegacy),
+            "the valid legacy allowlist is restored");
         Check(deskhubp::RememberAuthorizedKey(deskhubp::ClientPublicKeyText(second)),
             "a full public key is saved in authorized_keys");
         Check(!deskhubp::IsClientKeyAuthorized(first.publicKey) &&
@@ -193,12 +236,29 @@ void TestPublicKeyAllowlistOverridesLegacyFingerprints() {
             "the new public key list becomes authoritative when configured");
         Check(!deskhubp::RememberAuthorizedKey(deskhubp::ClientPublicKeyText(second)),
             "a duplicate public key is not stored twice");
+        const uint64_t generationBeforeDamage = deskhubp::AuthorizedKeysGeneration();
+        const std::string validKeys =
+            deskhubp::ReadAppDataFile(deskhubp::kAuthorizedKeysFileName);
         deskhubp::RemoveAppDataFile(deskhubp::kAuthorizedKeysFileName);
         Check(!deskhubp::IsClientKeyAuthorized(first.publicKey),
             "deleting the new list cannot reactivate a legacy fingerprint entry");
         Check(deskhubp::CheckClientKeyAuthorization(first.publicKey) ==
                   deskhubp::ClientKeyAuthorization::ConfigError,
             "an unreadable active allowlist has a distinct configuration error");
+        Check(!deskhubp::ClearAuthorizedKeys(),
+            "revoke-all cannot mask a missing active allowlist");
+        Check(deskhubp::WriteAppDataFile(deskhubp::kAuthorizedKeysFileName,
+                  validKeys + "invalid key\n"),
+            "the active allowlist can be damaged for a regression check");
+        Check(!deskhubp::ClearAuthorizedKeys(),
+            "revoke-all cannot overwrite a damaged allowlist");
+        Check(deskhubp::ReadAppDataFile(deskhubp::kAuthorizedKeysFileName) ==
+                  validKeys + "invalid key\n",
+            "a failed revoke-all preserves the allowlist for repair");
+        Check(deskhubp::AuthorizedKeysGeneration() == generationBeforeDamage,
+            "failed revoke-all does not publish a policy change");
+        Check(deskhubp::WriteAppDataFile(deskhubp::kAuthorizedKeysFileName, validKeys),
+            "the valid allowlist is restored");
         Check(deskhubp::ClearAuthorizedKeys() &&
                   !deskhubp::IsClientKeyAuthorized(second.publicKey),
             "an intentionally empty authorized_keys file denies every client");

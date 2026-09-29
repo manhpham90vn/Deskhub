@@ -196,7 +196,7 @@ bool SendInvalidProof(deskhubp::SessionTransport& viewer, const NetAddr& target)
             const auto header = deskhub::ParseCommonHeader(packet);
             if (!header || header->type != deskhub::MsgType::AuthResult) return false;
             const auto result = deskhub::ParseAuthResult(deskhub::PayloadOf(packet));
-            return result && result->code == deskhub::AuthResultCode::NotPaired;
+            return result && result->code == deskhub::AuthResultCode::BadSignature;
         },
         kSettleMillis);
 }
@@ -335,6 +335,24 @@ void TestAClosedConnectionTakesItsAdmissionWithIt() {
     std::string name;
     Check(!rig.host.PeerAuth(peer, fingerprint, name),
         "and the host no longer vouches for who was on it");
+
+    deskhubp::SessionTransport reconnected;
+    reconnected.SetRecvTimeout(1);
+    Check(reconnected.Connect(deskhubp::QuicSettings{}, rig.target, "admission-host") &&
+              reconnected.WaitEstablished(rig.target, kAuthTimeoutMs),
+        "the same client can establish a fresh QUIC connection");
+    const NetAddr newPeer{0x7F000001u, reconnected.LocalPort()};
+    Check(!rig.host.Authenticated(newPeer),
+        "a fresh QUIC connection does not inherit the previous admission");
+
+    deskhubp::ClientAuthConfig client;
+    client.identity = rig.machines.viewer;
+    client.hostFingerprint = rig.machines.host.fingerprint;
+    client.clientName = "reconnected-viewer";
+    deskhub::AuthResultCode code = deskhub::AuthResultCode::NotPaired;
+    Check(reconnected.RunClientAuth(rig.target, std::move(client), kAuthTimeoutMs, code) &&
+              WaitUntil([&] { return rig.host.Authenticated(newPeer); }, kSettleMillis),
+        "the fresh connection is admitted only after another signature");
 }
 
 void TestHostCannotSendBeforeAuthentication() {

@@ -292,7 +292,7 @@ endif()
 
 deskhub_target_warnings(platform)
 if(WIN32)
-    target_link_libraries(platform PUBLIC ws2_32 psapi ole32 shell32 crypt32)
+    target_link_libraries(platform PUBLIC ws2_32 psapi ole32 shell32 crypt32 advapi32)
     target_compile_options(platform PRIVATE /sdl)
 endif()
 
@@ -350,6 +350,8 @@ if(DESKHUB_PLATFORM_TESTS)
         target_sources(platform_tests PRIVATE tests/system/ClientIdentityTestsNone.cpp)
     endif()
     target_include_directories(platform_tests PRIVATE tests)
+    target_compile_definitions(platform_tests PRIVATE
+        DESKHUB_TEST_FIXTURES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures")
     deskhub_target_warnings(platform_tests)
 
     include(CTest)

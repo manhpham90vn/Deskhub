@@ -111,13 +111,14 @@ NVENC の実装そのものはユーザーの NVIDIA driver（`nvEncodeAPI64.dll
 | --- | --- | --- |
 | [quiche](https://github.com/cloudflare/quiche) 0.29.3 | BSD-2-Clause | **静的** |
 | [BoringSSL](https://boringssl.googlesource.com/boringssl/)（quiche が同梱） | OpenSSL / ISC 系 | **静的** |
+| [RustCrypto ssh-key](https://github.com/RustCrypto/SSH) 0.6.7 | Apache-2.0 OR MIT | **静的** |
 
-Deskhub の encrypt された transport は Cloudflare の quiche を組み込んでいる。
-[`scripts/build-quiche.sh`](scripts/build-quiche.sh) が正確なバージョンと commit に
-固定した、改変していない上流の source から build している。quiche は自前の BoringSSL
-を（`boring` crate 経由で）持っており、それが TLS と Deskhub の pairing の背後にある
-暗号を提供する。どちらもすべての app に静的に link される。いずれのライブラリも改変
-していない。
+Deskhub の暗号化 transport は Cloudflare quiche を組み込んでいる。
+[`scripts/build-quiche.sh`](scripts/build-quiche.sh) がバージョンと commit を固定し、
+ビルド時に [`patches/quiche-key-exporter.patch`](patches/quiche-key-exporter.patch) を
+適用して TLS キー材料を公開し、RustCrypto `ssh-key` で OpenSSH 秘密鍵を解析する。
+quiche は BoringSSL（`boring` crate 経由）を同梱する。これらのライブラリはすべての
+app に静的に link される。
 
 ## Audio codec（すべての app）
 

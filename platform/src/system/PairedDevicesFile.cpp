@@ -80,6 +80,11 @@ deskhub::PairedDevices LoadPairedDevices() {
     return LoadPairedDevicesLocked().value_or(deskhub::PairedDevices{});
 }
 
+std::optional<deskhub::PairedDevices> TryLoadPairedDevices() {
+    const std::lock_guard<std::mutex> lock(PairedDevicesMutex());
+    return LoadPairedDevicesLocked();
+}
+
 deskhub::PairVerdict CheckPairedDevice(const deskhub::Fingerprint& fingerprint) {
     return LoadPairedDevices().Check(fingerprint);
 }
@@ -118,6 +123,7 @@ bool ForgetAllPairedDevices() {
     const std::lock_guard<std::mutex> lock(PairedDevicesMutex());
     const ConfigFileLock fileLock(kPairedDevicesFileName);
     if (!fileLock.Valid()) return false;
+    if (!LoadPairedDevicesLocked()) return false;
     return SavePairedDevicesLocked(deskhub::PairedDevices{});
 }
 

@@ -19,7 +19,15 @@ final class SampleHandler: RPBroadcastSampleHandler, @unchecked Sendable {
     private var pending = [Int16]()
 
     override func broadcastStarted(withSetupInfo _: [String: NSObject]?) {
-        dhb_start_broadcast(BroadcastStatus.containerURL?.path, UIDevice.current.model)
+        guard let container = BroadcastStatus.containerURL?.path else {
+            finishBroadcastWithError(NSError(
+                domain: SampleHandler.errorDomain,
+                code: 2,
+                userInfo: [NSLocalizedDescriptionKey: "Deskhub shared app container is unavailable"]
+            ))
+            return
+        }
+        dhb_start_broadcast(container, UIDevice.current.model)
         BroadcastStatus().save()
         startPublishingStatus()
     }

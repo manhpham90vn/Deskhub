@@ -109,13 +109,14 @@ resolved at runtime; it is not bundled.
 | --- | --- | --- |
 | [quiche](https://github.com/cloudflare/quiche) 0.29.3 | BSD-2-Clause | **static** |
 | [BoringSSL](https://boringssl.googlesource.com/boringssl/) (bundled by quiche) | OpenSSL / ISC-style | **static** |
+| [RustCrypto ssh-key](https://github.com/RustCrypto/SSH) 0.6.7 | Apache-2.0 OR MIT | **static** |
 
-Deskhub's encrypted transport embeds Cloudflare's quiche, built from unmodified
-upstream sources pinned to an exact version and commit by
-[`scripts/build-quiche.sh`](scripts/build-quiche.sh). quiche carries its own copy of
-BoringSSL (via the `boring` crate), which provides TLS and the cryptography behind
-Deskhub's pairing. Both are linked statically into every app. Neither library is
-modified.
+Deskhub's encrypted transport embeds Cloudflare's quiche, pinned to an exact
+version and commit by [`scripts/build-quiche.sh`](scripts/build-quiche.sh).
+The build applies [`patches/quiche-key-exporter.patch`](patches/quiche-key-exporter.patch)
+to expose TLS keying material and parse OpenSSH private keys through RustCrypto
+`ssh-key`. quiche carries BoringSSL (via the `boring` crate). These libraries are
+linked statically into every app.
 
 ## Audio codec (all apps)
 

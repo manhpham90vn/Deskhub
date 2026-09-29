@@ -114,6 +114,8 @@ bool ClearAuthorizedKeys() {
     const std::lock_guard<std::mutex> lock(StoreMutex());
     const ConfigFileLock fileLock(kAuthorizedKeysFileName);
     if (!fileLock.Valid()) return false;
+    const auto snapshot = LoadLocked();
+    if (!snapshot) return false;
     return SaveLocked(deskhub::AuthorizedKeys{});
 }
 
@@ -126,7 +128,10 @@ ClientKeyAuthorization CheckClientKeyAuthorization(std::span<const uint8_t> publ
     if (!snapshot) return ClientKeyAuthorization::ConfigError;
     if (!snapshot->configured) {
         const auto fingerprint = FingerprintOfPublicKey(publicKeySpki);
-        return fingerprint && CheckPairedDevice(*fingerprint) == deskhub::PairVerdict::Paired
+        if (!fingerprint) return ClientKeyAuthorization::Denied;
+        const auto legacy = TryLoadPairedDevices();
+        if (!legacy) return ClientKeyAuthorization::ConfigError;
+        return legacy->Check(*fingerprint) == deskhub::PairVerdict::Paired
                    ? ClientKeyAuthorization::Authorized
                    : ClientKeyAuthorization::Denied;
     }
@@ -138,7 +143,7 @@ ClientKeyAuthorization CheckClientKeyAuthorization(std::span<const uint8_t> publ
 std::optional<deskhub::PairedDevices> LoadEffectiveAuthorizedDevices() {
     const auto snapshot = LoadAuthorizedKeys();
     if (!snapshot) return std::nullopt;
-    if (!snapshot->configured) return LoadPairedDevices();
+    if (!snapshot->configured) return TryLoadPairedDevices();
     deskhub::PairedDevices devices;
     for (const auto& key : snapshot->keys.Keys()) {
         const auto spki = PublicKeySpkiFromText(deskhub::FormatPublicKeyText(key));

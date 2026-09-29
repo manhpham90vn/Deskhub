@@ -1,12 +1,15 @@
 #include "deskhubp/system/ClientIdentity.h"
 
 #include <openssl/bio.h>
+#include <openssl/bn.h>
 #include <openssl/ec_key.h>
 #include <openssl/evp.h>
+#include <openssl/mem.h>
 #include <openssl/nid.h>
 #include <openssl/pem.h>
 #include <openssl/rand.h>
 #include <openssl/x509.h>
+#include <quiche.h>
 
 #include <array>
 #include <cstring>
@@ -130,6 +133,53 @@ int ReadPassphrase(char* output, int capacity, int, void* user) {
 
 PkeyPtr ParsePrivateKey(std::string_view pem, std::string_view passphrase) {
     if (pem.empty() || pem.size() > 65536 || passphrase.size() > 4096) return nullptr;
+    if (pem.starts_with("-----BEGIN OPENSSH PRIVATE KEY-----")) {
+        quiche_openssh_private_key decoded{};
+        const int status = quiche_parse_openssh_private_key(
+            reinterpret_cast<const uint8_t*>(pem.data()), pem.size(),
+            reinterpret_cast<const uint8_t*>(passphrase.data()), passphrase.size(), &decoded);
+        if (status != 0) return nullptr;
+        const auto build = [&]() -> PkeyPtr {
+            if (decoded.kind == 1 && decoded.public_key_len == 32) {
+                PkeyPtr key(EVP_PKEY_new_raw_private_key(
+                    EVP_PKEY_ED25519, nullptr, decoded.private_key, sizeof(decoded.private_key)));
+                std::array<uint8_t, 32> publicKey{};
+                size_t publicLength = publicKey.size();
+                if (!key || EVP_PKEY_get_raw_public_key(key.get(), publicKey.data(), &publicLength) != 1 ||
+                    publicLength != decoded.public_key_len ||
+                    CRYPTO_memcmp(publicKey.data(), decoded.public_key, publicLength) != 0)
+                    return nullptr;
+                return key;
+            }
+            if (decoded.kind != 2 || decoded.public_key_len != 65) return nullptr;
+            std::unique_ptr<EC_KEY, decltype(&EC_KEY_free)> ec(
+                EC_KEY_new_by_curve_name(NID_X9_62_prime256v1), EC_KEY_free);
+            std::unique_ptr<BIGNUM, decltype(&BN_clear_free)> scalar(
+                BN_bin2bn(decoded.private_key, sizeof(decoded.private_key), nullptr),
+                BN_clear_free);
+            if (!ec || !scalar || EC_KEY_set_private_key(ec.get(), scalar.get()) != 1)
+                return nullptr;
+            const EC_GROUP* group = EC_KEY_get0_group(ec.get());
+            std::unique_ptr<EC_POINT, decltype(&EC_POINT_free)> point(
+                EC_POINT_new(group), EC_POINT_free);
+            if (!point || EC_POINT_mul(group, point.get(), scalar.get(), nullptr, nullptr, nullptr) != 1 ||
+                EC_KEY_set_public_key(ec.get(), point.get()) != 1 ||
+                EC_KEY_check_key(ec.get()) != 1)
+                return nullptr;
+            std::array<uint8_t, 65> publicKey{};
+            if (EC_POINT_point2oct(group, point.get(), POINT_CONVERSION_UNCOMPRESSED,
+                    publicKey.data(), publicKey.size(), nullptr) != publicKey.size() ||
+                CRYPTO_memcmp(publicKey.data(), decoded.public_key, publicKey.size()) != 0)
+                return nullptr;
+            PkeyPtr key(EVP_PKEY_new());
+            if (!key || EVP_PKEY_assign_EC_KEY(key.get(), ec.get()) != 1) return nullptr;
+            ec.release();
+            return key;
+        };
+        PkeyPtr key = build();
+        OPENSSL_cleanse(&decoded, sizeof(decoded));
+        return key;
+    }
     BioPtr bio(BIO_new_mem_buf(pem.data(), int(pem.size())));
     if (!bio) return nullptr;
     std::string secret(passphrase);

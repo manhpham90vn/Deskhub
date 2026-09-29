@@ -150,10 +150,16 @@ void TestTrustStoreOnDisk() {
     Check(deskhubp::WriteAppDataFile(deskhubp::kTrustStoreFileName,
               valid + "damaged row\n"),
         "the isolated trust file can be corrupted for a regression check");
+    Check(!deskhubp::TryLoadTrustStore(),
+        "a damaged trust file is reported as invalid rather than an empty list");
     Check(deskhubp::CheckTrustedHost("10.1.2.3:47777", fp) == deskhub::TrustVerdict::Unknown,
         "a damaged trust file does not trust even a valid stored pin");
     Check(!deskhubp::RememberTrustedHost("10.1.2.3:47777", "Desk", fp, 2000),
         "a normal update cannot overwrite a damaged trust file");
+    Check(!deskhubp::ClearTrustedHosts(),
+        "revoke-all cannot overwrite a damaged trust file");
+    Check(deskhubp::ReadAppDataFile(deskhubp::kTrustStoreFileName) == valid + "damaged row\n",
+        "a failed revoke-all leaves the damaged trust file available for recovery");
     Check(deskhubp::WriteAppDataFile(deskhubp::kTrustStoreFileName, valid),
         "the valid trust file is restored");
 
@@ -166,6 +172,13 @@ void TestTrustStoreOnDisk() {
     Check(!deskhubp::ForgetTrustedHost("10.1.2.3:47777"), "and forgetting it twice does nothing");
     Check(deskhubp::CheckTrustedHost("10.1.2.3:47777", fp) == deskhub::TrustVerdict::Unknown,
         "after which it is a stranger again");
+
+    Check(deskhubp::RememberTrustedHost("10.1.2.3:47777", "Desk", fp, 3000),
+        "the valid trust file can be populated again");
+    Check(deskhubp::ClearTrustedHosts(), "revoke-all persists an empty trust list");
+    const auto cleared = deskhubp::TryLoadTrustStore();
+    Check(cleared && cleared->Size() == 0,
+        "revoke-all leaves a readable empty trust file");
 
     deskhubp::RemoveAppDataFile(deskhubp::kTrustStoreFileName);
 }

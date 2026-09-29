@@ -109,12 +109,13 @@ nó không được đóng gói kèm.
 | --- | --- | --- |
 | [quiche](https://github.com/cloudflare/quiche) 0.29.3 | BSD-2-Clause | **tĩnh** |
 | [BoringSSL](https://boringssl.googlesource.com/boringssl/) (đi kèm quiche) | OpenSSL / kiểu ISC | **tĩnh** |
+| [RustCrypto ssh-key](https://github.com/RustCrypto/SSH) 0.6.7 | Apache-2.0 OR MIT | **tĩnh** |
 
-Transport đã encrypt của Deskhub nhúng quiche của Cloudflare, build từ source gốc không
-sửa đổi, ghim vào đúng một phiên bản và một commit bởi
-[`scripts/build-quiche.sh`](scripts/build-quiche.sh). quiche mang theo bản BoringSSL của
-riêng nó (qua crate `boring`), thứ cung cấp TLS và phần mật mã đứng sau pairing của
-Deskhub. Cả hai đều được link tĩnh vào mọi app. Không thư viện nào bị sửa đổi.
+Transport đã mã hóa của Deskhub nhúng quiche của Cloudflare, ghim vào một phiên bản
+và commit bởi [`scripts/build-quiche.sh`](scripts/build-quiche.sh). Bản build áp dụng
+[`patches/quiche-key-exporter.patch`](patches/quiche-key-exporter.patch) để xuất dữ liệu
+khóa TLS và đọc private key OpenSSH qua RustCrypto `ssh-key`. quiche mang theo
+BoringSSL (qua crate `boring`). Các thư viện này được link tĩnh vào mọi app.
 
 ## Audio codec (mọi app)
 

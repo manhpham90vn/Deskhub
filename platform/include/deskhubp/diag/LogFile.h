@@ -80,6 +80,17 @@ inline std::wstring WidenUtf8(const std::string& s) {
     return out;
 }
 
+inline bool EnsureWritableDir(const std::string& dir) {
+    const std::wstring wide = WidenUtf8(dir);
+    if (wide.empty()) return false;
+    if (!CreateDirectoryW(wide.c_str(), nullptr) && GetLastError() != ERROR_ALREADY_EXISTS)
+        return false;
+    const DWORD attributes = GetFileAttributesW(wide.c_str());
+    return attributes != INVALID_FILE_ATTRIBUTES &&
+           (attributes & FILE_ATTRIBUTE_DIRECTORY) != 0 &&
+           (attributes & FILE_ATTRIBUTE_REPARSE_POINT) == 0;
+}
+
 inline std::wstring LogDirW() {
     std::wstring dir = WidenUtf8(AppDataDirRef());
     if (dir.empty()) {
@@ -90,6 +101,11 @@ inline std::wstring LogDirW() {
     }
 
     if (!CreateDirectoryW(dir.c_str(), nullptr) && GetLastError() != ERROR_ALREADY_EXISTS)
+        return std::wstring();
+    const DWORD attributes = GetFileAttributesW(dir.c_str());
+    if (attributes == INVALID_FILE_ATTRIBUTES ||
+        (attributes & FILE_ATTRIBUTE_DIRECTORY) == 0 ||
+        (attributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0)
         return std::wstring();
     return dir;
 }

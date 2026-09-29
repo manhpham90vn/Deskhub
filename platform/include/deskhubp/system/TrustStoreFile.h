@@ -9,7 +9,7 @@ inline constexpr const char* kTrustStoreFileName = "known_hosts";
 
 deskhub::TrustStore LoadTrustStore();
 std::optional<deskhub::TrustStore> TryLoadTrustStore();
-bool SaveTrustStore(const deskhub::TrustStore& store);
+bool ClearTrustedHosts();
 
 deskhub::TrustVerdict CheckTrustedHost(std::string_view endpoint,
     const deskhub::Fingerprint& fingerprint);

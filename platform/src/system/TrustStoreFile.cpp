@@ -69,11 +69,14 @@ std::optional<deskhub::TrustStore> TryLoadTrustStore() {
     return LoadTrustStoreLocked();
 }
 
-bool SaveTrustStore(const deskhub::TrustStore& store) {
+bool ClearTrustedHosts() {
     const std::lock_guard<std::mutex> lock(TrustStoreMutex());
     const ConfigFileLock fileLock(kTrustStoreFileName);
     if (!fileLock.Valid()) return false;
-    return SaveTrustStoreLocked(store);
+    auto store = LoadTrustStoreLocked();
+    if (!store) return false;
+    store->Clear();
+    return SaveTrustStoreLocked(*store);
 }
 
 deskhub::TrustVerdict CheckTrustedHost(std::string_view endpoint,

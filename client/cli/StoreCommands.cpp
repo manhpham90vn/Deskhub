@@ -91,10 +91,6 @@ ExitCode RunDevices(const Command& command) {
             return ExitCode::Usage;
         }
         pem.resize(size_t(length));
-        if (pem.find("-----BEGIN OPENSSH PRIVATE KEY-----") != std::string::npos) {
-            PrintError("OpenSSH private keys are not supported yet; import an Ed25519 or P-256 PKCS#8 key");
-            return ExitCode::Usage;
-        }
         if (pem.find("-----BEGIN RSA PRIVATE KEY-----") != std::string::npos) {
             PrintError("RSA private keys are not supported; use Ed25519 or P-256");
             return ExitCode::Usage;
@@ -113,7 +109,7 @@ ExitCode RunDevices(const Command& command) {
                                   ? deskhubp::ImportClientIdentity(pem, passphrase)
                                   : deskhubp::ImportClientIdentity(command.keyName, pem, passphrase);
         if (!imported) {
-            PrintError("could not import identity: check the name, key format, passphrase, and whether the name already exists");
+            PrintError("could not import identity: use an Ed25519 or P-256 OpenSSH/PKCS#8 private key; check its passphrase and whether the name already exists");
             return ExitCode::Usage;
         }
         if (!command.quiet) {
@@ -294,30 +290,34 @@ ExitCode RunTrust(const Command& command) {
     }
 
     if (command.trust == TrustAction::ForgetAll) {
-        deskhub::TrustStore store;
-        if (!deskhubp::SaveTrustStore(store)) {
-            PrintError("could not revoke the trusted host keys");
+        if (!deskhubp::ClearTrustedHosts()) {
+            PrintError("could not clear trusted host keys; check known_hosts and its permissions");
             return ExitCode::Failed;
         }
-        if (!command.quiet) PrintLine("Every host key is accepted afresh next time.");
+        if (!command.quiet) PrintLine("Every saved host key has been removed. Add a host key before connecting again.");
         return ExitCode::Ok;
     }
 
     if (command.trust == TrustAction::Forget) {
         if (!deskhubp::ForgetTrustedHost(command.target)) {
-            PrintError("no trusted host at " + command.target);
+            PrintError("could not remove trusted host at " + command.target +
+                       "; check the address, known_hosts, and its permissions");
             return ExitCode::Failed;
         }
-        if (!command.quiet) PrintLine("That host's key is accepted afresh next time.");
+        if (!command.quiet) PrintLine("That saved host key has been removed. Add its key before connecting again.");
         return ExitCode::Ok;
     }
 
-    const deskhub::TrustStore store = deskhubp::LoadTrustStore();
+    const auto store = deskhubp::TryLoadTrustStore();
+    if (!store) {
+        PrintError("could not read known_hosts; fix the file before listing or changing trusted hosts");
+        return ExitCode::Failed;
+    }
 
     if (command.json) {
         deskhub::cli::JsonWriter json;
         json.ArrayBegin();
-        for (const deskhub::TrustedHost& host : store.Hosts()) {
+        for (const deskhub::TrustedHost& host : store->Hosts()) {
             json.ObjectBegin();
             json.Field("endpoint", host.endpoint);
             json.Field("label", host.label);
@@ -332,14 +332,14 @@ ExitCode RunTrust(const Command& command) {
         return ExitCode::Ok;
     }
 
-    if (store.Hosts().empty()) {
+    if (store->Hosts().empty()) {
         if (!command.quiet) PrintLine("This machine has not trusted any host yet.");
         return ExitCode::Ok;
     }
 
     Table table;
     table.Row({"ALIAS", "ENDPOINT", "CLIENT KEY", "HOST KEY"});
-    for (const deskhub::TrustedHost& host : store.Hosts())
+    for (const deskhub::TrustedHost& host : store->Hosts())
         table.Row({host.label, host.endpoint,
             host.identityName.empty() ? "default" : host.identityName,
             deskhub::ShortFingerprint(host.fingerprint)});

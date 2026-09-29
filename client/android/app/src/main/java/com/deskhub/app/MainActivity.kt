@@ -514,8 +514,8 @@ private fun MainScreen(
                 deviceRows = deviceRows,
                 scanStatus = scanStatus,
                 onPickDevice = pickDevice,
-                onRescan = { deviceRows = NativeClient.deviceRows() },
-                onRefreshStatus = { deviceRows = NativeClient.deviceRows() },
+                onRescan = { scope.launch { deviceRows = NativeClient.deviceRows() } },
+                onRefreshStatus = { scope.launch { deviceRows = NativeClient.deviceRows() } },
                 port = port,
                 onPortChange = { chosen ->
                     NativeClient.setSettingsPort(chosen)

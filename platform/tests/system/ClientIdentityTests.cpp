@@ -14,6 +14,8 @@
 #include <array>
 #include <cstdio>
 #include <filesystem>
+#include <fstream>
+#include <iterator>
 
 #ifndef _WIN32
 #include <sys/stat.h>
@@ -86,6 +88,60 @@ std::string NewP256PrivateKey() {
     const std::string pem(reinterpret_cast<const char*>(data), size);
     BIO_free(output);
     return pem;
+}
+
+std::string OpenSshFixture(std::string_view name) {
+    const auto path = std::filesystem::path(DESKHUB_TEST_FIXTURES_DIR) / "openssh" /
+                      std::string(name);
+    std::ifstream input(path, std::ios::binary);
+    if (!input) return {};
+    return {std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>()};
+}
+
+void TestOpenSshPrivateKeyImport() {
+    std::printf("[client identity] OpenSSH Ed25519 and P-256 private keys import...\n");
+    if (!deskhubp::QuicAvailable()) return;
+    const SavedClientKey saved;
+    const auto original = deskhubp::LoadOrCreateClientIdentity();
+    Check(original.Valid(), "a baseline identity exists before OpenSSH import");
+    if (!original.Valid()) return;
+
+    const auto checkImport = [](std::string_view fixture, std::string_view passphrase) {
+        const std::string privateKey = OpenSshFixture(fixture);
+        const std::string publicKey = OpenSshFixture(std::string(fixture) + ".pub");
+        Check(!privateKey.empty() && !publicKey.empty(), "OpenSSH fixture files can be read");
+        if (privateKey.empty() || publicKey.empty()) return;
+        Check(deskhubp::ImportClientIdentity(privateKey, passphrase),
+            "a supported OpenSSH private key imports");
+        const auto imported = deskhubp::LoadClientIdentity();
+        Check(imported.Valid() &&
+                  imported.publicKey == deskhubp::PublicKeySpkiFromText(publicKey),
+            "the imported private key matches the ssh-keygen public key");
+        const std::vector<uint8_t> message = {'o', 'p', 'e', 'n', 's', 's', 'h'};
+        Check(imported.Valid() && deskhubp::VerifySignature(imported.publicKey, message,
+                                      deskhubp::SignWithClientIdentity(imported, message)),
+            "the imported OpenSSH key signs an authentication proof");
+    };
+
+    checkImport("ed25519", {});
+    checkImport("ed25519_encrypted", "correct passphrase");
+    checkImport("p256", {});
+    checkImport("p256_encrypted", "correct passphrase");
+    const auto latest = deskhubp::LoadClientIdentity();
+    const auto encrypted = OpenSshFixture("ed25519_encrypted");
+    Check(!deskhubp::ImportClientIdentity(encrypted, {}),
+        "an encrypted OpenSSH key requires its passphrase");
+    Check(!deskhubp::ImportClientIdentity(encrypted, "wrong"),
+        "a wrong OpenSSH passphrase is refused");
+    Check(!deskhubp::ImportClientIdentity(OpenSshFixture("rsa_unsupported"), {}),
+        "an unsupported OpenSSH RSA key is refused");
+    Check(!deskhubp::ImportClientIdentity(OpenSshFixture("ed25519_mismatched"), {}),
+        "an OpenSSH private key with a mismatched public key is refused");
+    const auto plain = OpenSshFixture("ed25519");
+    Check(plain.size() > 100 && !deskhubp::ImportClientIdentity(plain.substr(0, 100), {}),
+        "a truncated OpenSSH key is refused");
+    Check(deskhubp::LoadClientIdentity().fingerprint == latest.fingerprint,
+        "failed OpenSSH imports preserve the active identity");
 }
 
 void TestClientKeyIsSeparateAndStable() {
@@ -204,5 +260,6 @@ void TestNamedClientKeysStaySeparate() {
 
 void RunClientIdentityTests() {
     TestClientKeyIsSeparateAndStable();
+    TestOpenSshPrivateKeyImport();
     TestNamedClientKeysStaySeparate();
 }
