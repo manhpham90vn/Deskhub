@@ -24,9 +24,9 @@
 #include "deskhubp/system/DeviceName.h"
 #include "deskhubp/system/ClientIdentity.h"
 #include "deskhubp/system/HostIdentity.h"
-#include "deskhubp/system/PairedDevicesFile.h"
 #include "deskhubp/system/TrustStoreFile.h"
 #include "deskhubp/client/HostProfiles.h"
+#include "deskhubp/system/RecentDevicesFile.h"
 #include "deskhubp/system/ClientKeys.h"
 #include "deskhub/ui/ClientKeys.h"
 #include "deskhubp/system/AuthorizedKeysFile.h"
@@ -43,8 +43,6 @@
 namespace {
 
 namespace ui = deskhub::ui;
-
-constexpr const char* kRecentDevicesFile = "recent-devices.txt";
 
 constexpr int kWindowW = 1040;
 constexpr int kWindowH = 700;
@@ -64,7 +62,7 @@ float ColumnXAlign(ui::ColumnAlign align) {
 
 constexpr const char* kOnlineColour = "#00913c";
 constexpr const char* kOfflineColour = "#c82828";
-constexpr const char* kUnknownColour = "#787878";
+constexpr const char* kRowTextColour = "#111827";
 
 const char* const kPageLabels[] = {ui::kSidebarHost, ui::kSidebarClient, ui::kSidebarDevices,
     ui::kSidebarSettings};
@@ -581,7 +579,7 @@ void MainWindow::Open(GtkApplication* app) {
 
 void MainWindow::LoadSettings() {
     settings_ = deskhubp::LoadUiSettings();
-    recent_ = ui::ParseRecentDevices(deskhubp::ReadAppDataFile(kRecentDevicesFile));
+    recent_ = deskhubp::LoadRecentDevices();
 }
 
 uint16_t MainWindow::Port() const {
@@ -998,15 +996,13 @@ GtkWidget* MainWindow::BuildClientPage() {
         HeadingRow(ui::kDevicesHeading, G_CALLBACK(OnRefreshDevicesClicked), this), FALSE, FALSE,
         0);
 
-    deviceStore_ = gtk_list_store_new(6, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING,
-        G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING);
+    deviceStore_ =
+        gtk_list_store_new(4, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING);
     GtkWidget* deviceView = gtk_tree_view_new_with_model(GTK_TREE_MODEL(deviceStore_));
     g_object_unref(deviceStore_);
-    AddColumn(deviceView, "Device", 0, 5, 170, 0.f);
-    AddColumn(deviceView, ui::kDeviceColumnWhere, 1, 5, 120, 0.f);
-    AddColumn(deviceView, "Status", 2, 5, 100, 0.f);
-    AddColumn(deviceView, "Ping", 3, 5, 70, 1.f);
-    AddColumn(deviceView, "Last connected", 4, 5, 150, 0.f);
+    AddColumn(deviceView, ui::kDeviceNameLabel, 0, 3, 180, 0.f);
+    AddColumn(deviceView, ui::kHostAddressLabel, 1, 3, 170, 0.f);
+    AddColumn(deviceView, "Last connected", 2, 3, 150, 0.f);
     g_signal_connect(deviceView, "row-activated", G_CALLBACK(OnDeviceRowActivated), this);
     gtk_box_pack_start(GTK_BOX(devicesBox_), ListFrame(deviceView, kListH), TRUE, TRUE, 0);
 
@@ -1147,8 +1143,37 @@ void MainWindow::RefreshClientKeys() {
             g_strdup(key.publicKeyText.c_str()), g_free);
         g_signal_connect(copy, "clicked", G_CALLBACK(OnCopyTextClicked), this);
         gtk_grid_attach(GTK_GRID(clientKeysView_), copy, 2, row, 1, 1);
+        if (key.name == ui::kDefaultIdentityName) continue;
+        GtkWidget* remove = gtk_button_new_with_label(ui::kDeleteKeyAction);
+        AddClass(remove, "deskhub-row-action");
+        AddClass(remove, "deskhub-row-action-stop");
+        gtk_widget_set_valign(remove, GTK_ALIGN_CENTER);
+        g_object_set_data_full(G_OBJECT(remove), "deskhub-key-name", g_strdup(key.name.c_str()),
+            g_free);
+        g_signal_connect(remove, "clicked", G_CALLBACK(OnDeleteKeyClicked), this);
+        gtk_grid_attach(GTK_GRID(clientKeysView_), remove, 3, row, 1, 1);
     }
     gtk_widget_show_all(clientKeysView_);
+}
+
+void MainWindow::OnDeleteKeyClicked(GtkButton* button, gpointer user) {
+    auto* self = static_cast<MainWindow*>(user);
+    const auto* name =
+        static_cast<const char*>(g_object_get_data(G_OBJECT(button), "deskhub-key-name"));
+    if (name == nullptr) return;
+    const std::string keyName = name;
+    GtkWidget* dlg = gtk_message_dialog_new(GTK_WINDOW(self->window_), GTK_DIALOG_MODAL,
+        GTK_MESSAGE_WARNING, GTK_BUTTONS_NONE, "%s", keyName.c_str());
+    gtk_message_dialog_format_secondary_text(GTK_MESSAGE_DIALOG(dlg), "%s", ui::kDeleteKeyPrompt);
+    gtk_dialog_add_buttons(GTK_DIALOG(dlg), ui::kCancelAction, GTK_RESPONSE_CANCEL,
+        ui::kDeleteKeyAction, GTK_RESPONSE_ACCEPT, nullptr);
+    gtk_dialog_set_default_response(GTK_DIALOG(dlg), GTK_RESPONSE_CANCEL);
+    const bool confirmed = gtk_dialog_run(GTK_DIALOG(dlg)) == GTK_RESPONSE_ACCEPT;
+    gtk_widget_destroy(dlg);
+    if (!confirmed) return;
+    const ui::ClientKeyError error = deskhubp::DeleteClientKey(keyName);
+    self->ShowInlineError(self->clientKeysError_, ui::ClientKeyErrorText(error));
+    self->RefreshClientKeys();
 }
 
 void MainWindow::ShowInlineError(GtkWidget* label, const char* text) {
@@ -1309,8 +1334,8 @@ void MainWindow::OnConnectHostClicked(GtkButton* button, gpointer user) {
 
 void MainWindow::RefreshPairedDevices() {
     if (pairedView_ == nullptr) return;
-    const auto authorized = deskhubp::LoadEffectiveAuthorizedDevices();
-    pairedDevices_ = authorized ? authorized->Devices() : std::vector<deskhub::PairedDevice>{};
+    const auto authorized = deskhubp::ListAuthorizedClients();
+    pairedDevices_ = authorized ? *authorized : std::vector<deskhubp::AuthorizedClient>{};
 
     GList* children = gtk_container_get_children(GTK_CONTAINER(pairedView_));
     for (GList* child = children; child != nullptr; child = child->next)
@@ -1324,17 +1349,13 @@ void MainWindow::RefreshPairedDevices() {
     };
     addCell(ui::kPairedColumnName, 200, 0, 0, "deskhub-row-header");
     addCell(ui::kPairedColumnKey, 130, 1, 0, "deskhub-row-header");
-    addCell(ui::kPairedColumnPaired, 150, 2, 0, "deskhub-row-header");
-    addCell(ui::kPairedColumnLastSeen, 150, 3, 0, "deskhub-row-header");
     for (size_t i = 0; i < pairedDevices_.size(); ++i) {
-        const deskhub::PairedDevice& device = pairedDevices_[i];
+        const deskhubp::AuthorizedClient& device = pairedDevices_[i];
         const int row = int(i) + 1;
-        addCell(device.name.empty() ? "(unnamed)" : device.name, 200, 0, row,
+        addCell(device.label.empty() ? "(unnamed)" : device.label, 200, 0, row,
             "deskhub-row-cell");
         addCell(deskhub::ShortFingerprint(device.fingerprint), 130, 1, row,
             "deskhub-row-cell");
-        addCell(FormatUnixMinute(device.pairedUnix), 150, 2, row, "deskhub-row-cell");
-        addCell(FormatUnixMinute(device.lastSeenUnix), 150, 3, row, "deskhub-row-cell");
         GtkWidget* forget = gtk_button_new_with_label(ui::kPairedForget);
         AddClass(forget, "deskhub-row-action");
         AddClass(forget, "deskhub-row-action-stop");
@@ -1343,7 +1364,7 @@ void MainWindow::RefreshPairedDevices() {
         g_object_set_data(G_OBJECT(forget), "deskhub-paired-row",
             GINT_TO_POINTER(gint(i) + 1));
         g_signal_connect(forget, "clicked", G_CALLBACK(OnForgetDeviceClicked), this);
-        gtk_grid_attach(GTK_GRID(pairedView_), forget, 4, row, 1, 1);
+        gtk_grid_attach(GTK_GRID(pairedView_), forget, 2, row, 1, 1);
     }
     gtk_widget_show_all(pairedView_);
     gtk_widget_set_visible(pairedHintLabel_, pairedDevices_.empty());
@@ -1359,7 +1380,7 @@ void MainWindow::ForgetEveryDevice() {
     const bool confirmed = gtk_dialog_run(GTK_DIALOG(dlg)) == GTK_RESPONSE_YES;
     gtk_widget_destroy(dlg);
     if (!confirmed) return;
-    deskhubp::ForgetAllPairedDevices();
+    deskhubp::ClearAuthorizedKeys();
     RefreshPairedDevices();
 }
 
@@ -1368,7 +1389,7 @@ void MainWindow::OnForgetDeviceClicked(GtkButton* button, gpointer user) {
     const int row = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(button), "deskhub-paired-row")) - 1;
     if (row < 0 || size_t(row) >= self->pairedDevices_.size()) return;
     const deskhub::Fingerprint fingerprint = self->pairedDevices_[size_t(row)].fingerprint;
-    deskhubp::ForgetEffectiveAuthorizedDevice(fingerprint);
+    deskhubp::ForgetAuthorizedClient(fingerprint);
     self->RefreshPairedDevices();
 }
 
@@ -1665,10 +1686,6 @@ void MainWindow::SaveSettings() {
     if (!hosting_ && !hostStarting_) ShowIdleHostState();
 }
 
-void MainWindow::SaveRecentDevices() {
-    deskhubp::WriteAppDataFile(kRecentDevicesFile, ui::SerializeRecentDevices(recent_));
-}
-
 void MainWindow::ApplyTrayMode() {
     if (settings_.startHidden && !tray_.Attached()) {
         EnsureTrayAttached();
@@ -1720,18 +1737,15 @@ void MainWindow::OnRefreshDevicesClicked(GtkButton*, gpointer user) {
 }
 
 void MainWindow::RefreshDeviceList() {
-    deviceRows_ = ui::BuildDeviceRows({}, recent_);
-
     gtk_list_store_clear(deviceStore_);
-    for (const ui::DeviceRow& device : deviceRows_) {
+    for (const ui::RecentDevice& device : recent_) {
         const std::string last = device.lastConnectedUnix != 0
                                      ? FormatUnixMinute(device.lastConnectedUnix)
                                      : std::string("-");
         GtkTreeIter it;
         gtk_list_store_append(deviceStore_, &it);
-        gtk_list_store_set(deviceStore_, &it, 0, device.addr.c_str(), 1,
-            ui::DeviceOriginLabel(device.origin), 2, "-", 3, "-", 4, last.c_str(), 5,
-            kUnknownColour, -1);
+        gtk_list_store_set(deviceStore_, &it, 0, device.name.empty() ? "-" : device.name.c_str(),
+            1, device.addr.c_str(), 2, last.c_str(), 3, kRowTextColour, -1);
     }
 }
 
@@ -1739,8 +1753,8 @@ void MainWindow::OnDeviceRowActivated(GtkTreeView*, GtkTreePath* path, GtkTreeVi
     gpointer user) {
     auto* self = static_cast<MainWindow*>(user);
     const gint* idx = gtk_tree_path_get_indices(path);
-    if (!idx || idx[0] < 0 || size_t(idx[0]) >= self->deviceRows_.size()) return;
-    const std::string addr = self->deviceRows_[size_t(idx[0])].addr;
+    if (!idx || idx[0] < 0 || size_t(idx[0]) >= self->recent_.size()) return;
+    const std::string addr = self->recent_[size_t(idx[0])].addr;
     self->ConnectToDevice(addr);
 }
 
@@ -1835,8 +1849,8 @@ void MainWindow::OnSourcesReady(const std::string& addr, const deskhubp::Connect
         return;
     }
 
-    ui::TouchRecentDevice(recent_, addr, int64_t(std::time(nullptr)));
-    SaveRecentDevices();
+    deskhubp::RememberRecentDevice(addr, outcome.hostName);
+    recent_ = deskhubp::LoadRecentDevices();
     RefreshDeviceList();
 
     OpenConnectionWindow(addr, outcome);

@@ -41,6 +41,11 @@ const char* ClientKeyErrorText(ClientKeyError error) {
             return "That file is not an Ed25519 or ECDSA P-256 private key in OpenSSH or PKCS#8 "
                    "form, or the passphrase is wrong.";
         case ClientKeyError::WriteFailed: return "The key could not be saved on this machine.";
+        case ClientKeyError::DefaultKey:
+            return "The default key cannot be deleted; this device always keeps one.";
+        case ClientKeyError::KeyInUse:
+            return "A trusted host still connects with this key. Remove that host first.";
+        case ClientKeyError::KeyMissing: return "There is no key with that name.";
     }
     return "";
 }

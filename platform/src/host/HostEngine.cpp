@@ -4,6 +4,7 @@
 #include "deskhub/session/host/SourcePipeline.h"
 #include "deskhub/session/host/ScreenHostSession.h"
 #include "deskhub/ui/Strings.h"
+#include "deskhub/ui/UiSettings.h"
 #include "deskhubp/audio/AudioCapture.h"
 #include "deskhubp/diag/Log.h"
 #include "deskhubp/net/NetInfo.h"
@@ -11,7 +12,6 @@
 #include "deskhubp/host/TerminalHost.h"
 #include "deskhubp/system/DeviceName.h"
 #include "deskhubp/system/HostIdentity.h"
-#include "deskhubp/system/PairedDevicesFile.h"
 #include "deskhubp/system/KeepAwake.h"
 #include "deskhubp/system/UiSettingsStore.h"
 
@@ -71,7 +71,7 @@ std::vector<HostSource*> HostEngine::AllSources() {
 
 void HostEngine::PublishStatus() {
     std::vector<deskhub::media::ShareSourceStatus> rows =
-        PublishSourceStatus(live_, beacon_, policy_.status);
+        PublishSourceStatus(live_, sourceList_, policy_.status);
     std::lock_guard<std::mutex> lk(statusMutex_);
     statusRows_ = std::move(rows);
 }
@@ -183,6 +183,7 @@ bool HostEngine::Start(const std::vector<deskhub::media::ShareSource>& sources,
         opt_.deviceName.empty() ? LocalDeviceName() : opt_.deviceName;
     const HostIdentity identity = LoadOrCreateHostIdentity(commonName);
     if (!identity.Valid()) return Fail(std::string(deskhub::ui::kShareNoHostIdentity));
+    sourceList_.SetHostName(deskhub::ui::TruncateDeviceName(commonName));
 
     QuicSettings settings;
     settings.certPemPath = identity.certPath;
@@ -417,7 +418,7 @@ void HostEngine::RecvLoop() {
     loop.fallbackFps = opt_.fps;
     loop.stopped = [this] { return quit_.load(); };
     loop.onTick = [this] {
-        beacon_.SetCaps(deskhub::HostCaps{opt_.allowInput,
+        sourceList_.SetCaps(deskhub::HostCaps{opt_.allowInput,
             terminal() != nullptr && terminal()->Running(), audio_.running(),
             files() != nullptr && files()->Accepting()});
         DrainControlRequests();
@@ -447,7 +448,7 @@ void HostEngine::RecvLoop() {
     loop.source.inputSkipped = policy_.source.inputSkipped;
     loop.source.takeIdleFrames = policy_.source.takeIdleFrames;
 
-    RunHostNetLoop(sock_, beacon_, live_, loop);
+    RunHostNetLoop(sock_, sourceList_, live_, loop);
 }
 
 }

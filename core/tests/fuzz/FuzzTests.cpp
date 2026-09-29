@@ -4,7 +4,7 @@
 #include "deskhub/media/AnnexB.h"
 #include "deskhub/media/BitWriter.h"
 #include "deskhub/media/H264Sps.h"
-#include "deskhub/session/host/Beacon.h"
+#include "deskhub/session/host/SourceListResponder.h"
 #include "deskhub/session/client/ScreenClientSession.h"
 #include "deskhub/session/host/ScreenHostSession.h"
 #include "deskhub/ui/RecentDevices.h"
@@ -762,7 +762,7 @@ Datagram BuildKnownHello(uint32_t clientId) {
 }
 
 void TestSessionChaosFuzz() {
-    std::printf("[fuzz] 6 rounds of datagram chaos through host + client + beacon...\n");
+    std::printf("[fuzz] 6 rounds of datagram chaos through host + client + source list...\n");
     for (int round = 0; round < 6; ++round) {
         bool outboundOk = true;
         const auto witness = [&](std::span<const uint8_t> d) {
@@ -780,10 +780,10 @@ void TestSessionChaosFuzz() {
         ScreenClientSession client(std::move(clientCb));
         client.Start(Hello{1, 1920, 1080, 0, 0}, 1);
 
-        Beacon beacon;
+        SourceListResponder sourceList;
         const SourceInfo sources[2] = {
             {0, 1280, 720, "Display 1"}, {1, 1920, 1080, "Display 2"}};
-        beacon.SetSources(sources);
+        sourceList.SetSources(sources);
 
         uint8_t reply[kMaxDatagram];
         uint64_t now = 1'000'000;
@@ -799,7 +799,7 @@ void TestSessionChaosFuzz() {
             const uint64_t from = kTestViewer + (Rnd() % 7);
             host.HandlePacket(d, now, from);
             client.HandlePacket(d, now);
-            const size_t n = beacon.Reply(reply, d);
+            const size_t n = sourceList.Reply(reply, d);
             ok = ok && n <= sizeof(reply);
             ok = ok && (n == 0 || ValidOutbound(std::span<const uint8_t>(reply, n)));
             now += (Rnd() % 50 == 0) ? kSessionTimeoutUs + 1 : 20'000;

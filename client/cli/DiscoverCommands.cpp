@@ -79,7 +79,7 @@ SourceQueryRequest QueryRequestOf(const Command& command) {
 }
 
 ExitCode ReportQueryFailure(const SourceQueryReply& reply) {
-    PrintError(reply.failure);
+    PrintConnectFailure(reply.failure);
     if (reply.unknownHostKey)
         PrintError(deskhub::ui::NewHostKeyCliHint(deskhub::FormatFingerprint(*reply.unknownHostKey)));
     return ExitCode::Refused;

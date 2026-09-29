@@ -2,7 +2,7 @@
 
 # Deskhub プライバシーポリシー
 
-_発効日: 2026 年 9 月 28 日 — バージョン 2.8_
+_発効日: 2026 年 9 月 29 日 — バージョン 2.10_
 
 > 本書は [`PRIVACY.md`](PRIVACY.md) の翻訳。内容に差がある場合は英語版を優先する。
 
@@ -40,19 +40,17 @@ analytics、crash reporting、広告、組み込みの第三者 SDK はない。
 | 共有されているコンピュータの画面内容（video の frame） | その画面を利用者の別の端末に表示するため | 2 台の端末間で直接送信し、転送中は encrypt（QUIC/TLS） | 保存しない。session の間のみメモリ上に存在する |
 | 共有されているコンピュータが再生している音声（当該コンピュータが音声を共有し、viewer が要求した場合のみ） | 閲覧者がそのコンピュータの音声を聞けるようにするため | 2 台の端末間で直接送信し、転送中は encrypt（QUIC/TLS）。圧縮された音声として送る | 保存しない。session の間のみメモリ上に存在する |
 | Mouse、keyboard、タッチの input | 別の端末から、共有されているコンピュータを操作するため | 閲覧側の端末から共有されているコンピュータへ直接送信し、転送中は encrypt（QUIC/TLS） | 保存しない。inject 後に破棄する |
-| host の TLS 鍵ペア（初回起動時に生成される秘密鍵と自己署名 certificate） | 接続してくる client に host の identity を証明するため。利用者には fingerprint（`SHA256:…`）として表示される | app 自身のフォルダの `host_key.pem` と `host_cert.pem` に保存する。接続してくる client に提示するのは公開 certificate のみ | 利用者が削除するまで保持する。削除すると host は新しい identity となり、旧 identity を記録していた client は警告を表示する |
-| 本端末の client 署名 key | 選択した public key を許可した host へのアクセス権を証明するため | 既定の private key は `client_key.pem`、追加した名前付き key は app 自身のフォルダの `client_key.NAME.pem` に保存する。private key は端末に留まり、認証時には選択した public key と署名のみを送信する | key を削除するまで保持する。各 host は接続時に選択する public key を許可する必要がある |
-| 保存済み host profile（固定した TLS key fingerprint、アドレス、別名、選択した client identity、初回と最終確認時刻） | 既知の host を識別し、接続用 client key を選ぶため | 同じフォルダの `known_hosts` に保存する。送信しない | host を削除するかファイルを削除するまで保持する |
-| 本 host へのアクセスを許可した public key と任意のラベル | 対応する private key の所持を証明した client だけを受け入れるため | 同じフォルダの `authorized_keys` に保存し、`authorized_keys_active` は新ポリシーの有効化を記録する。送信しない | key を取り消すかファイルを削除するまで保持する。有効化後に `authorized_keys` だけを削除しても旧権限は復活しない |
-| 旧方式で pair したマシン（key fingerprint、名前、pair と最終確認時刻） | `authorized_keys` をまだ有効化していない環境のアクセスを維持するため | 旧環境では同じフォルダに `paired_devices` が残る場合がある。送信せず、新ポリシー有効化後はアクセスを許可しない | 旧ファイルを削除するまで保持する |
-| 廃止された passcode verifier 用の旧ランダム salt | 認証には使用しない | 旧版からの更新では、同じフォルダに `auth_salt` が残る場合がある。現在は送信しない | 利用者が削除するまで保持する |
+| host の TLS 鍵ペア（初回起動時に生成される秘密鍵と自己署名 certificate） | 接続してくる client に host の identity を証明するため。利用者には fingerprint（`SHA256:…`）として表示される | app 自身のフォルダの `host_key.pem` と `host_cert.pem` に保存する。接続してくる client に提示するのは公開 certificate のみ | 利用者が削除するまで保持する。自動的に置き換えられることはない。削除すると host は新しい identity となり、旧 identity を信頼していた client は、その host を削除して改めて信頼するまで接続を拒否する |
+| 本端末の client key（自動的に生成される既定の key と、名前を付けて生成または import した key） | 接続に選択した public key を許可している host に、本端末が connect してよいことを証明するため | 既定の private key は `client_key.pem`、名前付きの key は `client_key.NAME.pem` として、app 自身のフォルダに保存する（Windows では DPAPI で保護）。private key は端末の外に出ず、connect 時には選択した public key と署名のみを送信する。import する key ファイルの passphrase は import 中にのみ使用し、保存しない。*Copy public key* は、本端末の名前をラベルとした public key を clipboard に置き、利用者が host の所有者に渡せるようにする | key を削除するまで保持する |
+| 信頼済み host（アドレスと port、固定した host key の fingerprint、名前、使用する client key） | 本端末が信頼した host を識別し、key が変化した host を拒否し、その host に用いる client key を選ぶため | 同じフォルダの `known_hosts` に保存する。送信しない | host を削除するかファイルを削除するまで保持する |
+| 本 host への connect を許可した client public key と各ラベル | 対応する private key を保持していることを証明した client だけを受け入れるため | 同じフォルダの `authorized_keys` に、1 行に 1 つの key とそのラベルとして保存する。時刻は記録しない。送信しない | key を削除するかファイルを削除するまで保持する。ファイルがなければ誰も connect できない |
 | 利用者が入力するアドレス（IP または hostname） | 相手のマシンへ接続するため | 入力した端末内にのみ保持する | 利用者が変更するまでローカルに保持する |
-| 直近 10 件の接続先アドレスと各接続の時刻 | *Recent devices* の一覧を構成するため | 利用者の端末上、app 自身のフォルダの `recent-devices.txt` に保存する。Windows は `%USERPROFILE%\.deskhub`、macOS と Linux は `~/.deskhub`、iOS と Android は app のサンドボックス。旧ファイルの読み込みと再書き込みに成功すると、古い passcode は削除される | より新しいアドレスへ 10 件接続するか、ファイルを削除するまで保持する |
-| 共有に関する設定（frame rate、bitrate、解像度の上限、port、network アドレス、viewer による操作の可否、clipboard sync・keep awake・OS 起動時の開始・自動共有・バックグラウンドモードの各トグル） | 次回 app を開いた際に settings を復元するため | 同じフォルダの `ui-settings.txt` に保存する。iOS では app と broadcast extension が共有する app group のコンテナに置く。旧ファイルの読み込みと再書き込みに成功すると、古い passcode と pairing 設定は削除される | 利用者が変更するか、ファイルを削除するまで保持する |
+| 直近 10 件の接続先 host —— アドレス、最後に接続した時刻、host が自ら名乗った名前 | *Recent devices* の一覧を構成するため | 利用者の端末上、app 自身のフォルダの `recent-hosts.txt` に 1 行 1 host で保存する。Windows は `%USERPROFILE%\.deskhub`、macOS と Linux は `~/.deskhub`、iOS と Android は app のサンドボックス。送信されることはない。旧バージョンの `recent-devices.txt` は変換されず、削除される | より新しい host へ 10 件接続するか、ファイルを削除するまで保持する |
+| 共有に関する設定（frame rate、bitrate、解像度の上限、port、network アドレス、viewer による操作の可否、clipboard sync・音声・keep awake・OS 起動時の開始・自動共有・バックグラウンドモードの各トグル） | 次回 app を開いた際に settings を復元するため | 同じフォルダの `ui-settings.txt` に保存する。iOS では app と broadcast extension が共有する app group のコンテナに置く | 利用者が変更するか、ファイルを削除するまで保持する |
 | Linux のデスクトップが、その画面共有ダイアログで display を選択した後に発行する画面 permission の token（Linux のみ） | 以後の共有でその選択を再利用し、ダイアログが初回のみ表示されるようにするため | 同じフォルダの `portal-restore-token.txt` に保存する。この token は本マシン上の利用者自身のデスクトップ session にのみ意味を持ち、送信されない | 共有のたびに置き換わる。*Choose screens again* を選択するか、ファイルを削除すると消去される |
 | Clipboard のテキスト（clipboard sync のトグルが on で、session が動作している場合のみ） | ある端末でコピーしたテキストを他の端末で貼り付けられるようにするため | 端末間で直接送信し、転送中は encrypt（QUIC/TLS）。1 回のコピーにつき 32 KiB を上限とする。プレーンテキストのみで、画像やファイルは含まない | Deskhub は保存しない。各端末の通常のシステム clipboard 内にのみ存在する |
 | broadcast が動作中かどうか、接続中の viewer の数、broadcast extension 自身のメモリ使用量（MB）、直近の起動エラーの文言（iOS のみ） | app の共有画面が broadcast extension の状態を表示できるようにするため。iOS はこれを独立した process として動作させ、メモリ使用量が上限を超えた場合に終了させる | 同じ app group のコンテナの `broadcast-status.txt` に保存する | broadcast の終了時に削除する |
-| *Your name* 欄のデバイス名。利用者が変更するまでは、当該コンピュータまたは端末自身の名称が入る（Windows と Linux は hostname、macOS はコンピュータ名、iOS はデバイス名、Android は機種名） | 接続先の host において、本端末のアドレスの隣に表示し、共有している利用者が viewer を区別できるようにするため | 同じフォルダの `ui-settings.txt` に保存し、connect 時に host へ送信する。転送中は encrypt されるが、host の画面に表示され、その log にも記録される。したがって自分で選んだ名称に置き換えない限り、既定値が送信される。欄を空にしても既定値が復元され、その値が保存・送信される。マシン同士が pair した場合、host は当該名称を `paired_devices` の一覧にも、削除されるまで保存する | 既定値はコンピュータまたは端末の名称。利用者が変更するか、ファイルを削除するまで保持する。欄を空にすることは既定値の復元であり、名称の削除ではない |
+| Settings → General → *Device name* のデバイス名。空の場合は、当該コンピュータまたは端末自身の名称が使われる（Windows と Linux は hostname、macOS はコンピュータ名、iOS はデバイス名、Android は機種名） | 本端末に名前を付けるため。共有時には viewer に表示され、本端末に接続する許可済み client にも表示され、接続先の host では本端末のアドレスの隣に表示され、コピーする public key のラベルとして使われる | 同じフォルダの `ui-settings.txt` に保存し、connect 時に host へ送信する。転送中は encrypt されるが、host の画面に表示され、その log にも記録される。したがって自分で選んだ名称を設定しない限り、既定値が送信される。本端末が共有しているときは、許可された key で認証を終えた各 client にも名称を送信し —— 認証前に送ることはない —— その client は自身の最近の一覧に名称を保持する。コピーするすべての public key にも埋め込まれるため、その key を追加した host の所有者の `authorized_keys` に、ラベルとして名称が残る | 利用者が変更するか、ファイルを削除するまで保持する。欄を空にすることは既定値への切り替えであり、名称の削除ではない |
 | 接続中のコンピュータへ送信すると選択したファイル（利用者がファイルを選択し Send を押した場合のみ） | ある端末から別の端末へファイルを移すため | 2 台の端末間で直接送信し、転送中は encrypt（QUIC/TLS）。スマートフォンやタブレットでは、送信中に読み取れるよう、事前に app 自身の cache へコピーを用意する | ファイルの保存先は受信側による。コンピュータはそのために選択したフォルダ（別途選択しない場合は当該ユーザーのホームディレクトリ直下の `Deskhub`）へ書き込み、そのユーザーが削除するまで保持する。スマートフォンとタブレットには該当するフォルダがない。写真と動画は端末の写真ライブラリに追加され（Android では `Pictures/Deskhub` と `Movies/Deskhub`）、それ以外のファイルはシステムのファイルブラウザから参照できる場所、すなわち iOS では app の Documents フォルダ、Android では `Download/Deskhub` に置かれ、削除するまで残る。iOS ではライブラリが受け付けない写真は Documents に保存される。メディアストア経由の保存には Android 10 が必要であり、Android 9 以前では、届いたファイルは端末上の Deskhub 自身のフォルダに留まり、ギャラリーにも Downloads にも現れない。送信側の端末上の一時コピーは、送信ウィンドウを閉じた時点で削除する |
 | 提示された各ファイルの名称、サイズ、checksum、および送信側端末の名称、アドレス、key fingerprint | 受信側のコンピュータが到着中の内容を表示し、保存できない内容を拒否できるようにするため。またその所有者が送信元を把握できるようにするため | 2 台の端末間で送信し、転送中は encrypt する。受信側のコンピュータは、提示、その判断、結果を自身の session log に記録する | 利用者が削除するまで、当該コンピュータの log ファイルに保持される |
 | コンピュータが受信ファイルを保存するフォルダ | 次回 app を開いた際にその選択を復元するため | app 自身のフォルダの `ui-settings.txt` に保存する。送信しない | 利用者が変更するか、ファイルを削除するまで保持する |
@@ -154,16 +152,19 @@ App はこれ以外の permission を要求しない。将来のバージョン�
   Tailscale などの VPN を使用する場合、端末間のデータは当該 VPN（WireGuard）によって
   end-to-end で encrypt される。
 - Deskhub は session のトラフィックを encrypt する。video、control、input、clipboard、
-  terminal のデータはいずれも端末間で QUIC/TLS 上を通る。client は host が許可した key で
-  challenge に署名し、認証を送る前に固定済みの host key を確認する必要がある。
-  デバイス名は転送中 encrypt されるが host に表示されるため、この項目に機微な情報を
-  入力しないこと。Deskhub を Internet に直接公開しないこと。完全な threat model、保護
+  terminal のデータはいずれも端末間で QUIC/TLS 上を通る。client は host が
+  `authorized_keys` に記載した key で connection の transcript に署名する必要があり、
+  何かを送る前に固定済みの host key を確認する。passcode は保存も送信もされない。
+  Deskhub は利用者の network を scan せず、encrypt されていない discovery 要求にも応答
+  しない。デバイス名は転送中 encrypt されるが host に表示され、コピーする public key に
+  も埋め込まれるため、この項目に機微な情報を入力しないこと。Deskhub を Internet に直接公開しないこと。完全な threat model、保護
   される範囲、保護されない範囲、脆弱性の報告方法は
   [`SECURITY.ja.md`](https://github.com/manhpham90vn/Deskhub/blob/main/SECURITY.ja.md)
   に記載している。
-- 旧版の `recent-devices.txt` と `ui-settings.txt` には passcode が残っている場合がある。
-  読み込み時に原子的な置き換えによってこれらの項目を削除する。書き換えが失敗した場合は
-  旧ファイルをそのまま残し、次回の読み込み時に再試行する。
+- 旧バージョンが残したデータ —— passcode、以前の `paired_devices` の一覧、以前の
+  有効化の印 —— は変換されず、残ったファイルは削除される。読み取れない
+  `authorized_keys` や `known_hosts` のファイルは、読み取れない間はアクセスを拒否し、
+  次の変更時に新たに書き込まれる。
 - 当方は利用者に関するデータを保持していないため、侵害されうる開発者側のデータベースも
   存在しない。
 
@@ -171,8 +172,8 @@ App はこれ以外の permission を要求しない。将来のバージョン�
 
 当方はデータを保持しないため、当方が削除すべきものも存在しない。session のデータは
 session の終了時に消える。app に保存されたアドレスは、該当する欄を空にするか app を
-アンインストールすることで削除できる。最近使用した端末の一覧と保存済みの settings
-は、app のフォルダ（Windows は `%USERPROFILE%\.deskhub`、macOS と
+アンインストールすることで削除できる。最近使用した端末の一覧、保存済みの settings、
+key、許可済み client、信頼済み host は、app のフォルダ（Windows は `%USERPROFILE%\.deskhub`、macOS と
 Linux は `~/.deskhub`）を削除することで消去できる。app は次回起動時に空のフォルダを
 作り直す。iOS と Android では、app をアンインストールすればこれらは削除される。
 
@@ -212,6 +213,8 @@ https://github.com/manhpham90vn/Deskhub/blob/main/PRIVACY.md
 
 | バージョン | 日付 | 変更内容 |
 |---|---|---|
+| 2.10 | 2026-09-29 | host は、許可された key で認証を終えた各 client に自身のデバイス名を送信するようになった —— 認証前には何も送信しない —— client はその名前を最近の一覧に保持する。最近の一覧は新しいファイル `recent-hosts.txt`（アドレス、最後に接続した時刻、host の名前。最大 10 件）に移った。以前の `recent-devices.txt` は変換されず、削除される。 |
+| 2.9 | 2026-09-29 | **passcode を廃止し、アクセスは SSH と同じ仕組みになった。** passcode はもはやどこにも保存も送信もされない。LAN discovery を削除した。Deskhub が利用者の network を scan することはなく、host は平文の discovery 要求に応答しない。host は許可する client public key を、それぞれのラベルとともに `authorized_keys` に保持する。client は信頼する host を `known_hosts` に保持する。固定した host key の fingerprint、アドレス、名前、使用する client key である。Settings で設定する 1 つのデバイス名が、接続先の host に送信され、コピーする public key に埋め込まれる。許可済み client について時刻は保持しない。旧バージョンのデータファイル —— passcode、以前の `paired_devices` の一覧、以前の有効化の印 —— は変換されず、削除される。 |
 | 2.8 | 2026-09-28 | Host は許可した public key を `authorized_keys` に保存し、有効化の印をローカルに保持できる。保存済み host profile に別名と選択した client identity を追加した。旧方式の fingerprint のみの一覧は新しい一覧の有効化前に限り使用する。 |
 | 2.7 | 2026-09-28 | CLI で追加の名前付き client 署名 key を作成・import し、接続に使用する key を選択できる。名前付き private key は個別のローカルファイルに保存され、identity の一覧には public key の情報のみを表示する。 |
 | 2.6 | 2026-09-28 | client の接続には許可済みの署名 key と固定済みの host key が必要になった。Recent devices と UI settings は passcode を保存せず、旧ファイルの読み込みと安全な再書き込み時に古い項目を削除する。書き換えに失敗した場合は旧ファイルを残して後で再試行する。 |

@@ -122,9 +122,9 @@ void TestHandshakeStreamAndDatagram() {
     Check(server.datagrams.size() == 1 && server.datagrams[0].size() == frame.size(),
         "and it arrives whole on the video path");
 
-    uint8_t beacon[deskhub::kMaxDatagram];
-    const size_t beaconSize = deskhub::BuildListSources(beacon);
-    Check(client.endpoint.SendRaw(target, std::span<const uint8_t>(beacon, beaconSize)),
+    uint8_t sourceList[deskhub::kMaxDatagram];
+    const size_t querySize = deskhub::BuildListSources(sourceList);
+    Check(client.endpoint.SendRaw(target, std::span<const uint8_t>(sourceList, querySize)),
         "a legacy plaintext discovery packet reaches the UDP port");
     Pump(client, server, 50);
     Check(server.datagrams.size() == 1,

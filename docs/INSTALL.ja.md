@@ -192,7 +192,7 @@ sudo firewall-cmd --add-port=47777/udp --permanent        # Fedora / openSUSE
 
 ```bash
 sudo apt remove deskhub      # または: sudo dnf remove deskhub / sudo zypper remove deskhub
-rm -rf ~/.deskhub            # settings、key、pair 済みマシン
+rm -rf ~/.deskhub            # settings、key、許可済み client、信頼済み host
 sudo rm -f /etc/apt/sources.list.d/deskhub.list /etc/apt/keyrings/deskhub.gpg   # apt repository を追加した場合
 ```
 
@@ -234,7 +234,7 @@ Android と同様に、iPhone と iPad の host は view-only に限られる。
 `deskhub-cli` では画面の共有や remote shell の起動をコマンドで行える。スクリプトや
 SSH からも利用可能。Windows と Linux の `connect` はリモート画面のウィンドウを開く。
 macOS で画面を見る場合はデスクトップ app を使う。コマンド一覧は `deskhub-cli help`
-で確認できる。settings、pair 済みマシン、trust した host key は app と共通である。
+で確認できる。settings、client key、許可済み client、信頼済み host は app と共通である。
 
 | プラットフォーム | ファイル |
 | --- | --- |
@@ -275,14 +275,25 @@ app を使用する。
 ## 🔒 画面を共有する前に
 
 session が運ぶ内容 —— video、キー入力、mouse、clipboard、terminal のトラフィック ——
-はすべて **QUIC/TLS** 上を通る。未知のマシンが受け入れられるのは pairing handshake を
-通過した場合に限られる。**SPAKE2** によって host の passcode を知っていることを証明する
-（passcode 自体は送信されず、1 つの connection につき試行は 1 回）か、host 側の利用者が
-*Let this machine in?* に回答するかのいずれかである。
+はすべて **QUIC/TLS** 上を通り、アクセスは SSH と同じ仕組みで行われる。デバイスが
+connect できるようにするには、次のようにする。
+
+1. connect する側のデバイスで **Devices** → *When this machine is the client* →
+   **My keys** を開き、*Copy public key* を押す（CLI: `deskhub-cli key public --name default`）。
+2. host で **Devices** → *When this machine is the host* → **Clients allowed to
+   connect to this machine** を開き、*Allow* を押してその key を貼り付ける（CLI:
+   `deskhub-cli access add --stdin`）。
+3. アドレスで Connect する。初回は **New host** ダイアログが host の key の fingerprint
+   を表示する。host の Devices ページの **This machine's host key** と照合したうえで、
+   *Trust and connect* を押す。以後、その host は **Trusted hosts** に表示される。
+
+network 越しに何かを承認することはなく、Deskhub が network を scan することもない。
+信頼済み host の key が変わった場合、接続は即座に拒否される。key が変わった理由を把握
+している場合に限り、その host を *Trusted hosts* から削除し、改めて信頼すること。
 
 Deskhub は**信頼できる network** または **VPN** 上で使い、**UDP 47777 を
-port-forward しないこと**。Encrypt は session の内容を守るが、port は discovery の
-探索に応答する。また、初回の pairing では既知の身元情報と照合できない。遠隔から
+port-forward しないこと**。Encrypt は session の内容を守るが、host への初回の
+Connect では、fingerprint を照合しない限り、提示された key がそのまま信頼される。遠隔から
 アクセスする場合は、両方のマシンに [Tailscale](https://tailscale.com) を導入し、
 `100.x.y.z` のアドレスへ Connect できる。
 
@@ -293,6 +304,10 @@ port-forward しないこと**。Encrypt は session の内容を守るが、por
 
 - **接続先が見つからない** —— 2 台が同じ network（または同じ Tailscale tailnet）にあり、
   host 側で UDP 47777 が開いている必要がある。
+- **"This device's key is not authorized on that machine yet"** —— host がこの client key を
+  記載していない。host の Devices ページでその public key を許可する。以前の Deskhub
+  で許可されていた client は、改めて許可する必要がある。
+- **"This host's key has changed"** —— [画面を共有する前に](#-画面を共有する前に) を参照。
 - **Linux: share が直ちに失敗する** —— `vainfo | grep -E 'H264.*Enc'` を実行する。結果
   が空であれば、そのマシンに使用可能な H.264 encoder がなく、host にはできない。
 - **Linux: ポインタが動かない** —— 要件 3 の `/dev/uinput` rule が導入されていない。

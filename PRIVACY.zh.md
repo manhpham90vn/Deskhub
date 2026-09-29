@@ -2,7 +2,7 @@
 
 # Deskhub 隐私政策
 
-_生效日期：2026 年 9 月 28 日 —— 版本 2.8_
+_生效日期：2026 年 9 月 29 日 —— 版本 2.10_
 
 > 本文件译自 [`PRIVACY.md`](PRIVACY.md)。如有出入，以英文版为准。
 
@@ -37,19 +37,17 @@ analytics、crash reporting、广告，也未嵌入第三方 SDK。
 | 被共享电脑的屏幕内容（video frame） | 在你的另一台设备上显示该屏幕 | 在你的两台设备之间直接发送，传输中 encrypt（QUIC/TLS） | 不存储；仅在 session 期间存在于内存中 |
 | 被共享电脑正在播放的声音（仅当该电脑共享声音且 viewer 提出请求时） | 使观看者能够听到该电脑的声音 | 在你的两台设备之间直接发送，传输中 encrypt（QUIC/TLS），以压缩音频形式传输 | 不存储；仅在 session 期间存在于内存中 |
 | Mouse、keyboard 与触摸 input | 从你的另一台设备操作被共享的电脑 | 由观看设备直接发送至被共享的电脑，传输中 encrypt（QUIC/TLS） | 不存储；inject 之后即丢弃 |
-| host 的 TLS 密钥对，即首次运行时创建的私钥与自签 certificate | 向连接的 client 证明 host 身份；对用户呈现为 fingerprint（`SHA256:…`） | 写入 app 自身文件夹中的 `host_key.pem` 与 `host_cert.pem`；仅公开 certificate 会出示给连接的 client | 保留至你删除这些文件为止；删除后 host 将获得新的身份，此前认识旧身份的 client 会发出警告 |
-| 本设备的 client 签名 key | 向已授权所选 public key 的 host 证明访问权限 | 默认 private key 位于 `client_key.pem`；额外的命名 key 存放在 app 自身文件夹的 `client_key.NAME.pem`。private key 留在本地，认证时仅发送所选 public key 和签名 | 保留至你删除该 key；每个 host 都须授权连接时选用的 public key |
-| 已保存的 host 配置（固定的 TLS key fingerprint、地址、别名、所选 client identity、首次与最后一次出现时间） | 识别已知 host 并选择连接所用 client key | 写入同一文件夹中的 `known_hosts`；不会被传输 | 保留至你移除 host 或删除文件 |
-| 获准访问本 host 的 public key，以及可选标签 | 只允许能证明持有对应 private key 的 client 进入 | 写入同一文件夹中的 `authorized_keys`；`authorized_keys_active` 记录新策略已启用。这些文件不会被传输 | 保留至撤销 key 或删除文件；启用后仅删除 `authorized_keys` 不会恢复旧权限 |
-| 旧版已 pair 机器（key fingerprint、名称、pair 与最后出现时间） | 为尚未启用 `authorized_keys` 的安装保留访问权 | 旧安装可能仍在同一文件夹中保留 `paired_devices`；文件不会被传输，启用 `authorized_keys` 后不再授予访问权 | 保留至你删除旧文件 |
-| 已停用的 passcode verifier 所用的旧随机 salt | 不再用于认证 | 旧安装可能仍在同一文件夹中保留 `auth_salt`；该文件不再传输 | 保留至你删除该文件为止 |
+| host 的 TLS 密钥对，即首次运行时创建的私钥与自签 certificate | 向连接的 client 证明 host 身份；对用户呈现为 fingerprint（`SHA256:…`） | 写入 app 自身文件夹中的 `host_key.pem` 与 `host_cert.pem`；仅公开 certificate 会出示给连接的 client | 保留至你删除这些文件为止；不会被自动替换。删除后 host 将获得新的身份，此前信任旧身份的 client 会拒绝连接，直至其移除并重新信任该 host |
+| 本设备的 client key：自动创建的默认 key，以及你按名称生成或导入的任何 key | 证明本设备可以 connect 到允许该连接所选 public key 的 host | 默认 private key 保存在 `client_key.pem`，命名 key 保存在 `client_key.NAME.pem`，均位于 app 自身文件夹中（Windows 上以 DPAPI 保护）。private key 永远不会离开设备；connect 时仅发送所选 public key 和签名。导入 key 文件时使用的 passphrase 仅在导入期间使用，不会被保存。*Copy public key* 会将 public key 放入你的 clipboard，并以本设备名称作为 label，供你交给 host 的所有者 | 保留至你删除该 key 为止 |
+| 受信任的 host（地址与 port、固定的 host key fingerprint、名称、所使用的 client key） | 识别本设备已信任的 host，拒绝 key 已变更的 host，并为其选择 client key | 写入同一文件夹中的 `known_hosts`；不会被传输 | 保留至你移除 host 或删除文件 |
+| 允许 connect 到本 host 的 client public key，各带一个 label | 只允许能证明持有对应 private key 的 client 进入 | 写入同一文件夹中的 `authorized_keys`，每行一个 key 及其 label；不记录任何时间。不会被传输 | 保留至你移除这些 key 或删除文件；没有该文件时任何人都无法 connect |
 | 你输入的地址（IP 或 hostname） | 连接到另一台机器 | 仅保留在你输入它的设备上 | 本地保留至你修改为止 |
-| 最近 10 个连接地址及各自的时间 | 填充 *Recent devices* 列表 | 写入你设备上 app 自身文件夹中的 `recent-devices.txt`：Windows 为 `%USERPROFILE%\.deskhub`，macOS 与 Linux 为 `~/.deskhub`，iOS 与 Android 为 app 沙箱。读取并成功重写旧文件时会删除其中的 passcode | 保留至你连接了 10 个更新的地址，或删除该文件为止 |
-| 你的共享设置（frame rate、bitrate、分辨率上限、port、network 地址、viewer 操作权限，以及 clipboard sync、keep awake、随 OS 启动、自动共享与后台模式等开关） | 在下次打开 app 时恢复你的 settings | 写入同一文件夹中的 `ui-settings.txt`；在 iOS 上位于 app 与 broadcast extension 共享的 app group 容器中。读取并成功重写旧文件时会删除 passcode 与旧 pairing 开关 | 保留至你修改或删除该文件为止 |
+| 最近连接的 10 个 host —— 地址、最近一次连接的时间以及 host 自报的名称 | 填充 *Recent devices* 列表 | 写入你设备上 app 自身文件夹中的 `recent-hosts.txt`，每个 host 一行：Windows 为 `%USERPROFILE%\.deskhub`，macOS 与 Linux 为 `~/.deskhub`，iOS 与 Android 为 app 沙箱；从不传输。早期版本的 `recent-devices.txt` 文件会被删除，而非转换 | 保留至你连接了 10 个更新的 host，或删除该文件为止 |
+| 你的共享设置（frame rate、bitrate、分辨率上限、port、network 地址、viewer 操作权限，以及 clipboard sync、声音、keep awake、随 OS 启动、自动共享与后台模式等开关） | 在下次打开 app 时恢复你的 settings | 写入同一文件夹中的 `ui-settings.txt`；在 iOS 上位于 app 与 broadcast extension 共享的 app group 容器中 | 保留至你修改或删除该文件为止 |
 | 你在 Linux 桌面的屏幕共享对话框中选定 display 后，桌面签发的屏幕 permission token（仅 Linux） | 使后续共享复用该选择，从而对话框仅在首次出现 | 写入同一文件夹中的 `portal-restore-token.txt`；该 token 仅对本机上你自己的桌面 session 有意义，不会被传输 | 每次共享后被替换；在你选择 *Choose screens again* 或删除该文件时移除 |
 | Clipboard 文本（仅当 clipboard sync 开关开启且存在运行中的 session 时） | 使在一台设备上复制的文本可在其他设备上粘贴 | 在你的设备之间直接发送，传输中 encrypt（QUIC/TLS），每次复制上限 32 KiB；仅限纯文本，不包含图片或文件 | Deskhub 不存储；仅存在于各设备自身的系统 clipboard 中 |
 | 当前是否有 broadcast 在运行、已连接的 viewer 数量、broadcast extension 自身的内存占用（MB），以及最近一次启动错误的文本（仅 iOS） | 使 app 的共享界面能够显示 broadcast extension 的状态。iOS 将其作为独立 process 运行，并在内存占用过高时终止它 | 写入同一 app group 容器中的 `broadcast-status.txt` | 在 broadcast 结束时删除 |
-| *Your name* 字段中的设备名。在你修改之前，该字段预填为本电脑或设备自身的名称（Windows 与 Linux 为 hostname，macOS 为电脑名称，iOS 为设备名称，Android 为机型） | 在你所连接的 host 上、该设备地址旁显示，便于共享方区分各个 viewer | 保存在同一文件夹的 `ui-settings.txt` 中，并在 connect 时发送给 host。该数据在传输中 encrypt，但会显示在 host 的屏幕上并写入其日志，因此除非你改为自选名称，默认值将被发送；清空该字段仅会恢复默认值，随后该默认值被保存并发送。两台机器 pair 之后，host 还会将该名称保存在其 `paired_devices` 列表中，直至你被移除 | 默认为电脑或设备的名称；保留至你修改或删除该文件为止。清空该字段是恢复默认值，而非移除名称 |
+| Settings → General → *Device name* 中的设备名。留空时使用本电脑或设备自身的名称（Windows 与 Linux 为 hostname，macOS 为电脑名称，iOS 为设备名称，Android 为机型） | 为本设备命名：共享时显示给 viewer，显示给 connect 到本设备的已允许 client，在你所连接的 host 上显示于该设备地址旁，并用作你所复制 public key 的 label | 保存在同一文件夹的 `ui-settings.txt` 中，并在 connect 时发送给 host。该数据在传输中 encrypt，但会显示在 host 的屏幕上并写入其日志，因此除非你自行设置名称，默认名称将被发送。本设备共享时，还会将该名称发送给每个已用允许的 key 完成认证的 client —— 认证之前绝不发送 —— 该 client 会将其保存在自己的最近列表中。它还会嵌入你复制的每个 public key 中，因此添加该 key 的 host 所有者会在其 `authorized_keys` 中将该名称保留为 label | 保留至你修改或删除该文件为止。清空该字段是回退到默认值，而非移除名称 |
 | 你选择发送给已连接电脑的文件（仅在你亲自选定文件并按下 Send 时） | 将文件从你的一台设备传送到另一台 | 在你的两台设备之间直接发送，传输中 encrypt（QUIC/TLS）；在手机或平板上，发送前会在 app 自身的 cache 中准备一份副本以供读取 | 文件的存放位置取决于接收方。电脑会将其写入为此选定的文件夹，未另行选择时为该用户主目录下的 `Deskhub`，并保留至该用户删除为止。手机与平板没有对应的文件夹：照片和视频会加入该设备的相册（Android 上为 `Pictures/Deskhub` 与 `Movies/Deskhub`），其他文件放置在系统文件浏览器可见的位置，即 iOS 上 app 的 Documents 文件夹与 Android 上的 `Download/Deskhub`，并保留至你删除为止。在 iOS 上，相册不接受的照片改存至 Documents。经由媒体库的存放方式需要 Android 10：在 Android 9 及更早版本上，到达的文件保留在设备上 Deskhub 自身的文件夹中，不会出现在相册或 Downloads 中。发送端手机或平板上的临时副本会在发送窗口关闭时删除 |
 | 每个被提出文件的名称、大小与 checksum，以及发送设备的名称、地址和 key fingerprint | 使接收电脑能够显示正在到达的内容、拒收无法存储的内容，并使其所有者了解发送来源 | 在你的两台设备之间发送，传输中 encrypt；接收电脑将该提出、其判定与结果写入自身的 session log | 保留在该电脑的 log 文件中，直至你删除 |
 | 电脑用于存放接收文件的文件夹 | 在下次打开 app 时恢复该选择 | 写入 app 自身文件夹中的 `ui-settings.txt`；不会被传输 | 保留至你修改或删除该文件为止 |
@@ -137,20 +135,24 @@ App 不申请其他任何 permission。若将来的版本需要新的 permission
 - Stream 的流量保留在你自己的 network 或你自己的 VPN 隧道内。使用 Tailscale 等 VPN
   时，设备之间的数据由该 VPN（WireGuard）进行端到端 encrypt。
 - Deskhub 会 encrypt session 的流量：video、control、input、clipboard 与 terminal
-  数据均在你的设备之间通过 QUIC/TLS 传输。client 必须使用 host 已授权的 key 对 challenge 签名，
-  并在发送认证前检查已固定的 host key。设备名在传输中 encrypt，但会显示在 host 上，因此不应在该字段中填入敏感信息。
+  数据均在你的设备之间通过 QUIC/TLS 传输。client 必须使用 host 在 `authorized_keys` 中列出的 key
+  对该连接的 transcript 签名，并在发送任何内容之前检查已固定的 host key。不会保存或传输
+  任何 passcode。Deskhub 从不 scan 你的 network，也不应答任何未 encrypt 的 discovery 请求。
+  设备名在传输中 encrypt，但会显示在 host 上并嵌入你复制的 public key 中，因此不应在其中
+  填入敏感信息。
   请勿将 Deskhub 直接暴露到 Internet。完整的 threat model，包括保护范围、不受保护的
   范围以及漏洞报告方式，见
   [`SECURITY.zh.md`](https://github.com/manhpham90vn/Deskhub/blob/main/SECURITY.zh.md)。
-- 旧的 `recent-devices.txt` 与 `ui-settings.txt` 可能含有 passcode。读取时，app 会通过原子替换
-  删除这些字段。若重写失败，旧文件保持不变，并在以后读取时重试。
+- 早期版本遗留的数据 —— passcode、旧的 `paired_devices` 列表以及旧的启用标记 —— 不会被
+  转换：遗留文件会被删除。无法读取的 `authorized_keys` 或 `known_hosts` 文件在其无法读取
+  期间拒绝访问，并在下一次更改时重新写入。
 - 由于我们不持有关于你的任何数据，不存在可能被攻破的开发者侧数据库。
 
 ## 7. 数据保留与删除
 
 我们不保留任何数据，因此也没有需要我们删除的内容。所有 session 数据在 session 结束时
-消失。app 中保存的地址可通过清空相应字段或卸载 app 移除。最近设备列表与已保存的
-settings 可通过删除 app 的文件夹移除（Windows 上为
+消失。app 中保存的地址可通过清空相应字段或卸载 app 移除。最近设备列表、已保存的
+settings、key、允许的 client 与受信任的 host 可通过删除 app 的文件夹移除（Windows 上为
 `%USERPROFILE%\.deskhub`，macOS 与 Linux 上为 `~/.deskhub`），app 会在下次启动时重新
 创建空的文件夹；在 iOS 与 Android 上，卸载 app 即可移除这些数据。
 
@@ -186,6 +188,8 @@ https://github.com/manhpham90vn/Deskhub/blob/main/PRIVACY.md
 
 | 版本 | 日期 | 变更内容 |
 |---|---|---|
+| 2.10 | 2026-09-29 | host 现在会将其设备名发送给每个已用允许的 key 完成认证的 client —— 认证之前不发送任何内容 —— client 会将该名称保存在其最近列表中。最近列表改用新文件 `recent-hosts.txt`（地址、最近一次连接的时间、host 名称；最多 10 个）。旧的 `recent-devices.txt` 会被删除而非转换。 |
+| 2.9 | 2026-09-29 | **passcode 已被移除，访问方式与 SSH 相同。** 任何地方都不再保存或传输 passcode。LAN discovery 已被移除：Deskhub 从不 scan 你的 network，host 也不应答任何明文 discovery 请求。host 将其允许的 client public key 保存在 `authorized_keys` 中，各带一个 label；client 将其信任的 host 保存在 `known_hosts` 中，包括固定的 host key fingerprint、地址、名称以及所使用的 client key。在 Settings 中设置的唯一设备名会发送给你所连接的 host，并嵌入你复制的 public key 中。不为允许的 client 记录任何时间。早期版本的数据文件 —— passcode、旧的 `paired_devices` 列表、旧的启用标记 —— 会被删除而非转换。 |
 | 2.8 | 2026-09-28 | Host 可将获准访问的 public key 保存到 `authorized_keys`，并在本地保留启用标记。已保存的 host 配置增加别名和选用的 client identity。旧版仅含 fingerprint 的列表只在新列表启用前使用。 |
 | 2.7 | 2026-09-28 | CLI 可创建和导入额外的命名 client 签名 key，并为连接选择其中一个。每个命名 private key 单独保存在本地文件中；列出 identity 时只提供 public key 信息。 |
 | 2.6 | 2026-09-28 | client 接入现在需要已授权的签名 key 和已固定的 host key。Recent devices 与 UI settings 不再保存 passcode；读取旧文件并安全重写时会删除旧字段。若重写失败，保留旧文件供下次重试。 |

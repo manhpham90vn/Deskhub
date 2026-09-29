@@ -146,8 +146,6 @@ typedef enum {
     DHStrThisMachineHint = 90,
     DHStrPairedColumnName = 91,
     DHStrPairedColumnKey = 92,
-    DHStrPairedColumnPaired = 93,
-    DHStrPairedColumnLastSeen = 94,
     DHStrTerminalPickerLabel = 103,
     DHStrOpenDesktopLabel = 105,
     DHStrOpenShellLabel = 106,
@@ -155,7 +153,6 @@ typedef enum {
     DHStrPickSourcesHint = 109,
     DHStrPairedForgetNote = 110,
     DHStrDevicesHeading = 113,
-    DHStrDeviceColumnWhere = 114,
     DHStrDeviceNameLabel = 115,
     DHStrConnectButton = 116,
     DHStrCopyButton = 117,
@@ -212,6 +209,8 @@ typedef enum {
     DHStrCancelAction = 197,
     DHStrCopiedButton = 198,
     DHStrDeviceNameHint = 199,
+    DHStrDeleteKeyAction = 200,
+    DHStrDeleteKeyPrompt = 201,
 } DHStringId;
 
 typedef enum {

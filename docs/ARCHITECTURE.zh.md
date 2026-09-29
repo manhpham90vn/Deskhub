@@ -26,18 +26,19 @@ client/     各 OS 的 app: windows、linux、macos、ios、android（依赖 pla
 
 | Layer | 内容 |
 | --- | --- |
-| `core/protocol` | Wire format（`Wire.h`）、stream 的 record framing（`RecordStream.h`）、区分 QUIC 与 Deskhub beacon datagram 的 packet classifier |
+| `core/protocol` | Wire format（`Wire.h`）、stream 的 record framing（`RecordStream.h`）、区分 QUIC 与其他任何内容的 packet classifier |
 | `core/transport` | 面向 video 的 Packetizer/Reassembler、FEC、retransmit 缓存、send pacer |
-| `core/session` | session state machine，按角色划分：`session/host`（按 viewer 的 session、viewer 表、beacon、file receiver、auth throttle）、`session/client`（screen client、file sender、terminal client、connect 流程），以及置于其旁的共享组件（transfer 类型、terminal session 表、clipboard sync、link recovery） |
+| `core/session` | session state machine，按角色划分：`session/host`（按 viewer 的 session、viewer 表、`SourceListResponder`、file receiver、auth throttle）、`session/client`（screen client、file sender、terminal client、connect 流程），以及置于其旁的共享组件（transfer 类型、terminal session 表、clipboard sync、link recovery） |
 | `core/control` | Bitrate controller、quality ladder、stream 尺寸计算、clock offset |
 | `core/terminal` | 所有 client 共享的 VT emulator: `VtParser`、`Screen`、`KeyEncoder`、`Palette` |
-| `core/net` | Trust store（client 侧）、paired devices（host 侧）、bind 地址选择、LAN scan 逻辑 |
-| `core/ui` | 全部面向用户的字符串、settings 解析、表格行构造器，使五个 client 呈现一致的内容 |
+| `core/net` | Trust store（client 侧）、authorized keys（host 侧）、OpenSSH public key 文本、bind 地址选择 |
+| `core/ui` | 全部面向用户的字符串、settings 解析、表格行构造器、最近设备、host profile（`HostProfiles`）以及 client key 行（`ClientKeys`），使五个 client 呈现一致的内容 |
 | `platform/net` | `UdpSocket`（按 OS 实现）、`QuicEndpoint`（quiche 置于 pimpl 之后）、`SessionTransport` |
-| `platform/auth` | `AuthNegotiation` —— 双方共用的唯一 pairing/passcode handshake |
-| `platform/client` | `HostLink`（dial、trust、auth、channel，由所有界面共用）、`ScreenViewer`、`TerminalViewer`、`FileTransferClient`、`SourceQuery`、host probe、LAN scanner |
+| `platform/auth` | `AuthNegotiation` —— 双方共用的唯一基于 key 签名的 handshake |
+| `platform/client` | `HostLink`（dial、trust、auth、channel，由所有界面共用）、`ScreenViewer`、`TerminalViewer`、`FileTransferClient`、`SourceQuery`、`HostProfiles`（受信任的 host 及各自使用的 client key） |
 | `platform/host` | `HostEngine`、`HostNetLoop`、`SharingHost`、`TerminalHost`、`FileHost`、`ViewerBroadcast` |
-| `platform/system` | Clock、random、PTY（ConPTY / forkpty）、host identity（key）、trust 与 paired-device 文件、autostart、keep-awake |
+| `platform/system` | Clock、random、PTY（ConPTY / forkpty）、host identity（`HostIdentity`）、client key（`ClientKeys`、`ClientIdentity`）、`authorized_keys` 与 `known_hosts` 文件、最近列表（`RecentDevicesFile`）、设备名称、autostart、keep-awake |
+| `platform/ffi` | Swift 与 Kotlin app 调用的 C 接口：`SettingsFfi`（settings、设备名称）、`DevicesFfi`（最近设备、允许的 client、本 host 的 fingerprint）、`HostProfileFfi`（受信任的 host）、`ClientKeyFfi`（client key），以及 share、screen、terminal 和 send 各接口 |
 | `core/cli` | command line 语法及其 JSON writer：输入纯文本，输出经校验的 command |
 | `client/<os>` | Capture、encode、decode、render、windowing、对话框；不包含任何 protocol 相关内容 |
 | `client/cli` | 从 flag 到 session：一个 binary 即可完成 host、connect 与打开 shell，无需 GUI toolkit。它 link 桌面 app 所用的同一套各 OS media 库 |
@@ -56,11 +57,11 @@ host 提供的全部功能都运行在**一个 UDP port**（默认 47777）之�
                             |
                  ClassifyPacket（检查首字节）
                    /                    \
-            QUIC packet            Deskhub datagram
+            QUIC packet            其他任何内容
                  |                        |
-   +-------------+------------+       仅 beacon:
-   |             |            |       以明文应答 LIST_SOURCES / PING；
- stream      datagram      (TLS)      其他裸 packet 一律丢弃
+   +-------------+------------+        丢弃：不以明文
+   |             |            |        应答任何内容
+ stream      datagram      (TLS)
    |             |
  control      video
  input        audio       stream 承载经 framing 的 record（RecordStream）:
@@ -77,9 +78,9 @@ host 提供的全部功能都运行在**一个 UDP port**（默认 47777）之�
 - **Datagram**（不可靠、无序，但仍经 encrypt）：video 与 audio 的 packet。QUIC 不重传
   丢失的 packet；video 由 app 自身的 FEC/NACK 机制处理丢失，audio 则没有相应机制 ——
   见第 9 节。
-- **裸 UDP** 仅用于 discovery：beacon 应答不使用 QUIC 的 scanner，而未经邀请的 probe
-  只会得到空的 source 列表。不属于 discovery 类型的裸 packet，在到达任何 session 代码
-  之前即被丢弃。
+- **裸 UDP** 从不被应答。不存在 discovery：任何非 QUIC 的入站 packet 在到达任何 session
+  代码之前即被丢弃，`SourceListResponder` 仅对已 authenticate 的 connection 应答
+  `LIST_SOURCES` 与 session 0 的 `PING`。
 
 `QuicEndpoint` 完全隐藏 quiche（pimpl；`QuicEndpointNone.cpp` 提供 stub，但仅在 build
 显式使用 `-DDESKHUB_QUIC=OFF` 时生效。缺少 quiche 会导致 configure 失败，因为 stub
@@ -89,46 +90,57 @@ migration。按约定，quiche 的 connection 是 single-threaded 的，因此�
 该 mutex：先在未加锁状态执行 `WaitReadable`，随后加锁执行一次短暂的 `Poll`。若在等待
 期间持有该 mutex，将阻塞所有发送方。
 
-## 3. 准入：pairing
+## 3. 准入：key，与 SSH 相同
 
-每台机器在首次运行时创建一个 ECDSA P-256 key（`HostIdentity`），其 SHA-256 SPKI hash
-即为用户所见的 fingerprint。TLS 使用基于该 key 的自签 certificate。在 TLS 之上，应用层
-handshake（`AuthNegotiation`）按 connection 决定准入。transport 负责执行该 handshake，
-并丢弃来自 auth 尚未完成的 connection 的所有 message：
+每台机器在首次运行时创建一个 ECDSA P-256 host key（`HostIdentity`），且从不自动替换；
+其 SHA-256 SPKI hash 即为用户所见的 fingerprint。TLS 使用基于该 key 的自签 certificate。
+client 使用其某个 client key（`ClientKeys`）登录：生成的 key 为 Ed25519，从 OpenSSH 或
+PKCS#8 文件导入的 key 为 Ed25519 或 ECDSA P-256。host 仅接受列于其 `authorized_keys`
+（`AuthorizedKeys`，最多 128 行 `ssh-ed25519 AAAA… label` 或
+`ecdsa-sha2-nistp256 AAAA… label`）中的 public key；label 只是显示名称，从不代表权限。
+不会通过网络进行任何批准 —— 没有 passcode，没有批准提示，也没有让未知 key 接入的开关。
 
-| client 提供的内容 | host 是否认识该机器 | 结果 |
-| --- | --- | --- |
-| 不提供 | 已 pair | **Signature**: client 使用自身 key 对包含 TLS 会话标识与 host fingerprint 的 transcript 签名，随即被接受。 |
-| 不提供 | 未知 | **Approval**: 询问 host 前的用户（*Let this machine in?*）。 |
-| 提供 passcode | host 设有 passcode | **Passcode**: 在加 salt 的 verifier 上执行 SPAKE2。码本身不经过网络，每条 connection 仅允许一次尝试，双方均需证明，且 MAC 绑定到 client 实际接收到的 host key，从而使 relay 攻击无效。填入的码始终会被校验，无论是否已 pair。 |
-| 提供 passcode | host 未设 passcode | 无可比对的值 → 已 pair 走 Signature，否则走 Approval。 |
-| 任意 | pairing 已关闭 | **Denied**（已 pair 的机器仍走 Signature）。 |
+在 TLS 之上，应用层 handshake（`AuthNegotiation`，auth version 6）按 connection 决定
+准入。transport 负责执行该 handshake，且 host 不会向 auth 尚未完成的 connection 发送
+任何应用层内容：
 
-成功后 client 被写入 host 的 `paired_devices`；pairing 基于 key，而非地址。passcode 连
-续错误三次将使 passcode 通道锁定 30 秒，此后每次连续锁定的时长翻倍，最长一小时，直到输入正确的
-passcode 才重置（`AuthThrottle`）。approval 通道无需 throttle，因为由人进行判断。
+1. QUIC/TLS 完成。client 在**发送任何内容之前**，先将 host 的 key 与 `known_hosts` 比对
+   （见下文）。
+2. client 发送 `AuthStart`，其中包含其 public key 与设备名称。
+3. client 对一份 transcript 签名 —— 包括 domain label、auth version、角色、从这条
+   QUIC/TLS connection 导出的 session 值、其 public key 以及 host 的 TLS fingerprint
+   （`core/auth/Transcript`）—— host 使用该 key 验证签名，而该 key 必须在
+   `authorized_keys` 中。
+
+签名绑定到这一条 connection，因此重新连接时需再次签名；不支持 0-RTT 或 session
+resumption。host 同时最多保留 8 个等待 authenticate 的 connection，并在 10 秒后断开
+每一个；同一 key 与 source IP 在一分钟内出现 3 次无效签名，该组合将被封锁 10 秒
+（`AuthThrottle`）。
 
 接入资格属于单条 QUIC connection，而非某个地址。该 connection 一旦关闭，资格即被撤销，因此来自同
 一地址和 port 的下一条 connection 必须重新证明自己。在已开始 handshake 的 connection 上再次发送
 `AuthStart` 会导致该 connection 被关闭：已确立的身份不能被替换为从未证明过的身份，被拒绝的
-passcode 也不能在原 connection 上重试。在 Devices 页上 Forget 一台机器，也会关闭它当时打开的所有
-connection。
+key 也不能在原 connection 上重试。在 Devices 页上移除某个 client key（或执行 `access remove`），
+也会关闭它当时打开的所有 connection。
 
-在 client 侧，`known_hosts`（`TrustStore`）固定 host 的 key。key **发生变化**时将以明确
-的警告阻止连接；未知的 key 由 handshake 本身处理 —— 已证明 passcode 的 host 会被直接
-记录，不再提示。
+在 client 侧，`known_hosts`（`TrustStore`）按地址与 port 固定 host 的 key，并在旁边保存
+每个受信任 host 的名称及与之配合使用的 client key（`HostProfiles`）。这与 SSH 一样是
+trust on first use（首次使用时信任）：**未知**的 key 会使 link 以 *not trusted yet* 失败；
+app 随后在 *New host* 对话框中显示 fingerprint，待用户选择 *Trust and connect* 后，带
+`acceptNewHostKey` 重新 dial；CLI 仅在使用 `--accept-new-host-key` 时才这样做。key
+**发生变化**则是无法绕过的硬性失败：必须从 *Trusted hosts* 中移除该 host，再重新信任。
 
 线上传输的是 public key 本身，而非单独的 fingerprint：host 对收到的内容自行计算 hash，
 因此冒用他人身份需要使用冒名者并不持有的 key 进行签名。由于准入在每条 connection 上仅
-处理一次，transport 之上的任何组件都不会再次询问：已证明身份的机器在后续 message 中不
-携带 passcode，session 代码将整条 connection 视为已 authenticate。
+处理一次，transport 之上的任何组件都不会再次询问：session 代码将整条 connection 视为
+已 authenticate。
 
 ## 4. Host 侧
 
 ```
 HostEngine（每个 app 一个实例，持有 SessionTransport）
  ├─ net-loop thread: RunHostNetLoop
- │    recv → beacon 应答 | video 数据摄入 | Chan::Terminal → TerminalHost
+ │    recv → source 列表/pong 应答（仅限已准入） | video 数据摄入 | Chan::Terminal → TerminalHost
  │    按 source 的 session Tick、clipboard flush、reconfig、统计
  ├─ capture/encode: 按 source，由 OS 的 capture 回调驱动（client 层）
  │    frame → encoder（按 source 的 mutex）→ Packetizer → FEC → SendTo（datagram）
@@ -190,10 +202,9 @@ HostLink（每个打开的界面一个实例）
 ```
 
 准入完成后，link 自行监测自身状态（`core/session/LinkPulse`）：每秒发送一个 session id
-为 0 的 `Ping` datagram，host 的 beacon 在同一条 connection 上应答且无需 session。由于
-ping 是 ack-eliciting 的，它同时充当 keepalive；普通的 keepalive 定时器仅在 link 处于
-`Deciding` 状态时仍有意义。过旧的 host 无法应答 session-0 的 ping，因而从不发出首个
-pong，也就从不会因静默而被判定，不产生其他影响。在恢复中的 link 上，该
+为 0 的 `Ping` datagram，host 的 `SourceListResponder` 在同一条已 authenticate 的
+connection 上应答且无需 session。由于 ping 是 ack-eliciting 的，它同时充当 keepalive；
+普通的 keepalive 定时器仅在 link 获得准入之前仍有意义。在恢复中的 link 上，该
 pulse 同时用作 liveness 检查：连续五秒未收到 pong（且仅在首个 pong 已确认 host 会应答
 之后计算），即将 connection 转入既有的重连流程。这五秒按 link 循环实际处于监测状态的
 时间计算：`LinkPulse::Tick` 在 `HostLink::PumpReady` 每轮执行一次，某一轮中超出
@@ -207,30 +218,39 @@ reattach 提示），而不是直接结束。当 session 先发现问题时，`H
 仍未恢复，窗口按常规流程连同原因关闭。
 
 source 查询（`QuerySources`）以一次性、阻塞的形式使用同一条 link。UI 仍将各项请求（按
-键、resize、接受 fingerprint）送入 command 队列。host key 发生变化时，link 保持在
-`Deciding` 状态，直至用户接受或拒绝。terminal 窗口不解析 escape sequence：
+键、resize）送入 command 队列。未知的 host key 会使 link 失败并附带其 fingerprint，供
+UI 在 *New host* 对话框中显示；已变更的 key 则使 link 永久失败。terminal 窗口不解析 escape sequence：
 `core/terminal` 将 byte stream 转换为字符网格，窗口仅负责绘制单元格并转发按键事件。目
 前每个窗口仍各自持有一条 link；让指向同一 host 的所有窗口共享一条已准入的 link 是既定
 的下一步，将在 `HostLink` 处以 registry 加 observer fan-out 的形式实现，而不是新增一次
 handshake。
 
-## 6. Discovery
+## 6. 查找 host
 
-beacon 以明文 UDP 应答 `LIST_SOURCES` 与 `PING`，使 scanner 扫描一个 subnet 时无需执行
-254 次 TLS handshake。未获准入的机器得到的是空列表；真实的 source 列表仅在已准入的
-connection 上提供。该应答同时通过 `SOURCE_LIST` 的 header flag 说明 host 的能力 ——
-是否接受 input、是否共享 terminal —— 因此 client 在打开任何窗口之前即可得知手机只能被
-观看。早于这些 flag 的 host 不会设置任何一项。最近设备、其在线状态（ping/pong probe）
-以及 LAN scan 结果汇总为同一份设备列表，由 `core/ui/DeviceRows` 构建，并由五个 client
-共同使用。
+不存在 discovery：不会 scan network，host 也不应答任何明文 packet。client dial 的是用户
+输入的地址、最近使用的 host 或受信任的 host（`HostProfiles`）。`SourceListResponder` 仅在已准入的 connection 上应答
+`LIST_SOURCES`；该应答通过 `SOURCE_LIST` 的 header flag 说明 host 的能力 —— 是否接受
+input、是否共享 terminal —— 因此 client 在打开任何窗口之前即可得知手机只能被观看。
+source 记录之后，payload 还携带 host 的设备名称（一个长度字节加最多 64 字节 UTF-8；可为
+空），因此该名称只会到达已完成 authenticate 的 client。client 用
+`ParseSourceListHostName` 解析它，该函数会把任何控制字节替换为空格。
+
+最近列表位于 `platform/system/RecentDevicesFile`（`recent-hosts.txt`），其解析逻辑在
+`core/ui/RecentDevices`：地址、上次连接时间与 host 名称，最多 10 个。FFI
+`dh_list_sources` 仅在 host 应答后才将其记入列表，因此各 app 不再自行更新列表，
+`dh_recent_touch` 已移除。旧的 `recent-devices.txt` 会被删除，而不是转换。
 
 ## 7. 磁盘上的数据
 
-全部数据位于用户的 Deskhub 文件夹（`~/.deskhub`、`%USERPROFILE%\.deskhub`）：
-`host_key.pem` 与 `host_cert.pem`（identity）、`known_hosts`（本机 trust 的 host）、
-`paired_devices`（本 host 接受的机器）、`auth_salt`（verifier 使用的非机密 salt）、
-`ui-settings.txt`、`recent-devices.txt`（地址与遮蔽后的 passcode）、Linux 上的
-`portal-restore-token.txt`（桌面针对所选屏幕签发的 token），以及每次运行的 log。文件
+全部数据位于用户的 Deskhub 文件夹（`~/.deskhub`、`%USERPROFILE%\.deskhub`、iOS 上的
+App Group container、Android 上的内部存储；`DESKHUB_CONFIG_DIR` 或 CLI 的
+`--config-dir` 可覆盖该位置）：`host_key.pem` 与 `host_cert.pem`（host identity）、
+`client_key.pem` 与 `client_key.<name>.pem`（client key，Windows 上以 DPAPI 保护）、
+`authorized_keys`（本 host 接受的 client key）、`known_hosts`（受信任的 host 及其
+profile）、`ui-settings.txt`（包括设备名称）、`recent-hosts.txt`（地址、上次连接
+时间与 host 名称）、Linux 上的 `portal-restore-token.txt`（桌面针对所选屏幕签发的 token），以及每次
+运行的 log。任何地方都不保存 passcode。POSIX 上目录为 `0700`、文件为 `0600`，以原子方式
+写入；Windows 上的 ACL 仅允许该用户、SYSTEM 与 Administrators 访问。文件
 I/O 位于 `platform/`；解析逻辑与数据结构位于 `core/`，并具备 unit test。
 
 viewer 发送的文件保存在其他位置：由 host 选定的文件夹（`ui-settings.txt` 中的
@@ -245,8 +265,8 @@ viewer 发送的文件保存在其他位置：由 host 选定的文件夹（`ui-
 | Suite | 运行环境 | 覆盖内容 |
 | --- | --- | --- |
 | `make test` | 离线，不使用 socket | 整个 `core/`: wire、framing、FEC、session、VT emulator、settings、文案、确定性的 structured fuzzing |
-| `make test-platform` | loopback socket | 真实的 QUIC handshake、端到端的 SPAKE2、经由网络的 terminal host 与 viewer、面向真实 shell 的 PTY、lockout、approval |
-| `make test-integration` | loopback，capture/encode 为模拟实现 | 完整的 host↔client session: negotiation、经网络传输的视频、input、passcode 与 approval 的准入控制、对无效数据的容错，以及交叉负载下的时延 —— 文件传输、大量输出的 terminal 与按键操作与运行中的 stream 并行，各自按观测到的最大停顿设定阈值 |
+| `make test-platform` | loopback socket | 真实的 QUIC handshake、端到端的 key 签名 authenticate、host key 固定、经由网络的 terminal host 与 viewer、面向真实 shell 的 PTY、无效签名导致的 lockout |
+| `make test-integration` | loopback，capture/encode 为模拟实现 | 完整的 host↔client session: negotiation、经网络传输的视频、input、基于 authorized key 的准入、对无效数据的容错，以及交叉负载下的时延 —— 文件传输、大量输出的 terminal 与按键操作与运行中的 stream 并行，各自按观测到的最大停顿设定阈值 |
 | fuzz target | 每个 PR 上每个 target 30 秒，nightly 每个 15 分钟 | wire、H.264、reassembly、terminal 字节与 UI 文本的 parser，以及 host 与 viewer 两侧的 session state machine |
 | `make test-perf` | release build，离线与 loopback | 对 hot path 进行实测: `core_perf` 覆盖纯 C++ 的路径，`platform_perf` 覆盖 loopback 上的真实 QUIC；两者均按每单位的 allocation 次数、4 倍输入下的开销，以及相对本机 baseline 的偏移进行判定 |
 
@@ -274,7 +294,7 @@ runner 上与 base commit 的 A/B 结果（偏移仅作为警告，不导致失�
   发送记录和数据报。认证 challenge 和结果使用内部认证发送路径。信任存储在单个进程内
   串行化读取、修改和写入，并通过原子替换文件来持久化更改。
 
-- **损坏的客户端许可列表不授予访问权**：读取 `paired_devices` 时，只要文件不可读、
+- **损坏的客户端许可列表不授予访问权**：读取 `authorized_keys` 时，只要文件不可读、
   过大、格式错误或包含重复密钥，整个配置就视为失败。主机会定期重新检查已接纳连接
   的权限，因此其他进程替换文件后，即使进程内 generation 未变化也能撤销连接。
 
@@ -282,8 +302,7 @@ runner 上与 base commit 的 A/B 结果（偏移仅作为警告，不导致失�
   不会自动授权另一个 endpoint 使用同一密钥；连接前必须显式固定新地址和端口。
 
 - **新的客户端许可列表保存完整 public key**：`authorized_keys` 只接受有限长度的
-  OpenSSH public key 行，并拒绝损坏或重复的密钥。首次保存后由该文件决定访问权。
-  启用标记防止删除文件后重新启用旧版仅含 fingerprint 的权限。`known_hosts` 在
+  OpenSSH public key 行，并拒绝损坏或重复的密钥。它是唯一的许可列表：文件不存在时不接纳任何人。`known_hosts` 在
   TLS pin 旁保存各 endpoint 的别名和选用的 client identity。配置写入使用跨进程
   文件锁与原子替换。
   Service 可通过 `SetConfigDir` 或 `DESKHUB_CONFIG_DIR` 独立于日志目录选择配置目录。
@@ -305,8 +324,24 @@ runner 上与 base commit 的 A/B 结果（偏移仅作为警告，不导致失�
 - **认证在协议版本 3 内有独立版本**：`AuthStart` 在公钥前保留一个值为 0 的兼容字节，
   并在客户端名称后写入认证版本 6。旧主机能够读取请求并发送旧版 challenge；新客户端
   据此识别不兼容版本并关闭连接。新主机拒绝缺少版本后缀的请求，发送
-  `VersionMismatch` 后关闭连接。兼容字节不再表示 passcode 选项。challenge、response
-  和 result 只携带带版本的签名数据。
+  `VersionMismatch` 后关闭连接。challenge、response 和 result 只携带带版本的签名数据。
+
+- **首次使用时信任，变更时硬性阻止**：未知的主机密钥会像 SSH 一样向用户展示一次，
+  仅在用户接受后才被固定（CLI 中为 `--accept-new-host-key`）；已变更的密钥会被拒绝，
+  完全不提供接受按钮。允许用户点击跳过密钥变更的提示，会让人习惯性地跳过真正属于攻击的
+  那一次，因此唯一的解决方式是从 *Trusted hosts* 中移除该主机 —— 这是一个脱离触发该
+  问题的连接之外、需要刻意执行的操作。
+
+- **只有一个设备名称**：Settings → General → *Device name*（留空表示使用 OS 名称）是
+  一台机器唯一的名称 —— 主机将其显示给 viewer 并发送给它准入的客户端，客户端在连接时发送它，并且它作为该机器
+  复制的每个 public key 的 label（`<device name>` 或 `<device name> (<key name>)`）。
+  Client 页面去掉了自己的名称字段，使主机看到的名称与其 `authorized_keys` 中的 label
+  保持一致。
+
+- **不迁移旧数据**：passcode、旧的 `paired_devices` 列表及其启用标记不会被转换 ——
+  其中没有任何内容能证明客户端持有某个密钥 —— 遗留文件会被删除。无法读取的
+  `authorized_keys` 或 `known_hosts` 永远不会被猜测：在其无法读取期间，主机拒绝所有人，
+  客户端拒绝所有主机，下一次更改会重新写入该文件。
 
 - **桌面界面显示什么，由 `core/ui` 中的数据决定，而不是各个应用各写一份代码**：配色
   （`Theme.h`，每种颜色有浅色和深色两个值）、主机实时表格的列与尺寸（`HostRows.h`），以及
@@ -543,7 +578,7 @@ runner 上与 base commit 的 A/B 结果（偏移仅作为警告，不导致失�
   与 log。桌面 client 还会在 OS 的 display 变更信号上刷新其选择列表，这使得之后接入显示
   器时列表仍然正确。
 - **选择 quiche 而非 msquic 或 ngtcp2。** 这是唯一在 Android 与 iOS 上均有生产使用证据
-  的 QUIC 库。它附带 BoringSSL，后者同时服务于 SPAKE2 与 host identity，因此无需第二个
+  的 QUIC 库。它附带 BoringSSL，后者同时服务于 host identity 与 client key 签名，因此无需第二个
   密码学库。
 - **不使用 connection migration。** 候选库均缺乏可用的 client 侧支持。reconnect 与
   reattach 机制（类似 tmux，本就是移动端进入后台所必需）已覆盖该需求；被保留的 shell 也可被列出（`TermList`）并由新 client 按 id resume。
@@ -551,9 +586,6 @@ runner 上与 base commit 的 A/B 结果（偏移仅作为警告，不导致失�
   TLS handshake 签名。已保存但不受支持或不匹配的证书和私钥会使 host 启动失败，
   两个文件均保持原样。只有两个文件都不存在时才创建新的 host identity，因此已有的
   host fingerprint 不会悄然改变。
-- **passcode 的 verifier 是一次 SHA-256，而非开销较大的 KDF。** SPAKE2 已将攻击者限制为
-  每条 connection 一次在线尝试，且不留下值得离线破解的 transcript，这正是 KDF 的计算
-  强度所要达到的目的。
 - **quiche 预先构建，不使用 FetchContent。** `scripts/build-quiche.sh` 在
   `third_party/quiche/` 下为每个 rust target 生成一个目录，另有共享的 `include/`，其中
   包含 quiche.h 与 boring-sys 附带的 BoringSSL 头文件。这些头文件被单独取出，因为
@@ -623,25 +655,25 @@ runner 上与 base commit 的 A/B 结果（偏移仅作为警告，不导致失�
   构建，因此 Debug 配置同样对齐：`_ITERATOR_DEBUG_LEVEL=0`、`/U_DEBUG`、移除 `/RTC1`，
   因为 release CRT 不含 `_CrtDbgReport`，也不支持 run-time check。任何不一致都会导致
   大量 LNK2038 错误。
-- **passcode 是自助准入方式，approval 是备用方式。** 填入的码始终会被验证；没有码则由
-  人进行判断。passcode 不会以任何攻击者可获取的形式经过网络。
+- **已移除 passcode、批准提示与 LAN scan。** 4 位数字码是开放 port 上的短密钥，批准提示
+  可能被错误的人点击，而明文的 discovery 应答会让 network 上的任何人得知 host 的存在。
+  由所有者刻意复制的 key 取代了这三者。
 - **VT emulator 由本项目实现。** 没有任何平台自带的 terminal 控件能够同时在五个 client
   上使用并具备合适的许可证；自行实现使 terminal 行为可以离线测试，并在各平台保持一致。
 - **host 侧的 shell mirror 自首字节起即开始更新。** PTY 的输出是具破坏性的单消费者
   stream：已读取并发送给 viewer 的字节无法重放。因此 *Stop & attach* 打开的字符网格必须
   在字节经过时同步构建，而非在按下按钮时构建。远端 viewer 处于连接状态期间，mirror 自身
   对 terminal query 的响应会被丢弃：viewer 的屏幕已经作出响应，shell 不应收到两个响应。
-- **仅使用一个 port。** beacon、屏幕与 terminal 共用一个 listener；connection 与 stream
+- **仅使用一个 port。** 屏幕、terminal 与文件传输共用一个 listener；connection 与 stream
   的多路复用由 QUIC 负责。此前的第二个 port 仅因 QUIC 之前的屏幕通路独占 socket 而存在。
 - **一个 `HostLink` 取代此前的四套 handshake。** dial、trust 检查、auth 与 recovery 此前
   在 client 侧被实现了四次：source 查询、viewer、file sender，以及运行在独立
   `QuicEndpoint` 上的 terminal。这导致文件发送部分比 viewer 晚三个修复才获知 host key
   已变更。现在 `HostLink` 是 client 侧唯一执行 dial 或 authenticate 的代码；service 打
   开自己的 `Chan`，获得独立的 inbox 队列，并在自身 thread 上处理。terminal 的 backoff
-  重连已移入 link，使所有需要 recovery 的界面都继承该行为，trust 规则也集中于一处：变更
-  过的 key 使 link 保持在 `Deciding` 状态直至用户作出回应（仅 source 查询直接通过，
-  `trustGate=false` 且不记录任何内容，因为其调用方没有可展示的对话框），并且只有 host
-  以密码学方式证明过的 passcode 才会自动固定一个 key。
+  重连已移入 link，使所有需要 recovery 的界面都继承该行为，trust 规则也集中于一处：未知
+  的 key 使 link 失败，直至用户信任它（`acceptNewHostKey`）；变更过的 key 则始终使 link
+  失败。
 - **`HostLink` 通过 `Send` 发送，而非 `SendMessage`。** 在 Windows 上，platform 层背后
   的 OS 头文件将 `SendMessage` 定义为 `SendMessageA` 的宏，而在 `HostLink.cpp` 中这些
   头文件位于类声明之后、方法定义之前，导致 MSVC 要求为一个没有任何头文件声明过的
@@ -666,19 +698,17 @@ runner 上与 base commit 的 A/B 结果（偏移仅作为警告，不导致失�
   `client/windows/win32/MainFrame.cpp` 中的 `ConnectionFrame`、
   `client/linux/gtk/MainWindow.cpp` 中的 `ConnectionWindow`、
   `client/macos/app/swift/App.swift` 中名为 `connection` 的 `WindowGroup` —— 由其持有该
-  host 的地址、passcode、capability、source 列表与 control 选项，从而使 connect 页可以
+  host 的地址、capability、source 列表与 control 选项，从而使 connect 页可以
   继续连接下一个 host。主窗口仅保存已打开窗口的列表，用于在同一 host 被再次连接时将对应
   窗口置前、将每次 status probe 分发给地址匹配的窗口，以及在退出时关闭全部窗口。Android
   与 iOS 有意保持单连接模型：手机屏幕没有容纳第二个面板的空间，而其打开的 session 本身
   即为全屏。`ui::SameDeviceAddr` 是各处「同一个 host」的统一定义 —— 见下一条。
-- **同一个 host 有两种地址写法，但只有一种比较方式。** `ScanAddressText` 在 port 为默认
-  值时将其省略，因此 scan 结果行显示为 `192.168.1.60`，而用户输入并连接使用的地址为
-  `192.168.1.60:47777`。将两者作为字符串比较会在无任何提示的情况下失败，而每一处这样做
-  的位置都因此失去了某项功能：已连接的面板找不到匹配的设备行，因而不显示 ping；
-  `PasscodeForDevice` 无法找到从 scan 列表中选中的 host 所保存的码。因此地址的相等判断
-  必须经由 `ui::NormalizedDeviceAddr` 与 `ui::SameDeviceAddr`（`core/ui/Strings.h`），
-  并以 `dh_same_device_addr` 提供给 Swift 与 Kotlin 的 client。不要使用 `==` 比较两个
-  设备地址。
+- **同一个 host 有两种地址写法，但只有一种比较方式。** 地址可以带或不带默认 port，因此
+  `192.168.1.60` 与 `192.168.1.60:47777` 指的是同一个 host。将两者作为字符串比较会在无
+  任何提示的情况下失败：已连接的面板找不到匹配的最近记录行，并且同一个 host 被打开了两个
+  连接窗口。因此地址的相等判断
+  必须经由 `ui::NormalizedDeviceAddr` 与 `ui::SameDeviceAddr`（`core/ui/Strings.h`）。
+  不要使用 `==` 比较两个设备地址。
 
 - **刚打开的 decoder 尚未持有参考帧。** `ScreenViewer` 在 surface 变化时重建 decoder，
   而 iOS 的 app 在离开屏幕时交回 surface，锁屏即会触发该情形。reassembler 对此并不知情：

@@ -11,7 +11,6 @@
 #include "Output.h"
 
 #include "deskhub/cli/Json.h"
-#include "deskhub/net/PairedDevices.h"
 #include "deskhub/net/TrustStore.h"
 #include "deskhub/ui/UiSettings.h"
 #include "deskhubp/system/HostIdentity.h"
@@ -20,7 +19,7 @@
 #include "deskhubp/system/AuthorizedKeysFile.h"
 #include "deskhubp/system/ClientIdentity.h"
 #include "deskhubp/system/ClientKeys.h"
-#include "deskhubp/system/PairedDevicesFile.h"
+#include "deskhubp/system/Clock.h"
 #include "deskhubp/system/TrustStoreFile.h"
 #include "deskhubp/system/UiSettingsStore.h"
 
@@ -66,8 +65,8 @@ ExitCode RunHostProfile(const Command& command) {
         "Host profile saved.");
 }
 
-std::string DeviceName(const deskhub::PairedDevice& device) {
-    return device.name.empty() ? std::string("(unnamed)") : device.name;
+std::string ClientName(const deskhubp::AuthorizedClient& client) {
+    return client.label.empty() ? std::string("(unnamed)") : client.label;
 }
 
 std::vector<std::string> SettingsKeys(const std::string& text) {
@@ -223,11 +222,7 @@ ExitCode RunDevices(const Command& command) {
             PrintError("could not save the authorized key");
             return ExitCode::Failed;
         }
-        if (!command.quiet) {
-            PrintLine(deskhub::FormatFingerprint(*fingerprint));
-            if (!command.accessSyntax)
-                PrintLine("The full public key allowlist is now active; legacy fingerprint-only entries no longer grant access.");
-        }
+        if (!command.quiet) PrintLine(deskhub::FormatFingerprint(*fingerprint));
         return ExitCode::Ok;
     }
 
@@ -236,7 +231,7 @@ ExitCode RunDevices(const Command& command) {
             PrintError("could not revoke the authorized keys");
             return ExitCode::Failed;
         }
-        if (!command.quiet) PrintLine("Every paired machine has to pair again.");
+        if (!command.quiet) PrintLine("Every client key has been removed; nobody can connect until a key is added.");
         return ExitCode::Ok;
     }
 
@@ -247,31 +242,11 @@ ExitCode RunDevices(const Command& command) {
             PrintError("not a key fingerprint: " + command.target);
             return ExitCode::Usage;
         }
-        if (command.accessSyntax) {
-            const auto snapshot = deskhubp::LoadAuthorizedKeys();
-            if (!snapshot || !snapshot->configured) {
-                PrintError("authorized_keys is unavailable or has not been configured");
-                return ExitCode::Failed;
-            }
-            for (const auto& key : snapshot->keys.Keys()) {
-                const auto spki = deskhubp::PublicKeySpkiFromText(
-                    deskhub::FormatPublicKeyText(key));
-                if (deskhubp::FingerprintOfPublicKey(spki) != fingerprint) continue;
-                if (!deskhubp::ForgetAuthorizedKey(spki)) {
-                    PrintError("could not revoke the authorized key");
-                    return ExitCode::Failed;
-                }
-                if (!command.quiet) PrintLine("Authorized key revoked.");
-                return ExitCode::Ok;
-            }
-            PrintError("no authorized key has that fingerprint");
+        if (!deskhubp::ForgetAuthorizedClient(*fingerprint)) {
+            PrintError("no allowed client has that key");
             return ExitCode::Failed;
         }
-        if (!deskhubp::ForgetEffectiveAuthorizedDevice(*fingerprint)) {
-            PrintError("no paired machine has that key");
-            return ExitCode::Failed;
-        }
-        if (!command.quiet) PrintLine("That machine has to pair again.");
+        if (!command.quiet) PrintLine("That client key has been removed.");
         return ExitCode::Ok;
     }
 
@@ -284,7 +259,7 @@ ExitCode RunDevices(const Command& command) {
         if (command.json) {
             deskhub::cli::JsonWriter json;
             json.ArrayBegin();
-            for (const auto& key : snapshot->keys.Keys()) {
+            for (const auto& key : snapshot->Keys()) {
                 const std::string publicKey = deskhub::FormatPublicKeyText(key);
                 const auto fingerprint = deskhubp::FingerprintOfPublicKey(
                     deskhubp::PublicKeySpkiFromText(publicKey));
@@ -301,7 +276,7 @@ ExitCode RunDevices(const Command& command) {
         } else {
             Table table;
             table.Row({"FINGERPRINT", "NAME", "PUBLIC KEY"});
-            for (const auto& key : snapshot->keys.Keys()) {
+            for (const auto& key : snapshot->Keys()) {
                 const std::string publicKey = deskhub::FormatPublicKeyText(key);
                 const auto fingerprint = deskhubp::FingerprintOfPublicKey(
                     deskhubp::PublicKeySpkiFromText(publicKey));
@@ -313,21 +288,19 @@ ExitCode RunDevices(const Command& command) {
         return ExitCode::Ok;
     }
 
-    const auto devices = deskhubp::LoadEffectiveAuthorizedDevices();
-    if (!devices) {
-        PrintError("could not read authorized keys");
+    const auto clients = deskhubp::ListAuthorizedClients();
+    if (!clients) {
+        PrintError("could not read authorized_keys");
         return ExitCode::Failed;
     }
 
     if (command.json) {
         deskhub::cli::JsonWriter json;
         json.ArrayBegin();
-        for (const deskhub::PairedDevice& device : devices->Devices()) {
+        for (const deskhubp::AuthorizedClient& client : *clients) {
             json.ObjectBegin();
-            json.Field("fingerprint", deskhub::FormatFingerprint(device.fingerprint));
-            json.Field("name", device.name);
-            json.Field("pairedUnix", device.pairedUnix);
-            json.Field("lastSeenUnix", device.lastSeenUnix);
+            json.Field("fingerprint", deskhub::FormatFingerprint(client.fingerprint));
+            json.Field("name", client.label);
             json.ObjectEnd();
         }
         json.ArrayEnd();
@@ -335,16 +308,15 @@ ExitCode RunDevices(const Command& command) {
         return ExitCode::Ok;
     }
 
-    if (devices->Devices().empty()) {
-        if (!command.quiet) PrintLine("No machine has paired with this one yet.");
+    if (clients->empty()) {
+        if (!command.quiet) PrintLine("No client key is allowed to connect to this machine yet.");
         return ExitCode::Ok;
     }
 
     Table table;
-    table.Row({"KEY", "NAME", "PAIRED", "LAST SEEN"});
-    for (const deskhub::PairedDevice& device : devices->Devices())
-        table.Row({deskhub::ShortFingerprint(device.fingerprint), DeviceName(device),
-            UnixDate(device.pairedUnix), UnixDate(device.lastSeenUnix)});
+    table.Row({"KEY", "NAME"});
+    for (const deskhubp::AuthorizedClient& client : *clients)
+        table.Row({deskhub::ShortFingerprint(client.fingerprint), ClientName(client)});
     table.Print();
     return ExitCode::Ok;
 }
@@ -380,7 +352,7 @@ ExitCode RunTrust(const Command& command) {
         }
         if (!deskhubp::RememberTrustedHostProfile(command.target,
                 command.deviceName.value_or(command.target), *fingerprint,
-                command.identityName.value_or("default"), std::time(nullptr))) {
+                command.identityName.value_or("default"), NowUnixSeconds())) {
             PrintError("could not save the trusted host key");
             return ExitCode::Failed;
         }

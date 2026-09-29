@@ -3,7 +3,6 @@
 
 #include "deskhubp/system/AppDataFile.h"
 #include "deskhubp/system/AuthProof.h"
-#include "deskhubp/system/PairedDevicesFile.h"
 
 #include <cstdio>
 #include <string>
@@ -100,48 +99,9 @@ void TestAProofCannotBeCarriedToADifferentHost() {
         "and the two directions are not interchangeable, so neither can be replayed at the other");
 }
 
-void TestThePairedListOutlivesTheProcess() {
-    std::printf("[auth] a machine paired once is still paired after a restart...\n");
-    const std::string saved = deskhubp::ReadAppDataFile(deskhubp::kPairedDevicesFileName);
-    deskhubp::ForgetAllPairedDevices();
-
-    deskhub::Fingerprint laptop;
-    deskhub::Fingerprint stranger;
-    for (size_t i = 0; i < laptop.bytes.size(); ++i) {
-        laptop.bytes[i] = uint8_t(i + 3);
-        stranger.bytes[i] = uint8_t(i + 200);
-    }
-
-    Check(deskhubp::TryLoadPairedDevices().value_or(deskhub::PairedDevices{}).Check(laptop) == deskhub::PairVerdict::Unknown,
-        "nothing is paired to begin with");
-    Check(deskhubp::RememberPairedDevice(laptop, "manh laptop", 1000), "pairing writes the file");
-    Check(deskhubp::TryLoadPairedDevices().value_or(deskhub::PairedDevices{}).Check(laptop) == deskhub::PairVerdict::Paired,
-        "and reading it back lets that machine straight in");
-    Check(deskhubp::TryLoadPairedDevices().value_or(deskhub::PairedDevices{}).Check(stranger) == deskhub::PairVerdict::Unknown,
-        "while a machine that never paired is still a stranger");
-
-    Check(deskhubp::TouchPairedDevice(laptop, "manh laptop", 2000), "a visit is recorded");
-    Check(!deskhubp::TouchPairedDevice(stranger, "ghost", 2000),
-        "but a stranger's visit is not");
-
-    Check(deskhubp::ForgetPairedDevice(laptop), "forgetting it reports that it did something");
-    Check(deskhubp::TryLoadPairedDevices().value_or(deskhub::PairedDevices{}).Check(laptop) == deskhub::PairVerdict::Unknown,
-        "and that machine has to pair again - this is what revoking means");
-    Check(!deskhubp::ForgetPairedDevice(laptop), "forgetting it twice changes nothing");
-
-    deskhubp::RememberPairedDevice(laptop, "laptop", 3000);
-    deskhubp::RememberPairedDevice(stranger, "phone", 3000);
-    Check(deskhubp::TryLoadPairedDevices().value_or(deskhub::PairedDevices{}).Size() == 2, "two machines are on the list");
-    deskhubp::ForgetAllPairedDevices();
-    Check(deskhubp::TryLoadPairedDevices().value_or(deskhub::PairedDevices{}).Size() == 0, "and the big red button clears all of them");
-
-    if (!saved.empty()) deskhubp::WriteAppDataFile(deskhubp::kPairedDevicesFileName, saved);
-}
-
 }
 
 void RunAuthProofTests() {
     TestAKeyProvesTheMachineItBelongsTo();
     TestAProofCannotBeCarriedToADifferentHost();
-    TestThePairedListOutlivesTheProcess();
 }

@@ -24,8 +24,8 @@ void TestEveryLabelSaysSomething() {
         ui::kConnectionEndedTitle, ui::kDisconnected, ui::kSessionEnded, ui::kSidebarHost,
         ui::kSidebarClient, ui::kSidebarSettings, ui::kHostHeading, ui::kClientHeading,
         ui::kSettingsHint, ui::kSettingsGeneralArea, ui::kClientSettingsHeading,
-        ui::kClientSettingsHint, ui::kStatusOnline, ui::kStatusOffline,
-        ui::kStatusChecking, ui::kNotSharing, ui::kStartingShare, ui::kShareStateOn,
+        ui::kClientSettingsHint,
+        ui::kNotSharing, ui::kStartingShare, ui::kShareStateOn,
         ui::kShareStateOff, ui::kReceivingFilesState, ui::kMobileTakesFilesNote,
         ui::kStartSharing,
         ui::kNoDisplayTicked, ui::kNoDisplayFound, ui::kWaitingForDisplays,
@@ -48,7 +48,7 @@ void TestEveryLabelSaysSomething() {
         ui::kAllowClientAction, ui::kAllowClientInvalid, ui::kMyKeysHeading, ui::kMyKeysHint,
         ui::kCopyPublicKeyAction, ui::kNewKeyAction, ui::kImportKeyAction, ui::kKeyNameLabel,
         ui::kKeyPassphraseLabel, ui::kTrustNewHostTitle, ui::kTrustNewHostAction,
-        ui::kCancelAction, ui::kDeviceNameHint};
+        ui::kCancelAction, ui::kDeviceNameHint, ui::kDeleteKeyAction, ui::kDeleteKeyPrompt, ui::kAuthNotPairedCliHint};
     const std::string prompt = ui::TrustNewHostPrompt("192.168.1.10:47777", "SHA256:abc");
     Check(Contains(prompt, "192.168.1.10:47777") && Contains(prompt, "SHA256:abc"),
         "the first-connection prompt names the host and shows its whole fingerprint");

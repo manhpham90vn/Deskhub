@@ -9,7 +9,8 @@
 #include "capture/ScreenCapture.h"
 
 #include "deskhub/protocol/Wire.h"
-#include "deskhubp/ffi/DiscoveryFfi.h"
+#include "deskhubp/ffi/DevicesFfi.h"
+#include "deskhubp/ffi/SettingsFfi.h"
 #include "deskhubp/ffi/ShareFfi.h"
 #include "deskhubp/media/DisplayEnum.h"
 

@@ -6,6 +6,8 @@
 #include <ctime>
 #include <utility>
 
+#include "deskhub/ui/Strings.h"
+
 namespace deskhubcli {
 
 namespace {
@@ -54,18 +56,9 @@ void PrintError(std::string_view text) {
     std::fputc('\n', stderr);
 }
 
-std::string UnixDate(int64_t unixSeconds) {
-    if (unixSeconds <= 0) return "-";
-    const std::time_t stamp = std::time_t(unixSeconds);
-    std::tm broken{};
-#ifdef _WIN32
-    if (localtime_s(&broken, &stamp) != 0) return "-";
-#else
-    if (!localtime_r(&stamp, &broken)) return "-";
-#endif
-    char text[32];
-    if (!std::strftime(text, sizeof(text), "%Y-%m-%d %H:%M", &broken)) return "-";
-    return text;
+void PrintConnectFailure(std::string_view text) {
+    PrintError(text);
+    if (text == deskhub::ui::kAuthNotPaired) PrintError(deskhub::ui::kAuthNotPairedCliHint);
 }
 
 }

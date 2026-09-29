@@ -216,10 +216,23 @@ void TestStrictHostProfilesRejectDamage() {
         "an oversized profile file is rejected");
 }
 
+void TestTheKeyIsShownShortEnoughToRead() {
+    std::printf("[trust] a short fingerprint is enough to tell machines apart...\n");
+    const std::string shortForm = ShortFingerprint(MakeFingerprint(1));
+    Check(shortForm.size() == kShortFingerprintChars, "it is trimmed to a column width");
+    Check(shortForm.find("SHA256:") == std::string::npos, "the prefix every row shares is dropped");
+    Check(FormatFingerprint(MakeFingerprint(1)).find(shortForm) != std::string::npos,
+        "and what is shown really is the start of the full fingerprint");
+    Check(ShortFingerprint(MakeFingerprint(1)) != ShortFingerprint(MakeFingerprint(2)),
+        "two machines read differently");
+    Check(ShortFingerprint(Fingerprint{}).empty(), "and a machine with no key shows nothing");
+}
+
 }
 
 void RunTrustStoreTests() {
     TestFingerprintText();
+    TestTheKeyIsShownShortEnoughToRead();
     TestThreeTrustStates();
     TestRememberAndForget();
     TestCapEvictsOldest();

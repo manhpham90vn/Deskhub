@@ -118,7 +118,7 @@ client.
 | `connect ADDRESS` | mở cửa sổ xem và điều khiển màn hình host (Windows và Linux) |
 | `shell ADDRESS` | mở một shell trên host, ngay trong terminal hiện tại |
 | `send ADDRESS FILE...` | gửi file tới host đang nhận file |
-| `displays`, `sources ADDRESS` | màn hình cục bộ và nguồn trên host đã xác thực |
+| `displays`, `sources ADDRESS` | màn hình cục bộ và những gì một host đã xác thực đang share |
 | `key`, `access`, `host`, `host-key public` | khóa client, khóa được phép, host đã lưu và khóa host này |
 | `devices`, `trust`, `settings` | các lệnh cũ dùng cùng file cấu hình |
 
@@ -129,6 +129,10 @@ Chuyển kết quả `host-key public` của host sang client rồi đưa vào
 Sau đó dùng `connect office`, `sources office`, `shell office` hoặc `send office FILE`.
 `host update office` đổi địa chỉ, identity hoặc khóa ghim; `host remove office` xóa
 profile. `access remove --fingerprint SHA256:...` thu hồi khóa client.
+`sources`, `connect`, `shell` và `send` nhận một địa chỉ hoặc alias đã lưu, `--identity NAME`
+để chọn khóa client, và `--accept-new-host-key` để lưu khóa của host gặp lần đầu; không có cờ
+này thì host lạ bị từ chối và fingerprint của nó được in ra, còn host có khóa đã thay đổi
+luôn bị từ chối. Không có scan network và không có cờ passcode.
 `--config-dir PATH` chọn chung thư mục cấu hình cho mọi lệnh, đặt trước hoặc sau lệnh.
 
 `deskhub-cli help COMMAND` in ra các cờ. Các lệnh liệt kê hỗ trợ `--json`, và exit code cho biết
@@ -160,8 +164,8 @@ một binary không thể connect.
 | Lệnh | Phạm vi chạy | Nội dung kiểm tra |
 | --- | --- | --- |
 | `make test` | offline, không socket | toàn bộ `core/`: wire format, framing, FEC, session, VT emulator, settings, chuỗi văn bản |
-| `make test-platform` | socket loopback | QUIC handshake thật, SPAKE2 end-to-end, terminal host và viewer qua đường truyền, PTY với shell thật, lockout, approval |
-| `make test-integration` | loopback, capture/encode giả lập | session host↔client đầy đủ: negotiation, video qua đường truyền, input, kiểm soát bằng passcode và approval, khả năng chịu dữ liệu không hợp lệ |
+| `make test-platform` | socket loopback | QUIC handshake thật, xác thực bằng chữ ký khóa end-to-end, ghim host key, terminal host và viewer qua đường truyền, PTY với shell thật, lockout khi chữ ký sai |
+| `make test-integration` | loopback, capture/encode giả lập | session host↔client đầy đủ: negotiation, video qua đường truyền, input, chấp nhận theo khóa được phép, khả năng chịu dữ liệu không hợp lệ |
 | `make test-all` | cả ba suite, core chạy trước | |
 | `make test-ctest` | cùng các test đó nhưng qua CTest | đúng cách CI gọi chúng |
 | `make test-asan` | cả ba suite dưới ASan và UBSan | chỉ clang/gcc, không hỗ trợ MSVC |

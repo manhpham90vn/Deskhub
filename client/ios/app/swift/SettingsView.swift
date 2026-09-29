@@ -4,7 +4,6 @@ struct SettingsView: View {
     private static let portSettle = Duration.milliseconds(600)
 
     @Bindable var settings: SettingsModel
-    let onPortChange: (UInt16) -> Void
     @State private var deviceName = DeviceNameModel()
     @FocusState private var editingDeviceName: Bool
 
@@ -66,7 +65,6 @@ struct SettingsView: View {
             try? await Task.sleep(for: SettingsView.portSettle)
             guard !Task.isCancelled else { return }
             settings.save()
-            onPortChange(settings.acceptedPort)
         }
         .onChange(of: editingDeviceName) { _, editing in
             if !editing { deviceName.commit() }

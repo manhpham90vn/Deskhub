@@ -191,7 +191,7 @@ sudo firewall-cmd --add-port=47777/udp --permanent        # Fedora / openSUSE
 
 ```bash
 sudo apt remove deskhub      # or: sudo dnf remove deskhub / sudo zypper remove deskhub
-rm -rf ~/.deskhub            # settings, keys and paired machines
+rm -rf ~/.deskhub            # settings, keys, allowed clients and trusted hosts
 sudo rm -f /etc/apt/sources.list.d/deskhub.list /etc/apt/keyrings/deskhub.gpg   # the apt repository, if you added it
 ```
 
@@ -233,8 +233,8 @@ into the device it runs on.
 `deskhub-cli` provides commands for sharing a screen, opening a remote shell and
 connecting from a script or over SSH. On Windows and Linux, `connect` opens a window for
 the remote screen; on macOS, use the desktop app to watch a screen. Run `deskhub-cli help`
-for the command list. The CLI and app use the same settings, paired machines and trusted
-host keys.
+for the command list. The CLI and app use the same settings, client keys, allowed clients
+and trusted hosts.
 
 | Platform | File |
 | --- | --- |
@@ -274,14 +274,24 @@ and says so; use the app for that.
 ## 🔒 Before you share a screen
 
 Everything a session carries — video, keystrokes, mouse, clipboard and terminal traffic —
-runs over **QUIC/TLS**, and an unknown machine only gets in through a pairing handshake:
-it must prove it knows the host's passcode via **SPAKE2** (the code itself never travels,
-and each connection allows exactly one guess), or wait for the person at the host to
-answer *Let this machine in?*.
+runs over **QUIC/TLS**, and access works like SSH. To let a device connect:
+
+1. On the device that will connect, open **Devices** → *When this machine is the client*
+   → **My keys** and press *Copy public key* (CLI: `deskhub-cli key public --name default`).
+2. On the host, open **Devices** → *When this machine is the host* → **Clients allowed to
+   connect to this machine**, press *Allow* and paste that key (CLI:
+   `deskhub-cli access add --stdin`).
+3. Connect by address. The first time, a **New host** dialog shows the host's key
+   fingerprint: compare it with **This machine's host key** on the host's Devices page,
+   then press *Trust and connect*. From then on the host is under **Trusted hosts**.
+
+Nothing is approved over the network and Deskhub never scans it. If a trusted host's key
+ever changes, the connection is refused outright; remove the host from *Trusted hosts*
+only if you know why its key changed, then trust it again.
 
 Use Deskhub on a **network you trust** or through a **VPN**. Do not port-forward UDP
-47777. Encryption protects session contents, but the port still answers discovery probes,
-and the first pairing with a new machine has not yet verified its identity. For remote
+47777. Encryption protects session contents, but the first connection to a host trusts
+the key it is shown unless you compare the fingerprint. For remote
 access, you can install [Tailscale](https://tailscale.com) on both machines and connect
 to the `100.x.y.z` address.
 
@@ -292,6 +302,10 @@ and how to report a vulnerability.
 
 - **Nothing to connect to** — both machines must be on the same network (or the same
   Tailscale tailnet), and UDP 47777 must be open on the host.
+- **"This device's key is not authorized on that machine yet"** — the host does not list this
+  client key; allow its public key on the host's Devices page. Clients allowed by an
+  older Deskhub must be allowed again.
+- **"This host's key has changed"** — see [Before you share a screen](#-before-you-share-a-screen).
 - **Linux: sharing fails immediately** — run `vainfo | grep -E 'H264.*Enc'`; an empty
   result means this machine has no usable H.264 encoder and cannot host.
 - **Linux: the pointer doesn't move** — the `/dev/uinput` rule from requirement 3 is

@@ -82,6 +82,7 @@ bool QuerySources(const NetAddr& server, SourceQueryReply& reply,
         const size_t cnt = deskhub::ParseSourceList(deskhub::PayloadOf(span), tmp);
         for (size_t i = 0; i < cnt; ++i) reply.sources.push_back(std::move(tmp[i]));
         reply.caps = deskhub::HostCapsOfFlags(h->flags);
+        reply.hostName = deskhub::ParseSourceListHostName(deskhub::PayloadOf(span));
         reply.failure.clear();
         LOGI("[Sources] Host is sharing %zu source(s).", reply.sources.size());
         return true;

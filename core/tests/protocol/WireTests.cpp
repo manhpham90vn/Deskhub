@@ -130,6 +130,23 @@ void TestSourceListWire() {
     Check(ch && !HostCapsOfFlags(ch->flags).acceptsInput &&
               !HostCapsOfFlags(ch->flags).terminal,
         "a host that says nothing promises nothing");
+    Check(ParseSourceListHostName(PayloadOf(std::span<const uint8_t>(buf, n))).empty(),
+        "a host that gives no name sends an empty one");
+
+    n = BuildSourceList(buf, in, HostCaps{}, "Office PC");
+    const auto payload = PayloadOf(std::span<const uint8_t>(buf, n));
+    Check(ParseSourceListHostName(payload) == "Office PC",
+        "SOURCE_LIST carries the host's device name after the sources");
+    Check(ParseSourceList(payload, out) == in.size(), "and the sources still parse beside it");
+    n = BuildSourceList(buf, {}, HostCaps{}, std::string(200, 'x'));
+    Check(ParseSourceListHostName(PayloadOf(std::span<const uint8_t>(buf, n))).size() ==
+              kMaxClientNameBytes,
+        "an over-long host name is cut to the device-name limit");
+    n = BuildSourceList(buf, {}, HostCaps{}, "tab\there");
+    Check(ParseSourceListHostName(PayloadOf(std::span<const uint8_t>(buf, n))) == "tab here",
+        "control characters never reach the screen");
+    Check(ParseSourceListHostName(PayloadOf(std::span<const uint8_t>(buf, n - 1))).empty(),
+        "a truncated host name is dropped rather than read past the end");
 
     Hello h{0xDEADBEEF, 2560, 1440, 0, 5};
     n = BuildHello(buf, h);
@@ -546,11 +563,11 @@ void TestRecordFraming() {
 }
 
 void TestPacketClassification() {
-    std::printf("[wire] QUIC and beacon packets share a port and stay apart...\n");
+    std::printf("[wire] QUIC and plain source-list packets share a port and stay apart...\n");
     uint8_t buf[kMaxDatagram];
     const size_t n = BuildListSources(buf);
     Check(ClassifyPacket(std::span<const uint8_t>(buf, n)) == PacketKind::Deskhub,
-        "a beacon query is a Deskhub packet");
+        "a source-list query is a Deskhub packet");
 
     const uint8_t longHeader[16] = {0xC3, 0x00, 0x00, 0x00, 0x01};
     Check(ClassifyPacket(longHeader) == PacketKind::Quic, "a QUIC long header is QUIC");

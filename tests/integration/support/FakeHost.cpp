@@ -1,6 +1,7 @@
 #include "support/FakeHost.h"
 
 #include "support/FakeVideo.h"
+#include "support/TestSupport.h"
 
 #include "deskhub/control/StreamSize.h"
 #include "deskhub/session/host/SourcePipeline.h"
@@ -8,7 +9,6 @@
 #include "deskhubp/system/Clock.h"
 #include "deskhubp/system/ClientIdentity.h"
 #include "deskhubp/system/HostIdentity.h"
-#include "deskhubp/system/PairedDevicesFile.h"
 #include "deskhubp/system/TrustStoreFile.h"
 
 #include <cmath>
@@ -177,7 +177,7 @@ bool SharingHost::Start(const std::vector<deskhub::media::ShareSource>& sources,
     const auto host = deskhubp::LoadOrCreateHostIdentity("integration-host");
     const std::string address = NetAddr{0x7F000001u, port}.ToString();
     if (!client.Valid() || !host.Valid() ||
-        !deskhubp::RememberPairedDevice(client.fingerprint, "integration-client", std::time(nullptr)) ||
+        !GrantClientKey(client) ||
         !deskhubp::RememberTrustedHost(address, "127.0.0.1", host.fingerprint, std::time(nullptr)))
         return false;
     return engine_.Start(sources, opt, std::move(policy));

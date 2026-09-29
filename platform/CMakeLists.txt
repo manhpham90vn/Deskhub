@@ -204,7 +204,7 @@ add_library(platform STATIC
     src/audio/AudioBroadcaster.cpp
     src/system/TrustStoreFile.cpp
     src/system/ClientKeys.cpp
-    src/system/PairedDevicesFile.cpp
+    src/system/RecentDevicesFile.cpp
     src/system/AuthorizedKeysFile.cpp
     src/auth/AuthNegotiation.cpp
     src/client/HostLink.cpp
@@ -223,7 +223,8 @@ add_library(platform STATIC
     src/host/HostEngine.cpp
     src/ffi/ClientFfi.cpp
     src/ffi/ShareFfi.cpp
-    src/ffi/DiscoveryFfi.cpp
+    src/ffi/SettingsFfi.cpp
+    src/ffi/DevicesFfi.cpp
     src/ffi/SendFfi.cpp
     src/ffi/TerminalFfi.cpp
     src/ffi/HostProfileFfi.cpp

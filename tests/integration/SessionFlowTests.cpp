@@ -10,7 +10,7 @@
 #include "deskhubp/client/ScreenViewer.h"
 #include "deskhubp/system/HostIdentity.h"
 #include "deskhubp/system/ClientIdentity.h"
-#include "deskhubp/system/PairedDevicesFile.h"
+#include "deskhubp/system/AuthorizedKeysFile.h"
 #include "deskhubp/system/TrustStoreFile.h"
 
 #include <cstdio>
@@ -53,7 +53,7 @@ bool StartViewer(Viewer& viewer, deskhubp::ScreenViewerConfig cfg) {
 void ResetObservations() {
     fake::Host().Reset();
     fake::Decoded().Reset();
-    deskhubp::ForgetAllPairedDevices();
+    RevokeAllClientKeys();
 }
 
 bool Streaming(Viewer& v) {
@@ -395,6 +395,7 @@ void TestSourceDiscoveryBeforeAnySession() {
 
     SourceQueryReply reply;
     Check(QuerySources(HostAddr(port), reply), "LIST_SOURCES was answered");
+    Check(!reply.hostName.empty(), "the answer names the host, so the recent list can show it");
     const std::vector<deskhub::SourceInfo>& sources = reply.sources;
     Check(sources.size() == 2, "both shared sources come back");
     if (sources.size() == 2) {
@@ -563,14 +564,14 @@ void TestRevokedClientCannotReadSources() {
         return;
     }
 
-    deskhubp::ForgetAllPairedDevices();
+    RevokeAllClientKeys();
     SourceQueryReply reply;
     Check(!QuerySources(HostAddr(port), reply) && reply.sources.empty(),
         "a revoked client cannot read display names");
 
     const auto client = deskhubp::LoadOrCreateClientIdentity();
     Check(client.Valid() &&
-              deskhubp::RememberPairedDevice(client.fingerprint, "integration-client", std::time(nullptr)),
+              GrantClientKey(client),
         "the client key can be explicitly granted again");
     Check(QuerySources(HostAddr(port), reply) && reply.sources.size() == 1 &&
               reply.sources[0].name == "DELL U2723QE",
@@ -634,11 +635,11 @@ void TestJunkDatagramsDoNotDisturbTheStream() {
 namespace {
 
 struct SavedTrustFiles {
-    std::string paired = deskhubp::ReadAppDataFile(deskhubp::kPairedDevicesFileName);
+    std::string authorizedKeys = deskhubp::ReadAppDataFile(deskhubp::kAuthorizedKeysFileName);
     std::string known = deskhubp::ReadAppDataFile(deskhubp::kTrustStoreFileName);
 
     ~SavedTrustFiles() {
-        Restore(deskhubp::kPairedDevicesFileName, paired);
+        Restore(deskhubp::kAuthorizedKeysFileName, authorizedKeys);
         Restore(deskhubp::kTrustStoreFileName, known);
     }
 

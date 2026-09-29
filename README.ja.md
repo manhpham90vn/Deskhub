@@ -95,33 +95,33 @@ sudo apt install deskhub-cli   # CLI。単独でもインストール可能
 <table>
   <tr>
     <td align="center" width="33%">
-      <img src="docs/imgs/macos_2.png" alt="macOS の Deskhub Client ページ。host IP、UDP port、passcode と自分の名前の入力欄、remote desktop・control・terminal を選ぶチェックボックス、Connect ボタン、status・ping・最終接続時刻を並べたデバイス表">
-      <br><sub><b>Client</b> —— IP を入力するか、scan が検出したマシンを選択し、開く対象を選ぶ。画面、control 権限、shell、またはその組み合わせ。</sub>
+      <img src="docs/imgs/macos_2.png" alt="macOS の Deskhub Client ページ。host アドレスと UDP port の入力欄、remote desktop・control・terminal を選ぶチェックボックス、Connect ボタン、各アドレスの最終接続時刻を添えた最近のアドレス一覧">
+      <br><sub><b>Client</b> —— アドレスを入力するか、最近使った host または信頼済み host を選択し、開く対象を選ぶ。画面、control 権限、shell、またはその組み合わせ。</sub>
     </td>
     <td align="center" width="33%">
-      <img src="docs/imgs/macos_3.png" alt="macOS の Deskhub Devices ページ。pair 済みマシンと各 key、pair した時刻と最後に確認された時刻、Forget と Forget every machine のボタン、新規 pair を許可するスイッチ、本マシンの SHA256 key">
-      <br><sub><b>Devices</b> —— 受け入れたことのあるマシンを名前と key とともに一覧表示し、個別に取り消せる。必要なマシンの pair が済んだら、新規 pair を無効にできる。</sub>
+      <img src="docs/imgs/macos_3.png" alt="macOS の Deskhub Devices ページ。host としての本マシンの領域には SHA256 host key と connect を許可された client key、client としての本マシンの領域には自身の key と信頼済み host">
+      <br><sub><b>Devices</b> —— host としては、本マシンの host key と受け入れる client key を表示し、個別に削除できる。client としては、自分の key と信頼する host を表示する。</sub>
     </td>
     <td align="center" width="33%">
-      <img src="docs/imgs/macos_4.png" alt="macOS の Deskhub Settings ページ。fps、bitrate、quality、UDP port、pair に使う passcode、viewer が本マシンを control できるかのスイッチ、clipboard とスリープ防止のトグル、Screen Recording と Accessibility permission の現在の状態、ログイン時起動のスイッチ">
-      <br><sub><b>Settings</b> —— fps、bitrate、quality、port、passcode、viewer による control の可否、および macOS permission の現在の状態。</sub>
+      <img src="docs/imgs/macos_4.png" alt="macOS の Deskhub Settings ページ。デバイス名、fps、bitrate、quality、UDP port、viewer が本マシンを control できるかのスイッチ、clipboard とスリープ防止のトグル、Screen Recording と Accessibility permission の現在の状態、ログイン時起動のスイッチ">
+      <br><sub><b>Settings</b> —— デバイス名、fps、bitrate、quality、port、viewer による control の可否、および macOS permission の現在の状態。</sub>
     </td>
   </tr>
 </table>
 
 <p align="center">
-  <img src="docs/imgs/ios_1.png" alt="iOS の Deskhub Client ページ。IP・port・passcode・名前の入力欄、Connect と Terminal のボタン、リモートのマシンを control するスイッチ、確認済みアドレス数を報告する scan" width="195">
-  <img src="docs/imgs/ios_2.png" alt="iOS の Deskhub Host ページ。pair に使う passcode、Share on network、Start sharing、他のマシンが connect に使う IP アドレス" width="195">
-  <img src="docs/imgs/ios_3.png" alt="iOS の Deskhub Devices ページ。まだ空の pair 済みマシン一覧、新しいマシンの pair を許可するスイッチ、本デバイスの SHA256 key" width="195">
-  <img src="docs/imgs/ios_4.png" alt="iOS の Deskhub 接続 settings ページ。scan が確認する UDP port、clipboard 同期とスリープ防止のスイッチ" width="195">
+  <img src="docs/imgs/ios_1.png" alt="iOS の Deskhub Client ページ。アドレスと port の入力欄、Connect と Terminal のボタン、リモートのマシンを control するスイッチ、最近のアドレス一覧" width="195">
+  <img src="docs/imgs/ios_2.png" alt="iOS の Deskhub Host ページ。Share on network、Start sharing、他のマシンが connect に使う IP アドレス" width="195">
+  <img src="docs/imgs/ios_3.png" alt="iOS の Deskhub Devices ページ。本デバイスの SHA256 host key、connect を許可された client key、自身の client key と信頼済み host" width="195">
+  <img src="docs/imgs/ios_4.png" alt="iOS の Deskhub 接続 settings ページ。UDP port、clipboard 同期とスリープ防止のスイッチ" width="195">
 </p>
-<p align="center"><sub><b>iPhone</b> —— 同じ 4 ページ。scan を実行してマシンを選択し、映像を trackpad として操作する。iPhone 自身の画面を host することもできるが、view-only に限られる。</sub></p>
+<p align="center"><sub><b>iPhone</b> —— 同じ 4 ページ。信頼済み host に connect し、映像を trackpad として操作する。iPhone 自身の画面を host することもできるが、view-only に限られる。</sub></p>
 
 <p align="center">
-  <img src="docs/imgs/android_1.png" alt="Android の Deskhub Client ページ。IP・port・passcode・名前の入力欄、Connect と Terminal のボタン、control のチェックボックス、subnet を走査中の scan" width="195">
-  <img src="docs/imgs/android_2.png" alt="Android の Deskhub Host ページ。pair に使う passcode、Share on network、Start sharing、他のマシンが connect に使う IP アドレス" width="195">
-  <img src="docs/imgs/android_3.png" alt="Android の Deskhub Devices ページ。まだ空の pair 済みマシン一覧、新しいマシンの pair を許可するチェックボックス、本デバイスの SHA256 key" width="195">
-  <img src="docs/imgs/android_4.png" alt="Android の Deskhub 接続 settings ページ。scan が確認する UDP port、clipboard 同期とスリープ防止のチェックボックス" width="195">
+  <img src="docs/imgs/android_1.png" alt="Android の Deskhub Client ページ。アドレスと port の入力欄、Connect と Terminal のボタン、control のチェックボックス、最近のアドレス一覧" width="195">
+  <img src="docs/imgs/android_2.png" alt="Android の Deskhub Host ページ。Share on network、Start sharing、他のマシンが connect に使う IP アドレス" width="195">
+  <img src="docs/imgs/android_3.png" alt="Android の Deskhub Devices ページ。本デバイスの SHA256 host key、connect を許可された client key、自身の client key と信頼済み host" width="195">
+  <img src="docs/imgs/android_4.png" alt="Android の Deskhub 接続 settings ページ。UDP port、clipboard 同期とスリープ防止のチェックボックス" width="195">
 </p>
 <p align="center"><sub><b>Android</b> —— 同じ 4 ページを Material Design で構成している。host としては、Android 10+ で view-only の画面共有のみを行う。</sub></p>
 
@@ -138,11 +138,12 @@ sudo apt install deskhub-cli   # CLI。単独でもインストール可能
 | ------ | ---------- | --------- |
 | 対応するハードウェアでは 60 fps で stream できる。video 処理には、利用できる場合に GPU メモリを使う。 | package manager からインストールするか、release をダウンロードできる。アカウントも background service も不要。 | display を **Share** するか、IP アドレスへ **Connect** する。デスクトップでは **shell** の共有と**ファイル**の受信も可能。スマートフォンは view-only で画面を共有できる。 |
 
-Session は **QUIC/TLS** 上で end-to-end に encrypt される。未知のマシンが受け入れられる
-のは、host の passcode を知っていることを証明した場合 —— **SPAKE2** を用いるため
-passcode 自体は送信されない —— または host 側の利用者が承認した場合に限られる。ただし
-これは開いた port 上の短い秘密であることに変わりはない。信頼できる network か VPN を
-使用し、**UDP 47777 を port-forward しないこと**。完全な threat model は
+Session は **QUIC/TLS** 上で end-to-end に encrypt され、アクセスは SSH と同じ仕組みで
+行われる。client が受け入れられるのは、その public key が host の `authorized_keys` に
+記載されている場合に限られる。client は host の key を初回接続時に信頼した key と照合し、
+それが変わっていれば即座に拒否する。network 越しに何かを承認することはなく、Deskhub が
+network を scan することもない。信頼できる network か VPN を使用し、
+**UDP 47777 を port-forward しないこと**。完全な threat model は
 [`SECURITY.ja.md`](SECURITY.ja.md) を参照。
 
 <a id="why"></a>

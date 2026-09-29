@@ -178,7 +178,7 @@ sudo firewall-cmd --add-port=47777/udp --permanent        # Fedora / openSUSE
 
 ```bash
 sudo apt remove deskhub      # 或: sudo dnf remove deskhub / sudo zypper remove deskhub
-rm -rf ~/.deskhub            # settings、key 与已 pair 的机器
+rm -rf ~/.deskhub            # settings、key、允许的 client 与受信任的 host
 sudo rm -f /etc/apt/sources.list.d/deskhub.list /etc/apt/keyrings/deskhub.gpg   # apt repository（若已添加）
 ```
 
@@ -217,8 +217,8 @@ ipa 无法 sideload，因此 beta 通过 TestFlight 分发：
 
 `deskhub-cli` 提供共享屏幕、打开 remote shell 等命令，也可从脚本或 SSH 使用。
 在 Windows 和 Linux 上，`connect` 会打开远程屏幕窗口；在 macOS 上，请用桌面 app
-观看屏幕。运行 `deskhub-cli help` 可查看命令列表。CLI 与 app 共用 settings、已 pair
-的机器及 trust 的 host key。
+观看屏幕。运行 `deskhub-cli help` 可查看命令列表。CLI 与 app 共用 settings、client
+key、允许的 client 及受信任的 host。
 
 | 平台 | 文件 |
 | --- | --- |
@@ -256,13 +256,24 @@ window layer，程序会明确报告这一点。此类用途请使用 app。
 ## 🔒 共享屏幕之前
 
 一个 session 承载的全部内容 —— video、按键、mouse、clipboard 和 terminal 流量 —— 均运行
-在 **QUIC/TLS** 之上。陌生机器只能通过 pairing handshake 被接受：它必须通过 **SPAKE2**
-证明自己知道 host 的 passcode（passcode 本身不会被传输，且每条 connection 只允许一次尝
-试），或等待 host 前的用户回答 *Let this machine in?*。
+在 **QUIC/TLS** 之上，访问方式与 SSH 相同。要让一台设备 connect：
+
+1. 在将要 connect 的设备上，打开 **Devices** → *When this machine is the client* →
+   **My keys**，点击 *Copy public key*（CLI：`deskhub-cli key public --name default`）。
+2. 在 host 上，打开 **Devices** → *When this machine is the host* → **Clients allowed to
+   connect to this machine**，点击 *Allow* 并粘贴该 key（CLI：
+   `deskhub-cli access add --stdin`）。
+3. 按地址 Connect。首次连接时，**New host** 对话框会显示 host 的 key fingerprint：将其与
+   host 的 Devices 页上的 **This machine's host key** 核对，然后点击 *Trust and connect*。
+   此后该 host 会列在 **Trusted hosts** 下。
+
+不会通过 network 进行任何批准，Deskhub 也从不 scan network。若某个受信任 host 的 key
+发生变化，连接会被直接拒绝；只有在确知其 key 变更原因时，才从 *Trusted hosts* 中移除该
+host，然后重新信任。
 
 请在**可信的 network** 或 **VPN** 中使用 Deskhub，**不要对 UDP 47777 做
-port-forward**。Encrypt 能保护 session 内容，但该 port 仍会回应 discovery 探测；首次
-pair 时也没有已知身份可供核对。远程访问时，可在两台机器上安装
+port-forward**。Encrypt 能保护 session 内容，但除非你核对 fingerprint，否则首次
+connect 某个 host 时会信任其出示的 key。远程访问时，可在两台机器上安装
 [Tailscale](https://tailscale.com)，再 Connect 到 `100.x.y.z` 地址。
 
 [`SECURITY.zh.md`](../SECURITY.zh.md) 给出完整的 threat model、保护范围以及漏洞报告
@@ -272,6 +283,10 @@ pair 时也没有已知身份可供核对。远程访问时，可在两台机器
 
 - **找不到可连接的机器** —— 两台机器必须位于同一 network（或同一 Tailscale tailnet），
   且 host 侧的 UDP 47777 必须开放。
+- **"This device's key is not authorized on that machine yet"** —— host 的列表中没有本机的
+  client key；请在 host 的 Devices 页上允许其 public key。由旧版 Deskhub 允许的 client
+  必须重新允许。
+- **"This host's key has changed"** —— 见[共享屏幕之前](#-共享屏幕之前)。
 - **Linux：share 立即失败** —— 运行 `vainfo | grep -E 'H264.*Enc'`。结果为空说明本机没
   有可用的 H.264 encoder，无法作为 host。
 - **Linux：指针不移动** —— 缺少第 3 条中的 `/dev/uinput` rule。

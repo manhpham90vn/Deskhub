@@ -2,7 +2,7 @@
 
 # Deskhub Security Policy
 
-_Last updated: September 27, 2026_
+_Last updated: September 29, 2026_
 
 ## ⚠️ Read this first
 
@@ -10,17 +10,18 @@ _Last updated: September 27, 2026_
 expose a sharing machine directly to the Internet.**
 
 Sessions run over QUIC/TLS, including video, keystrokes, mouse, clipboard and terminal
-traffic. Before a new machine can connect, it must prove it knows the host's passcode
-without sending the code itself, or the person at the host must approve it. Discovery
-probes and beacons remain unencrypted; they carry no session content. Other packets
-outside an encrypted connection are dropped.
+traffic. Access works like SSH: a client gets in only if its public key is listed in the
+host's `authorized_keys`, and it proves it holds the matching private key. The client
+checks the host's key against the one it pinned on first connection before sending
+anything, and refuses outright if it has changed. Nothing is approved over the network —
+there is no passcode and no approval prompt — and the host answers no plaintext packet:
+anything outside an encrypted connection is dropped.
 
-Every host can also share **view-only** (input is dropped instead of injected), and can
-turn off new pairings entirely so only already-paired machines get in.
+Every host can also share **view-only** (input is dropped instead of injected).
 
-Encryption does not remove every network risk. The port still answers discovery probes,
-a 4-digit passcode is a short secret, the first connection does not verify a previously
-known identity, and the app does not resist flooding.
+Encryption does not remove every network risk. The first connection to a host trusts
+whatever key it is shown unless you compare the fingerprint, and the app does not resist
+flooding.
 
 For remote access, use a VPN. The project has been tested with
 [Tailscale](https://tailscale.com); connect to the host's `100.x.y.z` address.
@@ -35,54 +36,55 @@ or terminal.
 | | |
 |---|---|
 | Data reaching the developer | Nothing does. There are no servers, no accounts, no telemetry, no third-party SDKs. See [`PRIVACY.md`](PRIVACY.md). |
-| Someone reading your traffic | Every session runs inside QUIC/TLS — video frames, keystrokes, clipboard text and terminal bytes are all encrypted between the two machines. A packet capture yields traffic volume and timing, not content. Unencrypted packets arriving at the port are dropped unless they are discovery probes. |
+| Someone reading your traffic | Every session runs inside QUIC/TLS — video frames, keystrokes, clipboard text and terminal bytes are all encrypted between the two machines. A packet capture yields traffic volume and timing, not content. Unencrypted packets arriving at the port are dropped, and the host sends nothing at the application level — not even what it shares — before a client has authenticated. |
 | A remote viewer fighting you for the machine | "Host wins": the moment you touch the real mouse or keyboard, remote input is paused (Windows, macOS and Linux hosts alike). |
 | Keys left stuck down | Any key the remote side is holding is released automatically when the session ends or the viewer switches away. |
-| A stranger connecting uninvited | Admission is a pairing handshake. An unknown machine must prove the host's passcode via SPAKE2 — the code never travels, an eavesdropper takes nothing home to crack, and each connection allows exactly one guess — or, when no passcode is set, wait for the person at the host to answer *Let this machine in?*. Three wrong guesses lock pairing for 30 seconds, and each further lockout in a row doubles, up to an hour. Once admitted, a machine is paired: recognised by its cryptographic key, listed on the host's Devices page, and revocable there — forgetting it also closes any connection it has open. Admission lasts only as long as the connection that earned it. The discovery beacon no longer confirms a guessed code — a stranger's probe gets an empty list no matter what it contains, so the old brute-force oracle is gone. |
-| A machine-in-the-middle on later visits | Every machine has a key. A client remembers the key of each host it has paired with and refuses to reconnect over a changed key until the user explicitly accepts it. The passcode proof is bound to the host key the client actually saw, so a relayed proof does not verify. |
+| A stranger connecting uninvited | Only a client whose public key is in the host's `authorized_keys` gets in, and it must sign a transcript of this very connection with the matching private key. There is no secret to guess and nothing is approved over the network; a missing `authorized_keys` file means nobody gets in. A host keeps at most 8 connections waiting to authenticate and drops each after 10 seconds; 3 bad signatures from one key and address within a minute block that pair for 10 seconds. Removing a key on the host's Devices page also closes that device's running sessions at once. Admission lasts only as long as the connection that earned it. |
+| A machine-in-the-middle | Every host has a key. A client pins it on first connection, after the user compares the fingerprint, and checks it before sending anything on every later one. A changed key is refused outright, with no way to accept it from the prompt: the host must be removed from *Trusted hosts* and trusted again. The client's signature covers a session identifier exported from the TLS session and the host key fingerprint the client saw, so a signature relayed to another host, or replayed on another connection, does not verify. |
 | Viewers fighting each other for the mouse | Up to 5 viewers may watch one host, but only one drives input: the earliest to have joined wins, and a later viewer's input is dropped until the earlier one has been idle for a second. A 6th viewer is rejected as `Busy`. |
 | A viewer you only want to show the screen to | View-only sharing, available on every host, drops input packets at the host before anything is injected — it is not enforced by asking the client to behave. Android and iOS hosts are view-only unconditionally. |
 | A phone left sharing by accident | The operating system, not Deskhub, is the backstop: Android keeps a permanent notification up and re-asks for recording consent on every single share, and iOS keeps its broadcast indicator visible. Either can stop the share without opening the app. |
-| A paired machine writing files onto yours | Only an admitted machine can send files, and only while the receiving machine is offering file transfer. What arrives cannot escape the folder that machine chose: the name on the wire is cut to its last path element and scrubbed of separators, control bytes, characters the filesystem rejects and reserved device names before any file is opened; each file is written under a `.deskhub-part` name and renamed only once it has arrived whole with a matching CRC-32; and a name already present gets a number rather than overwriting anything. A batch is capped at 32 files, 8 GiB per file and 32 GiB in total. The same scrubbing runs on a phone or tablet before anything reaches its photo library or its Downloads folder. |
+| An allowed client writing files onto yours | Only an admitted machine can send files, and only while the receiving machine is offering file transfer. What arrives cannot escape the folder that machine chose: the name on the wire is cut to its last path element and scrubbed of separators, control bytes, characters the filesystem rejects and reserved device names before any file is opened; each file is written under a `.deskhub-part` name and renamed only once it has arrived whole with a matching CRC-32; and a name already present gets a number rather than overwriting anything. A batch is capped at 32 files, 8 GiB per file and 32 GiB in total. The same scrubbing runs on a phone or tablet before anything reaches its photo library or its Downloads folder. |
 | Malformed packets | Every field is bounds-checked before it is read. The parsers are covered by unit tests, run under AddressSanitizer, UndefinedBehaviorSanitizer and ThreadSanitizer in CI, and fuzzed nightly with libFuzzer — seven targets covering the wire format, H.264 parsing, packet reassembly, terminal byte streams, UI text, and the host and viewer session state machines. Crashes found by fuzzing are kept in-repo as regression tests, and new coverage is folded back into the seed corpus. |
 
 ### What Deskhub does **not** protect against
 
 This is the honest list. Nothing below is solved today:
 
-- **A kept shell belongs to the pairing, not to the machine that opened it.** A
-  shell left behind on a host outlives the connection that opened it, with no time
+- **A kept shell belongs to every allowed client, not to the machine that opened it.**
+  A shell left behind on a host outlives the connection that opened it, with no time
   limit, and every admitted machine can list the shells a host is keeping, reattach a
   detached one, and close any of them. The id, size and device name of each shell are
-  part of that listing. So a second machine you pair — or one whose key you have not
-  revoked on the Devices page — can read back what an earlier shell was doing and
-  carry on in it. Revoke a device you no longer trust, and close the shells you are
+  part of that listing. So a second client you allow — or one whose key you have not
+  removed on the Devices page — can read back what an earlier shell was doing and
+  carry on in it. Remove a key you no longer trust, and close the shells you are
   finished with rather than leaving them.
-- **The first meeting is a leap of faith.** Pairing stops a machine-in-the-middle who
-  arrives *later* — the key is pinned and a change is refused loudly. It cannot stop one
-  who is already in the middle at the very first contact: with no passcode set, whoever
-  the client reaches is who gets paired, and a passcode raises the bar only as much as a
-  4-digit secret can. Compare fingerprints out of band if that matters to you.
+- **The first meeting is a leap of faith.** Pinning the host key stops a
+  machine-in-the-middle who arrives *later* — a change is refused outright. It cannot
+  stop one who is already in the middle at the very first contact unless you compare the
+  fingerprint the *New host* dialog shows with the one on the host's Devices page, as the
+  dialog asks. `deskhub-cli` refuses an unknown host unless told `--accept-new-host-key`,
+  or you can pin the key in advance with `host add … --host-key-stdin`.
 - **Traffic analysis still works.** Encryption hides content, not existence: an observer
   sees that a session is running, how much video is flowing, and when you type.
-- **No rate limiting or DoS resistance.** Flooding the port will disrupt a session; a
-  no-passcode host can also be made to show approval prompts repeatedly.
-- **The discovery beacon still answers anyone.** A `LIST_SOURCES` probe or a `PING` gets
-  a reply from any source address — a stranger's reply is an empty list, and no probe can
-  confirm a passcode any more, but the machine is still discoverable by scanning and the
-  port is still usable as a small UDP reflector. One exception: a source address that
-  currently holds an encrypted connection is never answered in the plain — once a machine
-  has proved itself, everything it says must arrive encrypted, so a forged plaintext
-  `SOURCE_LIST` or `PONG` cannot impersonate a connected peer.
-- **The device name is shown and logged.** The *Your name* a viewer sends is encrypted in
-  transit now, but it is still shown on the host's screen, written into the host's logs
-  and stored in the host's paired-devices list. It defaults to the machine's own
-  hostname — often the owner's real name. Use a nickname; never put anything sensitive
-  in it. Clearing the field does not stop a name being sent; it only restores the
-  default.
+- **No rate limiting or DoS resistance.** Flooding the port will disrupt a session.
+  The limits on pending authentications and bad signatures stop guessing, not flooding.
+- **The QUIC handshake still answers.** The host no longer replies to any plaintext
+  packet, but a QUIC/TLS handshake to the port completes before the client has proved
+  anything, so a stranger who knows the address can still learn that something is
+  listening, and see the host's certificate.
+- **The device name is shown and logged.** The device name a client sends is encrypted in
+  transit, but it is shown on the host's screen and written into the host's logs, and it
+  is the label of every public key the machine copies — so it ends up in the
+  `authorized_keys` of each host that allows that key. A host also sends its own device
+  name to every client that has authenticated with an allowed key — never before — and
+  that client keeps it in its recent list. It defaults to the machine's own
+  hostname — often the owner's real name. Set a nickname in Settings → General → *Device
+  name*; never put anything sensitive in it. Clearing it does not stop a name being sent;
+  it only restores the default.
 - **A viewer slot frees itself after 5 seconds of silence.** If your viewer drops off,
   its slot reopens and the next `Hello` to arrive takes it — from any machine that has
-  passed admission (pairing, passcode or approval).
+  passed admission with an allowed key.
 - **Sharing exposes the entire display.** Not one window: every notification, popup and
   window on that monitor. See [`PRIVACY.md` §3.4](PRIVACY.md).
 - **A phone or tablet host exposes the whole phone.** Android and iOS can host too, and
@@ -130,13 +132,13 @@ matter.
 If someone is on the same LAN as a machine that is sharing its screen, and Deskhub is
 running, they can:
 
-1. Discover it by scanning for UDP 47777. An unpaired machine's probe gets an empty
-   list, but the machine still answers, so it still gives itself away.
-2. Try to get in. They can no longer read the passcode off the wire — it never travels.
-   What is left is guessing it online (one guess per connection, three wrong guesses
-   lock pairing for 30 seconds, and every further lockout doubles up to an hour, so
-   working through all 10,000 codes takes months) or, on a host with no passcode, hoping
-   the person at the host clicks **Allow** on the approval prompt.
+1. Find it by trying a QUIC handshake against UDP 47777 on each address. No plaintext
+   packet gets an answer, but the handshake itself does, so the machine gives itself away
+   to a targeted scan.
+2. Try to get in — which takes a private key whose public half the host owner has added
+   to `authorized_keys`. There is no passcode to guess and no prompt to trick someone
+   into clicking. Without such a key, the most they can do is try to sit in the middle of
+   a client's *first* connection to a host, which the fingerprint comparison catches.
 3. Watch the traffic without getting in — and learn only volume and timing. The
    session's content, video included, is encrypted; a capture no longer reconstructs
    the screen or the keystrokes.
@@ -152,9 +154,9 @@ If you want to keep using Deskhub as it is today, these are worth doing:
 
 - [ ] Run Tailscale on both machines and connect only over the `100.x.y.z` address.
 - [ ] Confirm your router has **no** port-forward or UPnP mapping for UDP 47777.
-- [ ] Authorize each client's public key on the host and pin the host's key on each
-      client before connecting. Review the Devices page and revoke keys you no longer
-      recognize. Untick *Viewers can control this machine* when only viewing is needed.
+- [ ] Allow only the client keys you need on the host, and compare the host key
+      fingerprint on the first connection from each client. Review the Devices page and
+      remove keys you no longer recognize. Untick *Viewers can control this machine* when only viewing is needed.
 - [ ] Quit Deskhub when you are not actively using it. It does not run as a background
       service — closing it closes the hole.
 - [ ] On Linux, if you use `ufw`, scope the rule instead of opening it wide:
@@ -163,9 +165,10 @@ If you want to keep using Deskhub as it is today, these are worth doing:
 - [ ] Do not leave a share running on a laptop that you carry onto other networks.
 - [ ] Lock your machine when you walk away, so an unattended session cannot be taken
       over silently.
-- [ ] With `deskhub-cli`, use `devices public` to display the client public key and
-      `trust public` to display the host TLS public key. Transfer each over a channel
-      you trust before authorizing a client or pinning a host.
+- [ ] With `deskhub-cli`, use `key public --name NAME` to display a client public key
+      and `host-key public` to display this host's key. Transfer each over a channel
+      you trust, then use `access add --stdin` on the host and `host add … --host-key-stdin`
+      on the client.
 
 ## Local artifacts
 
@@ -173,27 +176,35 @@ Diagnostic logs are written in plain text under `~/.deskhub/` (`%USERPROFILE%\.d
 on Windows) on Windows, macOS and Linux. They contain connection statistics and peer
 addresses, not screen content or keystrokes.
 
-The desktop apps and `deskhub-cli` share those files. They keep more in that folder: `ui-settings.txt` (fps, bitrate,
-resolution cap, ports, the view-only and pairing switches, your host passcode if you set
-one, and the device name shown to hosts), `recent-devices.txt` (the last 10 addresses you
-connected to, when, and the passcode used for each), `host_key.pem` + `host_cert.pem`
-(this machine's private key and self-signed certificate — the identity behind its
-fingerprint; anyone who copies the key file can impersonate this machine), `known_hosts`
-(the keys of hosts this machine has trusted), `paired_devices` (the keys, names and
-timestamps of machines allowed into this host), `auth_salt` (a non-secret salt for the
-passcode verifier) and, on Linux, `portal-restore-token.txt` (the desktop's own token for
+The desktop apps and `deskhub-cli` share those files; `DESKHUB_CONFIG_DIR` or the CLI's
+`--config-dir` points both at another folder. They keep more in that folder:
+`ui-settings.txt` (fps, bitrate, resolution cap, port, the view-only switch, the device
+name, the bind address and the other toggles), `recent-hosts.txt` (the last 10
+hosts you connected to — address, when, and the name each host reported), `client_key.pem` and `client_key.<name>.pem`
+(this machine's client private keys — anyone who copies one can sign in wherever that key
+is allowed; on Windows they are protected with DPAPI), `host_key.pem` + `host_cert.pem`
+(this machine's host private key and self-signed certificate — the identity behind its
+fingerprint; anyone who copies the key file can impersonate this machine as a host),
+`authorized_keys` (the client public keys allowed into this host, each with its label),
+`known_hosts` (the hosts this machine trusts — address, pinned fingerprint, name and the
+client key to use) and, on Linux, `portal-restore-token.txt` (the desktop's own token for
 the screens you picked, meaningful only to your desktop session and never transmitted).
-The mobile apps keep their settings inside their own sandbox — on iOS in the app group
-container. Stored passcodes are obfuscated with a fixed XOR key, which
-keeps them off the screen and out of a casual `type` of the file — **it is not
-encryption**, and anyone with the source and the file recovers them in seconds. Treat
-that folder as readable by anything running as you.
+No passcode is stored anywhere. On POSIX systems the folder is created `0700` and every
+file `0600`, written atomically; on Windows they are restricted to your user, SYSTEM and
+Administrators. The mobile apps keep the same files inside their own sandbox — on iOS in
+the app group container, on Android in the app's internal storage. Treat that folder as
+readable by anything running as you.
+
+An `authorized_keys` or `known_hosts` file that cannot be read is not guessed at: while it
+is unreadable, the host lets nobody in and the client refuses every host, and the next
+change writes it afresh. Data from older versions — passcodes, the old paired-machines
+list — is not converted; leftover files are deleted.
 
 Files another machine sends land outside that folder, in the directory the receiving
 machine chose for them (`Deskhub` in the user's home folder unless another is picked,
 saved as `transfer_dir`). On a phone or tablet they end up in the device's photo library
 or its Documents / Downloads folder, where they survive uninstalling the app. Treat
-anything delivered there as a file a paired machine put on your device.
+anything delivered there as a file an allowed client put on your device.
 
 Nothing uploads any of this; delete the folder at any time.
 
@@ -201,17 +212,14 @@ Nothing uploads any of this; delete the folder at any time.
 
 Tracked, in the order they are intended to land:
 
-1. **Storing the passcode and the host key in the OS keychain** instead of files.
-2. **Silencing the discovery beacon** so it does not reply at all to an unsolicited
-   probe, rather than replying with an empty list.
+1. **Storing the host key and client keys in the OS keychain** instead of files, on the
+   platforms where they are not already protected.
 
-Shipped since the last revision of this list: an encrypted transport (QUIC/TLS) for the
-whole session — video, input, clipboard and terminal alike — with unencrypted arrivals
-dropped unless they are discovery probes; SPAKE2 pairing so the passcode never travels
-and cannot be harvested or brute-forced offline; the approval prompt on the host; a
-paired-machines list with revocation; machine keys with a key-change warning on the
-client; and a 3-strikes lockout on wrong passcode guesses that starts at 30 seconds and
-doubles up to an hour.
+Shipped since the last revision of this list: SSH-style access — clients admitted only by
+public keys listed in the host's `authorized_keys`, each connection signed afresh; host
+keys pinned on first connection with a hard refusal when one changes; the passcode,
+approval prompt and pairing switch removed; LAN discovery removed, so the host answers no
+plaintext packet at all; and limits on pending authentications and bad signatures.
 
 This list is a statement of intent, not a schedule. Deskhub is maintained by one person
 in their spare time. Treat the current state as the state, not the plan.
@@ -234,8 +242,8 @@ release notes unless you would rather not be.
 
 There is no bug bounty; nothing is paid out.
 
-The limits above — first-connection trust, traffic analysis, discovery responses and
-the lack of DoS resistance — are already documented. Please report new evidence about
+The limits above — first-connection trust, traffic analysis, the visible QUIC handshake
+and the lack of DoS resistance — are already documented. Please report new evidence about
 their impact, or other security issues such as memory corruption, crashes caused by
 malformed packets, data leaving a device unexpectedly, or a flaw in a released
 mitigation.

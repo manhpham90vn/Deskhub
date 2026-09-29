@@ -21,7 +21,7 @@ final class SettingsModel {
     }
 
     var acceptedPort: UInt16 {
-        port >= 1 && port <= 65535 ? UInt16(port) : DeskhubDiscovery.defaultPort
+        port >= 1 && port <= 65535 ? UInt16(port) : DeskhubClient.defaultPort
     }
 
     func save() {

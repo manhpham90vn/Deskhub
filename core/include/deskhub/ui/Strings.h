@@ -50,9 +50,6 @@ inline constexpr const char* kClientSettingsHeading = "Connection settings";
 inline constexpr const char* kClientSettingsHint =
     "The device scan looks for sharing machines on this UDP port. Match it to the port in the "
     "host's Share settings.";
-inline constexpr const char* kStatusOnline = "Online";
-inline constexpr const char* kStatusOffline = "Offline";
-inline constexpr const char* kStatusChecking = "Checking...";
 inline constexpr const char* kNotSharing = "Not sharing.";
 inline constexpr const char* kStartingShare = "Starting share...";
 inline constexpr const char* kShareStateOn = "Sharing";
@@ -120,14 +117,28 @@ inline constexpr const char* kTrayQuit = "Quit Deskhub";
 inline constexpr const char* kLanDevicesEmpty = "Saved devices appear here after a connection.";
 inline constexpr const char* kRefreshNow = "Refresh now";
 inline constexpr const char* kAuthNotPaired =
-    "This client key is not authorized on that machine.";
-inline constexpr const char* kAuthRefused = "That machine rejected the authentication attempt.";
-inline constexpr const char* kAuthTimedOut = "The authentication attempt timed out.";
+    "This device's key is not authorized on that machine yet. To fix it: on this device "
+    "open Devices > My keys and press Copy public key (use the key this host connects with); "
+    "send it to the owner of that machine, who pastes it under Devices > Clients allowed to "
+    "connect and presses Allow. Then connect again.";
+inline constexpr const char* kAuthNotPairedCliHint =
+    "From the command line: run `deskhub-cli key public` here and pipe that line into "
+    "`deskhub-cli access add --stdin` on the other machine.";
+inline constexpr const char* kAuthRefused =
+    "That machine refused this connection. Ask its owner to check that this device's public "
+    "key is still listed under Devices > Clients allowed to connect, then connect again.";
+inline constexpr const char* kAuthTimedOut =
+    "The other machine did not finish signing in in time. Check that it is still sharing "
+    "and reachable, then connect again.";
 inline constexpr const char* kAuthVersionMismatch =
     "That machine uses an incompatible authentication version. Update Deskhub on both machines.";
-inline constexpr const char* kAuthBadSignature = "The client authentication signature was invalid.";
+inline constexpr const char* kAuthBadSignature =
+    "That machine could not verify this device's key. Connect again; if it keeps happening, "
+    "remove this device's key on that machine and add its current public key again.";
 inline constexpr const char* kAuthConfigError =
-    "The host authentication configuration cannot be read or parsed.";
+    "A Deskhub key list cannot be read. On the machine that shows this, open Devices and "
+    "add the allowed clients or trusted hosts again - the damaged list is replaced on the "
+    "next change.";
 inline constexpr const char* kAuthUntrustedHost =
     "This host is not trusted yet. Check its fingerprint and trust it, or add its host key "
     "first.";
@@ -135,7 +146,8 @@ inline constexpr const char* kAuthHostKeyChanged =
     "This host's key has changed. Deskhub will not connect until you remove it from "
     "Trusted hosts and trust it again - only do that if you know why the key changed.";
 inline constexpr const char* kAuthLocalKeyUnavailable =
-    "Could not load the client authentication key.";
+    "This device's key cannot be loaded. Open Devices > My keys and create a new key, or "
+    "remove this host from Trusted hosts and connect again so it uses the default key.";
 
 inline const char* AuthRefusalText(AuthResultCode code) {
     switch (code) {
@@ -177,12 +189,7 @@ inline constexpr const char* kThisMachineHint =
 inline constexpr const char* kPairedColumnName =
     "Client";
 inline constexpr const char* kPairedColumnKey = "Key";
-inline constexpr const char* kPairedColumnPaired = "Paired";
-inline constexpr const char* kPairedColumnLastSeen = "Last seen";
 inline constexpr const char* kDevicesHeading = "Devices";
-inline constexpr const char* kDeviceColumnWhere = "Where";
-inline constexpr const char* kDeviceOnThisNetwork = "On this network";
-inline constexpr const char* kDeviceRecent = "Recent";
 inline constexpr const char* kSavedHostsHeading =
     "Trusted hosts";
 inline constexpr const char* kSavedHostsHint =
@@ -209,6 +216,10 @@ inline constexpr const char* kMyKeysHint =
     "never leaves this machine.";
 inline constexpr const char* kCopyPublicKeyAction = "Copy public key";
 inline constexpr const char* kNewKeyAction = "New key";
+inline constexpr const char* kDeleteKeyAction = "Delete";
+inline constexpr const char* kDeleteKeyPrompt =
+    "Delete this key? Hosts that allow only this key will stop letting this device in, and "
+    "the private key cannot be recovered.";
 inline constexpr const char* kImportKeyAction = "Import key\xE2\x80\xA6";
 inline constexpr const char* kKeyNameLabel = "Key name";
 inline constexpr const char* kKeyPassphraseLabel = "Passphrase (only if the key has one)";

@@ -1,7 +1,7 @@
 #include "Tests.h"
 #include "support/TestSupport.h"
 
-#include "deskhub/session/host/Beacon.h"
+#include "deskhub/session/host/SourceListResponder.h"
 
 #include <cstdio>
 
@@ -9,15 +9,15 @@ using namespace deskhub;
 
 namespace {
 
-std::vector<uint8_t> Ask(const Beacon& b, std::span<const uint8_t> req, bool trusted = false) {
+std::vector<uint8_t> Ask(const SourceListResponder& b, std::span<const uint8_t> req, bool trusted = false) {
     uint8_t out[kMaxDatagram];
     const size_t n = b.Reply(out, req, trusted);
     return std::vector<uint8_t>(out, out + n);
 }
 
-void TestBeaconSourcesAndProbe() {
-    std::printf("[disc] Beacon: LIST_SOURCES and the session-less PING probe...\n");
-    Beacon b;
+void TestSourceListSourcesAndProbe() {
+    std::printf("[srclist] LIST_SOURCES and the session-less PING probe...\n");
+    SourceListResponder b;
     SourceInfo s;
     s.sourceId = 3;
     s.width = 3840;
@@ -52,12 +52,12 @@ void TestBeaconSourcesAndProbe() {
 
     rn = BuildPing(req, 42, p);
     Check(Ask(b, std::span<const uint8_t>(req, rn)).empty(),
-        "in-session PING is not the Beacon's business");
+        "in-session PING is not the SourceListResponder's business");
 }
 
-void TestBeaconHidesSourcesFromStrangers() {
-    std::printf("[disc] Beacon: an unauthenticated query receives no answer...\n");
-    Beacon b;
+void TestSourceListHidesSourcesFromStrangers() {
+    std::printf("[srclist] an unauthenticated query receives no answer...\n");
+    SourceListResponder b;
     SourceInfo s;
     s.sourceId = 0;
     s.width = 3440;
@@ -80,9 +80,9 @@ void TestBeaconHidesSourcesFromStrangers() {
         "the list comes back only once the asker is inside an authenticated connection");
 }
 
-void TestBeaconTellsAuthenticatedAskersWhatTheHostCanDo() {
-    std::printf("[disc] Beacon: what the host can do travels with the source list...\n");
-    Beacon b;
+void TestSourceListTellsAuthenticatedAskersWhatTheHostCanDo() {
+    std::printf("[srclist] what the host can do travels with the source list...\n");
+    SourceListResponder b;
     SourceInfo s;
     s.sourceId = 0;
     s.width = 1080;
@@ -107,9 +107,9 @@ void TestBeaconTellsAuthenticatedAskersWhatTheHostCanDo() {
         "a stranger receives no capability flags");
 }
 
-void TestBeaconIgnoresSessionTraffic() {
-    std::printf("[disc] Beacon: leaves session traffic alone...\n");
-    const Beacon b;
+void TestSourceListIgnoresSessionTraffic() {
+    std::printf("[srclist] leaves session traffic alone...\n");
+    const SourceListResponder b;
     uint8_t req[kMaxDatagram];
 
     Hello hello{};
@@ -127,9 +127,9 @@ void TestBeaconIgnoresSessionTraffic() {
 
 }
 
-void RunBeaconTests() {
-    TestBeaconSourcesAndProbe();
-    TestBeaconHidesSourcesFromStrangers();
-    TestBeaconTellsAuthenticatedAskersWhatTheHostCanDo();
-    TestBeaconIgnoresSessionTraffic();
+void RunSourceListResponderTests() {
+    TestSourceListSourcesAndProbe();
+    TestSourceListHidesSourcesFromStrangers();
+    TestSourceListTellsAuthenticatedAskersWhatTheHostCanDo();
+    TestSourceListIgnoresSessionTraffic();
 }

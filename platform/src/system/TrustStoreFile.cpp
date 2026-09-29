@@ -57,6 +57,29 @@ bool SaveTrustStoreLocked(const deskhub::TrustStore& store) {
     return WriteAppDataFileAtomic(kTrustStoreFileName, deskhub::SerializeTrustStore(store));
 }
 
+struct WritableTrustStore {
+    deskhub::TrustStore store{};
+    bool discarded = false;
+};
+
+WritableTrustStore LoadForWriteLocked() {
+    auto store = LoadTrustStoreLocked();
+    if (store) return WritableTrustStore{std::move(*store), false};
+    LOGW("known_hosts: discarding the unreadable file and writing a fresh one");
+    return WritableTrustStore{deskhub::TrustStore{}, true};
+}
+
+template <typename Change>
+bool ChangeTrustStore(Change change) {
+    const std::lock_guard<std::mutex> lock(TrustStoreMutex());
+    const ConfigFileLock fileLock(kTrustStoreFileName);
+    if (!fileLock.Valid()) return false;
+    WritableTrustStore writable = LoadForWriteLocked();
+    if (change(writable.store)) return SaveTrustStoreLocked(writable.store);
+    if (writable.discarded) SaveTrustStoreLocked(deskhub::TrustStore{});
+    return false;
+}
+
 }
 
 deskhub::TrustStore LoadTrustStore() {
@@ -70,13 +93,10 @@ std::optional<deskhub::TrustStore> TryLoadTrustStore() {
 }
 
 bool ClearTrustedHosts() {
-    const std::lock_guard<std::mutex> lock(TrustStoreMutex());
-    const ConfigFileLock fileLock(kTrustStoreFileName);
-    if (!fileLock.Valid()) return false;
-    auto store = LoadTrustStoreLocked();
-    if (!store) return false;
-    store->Clear();
-    return SaveTrustStoreLocked(*store);
+    return ChangeTrustStore([](deskhub::TrustStore& store) {
+        store.Clear();
+        return true;
+    });
 }
 
 deskhub::TrustVerdict CheckTrustedHost(std::string_view endpoint,
@@ -86,70 +106,53 @@ deskhub::TrustVerdict CheckTrustedHost(std::string_view endpoint,
 
 bool RememberTrustedHost(std::string_view endpoint, std::string_view label,
     const deskhub::Fingerprint& fingerprint, int64_t nowUnix) {
-    const std::lock_guard<std::mutex> lock(TrustStoreMutex());
-    const ConfigFileLock fileLock(kTrustStoreFileName);
-    if (!fileLock.Valid()) return false;
-    auto store = LoadTrustStoreLocked();
-    if (!store) return false;
-    store->Remember(endpoint, label, fingerprint, nowUnix);
-    return SaveTrustStoreLocked(*store);
+    return ChangeTrustStore([&](deskhub::TrustStore& store) {
+        store.Remember(endpoint, label, fingerprint, nowUnix);
+        return true;
+    });
 }
 
 bool RememberTrustedHostProfile(std::string_view endpoint, std::string_view label,
     const deskhub::Fingerprint& fingerprint, std::string_view identityName,
     int64_t nowUnix) {
-    const std::lock_guard<std::mutex> lock(TrustStoreMutex());
-    const ConfigFileLock fileLock(kTrustStoreFileName);
-    if (!fileLock.Valid()) return false;
-    auto store = LoadTrustStoreLocked();
-    if (!store) return false;
-    store->Remember(endpoint, label, fingerprint, nowUnix);
-    if (!store->SetProfile(endpoint, label, identityName)) return false;
-    return SaveTrustStoreLocked(*store);
+    return ChangeTrustStore([&](deskhub::TrustStore& store) {
+        store.Remember(endpoint, label, fingerprint, nowUnix);
+        return store.SetProfile(endpoint, label, identityName);
+    });
 }
 
 bool CreateTrustedHostProfile(std::string_view endpoint, std::string_view label,
     const deskhub::Fingerprint& fingerprint, std::string_view identityName) {
-    const std::lock_guard<std::mutex> lock(TrustStoreMutex());
-    const ConfigFileLock fileLock(kTrustStoreFileName);
-    if (!fileLock.Valid()) return false;
-    auto store = LoadTrustStoreLocked();
-    if (!store || store->Find(endpoint) || store->Size() >= deskhub::kMaxTrustedHosts) return false;
-    for (const auto& host : store->Hosts())
-        if (host.label == label) return false;
-    store->Insert(deskhub::TrustedHost{std::string(endpoint), std::string(label),
-        fingerprint, 0, 0, std::string(identityName)});
-    const auto saved = store->Find(endpoint);
-    if (!saved || saved->label != label || saved->identityName != identityName) return false;
-    return SaveTrustStoreLocked(*store);
+    return ChangeTrustStore([&](deskhub::TrustStore& store) {
+        if (store.Find(endpoint) || store.Size() >= deskhub::kMaxTrustedHosts) return false;
+        for (const auto& host : store.Hosts())
+            if (host.label == label) return false;
+        store.Insert(deskhub::TrustedHost{std::string(endpoint), std::string(label),
+            fingerprint, 0, 0, std::string(identityName)});
+        const auto saved = store.Find(endpoint);
+        return saved && saved->label == label && saved->identityName == identityName;
+    });
 }
 
 bool UpdateTrustedHostProfile(const deskhub::TrustedHost& expected, std::string_view endpoint,
     std::string_view label, const deskhub::Fingerprint& fingerprint,
     std::string_view identityName) {
-    const std::lock_guard<std::mutex> lock(TrustStoreMutex());
-    const ConfigFileLock fileLock(kTrustStoreFileName);
-    if (!fileLock.Valid()) return false;
-    auto store = LoadTrustStoreLocked();
-    if (!store || (expected.endpoint != endpoint && store->Find(endpoint))) return false;
-    const auto previous = store->Find(expected.endpoint);
-    if (!previous || *previous != expected) return false;
-    if (!store->Forget(expected.endpoint)) return false;
-    store->Insert(deskhub::TrustedHost{std::string(endpoint), std::string(label),
-        fingerprint, previous->firstSeenUnix, previous->lastSeenUnix,
-        std::string(identityName)});
-    const auto saved = store->Find(endpoint);
-    if (!saved || saved->label != label || saved->identityName != identityName) return false;
-    return SaveTrustStoreLocked(*store);
+    return ChangeTrustStore([&](deskhub::TrustStore& store) {
+        if (expected.endpoint != endpoint && store.Find(endpoint)) return false;
+        const auto previous = store.Find(expected.endpoint);
+        if (!previous || *previous != expected) return false;
+        if (!store.Forget(expected.endpoint)) return false;
+        store.Insert(deskhub::TrustedHost{std::string(endpoint), std::string(label),
+            fingerprint, previous->firstSeenUnix, previous->lastSeenUnix,
+            std::string(identityName)});
+        const auto saved = store.Find(endpoint);
+        return saved && saved->label == label && saved->identityName == identityName;
+    });
 }
 
 bool ForgetTrustedHost(std::string_view endpoint) {
-    const std::lock_guard<std::mutex> lock(TrustStoreMutex());
-    const ConfigFileLock fileLock(kTrustStoreFileName);
-    if (!fileLock.Valid()) return false;
-    auto store = LoadTrustStoreLocked();
-    if (!store || !store->Forget(endpoint)) return false;
-    return SaveTrustStoreLocked(*store);
+    return ChangeTrustStore(
+        [&](deskhub::TrustStore& store) { return store.Forget(endpoint); });
 }
 
 }

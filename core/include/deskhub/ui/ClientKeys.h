@@ -14,6 +14,9 @@ enum class ClientKeyError : uint8_t {
     NameInUse = 2,
     UnreadableKey = 3,
     WriteFailed = 4,
+    DefaultKey = 5,
+    KeyInUse = 6,
+    KeyMissing = 7,
 };
 
 bool IsValidClientKeyName(std::string_view name);

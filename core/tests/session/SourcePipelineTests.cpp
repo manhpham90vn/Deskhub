@@ -391,7 +391,7 @@ void TestNegotiationRejectsAnUnusableSize() {
 }
 
 void TestStatusProjection() {
-    std::printf("[router] a pipeline projects into the UI row and the beacon entry...\n");
+    std::printf("[router] a pipeline projects into the UI row and the source-list entry...\n");
     auto p = MakePipe(3);
     p->name = "Display 1";
     p->srcW.store(1920);
@@ -437,7 +437,7 @@ void TestStatusProjection() {
     Check(live.zeroCopy, "the zero-copy flag is passed through");
 
     const SourceInfo info = MakeSourceInfo(*p);
-    Check(info.sourceId == 3 && info.name == "Display 1", "the beacon entry keeps the identity");
+    Check(info.sourceId == 3 && info.name == "Display 1", "the sourceList entry keeps the identity");
     Check(info.width == 1920 && info.height == 1080, "and the advertised size");
 }
 

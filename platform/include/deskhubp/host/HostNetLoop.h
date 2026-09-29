@@ -1,7 +1,7 @@
 #pragma once
 #include "deskhub/control/QualityLadder.h"
 #include "deskhub/control/StreamSize.h"
-#include "deskhub/session/host/Beacon.h"
+#include "deskhub/session/host/SourceListResponder.h"
 #include "deskhub/session/host/ScreenHostSession.h"
 #include "deskhub/session/host/SourcePipelineState.h"
 #include "deskhubp/net/SessionTransport.h"
@@ -54,7 +54,7 @@ struct HostNetLoopHooks {
     uint32_t fallbackFps = 60;
 };
 
-void RunHostNetLoop(SessionTransport& sock, deskhub::Beacon& beacon,
+void RunHostNetLoop(SessionTransport& sock, deskhub::SourceListResponder& sourceList,
     std::span<deskhub::SourcePipelineState* const> live, const HostNetLoopHooks& hooks);
 
 }

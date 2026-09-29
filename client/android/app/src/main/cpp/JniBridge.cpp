@@ -14,7 +14,8 @@
 #include "deskhub/protocol/Wire.h"
 #include "deskhubp/diag/LogFile.h"
 #include "deskhubp/ffi/ClientFfi.h"
-#include "deskhubp/ffi/DiscoveryFfi.h"
+#include "deskhubp/ffi/DevicesFfi.h"
+#include "deskhubp/ffi/SettingsFfi.h"
 #include "deskhubp/ffi/SendFfi.h"
 
 static_assert(DHPhaseIdle == 0 && DHPhaseConnecting == 1 && DHPhaseStreaming == 2 &&
@@ -486,21 +487,12 @@ Java_com_deskhub_app_NativeClient_nativeAddressPort(JNIEnv* env, jobject, jstrin
     return jint(dh_address_port(FromJString(env, addrStr).c_str()));
 }
 
-JNIEXPORT jboolean JNICALL
-Java_com_deskhub_app_NativeClient_nativeSameDeviceAddr(JNIEnv* env, jobject, jstring leftStr,
-    jstring rightStr) {
-    const std::string left = FromJString(env, leftStr);
-    const std::string right = FromJString(env, rightStr);
-    return dh_same_device_addr(left.c_str(), right.c_str()) ? JNI_TRUE : JNI_FALSE;
-}
-
 JNIEXPORT jobjectArray JNICALL
 Java_com_deskhub_app_NativeClient_nativeDeviceRows(JNIEnv* env, jobject) {
     jclass cls = env->FindClass(kDeviceRowClass);
     if (!cls) return nullptr;
-    jmethodID ctor = env->GetMethodID(cls, "<init>",
-        "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;"
-        "Ljava/lang/String;ZZ)V");
+    jmethodID ctor =
+        env->GetMethodID(cls, "<init>", "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V");
     if (!ctor) return nullptr;
 
     DHDeviceRow rows[64];
@@ -509,26 +501,16 @@ Java_com_deskhub_app_NativeClient_nativeDeviceRows(JNIEnv* env, jobject) {
     jobjectArray arr = env->NewObjectArray(jsize(count), cls, nullptr);
     for (int i = 0; i < count && arr; ++i) {
         jstring addr = env->NewStringUTF(rows[i].addr);
-        jstring origin = env->NewStringUTF(rows[i].origin);
-        jstring status = env->NewStringUTF(rows[i].status);
-        jstring ping = env->NewStringUTF(rows[i].ping);
+        jstring name = env->NewStringUTF(rows[i].name);
         jstring last = env->NewStringUTF(rows[i].lastConnected);
-        jobject item = env->NewObject(cls, ctor, addr, origin, status, ping, last,
-            rows[i].known ? JNI_TRUE : JNI_FALSE, rows[i].online ? JNI_TRUE : JNI_FALSE);
+        jobject item = env->NewObject(cls, ctor, addr, name, last);
         env->SetObjectArrayElement(arr, jsize(i), item);
         env->DeleteLocalRef(item);
         env->DeleteLocalRef(last);
-        env->DeleteLocalRef(ping);
-        env->DeleteLocalRef(status);
-        env->DeleteLocalRef(origin);
+        env->DeleteLocalRef(name);
         env->DeleteLocalRef(addr);
     }
     return arr;
-}
-
-JNIEXPORT void JNICALL
-Java_com_deskhub_app_NativeClient_nativeRecentTouch(JNIEnv* env, jobject, jstring addrStr) {
-    dh_recent_touch(FromJString(env, addrStr).c_str());
 }
 
 JNIEXPORT jobjectArray JNICALL
@@ -536,7 +518,7 @@ Java_com_deskhub_app_NativeClient_nativePairedDevices(JNIEnv* env, jobject) {
     jclass cls = env->FindClass(kPairedDeviceClass);
     if (!cls) return nullptr;
     jmethodID ctor = env->GetMethodID(cls, "<init>",
-        "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;JJ)V");
+        "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V");
     if (!ctor) return nullptr;
 
     DHPairedDevice rows[128];
@@ -547,8 +529,7 @@ Java_com_deskhub_app_NativeClient_nativePairedDevices(JNIEnv* env, jobject) {
         jstring name = env->NewStringUTF(rows[i].name);
         jstring shortKey = env->NewStringUTF(rows[i].shortKey);
         jstring fingerprint = env->NewStringUTF(rows[i].fingerprint);
-        jobject item = env->NewObject(cls, ctor, name, shortKey, fingerprint,
-            jlong(rows[i].pairedUnix), jlong(rows[i].lastSeenUnix));
+        jobject item = env->NewObject(cls, ctor, name, shortKey, fingerprint);
         env->SetObjectArrayElement(arr, jsize(i), item);
         env->DeleteLocalRef(item);
         env->DeleteLocalRef(fingerprint);

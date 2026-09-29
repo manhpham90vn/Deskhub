@@ -39,6 +39,7 @@ bool ImportClientIdentity(std::string_view privateKeyPem, std::string_view passp
 bool ImportClientIdentity(std::string_view name, std::string_view privateKeyPem,
     std::string_view passphrase);
 std::vector<ClientIdentityInfo> ListClientIdentities();
+bool RemoveClientIdentity(std::string_view name);
 std::string ClientPublicKeyText(const ClientIdentity& identity);
 std::vector<uint8_t> SignWithClientIdentity(const ClientIdentity& identity,
     std::span<const uint8_t> data);

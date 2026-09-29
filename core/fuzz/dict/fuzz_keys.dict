@@ -1,0 +1,8 @@
+type_ed25519="ssh-ed25519 "
+type_p256="ecdsa-sha2-nistp256 "
+blob_ed25519="AAAAC3NzaC1lZDI1NTE5AAAAI"
+blob_p256="AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTY"
+fingerprint="SHA256:"
+default_port=":47777"
+newline="\x0a"
+tab="\x09"

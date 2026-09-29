@@ -71,7 +71,6 @@ object NativeClient {
     const val THEME_HEADING = 7
     const val THEME_MUTED = 8
     const val THEME_ONLINE = 10
-    const val THEME_OFFLINE = 11
     const val THEME_PAGE = 15
     const val STR_CLIENT_SETTINGS_HINT = 58
     const val STR_REFRESH_NOW = 51
@@ -141,6 +140,9 @@ object NativeClient {
     const val STR_COPIED_BUTTON = 198
     const val STR_DEVICE_NAME_LABEL = 115
     const val STR_DEVICE_NAME_HINT = 199
+    const val STR_DELETE_KEY_ACTION = 200
+    const val STR_DELETE_KEY_PROMPT = 201
+    const val DEFAULT_KEY_NAME = "default"
 
     private const val HOST_PROFILE_OK = 0
     private const val HOST_PROFILE_STORE_UNREADABLE = 10
@@ -176,16 +178,6 @@ object NativeClient {
     private external fun nativeAddressPort(addr: String): Int
 
     fun addressPort(addr: String): Int = nativeAddressPort(addr)
-
-    private external fun nativeSameDeviceAddr(
-        left: String,
-        right: String,
-    ): Boolean
-
-    fun sameDeviceAddr(
-        left: String,
-        right: String,
-    ): Boolean = nativeSameDeviceAddr(left, right)
 
     private external fun nativeSetDataDir(dir: String)
 
@@ -287,6 +279,8 @@ object NativeClient {
         passphrase: String,
     ): Int
 
+    private external fun nativeClientKeyDelete(name: String): Int
+
     private external fun nativeClientKeyErrorText(error: Int): String
 
     sealed interface HostProfiles {
@@ -342,22 +336,19 @@ object NativeClient {
         passphrase: String,
     ): String? = withContext(Dispatchers.IO) { clientKeyFailure(nativeClientKeyImport(name, privateKey, passphrase)) }
 
+    suspend fun deleteClientKey(name: String): String? =
+        withContext(Dispatchers.IO) { clientKeyFailure(nativeClientKeyDelete(name)) }
+
     data class DeviceRow(
         val addr: String,
-        val origin: String,
-        val status: String,
-        val ping: String,
+        val name: String,
         val lastConnected: String,
-        val known: Boolean,
-        val online: Boolean,
     )
 
     data class PairedDevice(
         val name: String,
         val shortKey: String,
         val fingerprint: String,
-        val pairedUnix: Long,
-        val lastSeenUnix: Long,
     )
 
     private external fun nativePairedDevices(): Array<PairedDevice>?
@@ -492,11 +483,7 @@ object NativeClient {
 
     private external fun nativeDeviceRows(): Array<DeviceRow>
 
-    private external fun nativeRecentTouch(addr: String)
-
     suspend fun deviceRows(): List<DeviceRow> = withContext(Dispatchers.IO) { nativeDeviceRows().toList() }
-
-    suspend fun recentTouch(addr: String) = withContext(Dispatchers.IO) { nativeRecentTouch(addr) }
 
     external fun nativeStart(
         addr: String,

@@ -4,7 +4,7 @@
 #include "deskhub/media/ShareTypes.h"
 #include "deskhub/media/VideoTypes.h"
 #include "deskhub/protocol/Wire.h"
-#include "deskhub/session/host/Beacon.h"
+#include "deskhub/session/host/SourceListResponder.h"
 #include "deskhub/session/host/SourcePipelineState.h"
 #include "deskhubp/audio/AudioBroadcaster.h"
 #include "deskhubp/diag/Log.h"
@@ -192,7 +192,7 @@ private:
 
     LocalInputMonitor localInputMon_;
     AudioBroadcaster audio_;
-    deskhub::Beacon beacon_;
+    deskhub::SourceListResponder sourceList_;
 
     uint32_t startBitrateBps_ = 0;
     bool keepAwakeHeld_ = false;

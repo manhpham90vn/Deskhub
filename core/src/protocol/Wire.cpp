@@ -123,9 +123,10 @@ size_t BuildListSources(std::span<uint8_t> out) {
 }
 
 size_t BuildSourceList(std::span<uint8_t> out, std::span<const SourceInfo> sources,
-    HostCaps caps) {
+    HostCaps caps, std::string_view hostName) {
     const size_t n = sources.size() < kMaxSources ? sources.size() : kMaxSources;
-    size_t payload = 1;
+    const size_t hostNameLen = Utf8TruncLen(std::string(hostName), kMaxClientNameBytes);
+    size_t payload = 1 + 1 + hostNameLen;
     for (size_t i = 0; i < n; ++i) {
         payload += 6 + Utf8TruncLen(sources[i].name, kMaxSourceNameBytes);
     }
@@ -147,6 +148,8 @@ size_t BuildSourceList(std::span<uint8_t> out, std::span<const SourceInfo> sourc
         if (nameLen) std::memcpy(p, s.name.data(), nameLen);
         p += nameLen;
     }
+    *p++ = uint8_t(hostNameLen);
+    if (hostNameLen) std::memcpy(p, hostName.data(), hostNameLen);
     return total;
 }
 
@@ -442,6 +445,24 @@ size_t ParseSourceList(std::span<const uint8_t> payload, std::span<SourceInfo> o
         off += rec + nameLen;
     }
     return written;
+}
+
+std::string ParseSourceListHostName(std::span<const uint8_t> payload) {
+    if (payload.empty()) return {};
+    constexpr size_t rec = 6;
+    constexpr size_t lenOff = 5;
+    size_t off = 1;
+    for (size_t i = 0; i < payload[0]; ++i) {
+        if (off + rec > payload.size()) return {};
+        off += rec + payload[off + lenOff];
+    }
+    if (off >= payload.size()) return {};
+    const size_t nameLen = payload[off];
+    if (nameLen > kMaxClientNameBytes || off + 1 + nameLen > payload.size()) return {};
+    std::string name(reinterpret_cast<const char*>(payload.data() + off + 1), nameLen);
+    for (char& c : name)
+        if (uint8_t(c) < 0x20 || uint8_t(c) == 0x7F) c = ' ';
+    return name;
 }
 
 std::optional<HelloAck> ParseHelloAck(std::span<const uint8_t> payload) {

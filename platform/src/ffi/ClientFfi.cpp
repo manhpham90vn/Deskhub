@@ -17,6 +17,7 @@
 #include "deskhubp/diag/Log.h"
 #include "deskhubp/diag/LogFile.h"
 #include "deskhubp/ffi/FfiText.h"
+#include "deskhubp/system/RecentDevicesFile.h"
 #include "deskhubp/input/NativeKeyMap.h"
 #include "deskhubp/client/SourceQuery.h"
 
@@ -142,6 +143,8 @@ const char* dh_string(DHStringId id) {
         case DHStrCancelAction: return deskhub::ui::kCancelAction;
         case DHStrCopiedButton: return deskhub::ui::kCopiedButton;
         case DHStrDeviceNameHint: return deskhub::ui::kDeviceNameHint;
+        case DHStrDeleteKeyAction: return deskhub::ui::kDeleteKeyAction;
+        case DHStrDeleteKeyPrompt: return deskhub::ui::kDeleteKeyPrompt;
         case DHStrSidebarHost: return deskhub::ui::kSidebarHost;
         case DHStrSidebarClient: return deskhub::ui::kSidebarClient;
         case DHStrSidebarSettings: return deskhub::ui::kSidebarSettings;
@@ -187,8 +190,6 @@ const char* dh_string(DHStringId id) {
         case DHStrThisMachineHint: return deskhub::ui::kThisMachineHint;
         case DHStrPairedColumnName: return deskhub::ui::kPairedColumnName;
         case DHStrPairedColumnKey: return deskhub::ui::kPairedColumnKey;
-        case DHStrPairedColumnPaired: return deskhub::ui::kPairedColumnPaired;
-        case DHStrPairedColumnLastSeen: return deskhub::ui::kPairedColumnLastSeen;
         case DHStrTerminalPickerLabel: return deskhub::ui::kTerminalPickerLabel;
         case DHStrFilesPickerLabel: return deskhub::ui::kFilesPickerLabel;
         case DHStrTransferChooseButton: return deskhub::ui::kTransferChooseButton;
@@ -212,7 +213,6 @@ const char* dh_string(DHStringId id) {
         case DHStrWaitingForDisplays: return deskhub::ui::kWaitingForDisplays;
         case DHStrNoDisplayFound: return deskhub::ui::kNoDisplayFound;
         case DHStrDevicesHeading: return deskhub::ui::kDevicesHeading;
-        case DHStrDeviceColumnWhere: return deskhub::ui::kDeviceColumnWhere;
         case DHStrDeviceNameLabel: return deskhub::ui::kDeviceNameLabel;
         case DHStrConnectButton: return deskhub::ui::kConnectButton;
         case DHStrCopyButton: return deskhub::ui::kCopyButton;
@@ -373,6 +373,7 @@ int dh_list_sources(const char* address, DHSourceInfo* out, int capacity, DHHost
                 deskhub::FormatFingerprint(*reply.unknownHostKey));
         return DH_SOURCE_QUERY_FAILED;
     }
+    deskhubp::RememberRecentDevice(address, reply.hostName);
     const std::vector<deskhub::SourceInfo>& sources = reply.sources;
     const deskhub::HostCaps& caps = reply.caps;
     if (out_caps)

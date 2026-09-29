@@ -4,7 +4,7 @@ import Observation
 @MainActor @Observable
 final class AppModel {
     var connect = ConnectModel()
-    var discovery = DiscoveryModel()
+    var recent = RecentDevicesModel()
     var settings = SettingsModel()
     var sharing = SharingModel()
 
@@ -23,7 +23,7 @@ final class AppModel {
         guard !connect.isConnecting else { return }
         Task {
             guard let found = await connect.connectAuth() else { return }
-            await discovery.remember(address: connect.acceptedAddress)
+            await recent.reload()
             sources = found.sources
         }
     }

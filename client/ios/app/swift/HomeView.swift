@@ -37,13 +37,11 @@ struct HomeView: View {
             }
             .tag(2)
 
-            SettingsView(settings: model.settings) { port in
-                model.discovery.usePort(port)
-            }
-            .tabItem {
-                Label(DeskhubClient.string(DHStrSidebarSettings), systemImage: "gearshape")
-            }
-            .tag(3)
+            SettingsView(settings: model.settings)
+                .tabItem {
+                    Label(DeskhubClient.string(DHStrSidebarSettings), systemImage: "gearshape")
+                }
+                .tag(3)
         }
     }
 

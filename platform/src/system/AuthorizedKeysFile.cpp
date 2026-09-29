@@ -1,5 +1,6 @@
 #include "deskhubp/system/AuthorizedKeysFile.h"
 
+#include <algorithm>
 #include <atomic>
 #include <filesystem>
 #include <fstream>
@@ -9,14 +10,18 @@
 #include "deskhubp/system/AppDataFile.h"
 #include "deskhubp/system/AuthProof.h"
 #include "deskhubp/system/ConfigFileLock.h"
-#include "deskhubp/system/PairedDevicesFile.h"
 #include "deskhubp/diag/Log.h"
 
 namespace deskhubp {
 
 namespace {
 
-constexpr const char* kAuthorizedKeysActiveFileName = "authorized_keys_active";
+constexpr const char* kRetiredFileNames[] = {"paired_devices", "authorized_keys_active"};
+
+struct WritableKeys {
+    deskhub::AuthorizedKeys keys{};
+    bool discarded = false;
+};
 
 std::mutex& StoreMutex() {
     static std::mutex mutex;
@@ -33,27 +38,33 @@ std::atomic<bool>& InvalidReported() {
     return reported;
 }
 
-std::optional<AuthorizedKeysSnapshot> InvalidConfig() {
+std::optional<deskhub::AuthorizedKeys> InvalidConfig() {
     if (!InvalidReported().exchange(true, std::memory_order_acq_rel))
         LOGE("authorized_keys: configuration cannot be read or parsed; denying admission");
     return std::nullopt;
 }
 
-std::optional<AuthorizedKeysSnapshot> LoadLocked() {
+void RemoveRetiredFilesOncePerDir(const std::filesystem::path& keysPath) {
+    static std::filesystem::path cleanedDir;
+    const std::filesystem::path dir = keysPath.parent_path();
+    if (dir == cleanedDir) return;
+    cleanedDir = dir;
+    for (const char* name : kRetiredFileNames) {
+        std::error_code error;
+        std::filesystem::remove(dir / name, error);
+    }
+}
+
+std::optional<deskhub::AuthorizedKeys> LoadLocked() {
     const auto path = AppDataFilePath(kAuthorizedKeysFileName);
     if (path.empty()) return InvalidConfig();
+    RemoveRetiredFilesOncePerDir(path);
     std::ifstream file(path, std::ios::binary | std::ios::ate);
     if (!file) {
         std::error_code error;
-        if (!std::filesystem::exists(path, error) && !error) {
-            const auto marker = AppDataFilePath(kAuthorizedKeysActiveFileName);
-            if (marker.empty()) return InvalidConfig();
-            if (!std::filesystem::exists(marker, error) && !error) {
-                InvalidReported().store(false, std::memory_order_release);
-                return AuthorizedKeysSnapshot{};
-            }
-        }
-        return InvalidConfig();
+        if (std::filesystem::exists(path, error) || error) return InvalidConfig();
+        InvalidReported().store(false, std::memory_order_release);
+        return deskhub::AuthorizedKeys{};
     }
     const auto size = file.tellg();
     if (size < 0 || size > std::streamoff(deskhub::kMaxAuthorizedKeysFileBytes) ||
@@ -64,26 +75,41 @@ std::optional<AuthorizedKeysSnapshot> LoadLocked() {
     auto keys = deskhub::ParseAuthorizedKeys(text);
     if (!keys) return InvalidConfig();
     InvalidReported().store(false, std::memory_order_release);
-    return AuthorizedKeysSnapshot{true, std::move(*keys)};
+    return keys;
+}
+
+WritableKeys LoadForWriteLocked() {
+    auto keys = LoadLocked();
+    if (keys) return WritableKeys{std::move(*keys), false};
+    LOGW("authorized_keys: discarding the unreadable file and writing a fresh one");
+    return WritableKeys{deskhub::AuthorizedKeys{}, true};
 }
 
 bool SaveLocked(const deskhub::AuthorizedKeys& keys) {
-    const auto marker = AppDataFilePath(kAuthorizedKeysActiveFileName);
-    if (marker.empty()) return false;
-    std::error_code error;
-    if (!std::filesystem::exists(marker, error)) {
-        if (error || !WriteAppDataFileAtomic(kAuthorizedKeysActiveFileName, "v1\n"))
-            return false;
-    }
     if (!WriteAppDataFileAtomic(kAuthorizedKeysFileName, deskhub::SerializeAuthorizedKeys(keys)))
         return false;
     Generation().fetch_add(1, std::memory_order_acq_rel);
     return true;
 }
 
+std::optional<deskhub::Fingerprint> FingerprintOfKey(const deskhub::PublicKeyText& key) {
+    return FingerprintOfPublicKey(PublicKeySpkiFromText(deskhub::FormatPublicKeyText(key)));
 }
 
-std::optional<AuthorizedKeysSnapshot> LoadAuthorizedKeys() {
+template <typename Change>
+bool ChangeKeys(Change change) {
+    const std::lock_guard<std::mutex> lock(StoreMutex());
+    const ConfigFileLock fileLock(kAuthorizedKeysFileName);
+    if (!fileLock.Valid()) return false;
+    WritableKeys writable = LoadForWriteLocked();
+    if (change(writable.keys)) return SaveLocked(writable.keys);
+    if (writable.discarded) SaveLocked(deskhub::AuthorizedKeys{});
+    return false;
+}
+
+}
+
+std::optional<deskhub::AuthorizedKeys> LoadAuthorizedKeys() {
     const std::lock_guard<std::mutex> lock(StoreMutex());
     return LoadLocked();
 }
@@ -91,32 +117,14 @@ std::optional<AuthorizedKeysSnapshot> LoadAuthorizedKeys() {
 bool RememberAuthorizedKey(std::string_view publicKeyText) {
     const auto parsed = deskhub::ParsePublicKeyText(publicKeyText);
     if (!parsed) return false;
-    const std::lock_guard<std::mutex> lock(StoreMutex());
-    const ConfigFileLock fileLock(kAuthorizedKeysFileName);
-    if (!fileLock.Valid()) return false;
-    auto snapshot = LoadLocked();
-    if (!snapshot || !snapshot->keys.Add(*parsed)) return false;
-    return SaveLocked(snapshot->keys);
-}
-
-bool ForgetAuthorizedKey(std::span<const uint8_t> publicKeySpki) {
-    const auto parsed = deskhub::ParsePublicKeyText(PublicKeyTextFromSpki(publicKeySpki));
-    if (!parsed) return false;
-    const std::lock_guard<std::mutex> lock(StoreMutex());
-    const ConfigFileLock fileLock(kAuthorizedKeysFileName);
-    if (!fileLock.Valid()) return false;
-    auto snapshot = LoadLocked();
-    if (!snapshot || !snapshot->configured || !snapshot->keys.Remove(*parsed)) return false;
-    return SaveLocked(snapshot->keys);
+    return ChangeKeys([&](deskhub::AuthorizedKeys& keys) { return keys.Add(*parsed); });
 }
 
 bool ClearAuthorizedKeys() {
-    const std::lock_guard<std::mutex> lock(StoreMutex());
-    const ConfigFileLock fileLock(kAuthorizedKeysFileName);
-    if (!fileLock.Valid()) return false;
-    const auto snapshot = LoadLocked();
-    if (!snapshot) return false;
-    return SaveLocked(deskhub::AuthorizedKeys{});
+    return ChangeKeys([](deskhub::AuthorizedKeys& keys) {
+        keys = deskhub::AuthorizedKeys{};
+        return true;
+    });
 }
 
 bool IsClientKeyAuthorized(std::span<const uint8_t> publicKeySpki) {
@@ -124,45 +132,34 @@ bool IsClientKeyAuthorized(std::span<const uint8_t> publicKeySpki) {
 }
 
 ClientKeyAuthorization CheckClientKeyAuthorization(std::span<const uint8_t> publicKeySpki) {
-    const auto snapshot = LoadAuthorizedKeys();
-    if (!snapshot) return ClientKeyAuthorization::ConfigError;
-    if (!snapshot->configured) {
-        const auto fingerprint = FingerprintOfPublicKey(publicKeySpki);
-        if (!fingerprint) return ClientKeyAuthorization::Denied;
-        const auto legacy = TryLoadPairedDevices();
-        if (!legacy) return ClientKeyAuthorization::ConfigError;
-        return legacy->Check(*fingerprint) == deskhub::PairVerdict::Paired
-                   ? ClientKeyAuthorization::Authorized
-                   : ClientKeyAuthorization::Denied;
-    }
+    const auto keys = LoadAuthorizedKeys();
+    if (!keys) return ClientKeyAuthorization::ConfigError;
     const auto parsed = deskhub::ParsePublicKeyText(PublicKeyTextFromSpki(publicKeySpki));
-    return parsed && snapshot->keys.Contains(*parsed) ? ClientKeyAuthorization::Authorized
-                                                      : ClientKeyAuthorization::Denied;
+    return parsed && keys->Contains(*parsed) ? ClientKeyAuthorization::Authorized
+                                             : ClientKeyAuthorization::Denied;
 }
 
-std::optional<deskhub::PairedDevices> LoadEffectiveAuthorizedDevices() {
-    const auto snapshot = LoadAuthorizedKeys();
-    if (!snapshot) return std::nullopt;
-    if (!snapshot->configured) return TryLoadPairedDevices();
-    deskhub::PairedDevices devices;
-    for (const auto& key : snapshot->keys.Keys()) {
-        const auto spki = PublicKeySpkiFromText(deskhub::FormatPublicKeyText(key));
-        const auto fingerprint = FingerprintOfPublicKey(spki);
+std::optional<std::vector<AuthorizedClient>> ListAuthorizedClients() {
+    const auto keys = LoadAuthorizedKeys();
+    if (!keys) return std::nullopt;
+    std::vector<AuthorizedClient> clients;
+    for (const auto& key : keys->Keys()) {
+        const auto fingerprint = FingerprintOfKey(key);
         if (!fingerprint) return std::nullopt;
-        devices.Insert(deskhub::PairedDevice{*fingerprint, key.label, 0, 0});
+        clients.push_back(AuthorizedClient{key.label, *fingerprint});
     }
-    return devices;
+    return clients;
 }
 
-bool ForgetEffectiveAuthorizedDevice(const deskhub::Fingerprint& fingerprint) {
-    const auto snapshot = LoadAuthorizedKeys();
-    if (!snapshot) return false;
-    if (!snapshot->configured) return ForgetPairedDevice(fingerprint);
-    for (const auto& key : snapshot->keys.Keys()) {
-        const auto spki = PublicKeySpkiFromText(deskhub::FormatPublicKeyText(key));
-        if (FingerprintOfPublicKey(spki) == fingerprint) return ForgetAuthorizedKey(spki);
-    }
-    return false;
+bool ForgetAuthorizedClient(const deskhub::Fingerprint& fingerprint) {
+    return ChangeKeys([&](deskhub::AuthorizedKeys& keys) {
+        const auto& stored = keys.Keys();
+        const auto match = std::find_if(stored.begin(), stored.end(),
+            [&](const deskhub::PublicKeyText& key) { return FingerprintOfKey(key) == fingerprint; });
+        if (match == stored.end()) return false;
+        const auto target = deskhub::ParsePublicKeyText(deskhub::FormatPublicKeyText(*match));
+        return target && keys.Remove(*target);
+    });
 }
 
 uint64_t AuthorizedKeysGeneration() {

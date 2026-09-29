@@ -43,9 +43,7 @@
 #include "deskhub/net/BindAddress.h"
 #include "deskhub/net/TrustStore.h"
 #include "deskhub/session/host/ShareFlow.h"
-#include "deskhub/net/PairedDevices.h"
 #include "deskhub/ui/AutoShareGate.h"
-#include "deskhub/ui/DeviceRows.h"
 #include "deskhub/ui/HostProfiles.h"
 #include "deskhub/ui/HostRows.h"
 #include "deskhub/ui/RecentDevices.h"
@@ -63,23 +61,20 @@
 #include "deskhubp/host/ShareController.h"
 #include "deskhubp/system/FileStore.h"
 #include "deskhubp/system/FolderOpen.h"
-#include "deskhubp/system/AppDataFile.h"
 #include "deskhubp/system/Clock.h"
 #include "deskhubp/system/Autostart.h"
 #include "deskhubp/system/DeviceName.h"
 #include "deskhubp/system/ClientIdentity.h"
 #include "deskhubp/system/ClientKeys.h"
 #include "deskhubp/system/HostIdentity.h"
-#include "deskhubp/system/PairedDevicesFile.h"
 #include "deskhubp/system/TrustStoreFile.h"
+#include "deskhubp/system/RecentDevicesFile.h"
 #include "deskhubp/system/AuthorizedKeysFile.h"
 #include "deskhubp/system/UiSettingsStore.h"
 
 namespace {
 
 namespace ui = deskhub::ui;
-
-constexpr const char* kRecentDevicesFile = "recent-devices.txt";
 
 constexpr int kHostTimerId = 1;
 constexpr int kClipTimerId = 3;
@@ -413,6 +408,7 @@ private:
     void CreateNewClientKey();
     void ImportClientKeyFile();
     void ShowClientKeyError(ui::ClientKeyError error);
+    void DeleteClientKey(const std::string& name);
     void CopyWithFeedback(wxButton* button, const wxString& text);
     void RestoreCopiedButton();
     void RefreshSavedHosts();
@@ -476,7 +472,6 @@ private:
     void SaveDeviceName();
     void PopulateBindChoice();
     void RebuildHostAddressRows();
-    void SaveRecentDevices();
     void OnClose(wxCloseEvent& event);
 
     wxSimplebook* book_ = nullptr;
@@ -492,7 +487,7 @@ private:
     wxScrolledWindow* pairedList_ = nullptr;
     wxBoxSizer* pairedRows_ = nullptr;
     wxStaticText* pairedHint_ = nullptr;
-    std::vector<deskhub::PairedDevice> pairedDevices_;
+    std::vector<deskhubp::AuthorizedClient> pairedDevices_;
     wxTextCtrl* allowClientCtrl_ = nullptr;
     wxStaticText* allowClientError_ = nullptr;
     wxScrolledWindow* clientKeyList_ = nullptr;
@@ -543,7 +538,6 @@ private:
     bool shareViewOnly_ = false;
     std::vector<ui::HostRow> hostRows_;
     std::vector<ui::RecentDevice> recent_;
-    std::vector<ui::DeviceRow> deviceRows_;
     deskhubp::SourceQueryAsync connectDriver_;
     deskhubp::ShareController share_;
     deskhubp::ShareDriver shareDriver_;
@@ -584,7 +578,7 @@ private:
 
 MainFrame::MainFrame() : wxFrame(nullptr, wxID_ANY, ToWx(ui::kAppTitle)) {
     settings_ = deskhubp::LoadUiSettings();
-    recent_ = ui::ParseRecentDevices(deskhubp::ReadAppDataFile(kRecentDevicesFile));
+    recent_ = deskhubp::LoadRecentDevices();
 
     auto* root = new wxBoxSizer(wxHORIZONTAL);
     root->Add(BuildSidebar(), wxSizerFlags().Expand());
@@ -940,11 +934,9 @@ wxWindow* MainFrame::BuildClientPage(wxWindow* parent) {
 
     deviceList_ = new wxListCtrl(devices, wxID_ANY, wxDefaultPosition, wxDefaultSize,
         wxLC_REPORT | wxLC_SINGLE_SEL);
-    deviceList_->InsertColumn(0, "Device", wxLIST_FORMAT_LEFT, FromDIP(170));
-    deviceList_->InsertColumn(1, ToWx(ui::kDeviceColumnWhere), wxLIST_FORMAT_LEFT, FromDIP(120));
-    deviceList_->InsertColumn(2, "Status", wxLIST_FORMAT_LEFT, FromDIP(100));
-    deviceList_->InsertColumn(3, "Ping", wxLIST_FORMAT_RIGHT, FromDIP(70));
-    deviceList_->InsertColumn(4, "Last connected", wxLIST_FORMAT_LEFT, FromDIP(150));
+    deviceList_->InsertColumn(0, ToWx(ui::kDeviceNameLabel), wxLIST_FORMAT_LEFT, FromDIP(200));
+    deviceList_->InsertColumn(1, ToWx(ui::kHostAddressLabel), wxLIST_FORMAT_LEFT, FromDIP(180));
+    deviceList_->InsertColumn(2, "Last connected", wxLIST_FORMAT_LEFT, FromDIP(170));
     deviceList_->SetMinSize(FromDIP(wxSize(-1, kListMinH)));
     deviceList_->Bind(wxEVT_LEFT_DOWN, [this](wxMouseEvent& event) { OnListClick(event); });
     devicesSizer->Add(deviceList_, wxSizerFlags(1).Expand().Border(wxTOP, FromDIP(16)));
@@ -1109,7 +1101,7 @@ void MainFrame::RefreshClientKeys() {
     const TableRow header = BeginTableRow(clientKeyList_, kBannerIdleBg);
     AddTableCell(header, ToWx(ui::kKeyNameLabel), 200, true);
     AddTableCell(header, ToWx(ui::kPairedColumnKey), 150, true);
-    header.cells->AddSpacer(actionSize.x);
+    header.cells->AddSpacer(actionSize.x * 2 + FromDIP(8));
     EndTableRow(clientKeyRows_, header);
     for (const deskhubp::ClientIdentityInfo& key : clientKeys_) AddClientKeyRow(key, actionSize);
     RelayoutTable(clientKeyList_);
@@ -1127,8 +1119,27 @@ void MainFrame::AddClientKeyRow(const deskhubp::ClientIdentityInfo& key,
     copy->Bind(wxEVT_BUTTON, [this, copy, publicKey = ToWx(key.publicKeyText)](wxCommandEvent&) {
         CopyWithFeedback(copy, publicKey);
     });
-    row.cells->Add(copy, wxSizerFlags().CentreVertical());
+    row.cells->Add(copy, wxSizerFlags().CentreVertical().Border(wxRIGHT, FromDIP(8)));
+    if (key.name != ui::kDefaultIdentityName) {
+        auto* remove = new wxButton(row.panel, wxID_ANY, ToWx(ui::kDeleteKeyAction));
+        remove->SetName("delete-client-key");
+        remove->SetMinSize(actionSize);
+        PaintButton(remove, kOffline);
+        remove->Bind(wxEVT_BUTTON, [this, name = key.name](wxCommandEvent&) {
+            CallAfter([this, name] { DeleteClientKey(name); });
+        });
+        row.cells->Add(remove, wxSizerFlags().CentreVertical());
+    }
     EndTableRow(clientKeyRows_, row);
+}
+
+void MainFrame::DeleteClientKey(const std::string& name) {
+    wxMessageDialog dialog(this, ToWx(ui::kDeleteKeyPrompt), "Deskhub",
+        wxOK | wxCANCEL | wxCANCEL_DEFAULT | wxICON_WARNING);
+    dialog.SetOKCancelLabels(ToWx(ui::kDeleteKeyAction), ToWx(ui::kCancelAction));
+    if (dialog.ShowModal() != wxID_OK) return;
+    ShowClientKeyError(deskhubp::DeleteClientKey(name));
+    RefreshClientKeys();
 }
 
 void MainFrame::CreateNewClientKey() {
@@ -1188,32 +1199,28 @@ void MainFrame::RestoreCopiedButton() {
 
 void MainFrame::RefreshPairedDevices() {
     if (pairedList_ == nullptr) return;
-    const auto authorized = deskhubp::LoadEffectiveAuthorizedDevices();
-    pairedDevices_ = authorized ? authorized->Devices() : std::vector<deskhub::PairedDevice>{};
+    const auto authorized = deskhubp::ListAuthorizedClients();
+    pairedDevices_ = authorized ? *authorized : std::vector<deskhubp::AuthorizedClient>{};
 
     pairedRows_->Clear(true);
     const wxSize actionSize = FromDIP(wxSize(120, 32));
     const TableRow header = BeginTableRow(pairedList_, kBannerIdleBg);
     AddTableCell(header, ToWx(ui::kPairedColumnName), 200, true);
     AddTableCell(header, ToWx(ui::kPairedColumnKey), 130, true);
-    AddTableCell(header, ToWx(ui::kPairedColumnPaired), 150, true);
-    AddTableCell(header, ToWx(ui::kPairedColumnLastSeen), 150, true);
     header.cells->AddSpacer(actionSize.x);
     EndTableRow(pairedRows_, header);
-    for (const deskhub::PairedDevice& device : pairedDevices_) {
+    for (const deskhubp::AuthorizedClient& device : pairedDevices_) {
         const TableRow row = BeginTableRow(pairedList_, *wxWHITE);
-        AddTableCell(row, ToWx(device.name.empty() ? std::string("(unnamed)") : device.name), 200,
-            false);
+        AddTableCell(row, ToWx(device.label.empty() ? std::string("(unnamed)") : device.label),
+            200, false);
         AddTableCell(row, ToWx(deskhub::ShortFingerprint(device.fingerprint)), 130, false);
-        AddTableCell(row, ToWx(FormatUnixMinute(device.pairedUnix)), 150, false);
-        AddTableCell(row, ToWx(FormatUnixMinute(device.lastSeenUnix)), 150, false);
         auto* forget = new wxButton(row.panel, wxID_ANY, ToWx(ui::kPairedForget));
         forget->SetName("forget-device");
         forget->SetMinSize(actionSize);
         PaintButton(forget, kOffline);
         const deskhub::Fingerprint fingerprint = device.fingerprint;
         forget->Bind(wxEVT_BUTTON, [this, fingerprint](wxCommandEvent&) {
-            deskhubp::ForgetEffectiveAuthorizedDevice(fingerprint);
+            deskhubp::ForgetAuthorizedClient(fingerprint);
             RefreshPairedDevices();
         });
         row.cells->Add(forget, wxSizerFlags().CentreVertical());
@@ -1319,7 +1326,7 @@ void MainFrame::ForgetEveryDevice() {
     wxMessageDialog dialog(this, ToWx(ui::kPairedForgetAllPrompt), "Deskhub",
         wxYES_NO | wxNO_DEFAULT | wxICON_WARNING);
     if (dialog.ShowModal() != wxID_YES) return;
-    deskhubp::ForgetAllPairedDevices();
+    deskhubp::ClearAuthorizedKeys();
     RefreshPairedDevices();
 }
 
@@ -1706,19 +1713,15 @@ void MainFrame::ShowHostTable(bool sharing) {
 }
 
 void MainFrame::RefreshDeviceList() {
-    deviceRows_ = ui::BuildDeviceRows({}, recent_);
-
     deviceList_->DeleteAllItems();
-    for (size_t i = 0; i < deviceRows_.size(); ++i) {
-        const ui::DeviceRow& device = deviceRows_[i];
-        const long row = deviceList_->InsertItem(long(i), ToWx(device.addr));
-        deviceList_->SetItem(row, 1, ToWx(ui::DeviceOriginLabel(device.origin)));
-        deviceList_->SetItem(row, 2, "-");
-        deviceList_->SetItem(row, 3, "-");
-        deviceList_->SetItem(row, 4,
+    for (size_t i = 0; i < recent_.size(); ++i) {
+        const ui::RecentDevice& device = recent_[i];
+        const long row = deviceList_->InsertItem(
+            long(i), device.name.empty() ? wxString("-") : ToWx(device.name));
+        deviceList_->SetItem(row, 1, ToWx(device.addr));
+        deviceList_->SetItem(row, 2,
             device.lastConnectedUnix != 0 ? ToWx(FormatUnixMinute(device.lastConnectedUnix))
                                           : wxString("-"));
-        deviceList_->SetItemTextColour(row, kMutedText);
     }
 }
 
@@ -2112,8 +2115,8 @@ void MainFrame::OnListClick(wxMouseEvent& event) {
 }
 
 void MainFrame::ConnectRow(long row) {
-    if (row < 0 || size_t(row) >= deviceRows_.size()) return;
-    const std::string addr = deviceRows_[size_t(row)].addr;
+    if (row < 0 || size_t(row) >= recent_.size()) return;
+    const std::string addr = recent_[size_t(row)].addr;
     ConnectToDevice(addr);
 }
 
@@ -2139,8 +2142,8 @@ void MainFrame::OnSourcesReady(const std::string& addr, const deskhubp::ConnectO
         return;
     }
 
-    ui::TouchRecentDevice(recent_, addr, NowUnixSeconds());
-    SaveRecentDevices();
+    deskhubp::RememberRecentDevice(addr, outcome.hostName);
+    recent_ = deskhubp::LoadRecentDevices();
     RefreshDeviceList();
 
     OpenConnectionWindow(addr, outcome);
@@ -2238,10 +2241,6 @@ void MainFrame::SaveDeviceName() {
     if (name == settings_.deviceName) return;
     settings_.deviceName = name;
     SaveSettings();
-}
-
-void MainFrame::SaveRecentDevices() {
-    deskhubp::WriteAppDataFile(kRecentDevicesFile, ui::SerializeRecentDevices(recent_));
 }
 
 void MainFrame::OnClose(wxCloseEvent& event) {

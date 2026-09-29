@@ -4,8 +4,6 @@ struct PairedDeviceRow: Identifiable {
     let name: String
     let shortKey: String
     let fingerprint: String
-    let pairedUnix: Int64
-    let lastSeenUnix: Int64
 
     var id: String { fingerprint }
 }
@@ -112,14 +110,6 @@ struct DevicesPage: View {
                     Text($0.shortKey)
                 }
                 .width(130)
-                TableColumn(DeskhubClient.string(DHStrPairedColumnPaired)) {
-                    Text(Self.dateText($0.pairedUnix))
-                }
-                .width(150)
-                TableColumn(DeskhubClient.string(DHStrPairedColumnLastSeen)) {
-                    Text(Self.dateText($0.lastSeenUnix))
-                }
-                .width(150)
                 TableColumn("") { device in
                     Button(DeskhubClient.string(DHStrPairedForget)) {
                         forget(device)
@@ -154,7 +144,7 @@ struct DevicesPage: View {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(device.name.isEmpty ? "(unnamed)" : device.name)
                                 .foregroundStyle(DeskhubPalette.heading)
-                            Text(Self.subtitle(for: device))
+                            Text(device.shortKey)
                                 .font(.caption)
                                 .foregroundStyle(DeskhubPalette.muted)
                         }
@@ -202,30 +192,9 @@ struct DevicesPage: View {
                 PairedDeviceRow(
                     name: DeskhubClient.cString(raw.name),
                     shortKey: DeskhubClient.cString(raw.shortKey),
-                    fingerprint: DeskhubClient.cString(raw.fingerprint),
-                    pairedUnix: raw.pairedUnix,
-                    lastSeenUnix: raw.lastSeenUnix
+                    fingerprint: DeskhubClient.cString(raw.fingerprint)
                 )
             }
         )
-    }
-
-    private static func subtitle(for device: PairedDeviceRow) -> String {
-        var line = device.shortKey
-        line += "  ·  "
-        line += DeskhubClient.string(DHStrPairedColumnPaired)
-        line += " "
-        line += Self.dateText(device.pairedUnix)
-        line += "  ·  "
-        line += DeskhubClient.string(DHStrPairedColumnLastSeen)
-        line += " "
-        line += Self.dateText(device.lastSeenUnix)
-        return line
-    }
-
-    private static func dateText(_ unix: Int64) -> String {
-        guard unix > 0 else { return "-" }
-        let date = Date(timeIntervalSince1970: TimeInterval(unix))
-        return date.formatted(date: .numeric, time: .shortened)
     }
 }

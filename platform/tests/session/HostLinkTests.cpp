@@ -2,7 +2,7 @@
 #include "support/TestSupport.h"
 
 #include "deskhub/protocol/Wire.h"
-#include "deskhub/session/host/Beacon.h"
+#include "deskhub/session/host/SourceListResponder.h"
 #include "deskhubp/net/SessionTransport.h"
 #include "deskhubp/auth/AuthNegotiation.h"
 #include "deskhub/ui/Strings.h"
@@ -13,7 +13,7 @@
 #include "deskhubp/system/AppDataFile.h"
 #include "deskhubp/system/ClientIdentity.h"
 #include "deskhubp/system/HostIdentity.h"
-#include "deskhubp/system/PairedDevicesFile.h"
+#include "deskhubp/system/AuthorizedKeysFile.h"
 #include "deskhubp/system/Random.h"
 #include "deskhubp/system/TrustStoreFile.h"
 
@@ -46,7 +46,7 @@ std::vector<uint8_t> TerminalProbe() {
 
 struct LinkHostRig {
     deskhubp::SessionTransport sock{};
-    deskhub::Beacon beacon{};
+    deskhub::SourceListResponder sourceList{};
     std::thread pump{};
     std::atomic<bool> stop{false};
     std::atomic<bool> answerPings{true};
@@ -60,7 +60,7 @@ struct LinkHostRig {
     bool Start(const deskhubp::HostIdentity& identity) {
         const auto client = deskhubp::LoadOrCreateClientIdentity();
         if (!client.Valid() ||
-            !deskhubp::RememberPairedDevice(client.fingerprint, "link-test-client", 500))
+            !GrantClientKey(client))
             return false;
         sock.SetRecvTimeout(1);
         deskhubp::QuicSettings settings;
@@ -89,7 +89,7 @@ struct LinkHostRig {
                     continue;
                 }
                 if (!answerPings.load(std::memory_order_acquire)) continue;
-                const size_t rn = beacon.Reply(reply, message, sock.Authenticated(from));
+                const size_t rn = sourceList.Reply(reply, message, sock.Authenticated(from));
                 if (!rn) continue;
                 sock.SendTo(from, reply, rn);
                 if (header->type == deskhub::MsgType::Ping)
@@ -208,7 +208,7 @@ void TestALinkReportsARefusal() {
     LinkHostRig host;
     Check(host.Start(identity), "the host rig listens");
     const auto client = deskhubp::LoadOrCreateClientIdentity();
-    Check(deskhubp::ForgetPairedDevice(client.fingerprint), "the client key is revoked");
+    Check(deskhubp::ForgetAuthorizedClient(client.fingerprint), "the client key is revoked");
     const auto config = LinkConfig();
     Check(deskhubp::RememberTrustedHost(config.hostLabel, "127.0.0.1",
               identity.fingerprint, NowUnixSeconds()),
@@ -248,9 +248,9 @@ void TestALinkUsesTheSelectedClientIdentity() {
     const auto selected = deskhubp::GenerateClientIdentity("phone");
     Check(selected.Valid() && selected.fingerprint != fallback.fingerprint,
         "the selected client key differs from the default");
-    Check(deskhubp::RememberPairedDevice(selected.fingerprint, "phone", 500),
+    Check(GrantClientKey(selected),
         "the host authorizes the selected client key");
-    Check(deskhubp::ForgetPairedDevice(fallback.fingerprint),
+    Check(deskhubp::ForgetAuthorizedClient(fallback.fingerprint),
         "the default key is not authorized for this connection");
 
     auto config = LinkConfig();

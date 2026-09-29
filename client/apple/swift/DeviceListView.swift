@@ -58,53 +58,30 @@ enum DeskhubPalette {
     }
 }
 
-enum DeviceRowStyle {
-    static func tint(online: Bool?) -> Color {
-        switch online {
-        case true: DeskhubPalette.online
-        case false: DeskhubPalette.offline
-        default: DeskhubPalette.heading
-        }
-    }
-}
-
 struct DeviceListView: View {
-    let heading: String
-    let note: String
     let rows: [DeviceListRow]
     let enabled: Bool
     let onPick: (DeviceListRow) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            if !heading.isEmpty {
-                Text(heading).font(.headline)
-            }
-
             ForEach(rows) { row in
                 Button {
                     onPick(row)
                 } label: {
                     HStack(spacing: 12) {
                         VStack(alignment: .leading, spacing: 1) {
-                            Text(row.addr).foregroundStyle(DeviceRowStyle.tint(online: row.online))
+                            Text(row.title).foregroundStyle(DeskhubPalette.heading)
                             if !row.detail.isEmpty {
                                 Text(row.detail).font(.caption).foregroundStyle(.secondary)
                             }
                         }
                         Spacer(minLength: 0)
-                        Text(row.ping)
-                            .font(.caption)
-                            .foregroundStyle(DeviceRowStyle.tint(online: row.online))
                     }
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .disabled(!enabled)
-            }
-
-            if !note.isEmpty {
-                Text(note).font(.caption).foregroundStyle(.secondary)
             }
         }
     }
@@ -112,25 +89,15 @@ struct DeviceListView: View {
 
 struct DeviceListRow: Identifiable, Hashable, Sendable {
     let addr: String
-    let origin: String
-    let ping: String
-    let status: String
+    let name: String
     let lastConnected: String
-    let online: Bool?
     var id: String { addr }
 
-    var detail: String {
-        [origin, status, lastConnected].filter { !$0.isEmpty }.joined(separator: "  ")
-    }
+    var title: String { name.isEmpty ? addr : name }
 
-    init(addr: String, origin: String, status: String, ping: String,
-         lastConnected: String, online: Bool?)
-    {
-        self.addr = addr
-        self.origin = origin
-        self.status = status
-        self.ping = ping
-        self.lastConnected = lastConnected
-        self.online = online
+    var detail: String {
+        let address = name.isEmpty ? [] : [addr]
+        let when = lastConnected.isEmpty ? [] : [lastConnected]
+        return (address + when).joined(separator: " · ")
     }
 }

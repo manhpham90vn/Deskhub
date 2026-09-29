@@ -20,13 +20,12 @@ enum DeskhubPage: Int, CaseIterable, Identifiable {
 }
 
 struct MainMenuView: View {
-    private static let portSettle = Duration.milliseconds(600)
     private static let focusSettle = Duration.milliseconds(400)
 
     @Bindable var connect: ConnectModel
     @Bindable var sharing: SharingModel
 
-    @State private var discovery = DiscoveryModel()
+    @State private var recent = RecentDevicesModel()
     @State private var page: DeskhubPage =
         StartPage.index().flatMap(DeskhubPage.init(rawValue:)) ?? .client
     @State private var shareAlert = ""
@@ -51,7 +50,7 @@ struct MainMenuView: View {
         .task {
             sharing.refreshPermissions()
             sharing.loadAddresses()
-            discovery.start()
+            recent.refresh()
             if sharing.autoShare, !sharing.didAutoShare, !sharing.isSharing, !sharing.isStarting {
                 sharing.didAutoShare = true
                 if StartPage.index() == nil {
@@ -59,11 +58,6 @@ struct MainMenuView: View {
                 }
                 await autoShare()
             }
-        }
-        .task(id: sharing.port) {
-            try? await Task.sleep(for: MainMenuView.portSettle)
-            guard !Task.isCancelled, sharing.port >= 1, sharing.port <= 65535 else { return }
-            discovery.usePort(UInt16(sharing.port))
         }
         .overlay {
             if connect.isConnecting {
@@ -125,11 +119,10 @@ struct MainMenuView: View {
             .disabled(connect.address.isEmpty || connect.isConnecting)
 
             deskhubHeadingRow(DeskhubClient.string(DHStrDevicesHeading)) {
-                discovery.rescanNow()
+                recent.refresh()
             }
             DeviceTable(
-                rows: discovery.devices,
-                note: discovery.scanStatus,
+                rows: recent.devices,
                 enabled: !connect.isConnecting,
                 onPick: pick
             )
@@ -241,7 +234,7 @@ extension MainMenuView {
         Task {
             guard let found = await connect.connectAuth() else { return }
             let address = connect.acceptedAddress
-            await discovery.remember(address: address)
+            await recent.reload()
             connect.forgetHost()
             openWindow(value: ConnectionRequest(
                 address: address,

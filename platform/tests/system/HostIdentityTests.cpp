@@ -154,12 +154,28 @@ void TestTrustStoreOnDisk() {
         "a damaged trust file is reported as invalid rather than an empty list");
     Check(deskhubp::CheckTrustedHost("10.1.2.3:47777", fp) == deskhub::TrustVerdict::Unknown,
         "a damaged trust file does not trust even a valid stored pin");
-    Check(!deskhubp::RememberTrustedHost("10.1.2.3:47777", "Desk", fp, 2000),
-        "a normal update cannot overwrite a damaged trust file");
-    Check(!deskhubp::ClearTrustedHosts(),
-        "revoke-all cannot overwrite a damaged trust file");
-    Check(deskhubp::ReadAppDataFile(deskhubp::kTrustStoreFileName) == valid + "damaged row\n",
-        "a failed revoke-all leaves the damaged trust file available for recovery");
+    deskhub::Fingerprint fresh = fp;
+    fresh.bytes[1] ^= 0xFF;
+    Check(deskhubp::RememberTrustedHost("10.9.9.9:47777", "Laptop", fresh, 2000),
+        "trusting a machine replaces a damaged trust file with a fresh one");
+    const auto restarted = deskhubp::TryLoadTrustStore();
+    Check(restarted && restarted->Size() == 1 &&
+              deskhubp::CheckTrustedHost("10.9.9.9:47777", fresh) ==
+                  deskhub::TrustVerdict::Trusted &&
+              deskhubp::CheckTrustedHost("10.1.2.3:47777", fp) == deskhub::TrustVerdict::Unknown,
+        "the fresh file holds only the new pin, none of the damaged contents");
+    Check(deskhubp::WriteAppDataFile(deskhubp::kTrustStoreFileName, valid + "damaged row\n"),
+        "the trust file is damaged again");
+    Check(deskhubp::ClearTrustedHosts(), "revoke-all replaces a damaged trust file");
+    const auto emptied = deskhubp::TryLoadTrustStore();
+    Check(emptied && emptied->Size() == 0, "with a readable empty one");
+    Check(deskhubp::WriteAppDataFile(deskhubp::kTrustStoreFileName, valid + "damaged row\n"),
+        "the trust file is damaged once more");
+    Check(!deskhubp::ForgetTrustedHost("10.1.2.3:47777"),
+        "forgetting a pin the fresh file does not hold reports no change");
+    const auto afterForget = deskhubp::TryLoadTrustStore();
+    Check(afterForget && afterForget->Size() == 0,
+        "but the damaged trust file is still replaced by an empty one");
     Check(deskhubp::WriteAppDataFile(deskhubp::kTrustStoreFileName, valid),
         "the valid trust file is restored");
 

@@ -122,7 +122,6 @@ class MainActivity : ComponentActivity() {
         FilesHost.bind(application)
         askForNotifications()
         val prefs = getSharedPreferences("deskhub", Context.MODE_PRIVATE)
-        prefs.edit().remove("passcode").apply()
         val lastAddress = prefs.getString("addr", "").orEmpty()
 
         val debuggable = (applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
@@ -216,7 +215,6 @@ private val AccentColor = darkThemeColor(NativeClient.THEME_ACCENT)
 private val HeadingColor = darkThemeColor(NativeClient.THEME_HEADING)
 private val MutedColor = darkThemeColor(NativeClient.THEME_MUTED)
 private val OnlineColor = darkThemeColor(NativeClient.THEME_ONLINE)
-private val OfflineColor = darkThemeColor(NativeClient.THEME_OFFLINE)
 private val PageColor = darkThemeColor(NativeClient.THEME_PAGE)
 
 private val DeskhubDarkColors =
@@ -359,7 +357,6 @@ private fun MainScreen(
     var authedAddr by remember { mutableStateOf("") }
     var querySeq by remember { mutableStateOf(0L) }
     var deviceRows by remember { mutableStateOf(emptyList<NativeClient.DeviceRow>()) }
-    var scanStatus by remember { mutableStateOf("") }
     var sendingTo by remember { mutableStateOf<FileSendDriver?>(null) }
     var section by remember { mutableStateOf(initialSection) }
     var port by remember { mutableStateOf(NativeClient.settingsPort()) }
@@ -392,7 +389,6 @@ private fun MainScreen(
                 is NativeClient.QueryOutcome.UnknownHost -> pendingTrust = TrustRequest(addr, outcome.fingerprint)
                 is NativeClient.QueryOutcome.Reached -> {
                     onRemember(addr)
-                    NativeClient.recentTouch(addr)
                     deviceRows = NativeClient.deviceRows()
                     authed = outcome.query
                     authedAddr = addr
@@ -512,10 +508,8 @@ private fun MainScreen(
                 onOpenShell = openShell,
                 onOpenFileSend = openFileSend,
                 deviceRows = deviceRows,
-                scanStatus = scanStatus,
                 onPickDevice = pickDevice,
-                onRescan = { scope.launch { deviceRows = NativeClient.deviceRows() } },
-                onRefreshStatus = { scope.launch { deviceRows = NativeClient.deviceRows() } },
+                onRefreshDevices = { scope.launch { deviceRows = NativeClient.deviceRows() } },
                 port = port,
                 onPortChange = { chosen ->
                     NativeClient.setSettingsPort(chosen)
@@ -598,10 +592,8 @@ private fun HomeScreen(
     onOpenShell: () -> Unit,
     onOpenFileSend: () -> Unit,
     deviceRows: List<NativeClient.DeviceRow>,
-    scanStatus: String,
     onPickDevice: (String) -> Unit,
-    onRescan: () -> Unit,
-    onRefreshStatus: () -> Unit,
+    onRefreshDevices: () -> Unit,
     port: Int,
     onPortChange: (Int) -> Unit,
     onStartSharing: (HostService.ShareRequest) -> Unit,
@@ -625,10 +617,8 @@ private fun HomeScreen(
                         onOpenShell = onOpenShell,
                         onOpenFileSend = onOpenFileSend,
                         deviceRows = deviceRows,
-                        scanStatus = scanStatus,
                         onPickDevice = onPickDevice,
-                        onRescan = onRescan,
-                        onRefreshStatus = onRefreshStatus,
+                        onRefreshDevices = onRefreshDevices,
                     )
 
                 Section.HOST ->
@@ -934,13 +924,6 @@ private fun HostRowList(
 private const val COPIED_FEEDBACK_MS = 1500L
 private const val MAX_KEY_FILE_BYTES = 64 * 1024
 
-private fun pairedDateText(unix: Long): String {
-    if (unix <= 0) return "-"
-    return java.text
-        .SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.US)
-        .format(java.util.Date(unix * 1000))
-}
-
 @Composable
 private fun AreaHeading(
     title: String,
@@ -1088,8 +1071,7 @@ private fun AllowedClientsSection() {
             Column(modifier = Modifier.weight(1f)) {
                 Text(device.name.ifBlank { "(unnamed)" }, color = HeadingColor)
                 Text(
-                    "${device.shortKey}  ·  ${pairedDateText(device.pairedUnix)}  ·  " +
-                        pairedDateText(device.lastSeenUnix),
+                    device.shortKey,
                     style = MaterialTheme.typography.bodySmall,
                     color = MutedColor,
                 )
@@ -1156,6 +1138,10 @@ private sealed interface KeyDialog {
     data class Import(
         val privateKey: String,
     ) : KeyDialog
+
+    data class Delete(
+        val name: String,
+    ) : KeyDialog
 }
 
 @Composable
@@ -1208,6 +1194,18 @@ private fun MyKeysSection(
                     }
                 },
             )
+
+        is KeyDialog.Delete ->
+            DeleteKeyDialog(
+                onCancel = { dialog = null },
+                onConfirm = {
+                    dialog = null
+                    scope.launch {
+                        error = NativeClient.deleteClientKey(open.name).orEmpty()
+                        onChanged()
+                    }
+                },
+            )
     }
 
     SectionLabel(NativeClient.string(NativeClient.STR_MY_KEYS_HEADING))
@@ -1217,7 +1215,7 @@ private fun MyKeysSection(
         color = MutedColor,
     )
     for (key in keys) {
-        ClientKeyRow(key)
+        ClientKeyRow(key, onDelete = { dialog = KeyDialog.Delete(key.name) })
     }
     if (error.isNotEmpty()) {
         Text(error, color = MaterialTheme.colorScheme.error)
@@ -1257,7 +1255,10 @@ private fun java.io.InputStream.readNBytesCompat(limit: Int): ByteArray {
 }
 
 @Composable
-private fun ClientKeyRow(key: NativeClient.ClientKey) {
+private fun ClientKeyRow(
+    key: NativeClient.ClientKey,
+    onDelete: () -> Unit,
+) {
     var expanded by remember { mutableStateOf(false) }
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -1279,7 +1280,31 @@ private fun ClientKeyRow(key: NativeClient.ClientKey) {
         CopyTextButton(NativeClient.string(NativeClient.STR_COPY_PUBLIC_KEY_ACTION)) {
             NativeClient.clientPublicKey(key.name)
         }
+        if (key.name != NativeClient.DEFAULT_KEY_NAME) {
+            TextButton(onClick = onDelete) {
+                Text(NativeClient.string(NativeClient.STR_DELETE_KEY_ACTION))
+            }
+        }
     }
+}
+
+@Composable
+private fun DeleteKeyDialog(
+    onCancel: () -> Unit,
+    onConfirm: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onCancel,
+        text = { Text(NativeClient.string(NativeClient.STR_DELETE_KEY_PROMPT)) },
+        confirmButton = {
+            TextButton(onClick = onConfirm) {
+                Text(NativeClient.string(NativeClient.STR_DELETE_KEY_ACTION), color = MaterialTheme.colorScheme.error)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onCancel) { Text(NativeClient.string(NativeClient.STR_CANCEL_ACTION)) }
+        },
+    )
 }
 
 @Composable
@@ -1526,10 +1551,8 @@ private fun AddressScreen(
     onOpenShell: () -> Unit,
     onOpenFileSend: () -> Unit,
     deviceRows: List<NativeClient.DeviceRow>,
-    scanStatus: String,
     onPickDevice: (String) -> Unit,
-    onRescan: () -> Unit,
-    onRefreshStatus: () -> Unit,
+    onRefreshDevices: () -> Unit,
 ) {
     val trimmed = address.trim()
     val ready = trimmed.isNotEmpty() && !busy
@@ -1601,9 +1624,6 @@ private fun AddressScreen(
                 }
             }
 
-            val connectedRow =
-                deviceRows.firstOrNull { NativeClient.sameDeviceAddr(it.addr, authedAddr) }
-            val liveColor = if (connectedRow?.online == false) OfflineColor else OnlineColor
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -1613,17 +1633,14 @@ private fun AddressScreen(
                     modifier =
                         Modifier
                             .size(10.dp)
-                            .background(liveColor, CircleShape),
+                            .background(OnlineColor, CircleShape),
                 )
                 Text(
                     NativeClient.string(NativeClient.STR_CONNECTED_PICK_SESSION),
-                    color = liveColor,
+                    color = OnlineColor,
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.weight(1f),
                 )
-                if (connectedRow != null && connectedRow.ping.isNotEmpty()) {
-                    Text(connectedRow.ping, color = liveColor, fontWeight = FontWeight.SemiBold)
-                }
             }
 
             OutlinedButton(
@@ -1657,23 +1674,9 @@ private fun AddressScreen(
         if (authed == null) {
             DeviceSection(
                 heading = NativeClient.string(NativeClient.STR_DEVICES_HEADING),
-                note = scanStatus,
-                rows =
-                    deviceRows.map { row ->
-                        DeviceRow(
-                            row.addr,
-                            row.ping,
-                            listOf(row.origin, row.status, row.lastConnected)
-                                .filter { it.isNotEmpty() }
-                                .joinToString("  "),
-                            if (row.known) row.online else null,
-                        )
-                    },
+                rows = deviceRows,
                 enabled = !busy,
-                onRefresh = {
-                    onRefreshStatus()
-                    onRescan()
-                },
+                onRefresh = onRefreshDevices,
                 onPick = onPickDevice,
             )
         }
@@ -1720,18 +1723,10 @@ private fun ProjectFooter() {
     }
 }
 
-private data class DeviceRow(
-    val addr: String,
-    val ping: String,
-    val detail: String,
-    val online: Boolean?,
-)
-
 @Composable
 private fun DeviceSection(
     heading: String,
-    note: String,
-    rows: List<DeviceRow>,
+    rows: List<NativeClient.DeviceRow>,
     enabled: Boolean,
     onRefresh: () -> Unit,
     onPick: (String) -> Unit,
@@ -1740,37 +1735,24 @@ private fun DeviceSection(
         HeadingRow(heading, onRefresh)
 
         for (row in rows) {
-            val tint =
-                when (row.online) {
-                    true -> OnlineColor
-                    false -> OfflineColor
-                    null -> HeadingColor
-                }
-            Row(
+            Column(
                 modifier =
                     Modifier
                         .fillMaxWidth()
                         .clickable(enabled = enabled) { onPick(row.addr) }
                         .padding(vertical = 6.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(row.addr, color = tint)
-                    if (row.detail.isNotBlank()) {
-                        Text(
-                            row.detail,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MutedColor,
-                        )
-                    }
+                val named = row.name.isNotBlank()
+                Text(if (named) row.name else row.addr, color = HeadingColor)
+                val details = listOfNotNull(row.addr.takeIf { named }, row.lastConnected.takeIf { it.isNotBlank() })
+                if (details.isNotEmpty()) {
+                    Text(
+                        details.joinToString("  ·  "),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MutedColor,
+                    )
                 }
-                Text(row.ping, style = MaterialTheme.typography.bodySmall, color = tint)
             }
-        }
-
-        if (note.isNotEmpty()) {
-            Text(note, style = MaterialTheme.typography.bodySmall, color = MutedColor)
         }
     }
 }

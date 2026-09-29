@@ -9,7 +9,7 @@
 #include "deskhubp/system/Clock.h"
 #include "deskhubp/system/ClientIdentity.h"
 #include "deskhubp/system/HostIdentity.h"
-#include "deskhubp/system/PairedDevicesFile.h"
+#include "deskhubp/system/AuthorizedKeysFile.h"
 #include "deskhubp/system/Pty.h"
 #include "deskhubp/system/TrustStoreFile.h"
 
@@ -179,10 +179,10 @@ void RunTerminalFfiTests() {
     const std::string savedCert = deskhubp::ReadAppDataFile(deskhubp::kHostCertFileName);
     const std::string savedKey = deskhubp::ReadAppDataFile(deskhubp::kHostKeyFileName);
     const std::string savedTrust = deskhubp::ReadAppDataFile(deskhubp::kTrustStoreFileName);
-    const std::string savedPaired = deskhubp::ReadAppDataFile(deskhubp::kPairedDevicesFileName);
+    const std::string savedAuthorizedKeys = deskhubp::ReadAppDataFile(deskhubp::kAuthorizedKeysFileName);
     ForgetHostIdentity();
     deskhubp::RemoveAppDataFile(deskhubp::kTrustStoreFileName);
-    deskhubp::ForgetAllPairedDevices();
+    RevokeAllClientKeys();
 
     const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity("deskhub-test");
     FfiHostRig rig;
@@ -207,8 +207,7 @@ void RunTerminalFfiTests() {
 
     const std::string address = "127.0.0.1:" + std::to_string(kFfiTestPort);
     const auto client = deskhubp::LoadOrCreateClientIdentity();
-    Check(client.Valid() && deskhubp::RememberPairedDevice(client.fingerprint,
-                                "term-ffi-viewer", 500),
+    Check(client.Valid() && GrantClientKey(client),
         "the viewer public key is authorized before opening the terminal");
     Check(deskhubp::RememberTrustedHost(address, address, identity.fingerprint,
               NowUnixSeconds()),
@@ -321,8 +320,8 @@ void RunTerminalFfiTests() {
         deskhubp::RemoveAppDataFile(deskhubp::kTrustStoreFileName);
     else
         deskhubp::WriteAppDataFile(deskhubp::kTrustStoreFileName, savedTrust);
-    if (savedPaired.empty())
-        deskhubp::RemoveAppDataFile(deskhubp::kPairedDevicesFileName);
+    if (savedAuthorizedKeys.empty())
+        deskhubp::RemoveAppDataFile(deskhubp::kAuthorizedKeysFileName);
     else
-        deskhubp::WriteAppDataFile(deskhubp::kPairedDevicesFileName, savedPaired);
+        deskhubp::WriteAppDataFile(deskhubp::kAuthorizedKeysFileName, savedAuthorizedKeys);
 }

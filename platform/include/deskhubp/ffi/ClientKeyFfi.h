@@ -17,6 +17,9 @@ typedef enum {
     DHClientKeyNameInUse = 2,
     DHClientKeyUnreadable = 3,
     DHClientKeyWriteFailed = 4,
+    DHClientKeyDefaultKey = 5,
+    DHClientKeyInUse = 6,
+    DHClientKeyMissing = 7,
 } DHClientKeyError;
 
 typedef struct {
@@ -27,6 +30,7 @@ typedef struct {
 int dh_client_keys(DHClientKey* out, int capacity);
 int dh_client_public_key(const char* name, char* out, int capacity);
 DHClientKeyError dh_client_key_generate(const char* name);
+DHClientKeyError dh_client_key_delete(const char* name);
 DHClientKeyError dh_client_key_import(const char* name, const char* private_key,
     const char* passphrase);
 const char* dh_client_key_error_text(DHClientKeyError error);

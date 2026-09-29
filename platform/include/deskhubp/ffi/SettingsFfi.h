@@ -7,18 +7,6 @@
 extern "C" {
 #endif
 
-#define DH_ADDR_CAP 64
-
-typedef struct {
-    char addr[DH_ADDR_CAP];
-    char origin[20];
-    char status[16];
-    char ping[16];
-    char lastConnected[24];
-    bool known;
-    bool online;
-} DHDeviceRow;
-
 typedef struct {
     uint32_t fps;
     uint32_t bitrateMbps;
@@ -27,8 +15,6 @@ typedef struct {
     bool allowInput;
     bool clientControl;
 } DHUiSettings;
-
-void dh_recent_touch(const char* address);
 
 typedef enum {
     DHSettingsEntryArea = 0,
@@ -70,8 +56,6 @@ DHUiSettings dh_settings_load(void);
 void dh_settings_save(uint32_t fps, uint32_t bitrate_mbps, uint32_t max_dim, uint32_t port,
     bool allow_input, bool client_control);
 
-int dh_device_rows(DHDeviceRow* out, int capacity);
-bool dh_same_device_addr(const char* a, const char* b);
 uint16_t dh_default_port(void);
 
 bool dh_client_control(void);
@@ -110,20 +94,6 @@ const char* dh_local_addresses(void);
 int dh_idle_host_status(uint16_t port, char* out, int capacity);
 int dh_sharing_status(uint16_t port, bool allow_input, bool screen, bool terminal, bool files,
     char* out, int capacity);
-
-typedef struct {
-    char name[80];
-    char shortKey[16];
-    char fingerprint[64];
-    int64_t pairedUnix;
-    int64_t lastSeenUnix;
-} DHPairedDevice;
-
-int dh_paired_devices(DHPairedDevice* out, int capacity);
-bool dh_paired_add_public_key(const char* public_key);
-bool dh_paired_forget(const char* fingerprint);
-void dh_paired_forget_all(void);
-int dh_host_fingerprint(char* out, int capacity);
 
 #ifdef __cplusplus
 }

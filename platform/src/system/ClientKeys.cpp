@@ -2,6 +2,11 @@
 
 #include "deskhubp/system/ClientIdentity.h"
 
+#include <algorithm>
+
+#include "deskhub/ui/HostProfiles.h"
+#include "deskhubp/system/TrustStoreFile.h"
+
 #include "deskhub/net/PublicKeyText.h"
 #include "deskhubp/system/UiSettingsStore.h"
 
@@ -43,6 +48,21 @@ ClientKeyError CreateClientKey(std::string_view name) {
     if (nameError != ClientKeyError::None) return nameError;
     return GenerateClientIdentity(name).Valid() ? ClientKeyError::None
                                                 : ClientKeyError::WriteFailed;
+}
+
+ClientKeyError DeleteClientKey(std::string_view name) {
+    if (name == deskhub::ui::kDefaultIdentityName) return ClientKeyError::DefaultKey;
+    const auto keys = ListClientIdentities();
+    const bool exists = std::any_of(keys.begin(), keys.end(),
+        [&](const ClientIdentityInfo& key) { return key.name == name; });
+    if (!exists) return ClientKeyError::KeyMissing;
+    const auto store = TryLoadTrustStore();
+    if (store && std::any_of(store->Hosts().begin(), store->Hosts().end(),
+                     [&](const deskhub::TrustedHost& host) {
+                         return deskhub::ui::ProfileIdentityName(host) == name;
+                     }))
+        return ClientKeyError::KeyInUse;
+    return RemoveClientIdentity(name) ? ClientKeyError::None : ClientKeyError::WriteFailed;
 }
 
 ClientKeyError ImportClientKey(std::string_view name, std::string_view privateKey,

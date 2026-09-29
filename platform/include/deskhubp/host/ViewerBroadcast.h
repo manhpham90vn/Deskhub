@@ -1,6 +1,6 @@
 #pragma once
 #include "deskhub/media/ShareTypes.h"
-#include "deskhub/session/host/Beacon.h"
+#include "deskhub/session/host/SourceListResponder.h"
 #include "deskhub/session/host/SourcePipelineState.h"
 #include "deskhubp/net/SessionTransport.h"
 
@@ -41,7 +41,7 @@ struct SourceStatusHooks {
 };
 
 std::vector<deskhub::media::ShareSourceStatus> PublishSourceStatus(
-    std::span<deskhub::SourcePipelineState* const> live, deskhub::Beacon& beacon,
+    std::span<deskhub::SourcePipelineState* const> live, deskhub::SourceListResponder& sourceList,
     const SourceStatusHooks& hooks);
 
 void LogTransferTotals(std::span<deskhub::SourcePipelineState* const> pipes);

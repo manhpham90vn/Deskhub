@@ -10,7 +10,7 @@
 
 namespace {
 
-static_assert(int(DHClientKeyWriteFailed) == int(deskhub::ui::ClientKeyError::WriteFailed),
+static_assert(int(DHClientKeyMissing) == int(deskhub::ui::ClientKeyError::KeyMissing),
     "DHClientKeyError must carry the core value of every ui::ClientKeyError");
 
 std::string TextOf(const char* text) {
@@ -42,6 +42,10 @@ int dh_client_public_key(const char* name, char* out, int capacity) {
 
 DHClientKeyError dh_client_key_generate(const char* name) {
     return DHClientKeyError(deskhubp::CreateClientKey(TextOf(name)));
+}
+
+DHClientKeyError dh_client_key_delete(const char* name) {
+    return DHClientKeyError(deskhubp::DeleteClientKey(TextOf(name)));
 }
 
 DHClientKeyError dh_client_key_import(const char* name, const char* private_key,

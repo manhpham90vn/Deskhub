@@ -167,7 +167,7 @@ void EndScreenHostSession(deskhub::SourcePipelineState& st, SessionTransport& so
 }
 
 std::vector<deskhub::media::ShareSourceStatus> PublishSourceStatus(
-    std::span<deskhub::SourcePipelineState* const> live, deskhub::Beacon& beacon,
+    std::span<deskhub::SourcePipelineState* const> live, deskhub::SourceListResponder& sourceList,
     const SourceStatusHooks& hooks) {
     std::vector<deskhub::media::ShareSourceStatus> rows;
     std::vector<deskhub::SourceInfo> infos;
@@ -190,7 +190,7 @@ std::vector<deskhub::media::ShareSourceStatus> PublishSourceStatus(
         infos.push_back(deskhub::MakeSourceInfo(*p));
     }
 
-    beacon.SetSources(infos);
+    sourceList.SetSources(infos);
     return rows;
 }
 

@@ -2,7 +2,6 @@
 
 #include <utility>
 
-#include "deskhubp/system/PairedDevicesFile.h"
 #include "deskhubp/system/AuthorizedKeysFile.h"
 
 namespace deskhubp {
@@ -54,7 +53,7 @@ std::optional<deskhub::AuthChallenge> HostAuth::Begin(const deskhub::AuthStart& 
     return challenge;
 }
 
-deskhub::AuthResult HostAuth::Respond(const deskhub::AuthResponse& response, int64_t nowUnix) {
+deskhub::AuthResult HostAuth::Respond(const deskhub::AuthResponse& response) {
     if (impl_->state != HostAuthState::AwaitingResponse)
         return impl_->Settle(deskhub::AuthResultCode::NotPaired);
 
@@ -68,7 +67,6 @@ deskhub::AuthResult HostAuth::Respond(const deskhub::AuthResponse& response, int
     if (transcript.empty()) return impl_->Settle(deskhub::AuthResultCode::NotPaired);
     if (!VerifySignature(impl_->peerPublicKey, transcript, response.proof))
         return impl_->Settle(deskhub::AuthResultCode::BadSignature);
-    TouchPairedDevice(impl_->peer, impl_->peerName, nowUnix);
     return impl_->Settle(deskhub::AuthResultCode::Accepted);
 }
 

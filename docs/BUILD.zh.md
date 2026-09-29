@@ -112,7 +112,7 @@ fuzz 等 preset 不受影响。启用后，各 OS 的 media 库由可选变为�
 | `connect ADDRESS` | 打开窗口查看并操作 host 的屏幕（Windows 和 Linux） |
 | `shell ADDRESS` | 在当前 terminal 中打开 host 上的一个 shell |
 | `send ADDRESS FILE...` | 向允许接收文件的 host 发送文件 |
-| `displays`、`sources ADDRESS` | 本地显示器和已认证 host 的共享源 |
+| `displays`、`sources ADDRESS` | 本地显示器，以及已认证 host 共享的内容 |
 | `key`、`access`、`host`、`host-key public` | client 身份、授权密钥、已保存 host 和本机 host 密钥 |
 | `devices`、`trust`、`settings` | 使用相同配置文件的旧命令 |
 
@@ -122,7 +122,10 @@ fuzz 等 preset 不受影响。启用后，各 OS 的 media 库由可选变为�
 `host add office --address 192.168.1.10:47777 --identity laptop-a --host-key-stdin`。
 随后可运行 `connect office`、`sources office`、`shell office` 或 `send office FILE`。
 `host update office` 可明确更改地址、身份或固定的密钥；`host remove office` 删除配置。
-`access remove --fingerprint SHA256:...` 撤销 client 密钥。
+`access remove --fingerprint SHA256:...` 撤销 client 密钥。`sources`、`connect`、`shell` 与 `send`
+接受地址或已保存的别名，使用 `--identity NAME` 选择 client 密钥，使用 `--accept-new-host-key`
+保存首次见到的 host 的密钥；不指定该 flag 时，未知 host 会被拒绝并打印其 fingerprint，而密钥
+已变更的 host 一律被拒绝。没有 network scan，也没有 passcode flag。
 `--config-dir PATH` 为所有命令指定同一配置目录，可放在命令前或命令后。
 
 `deskhub-cli help COMMAND` 会打印可用 flag。列出信息的命令支持 `--json`，exit code 表明失败
@@ -151,8 +154,8 @@ Rust 静态库，缺少它则无法 share 也无法 connect。Opus audio codec �
 | 命令 | 运行环境 | 覆盖内容 |
 | --- | --- | --- |
 | `make test` | 离线，不使用 socket | 整个 `core/`: wire format、framing、FEC、session、VT emulator、settings、文案 |
-| `make test-platform` | loopback socket | 真实的 QUIC handshake、端到端的 SPAKE2、经由网络的 terminal host 与 viewer、面向真实 shell 的 PTY、lockout、approval |
-| `make test-integration` | loopback，capture/encode 为模拟实现 | 完整的 host↔client session: negotiation、经网络传输的视频、input、passcode 与 approval 的准入控制、对无效数据的容错 |
+| `make test-platform` | loopback socket | 真实的 QUIC handshake、端到端的 key 签名 authenticate、host key 固定、经由网络的 terminal host 与 viewer、面向真实 shell 的 PTY、无效签名导致的 lockout |
+| `make test-integration` | loopback，capture/encode 为模拟实现 | 完整的 host↔client session: negotiation、经网络传输的视频、input、基于 authorized key 的准入、对无效数据的容错 |
 | `make test-all` | 三个 suite 全部运行，core 在先 | |
 | `make test-ctest` | 相同的 test，经由 CTest 运行 | 与 CI 的调用方式完全一致 |
 | `make test-asan` | 三个 suite 在 ASan 与 UBSan 下运行 | 仅支持 clang/gcc，不支持 MSVC |

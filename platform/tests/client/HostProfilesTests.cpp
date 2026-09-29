@@ -97,7 +97,21 @@ void TestClientKeysAreCreatedAndListed() {
         "its public key text is the one a host will allow");
     Check(dh_client_public_key("missing", publicKey, sizeof(publicKey)) == 0,
         "a key that does not exist has no public key");
-    deskhubp::RemoveAppDataFile("client_key.work.pem");
+    Check(dh_client_key_delete("default") == DHClientKeyDefaultKey,
+        "the default key can never be deleted");
+    Check(dh_host_trust_new("127.0.0.1:47031", deskhub::FormatFingerprint(KeyFor(9)).c_str()) ==
+              DHHostProfileOk,
+        "a trusted host is saved");
+    Check(deskhubp::SaveHostProfile(deskhub::ui::HostProfileMode::Update,
+              deskhub::ui::HostProfileRequest{"127-0-0-1-47031", "", std::nullopt, "work"}) ==
+              deskhub::ui::HostProfileError::None,
+        "and set to connect with the new key");
+    Check(dh_client_key_delete("work") == DHClientKeyInUse,
+        "a key a trusted host still uses cannot be deleted");
+    Check(dh_host_profile_remove("127-0-0-1-47031") == DHHostProfileOk, "the host is removed");
+    Check(dh_client_key_delete("work") == DHClientKeyOk, "then the key can be deleted");
+    Check(dh_client_key_delete("work") == DHClientKeyMissing, "and a second delete finds nothing");
+    Check(!deskhubp::LoadClientIdentity("work").Valid(), "the private key is gone from disk");
 }
 
 void TestUnreadableStoreIsNotOverwritten() {

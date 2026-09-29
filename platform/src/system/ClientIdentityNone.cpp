@@ -33,6 +33,10 @@ std::vector<ClientIdentityInfo> ListClientIdentities() {
     return {};
 }
 
+bool RemoveClientIdentity(std::string_view) {
+    return false;
+}
+
 std::string ClientPublicKeyText(const ClientIdentity&) {
     return {};
 }

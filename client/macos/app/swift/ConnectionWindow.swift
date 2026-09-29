@@ -8,13 +8,9 @@ struct ConnectionRequest: Codable, Hashable {
 }
 
 struct ConnectionWindow: View {
-    private static let pollInterval = Duration.seconds(1)
-
     let request: ConnectionRequest
 
     @State private var control: Bool
-    @State private var ping = ""
-    @State private var online: Bool?
     @State private var picking = false
     @Environment(\.openWindow) private var openWindow
     @Environment(\.dismiss) private var dismiss
@@ -45,22 +41,6 @@ struct ConnectionWindow: View {
             )
             .frame(width: 460, height: 340)
         }
-        .task {
-            while !Task.isCancelled {
-                let row = await Task.detached { [address = request.address] in
-                    DeskhubDiscovery.deviceRows().first {
-                        DeskhubClient.sameDeviceAddr($0.addr, address)
-                    }
-                }.value
-                ping = row?.ping ?? ""
-                online = row?.online
-                try? await Task.sleep(for: ConnectionWindow.pollInterval)
-            }
-        }
-    }
-
-    private var liveColor: Color {
-        online == false ? DeskhubPalette.offline : DeskhubPalette.online
     }
 
     private var header: some View {
@@ -79,18 +59,12 @@ struct ConnectionWindow: View {
 
             HStack(spacing: 8) {
                 Circle()
-                    .fill(liveColor)
+                    .fill(DeskhubPalette.online)
                     .frame(width: 10, height: 10)
                 Text(DeskhubClient.string(DHStrConnectedPickSession))
                     .fontWeight(.semibold)
-                    .foregroundStyle(liveColor)
+                    .foregroundStyle(DeskhubPalette.online)
                 Spacer(minLength: 0)
-                if !ping.isEmpty {
-                    Text(ping)
-                        .fontWeight(.semibold)
-                        .foregroundStyle(liveColor)
-                        .monospacedDigit()
-                }
             }
         }
     }

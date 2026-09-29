@@ -16,7 +16,6 @@ private:
 
 void PrintLine(std::string_view text);
 void PrintError(std::string_view text);
-
-std::string UnixDate(int64_t unixSeconds);
+void PrintConnectFailure(std::string_view text);
 
 }

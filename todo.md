@@ -89,6 +89,13 @@ Public key và thông tin host phải được chuyển qua kênh mà chủ thi�
 
 - [x] Triển khai TOFU và bố cục Devices mới trên core/platform/CLI và cả 5 app: `QuerySources` trả fingerprint của host lạ, `TrustNewHost` lưu host với tên sinh từ địa chỉ, `HostLinkConfig.acceptNewHostKey` và cờ CLI `--accept-new-host-key`; khóa host đổi vẫn bị chặn kể cả khi có cờ. API tạo/import khóa client có mã lỗi (`deskhubp/system/ClientKeys.h`, `ClientKeyFfi.h`), `LoadClientKeys` luôn đảm bảo có khóa `default`, và `HostLink` tự tạo khóa `default` khi hồ sơ host trỏ tới nó. Bỏ `dh_own_public_key`, `dh_own_fingerprint`, `dh_client_identity_names`, `dh_host_profile_add`. Trên Linux đã qua ba bộ test, cli-smoke, `make lint`, `make lint-tidy`, `make build-linux`, `make build-android`; Windows và macOS/iOS chưa build được cục bộ.
 - [x] Bỏ form thêm host thủ công khỏi GUI (Trusted hosts chỉ còn Connect/Remove; ghim trước qua CLI). Public key copy ra có nhãn giống SSH: `ssh-ed25519 AAAA… <tên thiết bị>` hoặc `<tên thiết bị> (<tên khóa>)` (`ui::ClientKeyLabel`, `deskhubp::ClientPublicKeyLine`, CLI `key public`), nên host hiện tên client thay cho “(unnamed)”. Tên thiết bị chỉ còn một chỗ nhập: mục “Device name” đầu khối General của Settings (layout dùng chung `SettingField::DeviceName`), bỏ ô “Your name” ở trang Client trên cả 5 app; host, client và nhãn public key cùng dùng tên này.
+- [x] Không migration dữ liệu cũ (quyết định 2026-09-29): bỏ file `paired_devices`, file đánh dấu kích hoạt và đường fallback; admission chỉ dùng `authorized_keys` (thiếu file = từ chối tất cả). File `authorized_keys`/`known_hosts` không đọc được thì từ chối khi đọc và được tạo lại khi ghi; file cũ được xóa. Bỏ đoạn làm sạch passcode trong settings/recent và phía Apple/Android. `authorized_keys` không lưu thời gian nên bỏ cột “Paired/Last seen”. API mới: `ListAuthorizedClients`, `ForgetAuthorizedClient`, `ClearAuthorizedKeys` (sửa lỗi nút “Remove every client” trên Linux/Windows trước đây không thu hồi gì).
+- [x] Gỡ phần discovery còn sót: `Beacon` đổi tên `SourceListResponder` (chỉ trả lời kết nối đã xác thực), bỏ `DeviceRows`/nguồn “On this network”/cột Where/status/ping, tách `DiscoveryFfi` thành `SettingsFfi` + `DevicesFfi`, đổi `DiscoveryModel` (Apple) thành `RecentDevicesModel`.
+- [x] Fuzz target `fuzz_keys` cho parser public key, `authorized_keys`, `known_hosts`, tên host/nhãn khóa (seed từ khóa thật). Máy dev thiếu runtime libFuzzer của clang; đã chạy 400.000 input đột biến dưới ASan/UBSan (gcc) không lỗi. CI chạy `make fuzz` như cũ.
+- [x] Tài liệu EN/VI/ZH/JA cập nhật theo mô hình khóa kiểu SSH, TOFU, bố cục Devices, tên thiết bị, không migration; PRIVACY lên bản 2.9. `cli-smoke.sh` viết lại theo luồng khóa.
+- [x] Sửa lỗi Android không tạo được khóa client: `link()` bị SELinux chặn trong thư mục app, thay bằng kiểm tra tồn tại + `rename()` dưới file lock. Thêm xóa khóa trong “My keys” (không xóa `default`, không xóa khóa đang được host đã tin dùng).
+- [x] Thông báo lỗi xác thực chỉ rõ bước tiếp theo (copy public key ở My keys, host dán vào Clients allowed to connect, kết nối lại; CLI in thêm lệnh `key public` / `access add --stdin`).
+- [x] Host gửi tên thiết bị trong `SOURCE_LIST` (chỉ cho kết nối đã xác thực); danh sách recent ở trang Client hiện tên host, lưu trong `recent-hosts.txt` (quản lý tập trung ở `platform/system/RecentDevicesFile`, `dh_list_sources` tự ghi, bỏ `dh_recent_touch`). PRIVACY lên 2.10.
 
 - [x] Không tự tin cậy host lần đầu dựa trên địa chỉ, tên máy hoặc việc TLS kết nối thành công. Theo quyết định TOFU ở trên, host lần đầu chỉ được lưu khi người dùng xác nhận fingerprint hoặc dùng `--accept-new-host-key`.
 - [x] Host chưa được cấu hình khóa: dừng; GUI hỏi xác nhận fingerprint, CLI in fingerprint và hướng dẫn `--accept-new-host-key`.
@@ -219,12 +226,12 @@ deskhub-cli connect office
 
 - [x] Xóa `LanScanner` và các callback/thread/timer quét mạng, gồm tự scan khi mở app và rescan định kỳ.
 - [x] Rà `HostProbe`, `DiscoveryFfi`, `DiscoveryModel`, UI từng OS và CLI để bỏ dependency vào kết quả scan.
-- [ ] Tách logic recent/saved host còn cần ra khỏi `DiscoveryFfi`; không xóa nhầm chức năng lưu host thủ công.
+- [x] Tách logic recent/saved host còn cần ra khỏi `DiscoveryFfi`; không xóa nhầm chức năng lưu host thủ công.
 - [x] Bỏ ngoại lệ nhận beacon plaintext trong `SessionTransport::Deliver` và đường gửi/trả lời discovery plaintext tương ứng.
 - [x] Host không trả `SOURCE_LIST` hay `PONG` cho các probe discovery chưa xác thực, kể cả trả danh sách rỗng.
 - [x] Sửa `RunSources` và `RunConnect` đang gọi `ProbeHostRttMs`: đi thẳng vào QUIC/TLS, kiểm tra host, auth rồi mới query nguồn.
-- [ ] Rà `Beacon`, `HostNetLoop` và `ViewerBroadcast`: tách phần liệt kê nguồn trong phiên đã auth trước khi xóa chức năng discovery. Không xóa theo tên “Broadcast” vì còn broadcast media tới viewer hợp lệ.
-- [ ] Giữ `ListSources/SourceList` khi cần cho danh sách màn hình sau auth; giữ ping/pong, heartbeat, RTT trong phiên hợp lệ.
+- [x] Rà `Beacon`, `HostNetLoop` và `ViewerBroadcast`: tách phần liệt kê nguồn trong phiên đã auth trước khi xóa chức năng discovery. Không xóa theo tên “Broadcast” vì còn broadcast media tới viewer hợp lệ.
+- [x] Giữ `ListSources/SourceList` khi cần cho danh sách màn hình sau auth; giữ ping/pong, heartbeat, RTT trong phiên hợp lệ.
 - [ ] Bỏ import, file build, FFI, string ID, bản dịch và test chỉ phục vụ scan LAN. Đã xóa source/build/FFI/JNI/test scanner, probe và string helper quét; cần rà tiếp string ID, bản dịch và tài liệu cũ.
 - [ ] Kiểm tra bằng packet capture: app idle không quét subnet; host không trả lời gói discovery Deskhub cũ; kết nối cấu hình thủ công vẫn hoạt động.
 
@@ -233,12 +240,12 @@ Bỏ discovery giảm dữ liệu công khai và đường xử lý trước aut
 ## 8. Chuyển đổi dữ liệu và tương thích
 
 - [x] Giữ khóa TLS host hiện tại nếu hợp lệ để tránh đổi danh tính host ngoài ý muốn; file đã lưu nhưng không dùng được không bị tự thay thế.
-- [ ] Version hóa cấu hình mới; migration có thể chạy lại an toàn, chỉ đánh dấu hoàn tất sau khi ghi thành công.
-- [ ] `paired_devices` cũ chỉ lưu fingerprint, không có public key để xuất thành `authorized_keys`. Không chuyển fingerprint thành một public key giả hoặc tự cấp quyền cho khóa do mạng cung cấp.
-- [ ] Cung cấp hướng dẫn/lệnh migration chủ động: xuất public key từ identity cũ trên từng client và thêm lại trên host, hoặc tạo khóa client mới rồi cấp quyền.
-- [ ] Có thể tái sử dụng khóa P-256 cũ cho danh tính client chuyển tiếp nếu parser mới hỗ trợ; phải là lựa chọn rõ ràng để sau này tách/đổi khóa client không làm đổi TLS host.
-- [ ] Giữ các pin host cũ nếu chuyển đổi được với đúng encoding fingerprint; đánh dấu rõ pin legacy và không làm mất kiểm tra khóa khi đọc cấu hình cũ.
-- [ ] Địa chỉ recent không kèm pin chỉ được chuyển thành mục chưa cấu hình xong; không tự trở thành host tin cậy.
+- [x] ~~Version hóa cấu hình mới và migration~~ — bỏ theo quyết định không migration; file cũ không tương thích bị xóa/tạo lại.
+- [x] ~~`paired_devices` cũ chỉ lưu fingerprint, không có public key để xuất thành `authorized_keys`. Không chuyển fingerprint thành một public key giả hoặc tự cấp quyền cho khóa do mạng cung cấp.~~ — không áp dụng (không migration).
+- [x] ~~Cung cấp hướng dẫn/lệnh migration chủ động: xuất public key từ identity cũ trên từng client và thêm lại trên host, hoặc tạo khóa client mới rồi cấp quyền.~~ — không áp dụng (không migration).
+- [x] ~~Có thể tái sử dụng khóa P-256 cũ cho danh tính client chuyển tiếp nếu parser mới hỗ trợ; phải là lựa chọn rõ ràng để sau này tách/đổi khóa client không làm đổi TLS host.~~ — không áp dụng (không migration).
+- [x] ~~Giữ các pin host cũ nếu chuyển đổi được với đúng encoding fingerprint; đánh dấu rõ pin legacy và không làm mất kiểm tra khóa khi đọc cấu hình cũ.~~ — không áp dụng (không migration).
+- [x] ~~Địa chỉ recent không kèm pin chỉ được chuyển thành mục chưa cấu hình xong; không tự trở thành host tin cậy.~~ — không áp dụng (không migration).
 - [x] Xóa passcode khỏi settings/recent store, CLI/env, FFI, log và serialization; không tạo bản backup mới chứa passcode/private key dạng rõ.
 - [ ] Thông báo tương thích rõ cho client/server cũ. Bản mới không cho phép cơ chế cũ để giữ tương thích.
 - [ ] Khi danh sách khóa mới chưa được cấu hình, host từ chối truy cập và hướng dẫn quản trị viên thêm public key cục bộ.
@@ -263,7 +270,7 @@ Bỏ discovery giảm dữ liệu công khai và đường xử lý trước aut
 - [ ] Reconnect/resume/session resumption phải xác thực lại đúng policy.
 - [ ] Gói discovery plaintext cũ không nhận phản hồi; ping/pong và source query sau auth vẫn hoạt động.
 - [ ] Kiểm tra kết nối thủ công trên macOS, Windows, Linux, Android, iOS và CLI; service được mô phỏng bằng caller không có UI dùng cùng API/config.
-- [ ] Fuzz parser key/config và message auth mới; cập nhật seed corpus và xóa vector chỉ dành cho giao thức cũ khi phù hợp.
+- [x] Fuzz parser key/config (`fuzz_keys`); message auth đã nằm trong `fuzz_wire`.
 
 ### 9.3. Gate hoàn tất
 
@@ -274,9 +281,9 @@ Bỏ discovery giảm dữ liệu công khai và đường xử lý trước aut
 
 ## 10. Tài liệu và thứ tự triển khai
 
-- [ ] Cập nhật README, SPECIFICATION, ARCHITECTURE, SECURITY, CLI help và hướng dẫn cài đặt/cấu hình bị ảnh hưởng.
-- [ ] Cập nhật PRIVACY về dữ liệu khóa/host được lưu và loại bỏ discovery/passcode; theo quy ước tài liệu hiện có, cập nhật version/ngày hiệu lực/changelog khi thay đổi hành vi lưu hoặc truyền dữ liệu.
-- [ ] Đồng bộ các tài liệu sản phẩm được sửa ở EN/VI/ZH/JA; thay ảnh chụp còn scan/passcode nếu cần.
+- [x] Cập nhật README, SPECIFICATION, ARCHITECTURE, SECURITY, CLI help và hướng dẫn cài đặt/cấu hình bị ảnh hưởng.
+- [x] Cập nhật PRIVACY về dữ liệu khóa/host được lưu và loại bỏ discovery/passcode; theo quy ước tài liệu hiện có, cập nhật version/ngày hiệu lực/changelog khi thay đổi hành vi lưu hoặc truyền dữ liệu.
+- [x] Đồng bộ các tài liệu sản phẩm được sửa ở EN/VI/ZH/JA. Ảnh chụp README vẫn là ảnh cũ, cần chụp lại.
 - [ ] Hướng dẫn tạo/import khóa, thêm public key text, ghim khóa host, chạy CLI không tương tác, thu hồi/đổi khóa và chuyển dữ liệu cũ.
 
 Triển khai theo các đợt phụ thuộc sau:

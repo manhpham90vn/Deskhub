@@ -189,7 +189,7 @@ sudo firewall-cmd --add-port=47777/udp --permanent        # Fedora / openSUSE
 
 ```bash
 sudo apt remove deskhub      # hoặc: sudo dnf remove deskhub / sudo zypper remove deskhub
-rm -rf ~/.deskhub            # settings, key và danh sách máy đã pair
+rm -rf ~/.deskhub            # settings, key, client được phép và host đã trust
 sudo rm -f /etc/apt/sources.list.d/deskhub.list /etc/apt/keyrings/deskhub.gpg   # apt repository, nếu đã thêm
 ```
 
@@ -231,7 +231,7 @@ cho phép app inject input vào chính thiết bị đang chạy nó.
 `deskhub-cli` cung cấp lệnh để share màn hình, mở remote shell và chạy từ script hoặc qua
 SSH. Trên Windows và Linux, `connect` mở cửa sổ xem màn hình từ xa; trên macOS, hãy dùng
 app desktop để xem màn hình. Chạy `deskhub-cli help` để xem danh sách lệnh. CLI và app dùng
-chung settings, danh sách máy đã pair và các host key đã trust.
+chung settings, client key, client được phép và các host đã trust.
 
 | Nền tảng | File |
 | --- | --- |
@@ -271,14 +271,25 @@ tương ứng. Trường hợp này cần dùng app.
 ## 🔒 Trước khi share màn hình
 
 Mọi dữ liệu một session mang theo — video, phím gõ, mouse, clipboard và lưu lượng terminal
-— đều chạy trên **QUIC/TLS**. Một máy lạ chỉ được chấp nhận qua pairing handshake: nó phải
-chứng minh được mình biết passcode của host thông qua **SPAKE2** (passcode không bao giờ
-được truyền đi, và mỗi connection chỉ được thử một lần), hoặc chờ người dùng tại host trả
-lời *Let this machine in?*.
+— đều chạy trên **QUIC/TLS**, và quyền truy cập hoạt động như SSH. Để cho phép một thiết bị
+connect:
+
+1. Trên thiết bị sẽ connect, mở **Devices** → *When this machine is the client* →
+   **My keys** và bấm *Copy public key* (CLI: `deskhub-cli key public --name default`).
+2. Trên host, mở **Devices** → *When this machine is the host* → **Clients allowed to
+   connect to this machine**, bấm *Allow* và dán key đó vào (CLI:
+   `deskhub-cli access add --stdin`).
+3. Connect theo địa chỉ. Lần đầu tiên, hộp thoại **New host** hiển thị fingerprint key của
+   host: đối chiếu nó với **This machine's host key** trên trang Devices của host, rồi bấm
+   *Trust and connect*. Từ đó trở đi, host nằm trong **Trusted hosts**.
+
+Không có gì được chấp thuận qua network và Deskhub không bao giờ scan network. Nếu key của
+một host đã trust thay đổi, connection bị từ chối ngay; chỉ gỡ host đó khỏi *Trusted hosts*
+khi bạn biết vì sao key của nó thay đổi, rồi trust lại.
 
 Hãy dùng Deskhub trên **network tin cậy** hoặc qua **VPN**. **Không port-forward UDP
-47777.** Encrypt giúp bảo vệ nội dung session, nhưng port vẫn trả lời các probe discovery;
-lần pair đầu tiên cũng chưa có danh tính đã biết để đối chiếu. Để truy cập từ xa, bạn có
+47777.** Encrypt giúp bảo vệ nội dung session, nhưng lần connect đầu tiên tới một host sẽ
+trust key được hiển thị, trừ khi bạn đối chiếu fingerprint. Để truy cập từ xa, bạn có
 thể cài [Tailscale](https://tailscale.com) trên cả hai máy và connect tới địa chỉ `100.x.y.z`.
 
 [`SECURITY.vi.md`](../SECURITY.vi.md) mô tả đầy đủ threat model, phạm vi được bảo vệ và
@@ -288,6 +299,10 @@ cách báo lỗ hổng.
 
 - **Không tìm thấy máy nào để connect** — hai máy phải nằm trên cùng network (hoặc cùng
   tailnet Tailscale), và UDP 47777 phải được mở ở phía host.
+- **"This device's key is not authorized on that machine yet"** — host không có client key này
+  trong danh sách; hãy cho phép public key của nó trên trang Devices của host. Các client
+  được một phiên bản Deskhub cũ cho phép phải được cho phép lại.
+- **"This host's key has changed"** — xem [Trước khi share màn hình](#-trước-khi-share-màn-hình).
 - **Linux: share thất bại ngay lập tức** — chạy `vainfo | grep -E 'H264.*Enc'`. Kết quả
   rỗng nghĩa là máy này không có H.264 encoder dùng được và không thể host.
 - **Linux: con trỏ không di chuyển** — thiếu rule `/dev/uinput` ở mục 3.

@@ -119,7 +119,7 @@ ExitCode RunSend(const Command& command) {
     if (command.json) {
         PrintResultJson(client, command.send.files.size());
     } else if (!command.quiet) {
-        PrintError(message);
+        PrintConnectFailure(message);
     }
     if (Interrupted() && last != deskhubp::FileTransferClientState::Done)
         return ExitCode::Interrupted;

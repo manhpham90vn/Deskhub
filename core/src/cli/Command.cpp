@@ -1200,10 +1200,9 @@ std::string UsageText(Verb verb) {
                    program +
                    " devices forget all\n"
                    "\n"
-                   "Machines that are allowed to connect to this one. Forgetting a machine means it\n"
-                   "needs its public key authorized again. --passphrase-stdin unlocks the imported\n"
-                   "private key file locally; it is never sent to a host. The first public key\n"
-                   "added to authorized_keys replaces legacy fingerprint-only permissions.\n";
+                   "Client keys allowed to connect to this machine (authorized_keys). Forgetting a\n"
+                   "key means that device needs its public key added again. --passphrase-stdin\n"
+                   "unlocks the imported private key file locally; it is never sent to a host.\n";
         case Verb::Trust:
             return "Usage: " + program +
                    " trust [list]\n"

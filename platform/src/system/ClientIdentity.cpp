@@ -304,9 +304,9 @@ bool SavePrivateKey(std::string_view fileName, std::string_view pem, bool replac
     const DWORD flags = (replace ? MOVEFILE_REPLACE_EXISTING : 0) | MOVEFILE_WRITE_THROUGH;
     const bool saved = MoveFileExW(temporary.c_str(), path.c_str(), flags) != 0;
 #else
-    const bool saved = replace ? ::rename(temporary.c_str(), path.c_str()) == 0
-                               : ::link(temporary.c_str(), path.c_str()) == 0;
-    if (!replace) ::unlink(temporary.c_str());
+    std::error_code existsError;
+    const bool taken = !replace && (std::filesystem::exists(path, existsError) || existsError);
+    const bool saved = !taken && ::rename(temporary.c_str(), path.c_str()) == 0;
 #endif
     if (!saved) {
         std::error_code ec;
@@ -418,6 +418,17 @@ std::vector<ClientIdentityInfo> ListClientIdentities() {
         return a.name < b.name;
     });
     return out;
+}
+
+bool RemoveClientIdentity(std::string_view name) {
+    const auto fileName = KeyFileName(name);
+    if (!fileName || name == "default") return false;
+    const std::lock_guard<std::mutex> lock(IdentityMutex());
+    const ConfigFileLock fileLock(*fileName);
+    if (!fileLock.Valid()) return false;
+    const auto path = AppDataFilePath(*fileName);
+    std::error_code error;
+    return !path.empty() && std::filesystem::remove(path, error) && !error;
 }
 
 std::string ClientPublicKeyText(const ClientIdentity& identity) {

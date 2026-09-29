@@ -24,6 +24,9 @@ bool IsZero(const Fingerprint& fp);
 std::string FormatFingerprint(const Fingerprint& fp);
 std::optional<Fingerprint> ParseFingerprint(std::string_view text);
 
+inline constexpr size_t kShortFingerprintChars = 12;
+std::string ShortFingerprint(const Fingerprint& fp);
+
 enum class TrustVerdict : uint8_t {
     Unknown = 0,
     Trusted = 1,

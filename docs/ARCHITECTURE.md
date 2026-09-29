@@ -25,18 +25,19 @@ client/     per-OS apps: windows, linux, macos, ios, android (depend on platform
 
 | Layer | Contents |
 | --- | --- |
-| `core/protocol` | Wire format (`Wire.h`), record framing for streams (`RecordStream.h`), packet classifier that tells QUIC from Deskhub beacon datagrams |
+| `core/protocol` | Wire format (`Wire.h`), record framing for streams (`RecordStream.h`), packet classifier that tells QUIC from anything else |
 | `core/transport` | Packetizer/Reassembler for video, FEC, retransmit cache, send pacer |
-| `core/session` | Session state machines, split by role: `session/host` (per-viewer sessions, viewer table, beacon, file receiver, auth throttle), `session/client` (screen client, file sender, terminal client, connect flow), and shared pieces beside them (transfer types, terminal session table, clipboard sync, link recovery) |
+| `core/session` | Session state machines, split by role: `session/host` (per-viewer sessions, viewer table, `SourceListResponder`, file receiver, auth throttle), `session/client` (screen client, file sender, terminal client, connect flow), and shared pieces beside them (transfer types, terminal session table, clipboard sync, link recovery) |
 | `core/control` | Bitrate controller, quality ladder, stream sizing, clock offset |
 | `core/terminal` | The VT emulator every client shares: `VtParser`, `Screen`, `KeyEncoder`, `Palette` |
-| `core/net` | Trust store (client side), paired devices (host side), bind-address selection, LAN scan logic |
-| `core/ui` | Every user-visible string, settings parsing, table-row builders — so all five clients say the same things |
+| `core/net` | Trust store (client side), authorized keys (host side), OpenSSH public-key text, bind-address selection |
+| `core/ui` | Every user-visible string, settings parsing, table-row builders, recent devices, host profiles (`HostProfiles`) and client-key rows (`ClientKeys`) — so all five clients say the same things |
 | `platform/net` | `UdpSocket` (per-OS), `QuicEndpoint` (quiche behind a pimpl), `SessionTransport` |
-| `platform/auth` | `AuthNegotiation` — the one pairing/passcode handshake both sides speak |
-| `platform/client` | `HostLink` (dial + trust + auth + channels, shared by every surface), `ScreenViewer`, `TerminalViewer`, `FileTransferClient`, `SourceQuery`, host probe, LAN scanner |
+| `platform/auth` | `AuthNegotiation` — the one key-signature handshake both sides speak |
+| `platform/client` | `HostLink` (dial + trust + auth + channels, shared by every surface), `ScreenViewer`, `TerminalViewer`, `FileTransferClient`, `SourceQuery`, `HostProfiles` (trusted hosts and the client key each uses) |
 | `platform/host` | `HostEngine`, `HostNetLoop`, `SharingHost`, `TerminalHost`, `FileHost`, `ViewerBroadcast` |
-| `platform/system` | Clock, random, PTY (ConPTY / forkpty), host identity (keys), trust/paired-device files, autostart, keep-awake |
+| `platform/system` | Clock, random, PTY (ConPTY / forkpty), host identity (`HostIdentity`), client keys (`ClientKeys`, `ClientIdentity`), `authorized_keys` and `known_hosts` files, the recent list (`RecentDevicesFile`), device name, autostart, keep-awake |
+| `platform/ffi` | The C surface the Swift and Kotlin apps call: `SettingsFfi` (settings, device name), `DevicesFfi` (recent devices, allowed clients, this host's fingerprint), `HostProfileFfi` (trusted hosts), `ClientKeyFfi` (client keys), plus the share, screen, terminal and send surfaces |
 | `core/cli` | The command-line grammar and its JSON writer — pure text in, validated command out |
 | `client/<os>` | Capture, encode, decode, render, windowing, dialogs — nothing protocol-shaped |
 | `client/cli` | Flags to sessions: one binary that hosts, connects and opens shells with no GUI toolkit. It links the same per-OS media library the desktop app does |
@@ -55,12 +56,12 @@ Everything a host offers rides **one UDP port** (default 47777) through one
                             |
                  ClassifyPacket (first byte)
                    /                    \
-            QUIC packets          Deskhub datagrams
+            QUIC packets          anything else
                  |                        |
-   +-------------+------------+       beacon only:
-   |             |            |       LIST_SOURCES / PING answered
- streams     datagrams     (TLS)      in the plain; every other
-   |             |                    raw packet is dropped
+   +-------------+------------+        dropped: nothing is
+   |             |            |        answered in the plain
+ streams     datagrams     (TLS)
+   |             |
  control      video
  input        audio       Streams carry framed records (RecordStream):
  clipboard                length-prefixed messages up to 16 KiB.
@@ -78,9 +79,9 @@ Everything a host offers rides **one UDP port** (default 47777) through one
 - **Datagrams** (unreliable, unordered, still encrypted): video and audio packets.
   Lost ones are never retransmitted by QUIC; for video the app's own FEC/NACK
   machinery handles loss, and for audio nothing does — see section 9.
-- **Raw UDP** exists only for discovery: the beacon answers scanners that speak no
-  QUIC, and probes it did not invite get an empty source list. Inbound raw packets
-  that are not discovery types are discarded before they reach any session code.
+- **Raw UDP** is never answered. There is no discovery: an inbound packet that is not
+  QUIC is discarded before it reaches any session code, and `SourceListResponder`
+  answers `LIST_SOURCES` and session-0 `PING` only for an authenticated connection.
 
 `QuicEndpoint` hides quiche completely (pimpl; `QuicEndpointNone.cpp` stubs it out,
 but only when a build opts out with `-DDESKHUB_QUIC=OFF` — a missing quiche fails the
@@ -90,51 +91,63 @@ touch of the endpoint happens under the transport's send mutex — and the trans
 never holds that mutex across a blocking socket wait (`WaitReadable` first, unlocked;
 then a brief locked `Poll`). Holding it across the wait starves every sender.
 
-## 3. Admission: pairing
+## 3. Admission: keys, like SSH
 
-Every machine creates an ECDSA P-256 key on first run (`HostIdentity`); its SHA-256
-SPKI hash is the fingerprint people see. TLS uses a self-signed certificate over that
-key. On top of TLS, an application-level handshake (`AuthNegotiation`) decides
-admission per connection. The transport runs it and drops every message from a
-connection whose auth has not settled:
+Every machine creates an ECDSA P-256 host key on first run (`HostIdentity`) and never
+replaces it automatically; its SHA-256 SPKI hash is the fingerprint people see. TLS
+uses a self-signed certificate over that key. A client signs in with one of its client
+keys (`ClientKeys`): Ed25519 when generated, Ed25519 or ECDSA P-256 when imported from
+an OpenSSH or PKCS#8 file. The host admits only public keys listed in its
+`authorized_keys` (`AuthorizedKeys`, at most 128 lines of `ssh-ed25519 AAAA… label` or
+`ecdsa-sha2-nistp256 AAAA… label`); the label is a display name, never a permission.
+Nothing is approved over the network — there is no passcode, no approval prompt and no
+switch that lets unknown keys in.
 
-| Client offers | Host knows the machine | Result |
-| --- | --- | --- |
-| nothing | paired | **Signature**: client signs a TLS-session-ID and host-fingerprint transcript with its key. In silently. |
-| nothing | unknown | **Approval**: the person at the host is asked (*Let this machine in?*). |
-| a passcode | host has one | **Passcode**: SPAKE2 over a salted verifier — the code never travels, one guess per connection, both sides prove it, MACs are bound to the host key the client actually saw (kills relays). A typed code is always checked, paired or not. |
-| a passcode | host has none | nothing to check against → Signature if paired, Approval otherwise. |
-| anything | pairing switched off | **Denied** (paired machines still get Signature). |
+On top of TLS, an application-level handshake (`AuthNegotiation`, auth version 6)
+decides admission per connection. The transport runs it, and the host sends nothing
+application-level to a connection whose auth has not settled:
 
-Success writes the client into the host's `paired_devices`; pairing is by key, not
-address. Three wrong passcode guesses lock the passcode path for 30 seconds, and each
-further lockout in a row doubles, up to one hour, until a correct passcode resets it
-(`AuthThrottle`); the approval path needs no throttle — a human is the gate.
+1. QUIC/TLS completes. The client checks the host's key against `known_hosts` **before
+   sending anything** (see below).
+2. The client sends `AuthStart` with its public key and device name.
+3. The client signs a transcript — domain label, auth version, role, the session value
+   exported from this QUIC/TLS connection, its public key and the host's TLS
+   fingerprint (`core/auth/Transcript`) — and the host verifies it against the key,
+   which must be in `authorized_keys`.
+
+A signature is bound to that one connection, so a reconnect signs again; there is no
+0-RTT or session resumption. The host keeps at most 8 connections waiting to
+authenticate and drops each after 10 seconds; 3 bad signatures from one key and source
+IP within a minute block that pair for 10 seconds (`AuthThrottle`).
 
 Admission belongs to one QUIC connection, not to an address. It is dropped the moment
 that connection closes, so the next connection from the same address and port has to
 prove itself again. A second `AuthStart` on a connection that already began its
 handshake closes the connection: a settled identity cannot be swapped for one that was
-never proved, and a refused passcode cannot be retried in place. Forgetting a machine
-on the Devices page also closes any connection it has open at that moment.
+never proved, and a refused key cannot be retried in place. Removing a client key on
+the Devices page (or `access remove`) also closes any connection it has open at that
+moment.
 
-Client side, `known_hosts` (`TrustStore`) pins host keys. A **changed** key blocks the
-connection behind a loud warning; an unknown key is settled by the handshake itself
-(a host that proved the passcode is remembered without a prompt).
+Client side, `known_hosts` (`TrustStore`) pins host keys per address and port, beside
+each trusted host's name and the client key to use with it (`HostProfiles`). This is
+trust on first use, as in SSH: an **unknown** key fails the link as *not trusted yet*;
+the app then shows the fingerprint in its *New host* dialog and redials with
+`acceptNewHostKey` once the user chooses *Trust and connect*, and the CLI does the same
+only with `--accept-new-host-key`. A **changed** key is a hard failure with no bypass:
+the host must be removed from *Trusted hosts* and trusted again.
 
 The wire carries the public key itself, never a bare fingerprint — the host hashes
 what it receives, so wearing someone else's identity would mean signing with a key
 the impostor does not hold. And because admission settles once per connection,
-nothing above the transport ever asks again: a machine that proved itself carries no
-passcode in any later message, and session code treats the whole connection as
-authenticated.
+nothing above the transport ever asks again: session code treats the whole connection
+as authenticated.
 
 ## 4. Host side
 
 ```
 HostEngine (one per app, owns SessionTransport)
  ├─ net-loop thread: RunHostNetLoop
- │    recv → beacon replies | video-path ingest | Chan::Terminal → TerminalHost
+ │    recv → source-list/pong replies (admitted only) | video-path ingest | Chan::Terminal → TerminalHost
  │    per-source session Tick, clipboard flush, reconfig, stats
  ├─ capture/encode: per-source, driven by the OS capture callbacks (client layer)
  │    frame → encoder (per-source mutex) → Packetizer → FEC → SendTo (datagrams)
@@ -204,11 +217,11 @@ HostLink (one per open surface)
 ```
 
 Once admitted, the link takes its own pulse (`core/session/LinkPulse`): a
-`Ping` datagram with session id 0 goes out once a second, and the host's beacon answers
-it over the same connection with no session required. Because a ping is ack-eliciting it
-doubles as the keepalive; the plain keepalive timer only still matters while the link is
-parked in `Deciding`. A host too old to answer session-0 pings never sends a first pong,
-so it is never judged by its silence — nothing regresses.
+`Ping` datagram with session id 0 goes out once a second, and the host's
+`SourceListResponder` answers it over the same, already authenticated connection with no
+session required. Because a ping is ack-eliciting it
+doubles as the keepalive; the plain keepalive timer only still matters before the link
+is admitted.
 On a recovering link the pulse is also the liveness check: five seconds without a
 pong (only ever after a first pong proved the host answers) drops the connection
 into the existing redial path. Those five seconds are counted in time the link
@@ -228,34 +241,45 @@ streaming resumes off the fresh keyframe. After sixty seconds
 reason.
 
 The source query (`QuerySources`) rides the same link in a one-shot, blocking form.
-The UI still posts intents (keys, resize, accept-fingerprint) into command queues;
-a changed host key parks the link in `Deciding` until the person accepts or rejects
-it. The terminal window never parses escape sequences — `core/terminal` turns the
+The UI still posts intents (keys, resize) into command queues. An unknown host key
+fails the link with its fingerprint attached, for the UI to show in its *New host*
+dialog; a changed one fails it for good. The terminal window never parses escape sequences — `core/terminal` turns the
 byte stream into a cell grid, and the window only draws cells and forwards key
 events. Today each window still holds its own link; sharing one admitted link across
 every window aimed at the same host is the intended next step, and it slots in at
 `HostLink` — a registry and observer fan-out — not as another handshake.
 
-## 6. Discovery
+## 6. Finding hosts
 
-The beacon answers `LIST_SOURCES` and `PING` as plain UDP so a scanner can sweep a
-subnet without 254 TLS handshakes. A stranger's reply is an empty list; the real
-source list is revealed only over an admitted connection. That answer also carries
-what the host can do — whether it takes input, whether it shares a terminal — in the
-`SOURCE_LIST` header flags, so a client knows before it opens any window that a phone
-can only be watched. A host from before the flags existed sets none of them. Recent devices, their
-online state (ping/pong probes) and the LAN scan feed one merged device list, built
-by `core/ui/DeviceRows` and shown by all five clients.
+There is no discovery: nothing scans the network and the host answers no plaintext
+packet. A client dials an address the user typed, a recent host or a trusted host
+(`HostProfiles`). `SourceListResponder` answers `LIST_SOURCES` only over an admitted
+connection; the answer carries what the host can do — whether it takes input, whether
+it shares a terminal — in the `SOURCE_LIST` header flags, so a client knows before it
+opens any window that a phone can only be watched. After the source records the payload
+carries the host's device name (a length byte and at most 64 bytes of UTF-8; empty is
+allowed), so the name reaches only a client that has already authenticated. The client
+parses it with `ParseSourceListHostName`, which turns any control byte into a space.
+
+The recent list lives in `platform/system/RecentDevicesFile` (`recent-hosts.txt`), over
+the parsing in `core/ui/RecentDevices`: address, last-connected time and the host name,
+at most 10. The FFI `dh_list_sources` records a host there only when it answered, so the
+apps no longer touch the list themselves and `dh_recent_touch` is gone. The old
+`recent-devices.txt` is deleted, not converted.
 
 ## 7. Data on disk
 
 Everything lives in the user's Deskhub folder (`~/.deskhub`,
-`%USERPROFILE%\.deskhub`): `host_key.pem` + `host_cert.pem` (identity),
-`known_hosts` (hosts this machine trusts), `paired_devices` (machines this host
-admits), `auth_salt` (non-secret verifier salt), `ui-settings.txt`,
-`recent-devices.txt` (addresses + obscured passcodes), `portal-restore-token.txt` on
-Linux (the desktop's own token for the screens picked in its screen-sharing dialog),
-and per-run logs. File I/O
+`%USERPROFILE%\.deskhub`, the App Group container on iOS, internal storage on Android;
+`DESKHUB_CONFIG_DIR` or the CLI's `--config-dir` override it): `host_key.pem` +
+`host_cert.pem` (host identity), `client_key.pem` + `client_key.<name>.pem` (client keys,
+DPAPI-protected on Windows), `authorized_keys` (client keys this host admits),
+`known_hosts` (trusted hosts with their profiles), `ui-settings.txt` (including the
+device name), `recent-hosts.txt` (address, last-connected time and host name),
+`portal-restore-token.txt` on Linux (the desktop's own token for the screens picked in
+its screen-sharing dialog), and per-run logs. No passcode is stored anywhere. POSIX
+directories are `0700` and files `0600`, written atomically; on Windows the ACL admits
+the user, SYSTEM and Administrators. File I/O
 stays in `platform/`; the parsing and the data structures live in `core/` and are
 unit-tested.
 
@@ -273,8 +297,8 @@ control bytes, characters Windows rejects and reserved device names all go — b
 | Suite | Runs | Covers |
 | --- | --- | --- |
 | `make test` | offline, no sockets | all of `core/`: wire, framing, FEC, sessions, VT emulator, settings, strings, deterministic structured fuzzing |
-| `make test-platform` | loopback sockets | real QUIC handshakes, SPAKE2 end-to-end, terminal host + viewer over the wire, PTY against a real shell, lockout, approval |
-| `make test-integration` | loopback, fake capture/encode | full host↔client sessions: negotiation, video across the wire, input, passcode/approval gating, junk resistance, and lag under cross-load — a file transfer, a flooded terminal and keystrokes beside a live stream, each gated on its worst observed stall |
+| `make test-platform` | loopback sockets | real QUIC handshakes, key-signature authentication end-to-end, host-key pinning, terminal host + viewer over the wire, PTY against a real shell, bad-signature lockout |
+| `make test-integration` | loopback, fake capture/encode | full host↔client sessions: negotiation, video across the wire, input, authorized-key admission, junk resistance, and lag under cross-load — a file transfer, a flooded terminal and keystrokes beside a live stream, each gated on its worst observed stall |
 | fuzz targets | 30 s per target on every PR, 15 min per target nightly | parsers for wire, H.264, reassembly, terminal bytes and UI text, plus the host and viewer session state machines |
 | `make test-perf` | release build, offline + loopback | the hot paths measured rather than only exercised: `core_perf` covers the pure-C++ paths, `platform_perf` covers real QUIC over loopback; both fail on allocations per unit, on the cost at 4× the input, and on drift against a baseline recorded on that machine |
 
@@ -308,7 +332,7 @@ line.
   serializes read-modify-write operations within one process and persists changes
   through an atomic file replacement.
 
-- **A damaged client allowlist grants no access**: loading `paired_devices` rejects
+- **A damaged client allowlist grants no access**: loading `authorized_keys` rejects
   unreadable, oversized, malformed, or duplicate entries as one failed configuration.
   The host periodically rechecks live admissions so a file replacement from another
   process can revoke active connections without an in-process generation update.
@@ -318,9 +342,8 @@ line.
   endpoint must be pinned explicitly before connection.
 
 - **The new client allowlist contains full public keys**: `authorized_keys` accepts
-  bounded OpenSSH public key lines and rejects malformed or duplicate entries. It
-  becomes authoritative when first saved. An activation marker prevents deleting
-  the file from reactivating legacy fingerprint-only permissions. `known_hosts`
+  bounded OpenSSH public key lines and rejects malformed or duplicate entries. It is
+  the only allowlist: a missing file admits nobody. `known_hosts`
   stores each endpoint's alias and selected client identity beside its TLS pin.
   Config writes use an OS file lock across processes and atomic replacement.
   A service can set its configuration directory with `SetConfigDir` or
@@ -347,8 +370,27 @@ line.
   before the key as a compatibility prefix and puts auth version 6 after the client name.
   An older host can read the offer and send its old challenge; the new client then detects
   the incompatible challenge and closes. A new host rejects an offer without the version
-  suffix, sends `VersionMismatch`, and closes. The prefix no longer carries a passcode
-  choice. Challenge, response, and result carry only versioned signature data.
+  suffix, sends `VersionMismatch`, and closes. Challenge, response, and result carry only
+  versioned signature data.
+
+- **Trust on first use, hard block on change**: an unknown host key is shown to the
+  user once, as SSH does, and pinned only when they accept it (`--accept-new-host-key`
+  in the CLI); a changed key is refused with no accept button at all. A prompt that
+  lets people click through a key change teaches them to click through the one that
+  is an attack, so the only way past it is removing the host from *Trusted hosts* —
+  a deliberate act away from the connection that tripped it.
+
+- **One device name**: Settings → General → *Device name* (empty means the OS name) is
+  the only name a machine has — hosts show it to viewers and send it to the clients
+  they admit, clients send it when they connect, and it labels every public key the machine copies
+  (`<device name>` or `<device name> (<key name>)`). The Client page lost its own
+  name field so the name a host sees and the label in its `authorized_keys` agree.
+
+- **No migration of old data**: passcodes, the old `paired_devices` list and its
+  activation marker are not converted — nothing in them proves a client holds a key —
+  and leftover files are deleted. An `authorized_keys` or `known_hosts` that cannot be
+  read is never guessed at: while it is unreadable the host denies everyone and the
+  client refuses every host, and the next change writes it afresh.
 
 - **What a desktop screen shows is data in `core/ui`, not code in each app**: the colour
   theme (`Theme.h`, a light and a dark value per colour), the live host table's columns
@@ -642,8 +684,8 @@ line.
   refresh their picker on the OS display-change signal, which is what keeps the list
   right when a monitor is plugged in later.
 - **quiche over msquic/ngtcp2**: the only QUIC library with production evidence on
-  both Android and iOS. It brings BoringSSL, which also serves SPAKE2 and the host
-  identity — no second crypto library.
+  both Android and iOS. It brings BoringSSL, which also serves the host identity and
+  the client-key signatures — no second crypto library.
 - **No connection migration**: no usable client-side support in any candidate
   library. Reconnect-and-reattach (tmux-style, already required for mobile
   backgrounding) covers it; kept shells can also be listed (`TermList`) and resumed
@@ -653,9 +695,6 @@ line.
   certificate and private key makes startup fail without changing either file.
   Only an installation with neither file creates a new host identity, so an
   existing host fingerprint never changes silently.
-- **The passcode verifier is one SHA-256, not an expensive KDF**: SPAKE2 already
-  limits an attacker to one online guess per connection and leaves no transcript
-  worth cracking offline, which is the whole job KDF hardness exists to do.
 - **quiche is prebuilt, not FetchContent**: `scripts/build-quiche.sh` writes one
   directory per rust target under `third_party/quiche/` plus a shared `include/` —
   quiche.h and the BoringSSL headers boring-sys vendors, copied out because Deskhub
@@ -735,9 +774,10 @@ line.
   matches too: `_ITERATOR_DEBUG_LEVEL=0`, `/U_DEBUG`, `/RTC1` stripped — the
   release CRT has no `_CrtDbgReport` and no run-time check support. Any mismatch
   ends in a wall of LNK2038.
-- **Passcode = self-service admission, approval = the fallback**: a typed code is
-  always verified; no code means a human decides. The passcode never crosses the
-  network in any form an attacker can take home.
+- **Passcode, approval prompt and LAN scan were removed**: a 4-digit code is a short
+  secret on an open port, an approval prompt can be clicked by the wrong person, and a
+  plaintext discovery answer tells anyone on the network that a host is there. Keys the
+  owner copies deliberately replace all three.
 - **The VT emulator is ours**: no platform terminal widget is available on all five
   clients under a usable licence, and owning it makes terminal behaviour testable
   offline and identical everywhere.
@@ -747,7 +787,7 @@ line.
   when the button is pressed. While a remote viewer is attached the mirror's own
   terminal-query responses are discarded: the viewer's screen already answers them,
   and the shell must not hear two answers.
-- **One port**: beacon, screen and terminal share a single listener; QUIC
+- **One port**: screen, terminal and file transfer share a single listener; QUIC
   multiplexes connections and streams. The old second port existed only because the
   pre-QUIC screen path monopolised the socket.
 - **One `HostLink`, four former handshakes**: dial + trust check + auth + recovery
@@ -757,11 +797,9 @@ line.
   did. `HostLink` is now the only client-side code that dials or authenticates; a
   service opens its `Chan`, gets its own inbox queue, and drains it on its own
   thread. The terminal's redial-with-backoff moved into the link so every surface
-  that asks for recovery inherits it, and the trust rules live in one place: a
-  changed key parks the link in `Deciding` until a person answers (only the source
-  query passes it through, `trustGate=false`, remembering nothing — its callers
-  have no prompt to show), and only a passcode the host cryptographically proved
-  pins a key automatically.
+  that asks for recovery inherits it, and the trust rules live in one place: an
+  unknown key fails the link until the user trusts it (`acceptNewHostKey`), and a
+  changed key always fails it.
 - **`HostLink` sends through `Send`, not `SendMessage`**: on Windows the OS headers
   behind the platform layer define `SendMessage` as a macro for `SendMessageA`, and
   in `HostLink.cpp` they landed after the class declaration but before the method
@@ -790,22 +828,20 @@ line.
   Windows, Linux and macOS keeps no connected state of its own. A host that answers gets
   a connection window — `ConnectionFrame` in `client/windows/win32/MainFrame.cpp`,
   `ConnectionWindow` in `client/linux/gtk/MainWindow.cpp`, the `connection` `WindowGroup`
-  in `client/macos/app/swift/App.swift` — owning that host's address, passcode, caps,
+  in `client/macos/app/swift/App.swift` — owning that host's address, caps,
   sources and control tick, so the page stays free to dial the next one. The main window
   keeps only a list of the open ones, to raise a window when the same host is dialled
   twice, to push each status probe at the window whose address matches, and to close them
   all on quit. Android and iOS deliberately stay single-connection: a phone screen has no
   room for a second panel, and the session it opens is full-screen anyway.
   `ui::SameDeviceAddr` is what "the same host" means everywhere — see the entry below.
-- **One host, two spellings, one comparison**: `ScanAddressText` drops the port when it is
-  the default, so a scanned row reads `192.168.1.60` while the address the user typed and
-  connected with reads `192.168.1.60:47777`. Comparing those as strings silently fails,
-  and every place that did lost something real: the connected panel found no matching
-  device row and so showed no ping, and `PasscodeForDevice` did not find the code saved
-  for a host that was picked out of the scan list. Address equality therefore goes through
-  `ui::NormalizedDeviceAddr` / `ui::SameDeviceAddr` (`core/ui/Strings.h`), exposed to the
-  Swift and Kotlin clients as `dh_same_device_addr`. Never compare two device addresses
-  with `==`.
+- **One host, two spellings, one comparison**: an address may be written with or without
+  the default port, so `192.168.1.60` and `192.168.1.60:47777` name the same host.
+  Comparing those as strings silently fails: the connected panel found no matching
+  recent row, and a connection window was opened twice for one host. Address equality
+  therefore goes through
+  `ui::NormalizedDeviceAddr` / `ui::SameDeviceAddr` (`core/ui/Strings.h`). Never compare
+  two device addresses with `==`.
 
 - **A decoder that has just been opened holds no reference frame**: `ScreenViewer` rebuilds
   its decoder whenever the surface changes, and the iOS app hands the surface back when the

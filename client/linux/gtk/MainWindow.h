@@ -11,16 +11,15 @@
 #include <vector>
 
 #include "TrayIcon.h"
-#include "deskhub/net/PairedDevices.h"
 #include "deskhub/net/TrustStore.h"
 #include "deskhub/session/client/ConnectFlow.h"
 #include "deskhub/session/client/OpenViewers.h"
 #include "deskhub/ui/AutoShareGate.h"
-#include "deskhub/ui/DeviceRows.h"
-#include "deskhub/ui/HostRows.h"
 #include "deskhub/ui/RecentDevices.h"
+#include "deskhub/ui/HostRows.h"
 #include "deskhub/ui/UiSettings.h"
 #include "deskhubp/host/ShareDriver.h"
+#include "deskhubp/system/AuthorizedKeysFile.h"
 #include "deskhubp/system/ClientIdentity.h"
 #include "deskhubp/host/SharingHost.h"
 #include "deskhubp/client/SourceQueryAsync.h"
@@ -93,6 +92,7 @@ private:
     static void OnAllowClientActivate(GtkEntry* entry, gpointer user);
     static void OnCopyTextClicked(GtkButton* button, gpointer user);
     static void OnNewKeyClicked(GtkButton* button, gpointer user);
+    static void OnDeleteKeyClicked(GtkButton* button, gpointer user);
     static void OnImportKeyClicked(GtkButton* button, gpointer user);
     void BuildSavedHostsSection(GtkWidget* box);
     void RefreshSavedHosts();
@@ -113,7 +113,6 @@ private:
 
     void LoadSettings();
     void SaveSettings();
-    void SaveRecentDevices();
     void PopulateBindCombo();
     void RebuildHostAddressRows();
 
@@ -232,7 +231,7 @@ private:
 
     GtkWidget* pairedView_ = nullptr;
     GtkWidget* pairedHintLabel_ = nullptr;
-    std::vector<deskhub::PairedDevice> pairedDevices_;
+    std::vector<deskhubp::AuthorizedClient> pairedDevices_;
     GtkWidget* allowClientEntry_ = nullptr;
     GtkWidget* allowClientError_ = nullptr;
     GtkWidget* clientKeysView_ = nullptr;
@@ -244,7 +243,6 @@ private:
     std::vector<deskhub::TrustedHost> savedHosts_;
     GtkWidget* deviceHintLabel_ = nullptr;
     GtkListStore* deviceStore_ = nullptr;
-    std::vector<deskhub::ui::DeviceRow> deviceRows_;
 
     GtkWidget* fpsSpin_ = nullptr;
     GtkWidget* bitrateSpin_ = nullptr;

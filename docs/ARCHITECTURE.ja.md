@@ -27,18 +27,19 @@ client/     OS ごとの app: windows、linux、macos、ios、android（platform
 
 | Layer | 内容 |
 | --- | --- |
-| `core/protocol` | Wire format（`Wire.h`）、stream の record framing（`RecordStream.h`）、QUIC と Deskhub の beacon datagram を判別する packet classifier |
+| `core/protocol` | Wire format（`Wire.h`）、stream の record framing（`RecordStream.h`）、QUIC とそれ以外を判別する packet classifier |
 | `core/transport` | video 向けの Packetizer/Reassembler、FEC、retransmit キャッシュ、send pacer |
-| `core/session` | session state machine を役割ごとに分割: `session/host`（viewer ごとの session、viewer 表、beacon、file receiver、auth throttle）、`session/client`（screen client、file sender、terminal client、connect の流れ）、およびそれらの隣に置いた共有部品（transfer の型、terminal session 表、clipboard sync、link recovery） |
+| `core/session` | session state machine を役割ごとに分割: `session/host`（viewer ごとの session、viewer 表、`SourceListResponder`、file receiver、auth throttle）、`session/client`（screen client、file sender、terminal client、connect の流れ）、およびそれらの隣に置いた共有部品（transfer の型、terminal session 表、clipboard sync、link recovery） |
 | `core/control` | Bitrate controller、quality ladder、stream のサイズ決定、clock offset |
 | `core/terminal` | すべての client が共有する VT emulator: `VtParser`、`Screen`、`KeyEncoder`、`Palette` |
-| `core/net` | Trust store（client 側）、paired devices（host 側）、bind アドレスの選択、LAN scan のロジック |
-| `core/ui` | 利用者に表示されるすべての文字列、settings の解析、表の行の構築。5 つの client が同一の内容を表示するためのもの |
+| `core/net` | Trust store（client 側）、authorized keys（host 側）、OpenSSH public key のテキスト、bind アドレスの選択 |
+| `core/ui` | 利用者に表示されるすべての文字列、settings の解析、表の行の構築、最近のデバイス、host profile（`HostProfiles`）と client key の行（`ClientKeys`）。5 つの client が同一の内容を表示するためのもの |
 | `platform/net` | `UdpSocket`（OS ごとの実装）、`QuicEndpoint`（quiche を pimpl の背後に配置）、`SessionTransport` |
-| `platform/auth` | `AuthNegotiation` —— 双方が用いる唯一の pairing/passcode handshake |
-| `platform/client` | `HostLink`（dial、trust、auth、channel。すべての画面が共有）、`ScreenViewer`、`TerminalViewer`、`FileTransferClient`、`SourceQuery`、host probe、LAN scanner |
+| `platform/auth` | `AuthNegotiation` —— 双方が用いる唯一の key 署名 handshake |
+| `platform/client` | `HostLink`（dial、trust、auth、channel。すべての画面が共有）、`ScreenViewer`、`TerminalViewer`、`FileTransferClient`、`SourceQuery`、`HostProfiles`（信頼済み host と、それぞれに用いる client key） |
 | `platform/host` | `HostEngine`、`HostNetLoop`、`SharingHost`、`TerminalHost`、`FileHost`、`ViewerBroadcast` |
-| `platform/system` | Clock、random、PTY（ConPTY / forkpty）、host identity（key）、trust と paired-device のファイル、autostart、keep-awake |
+| `platform/system` | Clock、random、PTY（ConPTY / forkpty）、host identity（`HostIdentity`）、client key（`ClientKeys`、`ClientIdentity`）、`authorized_keys` と `known_hosts` のファイル、最近の一覧（`RecentDevicesFile`）、デバイス名、autostart、keep-awake |
+| `platform/ffi` | Swift と Kotlin の app が呼び出す C の surface: `SettingsFfi`（settings、デバイス名）、`DevicesFfi`（最近のデバイス、許可済み client、本 host の fingerprint）、`HostProfileFfi`（信頼済み host）、`ClientKeyFfi`（client key）、および share、screen、terminal、send の各 surface |
 | `core/cli` | command line の文法とその JSON writer。入力は平文、出力は検証済みの command |
 | `client/<os>` | Capture、encode、decode、render、windowing、ダイアログ。protocol に関する要素は含まない |
 | `client/cli` | flag から session まで: GUI toolkit なしで host、connect、shell の起動を行う binary 1 つ。デスクトップ app と同じ OS ごとの media ライブラリを link する |
@@ -57,11 +58,11 @@ host が提供するすべての機能は、単一の `QuicEndpoint` を包む `
                             |
                  ClassifyPacket（先頭バイトを判定）
                    /                    \
-            QUIC packet            Deskhub datagram
+            QUIC packet             それ以外
                  |                        |
-   +-------------+------------+       beacon のみ:
-   |             |            |       LIST_SOURCES / PING に平文で応答し、
- stream      datagram      (TLS)      それ以外の生 packet はすべて破棄する
+   +-------------+------------+        破棄: 平文では何にも
+   |             |            |        応答しない
+ stream      datagram      (TLS)
    |             |
  control      video
  input        audio       stream は framing された record（RecordStream）を運ぶ。
@@ -80,9 +81,9 @@ host が提供するすべての機能は、単一の `QuicEndpoint` を包む `
 - **Datagram**（信頼性なし、順序保証なし、ただし encrypt 済み）: video と audio の
   packet。QUIC は失われた packet を再送しない。video については app 自身の FEC/NACK の
   機構が損失を扱い、audio については該当する機構はない —— 9 節を参照。
-- **生の UDP** は discovery のためにのみ使用する。beacon は QUIC を用いない scanner に
-  応答し、要求していない probe には空の source 一覧を返す。discovery の種別に該当しない
-  生 packet は、session のコードに届く前に破棄される。
+- **生の UDP** には一切応答しない。discovery は存在しない。QUIC でない受信 packet は
+  session のコードに届く前に破棄され、`SourceListResponder` は authenticate 済みの
+  connection に対してのみ `LIST_SOURCES` と session-0 の `PING` に応答する。
 
 `QuicEndpoint` は quiche を完全に隠蔽する（pimpl。`QuicEndpointNone.cpp` が stub を
 提供するが、これは build が明示的に `-DDESKHUB_QUIC=OFF` を指定した場合に限られる。
@@ -94,52 +95,65 @@ quiche がない場合は configure が失敗する。stub の binary では sha
 後にロックして短い `Poll` を行う。待機中に mutex を保持すると、すべての送信側が停止
 する。
 
-## 3. 受け入れの判定: pairing
+## 3. 受け入れの判定: SSH と同様の key
 
-各マシンは初回起動時に ECDSA P-256 の key を生成する（`HostIdentity`）。その SHA-256
-SPKI ハッシュが利用者に表示される fingerprint である。TLS はこの key に基づく自己署名
-certificate を使用する。TLS の上位では、アプリケーション層の handshake
-（`AuthNegotiation`）が connection ごとに受け入れの可否を決定する。transport がこれを
-実行し、auth が完了していない connection からの message はすべて破棄する。
+各マシンは初回起動時に ECDSA P-256 の host key を生成し（`HostIdentity`）、自動的に
+置き換えることはない。その SHA-256 SPKI ハッシュが利用者に表示される fingerprint である。
+TLS はこの key に基づく自己署名 certificate を使用する。client は自身の client key
+（`ClientKeys`）のいずれかで sign in する。生成した場合は Ed25519、OpenSSH または
+PKCS#8 のファイルから import した場合は Ed25519 または ECDSA P-256 である。host は
+`authorized_keys`（`AuthorizedKeys`。`ssh-ed25519 AAAA… label` または
+`ecdsa-sha2-nistp256 AAAA… label` の行を最大 128 行）に記載された public key のみを
+受け入れる。label は表示名であり、権限を意味することはない。network 越しに何かを承認
+することはない。passcode も、承認プロンプトも、未知の key を受け入れるスイッチも存在
+しない。
 
-| client が提示する内容 | host が当該マシンを知っているか | 結果 |
-| --- | --- | --- |
-| 提示しない | pair 済み | **Signature**: client が TLS セッション ID と host の fingerprint からなる transcript に自身の key で署名し、受け入れられる。 |
-| 提示しない | 未知 | **Approval**: host 側の利用者に確認する（*Let this machine in?*）。 |
-| passcode を提示 | host が passcode を設定している | **Passcode**: salt 付きの verifier 上で SPAKE2 を実行する。コード自体はネットワークを通過せず、connection ごとの試行は 1 回に限られ、双方が証明を行い、MAC は client が実際に受け取った host key に束縛される。これにより relay 攻撃は成立しない。入力されたコードは pair の有無にかかわらず常に検証される。 |
-| passcode を提示 | host は passcode を設定していない | 照合対象がないため、pair 済みなら Signature、そうでなければ Approval。 |
-| 任意 | pairing が無効 | **Denied**（pair 済みのマシンは Signature で通る）。 |
+TLS の上位では、アプリケーション層の handshake（`AuthNegotiation`、auth version 6）が
+connection ごとに受け入れの可否を決定する。transport がこれを実行し、auth が完了して
+いない connection に対して host はアプリケーション層のデータを一切送信しない。
 
-成功すると client は host の `paired_devices` に記録される。pairing は key に基づくもの
-であり、アドレスには基づかない。passcode を 3 回誤ると passcode の経路が 30 秒間
-ロックされ、その後ロックが続くたびに時間は倍になり、最長 1 時間に達する。正しい passcode
-が入力されるとリセットされる（`AuthThrottle`）。approval の経路に throttle は不要である。
-判断を行うのが人であるためだ。
+1. QUIC/TLS が完了する。client は**何かを送信する前に**、host の key を `known_hosts`
+   と照合する（後述）。
+2. client は自身の public key とデバイス名を含む `AuthStart` を送信する。
+3. client は transcript —— ドメインのラベル、auth version、役割、この QUIC/TLS
+   connection から export した session の値、自身の public key、host の TLS
+   fingerprint（`core/auth/Transcript`）—— に署名し、host はそれを当該 key で検証する。
+   その key は `authorized_keys` に含まれていなければならない。
+
+署名は 1 本の connection に束縛されるため、再接続の際には改めて署名する。0-RTT や
+session resumption は存在しない。host が保持する authenticate 待ちの connection は最大
+8 で、それぞれ 10 秒後に切断される。1 つの key と送信元 IP から 1 分以内に 3 回不正な
+署名があると、その組み合わせは 10 秒間ブロックされる（`AuthThrottle`）。
 
 受け入れは 1 本の QUIC connection に属するものであり、アドレスに属するものではない。その
 connection が閉じた時点で受け入れは取り消されるため、同じアドレスと port からの次の
 connection は改めて証明を行う必要がある。handshake を開始済みの connection で 2 回目の
 `AuthStart` を送ると、その connection は閉じられる。確立済みの身元を証明されていない身元に
-差し替えることはできず、拒否された passcode を同じ connection 上で再試行することもできない。
-Devices ページでマシンを Forget すると、その時点でそのマシンが開いている connection も閉じられる。
+差し替えることはできず、拒否された key を同じ connection 上で再試行することもできない。
+Devices ページで client key を削除する（または `access remove`）と、その時点でその key が
+開いている connection も閉じられる。
 
-client 側では `known_hosts`（`TrustStore`）が host の key を固定する。key が**変化した**
-場合は明確な警告とともに接続を拒否する。未知の key は handshake 自体が処理し、passcode
-を証明した host は確認を挟まずに記録される。
+client 側では `known_hosts`（`TrustStore`）が host の key をアドレスと port ごとに固定し、
+各信頼済み host の名前と、その host に用いる client key を併せて保持する
+（`HostProfiles`）。これは SSH と同じ初回接続時の信頼（trust on first use）である。
+**未知の** key は *not trusted yet* として link を失敗させる。app はその後 *New host*
+ダイアログに fingerprint を表示し、利用者が *Trust and connect* を選ぶと
+`acceptNewHostKey` を付けて再接続する。CLI も `--accept-new-host-key` を指定した場合に
+限り同じ動作をする。key が**変化した**場合は回避手段のない失敗となり、その host を
+*Trusted hosts* から削除して改めて信頼する必要がある。
 
 ネットワーク上を流れるのは public key そのものであり、fingerprint 単体ではない。host は
 受け取った内容を自身でハッシュするため、他者の identity を名乗るには、なりすます側が
 保持していない key で署名する必要がある。また、受け入れの判定は connection ごとに 1 度
-だけ行われるため、transport より上位の構成要素が再度確認することはない。身元を証明した
-マシンは以後の message に passcode を含めず、session のコードは connection 全体を
-authenticate 済みとして扱う。
+だけ行われるため、transport より上位の構成要素が再度確認することはない。session の
+コードは connection 全体を authenticate 済みとして扱う。
 
 ## 4. Host 側
 
 ```
 HostEngine（app ごとに 1 インスタンス、SessionTransport を保持）
  ├─ net-loop thread: RunHostNetLoop
- │    recv → beacon 応答 | video データの取り込み | Chan::Terminal → TerminalHost
+ │    recv → source 一覧/pong の応答（受け入れ済みのみ） | video データの取り込み | Chan::Terminal → TerminalHost
  │    source ごとの session Tick、clipboard flush、reconfig、統計
  ├─ capture/encode: source ごと。OS の capture コールバックが駆動する（client 層）
  │    frame → encoder（source ごとの mutex）→ Packetizer → FEC → SendTo（datagram）
@@ -209,11 +223,10 @@ HostLink（開いている画面ごとに 1 インスタンス）
 ```
 
 受け入れが完了すると、link は自身の状態を監視する（`core/session/LinkPulse`）。session
-id が 0 の `Ping` datagram を毎秒送信し、host の beacon が同一 connection 上で session
-を必要とせずに応答する。ping は ack-eliciting であるため keepalive も兼ねており、通常の
-keepalive タイマーは link が `Deciding` 状態にある間にのみ意味を持つ。session-0 の ping
-に応答できない古い host は最初の pong を返さないため、無音によって判定されることはなく、
-他に影響はない。復旧中の link では、この pulse が
+id が 0 の `Ping` datagram を毎秒送信し、host の `SourceListResponder` が、authenticate
+済みの同一 connection 上で session を必要とせずに応答する。ping は ack-eliciting である
+ため keepalive も兼ねており、通常の keepalive タイマーは link が受け入れられる前にのみ
+意味を持つ。復旧中の link では、この pulse が
 liveness の確認も兼ねる。5 秒間 pong を受信しない場合（ただし最初の pong によって host
 が応答することが確認された後に限る）、connection は既存の再接続の経路に入る。この 5 秒
 は、link のループが実際に監視していた時間で計算する。`LinkPulse::Tick` は
@@ -231,34 +244,45 @@ session が先に問題を検出した場合は `HostLink::RequestRedial` が再
 付して終了する。
 
 source の問い合わせ（`QuerySources`）は、同じ link を一度限りのブロッキング形式で使用
-する。UI は各種の要求（キー入力、resize、fingerprint の受け入れ）を command キューへ
-送る。host key が変化した場合、link は利用者が受け入れるか拒否するまで `Deciding`
-状態に留まる。terminal のウィンドウは escape sequence を解析しない。`core/terminal` が
+する。UI は各種の要求（キー入力、resize）を command キューへ送る。未知の host key は
+fingerprint を添えて link を失敗させ、UI がそれを *New host* ダイアログに表示する。変化
+した host key は link を完全に失敗させる。terminal のウィンドウは escape sequence を解析しない。`core/terminal` が
 byte stream をセルのグリッドに変換し、ウィンドウはセルの描画とキーイベントの転送のみを
 行う。現時点では各ウィンドウが個別に link を保持している。同一の host に向けたすべての
 ウィンドウで受け入れ済みの link を共有することは想定済みの次の段階であり、`HostLink`
 において registry と observer の fan-out として実装する。handshake を追加するもので
 はない。
 
-## 6. Discovery
+## 6. host の見つけ方
 
-beacon は `LIST_SOURCES` と `PING` に平文の UDP で応答する。scanner が subnet を走査
-する際に 254 回の TLS handshake を不要とするためである。受け入れられていないマシンには
-空の一覧を返し、実際の source 一覧は受け入れ済みの connection 上でのみ提供する。この
-応答は `SOURCE_LIST` のヘッダフラグによって host の能力（input を受け取るか、terminal
-を共有するか）も示すため、client はウィンドウを開く前に、スマートフォンは閲覧のみで
-あることを把握できる。これらのフラグより前の host はいずれのフラグも設定しない。最近の
-デバイス、その online 状態（ping/pong の probe）、LAN scan の結果は 1 つのデバイス一覧に
-統合され、`core/ui/DeviceRows` が構築し、5 つの client が共通して使用する。
+discovery は存在しない。network を scan するものはなく、host は平文の packet に一切
+応答しない。client が接続する先は、利用者が入力したアドレス、最近の host、または信頼済み
+host（`HostProfiles`）である。`SourceListResponder` は受け入れ済みの connection 上でのみ
+`LIST_SOURCES` に応答する。この応答は `SOURCE_LIST` のヘッダフラグによって host の能力
+（input を受け取るか、terminal を共有するか）も示すため、client はウィンドウを開く前に、
+スマートフォンは閲覧のみであることを把握できる。source のレコードの後に、payload は host
+のデバイス名（長さ 1 バイトと最大 64 バイトの UTF-8。空でもよい）を載せるため、この名前が
+届くのは authenticate 済みの client だけである。client は `ParseSourceListHostName` で
+これを解析し、制御バイトはすべて空白に置き換えられる。
+
+最近の一覧は `platform/system/RecentDevicesFile`（`recent-hosts.txt`）にあり、解析処理は
+`core/ui/RecentDevices` が担う。内容はアドレス、最終接続時刻、host の名前で、最大 10 件。
+FFI の `dh_list_sources` は host が応答したときにのみそこへ記録するため、各 app が自分で
+一覧を更新することはなくなり、`dh_recent_touch` は削除された。旧 `recent-devices.txt` は
+変換されずに削除される。
 
 ## 7. ディスク上のデータ
 
-すべてのデータは利用者の Deskhub フォルダ（`~/.deskhub`、`%USERPROFILE%\.deskhub`）に
-置かれる。`host_key.pem` と `host_cert.pem`（identity）、`known_hosts`（本マシンが
-trust した host）、`paired_devices`（この host が受け入れたマシン）、`auth_salt`
-（verifier 用の秘密ではない salt）、`ui-settings.txt`、`recent-devices.txt`（アドレスと
-伏せ字化した passcode）、Linux では `portal-restore-token.txt`（選択した画面に対して
-デスクトップが発行した token）、および実行ごとの log である。ファイル I/O は
+すべてのデータは利用者の Deskhub フォルダ（`~/.deskhub`、`%USERPROFILE%\.deskhub`、
+iOS では App Group のコンテナ、Android では内部ストレージ。`DESKHUB_CONFIG_DIR` または
+CLI の `--config-dir` で変更できる）に置かれる。`host_key.pem` と `host_cert.pem`（host
+identity）、`client_key.pem` と `client_key.<name>.pem`（client key。Windows では DPAPI
+で保護）、`authorized_keys`（この host が受け入れる client key）、`known_hosts`（信頼
+済み host とその profile）、`ui-settings.txt`（デバイス名を含む）、`recent-hosts.txt`
+（アドレス、最終接続時刻、host の名前）、Linux では `portal-restore-token.txt`（選択した画面に対して
+デスクトップが発行した token）、および実行ごとの log である。passcode はどこにも保存
+されない。POSIX ではディレクトリは `0700`、ファイルは `0600` で、atomic に書き込まれる。
+Windows では ACL が利用者本人、SYSTEM、Administrators のみを許可する。ファイル I/O は
 `platform/` に置き、解析処理とデータ構造は `core/` に置いて unit test を備える。
 
 viewer が送信したファイルは別の場所に保存される。host が選択したフォルダ
@@ -275,8 +299,8 @@ Windows が受け付けない文字、予約デバイス名が除去される。
 | Suite | 実行環境 | 対象範囲 |
 | --- | --- | --- |
 | `make test` | オフライン、socket なし | `core/` の全体: wire、framing、FEC、session、VT emulator、settings、文字列、決定的な structured fuzzing |
-| `make test-platform` | loopback socket | 実際の QUIC handshake、end-to-end の SPAKE2、ネットワーク越しの terminal host と viewer、実 shell に対する PTY、lockout、approval |
-| `make test-integration` | loopback、capture/encode は模擬実装 | host↔client の session 一式: negotiation、ネットワーク越しの video、input、passcode と approval による制御、不正データへの耐性、および交差負荷下の遅延 —— 動作中の stream と並行してファイル転送、大量出力の terminal、キー入力を実行し、それぞれ観測された最大の停止時間で判定する |
+| `make test-platform` | loopback socket | 実際の QUIC handshake、end-to-end の key 署名による認証、host key の固定、ネットワーク越しの terminal host と viewer、実 shell に対する PTY、不正な署名による lockout |
+| `make test-integration` | loopback、capture/encode は模擬実装 | host↔client の session 一式: negotiation、ネットワーク越しの video、input、許可済み key による受け入れ、不正データへの耐性、および交差負荷下の遅延 —— 動作中の stream と並行してファイル転送、大量出力の terminal、キー入力を実行し、それぞれ観測された最大の停止時間で判定する |
 | fuzz target | PR ごとに各 target 30 秒、nightly は各 15 分 | wire、H.264、reassembly、terminal のバイト列、UI テキストの parser、および host 側と viewer 側の session state machine |
 | `make test-perf` | release build、オフラインと loopback | hot path を実測する: `core_perf` は純 C++ の経路、`platform_perf` は loopback 上の実際の QUIC を対象とする。いずれも単位あたりの allocation 回数、入力 4 倍時のコスト、当該マシンで記録した baseline からの乖離によって判定する |
 
@@ -309,7 +333,7 @@ scaling の 2 つの判定とともに実行する（共有 runner には時間�
   challenge と結果は内部の認証送信経路を使う。信頼ストアは単一プロセス内で
   読み取り・変更・書き込みを直列化し、ファイルのアトミックな置換で保存する。
 
-- **破損したクライアント許可リストはアクセスを許可しない**: `paired_devices` の
+- **破損したクライアント許可リストはアクセスを許可しない**: `authorized_keys` の
   読み取り失敗、過大なサイズ、不正な形式、重複した鍵はいずれも設定全体の失敗と
   して扱う。ホストは接続中の認証状態を定期的に再確認するため、別プロセスが
   ファイルを置き換えた場合も、プロセス内の generation 更新なしに接続を取り消せる。
@@ -320,8 +344,7 @@ scaling の 2 つの判定とともに実行する（共有 runner には時間�
 
 - **新しいクライアント許可リストは完全な public key を保持する**:
   `authorized_keys` は長さを制限した OpenSSH public key 行を受け入れ、不正な行や
-  重複鍵を拒否する。初回保存後はこのファイルがアクセス権を決める。有効化マーカーに
-  より、ファイルを削除しても旧方式の fingerprint だけの権限は復活しない。
+  重複鍵を拒否する。これが唯一の許可リストであり、ファイルがなければ誰も受け入れない。
   `known_hosts` は TLS pin とともに endpoint ごとの別名と選択した client identity を
   保存する。設定の書き込みにはプロセス間のファイルロックと原子的な置換を使う。
   Service は `SetConfigDir` または `DESKHUB_CONFIG_DIR` で、ログ用とは別の設定
@@ -347,8 +370,27 @@ scaling の 2 つの判定とともに実行する（共有 runner には時間�
   前に互換性のための 0 バイトを残し、クライアント名の後に認証バージョン 6 を置く。
   旧ホストは開始メッセージを読んで旧 challenge を返せるため、新クライアントは非互換を
   検出して接続を閉じる。新ホストはバージョン接尾辞のない開始メッセージを拒否し、
-  `VersionMismatch` を送って接続を閉じる。先頭バイトは passcode の選択を表さない。
-  challenge、response、result はバージョン付きの署名データだけを運ぶ。
+  `VersionMismatch` を送って接続を閉じる。challenge、response、result はバージョン付きの
+  署名データだけを運ぶ。
+
+- **初回接続時は信頼、変更時は完全に遮断**：未知のホスト鍵は SSH と同様に一度だけ利用者に
+  示し、利用者が受け入れた場合にのみ固定する（CLI では `--accept-new-host-key`）。変化した
+  鍵は拒否し、受け入れのボタンは一切設けない。鍵の変化をクリックで通過させるプロンプトは、
+  攻撃であるその一回もクリックで通過させるよう利用者を慣らしてしまう。そのため通過する唯一の
+  方法は、ホストを *Trusted hosts* から削除することであり、これは問題を検出した接続とは
+  切り離された意図的な操作である。
+
+- **デバイス名は一つ**：Settings → General → *Device name*（空の場合は OS の名前）は、
+  マシンが持つ唯一の名前である。ホストは viewer に表示して受け入れたクライアントに送信し、クライアントは接続時に送信し、
+  マシンがコピーするすべての公開鍵のラベルにもなる（`<device name>` または
+  `<device name> (<key name>)`）。Client ページから独自の名前欄を削除したのは、ホストが
+  目にする名前と、その `authorized_keys` にあるラベルを一致させるためである。
+
+- **旧データは移行しない**：passcode、以前の `paired_devices` の一覧とその有効化マーカーは
+  変換しない —— いずれもクライアントが鍵を保持していることを何ら証明しない —— 残った
+  ファイルは削除する。読み取れない `authorized_keys` や `known_hosts` の内容を推測で補う
+  ことはない。読み取れない間、ホストは全員を拒否し、クライアントはすべてのホストを拒否し、
+  次の変更時にファイルを新たに書き込む。
 
 - **デスクトップ画面に何を表示するかは各アプリのコードではなく `core/ui` のデータで決まる**：
   配色（`Theme.h`。各色にライトとダークの値を持つ）、ホストのライブ表の列とサイズ
@@ -645,8 +687,8 @@ scaling の 2 つの判定とともに実行する（共有 runner には時間�
   log に出力する。デスクトップの client は OS の display 変更シグナルでも選択一覧を更新
   する。これにより、後からディスプレイを接続した場合も一覧が正しく保たれる。
 - **msquic や ngtcp2 ではなく quiche を採用する。** Android と iOS の双方で本番環境での
-  実績がある唯一の QUIC ライブラリである。BoringSSL を同梱しており、これが SPAKE2 と
-  host identity にも利用できるため、暗号ライブラリを 2 つ抱える必要がない。
+  実績がある唯一の QUIC ライブラリである。BoringSSL を同梱しており、これが host
+  identity と client key の署名にも利用できるため、暗号ライブラリを 2 つ抱える必要がない。
 - **connection migration は使用しない。** 候補となるライブラリのいずれにも、利用可能な
   client 側の対応がなかった。reconnect と reattach の機構（tmux と同様の方式であり、
   モバイルのバックグラウンド動作のために元より必要であった）がこの要件を満たしている。保持されている shell は一覧（`TermList`）して新しい client から id で resume することもできる。
@@ -654,9 +696,6 @@ scaling の 2 つの判定とともに実行する（共有 runner には時間�
   Ed25519 で TLS handshake に署名しない。保存済みの証明書と秘密鍵が未対応、または
   一致しない場合、host の起動を失敗させて両ファイルを保持する。両ファイルが存在しない
   場合に限り新しい host identity を作成するため、既存の host fingerprint は勝手に変わらない。
-- **passcode の verifier は SHA-256 1 回であり、負荷の高い KDF ではない。** SPAKE2 の
-  時点で攻撃者は connection ごとにオンラインで 1 回しか試行できず、オフラインで解析する
-  価値のある transcript も残らない。これは KDF の計算強度が担う目的そのものである。
 - **quiche は事前に build し、FetchContent は使用しない。**
   `scripts/build-quiche.sh` が `third_party/quiche/` の下に rust target ごとの
   ディレクトリと、共有の `include/` を生成する。後者には quiche.h と、boring-sys が
@@ -743,9 +782,10 @@ scaling の 2 つの判定とともに実行する（共有 runner には時間�
   同様に揃える。`_ITERATOR_DEBUG_LEVEL=0`、`/U_DEBUG`、`/RTC1` の除去である。release の
   CRT には `_CrtDbgReport` がなく、run-time check にも対応していないためである。不一致
   があれば多数の LNK2038 で終わる。
-- **passcode は自己完結した受け入れ手段であり、approval は代替手段である。** 入力された
-  コードは常に検証する。コードがない場合は人が判断する。passcode は攻撃者が取得できる
-  いかなる形でもネットワークを通過しない。
+- **passcode、承認プロンプト、LAN scan は削除した。** 4 桁のコードは開いた port 上の
+  短い秘密であり、承認プロンプトは誤った人物がクリックしうるものであり、平文の discovery
+  への応答は network 上の誰に対しても host の存在を知らせてしまう。所有者が意図して
+  コピーする key が、この 3 つすべてを置き換える。
 - **VT emulator は本プロジェクトで実装している。** 5 つの client すべてで利用でき、かつ
   適切なライセンスを備えたプラットフォーム標準の terminal ウィジェットは存在しない。
   自前で実装することで、terminal の挙動をオフラインでテスト可能にし、各プラットフォーム
@@ -756,7 +796,7 @@ scaling の 2 つの判定とともに実行する（共有 runner には時間�
   ならず、ボタンが押された時点では構築できない。リモートの viewer が接続している間、
   mirror 自身の terminal query への応答は破棄する。viewer の画面が既に応答しており、
   shell が 2 つの応答を受け取ってはならないためである。
-- **port は 1 つのみ使用する。** beacon、画面、terminal は 1 つの listener を共有し、
+- **port は 1 つのみ使用する。** 画面、terminal、file transfer は 1 つの listener を共有し、
   connection と stream の多重化は QUIC が担う。かつて 2 つ目の port が存在したのは、
   QUIC 導入前の画面の経路が socket を占有していたことによる。
 - **1 つの `HostLink` が従来の 4 つの handshake を置き換える。** dial、trust の確認、
@@ -766,10 +806,9 @@ scaling の 2 つの判定とともに実行する（共有 runner には時間�
   現在、client 側で dial または authenticate を行うコードは `HostLink` のみである。
   service は自身の `Chan` を開き、専用の inbox キューを受け取り、自身の thread で処理
   する。terminal の backoff を伴う再接続は link に移され、recovery を必要とするすべての
-  画面がこれを継承する。trust の規則も 1 箇所に集約されている。変更された key は利用者
-  が応答するまで link を `Deciding` に留め（素通りするのは source の問い合わせのみで、
-  `trustGate=false` として何も記録しない。呼び出し側に表示できるダイアログがないため
-  である）、key を自動的に固定するのは host が暗号的に証明した passcode の場合に限る。
+  画面がこれを継承する。trust の規則も 1 箇所に集約されている。未知の key は利用者
+  がそれを信頼する（`acceptNewHostKey`）まで link を失敗させ、変化した key は常に link を
+  失敗させる。
 - **`HostLink` は `SendMessage` ではなく `Send` で送信する。** Windows では platform 層
   の背後にある OS ヘッダが `SendMessage` を `SendMessageA` のマクロとして定義しており、
   `HostLink.cpp` ではそれがクラス宣言の後、メソッド定義の前に位置していた。その結果
@@ -800,7 +839,7 @@ scaling の 2 つの判定とともに実行する（共有 runner には時間�
   ごとに接続ウィンドウが割り当てられる。`client/windows/win32/MainFrame.cpp` の
   `ConnectionFrame`、`client/linux/gtk/MainWindow.cpp` の `ConnectionWindow`、
   `client/macos/app/swift/App.swift` の `connection` という `WindowGroup` であり、
-  それぞれがその host のアドレス、passcode、capability、source 一覧、control の選択を
+  それぞれがその host のアドレス、capability、source 一覧、control の選択を
   保持する。これにより connect ページは次の host に接続できる状態を保つ。メイン
   ウィンドウは開いているウィンドウの一覧のみを保持し、同じ host に再度接続した際に該当
   ウィンドウを前面に出すため、status の probe をアドレスの一致するウィンドウへ渡すため、
@@ -809,15 +848,12 @@ scaling の 2 つの判定とともに実行する（共有 runner には時間�
   にせよ全画面であるためだ。各所での「同じ host」の定義は `ui::SameDeviceAddr` である
   —— 次の項目を参照。
 - **同じ host に対して 2 通りのアドレス表記が存在するが、比較方法は 1 つである。**
-  `ScanAddressText` は port が既定値の場合にそれを省略するため、scan の行は
-  `192.168.1.60` と表示され、利用者が入力して接続したアドレスは `192.168.1.60:47777`
-  となる。この 2 つを文字列として比較すると通知なく失敗し、そのように実装されていた
-  すべての箇所で機能が失われていた。接続済みのパネルは該当するデバイス行を見つけられず
-  ping を表示せず、`PasscodeForDevice` は scan 一覧から選択した host に保存されていた
-  コードを見つけられなかった。したがってアドレスの等価判定は
-  `ui::NormalizedDeviceAddr` と `ui::SameDeviceAddr`（`core/ui/Strings.h`）を経由させ、
-  Swift と Kotlin の client には `dh_same_device_addr` として提供する。デバイスの
-  アドレス同士を `==` で比較してはならない。
+  アドレスは既定の port を付けても付けなくても表記できるため、`192.168.1.60` と
+  `192.168.1.60:47777` は同じ host を指す。この 2 つを文字列として比較すると通知なく
+  失敗する。接続済みのパネルは該当する最近の行を見つけられず、1 つの host に対して接続
+  ウィンドウが 2 つ開いていた。したがってアドレスの等価判定は
+  `ui::NormalizedDeviceAddr` と `ui::SameDeviceAddr`（`core/ui/Strings.h`）を経由させる。
+  デバイスのアドレス同士を `==` で比較してはならない。
 
 - **開いたばかりの decoder は参照 frame を保持していない。** `ScreenViewer` は surface
   が変化するたびに decoder を再構築し、iOS の app は画面から離れる際に surface を返す。

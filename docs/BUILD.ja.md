@@ -120,7 +120,7 @@ coverage・fuzz の preset には影響しない。有効にすると、OS ご�
 | `connect ADDRESS` | host の画面を表示して操作するウィンドウを開く（Windows と Linux） |
 | `shell ADDRESS` | 現在の terminal 内で host 上の shell を開く |
 | `send ADDRESS FILE...` | ファイルの受信を許可している host へファイルを送る |
-| `displays`、`sources ADDRESS` | ローカルの display と認証済み host の共有元 |
+| `displays`、`sources ADDRESS` | ローカルの display、および認証済み host が共有しているもの |
 | `key`、`access`、`host`、`host-key public` | client ID、許可済み鍵、保存済み host、この host の鍵 |
 | `devices`、`trust`、`settings` | 同じ設定ファイルを使う従来のコマンド |
 
@@ -131,7 +131,11 @@ host の `host-key public` の出力を client に渡し、
 に入力する。その後 `connect office`、`sources office`、`shell office`、
 `send office FILE` を使用できる。`host update office` でアドレス、ID、固定鍵を
 明示的に変更し、`host remove office` で profile を削除する。
-`access remove --fingerprint SHA256:...` は client 鍵を取り消す。
+`access remove --fingerprint SHA256:...` は client 鍵を取り消す。`sources`、`connect`、
+`shell`、`send` はアドレスまたは保存済みの alias を受け取り、`--identity NAME` で client
+鍵を選び、`--accept-new-host-key` で初めて見る host の鍵を保存する。これを付けない場合、
+未知の host は拒否されてその fingerprint が表示され、鍵が変わった host は常に拒否される。
+network の scan も passcode のフラグも存在しない。
 `--config-dir PATH` は全コマンドで同じ設定ディレクトリを選び、コマンドの前後に置ける。
 
 フラグは `deskhub-cli help COMMAND` が表示する。一覧コマンドは `--json` に対応し、
@@ -164,8 +168,8 @@ Opus audio codec は `third_party/opus` で build される C の静的ライブ
 | コマンド | 実行環境 | 対象範囲 |
 | --- | --- | --- |
 | `make test` | オフライン、socket なし | `core/` の全体: wire format、framing、FEC、session、VT emulator、settings、文字列 |
-| `make test-platform` | loopback socket | 実際の QUIC handshake、end-to-end の SPAKE2、ネットワーク越しの terminal host と viewer、実 shell に対する PTY、lockout、approval |
-| `make test-integration` | loopback、capture/encode は模擬実装 | host↔client の session 一式: negotiation、ネットワーク越しの video、input、passcode と approval による制御、不正データへの耐性 |
+| `make test-platform` | loopback socket | 実際の QUIC handshake、end-to-end の鍵署名による認証、host key の固定、ネットワーク越しの terminal host と viewer、実 shell に対する PTY、不正な署名による lockout |
+| `make test-integration` | loopback、capture/encode は模擬実装 | host↔client の session 一式: negotiation、ネットワーク越しの video、input、許可済み鍵による受け入れ、不正データへの耐性 |
 | `make test-all` | 3 つの suite すべて。core が先 | |
 | `make test-ctest` | 同じ test を CTest 経由で実行 | CI の呼び出し方と同一 |
 | `make test-asan` | 3 つの suite を ASan と UBSan の下で実行 | clang/gcc のみ。MSVC は非対応 |

@@ -4,11 +4,9 @@ import Observation
 @MainActor @Observable
 final class ConnectModel {
     private static let lastAddressKey = "lastAddress"
-    private static let retiredPasscodeKey = "lastPasscode"
 
     private static var lastAddress: String {
-        UserDefaults.standard.removeObject(forKey: retiredPasscodeKey)
-        return UserDefaults.standard.string(forKey: lastAddressKey) ?? ""
+        UserDefaults.standard.string(forKey: lastAddressKey) ?? ""
     }
 
     var address: String = DeskhubClient.addressHost(ConnectModel.lastAddress) {

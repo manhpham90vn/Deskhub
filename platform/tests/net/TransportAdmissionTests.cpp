@@ -8,7 +8,7 @@
 #include "deskhubp/system/AuthProof.h"
 #include "deskhubp/system/Clock.h"
 #include "deskhubp/system/HostIdentity.h"
-#include "deskhubp/system/PairedDevicesFile.h"
+#include "deskhubp/system/AuthorizedKeysFile.h"
 
 #include <array>
 #include <atomic>
@@ -29,22 +29,22 @@ constexpr int kQuietMillis = 300;
 struct SavedState {
     std::string cert{};
     std::string key{};
-    std::string paired{};
+    std::string authorizedKeys{};
 
     SavedState() {
         cert = deskhubp::ReadAppDataFile(deskhubp::kHostCertFileName);
         key = deskhubp::ReadAppDataFile(deskhubp::kHostKeyFileName);
-        paired = deskhubp::ReadAppDataFile(deskhubp::kPairedDevicesFileName);
-        deskhubp::ForgetAllPairedDevices();
+        authorizedKeys = deskhubp::ReadAppDataFile(deskhubp::kAuthorizedKeysFileName);
+        RevokeAllClientKeys();
     }
 
     ~SavedState() {
         if (!cert.empty()) deskhubp::WriteAppDataFile(deskhubp::kHostCertFileName, cert);
         if (!key.empty()) deskhubp::WriteAppDataFile(deskhubp::kHostKeyFileName, key);
-        if (paired.empty())
-            deskhubp::ForgetAllPairedDevices();
+        if (authorizedKeys.empty())
+            deskhubp::RemoveAppDataFile(deskhubp::kAuthorizedKeysFileName);
         else
-            deskhubp::WriteAppDataFile(deskhubp::kPairedDevicesFileName, paired);
+            deskhubp::WriteAppDataFile(deskhubp::kAuthorizedKeysFileName, authorizedKeys);
     }
 };
 
@@ -90,9 +90,7 @@ struct AdmissionRig {
 
     bool Start(bool authenticate = true) {
         if (!machines.Make()) return false;
-        if (!deskhubp::RememberPairedDevice(machines.viewer.fingerprint,
-                "admission-viewer", 500))
-            return false;
+        if (!GrantClientKey(machines.viewer)) return false;
         host.SetRecvTimeout(1);
         viewer.SetRecvTimeout(1);
 
@@ -462,16 +460,15 @@ void TestForgettingADeviceClosesItsLiveConnection() {
     Check(started, "the viewer is let in and paired");
     if (!started) return;
     const NetAddr peer = rig.Peer();
-    Check(deskhubp::TryLoadPairedDevices().value_or(deskhub::PairedDevices{}).Check(rig.machines.viewer.fingerprint) ==
-              deskhub::PairVerdict::Paired,
-        "the authorized key remains on the paired list");
+    Check(deskhubp::IsClientKeyAuthorized(deskhubp::ClientIdentity(rig.machines.viewer).publicKey),
+        "the authorized key remains on the list");
 
-    deskhubp::RememberPairedDevice(rig.machines.impostor.fingerprint, "bystander", 1);
-    deskhubp::ForgetPairedDevice(rig.machines.impostor.fingerprint);
+    GrantClientKey(rig.machines.impostor);
+    deskhubp::ForgetAuthorizedClient(rig.machines.impostor.fingerprint);
     SleepUs(kQuietMillis * 1000);
     Check(rig.host.Authenticated(peer), "forgetting some other machine leaves this one alone");
 
-    Check(deskhubp::ForgetPairedDevice(rig.machines.viewer.fingerprint),
+    Check(deskhubp::ForgetAuthorizedClient(rig.machines.viewer.fingerprint),
         "the viewer is forgotten");
     Check(WaitUntil([&] { return !rig.host.Authenticated(peer); }, kSettleMillis),
         "and its live connection loses its admission without waiting for it to hang up");
@@ -493,10 +490,10 @@ void TestExternalKeyRevocationClosesItsLiveConnection() {
     Check(started, "the viewer is admitted before the external edit");
     if (!started) return;
     const NetAddr peer = rig.Peer();
-    const uint64_t generation = deskhubp::PairedDevicesGeneration();
-    Check(deskhubp::WriteAppDataFileAtomic(deskhubp::kPairedDevicesFileName, ""),
+    const uint64_t generation = deskhubp::AuthorizedKeysGeneration();
+    Check(deskhubp::WriteAppDataFileAtomic(deskhubp::kAuthorizedKeysFileName, ""),
         "another process can replace the authorized key file");
-    Check(deskhubp::PairedDevicesGeneration() == generation,
+    Check(deskhubp::AuthorizedKeysGeneration() == generation,
         "an external edit does not use the in-process generation counter");
     Check(WaitUntil([&] { return !rig.host.Authenticated(peer); }, kSettleMillis),
         "the host still notices the edit and withdraws admission");

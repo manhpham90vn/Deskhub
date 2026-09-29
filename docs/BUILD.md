@@ -113,7 +113,7 @@ not a client.
 | `connect ADDRESS` | open a window on a host's screen and control it (Windows and Linux) |
 | `shell ADDRESS` | open a shell on a host, in the terminal you are already in |
 | `send ADDRESS FILE...` | send files to a host that accepts them |
-| `displays`, `sources ADDRESS` | local displays and sources on an authenticated host |
+| `displays`, `sources ADDRESS` | local displays, and what an authenticated host shares |
 | `key`, `access`, `host`, `host-key public` | client identities, allowed keys, saved hosts, and this host's key |
 | `devices`, `trust`, `settings` | older commands for the same configuration files |
 
@@ -124,7 +124,11 @@ Copy the host's `host-key public` output to the client and pipe it to
 Then use `connect office`, `sources office`, `shell office`, or `send office FILE`.
 `host update office` changes the address, identity, or pinned key explicitly;
 `host remove office` removes the profile. `access remove --fingerprint SHA256:...`
-revokes a client key. `--config-dir PATH` selects one configuration directory for every
+revokes a client key. `sources`, `connect`, `shell` and `send` take an address or a saved
+alias, `--identity NAME` to pick the client key, and `--accept-new-host-key` to save the
+key of a host seen for the first time; without it an unknown host is refused and its
+fingerprint printed, and a host whose key changed is always refused. There is no network
+scan and no passcode flag. `--config-dir PATH` selects one configuration directory for every
 command and can be placed before or after the command.
 
 `deskhub-cli help COMMAND` prints the flags. Listing commands support `--json`, and the exit
@@ -156,8 +160,8 @@ that could never connect.
 | Command | Runs | Covers |
 | --- | --- | --- |
 | `make test` | offline, no sockets | all of `core/`: wire format, framing, FEC, sessions, VT emulator, settings, strings |
-| `make test-platform` | loopback sockets | real QUIC handshakes, SPAKE2 end to end, terminal host + viewer over the wire, PTY against a real shell, lockout, approval |
-| `make test-integration` | loopback, fake capture/encode | full host↔client sessions: negotiation, video across the wire, input, passcode and approval gating, junk resistance |
+| `make test-platform` | loopback sockets | real QUIC handshakes, key-signature authentication end to end, host-key pinning, terminal host + viewer over the wire, PTY against a real shell, bad-signature lockout |
+| `make test-integration` | loopback, fake capture/encode | full host↔client sessions: negotiation, video across the wire, input, authorized-key admission, junk resistance |
 | `make test-all` | all three, core first | |
 | `make test-ctest` | the same tests through CTest | exactly how CI invokes them |
 | `make test-asan` | all three under ASan + UBSan | clang/gcc only, not MSVC |

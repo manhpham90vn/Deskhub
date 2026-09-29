@@ -28,18 +28,19 @@ client/     app theo từng OS: windows, linux, macos, ios, android (phụ thu�
 
 | Layer | Nội dung |
 | --- | --- |
-| `core/protocol` | Wire format (`Wire.h`), record framing cho stream (`RecordStream.h`), packet classifier phân biệt QUIC với datagram beacon của Deskhub |
+| `core/protocol` | Wire format (`Wire.h`), record framing cho stream (`RecordStream.h`), packet classifier phân biệt QUIC với mọi thứ khác |
 | `core/transport` | Packetizer/Reassembler cho video, FEC, cache retransmit, send pacer |
-| `core/session` | Các session state machine, chia theo vai trò: `session/host` (session theo từng viewer, bảng viewer, beacon, file receiver, auth throttle), `session/client` (screen client, file sender, terminal client, luồng connect), cùng các thành phần dùng chung đặt cạnh chúng (kiểu dữ liệu transfer, bảng terminal session, clipboard sync, link recovery) |
+| `core/session` | Các session state machine, chia theo vai trò: `session/host` (session theo từng viewer, bảng viewer, `SourceListResponder`, file receiver, auth throttle), `session/client` (screen client, file sender, terminal client, luồng connect), cùng các thành phần dùng chung đặt cạnh chúng (kiểu dữ liệu transfer, bảng terminal session, clipboard sync, link recovery) |
 | `core/control` | Bitrate controller, quality ladder, tính kích thước stream, clock offset |
 | `core/terminal` | VT emulator dùng chung cho mọi client: `VtParser`, `Screen`, `KeyEncoder`, `Palette` |
-| `core/net` | Trust store (phía client), paired devices (phía host), chọn bind address, logic scan LAN |
-| `core/ui` | Toàn bộ chuỗi hiển thị cho người dùng, phần parse settings, các builder dòng bảng, để cả năm client hiển thị cùng nội dung |
+| `core/net` | Trust store (phía client), authorized keys (phía host), văn bản public key OpenSSH, chọn bind address |
+| `core/ui` | Toàn bộ chuỗi hiển thị cho người dùng, phần parse settings, các builder dòng bảng, thiết bị gần đây, host profile (`HostProfiles`) và các dòng client key (`ClientKeys`), để cả năm client hiển thị cùng nội dung |
 | `platform/net` | `UdpSocket` (theo từng OS), `QuicEndpoint` (quiche đặt sau pimpl), `SessionTransport` |
-| `platform/auth` | `AuthNegotiation` — pairing/passcode handshake duy nhất mà cả hai phía sử dụng |
-| `platform/client` | `HostLink` (dial, trust, auth, channel; dùng chung cho mọi giao diện), `ScreenViewer`, `TerminalViewer`, `FileTransferClient`, `SourceQuery`, host probe, LAN scanner |
+| `platform/auth` | `AuthNegotiation` — handshake chữ ký bằng key duy nhất mà cả hai phía sử dụng |
+| `platform/client` | `HostLink` (dial, trust, auth, channel; dùng chung cho mọi giao diện), `ScreenViewer`, `TerminalViewer`, `FileTransferClient`, `SourceQuery`, `HostProfiles` (các host đã trust và client key mà mỗi host dùng) |
 | `platform/host` | `HostEngine`, `HostNetLoop`, `SharingHost`, `TerminalHost`, `FileHost`, `ViewerBroadcast` |
-| `platform/system` | Clock, random, PTY (ConPTY / forkpty), host identity (key), file trust và paired-device, autostart, keep-awake |
+| `platform/system` | Clock, random, PTY (ConPTY / forkpty), host identity (`HostIdentity`), client key (`ClientKeys`, `ClientIdentity`), file `authorized_keys` và `known_hosts`, danh sách gần đây (`RecentDevicesFile`), tên thiết bị, autostart, keep-awake |
+| `platform/ffi` | Giao diện C mà app Swift và Kotlin gọi: `SettingsFfi` (settings, tên thiết bị), `DevicesFfi` (thiết bị gần đây, client được phép, fingerprint của host này), `HostProfileFfi` (host đã trust), `ClientKeyFfi` (client key), cùng các giao diện share, screen, terminal và send |
 | `core/cli` | Cú pháp command line và bộ ghi JSON của nó: nhận văn bản thuần, trả về command đã được kiểm tra |
 | `client/<os>` | Capture, encode, decode, render, windowing, hộp thoại; không chứa thành phần nào thuộc protocol |
 | `client/cli` | Từ cờ tới session: một binary có thể host, connect và mở shell mà không cần GUI toolkit. Nó link cùng thư viện media theo từng OS mà app desktop sử dụng |
@@ -58,12 +59,12 @@ Mọi dịch vụ mà host cung cấp đều chạy trên **một UDP port** (m�
                             |
                  ClassifyPacket (byte đầu tiên)
                    /                    \
-            packet QUIC          datagram Deskhub
+            packet QUIC          mọi thứ khác
                  |                        |
-   +-------------+------------+       chỉ beacon:
-   |             |            |       LIST_SOURCES / PING được trả lời
- stream      datagram      (TLS)      ở dạng không encrypt; mọi packet
-   |             |                    thô khác đều bị loại bỏ
+   +-------------+------------+        bị loại bỏ: không gì được
+   |             |            |        trả lời ở dạng không encrypt
+ stream      datagram      (TLS)
+   |             |
  control      video
  input        audio       Stream mang các record đã framing (RecordStream):
  clipboard                message có length prefix, tối đa 16 KiB.
@@ -81,9 +82,9 @@ Mọi dịch vụ mà host cung cấp đều chạy trên **một UDP port** (m�
 - **Datagram** (không tin cậy, không bảo đảm thứ tự, vẫn được encrypt): packet video và
   audio. QUIC không retransmit các packet bị mất; với video, cơ chế FEC/NACK của app xử
   lý phần mất mát, còn với audio thì không có cơ chế nào — xem mục 9.
-- **UDP thô** chỉ phục vụ discovery: beacon trả lời các scanner không dùng QUIC, và các
-  probe không được mời nhận về danh sách source rỗng. Packet thô đi vào không thuộc các
-  loại discovery đều bị loại bỏ trước khi tới bất kỳ phần mã session nào.
+- **UDP thô** không bao giờ được trả lời. Không có discovery: packet đi vào không phải
+  QUIC đều bị loại bỏ trước khi tới bất kỳ phần mã session nào, và `SourceListResponder`
+  chỉ trả lời `LIST_SOURCES` và `PING` session-0 cho một connection đã authenticate.
 
 `QuicEndpoint` che hoàn toàn quiche (pimpl; `QuicEndpointNone.cpp` thay bằng stub, nhưng
 chỉ khi bản build chủ động dùng `-DDESKHUB_QUIC=OFF`; thiếu quiche sẽ làm fail bước
@@ -94,50 +95,62 @@ Transport không giữ mutex này xuyên qua một lần chờ socket blocking: 
 trước ở trạng thái không khoá, sau đó là một lần `Poll` ngắn có khoá. Giữ mutex xuyên qua
 lần chờ sẽ chặn mọi bên gửi.
 
-## 3. Cơ chế chấp nhận: pairing
+## 3. Cơ chế chấp nhận: key, như SSH
 
-Mỗi máy tạo một key ECDSA P-256 trong lần chạy đầu tiên (`HostIdentity`); hash SHA-256 của
-SPKI chính là fingerprint mà người dùng nhìn thấy. TLS sử dụng một certificate tự ký trên
-key đó. Bên trên TLS, một handshake ở tầng ứng dụng (`AuthNegotiation`) quyết định việc
-chấp nhận theo từng connection. Transport thực thi handshake này và loại bỏ mọi message từ
-connection chưa hoàn tất phần auth:
+Mỗi máy tạo một host key ECDSA P-256 trong lần chạy đầu tiên (`HostIdentity`) và không bao
+giờ tự động thay nó; hash SHA-256 của SPKI chính là fingerprint mà người dùng nhìn thấy. TLS
+sử dụng một certificate tự ký trên key đó. Client đăng nhập bằng một trong các client key
+của nó (`ClientKeys`): Ed25519 khi được tạo mới, Ed25519 hoặc ECDSA P-256 khi import từ file
+OpenSSH hoặc PKCS#8. Host chỉ chấp nhận public key có trong `authorized_keys` của nó
+(`AuthorizedKeys`, tối đa 128 dòng dạng `ssh-ed25519 AAAA… label` hoặc
+`ecdsa-sha2-nistp256 AAAA… label`); label chỉ là tên hiển thị, không bao giờ là quyền.
+Không có gì được chấp thuận qua network — không có passcode, không có prompt phê duyệt và
+không có switch nào cho key lạ vào.
 
-| Client cung cấp | Host có biết máy này không | Kết quả |
-| --- | --- | --- |
-| không cung cấp gì | đã pair | **Signature**: client ký transcript gồm định danh phiên TLS và fingerprint của host bằng key của nó, rồi được chấp nhận không cần thao tác thêm. |
-| không cung cấp gì | chưa biết | **Approval**: người dùng tại host được hỏi (*Let this machine in?*). |
-| một passcode | host có passcode | **Passcode**: SPAKE2 trên một verifier đã salt. Mã không đi qua đường truyền, mỗi connection chỉ được thử một lần, cả hai phía cùng chứng minh, và MAC được ràng buộc với đúng host key mà client thực sự nhận được, nhờ đó vô hiệu hoá các cuộc tấn công relay. Mã đã nhập luôn được kiểm tra, bất kể máy đã pair hay chưa. |
-| một passcode | host không có passcode | không có giá trị để đối chiếu → Signature nếu đã pair, ngược lại là Approval. |
-| bất kỳ | pairing đã tắt | **Denied** (máy đã pair vẫn đi theo đường Signature). |
+Bên trên TLS, một handshake ở tầng ứng dụng (`AuthNegotiation`, auth version 6) quyết
+định việc chấp nhận theo từng connection. Transport thực thi handshake này, và host không
+gửi gì ở tầng ứng dụng cho connection chưa hoàn tất phần auth:
 
-Khi thành công, client được ghi vào `paired_devices` của host; pairing dựa trên key, không
-dựa trên địa chỉ. Ba lần nhập sai passcode sẽ khoá đường passcode trong 30 giây, và mỗi
-lần khoá liên tiếp sau đó dài gấp đôi, tối đa một giờ, cho tới khi có một passcode đúng
-đặt lại bộ đếm (`AuthThrottle`). Đường approval không cần throttle vì đã có người quyết định.
+1. QUIC/TLS hoàn tất. Client kiểm tra key của host với `known_hosts` **trước khi gửi bất
+   cứ thứ gì** (xem bên dưới).
+2. Client gửi `AuthStart` kèm public key và tên thiết bị của nó.
+3. Client ký một transcript — domain label, auth version, vai trò, giá trị session export
+   từ chính QUIC/TLS connection này, public key của nó và fingerprint TLS của host
+   (`core/auth/Transcript`) — và host xác minh chữ ký với key đó, key này phải có trong
+   `authorized_keys`.
+
+Một chữ ký chỉ gắn với đúng một connection, nên mỗi lần kết nối lại phải ký lại; không có
+0-RTT hay session resumption. Host giữ tối đa 8 connection đang chờ authenticate và loại
+bỏ từng connection sau 10 giây; 3 chữ ký sai từ một key và một IP nguồn trong vòng một
+phút sẽ chặn cặp đó trong 10 giây (`AuthThrottle`).
 
 Việc được chấp nhận gắn với một QUIC connection, không gắn với địa chỉ. Nó bị huỷ ngay khi
 connection đó đóng, nên connection tiếp theo từ cùng địa chỉ và port phải chứng minh lại từ
 đầu. Một `AuthStart` thứ hai trên connection đã bắt đầu handshake sẽ khiến connection bị
 đóng: danh tính đã xác lập không thể bị tráo bằng một danh tính chưa từng được chứng minh,
-và một passcode bị từ chối không thể được thử lại ngay trên connection đó. Forget một máy
-trên trang Devices cũng đóng mọi connection mà máy đó đang mở.
+và một key bị từ chối không thể được thử lại ngay trên connection đó. Gỡ một client key
+trên trang Devices (hoặc `access remove`) cũng đóng mọi connection mà key đó đang mở.
 
-Ở phía client, `known_hosts` (`TrustStore`) ghim key của host. Một key **đã thay đổi** sẽ
-chặn kết nối kèm cảnh báo rõ ràng; một key chưa biết được chính handshake xử lý — host đã
-chứng minh được passcode sẽ được lưu mà không cần hỏi thêm.
+Ở phía client, `known_hosts` (`TrustStore`) ghim host key theo từng địa chỉ và port, cạnh
+tên của từng host đã trust và client key dùng với host đó (`HostProfiles`). Đây là trust on
+first use, giống SSH: một key **chưa biết** khiến link thất bại với trạng thái *chưa được
+trust*; sau đó app hiển thị fingerprint trong hộp thoại *New host* và dial lại với
+`acceptNewHostKey` khi người dùng chọn *Trust and connect*, còn CLI chỉ làm vậy khi có
+`--accept-new-host-key`. Một key **đã thay đổi** là lỗi cứng, không có cách bỏ qua: host
+phải được gỡ khỏi *Trusted hosts* rồi trust lại.
 
 Dữ liệu truyền đi là bản thân public key, không phải một fingerprint đơn lẻ: host tự hash
 nội dung nhận được, nên việc mạo danh đòi hỏi phải ký bằng một key mà kẻ mạo danh không
 có. Và vì việc chấp nhận chỉ được xử lý một lần cho mỗi connection, không thành phần nào
-phía trên transport phải hỏi lại: một máy đã chứng minh danh tính không mang passcode
-trong các message sau đó, và phần mã session coi toàn bộ connection là đã authenticate.
+phía trên transport phải hỏi lại: phần mã session coi toàn bộ connection là đã
+authenticate.
 
 ## 4. Phía host
 
 ```
 HostEngine (mỗi app một instance, sở hữu SessionTransport)
  ├─ thread net-loop: RunHostNetLoop
- │    recv → trả lời beacon | nạp dữ liệu video | Chan::Terminal → TerminalHost
+ │    recv → trả lời source-list/pong (chỉ khi đã được chấp nhận) | nạp dữ liệu video | Chan::Terminal → TerminalHost
  │    Tick session theo từng source, flush clipboard, reconfig, thống kê
  ├─ capture/encode: theo từng source, do callback capture của OS điều khiển (layer client)
  │    frame → encoder (mutex theo source) → Packetizer → FEC → SendTo (datagram)
@@ -206,12 +219,10 @@ HostLink (mỗi giao diện đang mở một instance)
 ```
 
 Sau khi được chấp nhận, link tự theo dõi tình trạng của chính nó
-(`core/session/LinkPulse`): một datagram `Ping` với session id 0 được gửi mỗi giây, và beacon
-của host trả lời trên cùng connection mà không cần session. Vì một ping là ack-eliciting nên
-nó đồng thời đóng vai trò keepalive; timer keepalive thông thường chỉ còn ý nghĩa khi link
-đang ở trạng thái `Deciding`. Host phiên bản cũ không trả lời được ping session-0 sẽ không
-bao giờ gửi pong đầu tiên, nên không bao giờ bị đánh giá theo sự im lặng của nó, không gây
-ảnh hưởng nào khác. Trên một link đang phục hồi, pulse cũng là phép
+(`core/session/LinkPulse`): một datagram `Ping` với session id 0 được gửi mỗi giây, và
+`SourceListResponder` của host trả lời trên cùng connection đã authenticate đó mà không cần
+session. Vì một ping là ack-eliciting nên nó đồng thời đóng vai trò keepalive; timer
+keepalive thông thường chỉ còn ý nghĩa trước khi link được chấp nhận. Trên một link đang phục hồi, pulse cũng là phép
 kiểm tra liveness: năm giây không nhận được pong, và chỉ tính sau khi đã có một pong đầu
 tiên xác nhận host có phản hồi, sẽ đưa connection vào đường kết nối lại sẵn có. Năm giây
 này được tính theo thời gian mà vòng lặp link thực sự theo dõi: `LinkPulse::Tick` chạy một
@@ -229,34 +240,45 @@ keyframe mới. Sau sáu mươi giây (`kViewerReattachGraceUs`) mà không kế
 sổ kết thúc kèm lý do như thông thường.
 
 Phần truy vấn source (`QuerySources`) sử dụng cùng link đó theo hình thức một lần, dạng
-blocking. UI vẫn đẩy các yêu cầu (phím, resize, chấp nhận fingerprint) vào các hàng đợi
-lệnh. Một host key đã thay đổi sẽ giữ link ở trạng thái `Deciding` cho tới khi người dùng
-chấp nhận hoặc từ chối. Cửa sổ terminal không parse escape sequence: `core/terminal`
+blocking. UI vẫn đẩy các yêu cầu (phím, resize) vào các hàng đợi lệnh. Một
+host key chưa biết khiến link thất bại kèm fingerprint của nó, để UI hiển thị trong hộp
+thoại *New host*; một host key đã thay đổi khiến link thất bại hẳn. Cửa sổ terminal không parse escape sequence: `core/terminal`
 chuyển byte stream thành lưới ô, còn cửa sổ chỉ vẽ ô và chuyển tiếp sự kiện phím. Hiện mỗi
 cửa sổ vẫn giữ link riêng; việc dùng chung một link đã được chấp nhận cho mọi cửa sổ trỏ
 tới cùng một host là bước tiếp theo đã dự kiến, và sẽ được bổ sung tại `HostLink` dưới
 dạng một registry cùng cơ chế fan-out cho observer, không phải thêm một handshake mới.
 
-## 6. Discovery
+## 6. Tìm host
 
-Beacon trả lời `LIST_SOURCES` và `PING` bằng UDP không encrypt, để một scanner quét được
-cả subnet mà không cần 254 lần TLS handshake. Máy chưa được chấp nhận nhận về danh sách
-rỗng; danh sách source thật chỉ được cung cấp trên một connection đã được chấp nhận. Phản
-hồi này cũng cho biết host hỗ trợ những gì — có nhận input hay không, có share terminal
-hay không — thông qua các flag trong header `SOURCE_LIST`, nhờ đó client biết trước khi mở
-bất kỳ cửa sổ nào rằng một điện thoại chỉ có thể được xem. Host phát hành trước khi các
-flag này tồn tại sẽ không đặt flag nào. Các thiết bị gần đây, trạng thái online của chúng
-(probe ping/pong) và kết quả scan LAN được hợp nhất thành một danh sách thiết bị duy nhất,
-dựng bởi `core/ui/DeviceRows` và hiển thị trên cả năm client.
+Không có discovery: không thành phần nào scan network và host không trả lời packet
+plaintext nào. Client dial tới một địa chỉ người dùng nhập, một host gần đây hoặc một host
+đã trust (`HostProfiles`). `SourceListResponder` chỉ trả lời `LIST_SOURCES` trên một
+connection đã được chấp nhận; phản hồi này cho biết host hỗ trợ những gì — có nhận input
+hay không, có share terminal hay không — thông qua các flag trong header `SOURCE_LIST`,
+nhờ đó client biết trước khi mở bất kỳ cửa sổ nào rằng một điện thoại chỉ có thể được xem.
+Sau các record source, payload mang tên thiết bị của host (một byte độ dài và tối đa 64
+byte UTF-8; được phép để trống), nên tên này chỉ tới được client đã authenticate. Client
+parse nó bằng `ParseSourceListHostName`, hàm này đổi mọi byte điều khiển thành dấu cách.
+
+Danh sách gần đây nằm trong `platform/system/RecentDevicesFile` (`recent-hosts.txt`), dựa
+trên phần parse trong `core/ui/RecentDevices`: địa chỉ, thời điểm kết nối gần nhất và tên
+host, tối đa 10. FFI `dh_list_sources` chỉ ghi một host vào đó khi host đã trả lời, nên
+các app không còn tự cập nhật danh sách và `dh_recent_touch` đã bị bỏ. File
+`recent-devices.txt` cũ bị xoá, không được chuyển đổi.
 
 ## 7. Dữ liệu trên đĩa
 
 Mọi dữ liệu nằm trong thư mục Deskhub của người dùng (`~/.deskhub`,
-`%USERPROFILE%\.deskhub`): `host_key.pem` và `host_cert.pem` (identity), `known_hosts`
-(các host mà máy này trust), `paired_devices` (các máy mà host này chấp nhận), `auth_salt`
-(salt không bí mật cho verifier), `ui-settings.txt`, `recent-devices.txt` (địa chỉ và
-passcode đã che), `portal-restore-token.txt` trên Linux (token của chính desktop cho những
-màn hình đã chọn trong hộp thoại chia sẻ màn hình), cùng log theo từng lần chạy. Phần file
+`%USERPROFILE%\.deskhub`, App Group container trên iOS, internal storage trên Android;
+`DESKHUB_CONFIG_DIR` hoặc `--config-dir` của CLI ghi đè vị trí này): `host_key.pem` và
+`host_cert.pem` (host identity), `client_key.pem` và `client_key.<name>.pem` (client key,
+được bảo vệ bằng DPAPI trên Windows), `authorized_keys` (các client key mà host này chấp
+nhận), `known_hosts` (các host đã trust cùng profile của chúng), `ui-settings.txt` (bao gồm
+tên thiết bị), `recent-hosts.txt` (địa chỉ, thời điểm kết nối gần nhất và tên host),
+`portal-restore-token.txt` trên Linux (token của chính desktop cho những màn hình đã chọn
+trong hộp thoại chia sẻ màn hình), cùng log theo từng lần chạy. Không có passcode nào được
+lưu ở bất cứ đâu. Trên POSIX, thư mục có quyền `0700` và file `0600`, được ghi atomic; trên
+Windows, ACL chỉ cho phép tài khoản người dùng, SYSTEM và Administrators. Phần file
 I/O nằm trong `platform/`; phần parse và các cấu trúc dữ liệu nằm trong `core/` và có unit
 test.
 
@@ -274,8 +296,8 @@ với filesystem.
 | Suite | Phạm vi chạy | Nội dung kiểm tra |
 | --- | --- | --- |
 | `make test` | offline, không socket | toàn bộ `core/`: wire, framing, FEC, session, VT emulator, settings, chuỗi văn bản, structured fuzzing tất định |
-| `make test-platform` | socket loopback | QUIC handshake thật, SPAKE2 end-to-end, terminal host và viewer qua đường truyền, PTY với shell thật, lockout, approval |
-| `make test-integration` | loopback, capture/encode giả lập | session host↔client đầy đủ: negotiation, video qua đường truyền, input, kiểm soát bằng passcode và approval, khả năng chịu dữ liệu không hợp lệ, và độ trễ dưới tải chéo — một phiên truyền file, một terminal có lượng output lớn và các phím gõ chạy song song với một stream đang hoạt động, mỗi hạng mục được kiểm theo độ trễ lớn nhất quan sát được |
+| `make test-platform` | socket loopback | QUIC handshake thật, xác thực bằng chữ ký key end-to-end, ghim host key, terminal host và viewer qua đường truyền, PTY với shell thật, lockout khi chữ ký sai |
+| `make test-integration` | loopback, capture/encode giả lập | session host↔client đầy đủ: negotiation, video qua đường truyền, input, chấp nhận theo authorized key, khả năng chịu dữ liệu không hợp lệ, và độ trễ dưới tải chéo — một phiên truyền file, một terminal có lượng output lớn và các phím gõ chạy song song với một stream đang hoạt động, mỗi hạng mục được kiểm theo độ trễ lớn nhất quan sát được |
 | fuzz target | 30 giây mỗi target trên mỗi PR, 15 phút mỗi target hằng đêm | parser cho wire, H.264, reassembly, byte terminal và chuỗi UI, cùng các session state machine phía host và phía viewer |
 | `make test-perf` | bản release, offline và loopback | đo thực tế các hot path: `core_perf` bao phủ các đường thuần C++, `platform_perf` bao phủ QUIC thật qua loopback; cả hai fail theo số allocation trên mỗi đơn vị, theo chi phí ở mức input gấp 4 lần, và theo độ lệch so với baseline ghi trên chính máy đó |
 
@@ -307,7 +329,7 @@ coverage của core.
   và kết quả dùng đường gửi auth nội bộ. Trust store tuần tự hóa thao tác đọc-sửa-ghi
   trong một tiến trình và lưu thay đổi bằng cách thay thế file atomic.
 
-- **Danh sách khóa client hỏng không cấp quyền**: khi nạp `paired_devices`, file không
+- **Danh sách khóa client hỏng không cấp quyền**: khi nạp `authorized_keys`, file không
   đọc được, quá lớn, sai định dạng hoặc trùng khóa đều làm toàn bộ cấu hình thất bại.
   Host kiểm tra lại quyền của kết nối đang chạy theo chu kỳ, nên file được thay từ
   tiến trình khác vẫn có thể thu hồi kết nối mà không cần generation nội bộ đổi.
@@ -317,9 +339,8 @@ coverage của core.
   được ghim rõ trước khi kết nối.
 
 - **Danh sách cấp quyền mới chứa public key đầy đủ**: `authorized_keys` nhận các dòng
-  public key OpenSSH có giới hạn và từ chối dòng hỏng hoặc trùng khóa. File này có
-  hiệu lực từ lần lưu đầu tiên. Dấu kích hoạt ngăn việc xóa file làm sống lại quyền
-  chỉ dựa trên fingerprint cũ. `known_hosts` lưu alias và khóa client được chọn cho
+  public key OpenSSH có giới hạn và từ chối dòng hỏng hoặc trùng khóa. Đây là danh
+  sách cấp quyền duy nhất: thiếu file thì không ai được nhận. `known_hosts` lưu alias và khóa client được chọn cho
   từng endpoint cạnh pin TLS. Ghi cấu hình dùng khóa file liên tiến trình và thay
   thế file atomic.
   Service có thể chọn thư mục cấu hình qua `SetConfigDir` hoặc `DESKHUB_CONFIG_DIR`
@@ -345,8 +366,26 @@ coverage của core.
   trước khóa làm tiền tố tương thích và đặt auth version 6 sau tên client. Host cũ có thể
   đọc lời mở đầu và gửi challenge cũ; client mới nhận ra challenge không tương thích rồi
   đóng kết nối. Host mới từ chối lời mở đầu thiếu hậu tố version, gửi `VersionMismatch`
-  rồi đóng kết nối. Byte tiền tố không còn biểu thị lựa chọn passcode. Challenge, response
-  và result chỉ mang dữ liệu chữ ký có version.
+  rồi đóng kết nối. Challenge, response và result chỉ mang dữ liệu chữ ký có version.
+
+- **Trust on first use, chặn cứng khi thay đổi**: host key chưa biết được hiển thị cho
+  người dùng một lần, như SSH, và chỉ được ghim khi người dùng chấp nhận
+  (`--accept-new-host-key` trong CLI); key đã thay đổi bị từ chối và không có nút chấp
+  nhận nào. Một prompt cho phép bấm qua việc key thay đổi sẽ tập cho người dùng thói quen
+  bấm qua đúng lần đó là một cuộc tấn công, nên cách duy nhất để vượt qua là gỡ host khỏi
+  *Trusted hosts* — một hành động có chủ ý, tách khỏi connection đã gây ra lỗi.
+
+- **Một tên thiết bị duy nhất**: Settings → General → *Device name* (để trống nghĩa là
+  dùng tên của OS) là tên duy nhất của một máy — host hiển thị nó cho viewer và gửi nó tới
+  các client mà host cho vào, client gửi nó khi connect, và nó là nhãn của mọi public key mà máy copy ra
+  (`<device name>` hoặc `<device name> (<key name>)`). Trang Client bỏ ô nhập tên riêng
+  để tên mà host nhìn thấy và nhãn trong `authorized_keys` của nó luôn khớp nhau.
+
+- **Không chuyển đổi dữ liệu cũ**: passcode, danh sách `paired_devices` cũ và dấu kích
+  hoạt của nó không được chuyển đổi — không thứ gì trong đó chứng minh được client giữ
+  một key — và các file còn sót lại bị xoá. File `authorized_keys` hoặc `known_hosts`
+  không đọc được sẽ không bao giờ bị suy đoán: trong khi file không đọc được, host từ chối
+  mọi client và client từ chối mọi host, và lần thay đổi tiếp theo sẽ ghi mới file đó.
 
 - **Những gì một màn hình desktop hiển thị là dữ liệu trong `core/ui`, không phải code
   riêng của từng app**: bộ màu (`Theme.h`, mỗi màu có một giá trị sáng và một giá trị tối),
@@ -643,7 +682,8 @@ coverage của core.
   màn hình được kết nối sau.
 - **Chọn quiche thay vì msquic hoặc ngtcp2.** Đây là thư viện QUIC duy nhất có bằng chứng
   sử dụng trong môi trường production trên cả Android và iOS. Nó đi kèm BoringSSL, thành
-  phần cũng phục vụ SPAKE2 và host identity, nên không cần thư viện mật mã thứ hai.
+  phần cũng phục vụ host identity và chữ ký client key, nên không cần thư viện mật mã thứ
+  hai.
 - **Không sử dụng connection migration.** Không thư viện ứng viên nào có hỗ trợ phía client
   dùng được. Cơ chế reconnect và reattach (tương tự tmux, vốn đã cần thiết cho việc app di
   động chạy nền) đã đáp ứng yêu cầu này; các shell đang được giữ cũng có thể được liệt kê (`TermList`) và resume theo id từ một client mới.
@@ -652,9 +692,6 @@ coverage của core.
   không được hỗ trợ hoặc không khớp khiến host không khởi động và giữ nguyên cả hai file.
   Chỉ khi cả hai file đều chưa có, ứng dụng mới tạo identity host, nên fingerprint host
   hiện có không tự đổi.
-- **Verifier của passcode là một lần SHA-256, không phải một KDF tốn chi phí.** SPAKE2 đã
-  giới hạn kẻ tấn công ở một lần thử online cho mỗi connection và không để lại transcript
-  nào có thể crack offline, tức là đã đáp ứng đúng mục đích mà độ cứng của KDF hướng tới.
 - **quiche được build sẵn, không dùng FetchContent.** `scripts/build-quiche.sh` tạo một
   thư mục cho mỗi rust target dưới `third_party/quiche/` cùng một thư mục `include/` dùng
   chung, chứa quiche.h và các header BoringSSL do boring-sys cung cấp. Các header này được
@@ -735,9 +772,10 @@ coverage của core.
   `_ITERATOR_DEBUG_LEVEL=0`, `/U_DEBUG`, loại bỏ `/RTC1`, vì CRT release không có
   `_CrtDbgReport` và không hỗ trợ run-time check. Mọi sai lệch đều dẫn tới một loạt lỗi
   LNK2038.
-- **Passcode là cơ chế tự phục vụ, approval là phương án dự phòng.** Mã đã nhập luôn được
-  xác minh; không có mã thì việc quyết định thuộc về người dùng. Passcode không đi qua
-  network dưới bất kỳ hình thức nào mà kẻ tấn công có thể thu thập.
+- **Passcode, prompt phê duyệt và scan LAN đã bị gỡ bỏ.** Mã 4 chữ số là một bí mật ngắn
+  trên một port đang mở, prompt phê duyệt có thể bị người khác nhấn nhầm, và một phản hồi
+  discovery không encrypt cho mọi người trên network biết có một host ở đó. Các key mà chủ
+  máy chủ động copy thay thế cả ba.
 - **VT emulator do dự án tự triển khai.** Không có widget terminal nào của nền tảng vừa có
   mặt trên cả năm client vừa đi kèm giấy phép phù hợp, và việc tự triển khai giúp hành vi
   terminal test được offline và nhất quán trên mọi nền tảng.
@@ -747,7 +785,7 @@ coverage của core.
   tại thời điểm nhấn nút. Trong khi một viewer từ xa còn đang kết nối, các phản hồi cho
   terminal query của bản mirror bị loại bỏ: màn hình của viewer đã trả lời chúng, và shell
   không được nhận hai phản hồi.
-- **Một port duy nhất.** Beacon, màn hình và terminal dùng chung một listener; QUIC đảm
+- **Một port duy nhất.** Màn hình, terminal và file transfer dùng chung một listener; QUIC đảm
   nhận việc multiplex connection và stream. Port thứ hai trước đây chỉ tồn tại vì đường
   màn hình ở giai đoạn trước QUIC chiếm dụng socket.
 - **Một `HostLink` thay cho bốn handshake trước đây.** Dial, kiểm tra trust, auth và
@@ -757,11 +795,9 @@ coverage của core.
   client thực hiện dial hoặc authenticate; mỗi service mở `Chan` của nó, nhận một hàng đợi
   inbox riêng và xử lý trên thread của chính nó. Cơ chế kết nối lại với backoff của
   terminal đã được chuyển vào link để mọi giao diện yêu cầu recovery đều thừa hưởng, và các
-  quy tắc trust nằm ở một vị trí duy nhất: một key đã thay đổi giữ link ở trạng thái
-  `Deciding` cho tới khi có phản hồi của người dùng (chỉ phần truy vấn source đi qua trực
-  tiếp, với `trustGate=false` và không lưu gì, vì bên gọi nó không có giao diện để hiển thị
-  hộp thoại), và chỉ một passcode mà host đã chứng minh bằng mật mã mới tự động ghim một
-  key.
+  quy tắc trust nằm ở một vị trí duy nhất: một key chưa biết khiến link thất bại cho tới
+  khi người dùng trust nó (`acceptNewHostKey`), và một key đã thay đổi luôn khiến link thất
+  bại.
 - **`HostLink` gửi dữ liệu qua `Send`, không phải `SendMessage`.** Trên Windows, các OS
   header phía sau layer platform định nghĩa `SendMessage` thành một macro cho
   `SendMessageA`, và trong `HostLink.cpp` chúng xuất hiện sau phần khai báo lớp nhưng trước
@@ -790,7 +826,7 @@ coverage của core.
   trên Windows, Linux và macOS không giữ trạng thái kết nối nào. Mỗi host phản hồi sẽ nhận
   một cửa sổ kết nối — `ConnectionFrame` trong `client/windows/win32/MainFrame.cpp`,
   `ConnectionWindow` trong `client/linux/gtk/MainWindow.cpp`, và `WindowGroup` tên
-  `connection` trong `client/macos/app/swift/App.swift` — sở hữu địa chỉ, passcode,
+  `connection` trong `client/macos/app/swift/App.swift` — sở hữu địa chỉ,
   capability, danh sách source và tuỳ chọn control của host đó, nhờ đó trang connect vẫn
   sẵn sàng cho host tiếp theo. Cửa sổ chính chỉ giữ danh sách các cửa sổ đang mở, để đưa
   một cửa sổ lên trước khi cùng một host được kết nối lần thứ hai, để chuyển từng lượt
@@ -798,15 +834,12 @@ coverage của core.
   iOS giữ mô hình một kết nối theo chủ đích: màn hình điện thoại không đủ chỗ cho một panel
   thứ hai, và session mà nó mở vốn đã chiếm toàn màn hình. `ui::SameDeviceAddr` là định
   nghĩa thống nhất của "cùng một host" — xem mục ngay dưới.
-- **Một host có hai cách viết địa chỉ, nhưng chỉ một phép so sánh.** `ScanAddressText` bỏ
-  phần port khi đó là port mặc định, nên một dòng kết quả scan hiển thị `192.168.1.60`
-  trong khi địa chỉ người dùng nhập và đã kết nối là `192.168.1.60:47777`. So sánh hai giá
-  trị này dưới dạng chuỗi sẽ sai mà không báo lỗi, và mọi vị trí từng làm như vậy đều mất
-  một chức năng: panel đã kết nối không tìm thấy dòng thiết bị tương ứng nên không hiển thị
-  ping, còn `PasscodeForDevice` không tìm được mã đã lưu cho một host chọn từ danh sách
-  scan. Vì vậy phép so sánh địa chỉ phải đi qua `ui::NormalizedDeviceAddr` và
-  `ui::SameDeviceAddr` (`core/ui/Strings.h`), được cung cấp cho client Swift và Kotlin dưới
-  tên `dh_same_device_addr`. Không so sánh hai địa chỉ thiết bị bằng `==`.
+- **Một host có hai cách viết địa chỉ, nhưng chỉ một phép so sánh.** Một địa chỉ có thể
+  được viết có hoặc không kèm port mặc định, nên `192.168.1.60` và `192.168.1.60:47777` chỉ
+  cùng một host. So sánh hai giá trị này dưới dạng chuỗi sẽ sai mà không báo lỗi: panel đã
+  kết nối không tìm thấy dòng gần đây tương ứng, và một cửa sổ kết nối bị mở hai lần cho
+  cùng một host. Vì vậy phép so sánh địa chỉ phải đi qua `ui::NormalizedDeviceAddr` và
+  `ui::SameDeviceAddr` (`core/ui/Strings.h`). Không so sánh hai địa chỉ thiết bị bằng `==`.
 
 - **Một decoder vừa được mở chưa có reference frame.** `ScreenViewer` dựng lại decoder mỗi
   khi surface thay đổi, và app iOS trả surface về khi app rời khỏi màn hình; chỉ cần khoá

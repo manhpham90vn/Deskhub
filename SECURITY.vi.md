@@ -2,7 +2,7 @@
 
 # Chính sách bảo mật của Deskhub
 
-_Cập nhật lần cuối: 27 tháng 9 năm 2026_
+_Cập nhật lần cuối: 29 tháng 9 năm 2026_
 
 Đây là bản dịch của [`SECURITY.md`](SECURITY.md). Nếu hai bản có khác biệt, bản tiếng Anh
 là bản chuẩn.
@@ -13,17 +13,18 @@ là bản chuẩn.
 không đưa máy đang share trực tiếp ra Internet.**
 
 Session chạy trên QUIC/TLS, gồm video, phím gõ, mouse, clipboard và lưu lượng terminal.
-Trước khi máy lạ được connect, nó phải chứng minh mình biết passcode của host mà không gửi
-chính mã đó, hoặc được người dùng tại host chấp thuận. Probe và beacon discovery không
-được encrypt nhưng không mang nội dung session. Những packet khác nằm ngoài connection
-đã encrypt sẽ bị loại bỏ.
+Quyền truy cập hoạt động như SSH: client chỉ được vào khi public key của nó có trong
+`authorized_keys` của host, và nó phải chứng minh mình giữ private key tương ứng. Client
+kiểm tra key của host với key đã ghim ở lần connect đầu tiên trước khi gửi bất cứ thứ gì,
+và từ chối ngay nếu key đó đã thay đổi. Không có gì được chấp thuận qua network — không có
+passcode và không có prompt phê duyệt — và host không trả lời packet plaintext nào: mọi
+dữ liệu nằm ngoài connection đã encrypt đều bị loại bỏ.
 
-Mọi host cũng có thể share ở chế độ **view-only** (input bị loại bỏ thay vì được inject),
-và có thể tắt hoàn toàn việc pair máy mới để chỉ chấp nhận những máy đã pair.
+Mọi host cũng có thể share ở chế độ **view-only** (input bị loại bỏ thay vì được inject).
 
-Encrypt không loại bỏ mọi rủi ro trên network. Port vẫn trả lời probe discovery,
-passcode 4 chữ số vẫn ngắn, lần connect đầu tiên chưa có danh tính đã biết để đối chiếu,
-và app không có cơ chế chống flooding.
+Encrypt không loại bỏ mọi rủi ro trên network. Lần connect đầu tiên tới một host sẽ trust
+bất kỳ key nào được hiển thị, trừ khi bạn đối chiếu fingerprint, và app không có cơ chế
+chống flooding.
 
 Để truy cập từ xa, hãy dùng VPN. Dự án đã kiểm thử với
 [Tailscale](https://tailscale.com); bạn có thể connect tới địa chỉ `100.x.y.z` của host.
@@ -36,58 +37,58 @@ Hãy xem các giới hạn bên dưới trước khi share màn hình hoặc ter
 | | |
 |---|---|
 | Dữ liệu tới tay người phát triển | Không có dữ liệu nào. Không server, không tài khoản, không telemetry, không SDK bên thứ ba. Xem [`PRIVACY.vi.md`](PRIVACY.vi.md). |
-| Việc đọc trộm lưu lượng | Mọi session đều chạy bên trong QUIC/TLS: frame video, phím gõ, văn bản clipboard và byte terminal đều được encrypt giữa hai máy. Việc bắt gói chỉ cho biết khối lượng và thời điểm, không cho biết nội dung. Packet chưa encrypt tới port đều bị loại bỏ, trừ các probe discovery. |
+| Việc đọc trộm lưu lượng | Mọi session đều chạy bên trong QUIC/TLS: frame video, phím gõ, văn bản clipboard và byte terminal đều được encrypt giữa hai máy. Việc bắt gói chỉ cho biết khối lượng và thời điểm, không cho biết nội dung. Packet chưa encrypt tới port đều bị loại bỏ, và host không gửi gì ở tầng ứng dụng — kể cả nội dung đang share — trước khi client authenticate. |
 | Viewer từ xa tranh quyền điều khiển | Host được ưu tiên: ngay khi bạn thao tác với mouse hoặc keyboard thật, remote input bị tạm dừng. Điều này áp dụng cho host trên Windows, macOS và Linux. |
 | Phím bị kẹt | Mọi phím mà phía từ xa đang giữ đều được nhả tự động khi session kết thúc hoặc viewer chuyển sang cửa sổ khác. |
-| Người lạ kết nối không được phép | Việc chấp nhận kết nối dựa trên pairing handshake. Một máy chưa biết phải chứng minh passcode của host qua SPAKE2 — mã không đi qua đường truyền, kẻ nghe lén không thu được dữ liệu nào để crack, và mỗi connection chỉ được thử một lần — hoặc, khi không đặt passcode, phải chờ người dùng tại host trả lời *Let this machine in?*. Ba lần thử sai sẽ khoá pairing trong 30 giây, và mỗi lần khoá liên tiếp sau đó dài gấp đôi, tối đa một giờ. Sau khi được chấp nhận, máy ở trạng thái đã pair: được nhận diện qua key mật mã, xuất hiện trên trang Devices của host, và có thể thu hồi tại đó; forget máy đó cũng đóng mọi connection nó đang mở. Việc được chấp nhận chỉ kéo dài bằng đúng connection đã giành được nó. Discovery beacon không còn xác nhận một mã đoán đúng hay sai: probe của máy lạ luôn nhận về danh sách rỗng, nên cơ chế dò mã trước đây không còn. |
-| Tấn công xen giữa ở các lần kết nối sau | Mỗi máy có một key. Client lưu key của từng host đã pair và từ chối kết nối lại khi key thay đổi, cho tới khi người dùng chấp nhận một cách tường minh. Phần chứng minh passcode được ràng buộc với đúng host key mà client nhận được, nên một bản chứng minh bị relay sẽ không hợp lệ. |
+| Người lạ kết nối không được phép | Chỉ client có public key nằm trong `authorized_keys` của host mới được vào, và nó phải ký một transcript của chính connection này bằng private key tương ứng. Không có bí mật nào để đoán và không có gì được chấp thuận qua network; khi thiếu file `authorized_keys` thì không ai vào được. Host giữ tối đa 8 connection đang chờ authenticate và loại bỏ từng connection sau 10 giây; 3 chữ ký sai từ một key và một địa chỉ trong vòng một phút sẽ chặn cặp đó trong 10 giây. Gỡ một key trên trang Devices của host cũng đóng ngay các session đang chạy của thiết bị đó. Việc được chấp nhận chỉ kéo dài bằng đúng connection đã giành được nó. |
+| Tấn công xen giữa | Mỗi host có một key. Client ghim key đó ở lần connect đầu tiên, sau khi người dùng đối chiếu fingerprint, và kiểm tra nó trước khi gửi bất cứ thứ gì ở mọi lần sau. Key đã thay đổi bị từ chối ngay, không có cách chấp nhận từ prompt: host phải được gỡ khỏi *Trusted hosts* rồi trust lại. Chữ ký của client bao gồm một session identifier export từ phiên TLS và fingerprint host key mà client nhìn thấy, nên chữ ký bị relay sang host khác, hoặc bị phát lại trên connection khác, sẽ không hợp lệ. |
 | Nhiều viewer tranh quyền điều khiển mouse | Tối đa 5 viewer cùng xem một host, nhưng chỉ một viewer điều khiển input: viewer tham gia sớm hơn được ưu tiên, và input của viewer tới sau bị loại bỏ cho tới khi viewer trước không thao tác trong một giây. Viewer thứ 6 bị từ chối với trạng thái `Busy`. |
 | Viewer chỉ được phép xem | Chế độ share view-only, có trên mọi host, loại bỏ các packet input ngay tại host trước khi bất cứ thao tác nào được inject; cơ chế này không dựa vào việc client tự tuân thủ. Host trên Android và iOS luôn ở chế độ view-only. |
 | Điện thoại bị bỏ quên trong trạng thái đang share | Cơ chế bảo vệ cuối cùng thuộc về hệ điều hành chứ không phải Deskhub: Android hiển thị một notification thường trực và yêu cầu đồng ý ghi màn hình ở từng phiên share, còn iOS giữ chỉ báo broadcast luôn hiển thị. Cả hai đều cho phép dừng share mà không cần mở app. |
-| Máy đã pair ghi file vào máy của bạn | Chỉ máy đã được chấp nhận mới gửi được file, và chỉ khi máy nhận đang bật file transfer. Dữ liệu tới không thể thoát khỏi thư mục mà máy đó chọn: tên file trên đường truyền bị cắt còn phần cuối của đường dẫn và loại bỏ dấu phân cách, byte điều khiển, ký tự filesystem không chấp nhận cùng các tên thiết bị dành riêng, trước khi bất kỳ file nào được mở. Mỗi file được ghi dưới tên có hậu tố `.deskhub-part` và chỉ được đổi tên khi đã nhận đủ với CRC-32 khớp. Tên đã tồn tại sẽ được thêm số thứ tự thay vì ghi đè. Một batch bị giới hạn ở 32 file, 8 GiB mỗi file và 32 GiB tổng cộng. Cùng cơ chế xử lý tên này cũng chạy trên điện thoại và tablet trước khi dữ liệu tới thư viện ảnh hoặc thư mục Downloads. |
+| Client được phép ghi file vào máy của bạn | Chỉ máy đã được chấp nhận mới gửi được file, và chỉ khi máy nhận đang bật file transfer. Dữ liệu tới không thể thoát khỏi thư mục mà máy đó chọn: tên file trên đường truyền bị cắt còn phần cuối của đường dẫn và loại bỏ dấu phân cách, byte điều khiển, ký tự filesystem không chấp nhận cùng các tên thiết bị dành riêng, trước khi bất kỳ file nào được mở. Mỗi file được ghi dưới tên có hậu tố `.deskhub-part` và chỉ được đổi tên khi đã nhận đủ với CRC-32 khớp. Tên đã tồn tại sẽ được thêm số thứ tự thay vì ghi đè. Một batch bị giới hạn ở 32 file, 8 GiB mỗi file và 32 GiB tổng cộng. Cùng cơ chế xử lý tên này cũng chạy trên điện thoại và tablet trước khi dữ liệu tới thư viện ảnh hoặc thư mục Downloads. |
 | Packet không hợp lệ | Mọi trường đều được kiểm tra giới hạn trước khi đọc. Các parser có unit test, chạy dưới AddressSanitizer, UndefinedBehaviorSanitizer và ThreadSanitizer trong CI, và được fuzz mỗi đêm bằng libFuzzer với bảy target bao phủ wire format, phần parse H.264, reassembly packet, byte stream terminal, chuỗi UI, cùng session state machine phía host và phía viewer. Các crash phát hiện qua fuzzing được lưu trong repo dưới dạng regression test, và phần coverage mới được bổ sung vào seed corpus. |
 
 ### Những gì Deskhub **không** bảo vệ
 
 Đây là danh sách đầy đủ. Không mục nào dưới đây đã được giải quyết:
 
-- **Shell được giữ lại thuộc về cặp đã pair, không thuộc riêng máy đã mở nó.** Một
-  shell còn lại trên host sống lâu hơn kết nối đã mở nó, không có giới hạn thời gian,
+- **Shell được giữ lại thuộc về mọi client được phép, không thuộc riêng máy đã mở nó.**
+  Một shell còn lại trên host sống lâu hơn kết nối đã mở nó, không có giới hạn thời gian,
   và mọi máy đã được nhận vào đều có thể liệt kê các shell host đang giữ, reattach một
   shell đã detach, và đóng bất kỳ shell nào. Id, kích thước và tên thiết bị của từng
-  shell nằm trong danh sách đó. Vì vậy một máy thứ hai bạn pair —— hoặc một máy mà bạn
-  chưa thu hồi key trên trang Devices —— có thể đọc lại những gì shell trước đó đang
-  làm và tiếp tục trong đó. Hãy thu hồi thiết bị bạn không còn tin tưởng, và đóng các
-  shell đã dùng xong thay vì để lại.
-- **Lần kết nối đầu tiên dựa trên tin cậy chưa được xác minh.** Pairing ngăn được kẻ xen
-  giữa xuất hiện ở *các lần sau*: key đã được ghim và mọi thay đổi đều bị từ chối kèm cảnh
-  báo rõ ràng. Nó không ngăn được kẻ đã xen giữa ngay từ lần tiếp xúc đầu tiên: khi không
-  đặt passcode, máy mà client kết nối tới sẽ được pair; còn passcode chỉ nâng mức bảo vệ
-  tương ứng với độ mạnh của một bí mật 4 chữ số. Nếu điều này quan trọng, hãy đối chiếu
-  fingerprint qua một kênh khác.
+  shell nằm trong danh sách đó. Vì vậy một client thứ hai bạn cho phép —— hoặc một client
+  mà bạn chưa gỡ key trên trang Devices —— có thể đọc lại những gì shell trước đó đang
+  làm và tiếp tục trong đó. Hãy gỡ key bạn không còn tin tưởng, và đóng các shell đã dùng
+  xong thay vì để lại.
+- **Lần kết nối đầu tiên dựa trên tin cậy chưa được xác minh.** Việc ghim host key ngăn
+  được kẻ xen giữa xuất hiện ở *các lần sau*: mọi thay đổi đều bị từ chối ngay. Nó không
+  ngăn được kẻ đã xen giữa ngay từ lần tiếp xúc đầu tiên, trừ khi bạn đối chiếu fingerprint
+  mà hộp thoại *New host* hiển thị với fingerprint trên trang Devices của host, như hộp
+  thoại yêu cầu. `deskhub-cli` từ chối host chưa biết trừ khi được chạy với
+  `--accept-new-host-key`, hoặc bạn có thể ghim key trước bằng
+  `host add … --host-key-stdin`.
 - **Phân tích lưu lượng vẫn khả thi.** Việc encrypt che giấu nội dung chứ không che giấu
   sự tồn tại: người quan sát biết được có một session đang chạy, lượng video đang truyền,
   và thời điểm bạn gõ phím.
 - **Không có rate limiting và không chống DoS.** Việc gửi lượng lớn dữ liệu tới port sẽ
-  làm gián đoạn session; với host không đặt passcode, kẻ tấn công còn có thể khiến prompt
-  phê duyệt hiển thị liên tục.
-- **Discovery beacon vẫn trả lời mọi nguồn.** Một probe `LIST_SOURCES` hoặc `PING` từ bất
-  kỳ địa chỉ nguồn nào đều nhận được phản hồi. Phản hồi cho máy lạ là danh sách rỗng, và
-  không probe nào xác nhận được passcode, nhưng máy vẫn bị phát hiện qua việc quét và port
-  vẫn có thể bị dùng làm một bộ phản xạ UDP nhỏ. Có một ngoại lệ: địa chỉ nguồn đang giữ
-  một connection đã encrypt sẽ không bao giờ nhận phản hồi ở dạng không encrypt. Sau khi
-  một máy đã chứng minh danh tính, mọi dữ liệu từ máy đó phải tới ở dạng encrypt, nên một
-  `SOURCE_LIST` hay `PONG` giả mạo ở dạng không encrypt không thể mạo danh một peer đang
-  kết nối.
-- **Tên thiết bị được hiển thị và ghi log.** Giá trị *Your name* mà viewer gửi hiện đã
-  được encrypt trên đường truyền, nhưng vẫn hiển thị trên màn hình của host, được ghi vào
-  log của host và lưu trong danh sách paired-devices của host. Giá trị mặc định là hostname
-  của máy, thường trùng với tên thật của người dùng. Nên dùng một biệt danh và không đặt
-  thông tin nhạy cảm vào trường này. Việc xoá trắng trường này không ngăn tên được gửi đi,
-  mà chỉ khôi phục giá trị mặc định.
+  làm gián đoạn session. Giới hạn về số lần authenticate đang chờ và số chữ ký sai chỉ
+  ngăn việc dò đoán, không ngăn flooding.
+- **QUIC handshake vẫn được trả lời.** Host không còn phản hồi packet plaintext nào,
+  nhưng một QUIC/TLS handshake tới port vẫn hoàn tất trước khi client chứng minh được gì,
+  nên người lạ biết địa chỉ vẫn có thể biết có dịch vụ đang lắng nghe, và thấy được
+  certificate của host.
+- **Tên thiết bị được hiển thị và ghi log.** Tên thiết bị mà client gửi được encrypt trên
+  đường truyền, nhưng vẫn hiển thị trên màn hình của host, được ghi vào log của host, và là
+  nhãn của mọi public key mà máy copy ra — nên tên này nằm trong `authorized_keys` của mọi
+  host cho phép key đó. Host cũng gửi tên thiết bị của chính nó tới mọi client đã
+  authenticate bằng một key được phép — không bao giờ trước đó — và client đó giữ tên
+  trong danh sách gần đây của nó. Giá trị mặc định là hostname của máy, thường trùng với tên thật của
+  người dùng. Nên đặt một biệt danh trong Settings → General → *Device name* và không đặt
+  thông tin nhạy cảm vào đó. Việc xoá trắng trường này không ngăn tên được gửi đi, mà chỉ
+  khôi phục giá trị mặc định.
 - **Vị trí viewer tự giải phóng sau 5 giây không có dữ liệu.** Nếu viewer của bạn
   mất kết nối, vị trí đó được mở lại và `Hello` tới tiếp theo sẽ chiếm chỗ, miễn là máy gửi
-  đã qua admission (pairing, passcode hoặc approval).
+  đã qua admission bằng một key được phép.
 - **Việc share phơi ra toàn bộ display.** Không phải một cửa sổ, mà là mọi notification,
   popup và cửa sổ trên màn hình đó. Xem [`PRIVACY.vi.md` §3.4](PRIVACY.vi.md).
 - **Host là điện thoại hoặc tablet phơi ra toàn bộ thiết bị.** Android và iOS cũng host
@@ -134,13 +135,13 @@ có ý nghĩa.
 
 Nếu một người ở cùng LAN với máy đang share màn hình và Deskhub đang chạy, họ có thể:
 
-1. Phát hiện máy đó bằng cách quét UDP 47777. Probe của một máy chưa pair nhận về danh
-   sách rỗng, nhưng máy vẫn phản hồi nên vẫn bị phát hiện.
-2. Thử kết nối. Họ không đọc được passcode trên đường truyền vì mã không đi qua đó. Các
-   phương án còn lại là thử trực tiếp (một lần cho mỗi connection, ba lần sai thì khoá
-   pairing 30 giây, mỗi lần khoá tiếp theo dài gấp đôi tới tối đa một giờ, nên thử hết
-   10.000 mã mất nhiều tháng), hoặc với host không đặt passcode, chờ người dùng tại host
-   nhấn **Allow** trên prompt phê duyệt.
+1. Tìm ra máy đó bằng cách thử QUIC handshake tới UDP 47777 trên từng địa chỉ. Không
+   packet plaintext nào được trả lời, nhưng chính handshake thì có, nên máy vẫn bị phát
+   hiện qua một lần quét có chủ đích.
+2. Thử kết nối — việc này cần một private key có nửa public đã được chủ host thêm vào
+   `authorized_keys`. Không có passcode để đoán và không có prompt nào để lừa người khác
+   nhấn vào. Không có key như vậy, điều tối đa họ làm được là cố xen vào giữa lần connect
+   *đầu tiên* của một client tới host, và việc đối chiếu fingerprint sẽ phát hiện điều đó.
 3. Quan sát lưu lượng mà không kết nối, và chỉ thu được thông tin về khối lượng và thời
    điểm. Nội dung của session, bao gồm video, đều được encrypt; việc bắt gói không dựng
    lại được màn hình hay các phím đã gõ.
@@ -156,9 +157,9 @@ Nếu bạn tiếp tục sử dụng Deskhub ở trạng thái hiện tại, nê
 
 - [ ] Chạy Tailscale trên cả hai máy và chỉ connect qua địa chỉ `100.x.y.z`.
 - [ ] Xác nhận router **không** có port-forward hoặc mapping UPnP cho UDP 47777.
-- [ ] Cấp quyền public key của từng client trên host và ghim khóa host trên từng client
-      trước khi kết nối. Rà soát trang Devices và thu hồi khóa không còn nhận ra. Bỏ chọn
-      *Viewers can control this machine* khi chỉ cần cho người khác xem.
+- [ ] Chỉ cho phép những client key cần thiết trên host, và đối chiếu fingerprint host key
+      ở lần connect đầu tiên từ mỗi client. Rà soát trang Devices và gỡ những key không
+      còn nhận ra. Bỏ chọn *Viewers can control this machine* khi chỉ cần cho người khác xem.
 - [ ] Thoát Deskhub khi không sử dụng. App không chạy như một background service, nên
       đóng app là đóng luôn điểm truy cập.
 - [ ] Trên Linux, nếu dùng `ufw`, hãy thu hẹp rule thay vì mở rộng:
@@ -166,9 +167,9 @@ Nếu bạn tiếp tục sử dụng Deskhub ở trạng thái hiện tại, nê
       `sudo ufw allow 47777/udp`.
 - [ ] Không để một phiên share đang chạy trên laptop mà bạn mang sang các network khác.
 - [ ] Khoá máy khi rời đi, để một session không người trông coi không bị chiếm quyền.
-- [ ] Với `deskhub-cli`, dùng `devices public` để xem public key client và `trust public`
-      để xem public key TLS host. Chuyển từng khóa qua kênh tin cậy trước khi cấp quyền
-      client hoặc ghim khóa host.
+- [ ] Với `deskhub-cli`, dùng `key public --name NAME` để xem một public key client và
+      `host-key public` để xem key của host này. Chuyển từng key qua kênh tin cậy, rồi dùng
+      `access add --stdin` trên host và `host add … --host-key-stdin` trên client.
 
 ## Dữ liệu lưu trên máy
 
@@ -176,27 +177,35 @@ Log chẩn đoán được ghi ở dạng văn bản thuần trong `~/.deskhub/`
 (`%USERPROFILE%\.deskhub` trên Windows) trên Windows, macOS và Linux. Log chứa thống kê
 kết nối và địa chỉ peer, không chứa nội dung màn hình hay phím gõ.
 
-App desktop và `deskhub-cli` dùng chung các file này. Thư mục đó còn chứa:
-`ui-settings.txt` (fps, bitrate, giới hạn độ phân giải, port, các switch view-only và
-pairing, passcode của host nếu có đặt, và tên thiết bị hiển thị cho host),
-`recent-devices.txt` (10 địa chỉ kết nối gần nhất, thời điểm, và passcode dùng cho từng
-địa chỉ), `host_key.pem` và `host_cert.pem` (private key và certificate tự ký của máy này,
-tức danh tính đứng sau fingerprint của nó; người có được file key có thể mạo danh máy
-này), `known_hosts` (key của các host mà máy này đã trust), `paired_devices` (key, tên và
-mốc thời gian của những máy được host này chấp nhận), `auth_salt` (một salt không bí mật
-cho verifier của passcode) và, trên Linux, `portal-restore-token.txt` (token của chính
-desktop cho những màn hình bạn đã chọn, chỉ có ý nghĩa với phiên desktop của bạn và không
-được truyền đi). App di động lưu settings trong sandbox riêng; trên iOS là trong app group
-container. Passcode đã lưu được làm rối bằng một khoá XOR cố định, giúp chúng không hiển
-thị trực tiếp khi mở file. **Đây không phải là encrypt**: người có source và file sẽ khôi
-phục được chúng trong vài giây. Hãy coi thư mục đó là nội dung mà mọi tiến trình chạy dưới
-tài khoản của bạn đều đọc được.
+App desktop và `deskhub-cli` dùng chung các file này; `DESKHUB_CONFIG_DIR` hoặc
+`--config-dir` của CLI trỏ cả hai sang một thư mục khác. Thư mục đó còn chứa:
+`ui-settings.txt` (fps, bitrate, giới hạn độ phân giải, port, switch view-only, tên thiết
+bị, địa chỉ bind và các toggle khác), `recent-hosts.txt` (10 host kết nối gần nhất — địa chỉ,
+thời điểm và tên mà mỗi host tự báo), `client_key.pem` và `client_key.<name>.pem` (các client private key của máy này
+— người có được một file có thể đăng nhập ở mọi nơi key đó được cho phép; trên Windows các
+file này được bảo vệ bằng DPAPI), `host_key.pem` và `host_cert.pem` (host private key và
+certificate tự ký của máy này, tức danh tính đứng sau fingerprint của nó; người có được file
+key có thể mạo danh máy này khi làm host), `authorized_keys` (các client public key được
+phép vào host này, mỗi key kèm nhãn), `known_hosts` (các host mà máy này trust — địa chỉ,
+fingerprint đã ghim, tên và client key dùng cho host đó) và, trên Linux,
+`portal-restore-token.txt` (token của chính desktop cho những màn hình bạn đã chọn, chỉ có
+ý nghĩa với phiên desktop của bạn và không được truyền đi). Không có passcode nào được lưu
+ở bất cứ đâu. Trên hệ POSIX, thư mục được tạo với quyền `0700` và mọi file `0600`, được ghi
+atomic; trên Windows, chúng chỉ cho phép tài khoản của bạn, SYSTEM và Administrators truy
+cập. App di động lưu cùng các file đó trong sandbox riêng — trên iOS là trong app group
+container, trên Android là trong internal storage của app. Hãy coi thư mục đó là nội dung
+mà mọi tiến trình chạy dưới tài khoản của bạn đều đọc được.
+
+File `authorized_keys` hoặc `known_hosts` không đọc được sẽ không bị suy đoán: trong khi
+file không đọc được, host không cho ai vào và client từ chối mọi host, và lần thay đổi tiếp
+theo sẽ ghi mới file đó. Dữ liệu từ phiên bản cũ — passcode, danh sách máy đã pair cũ —
+không được chuyển đổi; các file còn sót lại bị xoá.
 
 File do máy khác gửi tới được lưu ngoài thư mục đó, trong thư mục mà máy nhận đã chọn
 (`Deskhub` trong thư mục home của người dùng nếu không chọn khác, lưu dưới tên
 `transfer_dir`). Trên điện thoại hoặc tablet, các file này nằm trong thư viện ảnh hoặc thư
 mục Documents / Downloads của thiết bị, và vẫn tồn tại sau khi gỡ app. Hãy coi mọi nội
-dung được gửi tới đó là file do một máy đã pair đặt lên thiết bị của bạn.
+dung được gửi tới đó là file do một client được phép đặt lên thiết bị của bạn.
 
 Không dữ liệu nào trong số này được upload; bạn có thể xoá thư mục bất cứ lúc nào.
 
@@ -204,17 +213,15 @@ Không dữ liệu nào trong số này được upload; bạn có thể xoá th
 
 Đang theo dõi, theo thứ tự dự kiến triển khai:
 
-1. **Lưu passcode và host key trong keychain của hệ điều hành** thay vì trong file.
-2. **Không để discovery beacon phản hồi** các probe không được yêu cầu, thay vì trả về
-   danh sách rỗng.
+1. **Lưu host key và client key trong keychain của hệ điều hành** thay vì trong file, trên
+   những nền tảng mà chúng chưa được bảo vệ.
 
-Đã hoàn thành kể từ lần cập nhật danh sách gần nhất: một transport đã encrypt (QUIC/TLS)
-cho toàn bộ session, bao gồm video, input, clipboard và terminal, cùng việc loại bỏ dữ
-liệu chưa encrypt trừ các probe discovery; pairing bằng SPAKE2 để passcode không đi qua
-đường truyền và không thể bị thu thập hay brute-force offline; prompt phê duyệt tại host;
-danh sách máy đã pair kèm khả năng thu hồi; key cho từng máy cùng cảnh báo khi key thay
-đổi ở phía client; và cơ chế khoá sau 3 lần nhập sai passcode, bắt đầu từ 30 giây và
-tăng gấp đôi tới tối đa một giờ.
+Đã hoàn thành kể từ lần cập nhật danh sách gần nhất: quyền truy cập kiểu SSH — client chỉ
+được chấp nhận qua public key có trong `authorized_keys` của host, mỗi connection được ký
+lại từ đầu; host key được ghim ở lần connect đầu tiên và bị từ chối dứt khoát khi thay đổi;
+đã gỡ passcode, prompt phê duyệt và switch pairing; đã gỡ LAN discovery, nên host không trả
+lời bất kỳ packet plaintext nào; và giới hạn số lần authenticate đang chờ cũng như số chữ
+ký sai.
 
 Danh sách này là tuyên bố về định hướng, không phải lịch trình. Deskhub do một người bảo
 trì trong thời gian rảnh. Hãy đánh giá theo hiện trạng, không theo kế hoạch.
@@ -239,8 +246,8 @@ hành, bạn sẽ được ghi nhận trong release notes, trừ khi bạn khôn
 
 Dự án không có chương trình bug bounty và không chi trả phần thưởng.
 
-Các giới hạn phía trên — tin cậy ở lần connect đầu, phân tích lưu lượng, phản hồi
-discovery và việc không chống DoS — đã được ghi nhận. Vui lòng báo cáo nếu bạn có bằng
+Các giới hạn phía trên — tin cậy ở lần connect đầu, phân tích lưu lượng, QUIC handshake
+vẫn nhìn thấy được và việc không chống DoS — đã được ghi nhận. Vui lòng báo cáo nếu bạn có bằng
 chứng mới về tác động của chúng, hoặc phát hiện vấn đề khác như memory corruption, crash
 do packet không hợp lệ, dữ liệu rời khỏi thiết bị ngoài dự kiến, hay lỗi trong biện pháp
 giảm nhẹ đã phát hành.

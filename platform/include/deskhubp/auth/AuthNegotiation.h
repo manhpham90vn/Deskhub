@@ -1,5 +1,5 @@
 #pragma once
-#include "deskhub/net/PairedDevices.h"
+#include "deskhub/net/TrustStore.h"
 #include "deskhub/protocol/Wire.h"
 #include "deskhubp/system/AuthProof.h"
 #include "deskhubp/system/ClientIdentity.h"
@@ -33,7 +33,7 @@ public:
     void Configure(HostAuthConfig config);
 
     std::optional<deskhub::AuthChallenge> Begin(const deskhub::AuthStart& start);
-    deskhub::AuthResult Respond(const deskhub::AuthResponse& response, int64_t nowUnix);
+    deskhub::AuthResult Respond(const deskhub::AuthResponse& response);
 
     HostAuthState State() const;
     const deskhub::Fingerprint& PeerFingerprint() const;

@@ -1,78 +1,22 @@
-#include "deskhubp/ffi/DiscoveryFfi.h"
+#include "deskhubp/ffi/SettingsFfi.h"
 
-#include <algorithm>
-#include <chrono>
-#include <ctime>
-#include <cstring>
-#include <mutex>
-#include <optional>
 #include <iterator>
 #include <span>
 #include <string>
-#include <vector>
 
 #include "deskhub/net/Ipv4.h"
 #include "deskhub/protocol/Wire.h"
-#include "deskhub/ui/DeviceRows.h"
-#include "deskhub/ui/RecentDevices.h"
 #include "deskhub/ui/SettingsLayout.h"
 #include "deskhub/ui/Strings.h"
 #include "deskhub/ui/UiSettings.h"
 #include "deskhubp/ffi/FfiText.h"
 #include "deskhubp/net/NetInfo.h"
-#include "deskhubp/system/AppDataFile.h"
-#include "deskhubp/system/AuthProof.h"
-#include "deskhubp/system/ClientIdentity.h"
 #include "deskhubp/system/Autostart.h"
-#include "deskhubp/system/HostIdentity.h"
-#include "deskhubp/system/PairedDevicesFile.h"
-#include "deskhubp/system/AuthorizedKeysFile.h"
 #include "deskhubp/system/UiSettingsStore.h"
 
 namespace {
 
 namespace ui = deskhub::ui;
-
-constexpr const char* kRecentDevicesFile = "recent-devices.txt";
-std::mutex g_mutex;
-
-std::vector<ui::RecentDevice> g_recent;
-bool g_recentLoaded = false;
-bool g_recentNeedsMigration = false;
-
-std::vector<ui::RecentDevice>& Recent() {
-    if (!g_recentLoaded) {
-        const std::string text = deskhubp::ReadAppDataFile(kRecentDevicesFile);
-        g_recent = ui::ParseRecentDevices(text);
-        g_recentNeedsMigration = !text.empty() && text != ui::SerializeRecentDevices(g_recent);
-        g_recentLoaded = true;
-    }
-    if (g_recentNeedsMigration)
-        g_recentNeedsMigration = !deskhubp::WriteAppDataFileAtomic(kRecentDevicesFile,
-            ui::SerializeRecentDevices(g_recent));
-    return g_recent;
-}
-
-void SaveRecent() {
-    g_recentNeedsMigration = !deskhubp::WriteAppDataFileAtomic(kRecentDevicesFile,
-        ui::SerializeRecentDevices(g_recent));
-}
-
-std::string LocalTimeText(int64_t unixTime) {
-    if (unixTime <= 0) return {};
-    const std::time_t stamp = std::time_t(unixTime);
-    std::tm parts{};
-#ifdef _WIN32
-    if (localtime_s(&parts, &stamp) != 0) return {};
-#else
-    if (!localtime_r(&stamp, &parts)) return {};
-#endif
-    char buf[32];
-    if (std::strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M", &parts) == 0) return {};
-    return std::string(buf);
-}
-
-using deskhubp::FillText;
 
 struct KindPair {
     DHSettingsEntryKind ffi;
@@ -124,16 +68,11 @@ constexpr bool FfiSettingsLayoutMirrorsCore() {
 static_assert(FfiSettingsLayoutMirrorsCore(),
     "each DHSettingsEntryKind and DHSettingField must carry its core value");
 
+using deskhubp::FillText;
+
 }
 
 extern "C" {
-
-void dh_recent_touch(const char* address) {
-    if (!address || !*address) return;
-    std::lock_guard<std::mutex> lk(g_mutex);
-    ui::TouchRecentDevice(Recent(), address, int64_t(std::time(nullptr)));
-    SaveRecent();
-}
 
 int dh_settings_layout(DHSettingsEntry* out, int capacity) {
     const std::span<const ui::SettingsEntry> layout = ui::DesktopSettingsLayout();
@@ -175,31 +114,6 @@ void dh_settings_save(uint32_t fps, uint32_t bitrate_mbps, uint32_t max_dim, uin
     out.allowInput = allow_input;
     out.clientControl = client_control;
     deskhubp::SaveUiSettings(out);
-}
-
-int dh_device_rows(DHDeviceRow* out, int capacity) {
-    if (!out || capacity <= 0) return 0;
-    std::lock_guard<std::mutex> lk(g_mutex);
-    const std::vector<ui::DeviceRow> rows = ui::BuildDeviceRows({}, Recent());
-    const int count = int(rows.size()) < capacity ? int(rows.size()) : capacity;
-    for (int i = 0; i < count; ++i) {
-        const ui::DeviceRow& row = rows[size_t(i)];
-        deskhubp::CopyToBuf(out[i].addr, sizeof(out[i].addr), row.addr);
-        deskhubp::CopyToBuf(out[i].origin, sizeof(out[i].origin),
-            ui::DeviceOriginLabel(row.origin));
-        deskhubp::CopyToBuf(out[i].status, sizeof(out[i].status), "-");
-        deskhubp::CopyToBuf(out[i].ping, sizeof(out[i].ping), "-");
-        const std::string last = LocalTimeText(row.lastConnectedUnix);
-        deskhubp::CopyToBuf(out[i].lastConnected, sizeof(out[i].lastConnected),
-            last.empty() ? std::string("-") : last);
-        out[i].known = false;
-        out[i].online = false;
-    }
-    return count;
-}
-
-bool dh_same_device_addr(const char* a, const char* b) {
-    return a && b && ui::SameDeviceAddr(a, b);
 }
 
 uint16_t dh_default_port(void) {
@@ -337,46 +251,5 @@ int dh_sharing_status(uint16_t port, bool allow_input, bool screen, bool termina
     std::string text = ui::ShareSummaryLine(screen, terminal, files, port);
     if (screen && !allow_input) text += std::string("\n") + ui::kViewOnlyNote;
     return FillText(out, capacity, text);
-}
-
-int dh_paired_devices(DHPairedDevice* out, int capacity) {
-    if (!out || capacity <= 0) return 0;
-    const auto loaded = deskhubp::LoadEffectiveAuthorizedDevices();
-    if (!loaded) return 0;
-    const std::vector<deskhub::PairedDevice>& devices = loaded->Devices();
-    const int count = int(devices.size()) < capacity ? int(devices.size()) : capacity;
-    for (int i = 0; i < count; ++i) {
-        const deskhub::PairedDevice& device = devices[size_t(i)];
-        FillText(out[i].name, int(sizeof(out[i].name)), device.name);
-        FillText(out[i].shortKey, int(sizeof(out[i].shortKey)),
-            deskhub::ShortFingerprint(device.fingerprint));
-        FillText(out[i].fingerprint, int(sizeof(out[i].fingerprint)),
-            deskhub::FormatFingerprint(device.fingerprint));
-        out[i].pairedUnix = device.pairedUnix;
-        out[i].lastSeenUnix = device.lastSeenUnix;
-    }
-    return count;
-}
-
-bool dh_paired_add_public_key(const char* public_key) {
-    if (!public_key) return false;
-    return deskhubp::RememberAuthorizedKey(public_key);
-}
-
-bool dh_paired_forget(const char* fingerprint) {
-    if (!fingerprint) return false;
-    const std::optional<deskhub::Fingerprint> fp = deskhub::ParseFingerprint(fingerprint);
-    return fp && deskhubp::ForgetEffectiveAuthorizedDevice(*fp);
-}
-
-void dh_paired_forget_all(void) {
-    deskhubp::ClearAuthorizedKeys();
-}
-
-int dh_host_fingerprint(char* out, int capacity) {
-    const deskhubp::HostIdentity identity =
-        deskhubp::LoadOrCreateHostIdentity(deskhubp::SessionDeviceName());
-    return FillText(out, capacity,
-        identity.Valid() ? deskhub::FormatFingerprint(identity.fingerprint) : std::string());
 }
 }

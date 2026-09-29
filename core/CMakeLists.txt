@@ -63,12 +63,11 @@ add_library(core STATIC
     src/diag/ScreenClientDiag.cpp
     src/diag/ShareDiag.cpp
 
-    src/session/host/Beacon.cpp
+    src/session/host/SourceListResponder.cpp
 
     src/net/Ipv4.cpp
     src/net/BindAddress.cpp
     src/net/TrustStore.cpp
-    src/net/PairedDevices.cpp
     src/net/PublicKeyText.cpp
     src/net/AuthorizedKeys.cpp
 
@@ -82,7 +81,6 @@ add_library(core STATIC
     src/ui/HostRows.cpp
     src/ui/ShellPicker.cpp
     src/ui/TransferView.cpp
-    src/ui/DeviceRows.cpp
     src/ui/RecentDevices.cpp
     src/ui/HostProfiles.cpp
     src/ui/ClientKeys.cpp
@@ -179,12 +177,11 @@ if(DESKHUB_CORE_TESTS)
         tests/media/RgbDownscaleTests.cpp
         tests/media/PcmRingTests.cpp
 
-        tests/session/BeaconTests.cpp
+        tests/session/SourceListResponderTests.cpp
 
         tests/net/Ipv4Tests.cpp
         tests/net/BindAddressTests.cpp
         tests/net/TrustStoreTests.cpp
-        tests/net/PairedDevicesTests.cpp
         tests/net/PublicKeyTextTests.cpp
 
         tests/terminal/VtParserTests.cpp
@@ -199,7 +196,6 @@ if(DESKHUB_CORE_TESTS)
         tests/ui/HostRowsTests.cpp
         tests/ui/ShellPickerTests.cpp
         tests/ui/TransferViewTests.cpp
-        tests/ui/DeviceRowsTests.cpp
         tests/ui/RecentDevicesTests.cpp
         tests/ui/HostProfilesTests.cpp
         tests/ui/ClientKeysTests.cpp
@@ -280,4 +276,5 @@ if(DESKHUB_FUZZ)
     deskhub_fuzz_target(fuzz_session fuzz/FuzzSession.cpp)
     deskhub_fuzz_target(fuzz_uitext fuzz/FuzzUiText.cpp)
     deskhub_fuzz_target(fuzz_term fuzz/FuzzTerm.cpp)
+    deskhub_fuzz_target(fuzz_keys fuzz/FuzzKeys.cpp)
 endif()

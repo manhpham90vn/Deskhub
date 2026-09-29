@@ -14,10 +14,13 @@ enum FingerprintText {
 }
 
 struct ClientKeyRow: Identifiable, Hashable {
+    private static let defaultKeyName = "default"
+
     let name: String
     let fingerprint: String
 
     var id: String { name }
+    var deletable: Bool { name != Self.defaultKeyName }
     var shortFingerprint: String { FingerprintText.short(fingerprint) }
 }
 
@@ -52,6 +55,10 @@ final class ClientKeysModel {
 
     func importKey(name: String, privateKey: String, passphrase: String) {
         finish(dh_client_key_import(Self.trimmed(name), privateKey, passphrase))
+    }
+
+    func delete(_ key: ClientKeyRow) {
+        finish(dh_client_key_delete(key.name))
     }
 
     func reportUnreadable() {

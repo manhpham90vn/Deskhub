@@ -8,7 +8,6 @@
 #include "deskhubp/client/ScreenViewer.h"
 #include "deskhubp/host/FileHost.h"
 #include "deskhubp/system/Clock.h"
-#include "deskhubp/system/PairedDevicesFile.h"
 
 #include <cstdio>
 #include <filesystem>
@@ -60,7 +59,7 @@ struct Session {
     bool Open(const std::string& leaf, bool audio) {
         fake::Host().Reset();
         fake::Decoded().Reset();
-        deskhubp::ForgetAllPairedDevices();
+        RevokeAllClientKeys();
 
         landing = Scratch(leaf + "-land");
         source = Scratch(leaf + "-send");

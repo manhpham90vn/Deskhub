@@ -165,8 +165,8 @@ int main() {
     std::printf("--- media: PCM ring (drop-oldest, silence padding) ---\n");
     RunPcmRingTests();
 
-    std::printf("--- beacon (pre-session LIST_SOURCES + PING) ---\n");
-    RunBeaconTests();
+    std::printf("--- source list for authenticated viewers (LIST_SOURCES + PING) ---\n");
+    RunSourceListResponderTests();
 
     std::printf("--- net: dotted-quad IPv4 parsing ---\n");
     RunIpv4Tests();
@@ -178,7 +178,6 @@ int main() {
     RunTrustStoreTests();
 
     std::printf("--- net: which machines this host has paired with ---\n");
-    RunPairedDevicesTests();
     RunPublicKeyTextTests();
 
     std::printf("--- terminal: the VT escape-sequence parser ---\n");
@@ -207,7 +206,6 @@ int main() {
 
     std::printf("--- ui: host table rows (displays, viewers, cells) ---\n");
     RunHostRowsTests();
-    RunDeviceRowsTests();
 
     std::printf("--- ui: the shells a host is keeping, as a client sees them ---\n");
     RunShellPickerTests();

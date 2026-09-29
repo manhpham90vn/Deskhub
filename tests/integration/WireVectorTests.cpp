@@ -122,7 +122,7 @@ std::vector<Vector> AllVectors() {
                      const auto s = SampleSources();
                      return BuildSourceList(out, s);
                  },
-        "03060000000000000200050002d009446973706c61792031010320025809446973706c61792032"});
+        "03060000000000000200050002d009446973706c61792031010320025809446973706c6179203200"});
 
     v.push_back({"PING", [](std::span<uint8_t> out) {
                      PingPong p{};

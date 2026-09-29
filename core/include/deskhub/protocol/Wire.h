@@ -304,7 +304,7 @@ size_t BuildAuthResult(std::span<uint8_t> out, const AuthResult& m);
 size_t BuildStart(std::span<uint8_t> out, uint32_t sessionId);
 size_t BuildListSources(std::span<uint8_t> out);
 size_t BuildSourceList(std::span<uint8_t> out, std::span<const SourceInfo> sources,
-    HostCaps caps = {});
+    HostCaps caps = {}, std::string_view hostName = {});
 size_t BuildBye(std::span<uint8_t> out, uint32_t sessionId);
 size_t BuildPing(std::span<uint8_t> out, uint32_t sessionId, const PingPong& m);
 size_t BuildPong(std::span<uint8_t> out, uint32_t sessionId, const PingPong& m);
@@ -331,6 +331,7 @@ std::span<const uint8_t> PayloadOf(std::span<const uint8_t> datagram);
 
 std::optional<Hello> ParseHello(std::span<const uint8_t> payload);
 size_t ParseSourceList(std::span<const uint8_t> payload, std::span<SourceInfo> out);
+std::string ParseSourceListHostName(std::span<const uint8_t> payload);
 std::optional<HelloAck> ParseHelloAck(std::span<const uint8_t> payload);
 std::optional<AuthStart> ParseAuthStart(std::span<const uint8_t> payload);
 std::optional<AuthChallenge> ParseAuthChallenge(std::span<const uint8_t> payload);

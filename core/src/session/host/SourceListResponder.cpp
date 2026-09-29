@@ -1,8 +1,8 @@
-#include "deskhub/session/host/Beacon.h"
+#include "deskhub/session/host/SourceListResponder.h"
 
 namespace deskhub {
 
-size_t Beacon::Reply(std::span<uint8_t> out, std::span<const uint8_t> pkt, bool trusted) const {
+size_t SourceListResponder::Reply(std::span<uint8_t> out, std::span<const uint8_t> pkt, bool trusted) const {
     if (!trusted) return 0;
     const auto h = ParseCommonHeader(pkt);
     if (!h) return 0;
@@ -10,7 +10,7 @@ size_t Beacon::Reply(std::span<uint8_t> out, std::span<const uint8_t> pkt, bool 
 
     switch (h->type) {
         case MsgType::ListSources: {
-            return BuildSourceList(out, sources_, caps_);
+            return BuildSourceList(out, sources_, caps_, hostName_);
         }
         case MsgType::Ping: {
             if (h->sessionId != 0) return 0;

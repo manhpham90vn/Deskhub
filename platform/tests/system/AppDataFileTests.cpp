@@ -2,7 +2,6 @@
 #include "support/TestSupport.h"
 
 #include "deskhubp/system/AppDataFile.h"
-#include "deskhubp/system/PairedDevicesFile.h"
 #include "deskhubp/system/AuthorizedKeysFile.h"
 #include "deskhubp/system/ClientIdentity.h"
 #include "deskhubp/system/Random.h"
@@ -93,180 +92,184 @@ void TestConfigDirectoryCanBeSeparateFromLogs() {
     std::filesystem::remove_all(root, error);
 }
 
-void TestLegacySettingsMigration() {
+std::filesystem::path UniqueTempDir(const std::string& prefix) {
     std::array<uint8_t, 8> suffix{};
-    if (!RandomBytes(suffix.data(), suffix.size())) {
-        Check(false, "a migration test directory has a unique name");
-        return;
-    }
-    std::string name = "deskhub-migration-";
+    if (!RandomBytes(suffix.data(), suffix.size())) return {};
+    std::string name = prefix;
     constexpr char digits[] = "0123456789abcdef";
     for (uint8_t byte : suffix) {
         name += digits[byte >> 4];
         name += digits[byte & 15];
     }
-    const std::filesystem::path dir = std::filesystem::temp_directory_path() / name;
-    const std::string previous = deskhubp::AppDataDirRef();
-    deskhubp::SetAppDataDir(dir.string());
-
-    const std::string legacy = "name=workstation\nport=4200\npasscode=0417\nallow_new_pairings=1\n";
-    Check(deskhubp::WriteAppDataFile(deskhubp::kUiSettingsFileName, legacy),
-        "legacy settings are stored in an isolated directory");
-    const auto loaded = deskhubp::LoadUiSettings();
-    Check(loaded.deviceName == "workstation" && loaded.port == 4200,
-        "settings migration keeps supported values");
-    const std::string migrated = deskhubp::ReadAppDataFile(deskhubp::kUiSettingsFileName);
-    Check(migrated.find("passcode") == std::string::npos &&
-              migrated.find("allow_new_pairings") == std::string::npos,
-        "loading legacy settings removes discarded secrets from disk");
-    Check(migrated == deskhub::ui::SerializeUiSettings(loaded),
-        "loading legacy settings writes the sanitized form");
-    Check(!deskhubp::WriteAppDataFileAtomic("missing/settings.txt", "new"),
-        "an atomic write failure reports failure without changing the settings file");
-    Check(deskhubp::ReadAppDataFile(deskhubp::kUiSettingsFileName) == migrated,
-        "a failed atomic write leaves the previous settings intact");
-
-    deskhubp::SetAppDataDir(previous);
-    std::error_code error;
-    std::filesystem::remove_all(dir, error);
+    return std::filesystem::temp_directory_path() / name;
 }
 
-void TestAuthorizedKeyWritesOnlyPublishSuccessfulChanges() {
-    std::array<uint8_t, 8> suffix{};
-    if (!RandomBytes(suffix.data(), suffix.size())) {
+struct IsolatedAppData {
+    std::filesystem::path dir{};
+    std::string previous = deskhubp::AppDataDirRef();
+
+    explicit IsolatedAppData(const std::string& prefix) : dir(UniqueTempDir(prefix)) {
+        if (!dir.empty()) deskhubp::SetAppDataDir(dir.string());
+    }
+
+    ~IsolatedAppData() {
+        deskhubp::SetAppDataDir(previous);
+        std::error_code error;
+        if (!dir.empty()) std::filesystem::remove_all(dir, error);
+    }
+
+    IsolatedAppData(const IsolatedAppData&) = delete;
+    IsolatedAppData& operator=(const IsolatedAppData&) = delete;
+};
+
+void TestUnknownSettingsKeysAreIgnored() {
+    std::printf("[appdata] settings keys this version does not know are ignored...\n");
+    const IsolatedAppData isolated("deskhub-settings-");
+    if (isolated.dir.empty()) {
+        Check(false, "a settings test directory has a unique name");
+        return;
+    }
+
+    const std::string old = "name=workstation\nport=4200\npasscode=0417\nallow_new_pairings=1\n";
+    Check(deskhubp::WriteAppDataFile(deskhubp::kUiSettingsFileName, old),
+        "an old settings file is stored in an isolated directory");
+    const auto loaded = deskhubp::LoadUiSettings();
+    Check(loaded.deviceName == "workstation" && loaded.port == 4200,
+        "the keys this version knows are still read");
+    Check(deskhubp::ReadAppDataFile(deskhubp::kUiSettingsFileName) == old,
+        "reading settings never rewrites the file");
+    deskhubp::SaveUiSettings(loaded);
+    const std::string saved = deskhubp::ReadAppDataFile(deskhubp::kUiSettingsFileName);
+    Check(saved == deskhub::ui::SerializeUiSettings(loaded) &&
+              saved.find("passcode") == std::string::npos,
+        "the next save writes only the keys this version knows");
+    Check(!deskhubp::WriteAppDataFileAtomic("missing/settings.txt", "new"),
+        "an atomic write failure reports failure without changing the settings file");
+    Check(deskhubp::ReadAppDataFile(deskhubp::kUiSettingsFileName) == saved,
+        "a failed atomic write leaves the previous settings intact");
+}
+
+bool IsAuthorized(const deskhubp::ClientIdentity& identity) {
+    return deskhubp::IsClientKeyAuthorized(identity.publicKey);
+}
+
+bool DamageAuthorizedKeys(const std::string& valid) {
+    return deskhubp::WriteAppDataFile(deskhubp::kAuthorizedKeysFileName,
+        valid + "damaged row\n");
+}
+
+void TestADamagedAuthorizedKeysFileDeniesThenStartsFresh() {
+    std::printf("[appdata] a damaged authorized_keys denies everyone until the next change...\n");
+    if (!deskhubp::QuicAvailable()) return;
+    const IsolatedAppData isolated("deskhub-authorized-");
+    if (isolated.dir.empty()) {
         Check(false, "an authorized key test directory has a unique name");
         return;
     }
-    std::string name = "deskhub-authorized-";
-    constexpr char digits[] = "0123456789abcdef";
-    for (uint8_t byte : suffix) {
-        name += digits[byte >> 4];
-        name += digits[byte & 15];
-    }
-    const std::filesystem::path dir = std::filesystem::temp_directory_path() / name;
-    const std::string previous = deskhubp::AppDataDirRef();
-    deskhubp::SetAppDataDir(dir.string());
 
-    deskhub::Fingerprint key;
-    key.bytes[0] = 1;
-    Check(deskhubp::RememberPairedDevice(key, "laptop", 1000),
-        "an authorized key is saved in the isolated directory");
-    const std::string valid = deskhubp::ReadAppDataFile(deskhubp::kPairedDevicesFileName);
-    const std::string damaged = valid + "damaged row\n";
-    Check(deskhubp::WriteAppDataFile(deskhubp::kPairedDevicesFileName, damaged),
-        "the isolated admission list can be corrupted for a regression test");
-    Check(deskhubp::TryLoadPairedDevices().value_or(deskhub::PairedDevices{}).Check(key) == deskhub::PairVerdict::Unknown,
+    const auto laptop = deskhubp::GenerateClientIdentity("laptop");
+    const auto phone = deskhubp::GenerateClientIdentity("phone");
+    Check(laptop.Valid() && phone.Valid(), "two client keys are created in the isolated store");
+    if (!laptop.Valid() || !phone.Valid()) return;
+
+    Check(GrantClientKey(laptop), "an authorized key is saved in the isolated directory");
+    const std::string valid = deskhubp::ReadAppDataFile(deskhubp::kAuthorizedKeysFileName);
+    Check(DamageAuthorizedKeys(valid), "the admission list can be corrupted for a regression test");
+    Check(deskhubp::CheckClientKeyAuthorization(laptop.publicKey) ==
+                  deskhubp::ClientKeyAuthorization::ConfigError &&
+              !IsAuthorized(laptop),
         "a damaged admission list authorizes no key, even one on a valid row");
-    Check(!deskhubp::RememberPairedDevice(key, "changed", 2000),
-        "a normal update cannot overwrite a damaged admission list");
-    const uint64_t generationBeforeDamagedRevoke = deskhubp::PairedDevicesGeneration();
-    Check(!deskhubp::ForgetAllPairedDevices(),
-        "revoke-all cannot overwrite a damaged admission list");
-    Check(deskhubp::PairedDevicesGeneration() == generationBeforeDamagedRevoke,
-        "a failed revoke-all does not publish a policy change");
-    Check(deskhubp::ReadAppDataFile(deskhubp::kPairedDevicesFileName) == damaged,
-        "the damaged list remains available for repair");
-    Check(deskhubp::WriteAppDataFile(deskhubp::kPairedDevicesFileName, valid),
-        "the valid admission list is restored");
-    const uint64_t beforeFailure = deskhubp::PairedDevicesGeneration();
-    const auto target = deskhubp::AppDataFilePath(deskhubp::kPairedDevicesFileName);
+    Check(!deskhubp::ListAuthorizedClients(),
+        "a damaged admission list reads as an error, not as an empty list");
+
+    const uint64_t beforeAdd = deskhubp::AuthorizedKeysGeneration();
+    Check(GrantClientKey(phone), "adding a key to a damaged list succeeds");
+    Check(IsAuthorized(phone) && !IsAuthorized(laptop),
+        "the damaged contents are discarded and the fresh file holds only the new key");
+    Check(deskhubp::AuthorizedKeysGeneration() == beforeAdd + 1,
+        "starting fresh publishes one policy change");
+
+    Check(DamageAuthorizedKeys(valid), "the list is damaged again");
+    Check(RevokeAllClientKeys(), "revoke-all replaces a damaged list");
+    const auto afterClear = deskhubp::ListAuthorizedClients();
+    Check(afterClear && afterClear->empty(), "with an empty, readable one");
+
+    Check(DamageAuthorizedKeys(valid), "the list is damaged once more");
+    Check(!deskhubp::ForgetAuthorizedClient(laptop.fingerprint),
+        "forgetting a key the fresh file does not hold reports no change");
+    const auto afterForget = deskhubp::ListAuthorizedClients();
+    Check(afterForget && afterForget->empty(),
+        "but the damaged file is still replaced by an empty one");
+
+    const uint64_t beforeFailure = deskhubp::AuthorizedKeysGeneration();
+    const auto target = deskhubp::AppDataFilePath(deskhubp::kAuthorizedKeysFileName);
     std::error_code error;
     std::filesystem::remove(target, error);
     std::filesystem::create_directory(target, error);
     Check(!error, "a directory blocks replacement of the authorized key file");
-    Check(!deskhubp::RememberPairedDevice(key, "changed", 2000),
-        "a failed authorized key write reports failure");
-    Check(!deskhubp::ForgetAllPairedDevices(), "failed revoke-all reports failure");
-    Check(deskhubp::PairedDevicesGeneration() == beforeFailure,
+    Check(!GrantClientKey(laptop), "a failed authorized key write reports failure");
+    Check(!RevokeAllClientKeys(), "failed revoke-all reports failure");
+    Check(deskhubp::AuthorizedKeysGeneration() == beforeFailure,
         "failed writes do not announce a policy change");
 
     std::filesystem::remove(target, error);
-    Check(deskhubp::RememberPairedDevice(key, "laptop", 3000),
-        "the authorized key file can be written again");
-    const uint64_t beforeRevoke = deskhubp::PairedDevicesGeneration();
-    Check(deskhubp::ForgetAllPairedDevices(), "revoke-all persists an empty allowlist");
-    Check(deskhubp::TryLoadPairedDevices().value_or(deskhub::PairedDevices{}).Size() == 0 &&
-              deskhubp::PairedDevicesGeneration() == beforeRevoke + 1,
+    Check(GrantClientKey(laptop), "the authorized key file can be written again");
+    const uint64_t beforeRevoke = deskhubp::AuthorizedKeysGeneration();
+    Check(RevokeAllClientKeys(), "revoke-all persists an empty allowlist");
+    Check(!IsAuthorized(laptop) && deskhubp::AuthorizedKeysGeneration() == beforeRevoke + 1,
         "successful revoke-all publishes one policy change");
-
-    deskhubp::SetAppDataDir(previous);
-    std::filesystem::remove_all(dir, error);
 }
 
-void TestPublicKeyAllowlistOverridesLegacyFingerprints() {
+void TestAuthorizedClientsAreListedAndForgotten() {
+    std::printf("[appdata] authorized_keys is the only list of clients let in...\n");
     if (!deskhubp::QuicAvailable()) return;
-    std::array<uint8_t, 8> suffix{};
-    if (!RandomBytes(suffix.data(), suffix.size())) {
-        Check(false, "the public key allowlist test has a unique directory");
+    const IsolatedAppData isolated("deskhub-authorized-list-");
+    if (isolated.dir.empty()) {
+        Check(false, "the authorized client list test has a unique directory");
         return;
     }
-    std::string name = "deskhub-authorized-text-";
-    constexpr char digits[] = "0123456789abcdef";
-    for (uint8_t byte : suffix) {
-        name += digits[byte >> 4];
-        name += digits[byte & 15];
-    }
-    const auto dir = std::filesystem::temp_directory_path() / name;
-    const std::string previous = deskhubp::AppDataDirRef();
-    deskhubp::SetAppDataDir(dir.string());
 
-    const auto first = deskhubp::LoadOrCreateClientIdentity();
-    const auto second = deskhubp::GenerateClientIdentity("second");
-    Check(first.Valid() && second.Valid(), "two client keys are created in the isolated store");
-    if (first.Valid() && second.Valid()) {
-        Check(deskhubp::RememberPairedDevice(first.fingerprint, "legacy", 1),
-            "a fingerprint-only legacy entry exists");
-        Check(deskhubp::IsClientKeyAuthorized(first.publicKey),
-            "a legacy key remains authorized until the new store is configured");
-        const std::string validLegacy =
-            deskhubp::ReadAppDataFile(deskhubp::kPairedDevicesFileName);
-        Check(deskhubp::WriteAppDataFile(deskhubp::kPairedDevicesFileName,
-                  validLegacy + "invalid row\n"),
-            "the legacy allowlist can be damaged for a reload check");
-        Check(deskhubp::CheckClientKeyAuthorization(first.publicKey) ==
-                      deskhubp::ClientKeyAuthorization::ConfigError &&
-                  !deskhubp::LoadEffectiveAuthorizedDevices(),
-            "a damaged legacy allowlist reports a configuration error instead of an empty list");
-        Check(deskhubp::WriteAppDataFile(deskhubp::kPairedDevicesFileName, validLegacy),
-            "the valid legacy allowlist is restored");
-        Check(deskhubp::RememberAuthorizedKey(deskhubp::ClientPublicKeyText(second)),
-            "a full public key is saved in authorized_keys");
-        Check(!deskhubp::IsClientKeyAuthorized(first.publicKey) &&
-                  deskhubp::IsClientKeyAuthorized(second.publicKey),
-            "the new public key list becomes authoritative when configured");
-        Check(!deskhubp::RememberAuthorizedKey(deskhubp::ClientPublicKeyText(second)),
-            "a duplicate public key is not stored twice");
-        const uint64_t generationBeforeDamage = deskhubp::AuthorizedKeysGeneration();
-        const std::string validKeys =
-            deskhubp::ReadAppDataFile(deskhubp::kAuthorizedKeysFileName);
-        deskhubp::RemoveAppDataFile(deskhubp::kAuthorizedKeysFileName);
-        Check(!deskhubp::IsClientKeyAuthorized(first.publicKey),
-            "deleting the new list cannot reactivate a legacy fingerprint entry");
-        Check(deskhubp::CheckClientKeyAuthorization(first.publicKey) ==
-                  deskhubp::ClientKeyAuthorization::ConfigError,
-            "an unreadable active allowlist has a distinct configuration error");
-        Check(!deskhubp::ClearAuthorizedKeys(),
-            "revoke-all cannot mask a missing active allowlist");
-        Check(deskhubp::WriteAppDataFile(deskhubp::kAuthorizedKeysFileName,
-                  validKeys + "invalid key\n"),
-            "the active allowlist can be damaged for a regression check");
-        Check(!deskhubp::ClearAuthorizedKeys(),
-            "revoke-all cannot overwrite a damaged allowlist");
-        Check(deskhubp::ReadAppDataFile(deskhubp::kAuthorizedKeysFileName) ==
-                  validKeys + "invalid key\n",
-            "a failed revoke-all preserves the allowlist for repair");
-        Check(deskhubp::AuthorizedKeysGeneration() == generationBeforeDamage,
-            "failed revoke-all does not publish a policy change");
-        Check(deskhubp::WriteAppDataFile(deskhubp::kAuthorizedKeysFileName, validKeys),
-            "the valid allowlist is restored");
-        Check(deskhubp::ClearAuthorizedKeys() &&
-                  !deskhubp::IsClientKeyAuthorized(second.publicKey),
-            "an intentionally empty authorized_keys file denies every client");
+    const auto laptop = deskhubp::GenerateClientIdentity("laptop");
+    const auto phone = deskhubp::GenerateClientIdentity("phone");
+    Check(laptop.Valid() && phone.Valid(), "two client keys are created in the isolated store");
+    if (!laptop.Valid() || !phone.Valid()) return;
+
+    const std::string retiredList = "paired_devices";
+    const std::string retiredMarker = "authorized_keys_active";
+    Check(deskhubp::WriteAppDataFile(retiredList,
+              deskhub::FormatFingerprint(laptop.fingerprint) + " 1 1 laptop\n") &&
+              deskhubp::WriteAppDataFile(retiredMarker, "v1\n"),
+        "files from an older version are present");
+    Check(!IsAuthorized(laptop), "a fingerprint in the retired list admits nobody");
+    Check(!std::filesystem::exists(deskhubp::AppDataFilePath(retiredList)) &&
+              !std::filesystem::exists(deskhubp::AppDataFilePath(retiredMarker)),
+        "and the retired files are deleted on first load");
+
+    const auto empty = deskhubp::ListAuthorizedClients();
+    Check(empty && empty->empty(), "a missing authorized_keys is an empty list");
+
+    Check(deskhubp::RememberAuthorizedKey(deskhubp::ClientPublicKeyText(laptop) + " work laptop"),
+        "a labelled public key is saved");
+    Check(GrantClientKey(phone), "a second key is saved");
+    Check(!deskhubp::RememberAuthorizedKey(deskhubp::ClientPublicKeyText(phone)),
+        "a duplicate public key is not stored twice");
+    const auto clients = deskhubp::ListAuthorizedClients();
+    Check(clients && clients->size() == 2, "both clients are listed");
+    if (clients && clients->size() == 2) {
+        Check((*clients)[0].fingerprint == laptop.fingerprint &&
+                  (*clients)[0].label == "work laptop",
+            "a listed client carries its label and fingerprint");
+        Check((*clients)[1].fingerprint == phone.fingerprint, "in the order they were added");
     }
 
-    deskhubp::SetAppDataDir(previous);
-    std::error_code error;
-    std::filesystem::remove_all(dir, error);
+    Check(deskhubp::ForgetAuthorizedClient(laptop.fingerprint), "a client is forgotten");
+    Check(!IsAuthorized(laptop) && IsAuthorized(phone),
+        "only the forgotten client loses access");
+    Check(!deskhubp::ForgetAuthorizedClient(laptop.fingerprint),
+        "forgetting it twice changes nothing");
+
+    Check(RevokeAllClientKeys() && !IsAuthorized(phone),
+        "an intentionally empty authorized_keys file denies every client");
 }
 
 }
@@ -275,7 +278,7 @@ void RunAppDataFileTests() {
     TestRoundTrip();
     TestMissingFileReadsAsEmpty();
     TestConfigDirectoryCanBeSeparateFromLogs();
-    TestLegacySettingsMigration();
-    TestAuthorizedKeyWritesOnlyPublishSuccessfulChanges();
-    TestPublicKeyAllowlistOverridesLegacyFingerprints();
+    TestUnknownSettingsKeysAreIgnored();
+    TestADamagedAuthorizedKeysFileDeniesThenStartsFresh();
+    TestAuthorizedClientsAreListedAndForgotten();
 }

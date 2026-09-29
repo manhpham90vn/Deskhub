@@ -77,6 +77,11 @@ Java_com_deskhub_app_NativeClient_nativeClientKeyImport(JNIEnv* env, jobject, js
     return jint(error);
 }
 
+JNIEXPORT jint JNICALL
+Java_com_deskhub_app_NativeClient_nativeClientKeyDelete(JNIEnv* env, jobject, jstring nameStr) {
+    return jint(dh_client_key_delete(FromJString(env, nameStr).c_str()));
+}
+
 JNIEXPORT jstring JNICALL
 Java_com_deskhub_app_NativeClient_nativeClientKeyErrorText(JNIEnv* env, jobject, jint error) {
     return NewString(env, dh_client_key_error_text(DHClientKeyError(error)));

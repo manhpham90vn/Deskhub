@@ -5,7 +5,6 @@
 
 #include "deskhubp/diag/Log.h"
 #include "deskhubp/system/Clock.h"
-#include "deskhubp/system/PairedDevicesFile.h"
 #include "deskhubp/system/AuthorizedKeysFile.h"
 
 namespace deskhubp {
@@ -21,14 +20,10 @@ constexpr uint64_t kCloseAuthVersionMismatch = 4;
 constexpr uint64_t kCloseAuthExpired = 5;
 constexpr uint64_t kCloseAuthCapacity = 6;
 constexpr uint64_t kCloseAuthRateLimited = 7;
-constexpr uint64_t kPairedCheckIntervalUs = 100'000;
+constexpr uint64_t kAuthorizedCheckIntervalUs = 100'000;
 
 uint64_t StreamKey(QuicConnId conn, uint64_t stream) {
     return conn ^ (stream << 48);
-}
-
-int64_t NowUnix() {
-    return NowUnixSeconds();
 }
 
 bool IsAuthMessage(std::span<const uint8_t> message) {
@@ -135,7 +130,7 @@ void SessionTransport::Close() {
     authFailures_.Clear();
     pendingAuthDeadlines_.clear();
     authenticated_.clear();
-    nextPairedCheckUs_ = 0;
+    nextAuthorizedCheckUs_ = 0;
 }
 
 bool SessionTransport::SetRecvTimeout(uint32_t ms) {
@@ -323,7 +318,7 @@ bool SessionTransport::HandleHostAuth(const NetAddr& from, std::span<const uint8
             endpoint_.CloseConnection(key, kCloseBadFraming, "invalid auth response");
             return false;
         }
-        const deskhub::AuthResult result = at->second->Respond(*response, NowUnix());
+        const deskhub::AuthResult result = at->second->Respond(*response);
         SettleHostAuth(from, *at->second, result);
         return false;
     }
@@ -380,15 +375,11 @@ void SessionTransport::DropQueuedFrom(const NetAddr& peer) {
 
 void SessionTransport::RevokeForgottenPeers() {
     if (!hostAuthOn_) return;
-    const uint64_t generation = PairedDevicesGeneration();
-    const uint64_t authorizedGeneration = AuthorizedKeysGeneration();
+    const uint64_t generation = AuthorizedKeysGeneration();
     const uint64_t nowUs = NowUs();
-    if (generation == pairedGenerationSeen_ &&
-        authorizedGeneration == authorizedGenerationSeen_ && nowUs < nextPairedCheckUs_)
-        return;
-    pairedGenerationSeen_ = generation;
-    authorizedGenerationSeen_ = authorizedGeneration;
-    nextPairedCheckUs_ = nowUs + kPairedCheckIntervalUs;
+    if (generation == authorizedGenerationSeen_ && nowUs < nextAuthorizedCheckUs_) return;
+    authorizedGenerationSeen_ = generation;
+    nextAuthorizedCheckUs_ = nowUs + kAuthorizedCheckIntervalUs;
 
     std::vector<NetAddr> revoked;
     for (const auto& [key, admitted] : authenticated_) {

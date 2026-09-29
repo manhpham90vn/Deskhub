@@ -59,6 +59,14 @@ std::string FormatFingerprint(const Fingerprint& fp) {
     return out;
 }
 
+std::string ShortFingerprint(const Fingerprint& fp) {
+    if (IsZero(fp)) return {};
+    std::string full = FormatFingerprint(fp);
+    const size_t start = kFingerprintPrefix.size();
+    if (full.size() <= start) return full;
+    return full.substr(start, kShortFingerprintChars);
+}
+
 std::optional<Fingerprint> ParseFingerprint(std::string_view text) {
     const std::string trimmed = Trim(text);
     std::string_view body(trimmed);

@@ -21,27 +21,27 @@ void TestRoundTrip() {
     Check(ui::ParseRecentDevices(text) == devices, "serialize then parse is identity");
 }
 
-void TestLegacyPasscodesAreDiscarded() {
-    std::printf("[recent] old passcodes are discarded while addresses remain...\n");
-    const std::vector<ui::RecentDevice> saved{{"192.168.1.50", 1754300000}};
-    Check(ui::SerializeRecentDevices(saved) == "1754300000 192.168.1.50\n",
-        "a saved line carries only the time and the address");
+void TestHostNamesAreKept() {
+    std::printf("[recent] each address keeps the name its host reported...\n");
+    const std::vector<ui::RecentDevice> saved{{"192.168.1.50", 1754300000, "Office PC"},
+        {"192.168.1.51", 1754200000, ""}};
+    const std::string text = ui::SerializeRecentDevices(saved);
+    Check(text == "1754300000 192.168.1.50 Office PC\n1754200000 192.168.1.51\n",
+        "the name follows the address, and a host without one writes nothing extra");
+    Check(ui::ParseRecentDevices(text) == saved, "names with spaces read back exactly");
 
-    const auto reloaded = ui::ParseRecentDevices(
-        "1754300000 192.168.1.40 9182\n"
-        "1754200000 192.168.1.41 999\n"
-        "1754100000 192.168.1.42\n"
-        "  1754000000   192.168.1.43   5150  \n");
-    Check(reloaded.size() == 4, "all four lines parse");
-    if (reloaded.size() == 4) {
-        Check(reloaded[0].addr == "192.168.1.40",
-            "a code on an old line is discarded");
-        Check(reloaded[1].addr == "192.168.1.41",
-            "a malformed code is dropped but the device is kept");
-        Check(reloaded[2].addr == "192.168.1.42", "an old line without a code still parses");
-        Check(reloaded[3].addr == "192.168.1.43",
-            "runs of spaces around the fields do not swallow the address");
-    }
+    const auto reloaded = ui::ParseRecentDevices("  1754000000   192.168.1.43   Lab  box  \n");
+    Check(reloaded.size() == 1 && reloaded[0].addr == "192.168.1.43" &&
+              reloaded[0].name == "Lab  box",
+        "runs of spaces around the fields do not swallow the address or the name");
+
+    std::vector<ui::RecentDevice> devices;
+    ui::TouchRecentDevice(devices, "192.168.1.60", 100, "Laptop\tA");
+    Check(devices.size() == 1 && devices[0].name == "LaptopA",
+        "a name with control characters is cleaned before it is kept");
+    ui::TouchRecentDevice(devices, "192.168.1.60", 200, "Laptop B");
+    Check(devices.size() == 1 && devices[0].name == "Laptop B",
+        "connecting again records the name the host reports now");
 }
 
 void TestParseSkipsGarbage() {
@@ -76,16 +76,16 @@ void TestTouchMovesToFront() {
         {"192.168.1.10", 100},
         {"192.168.1.20", 90},
     };
-    ui::TouchRecentDevice(devices, "192.168.1.20", 200);
+    ui::TouchRecentDevice(devices, "192.168.1.20", 200, "");
     Check(devices.size() == 2, "no duplicate is created");
     Check(devices[0].addr == "192.168.1.20" && devices[0].lastConnectedUnix == 200,
         "the touched device is first with the new timestamp");
 
-    ui::TouchRecentDevice(devices, "  192.168.1.30 ", 300);
+    ui::TouchRecentDevice(devices, "  192.168.1.30 ", 300, "");
     Check(devices.size() == 3 && devices[0].addr == "192.168.1.30",
         "a new address is trimmed and inserted at the top");
 
-    ui::TouchRecentDevice(devices, "   ", 400);
+    ui::TouchRecentDevice(devices, "   ", 400, "");
     Check(devices.size() == 3, "a blank address is ignored");
 }
 
@@ -93,7 +93,7 @@ void TestCapKeepsNewest() {
     std::printf("[recent] the list never grows past the cap...\n");
     std::vector<ui::RecentDevice> devices;
     for (int i = 0; i < 25; ++i)
-        ui::TouchRecentDevice(devices, "10.0.0." + std::to_string(i), 1000 + i);
+        ui::TouchRecentDevice(devices, "10.0.0." + std::to_string(i), 1000 + i, "");
     Check(devices.size() == ui::kMaxRecentDevices, "touch enforces the cap");
     Check(devices[0].addr == "10.0.0.24", "the newest device stays");
 
@@ -119,9 +119,9 @@ void TestRemove() {
 void TestDefaultPortSpellingsAreOneDevice() {
     std::printf("[recent] a bare address and one with the default port are the same device...\n");
     std::vector<ui::RecentDevice> devices;
-    ui::TouchRecentDevice(devices, "192.168.1.60:47777", 100);
+    ui::TouchRecentDevice(devices, "192.168.1.60:47777", 100, "");
 
-    ui::TouchRecentDevice(devices, "192.168.1.60", 200);
+    ui::TouchRecentDevice(devices, "192.168.1.60", 200, "");
     Check(devices.size() == 1, "touching the other spelling replaces the entry");
 
     ui::RemoveRecentDevice(devices, "192.168.1.60:47777");
@@ -132,7 +132,7 @@ void TestDefaultPortSpellingsAreOneDevice() {
 
 void RunRecentDevicesTests() {
     TestRoundTrip();
-    TestLegacyPasscodesAreDiscarded();
+    TestHostNamesAreKept();
     TestParseSkipsGarbage();
     TestParseDropsDuplicates();
     TestTouchMovesToFront();

@@ -82,7 +82,7 @@ ExitCode ListShells(const Command& command, const NetAddr& host) {
             listed = true;
         }
         if (!command.quiet && !message.empty() && state != deskhubp::TerminalViewerState::Live)
-            PrintError(message);
+            PrintConnectFailure(message);
     };
     hooks.onTrustAsked = [&](deskhub::TrustVerdict verdict, std::string_view) {
         if (verdict == deskhub::TrustVerdict::Changed) keyChanged.store(true);
@@ -152,7 +152,7 @@ ExitCode RunShell(const Command& command) {
     hooks.onState = [&command](deskhubp::TerminalViewerState state, std::string_view message) {
         if (command.quiet || message.empty()) return;
         if (state == deskhubp::TerminalViewerState::Live) return;
-        PrintError(message);
+        PrintConnectFailure(message);
     };
     hooks.onTrustAsked = [&keyChanged](deskhub::TrustVerdict verdict,
                              std::string_view fingerprint) {

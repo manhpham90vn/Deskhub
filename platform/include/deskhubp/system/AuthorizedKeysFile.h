@@ -1,34 +1,35 @@
 #pragma once
 
 #include "deskhub/net/AuthorizedKeys.h"
-#include "deskhub/net/PairedDevices.h"
+#include "deskhub/net/TrustStore.h"
 
 #include <cstdint>
 #include <optional>
 #include <span>
+#include <string>
 #include <string_view>
+#include <vector>
 
 namespace deskhubp {
 
 inline constexpr const char* kAuthorizedKeysFileName = "authorized_keys";
 
-struct AuthorizedKeysSnapshot {
-    bool configured = false;
-    deskhub::AuthorizedKeys keys{};
+struct AuthorizedClient {
+    std::string label{};
+    deskhub::Fingerprint fingerprint{};
 };
 
 enum class ClientKeyAuthorization { Authorized,
     Denied,
     ConfigError };
 
-std::optional<AuthorizedKeysSnapshot> LoadAuthorizedKeys();
+std::optional<deskhub::AuthorizedKeys> LoadAuthorizedKeys();
 bool RememberAuthorizedKey(std::string_view publicKeyText);
-bool ForgetAuthorizedKey(std::span<const uint8_t> publicKeySpki);
 bool ClearAuthorizedKeys();
 bool IsClientKeyAuthorized(std::span<const uint8_t> publicKeySpki);
 ClientKeyAuthorization CheckClientKeyAuthorization(std::span<const uint8_t> publicKeySpki);
-std::optional<deskhub::PairedDevices> LoadEffectiveAuthorizedDevices();
-bool ForgetEffectiveAuthorizedDevice(const deskhub::Fingerprint& fingerprint);
+std::optional<std::vector<AuthorizedClient>> ListAuthorizedClients();
+bool ForgetAuthorizedClient(const deskhub::Fingerprint& fingerprint);
 uint64_t AuthorizedKeysGeneration();
 
 }

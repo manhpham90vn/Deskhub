@@ -2,7 +2,7 @@
 
 # Deskhub セキュリティポリシー
 
-_最終更新: 2026 年 9 月 27 日_
+_最終更新: 2026 年 9 月 29 日_
 
 本書は [`SECURITY.md`](SECURITY.md) の翻訳。食い違いがある場合は英語版が正文。
 
@@ -12,16 +12,17 @@ _最終更新: 2026 年 9 月 27 日_
 port-forward したり、共有中のマシンを Internet に直接公開したりしないこと。**
 
 Session の video、キー入力、mouse、clipboard、terminal の通信には QUIC/TLS を使う。
-未知のマシンが Connect するには、passcode 自体を送らずに host の passcode を知っている
-と証明するか、host 側の利用者に承認される必要がある。Discovery の probe と beacon
-は encrypt されないが、session の内容は含まない。encrypt 済みの connection の外から
-届く、それ以外の packet は破棄される。
+アクセスは SSH と同じ仕組みで行われる。client が受け入れられるのは、その public key が
+host の `authorized_keys` に記載され、対応する private key を保持していることを証明した
+場合に限られる。client は何かを送る前に、host の key を初回接続時に固定した key と照合
+し、変わっていれば即座に拒否する。network 越しに何かを承認することはなく —— passcode
+も承認プロンプトも存在しない —— host は平文の packet に一切応答しない。encrypt 済みの
+connection の外から届くものはすべて破棄される。
 
-いずれの host も **view-only** で共有でき（input は inject されず破棄される）、新規の
-pairing を完全に無効化して pair 済みのマシンのみを受け入れることもできる。
+いずれの host も **view-only** で共有できる（input は inject されず破棄される）。
 
-Encrypt だけでは network 上のリスクはなくならない。port は discovery の探索に応答し、
-4 桁の passcode は短い。初回の Connect では既知の身元情報と照合できず、app に
+Encrypt だけでは network 上のリスクはなくならない。host への初回の Connect では、
+fingerprint を照合しない限り、提示された key がそのまま信頼される。また app に
 flooding への防御機構もない。
 
 遠隔からアクセスするときは VPN を使う。本プロジェクトは
@@ -35,54 +36,54 @@ Connect できる。画面や terminal を共有する前に、以下の制限�
 | | |
 |---|---|
 | 開発者へのデータの流出 | 該当するデータは存在しない。サーバ、アカウント、telemetry、サードパーティ SDK のいずれもない。[`PRIVACY.ja.md`](PRIVACY.ja.md) を参照。 |
-| トラフィックの盗聴 | すべての session は QUIC/TLS の内部で動作する。video の frame、キー入力、clipboard のテキスト、terminal のバイト列は 2 台の間で encrypt される。パケットキャプチャから得られるのは通信量と時刻であり、内容ではない。port に到達する未 encrypt の packet は、discovery の探索を除きすべて破棄される。 |
+| トラフィックの盗聴 | すべての session は QUIC/TLS の内部で動作する。video の frame、キー入力、clipboard のテキスト、terminal のバイト列は 2 台の間で encrypt される。パケットキャプチャから得られるのは通信量と時刻であり、内容ではない。port に到達する未 encrypt の packet は破棄され、client が authenticate するまで host は application レベルで何も —— 共有内容さえも —— 送信しない。 |
 | リモートの viewer との操作の競合 | host を優先する。実際の mouse または keyboard を操作した時点で remote input は停止する。これは Windows、macOS、Linux の host に共通である。 |
 | キーの押下状態の残留 | リモート側が押している状態のキーは、session の終了時、または viewer が切り替わった時点で自動的に解放される。 |
-| 許可のない第三者の接続 | 受け入れは pairing handshake によって制御する。未知のマシンは SPAKE2 により host の passcode を証明する必要がある。コードはネットワークを通過せず、盗聴者はオフラインで解析できるデータを取得できず、connection ごとの試行は 1 回に限られる。passcode が未設定の場合は、host 側の利用者が *Let this machine in?* に回答するまで待機する。3 回失敗すると pairing は 30 秒間ロックされ、ロックが続くたびに時間は倍になり、最長 1 時間に達する。受け入れられたマシンは pair 済みとなり、暗号 key によって識別され、host の Devices ページに表示され、そこから取り消せる。Forget すると、そのマシンが開いている connection も閉じられる。受け入れは、それを得た connection が続く間だけ有効である。discovery beacon は推測されたコードの正否を示さない。未知のマシンの探索には常に空の一覧が返るため、以前の探索によるコード推測の手段は存在しない。 |
-| 以降の接続における中間者攻撃 | 各マシンは key を持つ。client は pair した各 host の key を保持し、key が変化した場合は利用者が明示的に受け入れるまで再接続を拒否する。passcode の証明は client が実際に受け取った host key に束縛されるため、relay された証明は検証を通らない。 |
+| 許可のない第三者の接続 | 受け入れられるのは、public key が host の `authorized_keys` に含まれる client のみであり、その client は対応する private key で当該 connection 自体の transcript に署名しなければならない。推測すべき秘密はなく、network 越しに何かが承認されることもない。`authorized_keys` ファイルが存在しなければ誰も受け入れられない。host が保持する authenticate 待ちの接続は最大 8 で、それぞれ 10 秒後に切断される。1 つの key とアドレスから 1 分以内に 3 回不正な署名があると、その組み合わせは 10 秒間ブロックされる。host の Devices ページで key を削除すると、そのデバイスの実行中の session も直ちに閉じられる。受け入れは、それを得た connection が続く間だけ有効である。 |
+| 中間者攻撃 | 各 host は key を持つ。client は初回接続時に、利用者が fingerprint を照合した後でそれを固定し、以降の接続では何かを送る前に毎回照合する。変化した key は即座に拒否され、プロンプトから受け入れる手段はない。その host を *Trusted hosts* から削除し、改めて信頼する必要がある。client の署名は、TLS session から export した session 識別子と client が受け取った host key の fingerprint を対象とするため、別の host に relay された署名や、別の connection で replay された署名は検証を通らない。 |
 | viewer 同士による mouse の競合 | 1 つの host を最大 5 viewer が閲覧できるが、input を操作できるのは 1 つのみである。先に参加した viewer が優先され、後から参加した viewer の input は、先行する viewer が 1 秒間無操作になるまで破棄される。6 番目の viewer は `Busy` として拒否される。 |
 | 閲覧のみを許可したい viewer | view-only の共有はすべての host で利用でき、何らかの操作が inject される前に host 側で input の packet を破棄する。client の自主的な遵守には依存しない。Android と iOS の host は常に view-only である。 |
 | 共有したまま放置されたスマートフォン | 最終的な防護は Deskhub ではなく OS が担う。Android は常駐通知を表示し、共有のたびに録画の同意を求める。iOS は broadcast のインジケータを表示し続ける。いずれも app を開かずに共有を停止できる。 |
-| pair 済みのマシンによる自機へのファイル書き込み | ファイルを送信できるのは受け入れ済みのマシンのみであり、かつ受信側が file transfer を有効にしている場合に限られる。到達したデータは受信側が選択したフォルダの外に出られない。ネットワーク上のファイル名は、いずれかのファイルが開かれる前に、パスの最後の要素へ切り詰められ、区切り文字、制御バイト、filesystem が受け付けない文字、予約デバイス名が除去される。各ファイルは `.deskhub-part` の接尾辞付きで書き込まれ、全体が到着し CRC-32 が一致した時点でのみ改名される。既存の同名ファイルは上書きされず、番号が付加される。1 batch は 32 ファイル、1 ファイル 8 GiB、合計 32 GiB に制限される。同じ名称処理は、スマートフォンやタブレットでも写真ライブラリや Downloads フォルダに到達する前に実行される。 |
+| 許可済み client による自機へのファイル書き込み | ファイルを送信できるのは受け入れ済みのマシンのみであり、かつ受信側が file transfer を有効にしている場合に限られる。到達したデータは受信側が選択したフォルダの外に出られない。ネットワーク上のファイル名は、いずれかのファイルが開かれる前に、パスの最後の要素へ切り詰められ、区切り文字、制御バイト、filesystem が受け付けない文字、予約デバイス名が除去される。各ファイルは `.deskhub-part` の接尾辞付きで書き込まれ、全体が到着し CRC-32 が一致した時点でのみ改名される。既存の同名ファイルは上書きされず、番号が付加される。1 batch は 32 ファイル、1 ファイル 8 GiB、合計 32 GiB に制限される。同じ名称処理は、スマートフォンやタブレットでも写真ライブラリや Downloads フォルダに到達する前に実行される。 |
 | 不正な packet | すべてのフィールドは読み取り前に境界検査を行う。parser は unit test を備え、CI では AddressSanitizer、UndefinedBehaviorSanitizer、ThreadSanitizer の下で実行され、libFuzzer により毎晩 fuzz される。target は 7 つで、wire format、H.264 の解析、packet の reassembly、terminal の byte stream、UI テキスト、および host 側と viewer 側の session state machine を対象とする。fuzzing で検出された crash は regression test として repo に保存し、新たな coverage は seed corpus に取り込む。 |
 
 ### Deskhub が防**がない**もの
 
 以下は網羅的な一覧であり、現時点でいずれも解決されていない。
 
-- **保持された shell は、それを開いたマシンではなく pairing に属する。** host に残さ
-  れた shell は、それを開いた接続よりも長く、時間制限なく生き続ける。許可されたマシ
-  ンはいずれも、host が保持している shell を一覧し、detach されたものを reattach し、
-  どれでも閉じることができる。各 shell の id、サイズ、デバイス名はその一覧に含まれ
-  る。したがって、pair した 2 台目のマシン —— あるいは Devices ページで key を失効さ
-  せていないマシン —— は、以前の shell が何をしていたかを読み戻し、その中で作業を続
-  けられる。信頼しなくなったデバイスは失効させ、使い終えた shell は残さず閉じること。
-- **最初の接続は未検証の信頼に基づく。** pairing が防げるのは*それ以降*に現れる中間者
-  である。key は固定され、変化は明確に拒否される。しかし最初の接触の時点で既に中間に
-  位置している攻撃者は防げない。passcode を設定していない場合、client が到達した相手が
-  そのまま pair され、passcode を設定しても、防護の程度は 4 桁の秘密に相当する水準に
-  とどまる。この点が重要な場合は、fingerprint を別の経路で照合すること。
+- **保持された shell は、それを開いたマシンではなく、すべての許可済み client に属する。**
+  host に残された shell は、それを開いた接続よりも長く、時間制限なく生き続ける。許可さ
+  れたマシンはいずれも、host が保持している shell を一覧し、detach されたものを
+  reattach し、どれでも閉じることができる。各 shell の id、サイズ、デバイス名はその一覧
+  に含まれる。したがって、許可した 2 台目の client —— あるいは Devices ページで key を
+  削除していない client —— は、以前の shell が何をしていたかを読み戻し、その中で作業を
+  続けられる。信頼しなくなった key は削除し、使い終えた shell は残さず閉じること。
+- **最初の接続は未検証の信頼に基づく。** host key の固定が防げるのは*それ以降*に現れる
+  中間者である。変化は即座に拒否される。しかし最初の接触の時点で既に中間に位置している
+  攻撃者は、ダイアログの求めに従い、*New host* ダイアログが示す fingerprint を host の
+  Devices ページ上のものと照合しない限り防げない。`deskhub-cli` は
+  `--accept-new-host-key` を指定しない限り未知の host を拒否する。また
+  `host add … --host-key-stdin` で key を事前に固定することもできる。
 - **トラフィック解析は依然として可能である。** encrypt が隠すのは内容であって存在では
   ない。観察者は session が動作していること、video の通信量、入力の時刻を把握できる。
 - **rate limiting はなく、DoS 耐性もない。** port に大量のデータを送り込めば session は
-  中断する。passcode を設定していない host では、承認プロンプトを繰り返し表示させる
-  こともできる。
-- **discovery beacon はあらゆる送信元に応答する。** 任意の送信元アドレスからの
-  `LIST_SOURCES` 探索や `PING` に応答が返る。未知のマシンへの応答は空の一覧であり、
-  いかなる探索でも passcode を確認することはできないが、マシンはスキャンによって発見
-  され、port は小規模な UDP リフレクタとして利用されうる。例外が 1 つある。現に
-  encrypt された connection を保持している送信元アドレスには、未 encrypt の応答を返さ
-  ない。マシンが身元を証明した後は、そのマシンからのデータはすべて encrypt された形で
-  到達しなければならないため、偽造された平文の `SOURCE_LIST` や `PONG` で接続中の peer
-  になりすますことはできない。
-- **デバイス名は表示され、ログにも記録される。** viewer が送る *Your name* は転送中は
-  encrypt されるが、host の画面に表示され、host の log に記録され、host の
-  paired-devices の一覧に保存される。既定値はマシンの hostname であり、多くの場合
-  利用者の実名である。ニックネームを使用し、この項目に機微な情報を入力しないこと。
-  項目を空にしても名称の送信は止まらず、既定値が復元されるだけである。
+  中断する。authenticate 待ちの接続数と不正な署名に対する制限は推測を防ぐものであり、
+  flooding を防ぐものではない。
+- **QUIC handshake には依然として応答する。** host は平文の packet には一切応答しなく
+  なったが、port への QUIC/TLS handshake は client が何かを証明する前に完了する。その
+  ため、アドレスを知っている第三者は、何かが待ち受けていることを把握でき、host の
+  certificate を見ることもできる。
+- **デバイス名は表示され、ログにも記録される。** client が送るデバイス名は転送中は
+  encrypt されるが、host の画面に表示され、host の log に記録される。さらに本マシンが
+  コピーするすべての public key のラベルとなるため、その key を許可した各 host の
+  `authorized_keys` にも残る。host も、許可済みの key で authenticate を終えたすべての
+  client に自身のデバイス名を送信し —— それより前に送ることはない —— その client は
+  最近の一覧に名前を保持する。既定値はマシンの hostname であり、多くの場合利用者の実名
+  である。Settings → General → *Device name* でニックネームを設定し、この項目に機微な
+  情報を入力しないこと。空にしても名称の送信は止まらず、既定値が復元されるだけである。
 - **viewer の枠は 5 秒間データがないと解放される。** 自分の viewer が切断された場合、
-  その枠は再び開放され、次に到達した `Hello` が使用する。送信元は admission（pairing、
-  passcode または approval）を通過したマシンであればよい。
+  その枠は再び開放され、次に到達した `Hello` が使用する。送信元は許可済みの key で
+  admission を通過したマシンであればよい。
 - **共有は display 全体を公開する。** 単一のウィンドウではなく、そのモニタ上のすべての
   通知、ポップアップ、ウィンドウが対象となる。[`PRIVACY.ja.md` §3.4](PRIVACY.ja.md) を
   参照。
@@ -132,13 +133,13 @@ profile を対象とするため、バインドを限定しても firewall は�
 画面を共有中で Deskhub が動作しているマシンと同じ LAN に第三者がいる場合、その相手は
 次のことが可能である。
 
-1. UDP 47777 をスキャンして当該マシンを発見する。pair していないマシンの探索には空の
-   一覧が返るが、マシン自体は応答するため、存在は把握される。
-2. 接続を試みる。passcode をネットワーク上から読み取ることはできない。コードが通過しな
-   いためである。残る手段は、オンラインでの試行（connection ごとに 1 回、3 回失敗すると
-   pairing が 30 秒ロックされ、以後ロックのたびに時間が倍になり最長 1 時間に達するため、
-   10,000 通りすべてを試すには数か月かかる）か、passcode を設定していない host において、host 側の
-   利用者が承認プロンプトで **Allow** を押すのを待つことである。
+1. 各アドレスの UDP 47777 に QUIC handshake を試みて当該マシンを発見する。平文の
+   packet には応答が返らないが、handshake 自体には応答するため、狙いを定めたスキャンに
+   対しては存在が把握される。
+2. 接続を試みる。そのためには、host の所有者が public 側を `authorized_keys` に追加した
+   private key が必要である。推測すべき passcode も、誰かにクリックさせるプロンプトも
+   存在しない。そのような key がなければ、せいぜい client が host に*初めて*接続する際に
+   中間に入り込むことを試みる程度であり、これは fingerprint の照合によって検出される。
 3. 接続せずにトラフィックを観察する。ただし得られるのは通信量と時刻のみである。video を
    含む session の内容は encrypt されており、キャプチャから画面やキー入力を再構成する
    ことはできない。
@@ -155,9 +156,9 @@ Deskhub を現状のまま使い続ける場合、次の項目を実施するこ
 - [ ] 両方のマシンで Tailscale を動作させ、`100.x.y.z` のアドレスのみで connect する。
 - [ ] ルータに UDP 47777 の port-forward および UPnP マッピングが**存在しない**ことを
       確認する。
-- [ ] 接続前に、host で各 client の public key を許可し、各 client で host key を固定する。
-      Devices ページを定期的に確認して不要な key を取り消す。閲覧のみで足りる場合は
-      *Viewers can control this machine* のチェックを外す。
+- [ ] host では必要な client key のみを許可し、各 client からの初回接続時に host key の
+      fingerprint を照合する。Devices ページを定期的に確認して不要な key を削除する。
+      閲覧のみで足りる場合は *Viewers can control this machine* のチェックを外す。
 - [ ] 使用していないときは Deskhub を終了する。background service ではないため、終了
       すれば受け入れ口も閉じる。
 - [ ] Linux で `ufw` を使用している場合は、全面的に開放せず範囲を限定する。
@@ -165,8 +166,9 @@ Deskhub を現状のまま使い続ける場合、次の項目を実施するこ
       `sudo ufw allow from 100.64.0.0/10 to any port 47777 proto udp` とする。
 - [ ] 他の network へ持ち出すノート PC で共有を動作させたままにしない。
 - [ ] 離席時にはマシンをロックし、無人の session が引き継がれないようにする。
-- [ ] `deskhub-cli` の `devices public` で client public key、`trust public` で host TLS
-      public key を表示する。client の許可や host key の固定前に、信頼できる経路で key を渡す。
+- [ ] `deskhub-cli` の `key public --name NAME` で client public key、`host-key public` で
+      本 host の key を表示する。それぞれを信頼できる経路で渡し、host では
+      `access add --stdin`、client では `host add … --host-key-stdin` を使う。
 
 ## ローカルに保存されるデータ
 
@@ -174,27 +176,35 @@ Deskhub を現状のまま使い続ける場合、次の項目を実施するこ
 `%USERPROFILE%\.deskhub`）の下に平文で書き込まれる。内容は接続の統計と peer のアドレス
 であり、画面の内容やキー入力は含まない。
 
-デスクトップの app と `deskhub-cli` はこれらのファイルを共有する。同じフォルダには次も
-保存される。`ui-settings.txt`（fps、bitrate、解像度の上限、port、view-only と pairing
-のスイッチ、設定済みの host passcode、host に表示されるデバイス名）、
-`recent-devices.txt`（直近 10 件の接続先アドレス、その時刻、それぞれに使用した
-passcode）、`host_key.pem` と `host_cert.pem`（本マシンの秘密鍵と自己署名 certificate。
-すなわち fingerprint の背後にある identity であり、この key ファイルを入手した者は本
-マシンになりすませる）、`known_hosts`（本マシンが trust した host の key）、
-`paired_devices`（この host が受け入れたマシンの key、名前、時刻）、`auth_salt`
-（passcode verifier 用の秘密ではない salt）、および Linux では
-`portal-restore-token.txt`（選択した画面に対してデスクトップが発行した token。自身の
-デスクトップ session にのみ意味を持ち、送信されることはない）。モバイルの app は設定を
-自身のサンドボックス内に保持し、iOS では app group のコンテナに置く。保存された
-passcode は固定の XOR key で難読化され、そのままでは読み取れない状態になっている。
-**これは encrypt ではない。** ソースとファイルを持つ者は数秒で復元できる。このフォルダ
-は、自分の権限で動作するあらゆるプログラムから読み取り可能なものとして扱うこと。
+デスクトップの app と `deskhub-cli` はこれらのファイルを共有する。`DESKHUB_CONFIG_DIR`
+または CLI の `--config-dir` で、両者を別のフォルダに向けることができる。同じフォルダには
+次も保存される。`ui-settings.txt`（fps、bitrate、解像度の上限、port、view-only の
+スイッチ、デバイス名、bind アドレス、その他のトグル）、`recent-hosts.txt`（直近 10 件
+の接続先 host —— アドレス、その時刻、各 host が名乗った名前）、`client_key.pem` と `client_key.<name>.pem`（本マシンの
+client 秘密鍵。入手した者は、その key が許可されているあらゆる場所に sign in できる。
+Windows では DPAPI で保護される）、`host_key.pem` と `host_cert.pem`（本マシンの host
+秘密鍵と自己署名 certificate。すなわち fingerprint の背後にある identity であり、この
+key ファイルを入手した者は host として本マシンになりすませる）、`authorized_keys`（この
+host に受け入れられる client public key とそれぞれのラベル）、`known_hosts`（本マシンが
+信頼する host。アドレス、固定した fingerprint、名前、使用する client key）、および
+Linux では `portal-restore-token.txt`（選択した画面に対してデスクトップが発行した
+token。自身のデスクトップ session にのみ意味を持ち、送信されることはない）。
+passcode はどこにも保存されない。POSIX システムではフォルダは `0700`、各ファイルは
+`0600` で作成され、atomic に書き込まれる。Windows では利用者本人、SYSTEM、
+Administrators のみに制限される。モバイルの app は同じファイルを自身のサンドボックス内
+に保持し、iOS では app group のコンテナ、Android では app の内部ストレージに置く。この
+フォルダは、自分の権限で動作するあらゆるプログラムから読み取り可能なものとして扱うこと。
+
+読み取れない `authorized_keys` や `known_hosts` の内容を推測で補うことはない。読み取れ
+ない間、host は誰も受け入れず、client はすべての host を拒否し、次の変更時にファイルが
+新たに書き込まれる。旧バージョンのデータ —— passcode、以前の pair 済みマシン一覧 —— は
+変換されず、残ったファイルは削除される。
 
 他のマシンが送信したファイルはこのフォルダの外、受信側が選択したディレクトリに保存
 される（別途選択していない場合は利用者のホームディレクトリ直下の `Deskhub`。
 `transfer_dir` として保存される）。スマートフォンやタブレットでは端末の写真ライブラリ
 または Documents / Downloads フォルダに置かれ、app をアンインストールしても残る。そこ
-に届いたものはすべて、pair 済みのマシンが自分の端末に置いたファイルとして扱うこと。
+に届いたものはすべて、許可済み client が自分の端末に置いたファイルとして扱うこと。
 
 これらがアップロードされることはない。フォルダはいつでも削除できる。
 
@@ -202,16 +212,14 @@ passcode は固定の XOR key で難読化され、そのままでは読み取�
 
 実施を予定している順に記載する。
 
-1. **passcode と host key を、ファイルではなく OS の keychain に保存する。**
-2. **discovery beacon が、要求していない探索に対して空の一覧を返すのではなく、応答
-   しないようにする。**
+1. **host key と client key を、まだ保護されていないプラットフォームにおいて、ファイル
+   ではなく OS の keychain に保存する。**
 
-本一覧の前回改訂以降に実施済みの事項: session 全体（video、input、clipboard、terminal
-のいずれも）に対する encrypt された transport（QUIC/TLS）の導入と、discovery の探索を
-除く未 encrypt データの破棄。passcode がネットワークを通過せず、収集もオフラインの
-brute-force もできない SPAKE2 による pairing。host 側の承認プロンプト。取り消し可能な
-pair 済みマシンの一覧。マシンごとの key と、client 側での key 変更の警告。passcode の
-誤入力に対する 3 回での lockout（30 秒から始まり、最長 1 時間まで倍増する）。
+本一覧の前回改訂以降に実施済みの事項: SSH 方式のアクセス —— client は host の
+`authorized_keys` に記載された public key によってのみ受け入れられ、connection ごとに
+新たに署名する。初回接続時の host key の固定と、変化した場合の拒否。passcode、承認
+プロンプト、pairing のスイッチの削除。LAN discovery の削除により、host は平文の packet
+に一切応答しなくなった。authenticate 待ちの接続数と不正な署名に対する制限。
 
 本一覧は方針の表明であり、スケジュールではない。Deskhub は 1 名が余暇に保守している。
 計画ではなく現状に基づいて判断していただきたい。
@@ -234,7 +242,7 @@ pair 済みマシンの一覧。マシンごとの key と、client 側での ke
 
 bug bounty はなく、報酬の支払いも行わない。
 
-初回接続時の信頼、トラフィック解析、discovery への応答、DoS 耐性の欠如は、上記に
+初回接続時の信頼、トラフィック解析、見える QUIC handshake、DoS 耐性の欠如は、上記に
 記載済みの制限である。その影響について新しい証拠があれば報告してほしい。不正な
 packet による memory corruption や crash、データが予期せず端末外へ出る問題、
 公開済みの緩和策の欠陥なども報告対象となる。

@@ -13,7 +13,6 @@
 #include "deskhubp/system/ClientIdentity.h"
 #include "deskhubp/system/FileStore.h"
 #include "deskhubp/system/HostIdentity.h"
-#include "deskhubp/system/PairedDevicesFile.h"
 #include "deskhubp/system/TrustStoreFile.h"
 
 #include <atomic>
@@ -144,8 +143,7 @@ struct ViewerRig {
         auth.identity = deskhubp::LoadOrCreateHostIdentity("file-test-viewer");
         auth.hostFingerprint = hostKey;
         auth.clientName = "file-test-viewer";
-        if (!deskhubp::RememberPairedDevice(auth.identity.fingerprint,
-                "file-test-viewer", 500))
+        if (!GrantClientKey(auth.identity))
             return false;
 
         deskhub::AuthResultCode code = deskhub::AuthResultCode::NotPaired;
@@ -538,8 +536,7 @@ void TestTheSendSurfaceTheClientPageDrives() {
 
     const std::string address = std::string("127.0.0.1:") + std::to_string(kFileTestPort);
     const auto clientKey = deskhubp::LoadOrCreateClientIdentity();
-    Check(clientKey.Valid() && deskhubp::RememberPairedDevice(clientKey.fingerprint,
-                                   "client-page", 500),
+    Check(clientKey.Valid() && GrantClientKey(clientKey),
         "the sender public key is authorized");
     Check(deskhubp::RememberTrustedHost(address, address, identity.fingerprint,
               NowUnixSeconds()),

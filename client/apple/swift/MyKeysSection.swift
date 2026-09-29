@@ -10,6 +10,7 @@ struct MyKeysSection: View {
     @State private var keyName = ""
     @State private var passphrase = ""
     @State private var importedKeyText = ""
+    @State private var deleting: ClientKeyRow?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -53,6 +54,18 @@ struct MyKeysSection: View {
             Button("OK", action: importChosenKey)
             Button(DeskhubClient.string(DHStrCancelAction), role: .cancel, action: forgetImport)
         }
+        .alert(
+            deleting?.name ?? "",
+            isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }),
+            presenting: deleting
+        ) { key in
+            Button(DeskhubClient.string(DHStrCancelAction), role: .cancel) {}
+            Button(DeskhubClient.string(DHStrDeleteKeyAction), role: .destructive) {
+                model.delete(key)
+            }
+        } message: { _ in
+            Text(DeskhubClient.string(DHStrDeleteKeyPrompt))
+        }
     }
 
     private var keyNameField: some View {
@@ -76,6 +89,14 @@ struct MyKeysSection: View {
             }
             .buttonStyle(.bordered)
             .controlSize(.small)
+            if key.deletable {
+                Button(DeskhubClient.string(DHStrDeleteKeyAction)) {
+                    deleting = key
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .tint(DeskhubPalette.offline)
+            }
         }
         .padding(.vertical, 2)
     }

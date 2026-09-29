@@ -94,33 +94,33 @@ Chi tiết và quyền cần cấp trên từng nền tảng: [INSTALL.vi.md](do
 <table>
   <tr>
     <td align="center" width="33%">
-      <img src="docs/imgs/macos_2.png" alt="Trang Client của Deskhub trên macOS: IP của host, UDP port, ô passcode và tên máy, các checkbox chọn remote desktop, control và terminal, nút Connect, cùng bảng thiết bị với status, ping và thời điểm connect gần nhất">
-      <br><sub><b>Client</b> — nhập IP hoặc chọn một máy mà scan tìm được, sau đó chọn nội dung cần mở: màn hình, quyền control, shell, hoặc kết hợp.</sub>
+      <img src="docs/imgs/macos_2.png" alt="Trang Client của Deskhub trên macOS: ô địa chỉ host và UDP port, các checkbox chọn remote desktop, control và terminal, nút Connect, cùng danh sách địa chỉ gần đây với thời điểm connect gần nhất của từng địa chỉ">
+      <br><sub><b>Client</b> — nhập địa chỉ hoặc chọn một host gần đây hay đã trust, sau đó chọn nội dung cần mở: màn hình, quyền control, shell, hoặc kết hợp.</sub>
     </td>
     <td align="center" width="33%">
-      <img src="docs/imgs/macos_3.png" alt="Trang Devices của Deskhub trên macOS: các máy đã pair kèm key, thời điểm pair và thời điểm thấy gần nhất, nút Forget và Forget every machine, switch cho phép pair máy mới, và key SHA256 của máy này">
-      <br><sub><b>Devices</b> — danh sách mọi máy đã được chấp nhận, kèm tên và key, có thể gỡ từng máy. Sau khi pair xong các máy cần dùng, có thể tắt việc pair máy mới.</sub>
+      <img src="docs/imgs/macos_3.png" alt="Trang Devices của Deskhub trên macOS: một khu vực cho máy này khi làm host, với host key SHA256 của nó và các client key được phép connect, và một khu vực cho máy này khi làm client, với các key của chính nó và các host đã trust">
+      <br><sub><b>Devices</b> — khi làm host: host key của máy này và các client key được phép vào, có thể gỡ từng key. Khi làm client: các key của chính bạn và các host bạn đã trust.</sub>
     </td>
     <td align="center" width="33%">
-      <img src="docs/imgs/macos_4.png" alt="Trang Settings của Deskhub trên macOS: fps, bitrate và quality, UDP port, passcode dùng để pair, switch cho phép viewer control máy này, các switch clipboard và chống sleep, trạng thái hiện thời của permission Screen Recording và Accessibility, cùng switch khởi động khi đăng nhập">
-      <br><sub><b>Settings</b> — fps, bitrate, quality, port, passcode, cho phép viewer control máy này hay không, và trạng thái hiện thời của các permission macOS.</sub>
+      <img src="docs/imgs/macos_4.png" alt="Trang Settings của Deskhub trên macOS: tên thiết bị, fps, bitrate và quality, UDP port, switch cho phép viewer control máy này, các switch clipboard và chống sleep, trạng thái hiện thời của permission Screen Recording và Accessibility, cùng switch khởi động khi đăng nhập">
+      <br><sub><b>Settings</b> — tên thiết bị, fps, bitrate, quality, port, cho phép viewer control máy này hay không, và trạng thái hiện thời của các permission macOS.</sub>
     </td>
   </tr>
 </table>
 
 <p align="center">
-  <img src="docs/imgs/ios_1.png" alt="Trang Client của Deskhub trên iOS: các ô IP, port, passcode và tên, nút Connect và Terminal, switch control máy từ xa, và scan báo số địa chỉ đã kiểm tra" width="195">
-  <img src="docs/imgs/ios_2.png" alt="Trang Host của Deskhub trên iOS: passcode dùng để pair, Share on network, Start sharing, và các địa chỉ IP để máy khác connect tới" width="195">
-  <img src="docs/imgs/ios_3.png" alt="Trang Devices của Deskhub trên iOS: danh sách máy đã pair còn trống, switch cho phép pair máy mới, và key SHA256 của thiết bị này" width="195">
-  <img src="docs/imgs/ios_4.png" alt="Trang settings kết nối của Deskhub trên iOS: UDP port mà scan kiểm tra, cùng các switch sync clipboard và giữ thiết bị không sleep" width="195">
+  <img src="docs/imgs/ios_1.png" alt="Trang Client của Deskhub trên iOS: các ô địa chỉ và port, nút Connect và Terminal, switch control máy từ xa, và danh sách địa chỉ gần đây" width="195">
+  <img src="docs/imgs/ios_2.png" alt="Trang Host của Deskhub trên iOS: Share on network, Start sharing, và các địa chỉ IP để máy khác connect tới" width="195">
+  <img src="docs/imgs/ios_3.png" alt="Trang Devices của Deskhub trên iOS: host key SHA256 của thiết bị này, các client key được phép connect, các client key của chính nó và các host đã trust" width="195">
+  <img src="docs/imgs/ios_4.png" alt="Trang settings kết nối của Deskhub trên iOS: UDP port, cùng các switch sync clipboard và giữ thiết bị không sleep" width="195">
 </p>
-<p align="center"><sub><b>iPhone</b> — vẫn bốn trang đó. Scan, chọn một máy, dùng khung video như trackpad để điều khiển; hoặc host màn hình của chính điện thoại ở chế độ view-only.</sub></p>
+<p align="center"><sub><b>iPhone</b> — vẫn bốn trang đó. Connect tới một host đã trust, dùng khung video như trackpad để điều khiển; hoặc host màn hình của chính điện thoại ở chế độ view-only.</sub></p>
 
 <p align="center">
-  <img src="docs/imgs/android_1.png" alt="Trang Client của Deskhub trên Android: các ô IP, port, passcode và tên, nút Connect và Terminal, checkbox control, và scan đang chạy qua subnet" width="195">
-  <img src="docs/imgs/android_2.png" alt="Trang Host của Deskhub trên Android: passcode dùng để pair, Share on network, Start sharing, và các địa chỉ IP để máy khác connect tới" width="195">
-  <img src="docs/imgs/android_3.png" alt="Trang Devices của Deskhub trên Android: danh sách máy đã pair còn trống, checkbox cho phép pair máy mới, và key SHA256 của thiết bị này" width="195">
-  <img src="docs/imgs/android_4.png" alt="Trang settings kết nối của Deskhub trên Android: UDP port mà scan kiểm tra, cùng các checkbox sync clipboard và giữ thiết bị không sleep" width="195">
+  <img src="docs/imgs/android_1.png" alt="Trang Client của Deskhub trên Android: các ô địa chỉ và port, nút Connect và Terminal, checkbox control, và danh sách địa chỉ gần đây" width="195">
+  <img src="docs/imgs/android_2.png" alt="Trang Host của Deskhub trên Android: Share on network, Start sharing, và các địa chỉ IP để máy khác connect tới" width="195">
+  <img src="docs/imgs/android_3.png" alt="Trang Devices của Deskhub trên Android: host key SHA256 của thiết bị này, các client key được phép connect, các client key của chính nó và các host đã trust" width="195">
+  <img src="docs/imgs/android_4.png" alt="Trang settings kết nối của Deskhub trên Android: UDP port, cùng các checkbox sync clipboard và giữ thiết bị không sleep" width="195">
 </p>
 <p align="center"><sub><b>Android</b> — vẫn bốn trang đó, theo Material Design. Khi làm host, Android 10+ chỉ share màn hình ở chế độ view-only.</sub></p>
 
@@ -137,10 +137,10 @@ chung xử lý protocol cho cả năm nền tảng.
 | ------ | ---------- | --------- |
 | Stream ở 60 fps trên phần cứng phù hợp. Đường xử lý video dùng bộ nhớ GPU khi có thể. | Cài qua package manager hoặc tải bản release. Không cần tài khoản hay background service. | **Share** một display hoặc **Connect** tới một IP. Máy desktop còn share được **shell** và nhận **file**; điện thoại share màn hình ở chế độ view-only. |
 
-Session được encrypt end-to-end trên **QUIC/TLS**. Máy lạ chỉ được chấp nhận khi chứng
-minh được mình biết passcode của host — thông qua **SPAKE2**, nên passcode không bao giờ
-được truyền đi — hoặc khi người dùng tại host chấp thuận. Dù vậy đó vẫn chỉ là một chuỗi bí mật
-ngắn nằm trên port đang mở: hãy dùng network tin cậy hoặc VPN, và **không port-forward
+Session được encrypt end-to-end trên **QUIC/TLS**, và quyền truy cập hoạt động như SSH: client
+chỉ được vào khi public key của nó có trong `authorized_keys` của host, và client kiểm tra key
+của host với key mà nó đã trust ở lần connect đầu tiên, từ chối ngay nếu key đó thay đổi.
+Không có gì được chấp thuận qua network và Deskhub không bao giờ scan network. Hãy dùng network tin cậy hoặc VPN, và **không port-forward
 UDP 47777**. Threat model đầy đủ nằm trong [`SECURITY.vi.md`](SECURITY.vi.md).
 
 <a id="why"></a>

@@ -39,7 +39,7 @@ void TestPublicKeysCarryAReadableLabel() {
 
 void TestEveryKeyErrorHasText() {
     std::printf("[keys] every key refusal can be shown to the user...\n");
-    for (uint8_t e = 1; e <= uint8_t(ui::ClientKeyError::WriteFailed); ++e)
+    for (uint8_t e = 1; e <= uint8_t(ui::ClientKeyError::KeyMissing); ++e)
         Check(*ui::ClientKeyErrorText(ui::ClientKeyError(e)) != '\0', "each error has a sentence");
     Check(*ui::ClientKeyErrorText(ui::ClientKeyError::None) == '\0', "success says nothing");
 }

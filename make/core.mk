@@ -82,7 +82,7 @@ perf-baseline: perf-build
 	DESKHUB_PERF_BASELINE=$(NULDEV) DESKHUB_PERF_WRITE=$(PLAT_PERF_BASE) $(PLAT_PERF_BIN)
 endif
 
-FUZZ_TARGETS := fuzz_wire fuzz_annexb fuzz_h264sps fuzz_reassembler fuzz_session fuzz_uitext fuzz_term
+FUZZ_TARGETS := fuzz_wire fuzz_annexb fuzz_h264sps fuzz_reassembler fuzz_session fuzz_uitext fuzz_term fuzz_keys
 FUZZ_SECONDS ?= 30
 FUZZ_COV_BIN := out/build/fuzz-coverage/core/$(firstword $(FUZZ_TARGETS))
 FUZZ_COV_OBJS := $(FUZZ_COV_BIN) $(foreach t,$(wordlist 2,$(words $(FUZZ_TARGETS)),$(FUZZ_TARGETS)),-object out/build/fuzz-coverage/core/$(t))

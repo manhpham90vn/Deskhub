@@ -10,7 +10,6 @@
 #include "deskhubp/host/TerminalHost.h"
 #include "deskhubp/client/TerminalViewer.h"
 #include "deskhubp/system/Clock.h"
-#include "deskhubp/system/PairedDevicesFile.h"
 #include "deskhubp/system/Pty.h"
 
 #include <atomic>
@@ -175,7 +174,7 @@ struct CrossSession {
     bool Open(const std::string& leaf, bool withFiles) {
         fake::Host().Reset();
         fake::Decoded().Reset();
-        deskhubp::ForgetAllPairedDevices();
+        RevokeAllClientKeys();
 
         port = NextTestPort();
         if (!host.Start({fake::Source("Display 1", 1280, 720, 1)}, port)) {

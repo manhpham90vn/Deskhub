@@ -12,7 +12,7 @@
 #include "deskhubp/client/TerminalViewer.h"
 #include "deskhubp/system/TrustStoreFile.h"
 #include "deskhubp/system/AppDataFile.h"
-#include "deskhubp/system/PairedDevicesFile.h"
+#include "deskhubp/system/AuthorizedKeysFile.h"
 #include "deskhubp/system/Clock.h"
 #include "deskhubp/system/ClientIdentity.h"
 
@@ -252,9 +252,9 @@ void TestHostSharesAShell() {
 
     const std::string savedCert = deskhubp::ReadAppDataFile(deskhubp::kHostCertFileName);
     const std::string savedKey = deskhubp::ReadAppDataFile(deskhubp::kHostKeyFileName);
-    const std::string savedPaired =
-        deskhubp::ReadAppDataFile(deskhubp::kPairedDevicesFileName);
-    deskhubp::ForgetAllPairedDevices();
+    const std::string savedAuthorizedKeys =
+        deskhubp::ReadAppDataFile(deskhubp::kAuthorizedKeysFileName);
+    RevokeAllClientKeys();
     ForgetHostIdentity();
     const deskhubp::HostIdentity clientIdentity =
         deskhubp::LoadOrCreateHostIdentity("deskhub-client");
@@ -310,7 +310,7 @@ void TestHostSharesAShell() {
             "a connection that never proved itself gets no shell, however it asks");
     }
 
-    Check(deskhubp::RememberPairedDevice(clientIdentity.fingerprint, "test-client", 500),
+    Check(GrantClientKey(clientIdentity),
         "the owner grants the client key locally");
     viewer.BeginAuth(clientIdentity, identity.fingerprint);
     Check(viewer.PumpUntil([&viewer] { return viewer.Allowed(); }, kMaxRounds),
@@ -380,10 +380,10 @@ void TestHostSharesAShell() {
 
     if (!savedCert.empty()) deskhubp::WriteAppDataFile(deskhubp::kHostCertFileName, savedCert);
     if (!savedKey.empty()) deskhubp::WriteAppDataFile(deskhubp::kHostKeyFileName, savedKey);
-    if (savedPaired.empty())
-        deskhubp::RemoveAppDataFile(deskhubp::kPairedDevicesFileName);
+    if (savedAuthorizedKeys.empty())
+        deskhubp::RemoveAppDataFile(deskhubp::kAuthorizedKeysFileName);
     else
-        deskhubp::WriteAppDataFile(deskhubp::kPairedDevicesFileName, savedPaired);
+        deskhubp::WriteAppDataFile(deskhubp::kAuthorizedKeysFileName, savedAuthorizedKeys);
 }
 
 bool WaitFor(const std::function<bool()>& done, int millis) {
@@ -465,9 +465,9 @@ void TestDroppedShellWaitsForItsClient() {
 
     const std::string savedCert = deskhubp::ReadAppDataFile(deskhubp::kHostCertFileName);
     const std::string savedKey = deskhubp::ReadAppDataFile(deskhubp::kHostKeyFileName);
-    const std::string savedPaired =
-        deskhubp::ReadAppDataFile(deskhubp::kPairedDevicesFileName);
-    deskhubp::ForgetAllPairedDevices();
+    const std::string savedAuthorizedKeys =
+        deskhubp::ReadAppDataFile(deskhubp::kAuthorizedKeysFileName);
+    RevokeAllClientKeys();
     ForgetHostIdentity();
     const deskhubp::HostIdentity clientIdentity =
         deskhubp::LoadOrCreateHostIdentity("deskhub-client");
@@ -482,7 +482,7 @@ void TestDroppedShellWaitsForItsClient() {
         return;
     }
 
-    Check(deskhubp::RememberPairedDevice(clientIdentity.fingerprint, "test-client", 500),
+    Check(GrantClientKey(clientIdentity),
         "the first client key is authorized");
     Viewer first;
     first.Start();
@@ -566,10 +566,10 @@ void TestDroppedShellWaitsForItsClient() {
 
     if (!savedCert.empty()) deskhubp::WriteAppDataFile(deskhubp::kHostCertFileName, savedCert);
     if (!savedKey.empty()) deskhubp::WriteAppDataFile(deskhubp::kHostKeyFileName, savedKey);
-    if (savedPaired.empty())
-        deskhubp::RemoveAppDataFile(deskhubp::kPairedDevicesFileName);
+    if (savedAuthorizedKeys.empty())
+        deskhubp::RemoveAppDataFile(deskhubp::kAuthorizedKeysFileName);
     else
-        deskhubp::WriteAppDataFile(deskhubp::kPairedDevicesFileName, savedPaired);
+        deskhubp::WriteAppDataFile(deskhubp::kAuthorizedKeysFileName, savedAuthorizedKeys);
 }
 
 void TestAnotherClientClosesAShell() {
@@ -581,9 +581,9 @@ void TestAnotherClientClosesAShell() {
 
     const std::string savedCert = deskhubp::ReadAppDataFile(deskhubp::kHostCertFileName);
     const std::string savedKey = deskhubp::ReadAppDataFile(deskhubp::kHostKeyFileName);
-    const std::string savedPaired =
-        deskhubp::ReadAppDataFile(deskhubp::kPairedDevicesFileName);
-    deskhubp::ForgetAllPairedDevices();
+    const std::string savedAuthorizedKeys =
+        deskhubp::ReadAppDataFile(deskhubp::kAuthorizedKeysFileName);
+    RevokeAllClientKeys();
     ForgetHostIdentity();
     const deskhubp::HostIdentity clientIdentity =
         deskhubp::LoadOrCreateHostIdentity("deskhub-client");
@@ -598,7 +598,7 @@ void TestAnotherClientClosesAShell() {
         return;
     }
 
-    Check(deskhubp::RememberPairedDevice(clientIdentity.fingerprint, "test-client", 500),
+    Check(GrantClientKey(clientIdentity),
         "the owner client key is authorized");
     Viewer owner;
     owner.Start();
@@ -671,10 +671,10 @@ void TestAnotherClientClosesAShell() {
 
     if (!savedCert.empty()) deskhubp::WriteAppDataFile(deskhubp::kHostCertFileName, savedCert);
     if (!savedKey.empty()) deskhubp::WriteAppDataFile(deskhubp::kHostKeyFileName, savedKey);
-    if (savedPaired.empty())
-        deskhubp::RemoveAppDataFile(deskhubp::kPairedDevicesFileName);
+    if (savedAuthorizedKeys.empty())
+        deskhubp::RemoveAppDataFile(deskhubp::kAuthorizedKeysFileName);
     else
-        deskhubp::WriteAppDataFile(deskhubp::kPairedDevicesFileName, savedPaired);
+        deskhubp::WriteAppDataFile(deskhubp::kAuthorizedKeysFileName, savedAuthorizedKeys);
 }
 
 void TestHostStopsAndAttachesShell() {
@@ -686,9 +686,9 @@ void TestHostStopsAndAttachesShell() {
 
     const std::string savedCert = deskhubp::ReadAppDataFile(deskhubp::kHostCertFileName);
     const std::string savedKey = deskhubp::ReadAppDataFile(deskhubp::kHostKeyFileName);
-    const std::string savedPaired =
-        deskhubp::ReadAppDataFile(deskhubp::kPairedDevicesFileName);
-    deskhubp::ForgetAllPairedDevices();
+    const std::string savedAuthorizedKeys =
+        deskhubp::ReadAppDataFile(deskhubp::kAuthorizedKeysFileName);
+    RevokeAllClientKeys();
     ForgetHostIdentity();
     const deskhubp::HostIdentity clientIdentity =
         deskhubp::LoadOrCreateHostIdentity("deskhub-client");
@@ -702,7 +702,7 @@ void TestHostStopsAndAttachesShell() {
         return;
     }
 
-    Check(deskhubp::RememberPairedDevice(clientIdentity.fingerprint, "test-client", 500),
+    Check(GrantClientKey(clientIdentity),
         "the client key is authorized");
     Viewer viewer;
     viewer.Start();
@@ -802,10 +802,10 @@ void TestHostStopsAndAttachesShell() {
 
     if (!savedCert.empty()) deskhubp::WriteAppDataFile(deskhubp::kHostCertFileName, savedCert);
     if (!savedKey.empty()) deskhubp::WriteAppDataFile(deskhubp::kHostKeyFileName, savedKey);
-    if (savedPaired.empty())
-        deskhubp::RemoveAppDataFile(deskhubp::kPairedDevicesFileName);
+    if (savedAuthorizedKeys.empty())
+        deskhubp::RemoveAppDataFile(deskhubp::kAuthorizedKeysFileName);
     else
-        deskhubp::WriteAppDataFile(deskhubp::kPairedDevicesFileName, savedPaired);
+        deskhubp::WriteAppDataFile(deskhubp::kAuthorizedKeysFileName, savedAuthorizedKeys);
 }
 
 void TestViewerTrustsThenRunsAShell() {
@@ -835,7 +835,7 @@ void TestViewerTrustsThenRunsAShell() {
     viewerConfig.size = deskhub::TermSize{80, 24};
     const auto clientKey = deskhubp::LoadOrCreateClientIdentity();
     Check(clientKey.Valid() &&
-              deskhubp::RememberPairedDevice(clientKey.fingerprint, "shared-viewer", 500),
+              GrantClientKey(clientKey),
         "the viewer key is authorized before connecting");
     Check(deskhubp::RememberTrustedHost(viewerConfig.host.ToString(), viewerConfig.hostLabel,
               identity.fingerprint, NowUnixSeconds()),
@@ -935,10 +935,10 @@ void TestUnknownClientAndChangedHostKeyAreDenied() {
     const std::string savedCert = deskhubp::ReadAppDataFile(deskhubp::kHostCertFileName);
     const std::string savedKey = deskhubp::ReadAppDataFile(deskhubp::kHostKeyFileName);
     const std::string savedTrust = deskhubp::ReadAppDataFile(deskhubp::kTrustStoreFileName);
-    const std::string savedPaired = deskhubp::ReadAppDataFile(deskhubp::kPairedDevicesFileName);
+    const std::string savedAuthorizedKeys = deskhubp::ReadAppDataFile(deskhubp::kAuthorizedKeysFileName);
     ForgetHostIdentity();
     deskhubp::RemoveAppDataFile(deskhubp::kTrustStoreFileName);
-    deskhubp::ForgetAllPairedDevices();
+    RevokeAllClientKeys();
 
     const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity("deskhub-test");
     HostRig host;
@@ -988,10 +988,10 @@ void TestUnknownClientAndChangedHostKeyAreDenied() {
         deskhubp::RemoveAppDataFile(deskhubp::kTrustStoreFileName);
     else
         deskhubp::WriteAppDataFile(deskhubp::kTrustStoreFileName, savedTrust);
-    if (savedPaired.empty())
-        deskhubp::RemoveAppDataFile(deskhubp::kPairedDevicesFileName);
+    if (savedAuthorizedKeys.empty())
+        deskhubp::RemoveAppDataFile(deskhubp::kAuthorizedKeysFileName);
     else
-        deskhubp::WriteAppDataFile(deskhubp::kPairedDevicesFileName, savedPaired);
+        deskhubp::WriteAppDataFile(deskhubp::kAuthorizedKeysFileName, savedAuthorizedKeys);
 }
 
 void TestAFloodOfOutputNeverTearsTheStream() {
@@ -1003,9 +1003,9 @@ void TestAFloodOfOutputNeverTearsTheStream() {
 
     const std::string savedCert = deskhubp::ReadAppDataFile(deskhubp::kHostCertFileName);
     const std::string savedKey = deskhubp::ReadAppDataFile(deskhubp::kHostKeyFileName);
-    const std::string savedPaired =
-        deskhubp::ReadAppDataFile(deskhubp::kPairedDevicesFileName);
-    deskhubp::ForgetAllPairedDevices();
+    const std::string savedAuthorizedKeys =
+        deskhubp::ReadAppDataFile(deskhubp::kAuthorizedKeysFileName);
+    RevokeAllClientKeys();
     ForgetHostIdentity();
     const deskhubp::HostIdentity clientIdentity =
         deskhubp::LoadOrCreateHostIdentity("deskhub-client");
@@ -1016,7 +1016,7 @@ void TestAFloodOfOutputNeverTearsTheStream() {
     HostRig host;
     if (identity.Valid() && clientIdentity.Valid() &&
         host.Start(identity, port)) {
-        Check(deskhubp::RememberPairedDevice(clientIdentity.fingerprint, "test-client", 500),
+        Check(GrantClientKey(clientIdentity),
             "the high-output client key is authorized");
         Viewer viewer;
         viewer.Start();
@@ -1050,10 +1050,10 @@ void TestAFloodOfOutputNeverTearsTheStream() {
     host.Stop();
     if (!savedCert.empty()) deskhubp::WriteAppDataFile(deskhubp::kHostCertFileName, savedCert);
     if (!savedKey.empty()) deskhubp::WriteAppDataFile(deskhubp::kHostKeyFileName, savedKey);
-    if (savedPaired.empty())
-        deskhubp::RemoveAppDataFile(deskhubp::kPairedDevicesFileName);
+    if (savedAuthorizedKeys.empty())
+        deskhubp::RemoveAppDataFile(deskhubp::kAuthorizedKeysFileName);
     else
-        deskhubp::WriteAppDataFile(deskhubp::kPairedDevicesFileName, savedPaired);
+        deskhubp::WriteAppDataFile(deskhubp::kAuthorizedKeysFileName, savedAuthorizedKeys);
 }
 
 }

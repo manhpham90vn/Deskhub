@@ -5,16 +5,6 @@ struct ConnectView: View {
 
     private var connected: Bool { model.connect.authed != nil }
 
-    private var connectedRow: DeviceListRow? {
-        model.discovery.devices.first {
-            DeskhubClient.sameDeviceAddr($0.addr, model.connect.acceptedAddress)
-        }
-    }
-
-    private var liveColor: Color {
-        connectedRow?.online == false ? DeskhubPalette.offline : DeskhubPalette.online
-    }
-
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
@@ -41,12 +31,10 @@ struct ConnectView: View {
                     .disabled(model.connect.address.isEmpty || model.connect.isConnecting)
 
                     deskhubHeadingRow(DeskhubClient.string(DHStrDevicesHeading)) {
-                        model.discovery.rescanNow()
+                        model.recent.refresh()
                     }
                     DeviceListView(
-                        heading: "",
-                        note: model.discovery.scanStatus,
-                        rows: model.discovery.devices,
+                        rows: model.recent.devices,
                         enabled: !model.connect.isConnecting,
                         onPick: pick
                     )
@@ -71,7 +59,7 @@ struct ConnectView: View {
             Text(model.connect.connectError)
         }
         .hostTrustAlert(model.connect) { model.beginConnect(to: $0) }
-        .task { model.discovery.start() }
+        .task { model.recent.refresh() }
     }
 
     private var connectedHeader: some View {
@@ -90,18 +78,12 @@ struct ConnectView: View {
 
             HStack(spacing: 8) {
                 Circle()
-                    .fill(liveColor)
+                    .fill(DeskhubPalette.online)
                     .frame(width: 10, height: 10)
                 Text(DeskhubClient.string(DHStrConnectedPickSession))
                     .fontWeight(.semibold)
-                    .foregroundStyle(liveColor)
+                    .foregroundStyle(DeskhubPalette.online)
                 Spacer(minLength: 0)
-                if let ping = connectedRow?.ping, !ping.isEmpty {
-                    Text(ping)
-                        .fontWeight(.semibold)
-                        .foregroundStyle(liveColor)
-                        .monospacedDigit()
-                }
             }
         }
     }

@@ -16,6 +16,7 @@ struct SourceQueryRequest {
 struct SourceQueryReply {
     std::vector<deskhub::SourceInfo> sources{};
     deskhub::HostCaps caps{};
+    std::string hostName{};
     std::string failure{};
     std::optional<deskhub::Fingerprint> unknownHostKey{};
 };

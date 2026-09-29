@@ -170,12 +170,12 @@ deskhub::ScreenHostCallbacks MakeScreenHostCallbacks(deskhub::SourcePipelineStat
     return cb;
 }
 
-void RunHostNetLoop(SessionTransport& sock, deskhub::Beacon& beacon,
+void RunHostNetLoop(SessionTransport& sock, deskhub::SourceListResponder& sourceList,
     std::span<deskhub::SourcePipelineState* const> live, const HostNetLoopHooks& hooks) {
     const std::vector<deskhub::SourcePipelineState*> liveStates(live.begin(), live.end());
 
     uint8_t buf[deskhub::kMaxRecordSize];
-    uint8_t beaconBuf[deskhub::kMaxDatagram];
+    uint8_t replyBuf[deskhub::kMaxDatagram];
     char line[deskhub::diag::SourceDiag::kStatusBufBytes];
 
     uint64_t lastStatUs = NowUs();
@@ -209,9 +209,9 @@ void RunHostNetLoop(SessionTransport& sock, deskhub::Beacon& beacon,
             } else if (header && header->chan == deskhub::Chan::File) {
                 if (hooks.onFile) hooks.onFile(from, pkt);
             } else if (const size_t rn =
-                           beacon.Reply(beaconBuf, pkt, sock.Authenticated(from));
+                           sourceList.Reply(replyBuf, pkt, sock.Authenticated(from));
                 rn) {
-                sock.SendTo(from, beaconBuf, rn);
+                sock.SendTo(from, replyBuf, rn);
             } else {
                 deskhub::AcceptDatagram(liveStates, pkt, from.Pack(), now);
             }

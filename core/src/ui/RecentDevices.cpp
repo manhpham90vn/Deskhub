@@ -3,6 +3,7 @@
 #include <algorithm>
 
 #include "deskhub/ui/Strings.h"
+#include "deskhub/ui/UiSettings.h"
 
 namespace deskhub::ui {
 
@@ -32,12 +33,15 @@ bool ParseLine(std::string_view line, RecentDevice& out) {
     const size_t next = rest.find(' ');
 
     std::string addr = rest;
+    std::string name;
     if (next != std::string::npos) {
         addr = TrimAscii(std::string_view(rest).substr(0, next));
+        name = TruncateDeviceName(TrimAscii(std::string_view(rest).substr(next + 1)));
     }
     if (addr.empty()) return false;
 
     out.addr = std::move(addr);
+    out.name = std::move(name);
     out.lastConnectedUnix = stamp;
     return true;
 }
@@ -74,18 +78,24 @@ std::string SerializeRecentDevices(const std::vector<RecentDevice>& devices) {
         out += std::to_string(d.lastConnectedUnix);
         out += ' ';
         out += d.addr;
+        const std::string name = TruncateDeviceName(d.name);
+        if (!name.empty()) {
+            out += ' ';
+            out += name;
+        }
         out += '\n';
         ++count;
     }
     return out;
 }
 
-void TouchRecentDevice(std::vector<RecentDevice>& devices, std::string_view addr, int64_t nowUnix) {
+void TouchRecentDevice(std::vector<RecentDevice>& devices, std::string_view addr, int64_t nowUnix,
+    std::string_view name) {
     const std::string trimmed = TrimAscii(addr);
     if (trimmed.empty()) return;
 
     RemoveRecentDevice(devices, trimmed);
-    devices.insert(devices.begin(), RecentDevice{trimmed, nowUnix});
+    devices.insert(devices.begin(), RecentDevice{trimmed, nowUnix, TruncateDeviceName(name)});
     if (devices.size() > kMaxRecentDevices) devices.resize(kMaxRecentDevices);
 }
 

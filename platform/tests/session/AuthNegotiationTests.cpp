@@ -3,7 +3,7 @@
 
 #include "deskhubp/auth/AuthNegotiation.h"
 #include "deskhubp/system/AppDataFile.h"
-#include "deskhubp/system/PairedDevicesFile.h"
+#include "deskhubp/system/AuthorizedKeysFile.h"
 
 #include <cstdio>
 #include <string>
@@ -13,19 +13,19 @@ namespace {
 struct CleanSlate {
     std::string cert = deskhubp::ReadAppDataFile(deskhubp::kHostCertFileName);
     std::string key = deskhubp::ReadAppDataFile(deskhubp::kHostKeyFileName);
-    std::string paired = deskhubp::ReadAppDataFile(deskhubp::kPairedDevicesFileName);
+    std::string authorizedKeys = deskhubp::ReadAppDataFile(deskhubp::kAuthorizedKeysFileName);
 
     CleanSlate() {
-        deskhubp::ForgetAllPairedDevices();
+        RevokeAllClientKeys();
     }
 
     ~CleanSlate() {
         if (!cert.empty()) deskhubp::WriteAppDataFile(deskhubp::kHostCertFileName, cert);
         if (!key.empty()) deskhubp::WriteAppDataFile(deskhubp::kHostKeyFileName, key);
-        if (paired.empty())
-            deskhubp::ForgetAllPairedDevices();
+        if (authorizedKeys.empty())
+            deskhubp::RemoveAppDataFile(deskhubp::kAuthorizedKeysFileName);
         else
-            deskhubp::WriteAppDataFile(deskhubp::kPairedDevicesFileName, paired);
+            deskhubp::WriteAppDataFile(deskhubp::kAuthorizedKeysFileName, authorizedKeys);
     }
 };
 
@@ -75,8 +75,7 @@ void TestUnknownKeyNeverRequestsApproval() {
     Check(host.State() == deskhubp::HostAuthState::Settled,
         "the host does not wait for approval");
     Check(challenge && !client.Answer(*challenge), "the client cannot answer a denial");
-    Check(deskhubp::TryLoadPairedDevices().value_or(deskhub::PairedDevices{}).Check(machines.client.fingerprint) ==
-              deskhub::PairVerdict::Unknown,
+    Check(!deskhubp::IsClientKeyAuthorized(deskhubp::ClientIdentity(machines.client).publicKey),
         "the unlisted key is never added automatically");
 }
 
@@ -85,7 +84,7 @@ void TestAuthorizedKeyMustSignForThisHost() {
     const CleanSlate guard;
     Machines machines;
     if (!machines.Make()) return;
-    Check(deskhubp::RememberPairedDevice(machines.client.fingerprint, "client", 500),
+    Check(GrantClientKey(machines.client),
         "the owner grants the client key locally");
     deskhubp::HostAuth host;
     deskhubp::ClientAuth client;
@@ -98,9 +97,9 @@ void TestAuthorizedKeyMustSignForThisHost() {
     const auto response = client.Answer(*challenge);
     Check(response && !response->proof.empty(), "the client signs the challenge");
     if (!response) return;
-    Check(host.Respond(*response, 1000).code == deskhub::AuthResultCode::Accepted,
+    Check(host.Respond(*response).code == deskhub::AuthResultCode::Accepted,
         "the signature admits the client");
-    Check(host.Respond(*response, 1000).code != deskhub::AuthResultCode::Accepted,
+    Check(host.Respond(*response).code != deskhub::AuthResultCode::Accepted,
         "the same signed response is not accepted twice");
     Check(!host.Begin(client.Begin()), "a settled handshake cannot issue another challenge");
 
@@ -113,7 +112,7 @@ void TestAuthorizedKeyMustSignForThisHost() {
     const auto wrongChallenge = wrongHost.Begin(fooled.Begin());
     const auto wrongResponse = wrongChallenge ? fooled.Answer(*wrongChallenge) : std::nullopt;
     Check(wrongResponse &&
-              wrongHost.Respond(*wrongResponse, 1000).code ==
+              wrongHost.Respond(*wrongResponse).code ==
                   deskhub::AuthResultCode::BadSignature,
         "a signature for another host key has a distinct error code");
 }
@@ -123,7 +122,7 @@ void TestRevocationDuringHandshakeIsEnforced() {
     const CleanSlate guard;
     Machines machines;
     if (!machines.Make()) return;
-    Check(deskhubp::RememberPairedDevice(machines.client.fingerprint, "client", 500),
+    Check(GrantClientKey(machines.client),
         "the client is authorized first");
     deskhubp::HostAuth host;
     deskhubp::ClientAuth client;
@@ -132,10 +131,10 @@ void TestRevocationDuringHandshakeIsEnforced() {
     const auto challenge = host.Begin(client.Begin());
     const auto response = challenge ? client.Answer(*challenge) : std::nullopt;
     Check(response.has_value(), "the client signs before revocation");
-    Check(deskhubp::ForgetPairedDevice(machines.client.fingerprint),
+    Check(deskhubp::ForgetAuthorizedClient(machines.client.fingerprint),
         "the owner revokes the key while auth is pending");
     if (response)
-        Check(host.Respond(*response, 1000).code != deskhub::AuthResultCode::Accepted,
+        Check(host.Respond(*response).code != deskhub::AuthResultCode::Accepted,
             "the signed response cannot finish after revocation");
 }
 
@@ -144,7 +143,7 @@ void TestAProofCannotMoveToAnotherTlsSession() {
     const CleanSlate guard;
     Machines machines;
     if (!machines.Make()) return;
-    Check(deskhubp::RememberPairedDevice(machines.client.fingerprint, "client", 500),
+    Check(GrantClientKey(machines.client),
         "the client key is authorized");
     deskhubp::HostAuth original;
     deskhubp::HostAuth other;
@@ -159,7 +158,7 @@ void TestAProofCannotMoveToAnotherTlsSession() {
     Check(response.has_value(), "the client signs for its own TLS session");
     if (!response) return;
     Check(other.Begin(client.Begin()).has_value(), "another connection requests authentication");
-    Check(other.Respond(*response, 1000).code != deskhub::AuthResultCode::Accepted,
+    Check(other.Respond(*response).code != deskhub::AuthResultCode::Accepted,
         "that connection rejects the captured signature");
 }
 
