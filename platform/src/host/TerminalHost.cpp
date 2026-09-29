@@ -329,6 +329,11 @@ void TerminalHost::PumpShells(uint64_t nowUs) {
     for (uint32_t termId : finished) {
         const auto at = shells_.find(termId);
         const int code = at == shells_.end() ? 0 : at->second.pty->ExitCode();
+        const uint64_t ptyBytes = at == shells_.end() ? 0 : at->second.ptyBytes;
+        LOGI(
+            "terminal id=%u: the shell ended on its own with exit code %d after printing %llu "
+            "bytes",
+            unsigned(termId), code, static_cast<unsigned long long>(ptyBytes));
         CloseShell(termId, code, true);
     }
 }

@@ -30,6 +30,7 @@ namespace {
 constexpr uint16_t kTestPort = 47793;
 constexpr int kMaxRounds = 2000;
 constexpr uint32_t kPollWaitMs = 2;
+constexpr int kCursorSettleTimeoutMs = 5000;
 
 struct Viewer {
     deskhubp::QuicEndpoint endpoint{};
@@ -882,8 +883,13 @@ void TestViewerTrustsThenRunsAShell() {
               shot.cells.size() == size_t(shot.size.rows) * shot.size.cols,
         "the snapshot holds one cell per position");
     Check(shot.At(999, 999) == deskhub::term::Cell{}, "and reading outside it is blank, not a crash");
-    Check(shot.scrollOffset == 0 && shot.cursor.visible,
-        "the live view is at the bottom, with the cursor on it");
+    Check(WaitFor(
+              [&viewer] {
+                  const deskhubp::TerminalSnapshot live = viewer.Snapshot();
+                  return live.scrollOffset == 0 && live.cursor.visible;
+              },
+              kCursorSettleTimeoutMs),
+        "the live view is at the bottom, with the cursor on it once the shell stops repainting");
 
     const std::string marker = "deskhub-scrollback-marker";
     viewer.SendText("echo " + marker + "\n");
