@@ -104,7 +104,7 @@ và Linux; bản macOS chưa hỗ trợ lệnh đó.
 ```bash
 make build-cli                       # bản debug cho OS hiện tại
 make release-cli                     # bản tối ưu
-make run-cli ARGS="scan"             # build, sau đó chạy với các tham số đã cho
+make run-cli ARGS="host list"        # build, sau đó chạy với các tham số đã cho
 ```
 
 Target này nằm sau `-DDESKHUB_CLI=ON` (mặc định tắt), nên app cùng các preset sanitizer,
@@ -118,10 +118,20 @@ client.
 | `connect ADDRESS` | mở cửa sổ xem và điều khiển màn hình host (Windows và Linux) |
 | `shell ADDRESS` | mở một shell trên host, ngay trong terminal hiện tại |
 | `send ADDRESS FILE...` | gửi file tới host đang nhận file |
-| `displays`, `scan`, `sources`, `probe` | những gì share được, và các máy đang hiện diện |
-| `devices`, `trust`, `settings` | cùng những file mà app desktop đọc và ghi |
+| `displays`, `sources ADDRESS` | màn hình cục bộ và nguồn trên host đã xác thực |
+| `key`, `access`, `host`, `host-key public` | khóa client, khóa được phép, host đã lưu và khóa host này |
+| `devices`, `trust`, `settings` | các lệnh cũ dùng cùng file cấu hình |
 
-`deskhub-cli help COMMAND` in ra các cờ. Mọi lệnh đều nhận `--json`, và exit code cho biết
+Tạo khóa client bằng `key generate --name laptop-a`, rồi lấy public key bằng
+`key public --name laptop-a`. Trên host, chuyển dòng đó vào `access add --stdin`.
+Chuyển kết quả `host-key public` của host sang client rồi đưa vào
+`host add office --address 192.168.1.10:47777 --identity laptop-a --host-key-stdin`.
+Sau đó dùng `connect office`, `sources office`, `shell office` hoặc `send office FILE`.
+`host update office` đổi địa chỉ, identity hoặc khóa ghim; `host remove office` xóa
+profile. `access remove --fingerprint SHA256:...` thu hồi khóa client.
+`--config-dir PATH` chọn chung thư mục cấu hình cho mọi lệnh, đặt trước hoặc sau lệnh.
+
+`deskhub-cli help COMMAND` in ra các cờ. Các lệnh liệt kê hỗ trợ `--json`, và exit code cho biết
 nguyên nhân lỗi: `2` sai cờ, `3` không có phản hồi, `4` bị từ chối, `5` host key đã thay
 đổi, `9` bản build này không hỗ trợ.
 

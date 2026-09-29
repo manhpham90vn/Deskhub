@@ -108,6 +108,41 @@ bool RememberTrustedHostProfile(std::string_view endpoint, std::string_view labe
     return SaveTrustStoreLocked(*store);
 }
 
+bool CreateTrustedHostProfile(std::string_view endpoint, std::string_view label,
+    const deskhub::Fingerprint& fingerprint, std::string_view identityName) {
+    const std::lock_guard<std::mutex> lock(TrustStoreMutex());
+    const ConfigFileLock fileLock(kTrustStoreFileName);
+    if (!fileLock.Valid()) return false;
+    auto store = LoadTrustStoreLocked();
+    if (!store || store->Find(endpoint) || store->Size() >= deskhub::kMaxTrustedHosts) return false;
+    for (const auto& host : store->Hosts())
+        if (host.label == label) return false;
+    store->Insert(deskhub::TrustedHost{std::string(endpoint), std::string(label),
+        fingerprint, 0, 0, std::string(identityName)});
+    const auto saved = store->Find(endpoint);
+    if (!saved || saved->label != label || saved->identityName != identityName) return false;
+    return SaveTrustStoreLocked(*store);
+}
+
+bool UpdateTrustedHostProfile(const deskhub::TrustedHost& expected, std::string_view endpoint,
+    std::string_view label, const deskhub::Fingerprint& fingerprint,
+    std::string_view identityName) {
+    const std::lock_guard<std::mutex> lock(TrustStoreMutex());
+    const ConfigFileLock fileLock(kTrustStoreFileName);
+    if (!fileLock.Valid()) return false;
+    auto store = LoadTrustStoreLocked();
+    if (!store || (expected.endpoint != endpoint && store->Find(endpoint))) return false;
+    const auto previous = store->Find(expected.endpoint);
+    if (!previous || *previous != expected) return false;
+    if (!store->Forget(expected.endpoint)) return false;
+    store->Insert(deskhub::TrustedHost{std::string(endpoint), std::string(label),
+        fingerprint, previous->firstSeenUnix, previous->lastSeenUnix,
+        std::string(identityName)});
+    const auto saved = store->Find(endpoint);
+    if (!saved || saved->label != label || saved->identityName != identityName) return false;
+    return SaveTrustStoreLocked(*store);
+}
+
 bool ForgetTrustedHost(std::string_view endpoint) {
     const std::lock_guard<std::mutex> lock(TrustStoreMutex());
     const ConfigFileLock fileLock(kTrustStoreFileName);

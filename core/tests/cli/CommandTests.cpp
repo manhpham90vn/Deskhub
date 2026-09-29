@@ -177,6 +177,61 @@ void TestDevicesAndTrust() {
     Check(!Parse({"trust", "forget", "--json"}).error.empty(), "a flag is not a target");
 }
 
+void TestProfileCommands() {
+    const cli::Command generated = Parse({"key", "generate", "--name", "laptop-a"});
+    Check(Ok(generated, cli::Verb::Devices) && generated.devices == cli::DevicesAction::Generate &&
+              generated.keyName == "laptop-a",
+        "key generation uses a named identity");
+    const cli::Command imported = Parse({"key", "import", "--name", "imported-key",
+        "--file", "private.pem", "--passphrase-stdin"});
+    Check(imported.error.empty() && imported.devices == cli::DevicesAction::Import &&
+              imported.target == "private.pem" && imported.keyPassphraseStdin,
+        "key import reads a named private key file");
+    Check(Parse({"key", "public", "--name", "laptop-a"}).keyName == "laptop-a",
+        "key public selects a named identity");
+    Check(!Parse({"key", "generate"}).error.empty(), "key generate needs a name");
+    Check(Parse({"access", "add", "--stdin"}).target == "-", "access add reads stdin");
+    Check(Parse({"access", "list", "--json"}).json, "access list supports JSON");
+    Check(Parse({"access", "remove", "--fingerprint", "SHA256:abc"}).target ==
+              "SHA256:abc",
+        "access remove selects a fingerprint");
+    Check(!Parse({"access", "remove"}).error.empty(), "access remove needs a fingerprint");
+    const cli::Command added = Parse({"host", "add", "office", "--address",
+        "192.168.1.10:47777", "--identity", "laptop-a", "--host-key-stdin"});
+    Check(added.error.empty() && added.verb == cli::Verb::Host &&
+              added.trust == cli::TrustAction::Add && added.profileAlias == "office" &&
+              added.target == "192.168.1.10:47777" && added.value == "-",
+        "host add stores an alias, endpoint, identity, and key source");
+    Check(Parse({"host", "list", "--json"}).json, "host list supports JSON");
+    Check(Parse({"host", "update", "office", "--identity", "phone"}).trust ==
+              cli::TrustAction::Update,
+        "host update can change the identity");
+    Check(Parse({"host", "remove", "office"}).trust == cli::TrustAction::Forget,
+        "host remove selects an alias");
+    Check(Parse({"host-key", "public"}).trust == cli::TrustAction::Public,
+        "host-key public exports the TLS host key");
+    Check(!Parse({"host", "add", "office"}).error.empty(), "host add needs required fields");
+    Check(Ok(Parse({"host", "--help"}), cli::Verb::Help), "host help works without an action");
+    Check(Ok(Parse({"host", "add", "--help"}), cli::Verb::Help),
+        "host add can request help without an alias");
+    Check(Ok(Parse({"access", "list", "--help"}), cli::Verb::Help),
+        "access list can request help");
+    const cli::Command connected = Parse({"--config-dir", "/tmp/deskhub-test",
+        "connect", "office"});
+    Check(connected.error.empty() && connected.profileAlias == "office" &&
+              connected.configDir == "/tmp/deskhub-test",
+        "connect accepts an alias and config dir");
+    Check(Parse({"sources", "office"}).profileAlias == "office",
+        "sources accepts a saved host alias");
+    Check(Parse({"shell", "office"}).profileAlias == "office",
+        "shell accepts a saved host alias");
+    Check(Parse({"send", "office", "file.txt"}).profileAlias == "office",
+        "send accepts a saved host alias");
+    Check(Parse({"host", "list", "--config-dir", "/tmp/deskhub-test"}).configDir ==
+              "/tmp/deskhub-test",
+        "config dir also works after a command");
+}
+
 void TestSettings() {
     std::printf("[cli] settings reads and writes the file the desktop app uses...\n");
     Check(Parse({"settings"}).settings == cli::SettingsAction::List, "settings lists by default");
@@ -453,6 +508,7 @@ void RunCliCommandTests() {
     TestLegacyAuthFlagsRejected();
     TestProbeIsUnavailable();
     TestDevicesAndTrust();
+    TestProfileCommands();
     TestSettings();
     TestShareFlags();
     TestShareFileFlags();

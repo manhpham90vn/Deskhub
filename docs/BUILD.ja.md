@@ -106,7 +106,7 @@ make lint      # C++・Kotlin・Swift の format を検査する。ファイル�
 ```bash
 make build-cli                       # この OS 向けの debug build
 make release-cli                     # 最適化版
-make run-cli ARGS="scan"             # build したうえで、その引数で実行
+make run-cli ARGS="host list"        # build したうえで、その引数で実行
 ```
 
 この target は `-DDESKHUB_CLI=ON` の後ろにあり（既定では無効）、app および sanitizer・
@@ -120,10 +120,21 @@ coverage・fuzz の preset には影響しない。有効にすると、OS ご�
 | `connect ADDRESS` | host の画面を表示して操作するウィンドウを開く（Windows と Linux） |
 | `shell ADDRESS` | 現在の terminal 内で host 上の shell を開く |
 | `send ADDRESS FILE...` | ファイルの受信を許可している host へファイルを送る |
-| `displays`、`scan`、`sources`、`probe` | 共有可能な対象と、ネットワーク上のマシン |
-| `devices`、`trust`、`settings` | デスクトップ app が読み書きするのと同じファイル |
+| `displays`、`sources ADDRESS` | ローカルの display と認証済み host の共有元 |
+| `key`、`access`、`host`、`host-key public` | client ID、許可済み鍵、保存済み host、この host の鍵 |
+| `devices`、`trust`、`settings` | 同じ設定ファイルを使う従来のコマンド |
 
-フラグは `deskhub-cli help COMMAND` が表示する。すべてのコマンドが `--json` に対応し、
+`key generate --name laptop-a` で client 鍵を作り、`key public --name laptop-a`
+で公開鍵を取得する。host ではその一行を `access add --stdin` に入力する。
+host の `host-key public` の出力を client に渡し、
+`host add office --address 192.168.1.10:47777 --identity laptop-a --host-key-stdin`
+に入力する。その後 `connect office`、`sources office`、`shell office`、
+`send office FILE` を使用できる。`host update office` でアドレス、ID、固定鍵を
+明示的に変更し、`host remove office` で profile を削除する。
+`access remove --fingerprint SHA256:...` は client 鍵を取り消す。
+`--config-dir PATH` は全コマンドで同じ設定ディレクトリを選び、コマンドの前後に置ける。
+
+フラグは `deskhub-cli help COMMAND` が表示する。一覧コマンドは `--json` に対応し、
 exit code が失敗の理由を示す。`2` フラグの誤り、`3` 応答なし、`4` 拒否、`5` host key
 の変更、`9` この build では未対応。
 

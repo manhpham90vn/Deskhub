@@ -99,7 +99,7 @@ systemd 运行。在 Windows 和 Linux 上，`connect` 会打开 viewer 窗口�
 ```bash
 make build-cli                       # 当前 OS 的 debug build
 make release-cli                     # 优化版本
-make run-cli ARGS="scan"             # 构建后以给定参数运行
+make run-cli ARGS="host list"        # 构建后以给定参数运行
 ```
 
 该 target 位于 `-DDESKHUB_CLI=ON` 之后（默认关闭），因此 app 以及 sanitizer、coverage、
@@ -112,10 +112,20 @@ fuzz 等 preset 不受影响。启用后，各 OS 的 media 库由可选变为�
 | `connect ADDRESS` | 打开窗口查看并操作 host 的屏幕（Windows 和 Linux） |
 | `shell ADDRESS` | 在当前 terminal 中打开 host 上的一个 shell |
 | `send ADDRESS FILE...` | 向允许接收文件的 host 发送文件 |
-| `displays`、`scan`、`sources`、`probe` | 可共享的内容，以及网络中存在的机器 |
-| `devices`、`trust`、`settings` | 与桌面 app 读写同一批文件 |
+| `displays`、`sources ADDRESS` | 本地显示器和已认证 host 的共享源 |
+| `key`、`access`、`host`、`host-key public` | client 身份、授权密钥、已保存 host 和本机 host 密钥 |
+| `devices`、`trust`、`settings` | 使用相同配置文件的旧命令 |
 
-`deskhub-cli help COMMAND` 会打印可用 flag。所有命令均支持 `--json`，exit code 表明失败
+使用 `key generate --name laptop-a` 创建 client 密钥，再用
+`key public --name laptop-a` 获取公钥。在 host 上将该行输入 `access add --stdin`。
+把 host 的 `host-key public` 输出传给 client，再输入
+`host add office --address 192.168.1.10:47777 --identity laptop-a --host-key-stdin`。
+随后可运行 `connect office`、`sources office`、`shell office` 或 `send office FILE`。
+`host update office` 可明确更改地址、身份或固定的密钥；`host remove office` 删除配置。
+`access remove --fingerprint SHA256:...` 撤销 client 密钥。
+`--config-dir PATH` 为所有命令指定同一配置目录，可放在命令前或命令后。
+
+`deskhub-cli help COMMAND` 会打印可用 flag。列出信息的命令支持 `--json`，exit code 表明失败
 原因：`2` flag 有误、`3` 无响应、`4` 被拒绝、`5` host key 已变更、`9` 当前 build 不支持。
 
 Linux 支持上表中的全部命令。Windows 的 `connect` 复用桌面 app 的窗口代码。

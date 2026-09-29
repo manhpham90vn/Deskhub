@@ -99,7 +99,7 @@ on Windows and Linux; macOS does not support that command yet.
 ```bash
 make build-cli                       # debug build for this OS
 make release-cli                     # optimized
-make run-cli ARGS="scan"             # build, then run with those arguments
+make run-cli ARGS="host list"        # build, then run with those arguments
 ```
 
 It is behind `-DDESKHUB_CLI=ON` (off by default), so the app builds and the sanitizer,
@@ -113,10 +113,21 @@ not a client.
 | `connect ADDRESS` | open a window on a host's screen and control it (Windows and Linux) |
 | `shell ADDRESS` | open a shell on a host, in the terminal you are already in |
 | `send ADDRESS FILE...` | send files to a host that accepts them |
-| `displays`, `scan`, `sources`, `probe` | what can be shared, and who is out there |
-| `devices`, `trust`, `settings` | the same files the desktop app reads and writes |
+| `displays`, `sources ADDRESS` | local displays and sources on an authenticated host |
+| `key`, `access`, `host`, `host-key public` | client identities, allowed keys, saved hosts, and this host's key |
+| `devices`, `trust`, `settings` | older commands for the same configuration files |
 
-`deskhub-cli help COMMAND` prints the flags. Every command answers `--json`, and the exit
+Create a named client key with `key generate --name laptop-a`, then copy its public key
+from `key public --name laptop-a`. On the host, pipe that line to `access add --stdin`.
+Copy the host's `host-key public` output to the client and pipe it to
+`host add office --address 192.168.1.10:47777 --identity laptop-a --host-key-stdin`.
+Then use `connect office`, `sources office`, `shell office`, or `send office FILE`.
+`host update office` changes the address, identity, or pinned key explicitly;
+`host remove office` removes the profile. `access remove --fingerprint SHA256:...`
+revokes a client key. `--config-dir PATH` selects one configuration directory for every
+command and can be placed before or after the command.
+
+`deskhub-cli help COMMAND` prints the flags. Listing commands support `--json`, and the exit
 code says what went wrong: `2` bad flags, `3` nobody answered, `4` refused, `5` the host
 key changed, `9` this build cannot do it.
 

@@ -197,12 +197,12 @@ deskhub-cli host list --json
 deskhub-cli connect office
 ```
 
-- [ ] Đối chiếu tên lệnh với parser hiện tại rồi thống nhất help, JSON schema và exit code. Các ví dụ trên chưa phải lệnh có sẵn.
-- [ ] `access add --stdin` nhận public key dạng text; `host add --host-key-stdin` nhận khóa TLS host theo định dạng đã quy định.
-- [ ] Cung cấp thao tác cập nhật/xóa host và đổi khóa ghim chủ động, có cùng API cho GUI.
-- [ ] Hỗ trợ `--config-dir` hoặc cơ chế tương đương dùng nhất quán cho mọi lệnh; trả lỗi rõ khi quyền đọc/ghi không đủ.
-- [ ] Public API trong `platform/` không gọi UI, không đọc stdin, không phụ thuộc event loop GUI. CLI/GUI cung cấp dữ liệu cho API.
-- [ ] `connect`, `sources`, `shell`, `send` và các luồng truy cập khác đều dùng host profile, identity và trust policy chung.
+- [x] Thêm cú pháp `key`, `access`, `host`, `host-key public` bên cạnh `devices`/`trust`; help, JSON và exit code dùng quy ước CLI hiện có.
+- [x] `access add --stdin` nhận public key dạng text; `host add --host-key-stdin` nhận public key TLS host và lưu fingerprint đã xác minh định dạng.
+- [x] Có `host update`/`host remove`; cập nhật địa chỉ, identity và pin qua API `platform/` ghi atomic.
+- [x] `--config-dir` dùng chung cho mọi lệnh; thư mục không truy cập được trả lỗi rõ.
+- [x] API lưu host trong `platform/` không gọi UI, không đọc stdin, không phụ thuộc event loop GUI.
+- [x] `connect`, `sources`, `shell`, `send` nhận alias host đã lưu, dùng địa chỉ, identity và pin của cùng profile.
 - [ ] Bỏ `scan`, tùy chọn passcode, biến môi trường passcode, cơ chế approval/auto-allow và tùy chọn bỏ qua kiểm tra host key.
 - [x] Bỏ lệnh `probe` và tùy chọn `--timeout` chỉ dùng cho probe; không còn probe UDP công khai.
 

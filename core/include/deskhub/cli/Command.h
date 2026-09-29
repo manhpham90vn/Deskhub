@@ -18,6 +18,7 @@ enum class Verb {
     Sources,
     Devices,
     Trust,
+    Host,
     Settings,
     Share,
     Shell,
@@ -38,7 +39,8 @@ enum class TrustAction { List,
     Add,
     Public,
     Forget,
-    ForgetAll };
+    ForgetAll,
+    Update };
 
 enum class SettingsAction { List,
     Get,
@@ -103,8 +105,11 @@ struct Command {
     bool json = false;
     bool quiet = false;
     bool verbose = false;
+    bool accessSyntax = false;
+    std::optional<std::string> configDir{};
 
     std::string address{};
+    std::string profileAlias{};
     uint16_t port = kDeskhubPort;
     bool portGiven = false;
 

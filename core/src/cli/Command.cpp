@@ -127,7 +127,13 @@ bool ValueOf(const Flag& flag, Cursor& cursor, std::string& out, std::string& er
     return true;
 }
 
-FlagResult ApplyGlobalFlag(Command& command, const Flag& flag) {
+FlagResult ApplyGlobalFlag(Command& command, const Flag& flag, Cursor& cursor) {
+    if (flag.name == "--config-dir") {
+        std::string value;
+        if (!ValueOf(flag, cursor, value, command.error)) return FlagResult::Failed;
+        command.configDir = value;
+        return FlagResult::Handled;
+    }
     if (flag.hasInlineValue) return FlagResult::Unknown;
     if (flag.name == "--json") {
         command.json = true;
@@ -184,6 +190,14 @@ FlagResult ApplyTextFlag(Command& command, const Flag& flag, Cursor& cursor,
 bool TakeAddress(Command& command, std::string_view token) {
     std::string host;
     uint16_t port = command.port;
+    if ((command.verb == Verb::Connect || command.verb == Verb::Sources ||
+            command.verb == Verb::Shell || command.verb == Verb::Send) &&
+        !token.empty() && token.find(':') == std::string_view::npos &&
+        token.find('.') == std::string_view::npos &&
+        token.find('/') == std::string_view::npos) {
+        command.profileAlias = std::string(token);
+        return true;
+    }
     if (!ui::SplitHostPort(ui::TrimAscii(token), host, port)) {
         command.error = ui::InvalidAddressLine(token) + " " + ui::InvalidAddressHint();
         return false;
@@ -200,6 +214,8 @@ Verb VerbOf(std::string_view token) {
     if (token == "sources") return Verb::Sources;
     if (token == "devices") return Verb::Devices;
     if (token == "trust") return Verb::Trust;
+    if (token == "host" || token == "host-key") return Verb::Host;
+    if (token == "key" || token == "access") return Verb::Devices;
     if (token == "settings") return Verb::Settings;
     if (token == "share") return Verb::Share;
     if (token == "shell") return Verb::Shell;
@@ -230,7 +246,9 @@ void ParseNoArgVerb(Command& command, Cursor& cursor) {
             command.verb = Verb::Help;
             return;
         }
-        if (ApplyGlobalFlag(command, flag) == FlagResult::Handled) continue;
+        const FlagResult global = ApplyGlobalFlag(command, flag, cursor);
+        if (global == FlagResult::Failed) return;
+        if (global == FlagResult::Handled) continue;
         if (verb == Verb::Displays && !flag.hasInlineValue && flag.name == "--forget") {
             command.forget = true;
             continue;
@@ -259,7 +277,9 @@ void ParseAddressVerb(Command& command, Cursor& cursor) {
             command.verb = Verb::Help;
             return;
         }
-        if (ApplyGlobalFlag(command, flag) == FlagResult::Handled) continue;
+        const FlagResult global = ApplyGlobalFlag(command, flag, cursor);
+        if (global == FlagResult::Failed) return;
+        if (global == FlagResult::Handled) continue;
 
         const FlagResult identity = ApplyTextFlag(command, flag, cursor, "--identity", command.identityName);
         if (identity == FlagResult::Failed) return;
@@ -391,7 +411,9 @@ void ParseTrust(Command& command, Cursor& cursor) {
                 command.verb = Verb::Help;
                 return;
             }
-            if (ApplyGlobalFlag(command, flag) == FlagResult::Handled) continue;
+            const FlagResult global = ApplyGlobalFlag(command, flag, cursor);
+            if (global == FlagResult::Failed) return;
+            if (global == FlagResult::Handled) continue;
             const FlagResult name = ApplyTextFlag(command, flag, cursor, "--name", command.deviceName);
             if (name == FlagResult::Failed) return;
             if (name == FlagResult::Handled) continue;
@@ -412,6 +434,186 @@ void ParseTrust(Command& command, Cursor& cursor) {
         return;
     }
     ParseNoArgVerb(command, cursor);
+}
+
+void ParseKey(Command& command, Cursor& cursor) {
+    if (More(cursor) && WantsHelp(SplitFlag(Look(cursor)))) {
+        command.helpFor = Verb::Devices;
+        command.verb = Verb::Help;
+        return;
+    }
+    if (!More(cursor) || IsFlagToken(Look(cursor))) {
+        command.error = "key needs generate, import, public, or list";
+        return;
+    }
+    const std::string_view action = Take(cursor);
+    if (action == "list")
+        command.devices = DevicesAction::Identities;
+    else if (action == "generate")
+        command.devices = DevicesAction::Generate;
+    else if (action == "import")
+        command.devices = DevicesAction::Import;
+    else if (action == "public")
+        command.devices = DevicesAction::Public;
+    else {
+        command.error = "key needs generate, import, public, or list";
+        return;
+    }
+    while (More(cursor)) {
+        const Flag flag = SplitFlag(Take(cursor));
+        if (WantsHelp(flag)) {
+            command.helpFor = Verb::Devices;
+            command.verb = Verb::Help;
+            return;
+        }
+        const FlagResult global = ApplyGlobalFlag(command, flag, cursor);
+        if (global == FlagResult::Failed) return;
+        if (global == FlagResult::Handled) continue;
+        if (flag.name == "--passphrase-stdin" && !flag.hasInlineValue &&
+            command.devices == DevicesAction::Import) {
+            command.keyPassphraseStdin = true;
+            continue;
+        }
+        if (flag.name == "--name" && command.devices != DevicesAction::Identities) {
+            if (!ValueOf(flag, cursor, command.keyName, command.error)) return;
+            continue;
+        }
+        if (flag.name == "--file" && command.devices == DevicesAction::Import) {
+            if (!ValueOf(flag, cursor, command.target, command.error)) return;
+            continue;
+        }
+        command.error = UnknownOption(flag.name, Verb::Devices);
+        return;
+    }
+    if (command.devices == DevicesAction::Generate && command.keyName.empty())
+        command.error = "key generate needs --name NAME";
+    if (command.devices == DevicesAction::Import &&
+        (command.keyName.empty() || command.target.empty()))
+        command.error = "key import needs --name NAME and --file PATH";
+    if (command.devices == DevicesAction::Public && command.keyName.empty())
+        command.error = "key public needs --name NAME";
+}
+
+void ParseAccess(Command& command, Cursor& cursor) {
+    command.accessSyntax = true;
+    if (More(cursor) && WantsHelp(SplitFlag(Look(cursor)))) {
+        command.helpFor = Verb::Devices;
+        command.verb = Verb::Help;
+        return;
+    }
+    if (!More(cursor) || IsFlagToken(Look(cursor))) {
+        command.error = "access needs add, list, or remove";
+        return;
+    }
+    const std::string_view action = Take(cursor);
+    if (action == "add")
+        command.devices = DevicesAction::Add;
+    else if (action == "list")
+        command.devices = DevicesAction::List;
+    else if (action == "remove")
+        command.devices = DevicesAction::Forget;
+    else {
+        command.error = "access needs add, list, or remove";
+        return;
+    }
+    while (More(cursor)) {
+        const Flag flag = SplitFlag(Take(cursor));
+        if (WantsHelp(flag)) {
+            command.helpFor = Verb::Devices;
+            command.verb = Verb::Help;
+            return;
+        }
+        const FlagResult global = ApplyGlobalFlag(command, flag, cursor);
+        if (global == FlagResult::Failed) return;
+        if (global == FlagResult::Handled) continue;
+        if (command.devices == DevicesAction::Add && flag.name == "--stdin" &&
+            !flag.hasInlineValue) {
+            command.target = "-";
+            continue;
+        }
+        if (command.devices == DevicesAction::Forget && flag.name == "--fingerprint") {
+            if (!ValueOf(flag, cursor, command.target, command.error)) return;
+            continue;
+        }
+        command.error = UnknownOption(flag.name, Verb::Devices);
+        return;
+    }
+    if ((command.devices == DevicesAction::Add || command.devices == DevicesAction::Forget) &&
+        command.target.empty()) command.error = "access add needs --stdin; access remove needs --fingerprint";
+}
+
+void ParseHost(Command& command, Cursor& cursor) {
+    if (More(cursor) && WantsHelp(SplitFlag(Look(cursor)))) {
+        command.helpFor = Verb::Host;
+        command.verb = Verb::Help;
+        return;
+    }
+    if (!More(cursor) || IsFlagToken(Look(cursor))) {
+        command.error = "host needs add, update, list, remove, or public";
+        return;
+    }
+    const std::string_view action = Take(cursor);
+    if (action == "public")
+        command.trust = TrustAction::Public;
+    else if (action == "list")
+        command.trust = TrustAction::List;
+    else if (action == "add")
+        command.trust = TrustAction::Add;
+    else if (action == "update")
+        command.trust = TrustAction::Update;
+    else if (action == "remove")
+        command.trust = TrustAction::Forget;
+    else {
+        command.error = "host needs add, update, list, remove, or public";
+        return;
+    }
+    if (command.trust == TrustAction::Add || command.trust == TrustAction::Update ||
+        command.trust == TrustAction::Forget) {
+        if (More(cursor) && WantsHelp(SplitFlag(Look(cursor)))) {
+            command.helpFor = Verb::Host;
+            command.verb = Verb::Help;
+            return;
+        }
+        if (!More(cursor) || IsFlagToken(Look(cursor))) {
+            command.error = "host action needs an alias";
+            return;
+        }
+        command.profileAlias = std::string(Take(cursor));
+    }
+    while (More(cursor)) {
+        const Flag flag = SplitFlag(Take(cursor));
+        if (WantsHelp(flag)) {
+            command.helpFor = Verb::Host;
+            command.verb = Verb::Help;
+            return;
+        }
+        const FlagResult global = ApplyGlobalFlag(command, flag, cursor);
+        if (global == FlagResult::Failed) return;
+        if (global == FlagResult::Handled) continue;
+        if (flag.name == "--address" && command.trust != TrustAction::List &&
+            command.trust != TrustAction::Public && command.trust != TrustAction::Forget) {
+            if (!ValueOf(flag, cursor, command.target, command.error)) return;
+            continue;
+        }
+        if (flag.name == "--identity" && command.trust != TrustAction::List &&
+            command.trust != TrustAction::Public && command.trust != TrustAction::Forget) {
+            if (ApplyTextFlag(command, flag, cursor, "--identity", command.identityName) == FlagResult::Failed) return;
+            continue;
+        }
+        if (flag.name == "--host-key-stdin" && !flag.hasInlineValue &&
+            (command.trust == TrustAction::Add || command.trust == TrustAction::Update)) {
+            command.value = "-";
+            continue;
+        }
+        command.error = UnknownOption(flag.name, Verb::Host);
+        return;
+    }
+    if (command.trust == TrustAction::Add &&
+        (command.target.empty() || !command.identityName || command.value.empty()))
+        command.error = "host add needs --address, --identity, and --host-key-stdin";
+    if (command.trust == TrustAction::Update && command.target.empty() &&
+        !command.identityName && command.value.empty())
+        command.error = "host update needs a field to change";
 }
 
 void ParseSettings(Command& command, Cursor& cursor) {
@@ -479,7 +681,9 @@ void ParseSend(Command& command, Cursor& cursor) {
             command.verb = Verb::Help;
             return;
         }
-        if (ApplyGlobalFlag(command, flag) == FlagResult::Handled) continue;
+        const FlagResult global = ApplyGlobalFlag(command, flag, cursor);
+        if (global == FlagResult::Failed) return;
+        if (global == FlagResult::Handled) continue;
 
         FlagResult result = ApplyTextFlag(command, flag, cursor, "--name", command.deviceName);
         if (result == FlagResult::Failed) return;
@@ -513,7 +717,9 @@ void ParseShare(Command& command, Cursor& cursor) {
             command.verb = Verb::Help;
             return;
         }
-        if (ApplyGlobalFlag(command, flag) == FlagResult::Handled) continue;
+        const FlagResult global = ApplyGlobalFlag(command, flag, cursor);
+        if (global == FlagResult::Failed) return;
+        if (global == FlagResult::Handled) continue;
 
         if (!flag.hasInlineValue) {
             if (flag.name == "--terminal") {
@@ -622,7 +828,9 @@ void ParseShell(Command& command, Cursor& cursor) {
             command.verb = Verb::Help;
             return;
         }
-        if (ApplyGlobalFlag(command, flag) == FlagResult::Handled) continue;
+        const FlagResult global = ApplyGlobalFlag(command, flag, cursor);
+        if (global == FlagResult::Failed) return;
+        if (global == FlagResult::Handled) continue;
 
         if (!flag.hasInlineValue && flag.name == "--list") {
             command.shell.list = true;
@@ -673,7 +881,9 @@ void ParseConnect(Command& command, Cursor& cursor) {
             command.verb = Verb::Help;
             return;
         }
-        if (ApplyGlobalFlag(command, flag) == FlagResult::Handled) continue;
+        const FlagResult global = ApplyGlobalFlag(command, flag, cursor);
+        if (global == FlagResult::Failed) return;
+        if (global == FlagResult::Handled) continue;
 
         if (!flag.hasInlineValue) {
             if (flag.name == "--view-only") {
@@ -733,6 +943,7 @@ const char* VerbName(Verb verb) {
         case Verb::Sources: return "sources";
         case Verb::Devices: return "devices";
         case Verb::Trust: return "trust";
+        case Verb::Host: return "host";
         case Verb::Settings: return "settings";
         case Verb::Share: return "share";
         case Verb::Shell: return "shell";
@@ -757,7 +968,9 @@ Command ParseCommand(int argc, const char* const* argv) {
             command.verb = Verb::Version;
             return command;
         }
-        if (ApplyGlobalFlag(command, flag) == FlagResult::Handled) continue;
+        const FlagResult global = ApplyGlobalFlag(command, flag, cursor);
+        if (global == FlagResult::Failed) return command;
+        if (global == FlagResult::Handled) continue;
         command.error = UnknownOption(flag.name, Verb::None);
         return command;
     }
@@ -779,8 +992,25 @@ Command ParseCommand(int argc, const char* const* argv) {
         case Verb::Version:
         case Verb::Displays: ParseNoArgVerb(command, cursor); break;
         case Verb::Sources: ParseAddressVerb(command, cursor); break;
-        case Verb::Devices: ParseDevices(command, cursor); break;
+        case Verb::Devices:
+            if (token == "key")
+                ParseKey(command, cursor);
+            else if (token == "access")
+                ParseAccess(command, cursor);
+            else
+                ParseDevices(command, cursor);
+            break;
         case Verb::Trust: ParseTrust(command, cursor); break;
+        case Verb::Host:
+            if (token == "host-key") {
+                if (More(cursor) && Take(cursor) == "public")
+                    command.trust = TrustAction::Public;
+                else
+                    command.error = "host-key needs public";
+                if (command.error.empty()) ParseNoArgVerb(command, cursor);
+            } else
+                ParseHost(command, cursor);
+            break;
         case Verb::Settings: ParseSettings(command, cursor); break;
         case Verb::Share: ParseShare(command, cursor); break;
         case Verb::Shell: ParseShell(command, cursor); break;
@@ -874,7 +1104,7 @@ std::string UsageText() {
            "Usage:\n"
            "  " +
            std::string(kProgram) +
-           " [--json] [--quiet] [--verbose] <command> [arguments]\n"
+           " [--json] [--quiet] [--verbose] [--config-dir PATH] <command> [arguments]\n"
            "\n"
            "Commands:\n"
            "  share               share this machine on the network\n"
@@ -885,6 +1115,10 @@ std::string UsageText() {
            "  sources ADDRESS     ask a host what it is sharing\n"
            "  devices             machines allowed to connect to this one\n"
            "  trust               hosts this machine has decided to trust\n"
+           "  key                 manage named client identities\n"
+           "  access              manage allowed client public keys\n"
+           "  host                manage saved host profiles\n"
+           "  host-key public     print this host's public key\n"
            "  settings            the settings the desktop app also uses\n"
            "  version             print the version\n"
            "  help [COMMAND]      print this list, or one command in detail\n"
@@ -912,6 +1146,27 @@ std::string UsageText(Verb verb) {
                    "Ask a host what it is sharing. Its TLS key must already be pinned.\n";
         case Verb::Devices:
             return "Usage: " + program +
+                   " key generate --name NAME\n"
+                   "       " +
+                   program +
+                   " key import --name NAME --file PATH [--passphrase-stdin]\n"
+                   "       " +
+                   program +
+                   " key public --name NAME\n"
+                   "       " +
+                   program +
+                   " key list [--json]\n"
+                   "       " +
+                   program +
+                   " access add --stdin\n"
+                   "       " +
+                   program +
+                   " access list [--json]\n"
+                   "       " +
+                   program +
+                   " access remove --fingerprint SHA256:...\n"
+                   "       " +
+                   program +
                    " devices [list]\n"
                    "       " +
                    program +
@@ -958,6 +1213,26 @@ std::string UsageText(Verb verb) {
                    "Hosts this machine has decided to trust, by key. --name saves an alias;\n"
                    "--identity chooses the client key for that host. A connection flag overrides\n"
                    "the saved choice. Forgetting a host blocks new connections until pinned.\n";
+        case Verb::Host:
+            return "Usage: " + program +
+                   " host add ALIAS --address IP[:PORT] --identity NAME --host-key-stdin\n"
+                   "       " +
+                   program +
+                   " host update ALIAS [--address IP[:PORT]] [--identity NAME] [--host-key-stdin]\n"
+                   "       " +
+                   program +
+                   " host remove ALIAS\n"
+                   "       " +
+                   program +
+                   " host list [--json]\n"
+                   "       " +
+                   program +
+                   " host public\n"
+                   "       " +
+                   program +
+                   " host-key public\n"
+                   "\n"
+                   "The host key is an OpenSSH public key line read from stdin. Saved aliases work with connect, sources, shell, and send.\n";
         case Verb::Settings:
             return "Usage: " + program +
                    " settings [list]\n"
