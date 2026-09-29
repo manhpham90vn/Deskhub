@@ -10,9 +10,6 @@
 
 #include <drm_fourcc.h>
 
-#include <fcntl.h>
-#include <unistd.h>
-
 #include <atomic>
 #include <cstring>
 #include <cstdio>
@@ -322,7 +319,6 @@ bool ScreenCapture::usingDmaBuf() const {
 
 bool ScreenCapture::Start(uint64_t targetId, const deskhub::media::CaptureOptions& opt,
     FrameHandler onFrame) {
-    const int portalFd = deskhubp::PortalScreenCast::Instance().pipewireFd();
     const uint32_t nodeId = uint32_t(targetId);
     const uint32_t fps = opt.fps;
     std::call_once(g_pwInit, [] { pw_init(nullptr, nullptr); });
@@ -349,9 +345,15 @@ bool ScreenCapture::Start(uint64_t targetId, const deskhub::media::CaptureOption
         return false;
     }
 
-    const int fd = fcntl(portalFd, F_DUPFD_CLOEXEC, 3);
+    const int fd = deskhubp::PortalScreenCast::Instance().OpenRemoteFd();
     if (fd < 0) {
-        LOGE("[Capture][node %u] Could not dup the portal fd.", nodeId);
+        LOGE(
+            "[Capture][node %u] The portal would not open a PipeWire remote for this screen: "
+            "%s. Each captured screen needs a remote of its own: a duplicated descriptor is "
+            "the same socket, so two pw_core objects would interleave their messages and "
+            "steal each other's SCM_RIGHTS buffer descriptors, which fails one of the "
+            "streams with 'Buffer allocation failed'.",
+            nodeId, deskhubp::PortalScreenCast::Instance().lastError().c_str());
         pw_thread_loop_unlock(im->loop);
         Stop();
         return false;
