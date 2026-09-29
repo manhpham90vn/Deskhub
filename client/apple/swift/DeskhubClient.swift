@@ -117,13 +117,31 @@ nonisolated enum DeskhubClient {
         Int(dh_max_transfer_files())
     }
 
-    static func listSources(address: String) -> HostQuery? {
+    private static let queryFailureCapacity = 512
+    private static let hostKeyCapacity = 128
+    private static let trustPromptCapacity = 640
+
+    static func trustNewHostPrompt(_ address: String, fingerprint: String) -> String {
+        buffered(trustPromptCapacity) { dh_trust_new_host_prompt(address, fingerprint, $0, $1) }
+    }
+
+    static func listSources(address: String) -> HostQueryOutcome {
         var buf = [DHSourceInfo](repeating: DHSourceInfo(), count: Int(dh_max_sources()))
         var caps = DHHostCaps()
+        var failure = [CChar](repeating: 0, count: queryFailureCapacity)
+        var newHostKey = [CChar](repeating: 0, count: hostKeyCapacity)
         let count = buf.withUnsafeMutableBufferPointer { ptr in
-            dh_list_sources(address, ptr.baseAddress, Int32(ptr.count), &caps)
+            dh_list_sources(
+                address, ptr.baseAddress, Int32(ptr.count), &caps,
+                &failure, Int32(queryFailureCapacity),
+                &newHostKey, Int32(hostKeyCapacity)
+            )
         }
-        guard count >= 0 else { return nil }
+        guard count >= 0 else {
+            return HostQueryOutcome(
+                failure: String(cString: failure), newHostKey: String(cString: newHostKey)
+            )
+        }
         let sources = buf.prefix(Int(count)).map { info in
             Source(
                 id: info.sourceId,
@@ -133,10 +151,10 @@ nonisolated enum DeskhubClient {
                 pickerLabel: cString(info.pickerLabel)
             )
         }
-        return HostQuery(
+        return HostQueryOutcome(query: HostQuery(
             sources: sources,
             caps: HostCaps(acceptsInput: caps.acceptsInput, terminal: caps.terminal,
                            files: caps.files)
-        )
+        ))
     }
 }

@@ -37,6 +37,7 @@ struct TerminalViewerConfig {
     std::string hostLabel{};
     std::string clientName{};
     std::string clientIdentityName{};
+    bool acceptNewHostKey = false;
     deskhub::TermSize size{};
     uint32_t resumeId = 0;
     bool deferOpen = false;

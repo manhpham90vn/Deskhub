@@ -13,10 +13,8 @@
 
 namespace deskhubp {
 
-struct ConnectOutcome {
+struct ConnectOutcome : SourceQueryReply {
     bool ok = false;
-    std::vector<deskhub::SourceInfo> sources;
-    deskhub::HostCaps caps{};
 };
 
 class SourceQueryAsync {
@@ -29,7 +27,7 @@ public:
         std::thread([pending = pending_, server,
                         postToUi = std::move(postToUi), onDone = std::move(onDone)] {
             auto outcome = std::make_shared<ConnectOutcome>();
-            outcome->ok = QuerySources(server, outcome->sources, nullptr, &outcome->caps);
+            outcome->ok = QuerySources(server, *outcome);
             pending->store(false, std::memory_order_release);
             postToUi([outcome, onDone] { onDone(*outcome); });
         }).detach();

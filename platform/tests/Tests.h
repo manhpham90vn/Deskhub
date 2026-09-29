@@ -14,6 +14,7 @@ void RunOpusCodecTests();
 void RunAudioBroadcasterTests();
 void RunScreenHostCallbackTests();
 void RunAppDataFileTests();
+void RunHostProfilesTests();
 void RunHostIdentityTests();
 void RunClientIdentityTests();
 void RunQuicEndpointTests();

@@ -10,7 +10,6 @@ final class FileSendModel: TransferDriver {
     @ObservationIgnored private var settled = true
 
     var address = ""
-    var deviceName = ""
 
     @ObservationIgnored private nonisolated(unsafe) var handle: OpaquePointer?
     private var poll: Timer?
@@ -39,7 +38,7 @@ final class FileSendModel: TransferDriver {
 
         release()
         handle = withCStrings(paths) { ptr, count in
-            dh_send_start(address, deviceName, ptr, count)
+            dh_send_start(address, DeviceNameModel.saved, ptr, count)
         }
         guard handle != nil else {
             transferError = DeskhubClient.couldNotConnect(address)

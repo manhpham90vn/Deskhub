@@ -12,6 +12,7 @@
 
 #include "TrayIcon.h"
 #include "deskhub/net/PairedDevices.h"
+#include "deskhub/net/TrustStore.h"
 #include "deskhub/session/client/ConnectFlow.h"
 #include "deskhub/session/client/OpenViewers.h"
 #include "deskhub/ui/AutoShareGate.h"
@@ -20,6 +21,7 @@
 #include "deskhub/ui/RecentDevices.h"
 #include "deskhub/ui/UiSettings.h"
 #include "deskhubp/host/ShareDriver.h"
+#include "deskhubp/system/ClientIdentity.h"
 #include "deskhubp/host/SharingHost.h"
 #include "deskhubp/client/SourceQueryAsync.h"
 #include "deskhubp/host/ShareController.h"
@@ -80,6 +82,26 @@ private:
     void SelectPage(int page);
 
     void RefreshPairedDevices();
+    void BuildHostKeySection(GtkWidget* box);
+    void BuildAllowedClientsSection(GtkWidget* box);
+    void BuildMyKeysSection(GtkWidget* box);
+    void RefreshClientKeys();
+    void ShowInlineError(GtkWidget* label, const char* text);
+    void AllowPastedClient();
+    void OfferToTrustNewHost(const std::string& addr, const deskhub::Fingerprint& key);
+    static void OnAllowClientClicked(GtkButton* button, gpointer user);
+    static void OnAllowClientActivate(GtkEntry* entry, gpointer user);
+    static void OnCopyTextClicked(GtkButton* button, gpointer user);
+    static void OnNewKeyClicked(GtkButton* button, gpointer user);
+    static void OnImportKeyClicked(GtkButton* button, gpointer user);
+    void BuildSavedHostsSection(GtkWidget* box);
+    void RefreshSavedHosts();
+    void ShowSavedHostsError(const char* text);
+    GtkWidget* SavedHostAction(const char* label, size_t index, GCallback onClick,
+        bool destructive);
+    const deskhub::TrustedHost* SavedHostOf(GtkButton* button) const;
+    static void OnRemoveHostClicked(GtkButton* button, gpointer user);
+    static void OnConnectHostClicked(GtkButton* button, gpointer user);
     void ForgetEveryDevice();
 
     bool Sharing() const;
@@ -211,6 +233,15 @@ private:
     GtkWidget* pairedView_ = nullptr;
     GtkWidget* pairedHintLabel_ = nullptr;
     std::vector<deskhub::PairedDevice> pairedDevices_;
+    GtkWidget* allowClientEntry_ = nullptr;
+    GtkWidget* allowClientError_ = nullptr;
+    GtkWidget* clientKeysView_ = nullptr;
+    GtkWidget* clientKeysError_ = nullptr;
+    std::vector<deskhubp::ClientIdentityInfo> clientKeys_;
+    GtkWidget* savedHostsView_ = nullptr;
+    GtkWidget* savedHostsHint_ = nullptr;
+    GtkWidget* savedHostsError_ = nullptr;
+    std::vector<deskhub::TrustedHost> savedHosts_;
     GtkWidget* deviceHintLabel_ = nullptr;
     GtkListStore* deviceStore_ = nullptr;
     std::vector<deskhub::ui::DeviceRow> deviceRows_;

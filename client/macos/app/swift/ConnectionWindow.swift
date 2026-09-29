@@ -2,7 +2,6 @@ import SwiftUI
 
 struct ConnectionRequest: Codable, Hashable {
     var address: String
-    var name: String
     var sources: [Source]
     var caps: HostCaps
     var control: Bool
@@ -145,6 +144,6 @@ struct ConnectionWindow: View {
 
     private func openFilesSession() {
         guard request.caps.files else { return }
-        openWindow(value: TransferRequest(address: request.address, name: request.name))
+        openWindow(value: TransferRequest(address: request.address))
     }
 }

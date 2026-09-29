@@ -34,6 +34,7 @@ struct FileTransferClientConfig {
     std::string hostLabel{};
     std::string clientName{};
     std::string clientIdentityName{};
+    bool acceptNewHostKey = false;
     std::vector<std::filesystem::path> files{};
 };
 

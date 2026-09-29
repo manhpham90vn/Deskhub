@@ -120,6 +120,7 @@ bool TerminalViewer::Start(const TerminalViewerConfig& config,
     linkConfig.hostLabel = config_.hostLabel;
     linkConfig.clientName = config_.clientName;
     linkConfig.clientIdentityName = config_.clientIdentityName;
+    linkConfig.acceptNewHostKey = config_.acceptNewHostKey;
     linkConfig.recoverLink = true;
     linkConfig.recoverGraceUs = deskhub::kTerminalReattachGraceUs;
 

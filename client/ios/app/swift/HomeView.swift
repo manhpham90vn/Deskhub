@@ -22,9 +22,12 @@ struct HomeView: View {
                 .tag(1)
 
             ScrollView {
-                DevicesPage()
-                    .padding()
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                DevicesPage(
+                    trustedHostsRevision: model.connect.trustedHostsRevision,
+                    onConnectHost: connectSavedHost
+                )
+                .padding()
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
             .tabItem {
                 Label(
@@ -42,5 +45,10 @@ struct HomeView: View {
             }
             .tag(3)
         }
+    }
+
+    private func connectSavedHost(_ address: String) {
+        page = 0
+        model.beginConnect(to: address)
     }
 }

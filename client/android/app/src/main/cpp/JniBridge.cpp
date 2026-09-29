@@ -94,6 +94,18 @@ jfloatArray NewFloatArray2(JNIEnv* env, jfloat a, jfloat b) {
     return arr;
 }
 
+constexpr int kFailureCapacity = 512;
+constexpr int kNewHostKeyCapacity = 128;
+constexpr jsize kFailureSlot = 0;
+constexpr jsize kNewHostKeySlot = 1;
+
+void StoreText(JNIEnv* env, jobjectArray out, jsize slot, const char* value) {
+    if (!out || env->GetArrayLength(out) <= slot) return;
+    jstring text = env->NewStringUTF(value);
+    env->SetObjectArrayElement(out, slot, text);
+    env->DeleteLocalRef(text);
+}
+
 void DropWindow() {
     if (!g_window) return;
     dh_screen_set_layer(g_session, nullptr);
@@ -188,7 +200,7 @@ Java_com_deskhub_app_NativeClient_nativeIsZoomed(JNIEnv*, jobject, jfloat zoom) 
 
 JNIEXPORT jobjectArray JNICALL
 Java_com_deskhub_app_NativeClient_nativeListSources(JNIEnv* env, jobject, jstring addrStr,
-    jbooleanArray capsOut) {
+    jbooleanArray capsOut, jobjectArray failureOut) {
     jclass cls = env->FindClass(kSourceClass);
     if (!cls) return nullptr;
     jmethodID ctor =
@@ -198,8 +210,15 @@ Java_com_deskhub_app_NativeClient_nativeListSources(JNIEnv* env, jobject, jstrin
     const std::string addr = FromJString(env, addrStr);
     DHSourceInfo sources[deskhub::kMaxSources];
     DHHostCaps caps{};
-    const int count = dh_list_sources(addr.c_str(), sources, int(deskhub::kMaxSources), &caps);
-    if (count == DH_SOURCE_QUERY_FAILED) return nullptr;
+    char failure[kFailureCapacity] = {};
+    char newHostKey[kNewHostKeyCapacity] = {};
+    const int count = dh_list_sources(addr.c_str(), sources, int(deskhub::kMaxSources), &caps,
+        failure, int(sizeof(failure)), newHostKey, int(sizeof(newHostKey)));
+    if (count == DH_SOURCE_QUERY_FAILED) {
+        StoreText(env, failureOut, kFailureSlot, failure);
+        StoreText(env, failureOut, kNewHostKeySlot, newHostKey);
+        return nullptr;
+    }
 
     if (capsOut && env->GetArrayLength(capsOut) >= 2) {
         const jboolean flags[2] = {static_cast<jboolean>(caps.terminal ? JNI_TRUE : JNI_FALSE),
@@ -550,24 +569,16 @@ Java_com_deskhub_app_NativeClient_nativePairedForgetAll(JNIEnv*, jobject) {
     dh_paired_forget_all();
 }
 
-JNIEXPORT jstring JNICALL
-Java_com_deskhub_app_NativeClient_nativeOwnFingerprint(JNIEnv* env, jobject) {
-    char buf[128];
-    dh_own_fingerprint(buf, int(sizeof(buf)));
-    return env->NewStringUTF(buf);
+JNIEXPORT jboolean JNICALL
+Java_com_deskhub_app_NativeClient_nativePairedAddPublicKey(JNIEnv* env, jobject,
+    jstring publicKeyStr) {
+    return dh_paired_add_public_key(FromJString(env, publicKeyStr).c_str()) ? JNI_TRUE : JNI_FALSE;
 }
 
 JNIEXPORT jstring JNICALL
 Java_com_deskhub_app_NativeClient_nativeHostFingerprint(JNIEnv* env, jobject) {
     char buf[128];
     dh_host_fingerprint(buf, int(sizeof(buf)));
-    return env->NewStringUTF(buf);
-}
-
-JNIEXPORT jstring JNICALL
-Java_com_deskhub_app_NativeClient_nativeOwnPublicKey(JNIEnv* env, jobject) {
-    char buf[1024];
-    dh_own_public_key(buf, int(sizeof(buf)));
     return env->NewStringUTF(buf);
 }
 

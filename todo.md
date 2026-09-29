@@ -48,6 +48,7 @@ Trạng thái: đang triển khai; các ô chưa đánh dấu vẫn còn phải 
 - [x] Import OpenSSH private key Ed25519/P-256 qua parser RustCrypto `ssh-key` tích hợp trong patch quiche; hỗ trợ khóa mã hóa bằng passphrase nhập qua stdin. Test bằng khóa `ssh-keygen` thật, gồm passphrase sai, khóa RSA không hỗ trợ, dữ liệu cắt ngắn và cặp khóa không khớp. Bộ test platform, `make test`, `make lint-cpp`, build CLI và build quiche cho iOS arm64 đã qua.
 - [x] Hoàn tất chính sách lưu khóa ở mục 4 theo lựa chọn file riêng cho host nền macOS/Linux: thư mục cấu hình POSIX kiểm tra theo file descriptor, Windows có ACL riêng; mọi đường ghi app data nay ghi tạm với quyền chặt rồi thay thế atomic. Broadcast iOS không tạo identity ngoài App Group khi container lỗi. Build iOS Simulator và Android Debug, platform tests, lint C++/Swift/Kotlin đã qua; build/test Windows cần gate Windows ở mục 9.
 - [x] Gỡ passcode khỏi mọi tầng còn lại: `HostLinkConfig`/`ScreenViewerConfig`/`TerminalViewerConfig`/`FileTransferClientConfig`, `QuerySources`, `ShareOptions`, `UiSettings`, `RecentDevice`, `SettingField`, chuỗi UI và hằng số `kPasscodeDigits`/`IsValidPasscode`. FFI bỏ tham số passcode của `dh_list_sources`, `dh_screen_start`, `dh_send_start`, `dh_share_start`, `dh_term_open*`, `dh_recent_touch`, `dh_settings_save`, `dh_sharing_status`; xóa `dh_is_valid_passcode`, `dh_passcode_digits`, `dh_recent_passcode`, `dh_passcode_display` và string ID passcode. Màu thẻ đổi tên thành `InfoCard` cho thẻ cổng. Linux, Windows, Android, macOS/iOS bỏ ô passcode khi kết nối, thẻ passcode trên trang chia sẻ, dòng passcode trong Settings và hộp thoại nhập passcode; bấm thiết bị trong danh sách kết nối thẳng tới địa chỉ đã lưu. Sửa golden vector auth trong integration test theo `kAuthVersion = 6`; xóa `CheckPairedDevice`, `LoadPairedDevices`, string ID `ConnectPromptTitle`/`SettingsSectionSecurity` không còn nơi dùng; sửa ba lỗi clang-tidy ở `Transcript.cpp` và `ClientIdentity.cpp`. Mô tả App Store/Play Store chuyển sang cấp quyền bằng khóa. Trên Linux đã qua `make test`, platform tests, integration tests, `make lint`, `make lint-tidy`, `make build-linux` và `make build-android` (kèm Android Lint); Windows và macOS/iOS chưa build được cục bộ. GUI chưa có cách ghim khóa host (mục 6.1), nên client GUI chưa kết nối được tới host mới cho tới khi có trang “Host đã lưu”.
+- [x] Đưa logic host profile ra khỏi CLI: `core/ui/HostProfiles` kiểm tra tên, chuẩn hóa địa chỉ `IP:port`, chống trùng tên/địa chỉ và giữ trường không đổi khi cập nhật; `platform/client/HostProfiles` đọc/ghi `known_hosts`, nhận khóa host dạng fingerprint `SHA256:` hoặc public key một dòng và kiểm tra khóa client tồn tại. CLI `host add/update/remove` và FFI mới `HostProfileFfi.h` dùng chung đường này. Trang Devices trên Linux, Windows, Android và macOS/iOS có mục “Saved hosts”: liệt kê, thêm (tên, địa chỉ, khóa host, chọn khóa client), xóa và kết nối thẳng từ một host đã lưu. Lỗi kết nối giờ hiện đúng nguyên nhân từ `HostLink` (không tới được, host chưa ghim, khóa host đổi, khóa client chưa được cấp quyền) thay cho mã `NotPaired` mặc định; `dh_list_sources` trả câu lỗi. `scripts/cli-smoke.sh` viết lại theo luồng khóa, thêm ca host chưa ghim và khóa chưa được cấp quyền. Trên Linux đã qua ba bộ test, `make lint`, `make lint-tidy`, cli-smoke, `make build-linux`, `make build-android`; Windows và macOS/iOS chưa build được cục bộ.
 
 Đã có nhiều identity client riêng, host profile và import OpenSSH/PKCS#8. Luồng auth mới không mở popup xác nhận kết nối; hàng đợi và API trả lời approval đã được gỡ. Passcode đã được gỡ khỏi code sản phẩm (chỉ còn đường migration xóa khóa `passcode=` trong file settings cũ); các message beacon discovery còn trong code và phải gỡ tiếp. File settings/recent cũ được làm sạch khi nạp thành công; nếu ghi thất bại, file cũ còn nguyên để thử lại. Migration cấu hình mới có version vẫn cần làm.
 
@@ -58,9 +59,9 @@ Gate chưa qua trọn vẹn: build macOS có ký cần chứng chỉ phát tri�
 - [x] Bỏ hoàn toàn passcode dùng để kết nối/pair, SPAKE2 và dữ liệu passcode được lưu. Tài liệu sản phẩm còn mô tả passcode và được xử lý ở mục 10.
 - [x] Bỏ popup duyệt kết nối, hàng đợi yêu cầu duyệt và chế độ tự chấp nhận máy lạ. Cờ `allow_new_pairings` còn trong settings cũ nhưng không được handshake đọc; xóa cùng migration settings.
 - [ ] Mọi kết nối phải xác thực bằng chữ ký từ private key tương ứng với public key đã được cấp quyền.
-- [ ] Cho phép thiết bị tự tạo khóa hoặc import private key có sẵn bên ngoài.
-- [ ] Host nhận public key của client bằng text. GUI có ô dán; CLI nhận stdin; service sau này đọc cùng cấu hình text.
-- [ ] Client kết nối tới địa chỉ được cấu hình trước và kiểm tra khóa host đã ghim.
+- [x] Cho phép thiết bị tự tạo khóa hoặc import private key có sẵn bên ngoài (GUI “My keys” và CLI `key generate/import`).
+- [x] Host nhận public key của client bằng text. GUI có ô dán; CLI nhận stdin; service sau này đọc cùng cấu hình text.
+- [x] Client kiểm tra khóa host đã ghim trước khi xác thực; host mới được ghim theo quyết định TOFU (xác nhận fingerprint hoặc `--accept-new-host-key`), khóa đổi bị chặn.
 - [ ] Bỏ tìm máy trong LAN ở UI, CLI và đường xử lý discovery trên mạng.
 - [ ] Dùng chung logic cho desktop, mobile, CLI và service tương lai.
 
@@ -82,12 +83,19 @@ Giả sử A muốn kết nối tới B:
 
 Public key và thông tin host phải được chuyển qua kênh mà chủ thiết bị tin cậy. Một public key tự ký hoặc lấy trực tiếp từ host chưa biết không tự tạo ra sự tin cậy.
 
-- [x] Không tự tin cậy host lần đầu dựa trên địa chỉ, tên máy hoặc việc TLS kết nối thành công.
-- [x] Host chưa được cấu hình khóa: dừng và trả lỗi hướng dẫn thêm host.
+**Quyết định 2026-09-29 — tin host theo kiểu SSH (TOFU):** lần kết nối đầu tới một host chưa có trong `known_hosts`, GUI hiện fingerprint `SHA256:` của khóa TLS host và chỉ lưu khi người dùng xác nhận; CLI từ chối, in fingerprint và chỉ lưu khi có `--accept-new-host-key` (tương đương `StrictHostKeyChecking=accept-new`). Khóa host đổi luôn bị chặn cứng, không có nút bỏ qua; muốn kết nối lại phải xóa host trong “Host đã tin”. Dán khóa host trước (`host add --host-key-stdin`, form trong GUI) vẫn được giữ cho ai cần tránh MITM ở lần đầu. Quyết định này thay các mục “không tự tin cậy host lần đầu” và “không mở popup trust” bên dưới.
+
+**Bố cục trang Devices:** chia hai khối theo vai. “Khi máy này là host”: khóa host của máy (fingerprint + Copy) và danh sách client được phép (dán public key, thu hồi). “Khi máy này là client”: “Khóa của tôi” (danh sách khóa, Copy public key từng khóa, tạo khóa mới, import) và “Host đã tin” (known_hosts: kết nối, xóa). GUI không có form thêm host thủ công; ghim trước và đổi tên/khóa client của host làm qua CLI `host add/update`.
+
+- [x] Triển khai TOFU và bố cục Devices mới trên core/platform/CLI và cả 5 app: `QuerySources` trả fingerprint của host lạ, `TrustNewHost` lưu host với tên sinh từ địa chỉ, `HostLinkConfig.acceptNewHostKey` và cờ CLI `--accept-new-host-key`; khóa host đổi vẫn bị chặn kể cả khi có cờ. API tạo/import khóa client có mã lỗi (`deskhubp/system/ClientKeys.h`, `ClientKeyFfi.h`), `LoadClientKeys` luôn đảm bảo có khóa `default`, và `HostLink` tự tạo khóa `default` khi hồ sơ host trỏ tới nó. Bỏ `dh_own_public_key`, `dh_own_fingerprint`, `dh_client_identity_names`, `dh_host_profile_add`. Trên Linux đã qua ba bộ test, cli-smoke, `make lint`, `make lint-tidy`, `make build-linux`, `make build-android`; Windows và macOS/iOS chưa build được cục bộ.
+- [x] Bỏ form thêm host thủ công khỏi GUI (Trusted hosts chỉ còn Connect/Remove; ghim trước qua CLI). Public key copy ra có nhãn giống SSH: `ssh-ed25519 AAAA… <tên thiết bị>` hoặc `<tên thiết bị> (<tên khóa>)` (`ui::ClientKeyLabel`, `deskhubp::ClientPublicKeyLine`, CLI `key public`), nên host hiện tên client thay cho “(unnamed)”. Tên thiết bị chỉ còn một chỗ nhập: mục “Device name” đầu khối General của Settings (layout dùng chung `SettingField::DeviceName`), bỏ ô “Your name” ở trang Client trên cả 5 app; host, client và nhãn public key cùng dùng tên này.
+
+- [x] Không tự tin cậy host lần đầu dựa trên địa chỉ, tên máy hoặc việc TLS kết nối thành công. Theo quyết định TOFU ở trên, host lần đầu chỉ được lưu khi người dùng xác nhận fingerprint hoặc dùng `--accept-new-host-key`.
+- [x] Host chưa được cấu hình khóa: dừng; GUI hỏi xác nhận fingerprint, CLI in fingerprint và hướng dẫn `--accept-new-host-key`.
 - [x] Host đổi khóa: dừng và yêu cầu cập nhật chủ động trong cấu hình/Devices; không mở popup chấp nhận ngay khi Connect.
 - [x] Client chưa được cấp quyền: từ chối; không tạo yêu cầu duyệt.
-- [ ] Public key chỉ định danh khóa. Tên/comment là nhãn hiển thị, không quyết định quyền truy cập.
-- [ ] Mỗi chiều truy cập được cấp quyền riêng; A vào được B không tự cấp quyền B vào A.
+- [x] Public key chỉ định danh khóa. Tên/comment là nhãn hiển thị, không quyết định quyền truy cập.
+- [x] Mỗi chiều truy cập được cấp quyền riêng; A vào được B không tự cấp quyền B vào A.
 
 ## 3. Điểm xuất phát trong code
 
@@ -175,11 +183,11 @@ Tên file và lệnh bên dưới là thiết kế dự kiến cần thống nh�
 
 ### 6.1. GUI
 
-- [ ] Trang “Khóa của tôi”: tạo khóa, import private key, xem/copy public key và fingerprint.
-- [ ] Trang “Thiết bị được phép”: dán public key text, đặt nhãn, liệt kê và thu hồi khóa.
-- [ ] Trang “Host đã lưu”: nhập alias, địa chỉ/cổng, khóa host tin cậy và chọn khóa client.
-- [ ] Kết nối từ danh sách host đã lưu; hiển thị lỗi trong trạng thái kết nối, không mở popup xin duyệt/trust.
-- [ ] Cập nhật Swift dùng chung macOS/iOS, Android, Linux và Windows cùng một hành vi.
+- [x] Trang “Khóa của tôi”: tạo khóa, import private key, xem/copy public key và fingerprint (mục “My keys” trong Devices).
+- [x] Trang “Thiết bị được phép”: dán public key text, liệt kê và thu hồi khóa. Nhãn lấy từ phần comment của public key (tên thiết bị bên client); chưa có chỗ sửa nhãn trên host.
+- [x] Trang “Host đã lưu”: nhập alias, địa chỉ/cổng, khóa host tin cậy và chọn khóa client. Sửa host đã lưu hiện chỉ có qua CLI `host update`; GUI xóa rồi thêm lại.
+- [x] Kết nối từ danh sách host đã lưu; hiển thị lỗi trong trạng thái kết nối, không mở popup xin duyệt/trust.
+- [x] Cập nhật Swift dùng chung macOS/iOS, Android, Linux và Windows cùng một hành vi. Windows và macOS/iOS chưa được build cục bộ.
 - [x] Xóa trường passcode, nút scan, switch cho phép pair máy mới và các màn hình yêu cầu duyệt. Nút làm mới còn lại chỉ nạp lại danh sách đã lưu, không quét mạng.
 - [ ] Chỉ lưu/hiển thị “last seen” dựa trên tương tác đã xác thực; không probe plaintext để cập nhật trạng thái danh sách.
 

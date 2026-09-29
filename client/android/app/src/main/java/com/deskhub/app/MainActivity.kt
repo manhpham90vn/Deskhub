@@ -8,12 +8,14 @@ import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.media.projection.MediaProjectionManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -32,6 +34,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -53,26 +56,35 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.addPathNodes
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 private const val TAG = "Deskhub"
 
@@ -341,10 +353,8 @@ private fun MainScreen(
     var step by remember { mutableStateOf<Step>(Step.Address) }
     var address by remember { mutableStateOf(NativeClient.addressHost(initialAddress)) }
     var connectPort by remember { mutableStateOf(portFieldText(initialAddress)) }
-    var deviceName by remember {
-        mutableStateOf(NativeClient.deviceName().ifBlank { Build.MODEL.orEmpty() })
-    }
     var connectError by remember { mutableStateOf("") }
+    var pendingTrust by remember { mutableStateOf<TrustRequest?>(null) }
     var authed by remember { mutableStateOf<NativeClient.HostQuery?>(null) }
     var authedAddr by remember { mutableStateOf("") }
     var querySeq by remember { mutableStateOf(0L) }
@@ -370,23 +380,24 @@ private fun MainScreen(
         }
         connectError = ""
         authed = null
-        deviceName = deviceName.trim().ifBlank { Build.MODEL.orEmpty() }
-        NativeClient.setDeviceName(deviceName)
+        NativeClient.setDeviceName(NativeClient.sessionDeviceName())
         val mine = Step.Querying(++querySeq)
         step = mine
         scope.launch {
-            val queried = NativeClient.queryHost(addr)
+            val outcome = NativeClient.queryHost(addr)
             if (step != mine) return@launch
             step = Step.Address
-            if (queried == null) {
-                connectError = NativeClient.sourceQueryFailed(addr)
-                return@launch
+            when (outcome) {
+                is NativeClient.QueryOutcome.Failed -> connectError = outcome.reason
+                is NativeClient.QueryOutcome.UnknownHost -> pendingTrust = TrustRequest(addr, outcome.fingerprint)
+                is NativeClient.QueryOutcome.Reached -> {
+                    onRemember(addr)
+                    NativeClient.recentTouch(addr)
+                    deviceRows = NativeClient.deviceRows()
+                    authed = outcome.query
+                    authedAddr = addr
+                }
             }
-            onRemember(addr)
-            NativeClient.recentTouch(addr)
-            deviceRows = NativeClient.deviceRows()
-            authed = queried
-            authedAddr = addr
         }
     }
 
@@ -407,7 +418,7 @@ private fun MainScreen(
 
     val openFileSend: () -> Unit = {
         if (authed?.files == true) {
-            sendingTo = StandaloneFileSendDriver(authedAddr, deviceName)
+            sendingTo = StandaloneFileSendDriver(authedAddr, NativeClient.sessionDeviceName())
         }
     }
 
@@ -422,7 +433,22 @@ private fun MainScreen(
         connect(NativeClient.composeAddress(address, connectPort))
     }
 
-    if (step is Step.Querying) {
+    val trust = pendingTrust
+    if (trust != null) {
+        TrustNewHostDialog(
+            request = trust,
+            onCancel = { pendingTrust = null },
+            onTrust = {
+                pendingTrust = null
+                val failure = NativeClient.trustNewHost(trust.address, trust.fingerprint)
+                if (failure != null) {
+                    connectError = failure
+                } else {
+                    connect(trust.address)
+                }
+            },
+        )
+    } else if (step is Step.Querying) {
         AlertDialog(
             onDismissRequest = { step = Step.Address },
             text = {
@@ -436,7 +462,9 @@ private fun MainScreen(
             },
             confirmButton = {},
             dismissButton = {
-                TextButton(onClick = { step = Step.Address }) { Text("Cancel") }
+                TextButton(onClick = { step = Step.Address }) {
+                    Text(NativeClient.string(NativeClient.STR_CANCEL_ACTION))
+                }
             },
         )
     } else if (connectError.isNotEmpty()) {
@@ -475,8 +503,6 @@ private fun MainScreen(
                     connectPort = it
                     authed = null
                 },
-                deviceName = deviceName,
-                onDeviceNameChange = { deviceName = it },
                 busy = step is Step.Querying,
                 authed = authed,
                 authedAddr = authedAddr,
@@ -511,6 +537,32 @@ private fun MainScreen(
     }
 }
 
+private data class TrustRequest(
+    val address: String,
+    val fingerprint: String,
+)
+
+@Composable
+private fun TrustNewHostDialog(
+    request: TrustRequest,
+    onCancel: () -> Unit,
+    onTrust: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onCancel,
+        title = { Text(NativeClient.string(NativeClient.STR_TRUST_NEW_HOST_TITLE)) },
+        text = { Text(NativeClient.trustNewHostPrompt(request.address, request.fingerprint)) },
+        confirmButton = {
+            TextButton(onClick = onTrust) {
+                Text(NativeClient.string(NativeClient.STR_TRUST_NEW_HOST_ACTION))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onCancel) { Text(NativeClient.string(NativeClient.STR_CANCEL_ACTION)) }
+        },
+    )
+}
+
 private fun portFieldText(addr: String): String {
     val explicit = NativeClient.addressPort(addr)
     val port = if (explicit != 0) explicit else NativeClient.defaultPort()
@@ -537,8 +589,6 @@ private fun HomeScreen(
     onAddressChange: (String) -> Unit,
     connectPort: String,
     onConnectPortChange: (String) -> Unit,
-    deviceName: String,
-    onDeviceNameChange: (String) -> Unit,
     busy: Boolean,
     authed: NativeClient.HostQuery?,
     authedAddr: String,
@@ -566,8 +616,6 @@ private fun HomeScreen(
                         onAddressChange = onAddressChange,
                         connectPort = connectPort,
                         onConnectPortChange = onConnectPortChange,
-                        deviceName = deviceName,
-                        onDeviceNameChange = onDeviceNameChange,
                         busy = busy,
                         authed = authed,
                         authedAddr = authedAddr,
@@ -590,7 +638,13 @@ private fun HomeScreen(
                         onStopSharing = onStopSharing,
                     )
 
-                Section.DEVICES -> DevicesScreen()
+                Section.DEVICES ->
+                    DevicesScreen(
+                        onConnectHost = { addr ->
+                            onSectionChange(Section.CLIENT)
+                            onPickDevice(addr)
+                        },
+                    )
 
                 Section.SETTINGS -> SettingsScreen(port = port, onPortChange = onPortChange)
             }
@@ -877,19 +931,116 @@ private fun HostRowList(
     }
 }
 
+private const val COPIED_FEEDBACK_MS = 1500L
+private const val MAX_KEY_FILE_BYTES = 64 * 1024
+
+private fun pairedDateText(unix: Long): String {
+    if (unix <= 0) return "-"
+    return java.text
+        .SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.US)
+        .format(java.util.Date(unix * 1000))
+}
+
 @Composable
-private fun DevicesScreen() {
+private fun AreaHeading(
+    title: String,
+    hint: String,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(
+            title,
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold,
+            color = AccentColor,
+        )
+        Text(hint, style = MaterialTheme.typography.bodyMedium, color = MutedColor)
+    }
+}
+
+@Composable
+private fun Hint(text: String) {
+    Text(text, style = MaterialTheme.typography.bodySmall, color = MutedColor)
+}
+
+@Composable
+private fun CopyTextButton(
+    label: String,
+    text: () -> String,
+) {
+    val context = LocalContext.current
+    var copied by remember { mutableStateOf(false) }
+    LaunchedEffect(copied) {
+        if (!copied) return@LaunchedEffect
+        delay(COPIED_FEEDBACK_MS)
+        copied = false
+    }
+    TextButton(
+        onClick = {
+            copyToClipboard(context, text())
+            copied = true
+        },
+    ) {
+        Text(if (copied) NativeClient.string(NativeClient.STR_COPIED_BUTTON) else label)
+    }
+}
+
+@Composable
+private fun DevicesScreen(onConnectHost: (String) -> Unit) {
+    var keys by remember { mutableStateOf(NativeClient.clientKeys()) }
+
+    Column(
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        AreaHeading(
+            NativeClient.string(NativeClient.STR_DEVICES_HOST_AREA),
+            NativeClient.string(NativeClient.STR_DEVICES_HOST_AREA_HINT),
+        )
+        ThisMachineSection()
+        AllowedClientsSection()
+
+        HorizontalDivider()
+
+        AreaHeading(
+            NativeClient.string(NativeClient.STR_DEVICES_CLIENT_AREA),
+            NativeClient.string(NativeClient.STR_DEVICES_CLIENT_AREA_HINT),
+        )
+        MyKeysSection(keys = keys, onChanged = { keys = NativeClient.clientKeys() })
+        SavedHostsSection(onConnectHost = onConnectHost)
+    }
+}
+
+@Composable
+private fun ThisMachineSection() {
+    val fingerprint = remember { NativeClient.hostFingerprint() }
+    SectionLabel(NativeClient.string(NativeClient.STR_THIS_MACHINE_HEADING))
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        SelectionContainer(modifier = Modifier.weight(1f)) {
+            Text(
+                fingerprint,
+                style = MaterialTheme.typography.bodySmall,
+                fontFamily = FontFamily.Monospace,
+                color = HeadingColor,
+            )
+        }
+        CopyTextButton(NativeClient.string(NativeClient.STR_COPY_BUTTON)) { fingerprint }
+    }
+    Hint(NativeClient.string(NativeClient.STR_THIS_MACHINE_HINT))
+}
+
+@Composable
+private fun AllowedClientsSection() {
     var devices by remember { mutableStateOf(NativeClient.pairedDevices()) }
     var confirmForgetAll by remember { mutableStateOf(false) }
-    val dateText: (Long) -> String = { unix ->
-        if (unix <= 0) {
-            "-"
-        } else {
-            java.text
-                .SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.US)
-                .format(java.util.Date(unix * 1000))
-        }
-    }
+    val refresh: () -> Unit = { devices = NativeClient.pairedDevices() }
 
     if (confirmForgetAll) {
         AlertDialog(
@@ -900,96 +1051,354 @@ private fun DevicesScreen() {
                 TextButton(
                     onClick = {
                         NativeClient.pairedForgetAll()
-                        devices = NativeClient.pairedDevices()
+                        refresh()
                         confirmForgetAll = false
                     },
                 ) { Text(NativeClient.string(NativeClient.STR_PAIRED_FORGET_ALL)) }
             },
             dismissButton = {
-                TextButton(onClick = { confirmForgetAll = false }) { Text("Cancel") }
+                TextButton(onClick = { confirmForgetAll = false }) {
+                    Text(NativeClient.string(NativeClient.STR_CANCEL_ACTION))
+                }
             },
         )
     }
 
-    Column(
-        modifier =
-            Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
-        Heading(NativeClient.string(NativeClient.STR_PAIRED_HEADING))
+    SectionLabel(NativeClient.string(NativeClient.STR_PAIRED_HEADING))
+    Text(
+        NativeClient.string(NativeClient.STR_PAIRED_HINT),
+        style = MaterialTheme.typography.bodyMedium,
+        color = MutedColor,
+    )
+    AllowClientForm(onAllowed = refresh)
+
+    if (devices.isEmpty()) {
         Text(
-            NativeClient.string(NativeClient.STR_PAIRED_HINT),
+            NativeClient.string(NativeClient.STR_PAIRED_EMPTY),
             style = MaterialTheme.typography.bodyMedium,
             color = MutedColor,
         )
+    }
+    for (device in devices) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(device.name.ifBlank { "(unnamed)" }, color = HeadingColor)
+                Text(
+                    "${device.shortKey}  ·  ${pairedDateText(device.pairedUnix)}  ·  " +
+                        pairedDateText(device.lastSeenUnix),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MutedColor,
+                )
+            }
+            TextButton(
+                onClick = {
+                    NativeClient.pairedForget(device.fingerprint)
+                    refresh()
+                },
+            ) { Text(NativeClient.string(NativeClient.STR_PAIRED_FORGET)) }
+        }
+    }
 
-        if (devices.isEmpty()) {
-            Text(
-                NativeClient.string(NativeClient.STR_PAIRED_EMPTY),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MutedColor,
-            )
-        } else {
-            for (device in devices) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            device.name.ifBlank { "(unnamed)" },
-                            color = HeadingColor,
-                        )
-                        Text(
-                            "${device.shortKey}  ·  ${dateText(device.pairedUnix)}  ·  " +
-                                dateText(device.lastSeenUnix),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MutedColor,
-                        )
-                    }
-                    TextButton(
-                        onClick = {
-                            NativeClient.pairedForget(device.fingerprint)
-                            devices = NativeClient.pairedDevices()
-                        },
-                    ) { Text(NativeClient.string(NativeClient.STR_PAIRED_FORGET)) }
+    TextButton(
+        onClick = { confirmForgetAll = true },
+        enabled = devices.isNotEmpty(),
+    ) { Text(NativeClient.string(NativeClient.STR_PAIRED_FORGET_ALL)) }
+    Hint(NativeClient.string(NativeClient.STR_PAIRED_FORGET_NOTE))
+}
+
+@Composable
+private fun AllowClientForm(onAllowed: () -> Unit) {
+    var publicKey by remember { mutableStateOf("") }
+    var invalid by remember { mutableStateOf(false) }
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        OutlinedTextField(
+            value = publicKey,
+            onValueChange = {
+                publicKey = it
+                invalid = false
+            },
+            placeholder = { Text(NativeClient.string(NativeClient.STR_ALLOW_CLIENT_PLACEHOLDER)) },
+            singleLine = true,
+            modifier = Modifier.weight(1f),
+        )
+        Button(
+            onClick = {
+                if (!NativeClient.pairedAddPublicKey(publicKey.trim())) {
+                    invalid = true
+                    return@Button
                 }
+                publicKey = ""
+                invalid = false
+                onAllowed()
+            },
+            enabled = publicKey.isNotBlank(),
+        ) { Text(NativeClient.string(NativeClient.STR_ALLOW_CLIENT_ACTION)) }
+    }
+    if (invalid) {
+        Text(
+            NativeClient.string(NativeClient.STR_ALLOW_CLIENT_INVALID),
+            color = MaterialTheme.colorScheme.error,
+        )
+    }
+}
+
+private sealed interface KeyDialog {
+    data object Create : KeyDialog
+
+    data class Import(
+        val privateKey: String,
+    ) : KeyDialog
+}
+
+@Composable
+private fun MyKeysSection(
+    keys: List<NativeClient.ClientKey>,
+    onChanged: () -> Unit,
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var dialog by remember { mutableStateOf<KeyDialog?>(null) }
+    var error by remember { mutableStateOf("") }
+    val importPicker =
+        rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+            if (uri == null) return@rememberLauncherForActivityResult
+            scope.launch {
+                val text = readKeyFile(context, uri)
+                if (text == null) {
+                    error = NativeClient.unreadableKeyText()
+                    return@launch
+                }
+                error = ""
+                dialog = KeyDialog.Import(text)
             }
         }
 
-        TextButton(
-            onClick = { confirmForgetAll = true },
-            enabled = devices.isNotEmpty(),
-        ) { Text(NativeClient.string(NativeClient.STR_PAIRED_FORGET_ALL)) }
+    when (val open = dialog) {
+        null -> {}
+        is KeyDialog.Create ->
+            KeyNameDialog(
+                askPassphrase = false,
+                onCancel = { dialog = null },
+                onConfirm = { name, _ ->
+                    dialog = null
+                    scope.launch {
+                        error = NativeClient.generateClientKey(name).orEmpty()
+                        onChanged()
+                    }
+                },
+            )
 
-        SectionLabel(NativeClient.string(NativeClient.STR_THIS_MACHINE_HEADING))
-        Text("Client authentication public key")
+        is KeyDialog.Import ->
+            KeyNameDialog(
+                askPassphrase = true,
+                onCancel = { dialog = null },
+                onConfirm = { name, passphrase ->
+                    dialog = null
+                    scope.launch {
+                        error = NativeClient.importClientKey(name, open.privateKey, passphrase).orEmpty()
+                        onChanged()
+                    }
+                },
+            )
+    }
+
+    SectionLabel(NativeClient.string(NativeClient.STR_MY_KEYS_HEADING))
+    Text(
+        NativeClient.string(NativeClient.STR_MY_KEYS_HINT),
+        style = MaterialTheme.typography.bodyMedium,
+        color = MutedColor,
+    )
+    for (key in keys) {
+        ClientKeyRow(key)
+    }
+    if (error.isNotEmpty()) {
+        Text(error, color = MaterialTheme.colorScheme.error)
+    }
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        OutlinedButton(onClick = { dialog = KeyDialog.Create }) {
+            Text(NativeClient.string(NativeClient.STR_NEW_KEY_ACTION))
+        }
+        OutlinedButton(onClick = { importPicker.launch(arrayOf("*/*")) }) {
+            Text(NativeClient.string(NativeClient.STR_IMPORT_KEY_ACTION))
+        }
+    }
+}
+
+private suspend fun readKeyFile(
+    context: Context,
+    uri: Uri,
+): String? =
+    withContext(Dispatchers.IO) {
+        runCatching {
+            context.contentResolver.openInputStream(uri)?.use { stream ->
+                val bytes = stream.readNBytesCompat(MAX_KEY_FILE_BYTES + 1)
+                if (bytes.size > MAX_KEY_FILE_BYTES) null else String(bytes, Charsets.UTF_8)
+            }
+        }.getOrNull()
+    }
+
+private fun java.io.InputStream.readNBytesCompat(limit: Int): ByteArray {
+    val out = java.io.ByteArrayOutputStream()
+    val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+    while (out.size() < limit) {
+        val read = read(buffer, 0, minOf(buffer.size, limit - out.size()))
+        if (read < 0) break
+        out.write(buffer, 0, read)
+    }
+    return out.toByteArray()
+}
+
+@Composable
+private fun ClientKeyRow(key: NativeClient.ClientKey) {
+    var expanded by remember { mutableStateOf(false) }
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(key.name, color = HeadingColor)
+            Text(
+                key.fingerprint,
+                modifier = Modifier.clickable { expanded = !expanded },
+                style = MaterialTheme.typography.bodySmall,
+                fontFamily = FontFamily.Monospace,
+                color = MutedColor,
+                maxLines = if (expanded) Int.MAX_VALUE else 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        CopyTextButton(NativeClient.string(NativeClient.STR_COPY_PUBLIC_KEY_ACTION)) {
+            NativeClient.clientPublicKey(key.name)
+        }
+    }
+}
+
+@Composable
+private fun KeyNameDialog(
+    askPassphrase: Boolean,
+    onCancel: () -> Unit,
+    onConfirm: (String, String) -> Unit,
+) {
+    var name by remember { mutableStateOf("") }
+    var passphrase by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onCancel,
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text(NativeClient.string(NativeClient.STR_KEY_NAME_LABEL)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                if (askPassphrase) {
+                    OutlinedTextField(
+                        value = passphrase,
+                        onValueChange = { passphrase = it },
+                        label = { Text(NativeClient.string(NativeClient.STR_KEY_PASSPHRASE_LABEL)) },
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onConfirm(name.trim(), passphrase) }, enabled = name.isNotBlank()) {
+                Text("OK")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onCancel) { Text(NativeClient.string(NativeClient.STR_CANCEL_ACTION)) }
+        },
+    )
+}
+
+@Composable
+private fun SavedHostsSection(onConnectHost: (String) -> Unit) {
+    var profiles by remember { mutableStateOf(NativeClient.hostProfiles()) }
+    var rowError by remember { mutableStateOf("") }
+    val refresh: () -> Unit = { profiles = NativeClient.hostProfiles() }
+
+    SectionLabel(NativeClient.string(NativeClient.STR_SAVED_HOSTS_HEADING))
+    Text(
+        NativeClient.string(NativeClient.STR_SAVED_HOSTS_HINT),
+        style = MaterialTheme.typography.bodyMedium,
+        color = MutedColor,
+    )
+
+    when (val loaded = profiles) {
+        is NativeClient.HostProfiles.Unreadable ->
+            Text(loaded.message, color = MaterialTheme.colorScheme.error)
+
+        is NativeClient.HostProfiles.Loaded ->
+            SavedHostRows(
+                hosts = loaded.hosts,
+                onConnectHost = onConnectHost,
+                onRemove = { alias ->
+                    rowError = NativeClient.removeHostProfile(alias).orEmpty()
+                    refresh()
+                },
+            )
+    }
+
+    if (rowError.isNotEmpty()) {
+        Text(rowError, color = MaterialTheme.colorScheme.error)
+    }
+}
+
+@Composable
+private fun SavedHostRows(
+    hosts: List<NativeClient.HostProfile>,
+    onConnectHost: (String) -> Unit,
+    onRemove: (String) -> Unit,
+) {
+    if (hosts.isEmpty()) {
         Text(
-            NativeClient.ownPublicKey(),
-            style = MaterialTheme.typography.bodySmall,
-            color = HeadingColor,
-        )
-        Text("Client authentication fingerprint (SHA-256 of SPKI)")
-        Text(
-            NativeClient.ownFingerprint(),
-            style = MaterialTheme.typography.bodySmall,
-            color = HeadingColor,
-        )
-        Text("TLS host fingerprint (SHA-256 of SPKI)")
-        Text(
-            NativeClient.hostFingerprint(),
-            style = MaterialTheme.typography.bodySmall,
-            color = HeadingColor,
-        )
-        Text(
-            NativeClient.string(NativeClient.STR_THIS_MACHINE_HINT),
-            style = MaterialTheme.typography.bodySmall,
+            NativeClient.string(NativeClient.STR_SAVED_HOSTS_EMPTY),
+            style = MaterialTheme.typography.bodyMedium,
             color = MutedColor,
         )
+        return
+    }
+
+    for (host in hosts) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(host.alias.ifBlank { host.endpoint }, color = HeadingColor)
+                Text(
+                    "${host.endpoint}  ·  ${host.identity}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MutedColor,
+                )
+                Text(
+                    host.fingerprint,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MutedColor,
+                )
+            }
+            TextButton(onClick = { onConnectHost(host.endpoint) }) {
+                Text(NativeClient.string(NativeClient.STR_CONNECT_BUTTON))
+            }
+            TextButton(onClick = { onRemove(host.alias) }) {
+                Text(NativeClient.string(NativeClient.STR_REMOVE_HOST_ACTION))
+            }
+        }
     }
 }
 
@@ -1021,6 +1430,8 @@ private fun SettingsScreen(
             style = MaterialTheme.typography.bodyMedium,
             color = MutedColor,
         )
+
+        DeviceNameField()
 
         SectionLabel(NativeClient.string(NativeClient.STR_SECTION_CONNECTION))
         OutlinedTextField(
@@ -1072,13 +1483,40 @@ private fun SettingsScreen(
 }
 
 @Composable
+private fun DeviceNameField() {
+    var name by remember { mutableStateOf(NativeClient.deviceName()) }
+    val focusManager = LocalFocusManager.current
+    val commit = {
+        if (name.trim() != NativeClient.deviceName()) {
+            NativeClient.setDeviceName(name.trim())
+            name = NativeClient.deviceName()
+        }
+    }
+    val latestCommit by rememberUpdatedState(commit)
+    DisposableEffect(Unit) { onDispose { latestCommit() } }
+
+    OutlinedTextField(
+        value = name,
+        onValueChange = { name = it },
+        label = { Text(NativeClient.string(NativeClient.STR_DEVICE_NAME_LABEL)) },
+        placeholder = { Text(Build.MODEL.orEmpty()) },
+        supportingText = { Text(NativeClient.string(NativeClient.STR_DEVICE_NAME_HINT)) },
+        singleLine = true,
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .onFocusChanged { if (!it.isFocused) commit() },
+        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+        keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
+    )
+}
+
+@Composable
 private fun AddressScreen(
     address: String,
     onAddressChange: (String) -> Unit,
     connectPort: String,
     onConnectPortChange: (String) -> Unit,
-    deviceName: String,
-    onDeviceNameChange: (String) -> Unit,
     busy: Boolean,
     authed: NativeClient.HostQuery?,
     authedAddr: String,
@@ -1140,17 +1578,6 @@ private fun AddressScreen(
                     keyboardActions = KeyboardActions(onGo = { go() }),
                 )
             }
-
-            OutlinedTextField(
-                value = deviceName,
-                onValueChange = onDeviceNameChange,
-                label = { Text("Your name") },
-                singleLine = true,
-                enabled = !busy,
-                modifier = Modifier.fillMaxWidth(),
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Go),
-                keyboardActions = KeyboardActions(onGo = { go() }),
-            )
 
             Button(
                 onClick = go,

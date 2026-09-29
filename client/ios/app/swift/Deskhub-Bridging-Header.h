@@ -2,5 +2,7 @@
 #import "deskhubp/ffi/ClientFfi.h"
 #import "deskhubp/ffi/ScreenFfi.h"
 #import "deskhubp/ffi/DiscoveryFfi.h"
+#import "deskhubp/ffi/HostProfileFfi.h"
+#import "deskhubp/ffi/ClientKeyFfi.h"
 #import "deskhubp/ffi/TerminalFfi.h"
 #import "deskhubp/ffi/SendFfi.h"

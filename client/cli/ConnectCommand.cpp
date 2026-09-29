@@ -30,14 +30,9 @@ ExitCode RunConnect(const Command& command) {
         return ExitCode::Unsupported;
     }
 
-    std::vector<deskhub::SourceInfo> offered;
-    deskhub::AuthResultCode code = deskhub::AuthResultCode::NotPaired;
-    deskhub::HostCaps caps{};
-    if (!QuerySources(server, offered, &code, &caps,
-            command.identityName.value_or(""))) {
-        PrintError(deskhub::ui::AuthRefusalText(code));
-        return ExitCode::Refused;
-    }
+    SourceQueryReply reply;
+    if (!QuerySources(server, reply, QueryRequestOf(command))) return ReportQueryFailure(reply);
+    const std::vector<deskhub::SourceInfo>& offered = reply.sources;
     if (offered.empty()) {
         PrintError(deskhub::ui::SourceQueryEmpty(command.address));
         return ExitCode::NothingToShare;
@@ -65,11 +60,11 @@ ExitCode RunConnect(const Command& command) {
     request.displayName =
         command.deviceName ? *command.deviceName : deskhubp::SessionDeviceName();
     request.clientIdentityName = command.identityName.value_or("");
-    request.control = command.connect.control && caps.acceptsInput;
-    request.audio = command.connect.audio.value_or(settings.playAudio) && caps.audio;
+    request.control = command.connect.control && reply.caps.acceptsInput;
+    request.audio = command.connect.audio.value_or(settings.playAudio) && reply.caps.audio;
     for (size_t index : pick.indices) request.sources.push_back(offered[index]);
 
-    if (command.connect.control && !caps.acceptsInput && !command.quiet)
+    if (command.connect.control && !reply.caps.acceptsInput && !command.quiet)
         PrintError(deskhub::ui::kViewOnlyNote);
 
     return RunViewers(request);

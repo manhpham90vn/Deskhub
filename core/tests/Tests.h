@@ -73,6 +73,8 @@ void RunShellPickerTests();
 void RunTransferViewTests();
 void RunDeviceRowsTests();
 void RunRecentDevicesTests();
+void RunHostProfilesTests();
+void RunClientKeysTests();
 void RunUiSettingsTests();
 void RunCliCommandTests();
 void RunCliJsonTests();

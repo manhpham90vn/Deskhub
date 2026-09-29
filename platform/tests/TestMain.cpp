@@ -67,6 +67,9 @@ int main() {
     std::printf("--- system: proving which machine, and that it knows the code ---\n");
     RunAuthProofTests();
 
+    std::printf("--- client: saved hosts and their pinned keys ---\n");
+    RunHostProfilesTests();
+
     std::printf("--- session: pairing a machine, and letting it back in later ---\n");
     RunAuthNegotiationTests();
 

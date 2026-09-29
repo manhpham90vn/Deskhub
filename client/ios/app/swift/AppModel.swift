@@ -15,13 +15,12 @@ final class AppModel {
     var fileSend: FileSendModel?
 
     func beginConnect(to address: String) {
-        connect.address = address
+        connect.target(address)
         beginConnect()
     }
 
     func beginConnect() {
         guard !connect.isConnecting else { return }
-        connect.saveDeviceName()
         Task {
             guard let found = await connect.connectAuth() else { return }
             await discovery.remember(address: connect.acceptedAddress)
@@ -82,10 +81,8 @@ final class AppModel {
 
     func openFileSend() {
         guard connect.canOpenFiles else { return }
-        connect.saveDeviceName()
         let sender = FileSendModel()
         sender.address = connect.acceptedAddress
-        sender.deviceName = connect.deviceName
         fileSend = sender
     }
 
@@ -97,7 +94,6 @@ final class AppModel {
 
     func openShell() {
         guard connect.canOpenShell else { return }
-        connect.saveDeviceName()
         let address = connect.acceptedAddress
         let model = TerminalModel()
         guard model.open(address: address) else {

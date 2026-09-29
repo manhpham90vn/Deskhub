@@ -61,6 +61,7 @@ ExitCode ListShells(const Command& command, const NetAddr& host) {
     config.clientName =
         command.deviceName ? *command.deviceName : deskhubp::SessionDeviceName();
     config.clientIdentityName = command.identityName.value_or("");
+    config.acceptNewHostKey = command.acceptNewHostKey;
     config.size = SizeNow();
     config.deferOpen = true;
 
@@ -141,6 +142,7 @@ ExitCode RunShell(const Command& command) {
     config.clientName =
         command.deviceName ? *command.deviceName : deskhubp::SessionDeviceName();
     config.clientIdentityName = command.identityName.value_or("");
+    config.acceptNewHostKey = command.acceptNewHostKey;
     config.size = SizeNow();
 
     std::atomic<bool> keyChanged{false};

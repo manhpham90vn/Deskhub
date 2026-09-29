@@ -14,6 +14,8 @@ add_library(deskhub SHARED
     JniEnv.cpp
     HostBridge.cpp
     TerminalBridge.cpp
+    HostProfileBridge.cpp
+    ClientKeyBridge.cpp
     SharingHost.cpp
     ScreenFfiAndroid.cpp
 

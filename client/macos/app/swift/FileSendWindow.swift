@@ -2,7 +2,6 @@ import SwiftUI
 
 struct TransferRequest: Codable, Hashable {
     var address: String
-    var name: String
 }
 
 struct FileSendWindow: View {
@@ -19,7 +18,6 @@ struct FileSendWindow: View {
             .navigationSubtitle(request.address)
             .onAppear {
                 sender.address = request.address
-                sender.deviceName = request.name
             }
             .onDisappear { sender.forgetTransfer() }
     }

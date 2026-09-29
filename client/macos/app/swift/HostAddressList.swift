@@ -1,4 +1,3 @@
-import AppKit
 import SwiftUI
 
 struct HostAddressList: View {
@@ -19,11 +18,8 @@ struct HostAddressList: View {
                     Text(addr.name).frame(width: 150, alignment: .leading).lineLimit(1)
                     Text(addr.ip).fontWeight(.bold).textSelection(.enabled)
                     Spacer(minLength: 0)
-                    Button(DeskhubClient.string(DHStrCopyButton)) {
-                        NSPasteboard.general.clearContents()
-                        NSPasteboard.general.setString(addr.ip, forType: .string)
-                    }
-                    .frame(width: 84)
+                    CopyButton { addr.ip }
+                        .frame(width: 84)
                 }
             }
         }

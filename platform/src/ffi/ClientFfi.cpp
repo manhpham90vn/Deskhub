@@ -119,6 +119,29 @@ const char* dh_string(DHStringId id) {
         case DHStrReceivingFilesState: return deskhub::ui::kReceivingFilesState;
         case DHStrMobileTakesFilesNote: return deskhub::ui::kMobileTakesFilesNote;
         case DHStrOpenFolderAction: return deskhub::ui::kOpenFolderAction;
+        case DHStrSavedHostsHeading: return deskhub::ui::kSavedHostsHeading;
+        case DHStrSavedHostsHint: return deskhub::ui::kSavedHostsHint;
+        case DHStrSavedHostsEmpty: return deskhub::ui::kSavedHostsEmpty;
+        case DHStrRemoveHostAction: return deskhub::ui::kRemoveHostAction;
+        case DHStrDevicesHostArea: return deskhub::ui::kDevicesHostArea;
+        case DHStrDevicesHostAreaHint: return deskhub::ui::kDevicesHostAreaHint;
+        case DHStrDevicesClientArea: return deskhub::ui::kDevicesClientArea;
+        case DHStrDevicesClientAreaHint: return deskhub::ui::kDevicesClientAreaHint;
+        case DHStrAllowClientPlaceholder: return deskhub::ui::kAllowClientPlaceholder;
+        case DHStrAllowClientAction: return deskhub::ui::kAllowClientAction;
+        case DHStrAllowClientInvalid: return deskhub::ui::kAllowClientInvalid;
+        case DHStrMyKeysHeading: return deskhub::ui::kMyKeysHeading;
+        case DHStrMyKeysHint: return deskhub::ui::kMyKeysHint;
+        case DHStrCopyPublicKeyAction: return deskhub::ui::kCopyPublicKeyAction;
+        case DHStrNewKeyAction: return deskhub::ui::kNewKeyAction;
+        case DHStrImportKeyAction: return deskhub::ui::kImportKeyAction;
+        case DHStrKeyNameLabel: return deskhub::ui::kKeyNameLabel;
+        case DHStrKeyPassphraseLabel: return deskhub::ui::kKeyPassphraseLabel;
+        case DHStrTrustNewHostTitle: return deskhub::ui::kTrustNewHostTitle;
+        case DHStrTrustNewHostAction: return deskhub::ui::kTrustNewHostAction;
+        case DHStrCancelAction: return deskhub::ui::kCancelAction;
+        case DHStrCopiedButton: return deskhub::ui::kCopiedButton;
+        case DHStrDeviceNameHint: return deskhub::ui::kDeviceNameHint;
         case DHStrSidebarHost: return deskhub::ui::kSidebarHost;
         case DHStrSidebarClient: return deskhub::ui::kSidebarClient;
         case DHStrSidebarSettings: return deskhub::ui::kSidebarSettings;
@@ -328,20 +351,30 @@ DHAutoShareStep dh_auto_share_step(bool displays_ready, uint32_t waited_ms) {
     return DHAutoShareKeepWaiting;
 }
 
-int dh_list_sources(const char* address, DHSourceInfo* out, int capacity, DHHostCaps* out_caps) {
+int dh_list_sources(const char* address, DHSourceInfo* out, int capacity, DHHostCaps* out_caps,
+    char* failure, int failure_capacity, char* new_host_key, int new_host_key_capacity) {
     if (out_caps) *out_caps = DHHostCaps{false, false, false, false};
+    if (failure && failure_capacity > 0) failure[0] = '\0';
+    if (new_host_key && new_host_key_capacity > 0) new_host_key[0] = '\0';
     if (!address || !out || capacity <= 0) return DH_SOURCE_QUERY_FAILED;
 
     NetAddr server;
     if (!ParseNetAddr(address, server)) {
         LOGE("[Bridge] Invalid address: %s", address);
+        deskhubp::FillText(failure, failure_capacity, deskhub::ui::InvalidAddressLine(address));
         return DH_SOURCE_QUERY_FAILED;
     }
 
-    std::vector<deskhub::SourceInfo> sources;
-    deskhub::HostCaps caps{};
-    if (!QuerySources(server, sources, nullptr, &caps))
+    SourceQueryReply reply;
+    if (!QuerySources(server, reply)) {
+        deskhubp::FillText(failure, failure_capacity, reply.failure);
+        if (reply.unknownHostKey)
+            deskhubp::FillText(new_host_key, new_host_key_capacity,
+                deskhub::FormatFingerprint(*reply.unknownHostKey));
         return DH_SOURCE_QUERY_FAILED;
+    }
+    const std::vector<deskhub::SourceInfo>& sources = reply.sources;
+    const deskhub::HostCaps& caps = reply.caps;
     if (out_caps)
         *out_caps = DHHostCaps{caps.acceptsInput, caps.terminal, caps.audio, caps.files};
 

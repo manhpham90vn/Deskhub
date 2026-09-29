@@ -2,6 +2,7 @@
 
 #include "deskhub/session/LinkRecovery.h"
 #include "deskhub/ui/Strings.h"
+#include "deskhubp/client/HostProfiles.h"
 #include "deskhubp/diag/Log.h"
 #include "deskhubp/system/Clock.h"
 #include "deskhubp/system/HostIdentity.h"
@@ -74,7 +75,6 @@ bool HostLink::Start(const HostLinkConfig& config, HostLinkCallbacks callbacks) 
     stop_.store(false, std::memory_order_release);
     peerGone_.store(false, std::memory_order_release);
     trustDecision_.store(int(TrustDecision::Pending), std::memory_order_release);
-    authCode_.store(deskhub::AuthResultCode::NotPaired, std::memory_order_release);
     autoTrustPending_.store(false, std::memory_order_release);
     redial_.store(false, std::memory_order_release);
     pulse_.Reset();
@@ -271,7 +271,6 @@ bool HostLink::SettleTrust() {
     const std::string endpoint = config_.host.ToString();
     const auto trustedHosts = TryLoadTrustStore();
     if (!trustedHosts) {
-        authCode_.store(deskhub::AuthResultCode::ConfigError, std::memory_order_release);
         Fail(HostLinkState::Failed, deskhub::ui::AuthRefusalText(deskhub::AuthResultCode::ConfigError));
         return false;
     }
@@ -283,10 +282,17 @@ bool HostLink::SettleTrust() {
     }
 
     if (verdict == deskhub::TrustVerdict::Trusted) return true;
+    if (verdict == deskhub::TrustVerdict::Unknown && config_.acceptNewHostKey &&
+        TrustNewHost(endpoint, *peer) == deskhub::ui::HostProfileError::None) {
+        LOGI("[Link] Trusted the new host key of %s: %s", endpoint.c_str(),
+            deskhub::FormatFingerprint(*peer).c_str());
+        const std::lock_guard<std::mutex> lock(mutex_);
+        verdict_ = deskhub::TrustVerdict::Trusted;
+        return true;
+    }
     const auto code = verdict == deskhub::TrustVerdict::Changed
                           ? deskhub::AuthResultCode::HostKeyChanged
                           : deskhub::AuthResultCode::UntrustedHost;
-    authCode_.store(code, std::memory_order_release);
     Fail(HostLinkState::Failed, deskhub::ui::AuthRefusalText(code));
     return false;
 }
@@ -307,11 +313,10 @@ bool HostLink::RunAuth() {
         const auto profile = LoadTrustStore().Find(config_.host.ToString());
         if (profile) identityName = profile->identityName;
     }
-    auth.identity = identityName.empty()
+    auth.identity = identityName.empty() || identityName == deskhub::ui::kDefaultIdentityName
                         ? LoadOrCreateClientIdentity()
                         : LoadClientIdentity(identityName);
     if (!auth.identity.Valid()) {
-        authCode_.store(deskhub::AuthResultCode::LocalKeyUnavailable, std::memory_order_release);
         Fail(HostLinkState::Failed,
             deskhub::ui::AuthRefusalText(deskhub::AuthResultCode::LocalKeyUnavailable));
         return false;
@@ -322,7 +327,6 @@ bool HostLink::RunAuth() {
     deskhub::AuthResultCode code = deskhub::AuthResultCode::NotPaired;
     const bool allowed = sock_.RunClientAuth(config_.host, std::move(auth), config_.authTimeoutMs,
         code, &stop_);
-    authCode_.store(code, std::memory_order_release);
     if (!allowed) {
         if (stop_.load(std::memory_order_acquire)) return false;
         if (recovering && code == deskhub::AuthResultCode::TimedOut) return false;

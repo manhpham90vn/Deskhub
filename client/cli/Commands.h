@@ -1,5 +1,6 @@
 #pragma once
 #include "deskhub/cli/Command.h"
+#include "deskhubp/client/SourceQuery.h"
 
 namespace deskhubcli {
 
@@ -9,6 +10,9 @@ using Verb = deskhub::cli::Verb;
 using DevicesAction = deskhub::cli::DevicesAction;
 using TrustAction = deskhub::cli::TrustAction;
 using SettingsAction = deskhub::cli::SettingsAction;
+
+SourceQueryRequest QueryRequestOf(const Command& command);
+ExitCode ReportQueryFailure(const SourceQueryReply& reply);
 
 ExitCode RunDisplays(const Command& command);
 ExitCode RunSources(const Command& command);

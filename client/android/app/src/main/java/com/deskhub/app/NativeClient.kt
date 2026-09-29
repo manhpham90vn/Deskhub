@@ -115,6 +115,39 @@ object NativeClient {
     const val STR_SHELL_PICKER_NEW = 161
     const val STR_SHELL_PICKER_CLOSE = 162
     const val STR_SHELL_PICKER_CLOSE_ASK = 163
+    const val STR_SAVED_HOSTS_HEADING = 171
+    const val STR_SAVED_HOSTS_HINT = 172
+    const val STR_SAVED_HOSTS_EMPTY = 173
+    const val STR_REMOVE_HOST_ACTION = 180
+    const val STR_PAIRED_FORGET_NOTE = 110
+    const val STR_COPY_BUTTON = 117
+    const val STR_DEVICES_HOST_AREA = 181
+    const val STR_DEVICES_HOST_AREA_HINT = 182
+    const val STR_DEVICES_CLIENT_AREA = 183
+    const val STR_DEVICES_CLIENT_AREA_HINT = 184
+    const val STR_ALLOW_CLIENT_PLACEHOLDER = 185
+    const val STR_ALLOW_CLIENT_ACTION = 186
+    const val STR_ALLOW_CLIENT_INVALID = 187
+    const val STR_MY_KEYS_HEADING = 188
+    const val STR_MY_KEYS_HINT = 189
+    const val STR_COPY_PUBLIC_KEY_ACTION = 190
+    const val STR_NEW_KEY_ACTION = 191
+    const val STR_IMPORT_KEY_ACTION = 192
+    const val STR_KEY_NAME_LABEL = 193
+    const val STR_KEY_PASSPHRASE_LABEL = 194
+    const val STR_TRUST_NEW_HOST_TITLE = 195
+    const val STR_TRUST_NEW_HOST_ACTION = 196
+    const val STR_CANCEL_ACTION = 197
+    const val STR_COPIED_BUTTON = 198
+    const val STR_DEVICE_NAME_LABEL = 115
+    const val STR_DEVICE_NAME_HINT = 199
+
+    private const val HOST_PROFILE_OK = 0
+    private const val HOST_PROFILE_STORE_UNREADABLE = 10
+    private const val CLIENT_KEY_OK = 0
+    private const val CLIENT_KEY_UNREADABLE = 3
+    private const val FAILURE_SLOT = 0
+    private const val NEW_HOST_KEY_SLOT = 1
 
     private external fun nativeString(id: Int): String
 
@@ -211,7 +244,103 @@ object NativeClient {
     private external fun nativeListSources(
         addr: String,
         capsOut: BooleanArray,
+        failureOut: Array<String>,
     ): Array<Source>?
+
+    data class HostProfile(
+        val alias: String,
+        val endpoint: String,
+        val identity: String,
+        val fingerprint: String,
+    )
+
+    private external fun nativeHostProfiles(): Array<HostProfile>?
+
+    private external fun nativeHostProfileRemove(alias: String): Int
+
+    private external fun nativeHostProfileErrorText(error: Int): String
+
+    private external fun nativeHostTrustNew(
+        address: String,
+        fingerprint: String,
+    ): Int
+
+    private external fun nativeTrustNewHostPrompt(
+        address: String,
+        fingerprint: String,
+    ): String
+
+    data class ClientKey(
+        val name: String,
+        val fingerprint: String,
+    )
+
+    private external fun nativeClientKeys(): Array<ClientKey>?
+
+    private external fun nativeClientPublicKey(name: String): String
+
+    private external fun nativeClientKeyGenerate(name: String): Int
+
+    private external fun nativeClientKeyImport(
+        name: String,
+        privateKey: String,
+        passphrase: String,
+    ): Int
+
+    private external fun nativeClientKeyErrorText(error: Int): String
+
+    sealed interface HostProfiles {
+        data class Loaded(
+            val hosts: List<HostProfile>,
+        ) : HostProfiles
+
+        data class Unreadable(
+            val message: String,
+        ) : HostProfiles
+    }
+
+    private fun hostProfileFailure(error: Int): String? =
+        if (error == HOST_PROFILE_OK) null else nativeHostProfileErrorText(error)
+
+    fun hostProfiles(): HostProfiles =
+        nativeHostProfiles()?.let { HostProfiles.Loaded(it.toList()) }
+            ?: HostProfiles.Unreadable(nativeHostProfileErrorText(HOST_PROFILE_STORE_UNREADABLE))
+
+    fun removeHostProfile(alias: String): String? = hostProfileFailure(nativeHostProfileRemove(alias))
+
+    fun trustNewHost(
+        address: String,
+        fingerprint: String,
+    ): String? = hostProfileFailure(nativeHostTrustNew(address, fingerprint))
+
+    fun trustNewHostPrompt(
+        address: String,
+        fingerprint: String,
+    ): String = nativeTrustNewHostPrompt(address, fingerprint)
+
+    private fun clientKeyFailure(error: Int): String? =
+        if (error ==
+            CLIENT_KEY_OK
+        ) {
+            null
+        } else {
+            nativeClientKeyErrorText(error)
+        }
+
+    fun unreadableKeyText(): String = nativeClientKeyErrorText(CLIENT_KEY_UNREADABLE)
+
+    fun clientKeys(): List<ClientKey> = nativeClientKeys()?.toList() ?: emptyList()
+
+    fun clientPublicKey(name: String): String = nativeClientPublicKey(name)
+
+    suspend fun generateClientKey(name: String): String? =
+        withContext(Dispatchers.IO) { clientKeyFailure(nativeClientKeyGenerate(name)) }
+
+    suspend fun importClientKey(
+        name: String,
+        privateKey: String,
+        passphrase: String,
+    ): String? = withContext(Dispatchers.IO) { clientKeyFailure(nativeClientKeyImport(name, privateKey, passphrase)) }
 
     data class DeviceRow(
         val addr: String,
@@ -237,11 +366,9 @@ object NativeClient {
 
     private external fun nativePairedForgetAll()
 
-    private external fun nativeOwnFingerprint(): String
+    private external fun nativePairedAddPublicKey(publicKey: String): Boolean
 
     private external fun nativeHostFingerprint(): String
-
-    private external fun nativeOwnPublicKey(): String
 
     fun pairedDevices(): List<PairedDevice> = nativePairedDevices()?.toList() ?: emptyList()
 
@@ -249,11 +376,9 @@ object NativeClient {
 
     fun pairedForgetAll() = nativePairedForgetAll()
 
-    fun ownFingerprint(): String = nativeOwnFingerprint()
+    fun pairedAddPublicKey(publicKey: String): Boolean = nativePairedAddPublicKey(publicKey)
 
     fun hostFingerprint(): String = nativeHostFingerprint()
-
-    fun ownPublicKey(): String = nativeOwnPublicKey()
 
     private external fun nativeDefaultPort(): Int
 
@@ -354,6 +479,8 @@ object NativeClient {
     fun deviceName(): String = nativeDeviceName()
 
     fun setDeviceName(name: String) = nativeSetDeviceName(name)
+
+    fun sessionDeviceName(): String = deviceName().trim().ifBlank { Build.MODEL.orEmpty() }
 
     private external fun nativeSettingsPort(): Int
 
@@ -769,10 +896,29 @@ object NativeClient {
         val files: Boolean,
     )
 
-    suspend fun queryHost(addr: String): HostQuery? =
+    sealed interface QueryOutcome {
+        data class Reached(
+            val query: HostQuery,
+        ) : QueryOutcome
+
+        data class UnknownHost(
+            val fingerprint: String,
+            val reason: String,
+        ) : QueryOutcome
+
+        data class Failed(
+            val reason: String,
+        ) : QueryOutcome
+    }
+
+    suspend fun queryHost(addr: String): QueryOutcome =
         withContext(Dispatchers.IO) {
             val caps = BooleanArray(2)
-            val sources = nativeListSources(addr, caps) ?: return@withContext null
-            HostQuery(sources.toList(), caps[0], caps[1])
+            val failure = arrayOf("", "")
+            val sources = nativeListSources(addr, caps, failure)
+            if (sources != null) return@withContext QueryOutcome.Reached(HostQuery(sources.toList(), caps[0], caps[1]))
+            val reason = failure[FAILURE_SLOT].ifBlank { sourceQueryFailed(addr) }
+            val newHostKey = failure[NEW_HOST_KEY_SLOT]
+            if (newHostKey.isBlank()) QueryOutcome.Failed(reason) else QueryOutcome.UnknownHost(newHostKey, reason)
         }
 }

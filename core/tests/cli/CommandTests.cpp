@@ -476,6 +476,21 @@ void TestShareFileFlags() {
         "while the tick itself is not saved: it is a source, like the terminal");
 }
 
+void TestAcceptNewHostKey() {
+    std::printf("[cli] a new host key is only saved when the flag asks for it...\n");
+    Check(!Parse({"sources", "192.168.1.10"}).acceptNewHostKey, "the default refuses unknown hosts");
+    Check(Parse({"sources", "192.168.1.10", "--accept-new-host-key"}).acceptNewHostKey,
+        "sources can accept a host seen for the first time");
+    Check(Parse({"connect", "192.168.1.10", "--accept-new-host-key"}).acceptNewHostKey,
+        "so can connect");
+    Check(Parse({"shell", "192.168.1.10", "--accept-new-host-key"}).acceptNewHostKey,
+        "and shell");
+    Check(Parse({"send", "192.168.1.10", "a.txt", "--accept-new-host-key"}).acceptNewHostKey,
+        "and send");
+    Check(!Parse({"sources", "192.168.1.10", "--accept-new-host-key=yes"}).error.empty(),
+        "the flag takes no value");
+}
+
 void TestUsageText() {
     std::printf("[cli] every command can explain itself...\n");
     Check(cli::UsageText().find("deskhub-cli") != std::string::npos, "the summary names the program");
@@ -518,5 +533,6 @@ void RunCliCommandTests() {
     TestDisplaysForget();
     TestApplyShareOptions();
     TestPickDisplays();
+    TestAcceptNewHostKey();
     TestUsageText();
 }

@@ -41,6 +41,8 @@ constexpr SettingsEntry kDesktopLayout[] = {
     Setting(SettingField::PlayAudio, kPlayAudioLabel),
 
     Area(kSettingsGeneralArea),
+    Setting(SettingField::DeviceName, kDeviceNameLabel),
+    Hint(kDeviceNameHint),
     Section(kSettingsSectionConnection),
     Setting(SettingField::Port, kUdpPortLabel),
     Section(kSettingsSectionSession),
@@ -74,6 +76,7 @@ bool* SettingFlag(UiSettings& settings, SettingField field) {
         case SettingField::TransferFolder:
         case SettingField::Permissions:
         case SettingField::Port:
+        case SettingField::DeviceName:
         case SettingField::Count: break;
     }
     return nullptr;

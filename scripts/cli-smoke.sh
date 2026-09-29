@@ -3,7 +3,6 @@ set -euo pipefail
 
 CLI=${1:-out/build/x64-debug/client/cli/deskhub-cli}
 PORT=${DESKHUB_SMOKE_PORT:-47989}
-PASSCODE=0417
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/deskhub-cli-smoke.XXXXXX")
 trap 'rm -rf "$WORK"' EXIT
 
@@ -46,8 +45,17 @@ expect_code 0 "$CLI" devices --json
 expect_code 0 "$CLI" trust --json
 expect_code 0 "$CLI" settings --json
 
+echo "== keys are exchanged as text before anything connects"
+expect_code 0 "$CLI" devices public
+cp "$WORK/out" "$WORK/client.pub"
+expect_code 0 "$CLI" access add --stdin <"$WORK/client.pub"
+expect_code 0 "$CLI" host-key public
+cp "$WORK/out" "$WORK/host.pub"
+expect_code 0 "$CLI" key generate --name stranger
+
 echo "== nobody is listening"
-expect_code 3 "$CLI" probe "127.0.0.1:$((PORT + 1))"
+expect_code 4 "$CLI" sources "127.0.0.1:$((PORT + 1))"
+grep -q "Could not reach" "$WORK/err" || fail "an unreachable host was not reported as unreachable"
 
 case "$(uname -s)" in
     MINGW* | MSYS* | CYGWIN*)
@@ -58,7 +66,7 @@ case "$(uname -s)" in
 esac
 
 echo "== a shell-only host, and a viewer that talks to it"
-"$CLI" share --no-screen --terminal --port "$PORT" --passcode "$PASSCODE" --quiet \
+"$CLI" share --no-screen --terminal --port "$PORT" --quiet \
     >"$WORK/share.out" 2>"$WORK/share.err" &
 SHARE_PID=$!
 
@@ -78,11 +86,16 @@ if [ "$ready" != 1 ]; then
     fail "the host never started listening"
 fi
 
-expect_code 0 "$CLI" probe "127.0.0.1:$PORT"
+expect_code 4 "$CLI" sources "127.0.0.1:$PORT"
+grep -q "not trusted yet" "$WORK/err" || fail "an unpinned host was not refused as unknown"
+grep -q "Host key fingerprint: SHA256:" "$WORK/err" || fail "the refusal did not show the fingerprint"
+
+expect_code 0 "$CLI" host add smoke --address "127.0.0.1:$PORT" --identity default \
+    --host-key-stdin <"$WORK/host.pub"
 
 offered=0
 for _ in $(seq 1 200); do
-    if "$CLI" sources "127.0.0.1:$PORT" --passcode "$PASSCODE" --json >"$WORK/out" 2>"$WORK/err" &&
+    if "$CLI" sources smoke --json >"$WORK/out" 2>"$WORK/err" &&
         grep -q '"terminal":true' "$WORK/out"; then
         offered=1
         break
@@ -95,15 +108,16 @@ if [ "$offered" != 1 ]; then
     fail "the host never offered its shell"
 fi
 
-expect_code 4 "$CLI" sources "127.0.0.1:$PORT" --passcode 9999
+expect_code 4 "$CLI" sources smoke --identity stranger
+grep -q "not authorized" "$WORK/err" || fail "a key the host never allowed was not refused"
 
 echo "== a host that takes no files says so"
 printf 'deskhub-smoke-file\n' >"$WORK/notes.txt"
-expect_code 4 "$CLI" send "127.0.0.1:$PORT" "$WORK/notes.txt" --passcode "$PASSCODE" --quiet
-expect_code 2 "$CLI" send "127.0.0.1:$PORT" "$WORK/absent.txt" --passcode "$PASSCODE" --quiet
+expect_code 4 "$CLI" send "127.0.0.1:$PORT" "$WORK/notes.txt" --quiet
+expect_code 2 "$CLI" send "127.0.0.1:$PORT" "$WORK/absent.txt" --quiet
 
 printf 'echo deskhub-smoke-ok\nexit\n' |
-    "$CLI" shell "127.0.0.1:$PORT" --passcode "$PASSCODE" >"$WORK/shell.out" 2>"$WORK/shell.err" || true
+    "$CLI" shell smoke >"$WORK/shell.out" 2>"$WORK/shell.err" || true
 if ! tr -d '\r' <"$WORK/shell.out" | grep -aq "deskhub-smoke-ok"; then
     echo "--- shell stdout"; cat "$WORK/shell.out"
     echo "--- shell stderr"; cat "$WORK/shell.err"
@@ -119,7 +133,7 @@ FILE_PORT=$((PORT + 2))
 LANDING="$WORK/landing"
 mkdir -p "$LANDING"
 "$CLI" share --no-screen --terminal --files --files-dir "$LANDING" --port "$FILE_PORT" \
-    --passcode "$PASSCODE" --quiet >"$WORK/files.out" 2>"$WORK/files.err" &
+    --quiet >"$WORK/files.out" 2>"$WORK/files.err" &
 FILES_PID=$!
 
 ready=0
@@ -140,14 +154,14 @@ fi
 
 head -c 120000 /dev/urandom >"$WORK/payload.bin"
 expect_code 0 "$CLI" send "127.0.0.1:$FILE_PORT" "$WORK/notes.txt" "$WORK/payload.bin" \
-    --passcode "$PASSCODE" --quiet
+    --accept-new-host-key --quiet
 cmp -s "$WORK/notes.txt" "$LANDING/notes.txt" || fail "the small file did not arrive intact"
 cmp -s "$WORK/payload.bin" "$LANDING/payload.bin" || fail "the large file did not arrive intact"
 
-expect_code 0 "$CLI" send "127.0.0.1:$FILE_PORT" "$WORK/notes.txt" --passcode "$PASSCODE" --quiet
+expect_code 0 "$CLI" send "127.0.0.1:$FILE_PORT" "$WORK/notes.txt" --quiet
 [ -f "$LANDING/notes (2).txt" ] || fail "a second copy overwrote the first instead of landing beside it"
 
-expect_code 4 "$CLI" send "127.0.0.1:$FILE_PORT" "$WORK/notes.txt" --passcode 9999 --quiet
+expect_code 4 "$CLI" send "127.0.0.1:$FILE_PORT" "$WORK/notes.txt" --identity stranger --quiet
 
 kill -INT "$FILES_PID"
 wait "$FILES_PID" || fail "the file host did not stop cleanly on an interrupt"
@@ -157,7 +171,7 @@ ONLY_PORT=$((PORT + 3))
 ONLY_LANDING="$WORK/only"
 mkdir -p "$ONLY_LANDING"
 "$CLI" share --no-screen --files --files-dir "$ONLY_LANDING" --port "$ONLY_PORT" \
-    --passcode "$PASSCODE" --quiet >"$WORK/only.out" 2>"$WORK/only.err" &
+    --quiet >"$WORK/only.out" 2>"$WORK/only.err" &
 ONLY_PID=$!
 
 ready=0
@@ -176,10 +190,13 @@ if [ "$ready" != 1 ]; then
     fail "a host with only file transfer never started listening"
 fi
 
+expect_code 0 "$CLI" host add only --address "127.0.0.1:$ONLY_PORT" --identity default \
+    --host-key-stdin <"$WORK/host.pub"
+
 sleep 1
 kill -0 "$ONLY_PID" 2>/dev/null || fail "a host with only file transfer stopped on its own"
 
-expect_code 0 "$CLI" send "127.0.0.1:$ONLY_PORT" "$WORK/notes.txt" --passcode "$PASSCODE" --quiet
+expect_code 0 "$CLI" send "127.0.0.1:$ONLY_PORT" "$WORK/notes.txt" --quiet
 cmp -s "$WORK/notes.txt" "$ONLY_LANDING/notes.txt" ||
     fail "the file never reached a host that shares nothing else"
 

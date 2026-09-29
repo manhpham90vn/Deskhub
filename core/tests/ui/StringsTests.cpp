@@ -40,7 +40,18 @@ void TestEveryLabelSaysSomething() {
         ui::kTrayShowWindow, ui::kTrayHideWindow, ui::kTrayQuit,
         ui::kSettingsSectionVideo, ui::kSettingsSectionConnection, ui::kSettingsSectionSecurity,
         ui::kSettingsSectionSession, ui::kSettingsSectionLaunch,
-        ui::kAuthVersionMismatch};
+        ui::kAuthVersionMismatch, ui::kSavedHostsHeading, ui::kSavedHostsHint,
+        ui::kSavedHostsEmpty, ui::kHostNameLabel, ui::kHostAddressLabel, ui::kHostKeyLabel,
+        ui::kHostIdentityLabel,
+        ui::kRemoveHostAction, ui::kDevicesHostArea, ui::kDevicesHostAreaHint,
+        ui::kDevicesClientArea, ui::kDevicesClientAreaHint, ui::kAllowClientPlaceholder,
+        ui::kAllowClientAction, ui::kAllowClientInvalid, ui::kMyKeysHeading, ui::kMyKeysHint,
+        ui::kCopyPublicKeyAction, ui::kNewKeyAction, ui::kImportKeyAction, ui::kKeyNameLabel,
+        ui::kKeyPassphraseLabel, ui::kTrustNewHostTitle, ui::kTrustNewHostAction,
+        ui::kCancelAction, ui::kDeviceNameHint};
+    const std::string prompt = ui::TrustNewHostPrompt("192.168.1.10:47777", "SHA256:abc");
+    Check(Contains(prompt, "192.168.1.10:47777") && Contains(prompt, "SHA256:abc"),
+        "the first-connection prompt names the host and shows its whole fingerprint");
     for (const char* s : labels) Check(s && *s, "every shared UI string is non-empty");
 }
 

@@ -39,6 +39,7 @@ struct HostLinkConfig {
     std::string clientName{};
     std::string clientIdentityName{};
     bool recoverLink = false;
+    bool acceptNewHostKey = false;
     uint64_t recoverGraceUs = 0;
     uint32_t connectTimeoutMs = 10'000;
     uint32_t authTimeoutMs = 65'000;
@@ -98,9 +99,6 @@ public:
     std::string Message() const;
     std::string FingerprintText() const;
     deskhub::TrustVerdict Verdict() const;
-    deskhub::AuthResultCode AuthCode() const {
-        return authCode_.load(std::memory_order_acquire);
-    }
 
 private:
     enum class TrustDecision : int { Pending = 0,
@@ -132,7 +130,6 @@ private:
     mutable std::mutex mutex_;
     std::thread thread_{};
     std::atomic<HostLinkState> state_{HostLinkState::Idle};
-    std::atomic<deskhub::AuthResultCode> authCode_{deskhub::AuthResultCode::NotPaired};
     std::atomic<int> trustDecision_{int(TrustDecision::Pending)};
     std::atomic<bool> running_{false};
     std::atomic<bool> stop_{false};

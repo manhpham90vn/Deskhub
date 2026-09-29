@@ -80,7 +80,10 @@ inline constexpr const char* kCaptureUnavailableTitle = "Screen capture is not a
 inline constexpr const char* kNoDisplayTicked = "Tick at least one display to share.";
 inline constexpr const char* kStopDisplayAction = "Stop";
 inline constexpr const char* kDisconnectViewerAction = "Disconnect";
-inline constexpr const char* kDeviceNameLabel = "Your name";
+inline constexpr const char* kDeviceNameLabel = "Device name";
+inline constexpr const char* kDeviceNameHint =
+    "The one name this device goes by: hosts see it when you connect, devices that connect "
+    "here see it on this machine, and it labels the public keys you copy.";
 inline constexpr const char* kConnectButton = "Connect";
 inline constexpr const char* kCopyButton = "Copy";
 inline constexpr const char* kCopiedButton = "Copied";
@@ -126,9 +129,11 @@ inline constexpr const char* kAuthBadSignature = "The client authentication sign
 inline constexpr const char* kAuthConfigError =
     "The host authentication configuration cannot be read or parsed.";
 inline constexpr const char* kAuthUntrustedHost =
-    "Host key is unknown. Add the host public key before connecting.";
+    "This host is not trusted yet. Check its fingerprint and trust it, or add its host key "
+    "first.";
 inline constexpr const char* kAuthHostKeyChanged =
-    "Host key changed. Update the saved host key before connecting.";
+    "This host's key has changed. Deskhub will not connect until you remove it from "
+    "Trusted hosts and trust it again - only do that if you know why the key changed.";
 inline constexpr const char* kAuthLocalKeyUnavailable =
     "Could not load the client authentication key.";
 
@@ -149,21 +154,28 @@ inline const char* AuthRefusalText(AuthResultCode code) {
 }
 
 inline constexpr const char* kSidebarDevices = "Devices";
-inline constexpr const char* kPairedHeading = "Machines allowed to connect to this one";
+inline constexpr const char* kPairedHeading =
+    "Clients allowed to connect to this machine";
 inline constexpr const char* kPairedHint =
-    "Add each client's public key here before it connects. Only listed keys are allowed.";
-inline constexpr const char* kPairedEmpty = "(no client keys have been allowed yet)";
-inline constexpr const char* kPairedForget = "Forget";
-inline constexpr const char* kPairedForgetAll = "Forget every machine";
+    "Paste the public key of each device that may connect. Only keys listed here get in; "
+    "nothing is approved over the network.";
+inline constexpr const char* kPairedEmpty =
+    "(no client keys allowed yet)";
+inline constexpr const char* kPairedForget =
+    "Remove";
+inline constexpr const char* kPairedForgetAll =
+    "Remove every client";
 inline constexpr const char* kPairedForgetAllPrompt =
     "All client keys will lose access. You can add them again later. Continue?";
 inline constexpr const char* kPairedForgetNote =
-    "Remove a client key to revoke its access to this machine.";
-inline constexpr const char* kThisMachineHeading = "This machine's key";
+    "Removing a key disconnects that device at once.";
+inline constexpr const char* kThisMachineHeading =
+    "This machine's host key";
 inline constexpr const char* kThisMachineHint =
-    "Read this out over the phone to whoever is connecting. It is the one thing a machine in "
-    "the middle cannot fake.";
-inline constexpr const char* kPairedColumnName = "Machine";
+    "A device connecting here for the first time is shown this fingerprint. Ask its user "
+    "to compare it before they trust this machine.";
+inline constexpr const char* kPairedColumnName =
+    "Client";
 inline constexpr const char* kPairedColumnKey = "Key";
 inline constexpr const char* kPairedColumnPaired = "Paired";
 inline constexpr const char* kPairedColumnLastSeen = "Last seen";
@@ -171,6 +183,51 @@ inline constexpr const char* kDevicesHeading = "Devices";
 inline constexpr const char* kDeviceColumnWhere = "Where";
 inline constexpr const char* kDeviceOnThisNetwork = "On this network";
 inline constexpr const char* kDeviceRecent = "Recent";
+inline constexpr const char* kSavedHostsHeading =
+    "Trusted hosts";
+inline constexpr const char* kSavedHostsHint =
+    "A host is added here when you confirm its fingerprint on the first connection. If a "
+    "host's key changes, Deskhub refuses to connect until you remove the host here.";
+inline constexpr const char* kSavedHostsEmpty =
+    "(no trusted hosts yet)";
+inline constexpr const char* kHostNameLabel = "Name";
+inline constexpr const char* kHostAddressLabel = "Address";
+inline constexpr const char* kHostKeyLabel = "Host key";
+inline constexpr const char* kHostIdentityLabel = "Client key";
+inline constexpr const char* kRemoveHostAction = "Remove";
+inline constexpr const char* kDevicesHostArea = "When this machine is the host";
+inline constexpr const char* kDevicesHostAreaHint = "Other devices connect to this machine.";
+inline constexpr const char* kDevicesClientArea = "When this machine is the client";
+inline constexpr const char* kDevicesClientAreaHint = "This machine connects to other devices.";
+inline constexpr const char* kAllowClientPlaceholder = "ssh-ed25519 AAAA\xE2\x80\xA6 laptop";
+inline constexpr const char* kAllowClientAction = "Allow";
+inline constexpr const char* kAllowClientInvalid =
+    "That is not a supported Ed25519 or ECDSA P-256 public key, or it is already allowed.";
+inline constexpr const char* kMyKeysHeading = "My keys";
+inline constexpr const char* kMyKeysHint =
+    "Give a key's public key to the owner of a host so they can allow it. The private key "
+    "never leaves this machine.";
+inline constexpr const char* kCopyPublicKeyAction = "Copy public key";
+inline constexpr const char* kNewKeyAction = "New key";
+inline constexpr const char* kImportKeyAction = "Import key\xE2\x80\xA6";
+inline constexpr const char* kKeyNameLabel = "Key name";
+inline constexpr const char* kKeyPassphraseLabel = "Passphrase (only if the key has one)";
+inline constexpr const char* kTrustNewHostTitle = "New host";
+inline constexpr const char* kTrustNewHostAction = "Trust and connect";
+inline constexpr const char* kCancelAction = "Cancel";
+
+inline std::string NewHostKeyCliHint(std::string_view fingerprint) {
+    return "Host key fingerprint: " + std::string(fingerprint) +
+           "\nCompare it with the fingerprint on that machine's Devices page, then rerun with "
+           "--accept-new-host-key.";
+}
+
+inline std::string TrustNewHostPrompt(std::string_view address, std::string_view fingerprint) {
+    return "This device has not connected to " + std::string(address) +
+           " before. Its host key fingerprint is:\n\n" + std::string(fingerprint) +
+           "\n\nCompare it with the fingerprint shown on that machine's Devices page. Trust it "
+           "only if they match.";
+}
 
 inline constexpr const char* kTerminalSourceName = "Terminal";
 inline constexpr const char* kTerminalPickerLabel =

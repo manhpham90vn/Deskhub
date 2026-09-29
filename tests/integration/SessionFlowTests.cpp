@@ -393,8 +393,9 @@ void TestSourceDiscoveryBeforeAnySession() {
         return;
     }
 
-    std::vector<deskhub::SourceInfo> sources;
-    Check(QuerySources(HostAddr(port), sources), "LIST_SOURCES was answered");
+    SourceQueryReply reply;
+    Check(QuerySources(HostAddr(port), reply), "LIST_SOURCES was answered");
+    const std::vector<deskhub::SourceInfo>& sources = reply.sources;
     Check(sources.size() == 2, "both shared sources come back");
     if (sources.size() == 2) {
         Check(sources[0].name == "Display 1" && sources[1].name == "Display 2",
@@ -419,13 +420,11 @@ void TestAViewerLearnsWhatTheHostCannotDo() {
         return;
     }
 
-    std::vector<deskhub::SourceInfo> sources;
-    deskhub::HostCaps caps{};
-    Check(QuerySources(HostAddr(port), sources, nullptr, &caps),
-        "the phone answers the query");
-    Check(!caps.acceptsInput,
+    SourceQueryReply phone;
+    Check(QuerySources(HostAddr(port), phone), "the phone answers the query");
+    Check(!phone.caps.acceptsInput,
         "a host that injects no input says so, so the control tick can be called out");
-    Check(!caps.terminal,
+    Check(!phone.caps.terminal,
         "and it offers no shell, so no terminal window is opened against it");
 
     host.Stop();
@@ -436,11 +435,9 @@ void TestAViewerLearnsWhatTheHostCannotDo() {
         Check(false, "the desktop host could not start");
         return;
     }
-    sources.clear();
-    caps = deskhub::HostCaps{};
-    Check(QuerySources(HostAddr(deskPort), sources, nullptr, &caps),
-        "a desktop answers the same query");
-    Check(caps.acceptsInput, "and a host that does take input is not mistaken for a phone");
+    SourceQueryReply desk;
+    Check(QuerySources(HostAddr(deskPort), desk), "a desktop answers the same query");
+    Check(desk.caps.acceptsInput, "and a host that does take input is not mistaken for a phone");
 
     desktop.Stop();
 }
@@ -567,16 +564,16 @@ void TestRevokedClientCannotReadSources() {
     }
 
     deskhubp::ForgetAllPairedDevices();
-    std::vector<deskhub::SourceInfo> sources;
-    Check(!QuerySources(HostAddr(port), sources) && sources.empty(),
+    SourceQueryReply reply;
+    Check(!QuerySources(HostAddr(port), reply) && reply.sources.empty(),
         "a revoked client cannot read display names");
 
     const auto client = deskhubp::LoadOrCreateClientIdentity();
     Check(client.Valid() &&
               deskhubp::RememberPairedDevice(client.fingerprint, "integration-client", std::time(nullptr)),
         "the client key can be explicitly granted again");
-    Check(QuerySources(HostAddr(port), sources) && sources.size() == 1 &&
-              sources[0].name == "DELL U2723QE",
+    Check(QuerySources(HostAddr(port), reply) && reply.sources.size() == 1 &&
+              reply.sources[0].name == "DELL U2723QE",
         "a granted client can read sources after authentication");
     host.Stop();
 }

@@ -203,10 +203,12 @@ add_library(platform STATIC
     src/audio/AudioPlayer.cpp
     src/audio/AudioBroadcaster.cpp
     src/system/TrustStoreFile.cpp
+    src/system/ClientKeys.cpp
     src/system/PairedDevicesFile.cpp
     src/system/AuthorizedKeysFile.cpp
     src/auth/AuthNegotiation.cpp
     src/client/HostLink.cpp
+    src/client/HostProfiles.cpp
     src/host/TerminalHost.cpp
     src/client/TerminalViewer.cpp
     src/host/FileHost.cpp
@@ -224,6 +226,8 @@ add_library(platform STATIC
     src/ffi/DiscoveryFfi.cpp
     src/ffi/SendFfi.cpp
     src/ffi/TerminalFfi.cpp
+    src/ffi/HostProfileFfi.cpp
+    src/ffi/ClientKeyFfi.cpp
 )
 target_include_directories(platform PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 target_compile_features(platform PUBLIC cxx_std_20)
@@ -322,6 +326,7 @@ if(DESKHUB_PLATFORM_TESTS)
         tests/input/LocalInputGateTests.cpp
         tests/media/AudioBroadcasterTests.cpp
         tests/media/OpusCodecTests.cpp
+        tests/client/HostProfilesTests.cpp
         tests/net/NetAddrTests.cpp
         tests/net/SourceQueryTests.cpp
         tests/net/UdpSocketTests.cpp

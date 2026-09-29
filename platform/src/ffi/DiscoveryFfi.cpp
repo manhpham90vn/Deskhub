@@ -107,6 +107,7 @@ constexpr FieldPair kFieldPairs[] = {
     FieldPair{DHSettingKeepAwake, ui::SettingField::KeepAwake},
     FieldPair{DHSettingAutostart, ui::SettingField::Autostart},
     FieldPair{DHSettingCloseToTray, ui::SettingField::CloseToTray},
+    FieldPair{DHSettingDeviceName, ui::SettingField::DeviceName},
 };
 
 static_assert(std::size(kFieldPairs) == size_t(ui::SettingField::Count),
@@ -372,21 +373,10 @@ void dh_paired_forget_all(void) {
     deskhubp::ClearAuthorizedKeys();
 }
 
-int dh_own_fingerprint(char* out, int capacity) {
-    const deskhubp::ClientIdentity identity = deskhubp::LoadOrCreateClientIdentity();
-    return FillText(out, capacity,
-        identity.Valid() ? deskhub::FormatFingerprint(identity.fingerprint) : std::string());
-}
-
 int dh_host_fingerprint(char* out, int capacity) {
     const deskhubp::HostIdentity identity =
         deskhubp::LoadOrCreateHostIdentity(deskhubp::SessionDeviceName());
     return FillText(out, capacity,
         identity.Valid() ? deskhub::FormatFingerprint(identity.fingerprint) : std::string());
-}
-
-int dh_own_public_key(char* out, int capacity) {
-    const deskhubp::ClientIdentity identity = deskhubp::LoadOrCreateClientIdentity();
-    return FillText(out, capacity, deskhubp::ClientPublicKeyText(identity));
 }
 }

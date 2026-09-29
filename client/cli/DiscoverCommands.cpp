@@ -74,6 +74,17 @@ ExitCode RunDisplays(const Command& command) {
     return ExitCode::Ok;
 }
 
+SourceQueryRequest QueryRequestOf(const Command& command) {
+    return SourceQueryRequest{command.identityName.value_or(""), command.acceptNewHostKey};
+}
+
+ExitCode ReportQueryFailure(const SourceQueryReply& reply) {
+    PrintError(reply.failure);
+    if (reply.unknownHostKey)
+        PrintError(deskhub::ui::NewHostKeyCliHint(deskhub::FormatFingerprint(*reply.unknownHostKey)));
+    return ExitCode::Refused;
+}
+
 ExitCode RunSources(const Command& command) {
     NetAddr server{};
     if (!ResolveTarget(command, server)) return ExitCode::Usage;
@@ -83,14 +94,10 @@ ExitCode RunSources(const Command& command) {
         return ExitCode::Unsupported;
     }
 
-    std::vector<deskhub::SourceInfo> sources;
-    deskhub::AuthResultCode code = deskhub::AuthResultCode::NotPaired;
-    deskhub::HostCaps caps{};
-    if (!QuerySources(server, sources, &code, &caps,
-            command.identityName.value_or(""))) {
-        PrintError(deskhub::ui::AuthRefusalText(code));
-        return ExitCode::Refused;
-    }
+    SourceQueryReply reply;
+    if (!QuerySources(server, reply, QueryRequestOf(command))) return ReportQueryFailure(reply);
+    const std::vector<deskhub::SourceInfo>& sources = reply.sources;
+    const deskhub::HostCaps& caps = reply.caps;
     if (sources.empty() && !caps.terminal && !caps.files) {
         PrintError(deskhub::ui::SourceQueryEmpty(command.address));
         return ExitCode::Unreachable;

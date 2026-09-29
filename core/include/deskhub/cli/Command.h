@@ -115,6 +115,7 @@ struct Command {
 
     std::optional<std::string> deviceName{};
     std::optional<std::string> identityName{};
+    bool acceptNewHostKey = false;
 
     DevicesAction devices = DevicesAction::List;
     TrustAction trust = TrustAction::List;

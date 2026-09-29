@@ -31,6 +31,7 @@ enum class SettingField : uint8_t {
     KeepAwake,
     Autostart,
     CloseToTray,
+    DeviceName,
     Count,
 };
 

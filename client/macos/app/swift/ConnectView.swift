@@ -70,6 +70,7 @@ struct MainMenuView: View {
                 queryingOverlay
             }
         }
+        .hostTrustAlert(connect) { beginConnect(to: $0) }
         .alert("Deskhub", isPresented: showingConnectError) {
             Button("OK", role: .cancel) { connect.connectError = "" }
         } message: {
@@ -100,7 +101,11 @@ struct MainMenuView: View {
         switch page {
         case .host: HostPage(sharing: sharing) { Task { await share() } }
         case .client: clientPage
-        case .devices: DevicesPage()
+        case .devices:
+            DevicesPage(
+                trustedHostsRevision: connect.trustedHostsRevision,
+                onConnectHost: beginConnect(to:)
+            )
         case .settings: SettingsPage(sharing: sharing)
         }
     }
@@ -152,14 +157,6 @@ struct MainMenuView: View {
                         .onSubmit(beginConnect)
                         .disabled(connect.isConnecting)
                 }
-                GridRow {
-                    Text(DeskhubClient.string(DHStrDeviceNameLabel))
-                    TextField("", text: $connect.deviceName)
-                        .textFieldStyle(.roundedBorder)
-                        .frame(width: 260)
-                        .onSubmit(beginConnect)
-                        .disabled(connect.isConnecting)
-                }
             }
         }
     }
@@ -183,7 +180,7 @@ struct MainMenuView: View {
                     ProgressView().controlSize(.small)
                     Text(DeskhubClient.string(DHStrQueryingSources))
                 }
-                Button("Cancel") { connect.forgetHost() }
+                Button(DeskhubClient.string(DHStrCancelAction)) { connect.forgetHost() }
             }
             .padding(24)
             .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
@@ -230,15 +227,17 @@ extension MainMenuView {
     }
 
     private func pick(_ row: DeviceListRow) {
-        connect.address = DeskhubClient.addressHost(row.addr)
-        connect.port = DeskhubClient.addressPortText(row.addr)
+        beginConnect(to: row.addr)
+    }
+
+    private func beginConnect(to address: String) {
+        connect.target(address)
         beginConnect()
     }
 
     private func beginConnect() {
         guard !connect.address.isEmpty, !connect.isConnecting else { return }
         guard connect.acceptAddress() != nil else { return }
-        connect.saveDeviceName()
         Task {
             guard let found = await connect.connectAuth() else { return }
             let address = connect.acceptedAddress
@@ -246,7 +245,6 @@ extension MainMenuView {
             connect.forgetHost()
             openWindow(value: ConnectionRequest(
                 address: address,
-                name: connect.deviceName,
                 sources: found.sources,
                 caps: found.caps,
                 control: sharing.clientControl

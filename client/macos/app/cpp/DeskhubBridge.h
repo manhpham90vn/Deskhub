@@ -8,6 +8,8 @@
 #include "deskhubp/ffi/ScreenFfi.h"
 #include "deskhubp/ffi/SendFfi.h"
 #include "deskhubp/ffi/DiscoveryFfi.h"
+#include "deskhubp/ffi/HostProfileFfi.h"
+#include "deskhubp/ffi/ClientKeyFfi.h"
 #include "deskhubp/ffi/TerminalFfi.h"
 
 #ifdef __cplusplus

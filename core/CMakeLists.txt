@@ -84,6 +84,8 @@ add_library(core STATIC
     src/ui/TransferView.cpp
     src/ui/DeviceRows.cpp
     src/ui/RecentDevices.cpp
+    src/ui/HostProfiles.cpp
+    src/ui/ClientKeys.cpp
     src/ui/UiSettings.cpp
     src/ui/AutostartConfig.cpp
     src/ui/AutoShareGate.cpp
@@ -199,6 +201,8 @@ if(DESKHUB_CORE_TESTS)
         tests/ui/TransferViewTests.cpp
         tests/ui/DeviceRowsTests.cpp
         tests/ui/RecentDevicesTests.cpp
+        tests/ui/HostProfilesTests.cpp
+        tests/ui/ClientKeysTests.cpp
         tests/ui/UiSettingsTests.cpp
         tests/ui/AutostartConfigTests.cpp
         tests/ui/AutoShareGateTests.cpp

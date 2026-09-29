@@ -31,6 +31,7 @@
 #include <unistd.h>
 #endif
 
+#include "deskhub/ui/ClientKeys.h"
 #include "deskhubp/system/AppDataFile.h"
 #include "deskhubp/system/AuthProof.h"
 #include "deskhubp/system/ConfigFileLock.h"
@@ -283,13 +284,7 @@ bool WriteTemporary(const std::filesystem::path& path, std::string_view data) {
 
 std::optional<std::string> KeyFileName(std::string_view name) {
     if (name == "default") return std::string(kClientKeyFileName);
-    if (name.empty() || name.size() > 64) return std::nullopt;
-    for (size_t i = 0; i < name.size(); ++i) {
-        const char c = name[i];
-        const bool letter = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
-        const bool digit = c >= '0' && c <= '9';
-        if (!letter && !digit && (i == 0 || (c != '-' && c != '_'))) return std::nullopt;
-    }
+    if (!deskhub::ui::IsValidClientKeyName(name)) return std::nullopt;
     return "client_key." + std::string(name) + ".pem";
 }
 

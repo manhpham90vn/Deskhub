@@ -59,6 +59,8 @@ void TestThePageSplitsIntoHostClientAndGeneral() {
 void TestEachSettingSitsOnTheSideThatUsesIt() {
     std::printf("[settings] a setting lives in the box of the side that reads it...\n");
     Check(InArea(ui::SettingField::AllowInput, ui::kSidebarHost), "remote control guards sharing");
+    Check(InArea(ui::SettingField::DeviceName, ui::kSettingsGeneralArea),
+        "one device name serves both the host and the client side");
     Check(InArea(ui::SettingField::PlayAudio, ui::kSidebarClient), "playing sound is watching");
     Check(InArea(ui::SettingField::Port, ui::kSettingsGeneralArea),
         "the port is where the host listens and where the scan knocks");

@@ -187,6 +187,14 @@ FlagResult ApplyTextFlag(Command& command, const Flag& flag, Cursor& cursor,
     return FlagResult::Handled;
 }
 
+FlagResult ApplyConnectionFlag(Command& command, const Flag& flag, Cursor& cursor) {
+    if (flag.name == "--accept-new-host-key" && !flag.hasInlineValue) {
+        command.acceptNewHostKey = true;
+        return FlagResult::Handled;
+    }
+    return ApplyTextFlag(command, flag, cursor, "--identity", command.identityName);
+}
+
 bool TakeAddress(Command& command, std::string_view token) {
     std::string host;
     uint16_t port = command.port;
@@ -281,9 +289,9 @@ void ParseAddressVerb(Command& command, Cursor& cursor) {
         if (global == FlagResult::Failed) return;
         if (global == FlagResult::Handled) continue;
 
-        const FlagResult identity = ApplyTextFlag(command, flag, cursor, "--identity", command.identityName);
-        if (identity == FlagResult::Failed) return;
-        if (identity == FlagResult::Handled) continue;
+        const FlagResult connection = ApplyConnectionFlag(command, flag, cursor);
+        if (connection == FlagResult::Failed) return;
+        if (connection == FlagResult::Handled) continue;
 
         command.error = UnknownOption(flag.name, command.verb);
         return;
@@ -689,7 +697,7 @@ void ParseSend(Command& command, Cursor& cursor) {
         if (result == FlagResult::Failed) return;
         if (result == FlagResult::Handled) continue;
 
-        result = ApplyTextFlag(command, flag, cursor, "--identity", command.identityName);
+        result = ApplyConnectionFlag(command, flag, cursor);
         if (result == FlagResult::Failed) return;
         if (result == FlagResult::Handled) continue;
 
@@ -852,7 +860,7 @@ void ParseShell(Command& command, Cursor& cursor) {
         if (result == FlagResult::Failed) return;
         if (result == FlagResult::Handled) continue;
 
-        result = ApplyTextFlag(command, flag, cursor, "--identity", command.identityName);
+        result = ApplyConnectionFlag(command, flag, cursor);
         if (result == FlagResult::Failed) return;
         if (result == FlagResult::Handled) continue;
 
@@ -911,7 +919,7 @@ void ParseConnect(Command& command, Cursor& cursor) {
         if (result == FlagResult::Failed) return;
         if (result == FlagResult::Handled) continue;
 
-        result = ApplyTextFlag(command, flag, cursor, "--identity", command.identityName);
+        result = ApplyConnectionFlag(command, flag, cursor);
         if (result == FlagResult::Failed) return;
         if (result == FlagResult::Handled) continue;
 
@@ -1141,9 +1149,11 @@ std::string UsageText(Verb verb) {
                    "              sent no frame - the saved choice has gone stale.\n";
         case Verb::Sources:
             return "Usage: " + program +
-                   " sources ADDRESS[:PORT] [--identity NAME]\n"
+                   " sources ADDRESS[:PORT] [--identity NAME] [--accept-new-host-key]\n"
                    "\n"
-                   "Ask a host what it is sharing. Its TLS key must already be pinned.\n";
+                   "Ask a host what it is sharing. A host whose key is not saved yet is refused\n"
+                   "and its fingerprint is printed; compare it with the host, then rerun with\n"
+                   "--accept-new-host-key to save it. A host whose key changed is always refused.\n";
         case Verb::Devices:
             return "Usage: " + program +
                    " key generate --name NAME\n"
@@ -1256,6 +1266,7 @@ std::string UsageText(Verb verb) {
                    "  --audio / --no-audio  play the host's sound, or do not\n"
                    "  --name NAME           what the host sees this machine called\n"
                    "  --identity NAME       client key to use for this connection\n"
+                   "  --accept-new-host-key save the key of a host seen for the first time\n"
                    "\n"
                    "F9 locks the pointer to the window, Escape lets it go again.\n";
         case Verb::Shell:
@@ -1270,6 +1281,7 @@ std::string UsageText(Verb verb) {
                    "\n"
                    "  --name NAME       what the host sees this machine called\n"
                    "  --identity NAME   client key to use for this connection\n"
+                   "  --accept-new-host-key  save the key of a host seen for the first time\n"
                    "  --resume ID       reattach a shell the host is keeping, by its id\n"
                    "  --list            list the shells open on the host, then quit\n";
         case Verb::Send:
@@ -1283,6 +1295,7 @@ std::string UsageText(Verb verb) {
                    "\n"
                    "  --name NAME       what the host sees this machine called\n"
                    "  --identity NAME   client key to use for this connection\n"
+                   "  --accept-new-host-key  save the key of a host seen for the first time\n"
                    "\n"
                    "At most " +
                    std::to_string(kMaxTransferFiles) +

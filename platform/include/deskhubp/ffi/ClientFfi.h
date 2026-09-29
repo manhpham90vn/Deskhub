@@ -189,6 +189,29 @@ typedef enum {
     DHStrReceivingFilesState = 168,
     DHStrMobileTakesFilesNote = 169,
     DHStrOpenFolderAction = 170,
+    DHStrSavedHostsHeading = 171,
+    DHStrSavedHostsHint = 172,
+    DHStrSavedHostsEmpty = 173,
+    DHStrRemoveHostAction = 180,
+    DHStrDevicesHostArea = 181,
+    DHStrDevicesHostAreaHint = 182,
+    DHStrDevicesClientArea = 183,
+    DHStrDevicesClientAreaHint = 184,
+    DHStrAllowClientPlaceholder = 185,
+    DHStrAllowClientAction = 186,
+    DHStrAllowClientInvalid = 187,
+    DHStrMyKeysHeading = 188,
+    DHStrMyKeysHint = 189,
+    DHStrCopyPublicKeyAction = 190,
+    DHStrNewKeyAction = 191,
+    DHStrImportKeyAction = 192,
+    DHStrKeyNameLabel = 193,
+    DHStrKeyPassphraseLabel = 194,
+    DHStrTrustNewHostTitle = 195,
+    DHStrTrustNewHostAction = 196,
+    DHStrCancelAction = 197,
+    DHStrCopiedButton = 198,
+    DHStrDeviceNameHint = 199,
 } DHStringId;
 
 typedef enum {
@@ -236,7 +259,8 @@ bool dh_is_escape_vk(int32_t vk);
 
 bool dh_parse_address(const char* address);
 
-int dh_list_sources(const char* address, DHSourceInfo* out, int capacity, DHHostCaps* out_caps);
+int dh_list_sources(const char* address, DHSourceInfo* out, int capacity, DHHostCaps* out_caps,
+    char* failure, int failure_capacity, char* new_host_key, int new_host_key_capacity);
 
 int dh_max_sources(void);
 

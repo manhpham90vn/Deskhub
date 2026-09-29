@@ -1,12 +1,24 @@
 #pragma once
+#include <optional>
 #include <string>
-#include <string_view>
 #include <vector>
 
 #include "deskhubp/net/UdpSocket.h"
 
+#include "deskhub/net/TrustStore.h"
 #include "deskhub/protocol/Wire.h"
 
-bool QuerySources(const NetAddr& server, std::vector<deskhub::SourceInfo>& out,
-    deskhub::AuthResultCode* outCode = nullptr, deskhub::HostCaps* outCaps = nullptr,
-    std::string_view clientIdentityName = {});
+struct SourceQueryRequest {
+    std::string clientIdentityName{};
+    bool acceptNewHostKey = false;
+};
+
+struct SourceQueryReply {
+    std::vector<deskhub::SourceInfo> sources{};
+    deskhub::HostCaps caps{};
+    std::string failure{};
+    std::optional<deskhub::Fingerprint> unknownHostKey{};
+};
+
+bool QuerySources(const NetAddr& server, SourceQueryReply& reply,
+    const SourceQueryRequest& request = {});

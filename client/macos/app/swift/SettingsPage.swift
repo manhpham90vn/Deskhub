@@ -2,6 +2,8 @@ import SwiftUI
 
 struct SettingsPage: View {
     @Bindable var sharing: SharingModel
+    @State private var deviceName = DeviceNameModel()
+    @FocusState private var editingDeviceName: Bool
 
     private static let areas = SettingsAreaModel.loadDesktopLayout()
 
@@ -10,7 +12,7 @@ struct SettingsPage: View {
             deskhubHeading(DeskhubClient.string(DHStrSidebarSettings))
 
             ForEach(SettingsPage.areas) { area in
-                SettingsArea(title: area.title) {
+                DeskhubArea(title: area.title) {
                     ForEach(area.blocks) { block in
                         blockView(block)
                     }
@@ -29,6 +31,10 @@ struct SettingsPage: View {
         .onChange(of: sharing.shareAudio) { _, _ in sharing.save() }
         .onChange(of: sharing.playAudio) { _, _ in sharing.save() }
         .onChange(of: sharing.keepAwake) { _, _ in sharing.save() }
+        .onChange(of: editingDeviceName) { _, editing in
+            if !editing { deviceName.commit() }
+        }
+        .onDisappear { deviceName.commit() }
     }
 
     @ViewBuilder
@@ -55,6 +61,11 @@ struct SettingsPage: View {
     @ViewBuilder
     private func input(_ field: DHSettingField) -> some View {
         switch field {
+        case DHSettingDeviceName:
+            TextField(deviceName.placeholder, text: $deviceName.name)
+                .textFieldStyle(.roundedBorder).frame(width: 260)
+                .focused($editingDeviceName)
+                .onSubmit(deviceName.commit)
         case DHSettingFps:
             TextField("", value: $sharing.fps, format: .number)
                 .textFieldStyle(.roundedBorder).frame(width: 90)
@@ -141,7 +152,7 @@ private struct SettingsBlock: Identifiable {
 private struct SettingsAreaModel: Identifiable {
     private static let layoutCapacity = 64
     private static let labelledInputs: [DHSettingField] = [
-        DHSettingFps, DHSettingBitrate, DHSettingQuality, DHSettingPort,
+        DHSettingDeviceName, DHSettingFps, DHSettingBitrate, DHSettingQuality, DHSettingPort,
     ]
 
     let id: Int
@@ -186,31 +197,5 @@ private struct SettingsAreaModel: Identifiable {
                 blocks.append(SettingsBlock(id: index, content: .inputs([row])))
             }
         }
-    }
-}
-
-private struct SettingsArea<Content: View>: View {
-    private static var accentBarWidth: CGFloat { CGFloat(dh_settings_area_bar_width()) }
-
-    let title: String
-    @ViewBuilder let content: Content
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(title)
-                .font(.system(size: 17, weight: .bold))
-                .foregroundStyle(DeskhubPalette.heading)
-            content
-        }
-        .padding(16)
-        .padding(.leading, SettingsArea.accentBarWidth)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .overlay(alignment: .leading) {
-            Rectangle().fill(DeskhubPalette.accent).frame(width: SettingsArea.accentBarWidth)
-        }
-        .clipShape(RoundedRectangle(cornerRadius: 8))
-        .overlay(
-            RoundedRectangle(cornerRadius: 8).stroke(DeskhubPalette.rowLine, lineWidth: 1)
-        )
     }
 }

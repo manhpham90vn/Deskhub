@@ -36,6 +36,18 @@ struct HostQuery: Sendable {
     var caps = HostCaps()
 }
 
+struct HostQueryOutcome: Sendable {
+    var query: HostQuery?
+    var failure = ""
+    var newHostKey = ""
+}
+
+struct PendingHostTrust: Sendable, Equatable {
+    let address: String
+    let fingerprint: String
+    let prompt: String
+}
+
 struct TransferState: Sendable, Equatable {
     var active = false
     var done = false

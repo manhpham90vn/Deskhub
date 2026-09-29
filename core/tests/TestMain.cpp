@@ -218,6 +218,12 @@ int main() {
     std::printf("--- ui: recent devices list (parse, touch, cap) ---\n");
     RunRecentDevicesTests();
 
+    std::printf("--- ui: saved hosts (name, address, pinned key) ---\n");
+    RunHostProfilesTests();
+
+    std::printf("--- ui: this machine's client keys ---\n");
+    RunClientKeysTests();
+
     std::printf("--- ui: persisted share settings ---\n");
     RunUiSettingsTests();
 

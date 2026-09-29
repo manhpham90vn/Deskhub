@@ -2,6 +2,7 @@
 
 #include <cinttypes>
 
+#include "deskhub/ui/Strings.h"
 #include "deskhubp/diag/Log.h"
 #include "deskhubp/client/HostLink.h"
 #include "deskhubp/system/Clock.h"
@@ -14,12 +15,10 @@ constexpr uint64_t kListTimeoutUs = 5'000'000;
 constexpr uint32_t kPollWaitMs = 2;
 }
 
-bool QuerySources(const NetAddr& server, std::vector<deskhub::SourceInfo>& out,
-    deskhub::AuthResultCode* outCode,
-    deskhub::HostCaps* outCaps, std::string_view clientIdentityName) {
-    out.clear();
-    if (outCode) *outCode = deskhub::AuthResultCode::NotPaired;
-    if (outCaps) *outCaps = deskhub::HostCaps{};
+bool QuerySources(const NetAddr& server, SourceQueryReply& reply,
+    const SourceQueryRequest& request) {
+    reply = SourceQueryReply{};
+    reply.failure = deskhub::ui::SourceQueryFailed(server.ToString());
 
     if (!deskhubp::QuicAvailable()) {
         LOGE("[Sources] This build has no QUIC library.");
@@ -34,7 +33,8 @@ bool QuerySources(const NetAddr& server, std::vector<deskhub::SourceInfo>& out,
     config.host = server;
     config.hostLabel = server.ToString();
     config.clientName = deskhubp::SessionDeviceName();
-    config.clientIdentityName = clientIdentityName;
+    config.clientIdentityName = request.clientIdentityName;
+    config.acceptNewHostKey = request.acceptNewHostKey;
     config.connectTimeoutMs = kHandshakeTimeoutMs;
     config.authTimeoutMs = kAuthTimeoutMs;
     config.recvWaitMs = kPollWaitMs;
@@ -45,7 +45,13 @@ bool QuerySources(const NetAddr& server, std::vector<deskhub::SourceInfo>& out,
 
     while (!link.Settled() && link.State() != deskhubp::HostLinkState::Ready)
         control->WaitWork(kPollWaitMs);
-    if (outCode) *outCode = link.AuthCode();
+    if (link.State() == deskhubp::HostLinkState::Refused ||
+        link.State() == deskhubp::HostLinkState::Failed) {
+        const std::string reason = link.Message();
+        if (!reason.empty()) reply.failure = reason;
+        if (link.Verdict() == deskhub::TrustVerdict::Unknown)
+            reply.unknownHostKey = deskhub::ParseFingerprint(link.FingerprintText());
+    }
     if (link.State() == deskhubp::HostLinkState::Refused) {
         LOGW("[Sources] %s did not let this machine in.", server.ToString().c_str());
         return false;
@@ -74,9 +80,10 @@ bool QuerySources(const NetAddr& server, std::vector<deskhub::SourceInfo>& out,
 
         deskhub::SourceInfo tmp[deskhub::kMaxSources];
         const size_t cnt = deskhub::ParseSourceList(deskhub::PayloadOf(span), tmp);
-        for (size_t i = 0; i < cnt; ++i) out.push_back(std::move(tmp[i]));
-        if (outCaps) *outCaps = deskhub::HostCapsOfFlags(h->flags);
-        LOGI("[Sources] Host is sharing %zu source(s).", out.size());
+        for (size_t i = 0; i < cnt; ++i) reply.sources.push_back(std::move(tmp[i]));
+        reply.caps = deskhub::HostCapsOfFlags(h->flags);
+        reply.failure.clear();
+        LOGI("[Sources] Host is sharing %zu source(s).", reply.sources.size());
         return true;
     }
 

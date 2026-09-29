@@ -5,12 +5,16 @@ struct SettingsView: View {
 
     @Bindable var settings: SettingsModel
     let onPortChange: (UInt16) -> Void
+    @State private var deviceName = DeviceNameModel()
+    @FocusState private var editingDeviceName: Bool
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 deskhubHeading(DeskhubClient.string(DHStrClientSettingsHeading))
                 deskhubHint(DeskhubClient.string(DHStrClientSettingsHint))
+
+                deviceNameField
 
                 deskhubSection(DeskhubClient.string(DHStrSettingsSectionConnection))
                 HStack(spacing: 12) {
@@ -63,6 +67,23 @@ struct SettingsView: View {
             guard !Task.isCancelled else { return }
             settings.save()
             onPortChange(settings.acceptedPort)
+        }
+        .onChange(of: editingDeviceName) { _, editing in
+            if !editing { deviceName.commit() }
+        }
+        .onDisappear { deviceName.commit() }
+    }
+
+    private var deviceNameField: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(DeskhubClient.string(DHStrDeviceNameLabel))
+            TextField(deviceName.placeholder, text: $deviceName.name)
+                .textFieldStyle(.roundedBorder)
+                .autocorrectionDisabled()
+                .submitLabel(.done)
+                .focused($editingDeviceName)
+                .onSubmit(deviceName.commit)
+            deskhubHint(DeskhubClient.string(DHStrDeviceNameHint))
         }
     }
 }

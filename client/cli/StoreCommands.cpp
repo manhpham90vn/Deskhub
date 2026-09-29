@@ -13,12 +13,13 @@
 #include "deskhub/cli/Json.h"
 #include "deskhub/net/PairedDevices.h"
 #include "deskhub/net/TrustStore.h"
-#include "deskhub/net/Ipv4.h"
 #include "deskhub/ui/UiSettings.h"
 #include "deskhubp/system/HostIdentity.h"
 #include "deskhubp/system/AuthProof.h"
+#include "deskhubp/client/HostProfiles.h"
 #include "deskhubp/system/AuthorizedKeysFile.h"
 #include "deskhubp/system/ClientIdentity.h"
+#include "deskhubp/system/ClientKeys.h"
 #include "deskhubp/system/PairedDevicesFile.h"
 #include "deskhubp/system/TrustStoreFile.h"
 #include "deskhubp/system/UiSettingsStore.h"
@@ -27,14 +28,42 @@ namespace deskhubcli {
 
 namespace {
 
-bool ValidAlias(std::string_view alias) {
-    if (alias.empty() || alias.size() > deskhub::kMaxTrustLabelBytes) return false;
-    for (char c : alias) {
-        if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
-            (c >= '0' && c <= '9') || c == '-' || c == '_') continue;
-        return false;
+ExitCode ReportHostProfile(deskhub::ui::HostProfileError error, const Command& command,
+    std::string_view done) {
+    if (error == deskhub::ui::HostProfileError::None) {
+        if (!command.quiet) PrintLine(done);
+        return ExitCode::Ok;
     }
-    return true;
+    PrintError(deskhub::ui::HostProfileErrorText(error));
+    const bool fileProblem = error == deskhub::ui::HostProfileError::StoreUnreadable ||
+                             error == deskhub::ui::HostProfileError::WriteFailed ||
+                             error == deskhub::ui::HostProfileError::AliasAmbiguous;
+    return fileProblem ? ExitCode::Failed : ExitCode::Usage;
+}
+
+ExitCode RunHostProfile(const Command& command) {
+    if (command.trust == TrustAction::Forget)
+        return ReportHostProfile(
+            deskhubp::RemoveHostProfile(command.profileAlias), command, "Saved host removed.");
+
+    deskhub::ui::HostProfileRequest request;
+    request.alias = command.profileAlias;
+    request.address = command.target;
+    request.identityName = command.identityName.value_or(std::string());
+    if (command.value == "-") {
+        std::string text;
+        if (!std::getline(std::cin, text)) {
+            PrintError("no host public key arrived on stdin");
+            return ExitCode::Usage;
+        }
+        request.hostKey = deskhubp::ParseHostKeyText(text);
+        if (!request.hostKey)
+            return ReportHostProfile(deskhub::ui::HostProfileError::InvalidHostKey, command, "");
+    }
+    const auto mode = command.trust == TrustAction::Add ? deskhub::ui::HostProfileMode::Add
+                                                        : deskhub::ui::HostProfileMode::Update;
+    return ReportHostProfile(deskhubp::SaveHostProfile(mode, request), command,
+        "Host profile saved.");
 }
 
 std::string DeviceName(const deskhub::PairedDevice& device) {
@@ -133,7 +162,7 @@ ExitCode RunDevices(const Command& command) {
         const deskhubp::ClientIdentity identity = command.keyName.empty()
                                                       ? deskhubp::LoadOrCreateClientIdentity()
                                                       : deskhubp::LoadClientIdentity(command.keyName);
-        const std::string publicKey = deskhubp::ClientPublicKeyText(identity);
+        const std::string publicKey = deskhubp::ClientPublicKeyLine(identity, command.keyName);
         if (publicKey.empty()) {
             PrintError("could not read this machine's public key");
             return ExitCode::Failed;
@@ -148,7 +177,7 @@ ExitCode RunDevices(const Command& command) {
             PrintError("could not create identity: check the name and whether it already exists");
             return ExitCode::Failed;
         }
-        if (!command.quiet) PrintLine(deskhubp::ClientPublicKeyText(identity));
+        if (!command.quiet) PrintLine(deskhubp::ClientPublicKeyLine(identity, command.keyName));
         return ExitCode::Ok;
     }
 
@@ -323,92 +352,8 @@ ExitCode RunDevices(const Command& command) {
 ExitCode RunTrust(const Command& command) {
     const bool profileCommand = command.verb == deskhub::cli::Verb::Host;
     if (profileCommand && command.trust != TrustAction::Public &&
-        command.trust != TrustAction::List) {
-        if (!ValidAlias(command.profileAlias)) {
-            PrintError("host alias must be 1-64 ASCII letters, digits, '-' or '_'");
-            return ExitCode::Usage;
-        }
-        const auto store = deskhubp::TryLoadTrustStore();
-        if (!store) {
-            PrintError("could not read known_hosts; fix the file before changing a profile");
-            return ExitCode::Failed;
-        }
-        std::optional<deskhub::TrustedHost> existing;
-        for (const auto& host : store->Hosts()) {
-            if (host.label != command.profileAlias) continue;
-            if (existing) {
-                PrintError("host alias is ambiguous; fix duplicate labels in known_hosts");
-                return ExitCode::Failed;
-            }
-            existing = host;
-        }
-        if (command.trust == TrustAction::Add && existing) {
-            PrintError("host alias already exists; use host update");
-            return ExitCode::Usage;
-        }
-        if (command.trust != TrustAction::Add && !existing) {
-            PrintError("no saved host has that alias");
-            return ExitCode::Usage;
-        }
-        if (command.trust == TrustAction::Forget) {
-            if (!deskhubp::ForgetTrustedHost(existing->endpoint)) {
-                PrintError("could not remove the saved host");
-                return ExitCode::Failed;
-            }
-            if (!command.quiet) PrintLine("Saved host removed.");
-            return ExitCode::Ok;
-        }
-        const std::string endpoint = command.target.empty() ? existing->endpoint : command.target;
-        std::string host;
-        uint16_t port = deskhub::kDeskhubPort;
-        if (!deskhub::ui::SplitHostPort(endpoint, host, port) ||
-            !deskhub::ParseIPv4(host)) {
-            PrintError("invalid host address");
-            return ExitCode::Usage;
-        }
-        const std::string canonical = host + ":" + std::to_string(port);
-        const std::string identityName = command.identityName.value_or(
-            existing && !existing->identityName.empty() ? existing->identityName : "default");
-        if (!deskhubp::LoadClientIdentity(identityName).Valid()) {
-            PrintError("client identity does not exist or cannot be read");
-            return ExitCode::Usage;
-        }
-        auto fingerprint = existing ? std::optional<deskhub::Fingerprint>(existing->fingerprint)
-                                    : std::nullopt;
-        if (command.value == "-") {
-            std::string text;
-            if (!std::getline(std::cin, text)) {
-                PrintError("no host public key arrived on stdin");
-                return ExitCode::Usage;
-            }
-            fingerprint = deskhubp::FingerprintOfPublicKey(
-                deskhubp::PublicKeySpkiFromText(text));
-            if (!fingerprint) {
-                PrintError("invalid or unsupported host public key");
-                return ExitCode::Usage;
-            }
-        }
-        if (!fingerprint) {
-            PrintError("a host public key is required");
-            return ExitCode::Usage;
-        }
-        if ((command.trust == TrustAction::Add || canonical != existing->endpoint) &&
-            store->Find(canonical)) {
-            PrintError("another saved host already uses that address");
-            return ExitCode::Usage;
-        }
-        const bool saved = existing
-                               ? deskhubp::UpdateTrustedHostProfile(*existing, canonical,
-                                     command.profileAlias, *fingerprint, identityName)
-                               : deskhubp::CreateTrustedHostProfile(canonical, command.profileAlias,
-                                     *fingerprint, identityName);
-        if (!saved) {
-            PrintError("could not save the host profile");
-            return ExitCode::Failed;
-        }
-        if (!command.quiet) PrintLine("Host profile saved.");
-        return ExitCode::Ok;
-    }
+        command.trust != TrustAction::List)
+        return RunHostProfile(command);
     if (command.trust == TrustAction::Public) {
         const auto identity = deskhubp::LoadOrCreateHostIdentity("deskhub");
         const std::string publicKey = deskhubp::IdentityPublicKeyText(identity);
@@ -428,11 +373,7 @@ ExitCode RunTrust(const Command& command) {
                 return ExitCode::Usage;
             }
         }
-        auto fingerprint = deskhub::ParseFingerprint(supplied);
-        if (!fingerprint) {
-            const auto spki = deskhubp::PublicKeySpkiFromText(supplied);
-            fingerprint = deskhubp::FingerprintOfPublicKey(spki);
-        }
+        const auto fingerprint = deskhubp::ParseHostKeyText(supplied);
         if (!fingerprint || command.target.empty()) {
             PrintError("expected an address and host public key or SHA256 fingerprint");
             return ExitCode::Usage;

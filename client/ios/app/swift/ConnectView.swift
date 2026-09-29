@@ -70,6 +70,7 @@ struct ConnectView: View {
         } message: {
             Text(model.connect.connectError)
         }
+        .hostTrustAlert(model.connect) { model.beginConnect(to: $0) }
         .task { model.discovery.start() }
     }
 
@@ -151,12 +152,6 @@ struct ConnectView: View {
                 .keyboardType(.numberPad)
                 .frame(width: 90)
             }
-
-            TextField("Your name", text: $model.connect.deviceName)
-                .textFieldStyle(.roundedBorder)
-                .autocorrectionDisabled()
-                .submitLabel(.go)
-                .onSubmit(model.beginConnect)
         }
     }
 
@@ -168,7 +163,7 @@ struct ConnectView: View {
                     ProgressView()
                     Text(DeskhubClient.string(DHStrQueryingSources))
                 }
-                Button("Cancel", action: model.dropHost)
+                Button(DeskhubClient.string(DHStrCancelAction), action: model.dropHost)
             }
             .padding(24)
             .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
@@ -176,9 +171,6 @@ struct ConnectView: View {
     }
 
     private func pick(_ row: DeviceListRow) {
-        let addr = DeskhubClient.composeAddress(
-            DeskhubClient.addressHost(row.addr), portText: DeskhubClient.addressPortText(row.addr)
-        )
-        model.beginConnect(to: addr)
+        model.beginConnect(to: row.addr)
     }
 }

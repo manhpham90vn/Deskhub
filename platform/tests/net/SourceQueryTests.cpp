@@ -68,25 +68,26 @@ void TestAPlainUdpImpostorIsNotBelieved() {
 
     std::thread responder(AnswerOneQuery, std::ref(host));
 
-    std::vector<deskhub::SourceInfo> out;
-    deskhub::AuthResultCode code = deskhub::AuthResultCode::Accepted;
-    const bool ok = QuerySources(NetAddr{kLoopbackIp, port}, out, &code);
+    SourceQueryReply reply;
+    const bool ok = QuerySources(NetAddr{kLoopbackIp, port}, reply);
     responder.join();
 
     Check(!ok, "the query fails rather than trusting whatever answered");
-    Check(out.empty(), "and not one display name is taken from it");
+    Check(reply.sources.empty(), "and not one display name is taken from it");
+    Check(!reply.failure.empty(), "and the caller is told why");
+    Check(!reply.unknownHostKey, "and no host key is offered for trust without a TLS handshake");
     host.Close();
 }
 
 void TestQueryTimesOutWithoutAHost() {
     std::printf("[srcq] no host answering means a clean false, not a hang (~3 s)...\n");
-    std::vector<deskhub::SourceInfo> out;
-    out.push_back(deskhub::SourceInfo{});
+    SourceQueryReply reply;
+    reply.sources.push_back(deskhub::SourceInfo{});
     const uint64_t startUs = NowUs();
-    const bool ok = QuerySources(NetAddr{kLoopbackIp, kLastTestPort + 1}, out);
+    const bool ok = QuerySources(NetAddr{kLoopbackIp, kLastTestPort + 1}, reply);
     const uint64_t tookUs = NowUs() - startUs;
     Check(!ok, "silence is reported as failure");
-    Check(out.empty(), "and the stale result list was cleared");
+    Check(reply.sources.empty(), "and the stale result list was cleared");
     Check(tookUs < 10'000'000, "the query gives up in bounded time");
 }
 
