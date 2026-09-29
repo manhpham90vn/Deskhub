@@ -806,3 +806,7 @@ runner 上与 base commit 的 A/B 结果（偏移仅作为警告，不导致失�
   `bind(127.0.0.1:47793)` 上以 `EADDRINUSE` 失败：上一个测试的 shell 还没退出。
   `UdpSocket::Open` 现在设置 `FD_CLOEXEC`，shell 一 exec 描述符就消失，端口只属于 host。
   任何会 fork 用户 shell 的进程中的长命描述符都需要这一点；仅在父进程关闭是不够的。
+  不过 close-on-exec 仍留有一段空隙：处于 `forkpty` 与 `exec` 之间的子进程仍持有其副本，
+  自 service 循环不再为每次 poll 耗费一毫秒、下一个测试更早开始起，同一个 `bind` 在每次
+  ASan 运行中都失败。因此 `Shutdown` 在 hangup 之后最多用 200 ms 回收子进程，超时则
+  kill，这也使已关闭的终端不再留下 zombie。

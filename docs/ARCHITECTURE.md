@@ -960,3 +960,8 @@ line.
   yet. `UdpSocket::Open` now sets `FD_CLOEXEC`, so the descriptor is gone the moment the
   shell execs and the port belongs to nobody but the host. Any long-lived descriptor in a
   process that forks a user's shell needs this; closing it in the parent is not enough.
+  Close-on-exec left one window open, though: a child between `forkpty` and `exec` still
+  holds its copy, and the same `bind` failed on every ASan run once the service loop
+  stopped spending a millisecond per poll and the next test started sooner. `Shutdown`
+  therefore reaps the child for up to 200 ms after the hangup and kills it after that,
+  which also stops a closed terminal leaving a zombie behind.

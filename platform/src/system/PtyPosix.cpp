@@ -19,10 +19,14 @@
 #endif
 
 #include "deskhubp/diag/Log.h"
+#include "deskhubp/system/Clock.h"
 
 namespace deskhubp {
 
 namespace {
+
+constexpr uint64_t kHangupGraceUs = 200'000;
+constexpr uint64_t kReapPollUs = 1'000;
 
 winsize ToWinSize(deskhub::TermSize size) {
     const deskhub::TermSize clamped = deskhub::ClampTermSize(size);
@@ -60,11 +64,31 @@ struct Pty::Impl {
         child = -1;
     }
 
-    void Shutdown() {
-        if (child > 0) {
-            kill(child, SIGHUP);
+    bool ReapWithin(uint64_t graceUs) {
+        const uint64_t deadline = NowUs() + graceUs;
+        for (;;) {
             Reap(false);
+            if (child <= 0) return true;
+            if (NowUs() >= deadline) return false;
+            SleepUs(kReapPollUs);
         }
+    }
+
+    void EndChild() {
+        if (child <= 0) return;
+        exited = false;
+        kill(child, SIGHUP);
+        if (ReapWithin(kHangupGraceUs)) return;
+        LOGW(
+            "pty: the shell ignored the hangup for %llu ms and was killed, because a child "
+            "left running keeps whatever it inherited, the session port included",
+            static_cast<unsigned long long>(kHangupGraceUs / 1000));
+        kill(child, SIGKILL);
+        Reap(true);
+    }
+
+    void Shutdown() {
+        EndChild();
         if (master >= 0) {
             close(master);
             master = -1;

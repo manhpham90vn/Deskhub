@@ -960,3 +960,8 @@ coverage của core.
   trước chưa kịp thoát. `UdpSocket::Open` giờ đặt `FD_CLOEXEC`, nên descriptor biến mất
   ngay khi shell exec và cổng chỉ thuộc về host. Bất kỳ descriptor sống lâu nào trong một
   tiến trình có fork shell của người dùng đều cần điều này; đóng ở tiến trình cha là chưa đủ.
+  Tuy vậy close-on-exec vẫn để hở một khoảng: tiến trình con nằm giữa `forkpty` và `exec`
+  vẫn giữ bản sao của nó, và chính lệnh `bind` đó hỏng ở mọi lần chạy ASan kể từ khi
+  service loop không còn tốn một mili giây cho mỗi lần poll và test kế tiếp bắt đầu sớm
+  hơn. Vì vậy `Shutdown` thu hồi tiến trình con trong tối đa 200 ms sau hangup và kill sau
+  khoảng đó, nhờ vậy một terminal đã đóng cũng không còn để lại zombie.
