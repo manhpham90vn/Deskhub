@@ -1111,3 +1111,10 @@ line.
   terminal until output nobody has read is drained, so with the master still open even
   the killed child never finished exiting, the final `waitpid` never returned, and every
   macOS test job ran into its timeout.
+- **The Windows app talks to the clipboard through Win32, not `wxClipboard`**: `capture::InitRuntime`
+  puts the UI thread into a multi-threaded COM apartment because Windows.Graphics.Capture and the
+  encoder threads rely on the implicit MTA, so wxWidgets' `OleInitialize` fails at start-up and every
+  OLE clipboard call answers `CO_E_NOTINITIALIZED` ("Failed to put data on the clipboard … CoInitialize
+  has not been called"). `OpenClipboard`/`SetClipboardData` need no apartment, so the Copy buttons and
+  the clipboard sync use them; moving the UI thread to an STA instead would strand every worker thread
+  that never calls `CoInitialize`.

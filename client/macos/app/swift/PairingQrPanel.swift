@@ -1,50 +1,89 @@
 import SwiftUI
 
-struct PairingQrToggleButton: View {
-    let model: PairingQrModel
-    let port: UInt16
-    let bindIp: String
+struct PairingQrShowButton: View {
+    static let windowId = "pairingQr"
+
+    let sharing: SharingModel
+    @Environment(\.openWindow) private var openWindow
+    @State private var unavailable = false
 
     var body: some View {
-        Button(DeskhubClient.string(model.shown ? DHStrHideQrAction : DHStrShowQrAction)) {
-            model.toggle(port: port, bindIp: bindIp)
+        Button(DeskhubClient.string(DHStrShowQrAction), action: show)
+            .buttonStyle(.bordered)
+            .alert("Deskhub", isPresented: $unavailable) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(DeskhubClient.string(DHStrQrUnavailable))
+            }
+    }
+
+    private func show() {
+        if !sharing.qr.open {
+            sharing.qr.show(port: sharing.sharingPort, bindIp: sharing.bindIp)
+            guard sharing.qr.shown else {
+                unavailable = true
+                return
+            }
         }
-        .buttonStyle(.bordered)
+        openWindow(id: PairingQrShowButton.windowId)
     }
 }
 
-struct PairingQrPanel: View {
+struct PairingQrWindow: View {
     private static let qrSide: CGFloat = 240
+    private static let contentWidth: CGFloat = 300
+    private static let tick = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
-    let model: PairingQrModel
+    let sharing: SharingModel
+    @Environment(\.dismissWindow) private var dismissWindow
+    @State private var now = Date()
 
     var body: some View {
-        panel
-    }
-
-    private var panel: some View {
         VStack(alignment: .leading, spacing: 10) {
-            QrCodeView(modules: model.modules)
-                .frame(width: PairingQrPanel.qrSide, height: PairingQrPanel.qrSide)
+            QrCodeView(modules: sharing.qr.modules)
+                .frame(width: PairingQrWindow.qrSide, height: PairingQrWindow.qrSide)
                 .frame(maxWidth: .infinity)
-                .accessibilityLabel(model.invite)
+                .accessibilityLabel(sharing.qr.invite)
             HStack(spacing: 10) {
-                Text(model.invite)
+                Text(sharing.qr.invite)
                     .font(.system(.body, design: .monospaced))
                     .foregroundStyle(DeskhubPalette.heading)
                     .lineLimit(1)
                     .truncationMode(.middle)
                     .textSelection(.enabled)
-                    .help(model.invite)
+                    .help(sharing.qr.invite)
                 Spacer(minLength: 0)
-                CopyButton { model.invite }
+                CopyButton { sharing.qr.invite }
                     .buttonStyle(.bordered)
+                    .disabled(!sharing.qr.shown)
+            }
+            if sharing.qr.expired {
+                Text(DeskhubClient.string(DHStrQrExpiredNote))
+                    .foregroundStyle(DeskhubPalette.offline)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button(DeskhubClient.string(DHStrNewQrAction)) {
+                    sharing.qr.renew(port: sharing.sharingPort, bindIp: sharing.bindIp)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(DeskhubPalette.accent)
+                .frame(maxWidth: .infinity)
+            } else {
+                Text(DeskhubClient.qrExpiryLine(sharing.qr.secondsLeft(at: now)))
+                    .foregroundStyle(DeskhubPalette.muted)
             }
             deskhubHint(DeskhubClient.string(DHStrQrHint))
         }
-        .padding(10)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(DeskhubPalette.infoCard)
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .padding(16)
+        .frame(width: PairingQrWindow.contentWidth, alignment: .topLeading)
+        .onReceive(PairingQrWindow.tick) { date in
+            now = date
+            if sharing.qr.shown, sharing.qr.secondsLeft(at: date) <= 0 {
+                sharing.qr.expire()
+            }
+        }
+        .onChange(of: sharing.isSharing) { _, live in
+            if !live { dismissWindow(id: PairingQrShowButton.windowId) }
+        }
+        .onDisappear { sharing.qr.hide() }
     }
 }

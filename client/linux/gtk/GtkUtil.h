@@ -1,9 +1,57 @@
 #pragma once
 #include <gtk/gtk.h>
 
+#include <cstdint>
 #include <functional>
 #include <string>
 #include <utility>
+
+#include "deskhub/ui/Controls.h"
+#include "deskhub/ui/HostRows.h"
+
+inline void AddClass(GtkWidget* widget, const char* name) {
+    gtk_style_context_add_class(gtk_widget_get_style_context(widget), name);
+}
+
+inline void RemoveClass(GtkWidget* widget, const char* name) {
+    gtk_style_context_remove_class(gtk_widget_get_style_context(widget), name);
+}
+
+inline GtkWidget* StandardButton(const char* label) {
+    GtkWidget* button = gtk_button_new_with_label(label);
+    gtk_widget_set_size_request(button, deskhub::ui::kButtonMinWidth, deskhub::ui::kButtonHeight);
+    return button;
+}
+
+inline GtkWidget* PrimaryButton(const char* label) {
+    GtkWidget* button = gtk_button_new_with_label(label);
+    gtk_widget_set_size_request(button, -1, deskhub::ui::kPrimaryButtonHeight);
+    return button;
+}
+
+inline GtkWidget* RowButton(const char* label, const char* cssClass) {
+    GtkWidget* button = gtk_button_new_with_label(label);
+    AddClass(button, "deskhub-row-action");
+    AddClass(button, cssClass);
+    gtk_widget_set_size_request(button, deskhub::ui::kHostActionWidth,
+        deskhub::ui::kHostActionHeight);
+    gtk_widget_set_valign(button, GTK_ALIGN_CENTER);
+    return button;
+}
+
+inline GtkWidget* TextField(int widthChars) {
+    GtkWidget* entry = gtk_entry_new();
+    if (widthChars > 0) gtk_entry_set_width_chars(GTK_ENTRY(entry), widthChars);
+    gtk_widget_set_size_request(entry, -1, deskhub::ui::kFieldHeight);
+    return entry;
+}
+
+inline GtkWidget* NumberField(uint32_t value, uint32_t maxValue) {
+    GtkWidget* spin = gtk_spin_button_new_with_range(1, double(maxValue), 1);
+    gtk_spin_button_set_value(GTK_SPIN_BUTTON(spin), double(value));
+    gtk_widget_set_size_request(spin, -1, deskhub::ui::kFieldHeight);
+    return spin;
+}
 
 inline void RunOnMain(std::function<void()> fn) {
     auto* boxed = new std::function<void()>(std::move(fn));

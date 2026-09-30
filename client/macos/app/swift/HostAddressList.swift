@@ -17,7 +17,6 @@ struct HostAddressList: View {
                 HStack(spacing: 14) {
                     Text(addr.name).frame(width: 150, alignment: .leading).lineLimit(1)
                     Text(addr.ip).fontWeight(.bold).textSelection(.enabled)
-                    Spacer(minLength: 0)
                     CopyButton { addr.ip }
                         .frame(width: 84)
                 }

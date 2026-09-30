@@ -263,8 +263,17 @@ void TestOneHostIsOneAddressHoweverItIsSpelled() {
 
 }
 
+void TestQrExpiryCountsDownToZero() {
+    std::printf("[strings] the QR window counts the five minutes down and stops at zero...\n");
+    Check(ui::QrExpiryLine(300) == "Expires in 5:00", "a fresh code shows the full five minutes");
+    Check(ui::QrExpiryLine(65) == "Expires in 1:05", "seconds under ten keep their leading zero");
+    Check(ui::QrExpiryLine(0) == "Expires in 0:00", "the last second reads as zero");
+    Check(ui::QrExpiryLine(-7) == "Expires in 0:00", "an overdue clock never goes negative");
+}
+
 void RunStringsTests() {
     TestEveryLabelSaysSomething();
+    TestQrExpiryCountsDownToZero();
     TestConnectingMentionsTheAddress();
     TestQueryFailureExplainsWhatToCheck();
     TestHostTitleOnlyShowsAKnownSize();

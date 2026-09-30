@@ -17,8 +17,15 @@ extension DeskhubPalette {
     }
 }
 
+enum DeskhubControlMetrics {
+    private static let metrics = dh_control_metrics()
+    static let primaryButtonHeight = CGFloat(metrics.primaryButtonHeight)
+    static let addressFieldWidth = CGFloat(metrics.addressFieldWidth)
+    static let portFieldWidth = CGFloat(metrics.portFieldWidth)
+}
+
 enum DeskhubPrimaryMetrics {
-    static let buttonHeight: CGFloat = 46
+    static let buttonHeight = DeskhubControlMetrics.primaryButtonHeight
     static let pickerHeight: CGFloat = 170
 }
 

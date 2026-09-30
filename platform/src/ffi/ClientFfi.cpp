@@ -11,6 +11,7 @@
 #include "deskhub/protocol/Wire.h"
 #include "deskhub/session/client/ConnectFlow.h"
 #include "deskhub/session/client/OpenViewers.h"
+#include "deskhub/ui/Controls.h"
 #include "deskhub/ui/AutoShareGate.h"
 #include "deskhub/ui/Strings.h"
 #include "deskhub/ui/Theme.h"
@@ -150,6 +151,9 @@ const char* dh_string(DHStringId id) {
         case DHStrShareNoHostIdentity: return deskhub::ui::kShareNoHostIdentity;
         case DHStrHostNameLabel: return deskhub::ui::kHostNameLabel;
         case DHStrHostKeyLabel: return deskhub::ui::kHostKeyLabel;
+        case DHStrQrWindowTitle: return deskhub::ui::kQrWindowTitle;
+        case DHStrQrExpiredNote: return deskhub::ui::kQrExpiredNote;
+        case DHStrNewQrAction: return deskhub::ui::kNewQrAction;
         case DHStrTrustNewHostTitle: return deskhub::ui::kTrustNewHostTitle;
         case DHStrTrustNewHostAction: return deskhub::ui::kTrustNewHostAction;
         case DHStrCancelAction: return deskhub::ui::kCancelAction;
@@ -279,6 +283,19 @@ int dh_udp_port_line(uint32_t port, char* out, int capacity) {
     if (!out || capacity <= 0) return 0;
     deskhubp::CopyToBuf(out, size_t(capacity), deskhub::ui::UdpPortLine(uint16_t(port)));
     return int(std::strlen(out));
+}
+
+int dh_qr_expiry_line(int64_t seconds_left, char* out, int capacity) {
+    if (!out || capacity <= 0) return 0;
+    deskhubp::CopyToBuf(out, size_t(capacity), deskhub::ui::QrExpiryLine(seconds_left));
+    return int(std::strlen(out));
+}
+
+DHControlMetrics dh_control_metrics(void) {
+    return DHControlMetrics{deskhub::ui::kButtonMinWidth, deskhub::ui::kButtonHeight,
+        deskhub::ui::kPrimaryButtonHeight, deskhub::ui::kFieldHeight,
+        deskhub::ui::kAddressFieldWidth, deskhub::ui::kPortFieldWidth,
+        deskhub::ui::kNumberFieldWidth};
 }
 
 int dh_compose_address(const char* host, const char* portText, char* out, int capacity) {

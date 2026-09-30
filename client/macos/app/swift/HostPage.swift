@@ -22,28 +22,20 @@ struct HostPage: View {
                     }
                 }
                 .labelsHidden()
-                .frame(width: 260)
+                .frame(width: DeskhubControlMetrics.addressFieldWidth)
                 .disabled(live)
             }
 
             HStack(alignment: .top, spacing: 14) {
-                VStack(alignment: .leading, spacing: 10) {
-                    HostAddressList(
-                        addresses: shownAddresses,
-                        staleIp: staleBindIp ? sharing.bindIp : nil
-                    )
-                }
+                HostAddressList(
+                    addresses: shownAddresses,
+                    staleIp: staleBindIp ? sharing.bindIp : nil
+                )
                 if live {
                     Spacer(minLength: 0)
-                    PairingQrToggleButton(
-                        model: sharing.qr, port: sharing.sharingPort, bindIp: sharing.bindIp
-                    )
-                    .disabled(!sharing.isSharing)
+                    PairingQrShowButton(sharing: sharing)
+                        .disabled(!sharing.isSharing)
                 }
-            }
-
-            if live, sharing.qr.shown {
-                PairingQrPanel(model: sharing.qr)
             }
 
             if shareState != .idle {

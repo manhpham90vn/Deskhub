@@ -223,6 +223,10 @@ inline constexpr const char* kQrHint =
     "Scan this with Deskhub on a phone or tablet, or paste the link into another Deskhub's "
     "address field. It lets one device in and stops working after five minutes or when it "
     "is hidden.";
+inline constexpr const char* kQrWindowTitle = "QR code";
+inline constexpr const char* kQrExpiredNote =
+    "This QR code has expired. Make a new one to let another device in.";
+inline constexpr const char* kNewQrAction = "Generate new QR code";
 inline constexpr const char* kQrUnavailable =
     "Could not make a QR code: this machine has no identity key or no network address.";
 inline constexpr const char* kUnnamedClient = "(unnamed)";
@@ -483,6 +487,13 @@ inline std::string UdpPortLine(uint16_t port) {
 
 inline std::string UdpPortLine() {
     return UdpPortLine(kDeskhubPort);
+}
+
+inline std::string QrExpiryLine(int64_t secondsLeft) {
+    const int64_t left = secondsLeft > 0 ? secondsLeft : 0;
+    const int64_t seconds = left % 60;
+    return "Expires in " + std::to_string(left / 60) + (seconds < 10 ? ":0" : ":") +
+           std::to_string(seconds);
 }
 
 inline std::string PortCell(uint16_t port) {

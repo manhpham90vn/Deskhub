@@ -342,13 +342,13 @@ private:
         box->Add(list_, wxSizerFlags(1).Expand().Border(wxLEFT | wxRIGHT, FromDIP(12)));
 
         auto* row = new wxBoxSizer(wxHORIZONTAL);
-        resumeBtn_ = new wxButton(picker_, wxID_ANY, ToWx(ui::kShellPickerResume));
+        resumeBtn_ = MakeButton(picker_, ToWx(ui::kShellPickerResume));
         resumeBtn_->SetName("shell-resume");
         resumeBtn_->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { ResumeSelected(); });
-        closeBtn_ = new wxButton(picker_, wxID_ANY, ToWx(ui::kShellPickerClose));
+        closeBtn_ = MakeButton(picker_, ToWx(ui::kShellPickerClose));
         closeBtn_->SetName("shell-close");
         closeBtn_->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { CloseSelected(); });
-        auto* freshBtn = new wxButton(picker_, wxID_ANY, ToWx(ui::kShellPickerNew));
+        auto* freshBtn = MakeButton(picker_, ToWx(ui::kShellPickerNew));
         freshBtn->SetName("shell-new");
         freshBtn->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { OpenFresh(); });
         row->Add(resumeBtn_, wxSizerFlags().Border(wxRIGHT, FromDIP(8)));

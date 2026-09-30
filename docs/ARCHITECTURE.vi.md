@@ -1107,3 +1107,10 @@ coverage của core.
   đóng terminal của nó cho tới khi phần output chưa ai đọc được xả hết, nên khi master còn
   mở thì ngay cả tiến trình con đã bị kill cũng không bao giờ thoát xong, lệnh `waitpid`
   cuối cùng không bao giờ trả về, và mọi job test trên macOS đều chạy tới hết timeout.
+- **App Windows nói chuyện với clipboard qua Win32, không qua `wxClipboard`**: `capture::InitRuntime`
+  đặt luồng UI vào COM apartment đa luồng vì Windows.Graphics.Capture và các luồng encoder dựa vào MTA
+  ngầm định, nên `OleInitialize` của wxWidgets thất bại ngay lúc khởi động và mọi lời gọi clipboard
+  qua OLE trả về `CO_E_NOTINITIALIZED` ("Failed to put data on the clipboard … CoInitialize has not
+  been called"). `OpenClipboard`/`SetClipboardData` không cần apartment, nên các nút Copy và đồng bộ
+  clipboard dùng chúng; nếu chuyển luồng UI sang STA thì mọi luồng worker chưa từng gọi `CoInitialize`
+  sẽ mất apartment.

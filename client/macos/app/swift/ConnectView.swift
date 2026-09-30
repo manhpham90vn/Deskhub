@@ -135,14 +135,14 @@ struct MainMenuView: View {
                     DeskhubClient.string(DHStrClientIpPlaceholder), text: $connect.address
                 )
                 .textFieldStyle(.roundedBorder)
-                .frame(width: 260)
+                .frame(width: DeskhubControlMetrics.addressFieldWidth)
                 .onSubmit(beginConnect)
             }
             GridRow {
                 Text(DeskhubClient.string(DHStrUdpPortLabel))
                 TextField("", text: $connect.port)
                     .textFieldStyle(.roundedBorder)
-                    .frame(width: 80)
+                    .frame(width: DeskhubControlMetrics.portFieldWidth)
                     .onSubmit(beginConnect)
             }
         }

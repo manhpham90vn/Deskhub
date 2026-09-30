@@ -1122,3 +1122,10 @@ scaling の 2 つの判定とともに実行する（共有 runner には時間�
   誰にも読まれていない出力が排出されるまで端末の close でブロックするため、master が
   開いたままでは kill された子プロセスでさえ終了を完了できず、最後の `waitpid` は
   戻らず、macOS のすべてのテスト job が timeout まで走り続けた。
+- **Windows app はクリップボードを `wxClipboard` ではなく Win32 経由で扱う**：`capture::InitRuntime` は
+  Windows.Graphics.Capture とエンコーダースレッドが暗黙の MTA に依存するため UI スレッドをマルチスレッド
+  COM apartment に入れる。その結果 wxWidgets の `OleInitialize` は起動時に失敗し、OLE 経由のクリップボード
+  呼び出しはすべて `CO_E_NOTINITIALIZED`（"Failed to put data on the clipboard … CoInitialize has not been
+  called"）を返す。`OpenClipboard`/`SetClipboardData` は apartment を必要としないため、Copy ボタンと
+  クリップボード同期はこれらを使う。UI スレッドを STA に切り替えると、`CoInitialize` を一度も呼ばない
+  ワーカースレッドがすべて apartment を失う。

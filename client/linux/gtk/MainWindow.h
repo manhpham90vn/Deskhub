@@ -123,16 +123,17 @@ private:
     void SaveSettings();
     void PopulateBindCombo();
     void RebuildHostAddressRows();
-    GtkWidget* BuildQrPanel();
+    void BuildQrWindow();
+    bool FillQrWindow();
+    void ExpireQr();
     AccessRequestsView BuildAccessRequestsSection(GtkWidget* box);
     void FillAccessRequestsView(const AccessRequestsView& view);
     void AnnounceNewAccessRequests();
     void PostAccessRequestNotification(const deskhubp::PendingClient& client,
         const std::string& notificationId);
     void WithdrawAccessRequestNotification(const deskhub::Fingerprint& fingerprint);
-    void ToggleQrPanel();
-    void ShowQrPanel();
-    void HideQrPanel();
+    void ShowQrWindow();
+    void CloseQrWindow();
     void RevokeInviteIfShown();
     void ShowSharingOnlyWidgets(bool live);
     void RefreshAccessRequests(bool force);
@@ -141,6 +142,9 @@ private:
         bool destructive);
     static gboolean OnQrDraw(GtkWidget* area, cairo_t* cr, gpointer user);
     static void OnQrToggleClicked(GtkButton* b, gpointer user);
+    static void OnQrRenewClicked(GtkButton* b, gpointer user);
+    static gboolean OnQrWindowDelete(GtkWidget* w, GdkEvent* e, gpointer user);
+    static gboolean OnQrTick(gpointer user);
     static void OnApproveRequestClicked(GtkButton* button, gpointer user);
     static void OnDenyRequestClicked(GtkButton* button, gpointer user);
 
@@ -234,10 +238,14 @@ private:
 
     GtkWidget* hostAddrBox_ = nullptr;
     GtkWidget* qrToggle_ = nullptr;
-    GtkWidget* qrPanel_ = nullptr;
+    GtkWidget* qrWindow_ = nullptr;
     GtkWidget* qrArea_ = nullptr;
     GtkWidget* qrInviteLabel_ = nullptr;
     GtkWidget* qrCopy_ = nullptr;
+    GtkWidget* qrExpiryLabel_ = nullptr;
+    GtkWidget* qrRenewButton_ = nullptr;
+    guint qrTickId_ = 0;
+    gint64 qrExpiresAtMs_ = 0;
     std::optional<deskhub::QrCode> qrCode_;
     std::string pairingInvite_;
     GtkWidget* requestsSection_ = nullptr;

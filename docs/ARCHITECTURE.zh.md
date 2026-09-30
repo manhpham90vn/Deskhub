@@ -928,3 +928,8 @@ runner 上与 base commit 的 A/B 结果（偏移仅作为警告，不导致失�
   macOS 上，正在退出的 shell 会阻塞在关闭其终端的步骤上，直到无人读取的输出被排空，因此
   只要 master 仍然打开，即使被 kill 的子进程也无法完成退出，最后的 `waitpid` 永不返回，
   macOS 上的每个测试 job 都会一直运行到超时。
+- **Windows app 通过 Win32 而不是 `wxClipboard` 访问剪贴板**：`capture::InitRuntime` 把 UI 线程放进多线程
+  COM apartment，因为 Windows.Graphics.Capture 与编码线程依赖隐式 MTA，于是 wxWidgets 的 `OleInitialize`
+  在启动时失败，所有 OLE 剪贴板调用都返回 `CO_E_NOTINITIALIZED`（"Failed to put data on the clipboard …
+  CoInitialize has not been called"）。`OpenClipboard`/`SetClipboardData` 不需要 apartment，因此 Copy 按钮
+  与剪贴板同步使用它们；若改把 UI 线程切成 STA，所有从未调用 `CoInitialize` 的工作线程都会失去 apartment。

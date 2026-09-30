@@ -1,5 +1,7 @@
 #include "deskhubp/ffi/PairingFfi.h"
 
+#include "deskhub/auth/PairingTokens.h"
+
 #include <string>
 
 #include "deskhub/net/PairingInvite.h"
@@ -19,6 +21,10 @@ int dh_pairing_invite(uint16_t port, const char* bind_ip, char* out, int capacit
 
 void dh_pairing_revoke(void) {
     deskhubp::RevokePairingTokens();
+}
+
+int64_t dh_pairing_token_ttl_seconds(void) {
+    return deskhub::kPairingTokenTtlSeconds;
 }
 
 int dh_qr_encode(const char* text, uint8_t* modules, int capacity) {

@@ -189,6 +189,12 @@ nonisolated enum DeskhubClient {
         buffered(pairingInviteCapacity) { dh_pairing_invite(port, bindIp, $0, $1) }
     }
 
+    static var pairingTokenTtlSeconds: Int64 { dh_pairing_token_ttl_seconds() }
+
+    static func qrExpiryLine(_ secondsLeft: Int64) -> String {
+        buffered(64) { dh_qr_expiry_line(secondsLeft, $0, $1) }
+    }
+
     static func revokePairingInvite() {
         dh_pairing_revoke()
     }

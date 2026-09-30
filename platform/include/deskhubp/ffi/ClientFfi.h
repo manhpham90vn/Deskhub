@@ -216,6 +216,9 @@ typedef enum {
     DHStrShareNoHostIdentity = 217,
     DHStrHostNameLabel = 218,
     DHStrHostKeyLabel = 219,
+    DHStrQrWindowTitle = 220,
+    DHStrQrExpiredNote = 221,
+    DHStrNewQrAction = 222,
 } DHStringId;
 
 typedef enum {
@@ -303,6 +306,19 @@ int dh_could_not_connect(const char* address, char* out, int capacity);
 int dh_source_query_failed(const char* address, char* out, int capacity);
 
 int dh_udp_port_line(uint32_t port, char* out, int capacity);
+int dh_qr_expiry_line(int64_t seconds_left, char* out, int capacity);
+
+typedef struct {
+    int32_t buttonMinWidth;
+    int32_t buttonHeight;
+    int32_t primaryButtonHeight;
+    int32_t fieldHeight;
+    int32_t addressFieldWidth;
+    int32_t portFieldWidth;
+    int32_t numberFieldWidth;
+} DHControlMetrics;
+
+DHControlMetrics dh_control_metrics(void);
 
 int dh_compose_address(const char* host, const char* portText, char* out, int capacity);
 
