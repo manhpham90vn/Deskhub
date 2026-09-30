@@ -219,6 +219,7 @@ typedef enum {
     DHStrQrWindowTitle = 220,
     DHStrQrExpiredNote = 221,
     DHStrNewQrAction = 222,
+    DHStrQrUnavailable = 223,
 } DHStringId;
 
 typedef enum {

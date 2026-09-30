@@ -154,6 +154,7 @@ const char* dh_string(DHStringId id) {
         case DHStrQrWindowTitle: return deskhub::ui::kQrWindowTitle;
         case DHStrQrExpiredNote: return deskhub::ui::kQrExpiredNote;
         case DHStrNewQrAction: return deskhub::ui::kNewQrAction;
+        case DHStrQrUnavailable: return deskhub::ui::kQrUnavailable;
         case DHStrTrustNewHostTitle: return deskhub::ui::kTrustNewHostTitle;
         case DHStrTrustNewHostAction: return deskhub::ui::kTrustNewHostAction;
         case DHStrCancelAction: return deskhub::ui::kCancelAction;
