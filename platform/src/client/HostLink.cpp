@@ -87,6 +87,8 @@ bool HostLink::Start(const HostLinkConfig& config, HostLinkCallbacks callbacks) 
     keepaliveIntervalUs_ = deskhub::KeepaliveIntervalUs(QuicSettings{}.idleTimeoutMs);
     linkLostAtUs_ = 0;
     redialAttempts_ = 0;
+    approvalStartedUs_ = 0;
+    approvalAttempts_ = 0;
 
     sock_.SetRecvTimeout(config_.recvWaitMs);
     sock_.SetOnPeerGone([this](const NetAddr& peer) {
@@ -194,6 +196,8 @@ void HostLink::Loop() {
             resumed ? deskhub::ui::kTerminalReattached : std::string_view{});
         linkLostAtUs_ = 0;
         redialAttempts_ = 0;
+        approvalStartedUs_ = 0;
+        approvalAttempts_ = 0;
         redial_.store(false, std::memory_order_release);
         pulse_.Reset();
         if (cb_.onReady) cb_.onReady(resumed);
@@ -227,16 +231,19 @@ bool HostLink::DialAndAdmit() {
                 Fail(HostLinkState::Failed, deskhub::ui::kTerminalUnreachable);
                 return false;
             }
-            const uint64_t waitUntil = NowUs() + deskhub::ReconnectDelayUs(redialAttempts_);
-            while (!stop_.load(std::memory_order_acquire) && NowUs() < waitUntil)
-                SleepUs(kDecisionPollUs);
-            if (stop_.load(std::memory_order_acquire)) return false;
+            if (!WaitBeforeRedial(redialAttempts_)) return false;
             ++redialAttempts_;
+        }
+        const bool awaitingApproval = State() == HostLinkState::AwaitingApproval;
+        if (awaitingApproval) {
+            sock_.Close();
+            if (!WaitBeforeRedial(approvalAttempts_++)) return false;
         }
 
         peerGone_.store(false, std::memory_order_release);
         sock_.Close();
-        if (!recovering) SetState(HostLinkState::Connecting, deskhub::ui::kTransferConnecting);
+        if (!recovering && !awaitingApproval)
+            SetState(HostLinkState::Connecting, deskhub::ui::kTransferConnecting);
         if (!sock_.Connect(QuicSettings{}, config_.host, config_.hostLabel)) {
             Fail(HostLinkState::Failed, deskhub::ui::kTerminalUnreachable);
             return false;
@@ -249,8 +256,44 @@ bool HostLink::DialAndAdmit() {
         if (!SettleTrust()) return false;
         if (RunAuth()) return true;
         if (Settled() || stop_.load(std::memory_order_acquire)) return false;
+        if (State() == HostLinkState::AwaitingApproval && !KeepWaitingForApproval()) return false;
     }
     return false;
+}
+
+bool HostLink::WaitBeforeRedial(uint32_t attempt) {
+    const uint64_t waitUntil = NowUs() + deskhub::ReconnectDelayUs(attempt);
+    while (!stop_.load(std::memory_order_acquire) && NowUs() < waitUntil) SleepUs(kDecisionPollUs);
+    return !stop_.load(std::memory_order_acquire);
+}
+
+bool HostLink::KeepWaitingForApproval() {
+    if (NowUs() - approvalStartedUs_ < config_.approvalWaitUs) return true;
+    LOGW("link: %s did not approve this device within the wait",
+        config_.host.ToString().c_str());
+    Fail(HostLinkState::Refused,
+        deskhub::ui::AuthRefusalText(deskhub::AuthResultCode::AwaitingApproval));
+    return false;
+}
+
+bool HostLink::PinExpectedHostKey(const deskhub::Fingerprint& expected,
+    const deskhub::Fingerprint& peer, const std::string& endpoint) {
+    if (expected != peer) {
+        LOGW("[Link] %s answered with %s, not the key the invite named",
+            endpoint.c_str(), deskhub::FormatFingerprint(peer).c_str());
+        Fail(HostLinkState::Failed, deskhub::ui::kInviteHostMismatch);
+        return false;
+    }
+    if (TrustNewHost(endpoint, peer) != deskhub::ui::HostProfileError::None) {
+        Fail(HostLinkState::Failed,
+            deskhub::ui::AuthRefusalText(deskhub::AuthResultCode::ConfigError));
+        return false;
+    }
+    LOGI("[Link] Trusted %s from its invite: %s", endpoint.c_str(),
+        deskhub::FormatFingerprint(peer).c_str());
+    const std::lock_guard<std::mutex> lock(mutex_);
+    verdict_ = deskhub::TrustVerdict::Trusted;
+    return true;
 }
 
 bool HostLink::AwaitEstablished() {
@@ -274,15 +317,19 @@ bool HostLink::SettleTrust() {
         Fail(HostLinkState::Failed, deskhub::ui::AuthRefusalText(deskhub::AuthResultCode::ConfigError));
         return false;
     }
-    const deskhub::TrustVerdict verdict = trustedHosts->Check(endpoint, *peer);
+    const deskhub::TrustVerdict verdict = trustedHosts->Check(*peer);
     {
         const std::lock_guard<std::mutex> lock(mutex_);
         fingerprint_ = *peer;
         verdict_ = verdict;
     }
 
-    if (verdict == deskhub::TrustVerdict::Trusted) return true;
-    if (verdict == deskhub::TrustVerdict::Unknown && config_.acceptNewHostKey &&
+    if (config_.expectedHostKey) return PinExpectedHostKey(*config_.expectedHostKey, *peer, endpoint);
+    if (verdict == deskhub::TrustVerdict::Trusted) {
+        TouchTrustedHost(*peer, endpoint, NowUnixSeconds());
+        return true;
+    }
+    if (config_.acceptNewHostKey &&
         TrustNewHost(endpoint, *peer) == deskhub::ui::HostProfileError::None) {
         LOGI("[Link] Trusted the new host key of %s: %s", endpoint.c_str(),
             deskhub::FormatFingerprint(*peer).c_str());
@@ -290,16 +337,15 @@ bool HostLink::SettleTrust() {
         verdict_ = deskhub::TrustVerdict::Trusted;
         return true;
     }
-    const auto code = verdict == deskhub::TrustVerdict::Changed
-                          ? deskhub::AuthResultCode::HostKeyChanged
-                          : deskhub::AuthResultCode::UntrustedHost;
-    Fail(HostLinkState::Failed, deskhub::ui::AuthRefusalText(code));
+    Fail(HostLinkState::Failed, deskhub::ui::AuthRefusalText(deskhub::AuthResultCode::UntrustedHost));
     return false;
 }
 
 bool HostLink::RunAuth() {
     const bool recovering = linkLostAtUs_ != 0;
-    if (!recovering) SetState(HostLinkState::Authing, deskhub::ui::kTransferConnecting);
+    const bool awaitingApproval = State() == HostLinkState::AwaitingApproval;
+    if (!recovering && !awaitingApproval)
+        SetState(HostLinkState::Authing, deskhub::ui::kTransferConnecting);
 
     deskhub::Fingerprint peer;
     {
@@ -308,14 +354,7 @@ bool HostLink::RunAuth() {
     }
 
     ClientAuthConfig auth;
-    std::string identityName = config_.clientIdentityName;
-    if (identityName.empty()) {
-        const auto profile = LoadTrustStore().Find(config_.host.ToString());
-        if (profile) identityName = profile->identityName;
-    }
-    auth.identity = identityName.empty() || identityName == deskhub::ui::kDefaultIdentityName
-                        ? LoadOrCreateClientIdentity()
-                        : LoadClientIdentity(identityName);
+    auth.identity = LoadOrCreateHostIdentity();
     if (!auth.identity.Valid()) {
         Fail(HostLinkState::Failed,
             deskhub::ui::AuthRefusalText(deskhub::AuthResultCode::LocalKeyUnavailable));
@@ -323,18 +362,24 @@ bool HostLink::RunAuth() {
     }
     auth.hostFingerprint = peer;
     auth.clientName = config_.clientName;
+    auth.pairingToken = config_.pairingToken;
 
     deskhub::AuthResultCode code = deskhub::AuthResultCode::NotPaired;
     const bool allowed = sock_.RunClientAuth(config_.host, std::move(auth), config_.authTimeoutMs,
         code, &stop_);
-    if (!allowed) {
-        if (stop_.load(std::memory_order_acquire)) return false;
-        if (recovering && code == deskhub::AuthResultCode::TimedOut) return false;
-        Fail(HostLinkState::Refused, deskhub::ui::AuthRefusalText(code));
+    if (allowed) return true;
+    if (stop_.load(std::memory_order_acquire)) return false;
+    if (recovering && code == deskhub::AuthResultCode::TimedOut) return false;
+    if (code == deskhub::AuthResultCode::AwaitingApproval) {
+        config_.pairingToken.clear();
+        if (approvalStartedUs_ == 0) approvalStartedUs_ = NowUs();
+        if (!awaitingApproval)
+            SetState(HostLinkState::AwaitingApproval,
+                deskhub::ui::AwaitingApprovalLine(config_.hostLabel));
         return false;
     }
-
-    return true;
+    Fail(HostLinkState::Refused, deskhub::ui::AuthRefusalText(code));
+    return false;
 }
 
 void HostLink::PumpReady() {

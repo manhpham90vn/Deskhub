@@ -67,8 +67,9 @@ size_t BuildHello(std::span<uint8_t> out, const Hello& m) {
 
 size_t BuildAuthStart(std::span<uint8_t> out, const AuthStart& m) {
     if (m.publicKey.empty() || m.publicKey.size() > kMaxAuthBlobBytes) return 0;
+    if (!m.pairingToken.empty() && m.pairingToken.size() != kPairingTokenBytes) return 0;
     const size_t nameLen = Utf8TruncLen(m.clientName, kMaxClientNameBytes);
-    const size_t payload = 1 + 2 + m.publicKey.size() + 1 + nameLen + 1;
+    const size_t payload = 1 + 2 + m.publicKey.size() + 1 + nameLen + 1 + m.pairingToken.size() + 1;
     const size_t total = WriteCommon(out, MsgType::AuthStart, 0, Chan::Control, 0, payload);
     if (!total) return 0;
     uint8_t* p = out.data() + kCommonHeaderSize;
@@ -79,12 +80,16 @@ size_t BuildAuthStart(std::span<uint8_t> out, const AuthStart& m) {
     p += m.publicKey.size();
     *p++ = uint8_t(nameLen);
     if (nameLen) std::memcpy(p, m.clientName.data(), nameLen);
-    p[nameLen] = kAuthVersion;
+    p += nameLen;
+    *p++ = uint8_t(m.pairingToken.size());
+    if (!m.pairingToken.empty()) std::memcpy(p, m.pairingToken.data(), m.pairingToken.size());
+    p += m.pairingToken.size();
+    *p = kAuthVersion;
     return total;
 }
 
 size_t BuildAuthChallenge(std::span<uint8_t> out, const AuthChallenge& m) {
-    if (uint8_t(m.mode) > uint8_t(AuthMode::ConfigError)) return 0;
+    if (uint8_t(m.mode) > uint8_t(AuthMode::AwaitingApproval)) return 0;
     const size_t payload = 2;
     const size_t total = WriteCommon(out, MsgType::AuthChallenge, 0, Chan::Control, 0, payload);
     if (!total) return 0;
@@ -349,31 +354,36 @@ std::span<const uint8_t> PayloadOf(std::span<const uint8_t> datagram) {
 }
 
 std::optional<AuthStart> ParseAuthStart(std::span<const uint8_t> payload) {
-    if (payload.size() < 5) return std::nullopt;
+    if (payload.size() < 6) return std::nullopt;
     const uint8_t* p = payload.data();
     if (p[0] != 0) return std::nullopt;
     const size_t keyLen = GetU16(p + 1);
-    if (keyLen == 0 || keyLen > kMaxAuthBlobBytes || payload.size() < 1 + 2 + keyLen + 1 + 1)
+    if (keyLen == 0 || keyLen > kMaxAuthBlobBytes || payload.size() < 1 + 2 + keyLen + 1 + 1 + 1)
         return std::nullopt;
 
     AuthStart m;
     m.publicKey.assign(p + 3, p + 3 + keyLen);
     const size_t nameOff = 1 + 2 + keyLen;
     const size_t nameLen = p[nameOff];
-    if (nameLen > kMaxClientNameBytes || payload.size() != nameOff + 1 + nameLen + 1 ||
-        p[nameOff + 1 + nameLen] != kAuthVersion)
+    if (nameLen > kMaxClientNameBytes || payload.size() < nameOff + 1 + nameLen + 1 + 1)
+        return std::nullopt;
+    const size_t tokenOff = nameOff + 1 + nameLen;
+    const size_t tokenLen = p[tokenOff];
+    if ((tokenLen != 0 && tokenLen != kPairingTokenBytes) ||
+        payload.size() != tokenOff + 1 + tokenLen + 1 || p[tokenOff + 1 + tokenLen] != kAuthVersion)
         return std::nullopt;
     m.clientName.reserve(nameLen);
     for (size_t i = 0; i < nameLen; ++i) {
         const uint8_t c = p[nameOff + 1 + i];
         if (c >= 0x20 && c != 0x7F) m.clientName.push_back(char(c));
     }
+    if (tokenLen) m.pairingToken.assign(p + tokenOff + 1, p + tokenOff + 1 + tokenLen);
     return m;
 }
 
 std::optional<AuthChallenge> ParseAuthChallenge(std::span<const uint8_t> payload) {
     if (payload.size() != 2 || payload[0] != kAuthVersion ||
-        payload[1] > uint8_t(AuthMode::ConfigError))
+        payload[1] > uint8_t(AuthMode::AwaitingApproval))
         return std::nullopt;
     AuthChallenge m;
     m.mode = AuthMode(payload[1]);

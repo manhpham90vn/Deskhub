@@ -20,11 +20,9 @@ jstring NewString(JNIEnv* env, const char* text) {
 jobject NewHostProfile(JNIEnv* env, jclass cls, jmethodID ctor, const DHHostProfile& row) {
     jstring alias = NewString(env, row.alias);
     jstring endpoint = NewString(env, row.endpoint);
-    jstring identity = NewString(env, row.identity);
     jstring fingerprint = NewString(env, row.fingerprint);
-    jobject item = env->NewObject(cls, ctor, alias, endpoint, identity, fingerprint);
+    jobject item = env->NewObject(cls, ctor, alias, endpoint, fingerprint);
     env->DeleteLocalRef(fingerprint);
-    env->DeleteLocalRef(identity);
     env->DeleteLocalRef(endpoint);
     env->DeleteLocalRef(alias);
     return item;
@@ -39,7 +37,7 @@ Java_com_deskhub_app_NativeClient_nativeHostProfiles(JNIEnv* env, jobject) {
     jclass cls = env->FindClass(kHostProfileClass);
     if (!cls) return nullptr;
     jmethodID ctor = env->GetMethodID(cls, "<init>",
-        "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V");
+        "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V");
     if (!ctor) return nullptr;
 
     const int total = dh_host_profiles(nullptr, 0);

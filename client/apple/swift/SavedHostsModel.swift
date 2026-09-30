@@ -1,10 +1,21 @@
 import Foundation
 import Observation
 
+enum FingerprintText {
+    private static let prefix = "SHA256:"
+    private static let shortLength = 12
+
+    static func short(_ fingerprint: String) -> String {
+        let body = fingerprint.hasPrefix(prefix)
+            ? fingerprint.dropFirst(prefix.count)
+            : Substring(fingerprint)
+        return String(body.prefix(shortLength))
+    }
+}
+
 struct SavedHostRow: Identifiable, Hashable {
     let alias: String
     let endpoint: String
-    let identity: String
     let fingerprint: String
 
     var id: String { alias }
@@ -46,7 +57,6 @@ final class SavedHostsModel {
             SavedHostRow(
                 alias: DeskhubClient.cString(raw.alias),
                 endpoint: DeskhubClient.cString(raw.endpoint),
-                identity: DeskhubClient.cString(raw.identity),
                 fingerprint: DeskhubClient.cString(raw.fingerprint)
             )
         }

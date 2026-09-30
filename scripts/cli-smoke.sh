@@ -4,11 +4,12 @@ set -euo pipefail
 CLI=${1:-out/build/x64-debug/client/cli/deskhub-cli}
 PORT=${DESKHUB_SMOKE_PORT:-47989}
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/deskhub-cli-smoke.XXXXXX")
-trap 'rm -rf "$WORK"' EXIT
+trap 'jobs -p | xargs -r kill 2>/dev/null; rm -rf "$WORK"' EXIT
 
-mkdir -p "$WORK/home"
+mkdir -p "$WORK/home" "$WORK/other"
 export HOME="$WORK/home"
 export USERPROFILE="$WORK/home"
+OTHER=(--config-dir "$WORK/other")
 
 if [ ! -x "$CLI" ]; then
     echo "cli-smoke: $CLI is not there - run 'make build-cli' first" >&2
@@ -51,7 +52,11 @@ cp "$WORK/out" "$WORK/client.pub"
 expect_code 0 "$CLI" access add --stdin <"$WORK/client.pub"
 expect_code 0 "$CLI" host-key public
 cp "$WORK/out" "$WORK/host.pub"
-expect_code 0 "$CLI" key generate --name stranger
+expect_code 0 "$CLI" key public
+expect_code 2 "$CLI" key generate --name stranger
+expect_code 0 "$CLI" "${OTHER[@]}" key public
+expect_code 0 "$CLI" access requests --json
+grep -q '^\[\]$' "$WORK/out" || fail "a fresh machine already had a connection request"
 
 echo "== nobody is listening"
 expect_code 3 "$CLI" sources "127.0.0.1:$((PORT + 1))"
@@ -60,10 +65,8 @@ grep -q "Could not reach" "$WORK/err" || fail "an unreachable host was not repor
 case "$(uname -s)" in
     MINGW* | MSYS* | CYGWIN*)
         echo "== the rest needs POSIX signals - skipping on Windows"
-        echo "== keys are deleted and access is cleared"
+        echo "== access is cleared"
 expect_code 2 "$CLI" key delete --name default
-expect_code 0 "$CLI" key delete --name stranger
-expect_code 2 "$CLI" key delete --name stranger
 expect_code 0 "$CLI" access clear
 expect_code 0 "$CLI" access list --json
 grep -q '^\[\]$' "$WORK/out" || fail "access clear left a client key behind"
@@ -74,7 +77,7 @@ echo "cli-smoke: OK"
 esac
 
 echo "== a shell-only host, and a viewer that talks to it"
-"$CLI" share --no-screen --terminal --port "$PORT" --quiet \
+"$CLI" share --no-screen --terminal --port "$PORT" --qr --no-status \
     >"$WORK/share.out" 2>"$WORK/share.err" &
 SHARE_PID=$!
 
@@ -98,7 +101,9 @@ expect_code 4 "$CLI" sources "127.0.0.1:$PORT"
 grep -q "not trusted yet" "$WORK/err" || fail "an unpinned host was not refused as unknown"
 grep -q "Host key fingerprint: SHA256:" "$WORK/err" || fail "the refusal did not show the fingerprint"
 
-expect_code 0 "$CLI" host add smoke --address "127.0.0.1:$PORT" --identity default \
+expect_code 0 "$CLI" host add smoke --address "127.0.0.1:$PORT" \
+    --host-key-stdin <"$WORK/host.pub"
+expect_code 2 "$CLI" host add other --address "127.0.0.1:$PORT" --identity default \
     --host-key-stdin <"$WORK/host.pub"
 
 offered=0
@@ -116,8 +121,36 @@ if [ "$offered" != 1 ]; then
     fail "the host never offered its shell"
 fi
 
-expect_code 4 "$CLI" sources smoke --identity stranger
-grep -q "not authorized" "$WORK/err" || fail "a key the host never allowed was not refused"
+echo "== a stranger waits for approval, and gets in once approved"
+expect_code 4 "$CLI" "${OTHER[@]}" sources "127.0.0.1:$PORT" --accept-new-host-key \
+    --approval-wait 2 --quiet
+grep -q "did not approve this device in time" "$WORK/err" ||
+    fail "a stranger with a short wait was not told nobody approved"
+expect_code 0 "$CLI" access requests --json
+grep -q '"name"' "$WORK/out" || fail "the host did not record the stranger's request"
+grep -q "wants to connect" "$WORK/share.err" || fail "the sharing host did not announce the request"
+STRANGER=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))[0]["fingerprint"])' "$WORK/out")
+expect_code 0 "$CLI" access approve --fingerprint "$STRANGER"
+expect_code 0 "$CLI" "${OTHER[@]}" sources "127.0.0.1:$PORT" --json
+grep -q '"terminal":true' "$WORK/out" || fail "the approved stranger was not let in"
+expect_code 0 "$CLI" access requests --json
+grep -q '^\[\]$' "$WORK/out" || fail "an approved request was not removed"
+
+echo "== a third machine gets in with the QR invite, once"
+INVITE=$(grep -o 'deskhub://pair/[A-Za-z0-9_-]*' "$WORK/share.err" | head -1)
+[ -n "$INVITE" ] || fail "share --qr printed no invite link"
+mkdir -p "$WORK/third" "$WORK/fourth"
+expect_code 0 "$CLI" --config-dir "$WORK/third" sources "$INVITE" --json
+grep -q '"terminal":true' "$WORK/out" || fail "the invite did not let the third machine in"
+expect_code 0 "$CLI" --config-dir "$WORK/third" host list --json
+grep -q ":$PORT\"" "$WORK/out" || fail "the invite did not pin the host"
+expect_code 4 "$CLI" --config-dir "$WORK/fourth" sources "$INVITE" --approval-wait 2 --quiet
+grep -q "did not approve this device in time" "$WORK/err" ||
+    fail "a spent invite still admitted a fourth machine"
+expect_code 0 "$CLI" access requests --json
+FOURTH=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))[0]["fingerprint"])' "$WORK/out")
+expect_code 0 "$CLI" access deny --fingerprint "$FOURTH"
+expect_code 1 "$CLI" access deny --fingerprint "$FOURTH"
 
 echo "== a host that takes no files says so"
 printf 'deskhub-smoke-file\n' >"$WORK/notes.txt"
@@ -169,7 +202,7 @@ cmp -s "$WORK/payload.bin" "$LANDING/payload.bin" || fail "the large file did no
 expect_code 0 "$CLI" send "127.0.0.1:$FILE_PORT" "$WORK/notes.txt" --quiet
 [ -f "$LANDING/notes (2).txt" ] || fail "a second copy overwrote the first instead of landing beside it"
 
-expect_code 4 "$CLI" send "127.0.0.1:$FILE_PORT" "$WORK/notes.txt" --identity stranger --quiet
+expect_code 2 "$CLI" send "127.0.0.1:$FILE_PORT" "$WORK/notes.txt" --identity stranger --quiet
 
 kill -INT "$FILES_PID"
 wait "$FILES_PID" || fail "the file host did not stop cleanly on an interrupt"
@@ -198,7 +231,8 @@ if [ "$ready" != 1 ]; then
     fail "a host with only file transfer never started listening"
 fi
 
-expect_code 0 "$CLI" host add only --address "127.0.0.1:$ONLY_PORT" --identity default \
+expect_code 0 "$CLI" trust forget smoke
+expect_code 0 "$CLI" host add only --address "127.0.0.1:$ONLY_PORT" \
     --host-key-stdin <"$WORK/host.pub"
 
 sleep 1
@@ -211,10 +245,8 @@ cmp -s "$WORK/notes.txt" "$ONLY_LANDING/notes.txt" ||
 kill -INT "$ONLY_PID"
 wait "$ONLY_PID" || fail "the file-only host did not stop cleanly on an interrupt"
 
-echo "== keys are deleted and access is cleared"
+echo "== access is cleared"
 expect_code 2 "$CLI" key delete --name default
-expect_code 0 "$CLI" key delete --name stranger
-expect_code 2 "$CLI" key delete --name stranger
 expect_code 0 "$CLI" access clear
 expect_code 0 "$CLI" access list --json
 grep -q '^\[\]$' "$WORK/out" || fail "access clear left a client key behind"

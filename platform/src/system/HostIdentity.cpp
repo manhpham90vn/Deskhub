@@ -7,12 +7,11 @@
 #include <openssl/evp.h>
 #include <openssl/nid.h>
 #include <openssl/pem.h>
-#include <openssl/rand.h>
 #include <openssl/sha.h>
 #include <openssl/x509.h>
 
-#include <memory>
 #include <filesystem>
+#include <memory>
 #include <vector>
 
 #include "deskhubp/diag/Log.h"
@@ -22,8 +21,9 @@ namespace deskhubp {
 
 namespace {
 
-constexpr long kIdentityLifetimeSeconds = 10L * 365 * 24 * 3600;
+constexpr long kTransportCertLifetimeSeconds = 20L * 365 * 24 * 3600;
 constexpr int kSerialBits = 63;
+constexpr const char* kTransportCertCommonName = "deskhub";
 
 struct BioDeleter {
     void operator()(BIO* bio) const {
@@ -64,13 +64,28 @@ std::string BioToString(BIO* bio) {
     return std::string(reinterpret_cast<const char*>(data), len);
 }
 
-bool UsableForTls(X509* cert) {
-    PkeyPtr key(X509_get_pubkey(cert));
-    if (!key || EVP_PKEY_id(key.get()) != EVP_PKEY_EC) return false;
-    const EC_KEY* ec = EVP_PKEY_get0_EC_KEY(key.get());
+bool UsableForTls(EVP_PKEY* key) {
+    if (key == nullptr || EVP_PKEY_id(key) != EVP_PKEY_EC) return false;
+    const EC_KEY* ec = EVP_PKEY_get0_EC_KEY(key);
     if (ec == nullptr) return false;
     const EC_GROUP* group = EC_KEY_get0_group(ec);
     return group != nullptr && EC_GROUP_get_curve_name(group) == NID_X9_62_prime256v1;
+}
+
+std::vector<uint8_t> SpkiOf(EVP_PKEY* key) {
+    uint8_t* der = nullptr;
+    const int len = i2d_PUBKEY(key, &der);
+    if (len <= 0 || der == nullptr) return {};
+    std::vector<uint8_t> out(der, der + len);
+    OPENSSL_free(der);
+    return out;
+}
+
+std::optional<deskhub::Fingerprint> FingerprintOfSpki(std::span<const uint8_t> spki) {
+    if (spki.empty()) return std::nullopt;
+    deskhub::Fingerprint fp;
+    SHA256(spki.data(), spki.size(), fp.bytes.data());
+    return fp;
 }
 
 std::optional<deskhub::Fingerprint> FingerprintOfCert(X509* cert) {
@@ -79,8 +94,7 @@ std::optional<deskhub::Fingerprint> FingerprintOfCert(X509* cert) {
     uint8_t* der = nullptr;
     const int len = i2d_X509_PUBKEY(pubkey, &der);
     if (len <= 0 || der == nullptr) return std::nullopt;
-    deskhub::Fingerprint fp;
-    SHA256(der, size_t(len), fp.bytes.data());
+    const auto fp = FingerprintOfSpki(std::span<const uint8_t>(der, size_t(len)));
     OPENSSL_free(der);
     return fp;
 }
@@ -96,6 +110,13 @@ PkeyPtr GenerateKey() {
     return PkeyPtr(raw);
 }
 
+PkeyPtr PrivateKeyFromPem(std::string_view pem) {
+    if (pem.empty()) return nullptr;
+    BioPtr bio(BIO_new_mem_buf(pem.data(), int(pem.size())));
+    if (!bio) return nullptr;
+    return PkeyPtr(PEM_read_bio_PrivateKey(bio.get(), nullptr, nullptr, nullptr));
+}
+
 bool SetRandomSerial(X509* cert) {
     BignumPtr serial(BN_new());
     if (!serial) return false;
@@ -103,55 +124,47 @@ bool SetRandomSerial(X509* cert) {
     return BN_to_ASN1_INTEGER(serial.get(), X509_get_serialNumber(cert)) != nullptr;
 }
 
-bool SetSubject(X509* cert, std::string_view commonName) {
+bool SetSubject(X509* cert) {
     X509_NAME* name = X509_get_subject_name(cert);
     if (name == nullptr) return false;
-    const std::string cn(commonName.empty() ? std::string("deskhub-host") : std::string(commonName));
+    const std::string cn(kTransportCertCommonName);
     if (X509_NAME_add_entry_by_txt(name, "CN", MBSTRING_UTF8,
             reinterpret_cast<const uint8_t*>(cn.data()), int(cn.size()), -1, 0) != 1)
         return false;
     return X509_set_issuer_name(cert, name) == 1;
 }
 
-X509Ptr MakeSelfSigned(EVP_PKEY* key, std::string_view commonName) {
+X509Ptr MakeSelfSigned(EVP_PKEY* key) {
     X509Ptr cert(X509_new());
     if (!cert) return nullptr;
     if (X509_set_version(cert.get(), X509_VERSION_3) != 1) return nullptr;
     if (!SetRandomSerial(cert.get())) return nullptr;
     if (X509_gmtime_adj(X509_getm_notBefore(cert.get()), 0) == nullptr) return nullptr;
-    if (X509_gmtime_adj(X509_getm_notAfter(cert.get()), kIdentityLifetimeSeconds) == nullptr)
+    if (X509_gmtime_adj(X509_getm_notAfter(cert.get()), kTransportCertLifetimeSeconds) == nullptr)
         return nullptr;
-    if (!SetSubject(cert.get(), commonName)) return nullptr;
+    if (!SetSubject(cert.get())) return nullptr;
     if (X509_set_pubkey(cert.get(), key) != 1) return nullptr;
     if (X509_sign(cert.get(), key, EVP_sha256()) == 0) return nullptr;
     return cert;
 }
 
-HostIdentity IdentityFromPem(std::string certPem, std::string keyPem) {
+HostIdentity IdentityFromPem(std::string keyPem) {
     HostIdentity out;
-    if (certPem.empty() || keyPem.empty()) return out;
-
-    BioPtr bio(BIO_new_mem_buf(certPem.data(), int(certPem.size())));
-    if (!bio) return out;
-    X509Ptr cert(PEM_read_bio_X509(bio.get(), nullptr, nullptr, nullptr));
-    if (!cert) return out;
-    if (!UsableForTls(cert.get())) {
-        LOGE("host identity: the stored certificate cannot be used for TLS");
+    if (keyPem.empty()) return out;
+    const PkeyPtr key = PrivateKeyFromPem(keyPem);
+    if (!key) {
+        LOGE("host identity: the stored private key cannot be read");
         return out;
     }
-    BioPtr keyBio(BIO_new_mem_buf(keyPem.data(), int(keyPem.size())));
-    if (!keyBio) return out;
-    PkeyPtr key(PEM_read_bio_PrivateKey(keyBio.get(), nullptr, nullptr, nullptr));
-    if (!key || X509_check_private_key(cert.get(), key.get()) != 1) {
-        LOGE("host identity: the stored private key does not match the certificate");
+    if (!UsableForTls(key.get())) {
+        LOGE("host identity: the stored private key is not an ECDSA P-256 key, so TLS cannot use it");
         return out;
     }
-    const std::optional<deskhub::Fingerprint> fp = FingerprintOfCert(cert.get());
-    if (!fp) return out;
-    out.certPem = std::move(certPem);
+    out.publicKey = SpkiOf(key.get());
+    const std::optional<deskhub::Fingerprint> fp = FingerprintOfSpki(out.publicKey);
+    if (!fp) return {};
     out.keyPem = std::move(keyPem);
     out.fingerprint = *fp;
-    out.certPath = AppDataFilePath(kHostCertFileName).string();
     out.keyPath = AppDataFilePath(kHostKeyFileName).string();
     return out;
 }
@@ -179,20 +192,18 @@ std::optional<deskhub::Fingerprint> FingerprintOfCertDer(std::span<const uint8_t
 }
 
 HostIdentity LoadHostIdentity() {
-    return IdentityFromPem(ReadAppDataFile(kHostCertFileName), ReadAppDataFile(kHostKeyFileName));
+    return IdentityFromPem(ReadAppDataFile(kHostKeyFileName));
 }
 
-HostIdentity LoadOrCreateHostIdentity(std::string_view commonName) {
+HostIdentity LoadOrCreateHostIdentity() {
     HostIdentity existing = LoadHostIdentity();
     if (existing.Valid()) return existing;
-    const auto certPath = AppDataFilePath(kHostCertFileName);
     const auto keyPath = AppDataFilePath(kHostKeyFileName);
-    if (certPath.empty() || keyPath.empty()) return {};
-    bool hasCert = false;
+    if (keyPath.empty()) return {};
     bool hasKey = false;
-    if (!HasStoredFile(certPath, hasCert) || !HasStoredFile(keyPath, hasKey)) return {};
-    if (hasCert || hasKey) {
-        LOGE("host identity: stored certificate or private key is unusable; refusing to replace it");
+    if (!HasStoredFile(keyPath, hasKey)) return {};
+    if (hasKey) {
+        LOGE("host identity: the stored private key is unusable; refusing to replace it");
         return {};
     }
 
@@ -201,32 +212,34 @@ HostIdentity LoadOrCreateHostIdentity(std::string_view commonName) {
         LOGE("host identity: could not generate a key pair");
         return {};
     }
-    X509Ptr cert = MakeSelfSigned(key.get(), commonName);
-    if (!cert) {
-        LOGE("host identity: could not build a self-signed certificate");
-        return {};
-    }
-
-    BioPtr certBio(BIO_new(BIO_s_mem()));
     BioPtr keyBio(BIO_new(BIO_s_mem()));
-    if (!certBio || !keyBio) return {};
-    if (PEM_write_bio_X509(certBio.get(), cert.get()) != 1) return {};
+    if (!keyBio) return {};
     if (PEM_write_bio_PKCS8PrivateKey(keyBio.get(), key.get(), nullptr, nullptr, 0, nullptr,
             nullptr) != 1)
         return {};
-
-    const std::string certPem = BioToString(certBio.get());
     const std::string keyPem = BioToString(keyBio.get());
-    if (!WriteAppDataFileAtomic(kHostKeyFileName, keyPem) ||
-        !WriteAppDataFileAtomic(kHostCertFileName, certPem)) {
-        LOGE("host identity: could not save the key pair to the app data directory");
+    if (!WriteAppDataFileAtomic(kHostKeyFileName, keyPem)) {
+        LOGE("host identity: could not save the key to the app data directory");
         return {};
     }
 
-    HostIdentity created = IdentityFromPem(certPem, keyPem);
+    HostIdentity created = IdentityFromPem(keyPem);
     if (created.Valid())
         LOGI("host identity: created %s", deskhub::FormatFingerprint(created.fingerprint).c_str());
     return created;
+}
+
+std::string TransportCertificatePem(const HostIdentity& identity) {
+    const PkeyPtr key = PrivateKeyFromPem(identity.keyPem);
+    if (!key || !UsableForTls(key.get())) return {};
+    const X509Ptr cert = MakeSelfSigned(key.get());
+    if (!cert) {
+        LOGE("host identity: could not wrap the key in a certificate for TLS");
+        return {};
+    }
+    BioPtr certBio(BIO_new(BIO_s_mem()));
+    if (!certBio || PEM_write_bio_X509(certBio.get(), cert.get()) != 1) return {};
+    return BioToString(certBio.get());
 }
 
 }

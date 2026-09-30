@@ -9,9 +9,12 @@
 #include "deskhub/net/TrustStore.h"
 #include "deskhub/ui/RecentDevices.h"
 #include "deskhub/ui/Strings.h"
+#include "deskhub/ui/UiSettings.h"
 #include "deskhubp/ffi/FfiText.h"
 #include "deskhubp/system/RecentDevicesFile.h"
 #include "deskhubp/system/AppDataFile.h"
+#include "deskhubp/system/AccessRequestsFile.h"
+#include "deskhubp/system/AuthProof.h"
 #include "deskhubp/system/AuthorizedKeysFile.h"
 #include "deskhubp/system/HostIdentity.h"
 #include "deskhubp/system/UiSettingsStore.h"
@@ -87,9 +90,52 @@ void dh_paired_forget_all(void) {
 }
 
 int dh_host_fingerprint(char* out, int capacity) {
-    const deskhubp::HostIdentity identity =
-        deskhubp::LoadOrCreateHostIdentity(deskhubp::SessionDeviceName());
+    const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity();
     return FillText(out, capacity,
         identity.Valid() ? deskhub::FormatFingerprint(identity.fingerprint) : std::string());
+}
+
+int dh_host_public_key(char* out, int capacity) {
+    const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity();
+    if (!identity.Valid()) return FillText(out, capacity, std::string());
+    return FillText(out, capacity,
+        deskhubp::IdentityPublicKeyLine(identity,
+            ui::TruncateDeviceName(deskhubp::SessionDeviceName())));
+}
+
+int dh_access_requests(DHAccessRequest* out, int capacity) {
+    if (!out || capacity <= 0) return 0;
+    const auto requests = deskhubp::ListAccessRequests();
+    if (!requests) return 0;
+    const int count = int(requests->size()) < capacity ? int(requests->size()) : capacity;
+    for (int i = 0; i < count; ++i) {
+        const deskhubp::PendingClient& client = (*requests)[size_t(i)];
+        FillText(out[i].name, int(sizeof(out[i].name)), client.label);
+        FillText(out[i].address, int(sizeof(out[i].address)), client.address);
+        FillText(out[i].shortKey, int(sizeof(out[i].shortKey)),
+            deskhub::ShortFingerprint(client.fingerprint));
+        FillText(out[i].fingerprint, int(sizeof(out[i].fingerprint)),
+            deskhub::FormatFingerprint(client.fingerprint));
+        const std::string when = LocalTimeText(client.requestedUnix);
+        FillText(out[i].requestedAt, int(sizeof(out[i].requestedAt)),
+            when.empty() ? std::string("-") : when);
+    }
+    return count;
+}
+
+bool dh_access_approve(const char* fingerprint) {
+    if (!fingerprint) return false;
+    const std::optional<deskhub::Fingerprint> fp = deskhub::ParseFingerprint(fingerprint);
+    return fp && deskhubp::ApproveAccessRequest(*fp);
+}
+
+bool dh_access_deny(const char* fingerprint) {
+    if (!fingerprint) return false;
+    const std::optional<deskhub::Fingerprint> fp = deskhub::ParseFingerprint(fingerprint);
+    return fp && deskhubp::DenyAccessRequest(*fp);
+}
+
+uint64_t dh_access_requests_generation(void) {
+    return deskhubp::AccessRequestsGeneration();
 }
 }

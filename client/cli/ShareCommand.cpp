@@ -1,5 +1,6 @@
 #include "Commands.h"
 
+#include <algorithm>
 #include <chrono>
 #include <filesystem>
 #include <string>
@@ -17,8 +18,12 @@
 #include "deskhubp/host/SharingHost.h"
 #include "deskhubp/host/FileHost.h"
 #include "deskhubp/host/TerminalHost.h"
+#include "deskhub/qr/QrCode.h"
+#include "deskhubp/host/PairingInvite.h"
+#include "deskhubp/system/AccessRequestsFile.h"
 #include "deskhubp/system/FileStore.h"
 #include "deskhubp/system/DeviceName.h"
+#include "deskhubp/system/PairingTokenFile.h"
 #include "deskhubp/system/UiSettingsStore.h"
 
 namespace deskhubcli {
@@ -78,6 +83,33 @@ void PrintStatusJson(const std::vector<deskhub::media::ShareSourceStatus>& sourc
     json.Field("shells", int64_t(shellCount));
     json.ObjectEnd();
     PrintLine(json.Text());
+}
+
+void PrintPairingQr(const deskhub::ui::UiSettings& settings, const ShareOptions& options) {
+    const std::string invite = deskhubp::BuildPairingInvite(options.port, settings.bindIp,
+        deskhub::ui::TruncateDeviceName(settings.deviceName));
+    if (invite.empty()) {
+        PrintError(deskhub::ui::kQrUnavailable);
+        return;
+    }
+    const auto code = deskhub::EncodeQr(invite);
+    if (code) std::fputs(deskhub::RenderQrText(*code).c_str(), stderr);
+    PrintError(invite);
+    PrintError(deskhub::ui::kQrHint);
+}
+
+void PrintNewAccessRequests(uint64_t& generationSeen, std::vector<std::string>& announced) {
+    const uint64_t generation = deskhubp::AccessRequestsGeneration();
+    if (generation == generationSeen) return;
+    generationSeen = generation;
+    const auto requests = deskhubp::ListAccessRequests();
+    if (!requests) return;
+    for (const deskhubp::PendingClient& client : *requests) {
+        const std::string fingerprint = deskhub::FormatFingerprint(client.fingerprint);
+        if (std::find(announced.begin(), announced.end(), fingerprint) != announced.end()) continue;
+        announced.push_back(fingerprint);
+        PrintError(deskhub::ui::AccessRequestCliLine(client.label, fingerprint, client.address));
+    }
 }
 
 bool CollectSources(const Command& command, std::vector<ShareSource>& out) {
@@ -169,12 +201,16 @@ ExitCode RunShare(const Command& command) {
             PrintError(deskhub::ui::TransferFolderNote(deskhubp::PathText(files.Directory())));
         const std::string bindWarning = host.BindWarning();
         if (!bindWarning.empty()) PrintError(bindWarning);
+        if (command.share.qr) PrintPairingQr(settings, options);
         PrintError("Press Ctrl-C to stop sharing.");
     }
 
     uint32_t sinceStatusMs = 0;
+    uint64_t requestsSeen = deskhubp::AccessRequestsGeneration() - 1;
+    std::vector<std::string> requestsAnnounced;
     while (!Interrupted() && host.running()) {
         std::this_thread::sleep_for(std::chrono::milliseconds(kPollMs));
+        if (!command.quiet) PrintNewAccessRequests(requestsSeen, requestsAnnounced);
 
         if (!command.share.status || command.quiet) continue;
         sinceStatusMs += kPollMs;
@@ -193,6 +229,7 @@ ExitCode RunShare(const Command& command) {
     if (files.Running()) files.Stop();
     if (terminal.Running()) terminal.Stop();
     host.Stop();
+    if (command.share.qr) deskhubp::RevokePairingTokens();
     if (!command.quiet) PrintError("Stopped sharing.");
     return ExitCode::Ok;
 }

@@ -103,6 +103,8 @@ NVENC の実装そのものはユーザーの NVIDIA driver（`nvEncodeAPI64.dll
 | --- | --- | --- |
 | [AndroidX](https://developer.android.com/jetpack/androidx) —— Core KTX、Activity、Compose UI、Material 3 | Apache-2.0 | 動的 |
 | [Kotlin](https://kotlinlang.org) 標準ライブラリ | Apache-2.0 | 動的 |
+| [CameraX](https://developer.android.com/media/camera/camerax) 1.4 —— `camera-camera2`、`camera-lifecycle`、`camera-view`（QR スキャン） | Apache-2.0 | 動的 |
+| [ZXing](https://github.com/zxing/zxing) `core` 3.5（QR デコード） | Apache-2.0 | 動的 |
 | MediaCodec、NDK の media API | Android SDK / NDK | OS コンポーネント |
 
 ## QUIC transport（すべての app）

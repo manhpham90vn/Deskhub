@@ -40,6 +40,22 @@ struct HostQueryOutcome: Sendable {
     var query: HostQuery?
     var failure = ""
     var newHostKey = ""
+    var answeredAddress = ""
+    var failureKind: Int32 = 0
+
+    func failed(as kind: DHSourceQueryFailure) -> Bool {
+        failureKind == Int32(kind.rawValue)
+    }
+}
+
+struct AccessRequestRow: Identifiable, Hashable, Sendable {
+    let name: String
+    let address: String
+    let shortKey: String
+    let fingerprint: String
+    let requestedAt: String
+
+    var id: String { fingerprint }
 }
 
 struct PendingHostTrust: Sendable, Equatable {

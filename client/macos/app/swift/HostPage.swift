@@ -26,10 +26,24 @@ struct HostPage: View {
                 .disabled(sharing.isSharing || sharing.isStarting)
             }
 
-            HostAddressList(
-                addresses: shownAddresses,
-                staleIp: staleBindIp ? sharing.bindIp : nil
-            )
+            HStack(alignment: .top, spacing: 14) {
+                VStack(alignment: .leading, spacing: 10) {
+                    HostAddressList(
+                        addresses: shownAddresses,
+                        staleIp: staleBindIp ? sharing.bindIp : nil
+                    )
+                }
+                if sharing.isSharing {
+                    Spacer(minLength: 0)
+                    PairingQrToggleButton(
+                        model: sharing.qr, port: sharing.sharingPort, bindIp: sharing.bindIp
+                    )
+                }
+            }
+
+            if sharing.isSharing, sharing.qr.shown {
+                PairingQrPanel(model: sharing.qr)
+            }
 
             if shareState != .idle {
                 HostStatusBanner(state: shareState, detail: sharing.statusLine)
@@ -40,6 +54,7 @@ struct HostPage: View {
             }
 
             if sharing.isSharing {
+                AccessRequestsSection(model: sharing.accessRequests)
                 HostSourceTable(
                     rows: sharing.rows,
                     onAction: { sharing.runRowAction($0) },

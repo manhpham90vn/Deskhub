@@ -95,8 +95,7 @@ final class FileSendModel: TransferDriver {
             active: raw.state == DHSendConnecting.rawValue || raw.state == DHSendSending.rawValue,
             done: raw.state == DHSendDone.rawValue,
             failed: raw.state == DHSendFailed.rawValue
-                || raw.state == DHSendRefused.rawValue
-                || raw.state == DHSendKeyChanged.rawValue,
+                || raw.state == DHSendRefused.rawValue,
             fileIndex: raw.fileIndex,
             fileCount: raw.fileCount,
             bytes: raw.bytes,

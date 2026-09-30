@@ -43,10 +43,21 @@ struct HomeView: View {
                 }
                 .tag(3)
         }
+        .onOpenURL(perform: openInvite)
     }
 
     private func connectSavedHost(_ address: String) {
         page = 0
         model.beginConnect(to: address)
+    }
+
+    private func openInvite(_ url: URL) {
+        let invite = url.absoluteString
+        guard DeskhubClient.isPairingInvite(invite) else {
+            model.connect.connectError = DeskhubClient.string(DHStrInviteInvalid)
+            return
+        }
+        page = 0
+        model.beginConnect(invite: invite)
     }
 }

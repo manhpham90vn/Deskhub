@@ -103,7 +103,6 @@ struct Screen {
     bool control = true;
     bool realized = false;
     bool closed = false;
-    bool keyChanged = false;
     std::string endReason{};
 
     double lastPx = 0;
@@ -144,7 +143,6 @@ private:
     EglConfigChoice choice_{};
     Atom deleteWindow_ = 0;
     std::vector<std::unique_ptr<Screen>> screens_{};
-    bool anyKeyChanged_ = false;
     bool anyRefused_ = false;
 };
 
@@ -251,7 +249,6 @@ bool ViewerSession::OpenWindow(const deskhub::SourceInfo& source, const ViewRequ
     config.screenW = uint32_t(DisplayWidth(display_, DefaultScreen(display_)));
     config.screenH = uint32_t(DisplayHeight(display_, DefaultScreen(display_)));
     config.displayName = request.displayName;
-    config.clientIdentityName = request.clientIdentityName;
     config.wantsAudio = request.audio;
     config.onStatus = [raw](const char* status) { raw->statusLine = status ? status : ""; };
     config.onEnded = [raw](const char* reason) {
@@ -262,16 +259,6 @@ bool ViewerSession::OpenWindow(const deskhub::SourceInfo& source, const ViewRequ
         if (raw->endReason.empty() && reason) raw->endReason = reason;
         raw->closed = true;
     };
-    config.onTrustAsked = [raw](deskhub::TrustVerdict verdict, std::string_view fingerprint) {
-        if (verdict != deskhub::TrustVerdict::Changed) return;
-        raw->keyChanged = true;
-        raw->closed = true;
-        PrintError(deskhub::ui::kTrustChangedTitle);
-        PrintError(deskhub::ui::kTrustChangedBody);
-        PrintError(std::string(deskhub::ui::kTrustFingerprintLabel) + " " +
-                   std::string(fingerprint));
-    };
-
     raw->engine = std::make_unique<Engine>();
     raw->engine->SetSurface(&raw->renderer);
     if (!raw->engine->Start(config)) {
@@ -457,10 +444,7 @@ int ViewerSession::Run() {
 
         bool anyOpen = false;
         for (const std::unique_ptr<Screen>& screen : screens_) {
-            if (screen->closed) {
-                if (screen->keyChanged) anyKeyChanged_ = true;
-                continue;
-            }
+            if (screen->closed) continue;
             anyOpen = true;
             SizeToVideo(*screen);
             UpdateTitle(*screen);
@@ -472,12 +456,9 @@ int ViewerSession::Run() {
         std::this_thread::sleep_for(std::chrono::milliseconds(kFrameSleepMs));
     }
 
-    for (const std::unique_ptr<Screen>& screen : screens_) {
-        if (screen->keyChanged) anyKeyChanged_ = true;
-        if (!screen->endReason.empty() && !screen->keyChanged) anyRefused_ = true;
-    }
+    for (const std::unique_ptr<Screen>& screen : screens_)
+        if (!screen->endReason.empty()) anyRefused_ = true;
 
-    if (anyKeyChanged_) return int(ExitCode::KeyChanged);
     if (anyRefused_) return int(ExitCode::Ok);
     return int(ExitCode::Ok);
 }

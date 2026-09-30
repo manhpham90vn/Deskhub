@@ -22,6 +22,14 @@ constexpr uint64_t kCloseAuthCapacity = 6;
 constexpr uint64_t kCloseAuthRateLimited = 7;
 constexpr uint64_t kAuthorizedCheckIntervalUs = 100'000;
 
+constexpr deskhub::Fingerprint PairingGuessKey() {
+    deskhub::Fingerprint key;
+    for (uint8_t& byte : key.bytes) byte = 0xFF;
+    return key;
+}
+
+constexpr deskhub::Fingerprint kPairingGuessKey = PairingGuessKey();
+
 uint64_t StreamKey(QuicConnId conn, uint64_t stream) {
     return conn ^ (stream << 48);
 }
@@ -264,14 +272,24 @@ bool SessionTransport::HandleHostAuth(const NetAddr& from, std::span<const uint8
             endpoint_.CloseConnection(key, kCloseBadFraming, "auth session unavailable");
             return false;
         }
+        if (!start->pairingToken.empty() &&
+            !authFailures_.Allow(kPairingGuessKey, from.ip, NowUs())) {
+            endpoint_.CloseConnection(key, kCloseAuthRateLimited, "pairing token guesses rate limited");
+            return false;
+        }
         auto auth = std::make_unique<HostAuth>();
         HostAuthConfig config = hostAuthConfig_;
         config.sessionId = *sessionId;
+        config.peerAddress = from.ToString();
         auth->Configure(std::move(config));
         const std::optional<deskhub::AuthChallenge> challenge = auth->Begin(*start);
         if (!challenge) {
             endpoint_.CloseConnection(key, kCloseBadFraming, "unsupported client key");
             return false;
+        }
+        if (auth->PairingTokenRejected()) {
+            LOGW("transport: %s presented a pairing token that did not match", from.ToString().c_str());
+            authFailures_.RecordFailure(kPairingGuessKey, from.ip, NowUs());
         }
         if (challenge->mode == deskhub::AuthMode::Signature &&
             !authFailures_.Allow(auth->PeerFingerprint(), from.ip, NowUs())) {
@@ -290,6 +308,8 @@ bool SessionTransport::HandleHostAuth(const NetAddr& from, std::span<const uint8
 
         if (challenge->mode == deskhub::AuthMode::Denied && authCallbacks_.onRefused)
             authCallbacks_.onRefused(from, deskhub::AuthResultCode::NotPaired);
+        if (challenge->mode == deskhub::AuthMode::AwaitingApproval && authCallbacks_.onRefused)
+            authCallbacks_.onRefused(from, deskhub::AuthResultCode::AwaitingApproval);
         if (challenge->mode == deskhub::AuthMode::ConfigError && authCallbacks_.onRefused)
             authCallbacks_.onRefused(from, deskhub::AuthResultCode::ConfigError);
         if (challenge->mode == deskhub::AuthMode::Signature)
@@ -521,6 +541,11 @@ bool SessionTransport::RunClientAuth(const NetAddr& server, ClientAuthConfig con
             }
             if (challenge->mode == deskhub::AuthMode::ConfigError) {
                 outCode = deskhub::AuthResultCode::ConfigError;
+                clientAuthOn_ = false;
+                return false;
+            }
+            if (challenge->mode == deskhub::AuthMode::AwaitingApproval) {
+                outCode = deskhub::AuthResultCode::AwaitingApproval;
                 clientAuthOn_ = false;
                 return false;
             }

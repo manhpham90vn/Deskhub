@@ -43,7 +43,7 @@ jobs:
           if git fetch origin nightly-fuzz-corpus; then
             git checkout FETCH_HEAD -- core/fuzz/seeds
           fi
-          for t in fuzz_wire fuzz_annexb fuzz_h264sps fuzz_reassembler fuzz_session fuzz_uitext fuzz_term fuzz_keys; do
+          for t in fuzz_wire fuzz_annexb fuzz_h264sps fuzz_reassembler fuzz_session fuzz_uitext fuzz_term fuzz_keys fuzz_qr; do
             [ -x "out/build/fuzz/core/$t" ] || continue
             [ -d "out/fuzz/corpus/$t" ] || continue
             "out/build/fuzz/core/$t" -merge=1 "core/fuzz/seeds/$t" "out/fuzz/corpus/$t"

@@ -96,6 +96,8 @@ driver 里（`nvEncodeAPI64.dll`），在运行时解析；它没有被捆绑。
 | --- | --- | --- |
 | [AndroidX](https://developer.android.com/jetpack/androidx) —— Core KTX、Activity、Compose UI、Material 3 | Apache-2.0 | 动态 |
 | [Kotlin](https://kotlinlang.org) 标准库 | Apache-2.0 | 动态 |
+| [CameraX](https://developer.android.com/media/camera/camerax) 1.4 —— `camera-camera2`、`camera-lifecycle`、`camera-view`（扫描 QR） | Apache-2.0 | 动态 |
+| [ZXing](https://github.com/zxing/zxing) `core` 3.5（解码 QR） | Apache-2.0 | 动态 |
 | MediaCodec、NDK 的 media API | Android SDK / NDK | OS 组件 |
 
 ## QUIC transport（所有 app）

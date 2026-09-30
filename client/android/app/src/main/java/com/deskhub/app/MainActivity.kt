@@ -8,7 +8,6 @@ import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.media.projection.MediaProjectionManager
-import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
@@ -18,12 +17,14 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -67,6 +68,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -78,18 +81,16 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.Dispatchers
+import androidx.core.content.ContextCompat
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 private const val TAG = "Deskhub"
 
 class MainActivity : ComponentActivity() {
     private var pendingShare: HostService.ShareRequest? = null
+    private var pendingInvite by mutableStateOf<String?>(null)
 
     private val projectionConsent =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -133,6 +134,7 @@ class MainActivity : ComponentActivity() {
                 openStream(addr, 0)
             }
         }
+        pendingInvite = pairingInviteFrom(intent)
 
         setContent {
             MaterialTheme(colorScheme = DeskhubDarkColors) {
@@ -141,6 +143,8 @@ class MainActivity : ComponentActivity() {
                         MainScreen(
                             initialSection = startSection,
                             initialAddress = lastAddress,
+                            invite = pendingInvite,
+                            onInviteConsumed = { pendingInvite = null },
                             onRemember = { addr ->
                                 prefs.edit().putString("addr", addr).apply()
                             },
@@ -153,6 +157,12 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        pairingInviteFrom(intent)?.let { pendingInvite = it }
     }
 
     private fun askForNotifications() {
@@ -206,6 +216,10 @@ class MainActivity : ComponentActivity() {
 
 private const val POLL_INTERVAL_MS = 1000L
 private const val PORT_SETTLE_MS = 600L
+private const val UNSEEN_GENERATION = -1L
+private const val QR_QUIET_ZONE_MODULES = 4
+private const val QR_CELL_OVERLAP_PX = 0.5f
+private const val QR_WIDTH_FRACTION = 0.7f
 
 private const val OPAQUE_ALPHA = 0xFF000000.toInt()
 
@@ -309,6 +323,11 @@ private fun sectionExtra(intent: Intent?): Section {
     return Section.entries.firstOrNull { it.name.equals(name, ignoreCase = true) } ?: Section.CLIENT
 }
 
+private fun pairingInviteFrom(intent: Intent?): String? {
+    if (intent?.action != Intent.ACTION_VIEW) return null
+    return intent.dataString?.takeIf { NativeClient.isPairingInvite(it) }
+}
+
 private sealed interface Step {
     data object Address : Step
 
@@ -325,6 +344,8 @@ private sealed interface Step {
 private fun MainScreen(
     initialSection: Section,
     initialAddress: String,
+    invite: String?,
+    onInviteConsumed: () -> Unit,
     onRemember: (String) -> Unit,
     onOpenStream: (String, Int, List<NativeClient.Source>) -> Unit,
     onOpenShell: (String) -> Unit,
@@ -343,6 +364,7 @@ private fun MainScreen(
     var sendingTo by remember { mutableStateOf<FileSendDriver?>(null) }
     var section by remember { mutableStateOf(initialSection) }
     var port by remember { mutableStateOf(NativeClient.settingsPort()) }
+    var scanning by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     BackHandler(enabled = step != Step.Address) { step = Step.Address }
 
@@ -353,31 +375,75 @@ private fun MainScreen(
         }
     }
 
-    val connect: (String) -> Unit = connectLambda@{ addr ->
-        if (!NativeClient.parseAddress(addr)) {
-            connectError = NativeClient.string(NativeClient.STR_INVALID_ADDRESS_HINT)
-            return@connectLambda
+    val adoptAddress: (String) -> Unit = { addr ->
+        if (addr.isNotBlank()) {
+            address = NativeClient.addressHost(addr)
+            connectPort = portFieldText(addr)
         }
+    }
+
+    val settle: suspend (NativeClient.QueryOutcome, String) -> Unit = { outcome, fallback ->
+        val answered = outcome.answeredAddress.ifBlank { fallback }
+        when (outcome) {
+            is NativeClient.QueryOutcome.Failed -> {
+                if (outcome.awaitingApproval) adoptAddress(answered)
+                connectError = outcome.reason
+            }
+
+            is NativeClient.QueryOutcome.UnknownHost -> pendingTrust = TrustRequest(answered, outcome.fingerprint)
+            is NativeClient.QueryOutcome.Reached -> {
+                adoptAddress(answered)
+                onRemember(answered)
+                deviceRows = NativeClient.deviceRows()
+                authed = outcome.query
+                authedAddr = answered
+            }
+        }
+    }
+
+    val startQuery: (String, suspend () -> NativeClient.QueryOutcome) -> Unit = { fallback, query ->
         connectError = ""
         authed = null
         NativeClient.setDeviceName(NativeClient.sessionDeviceName())
         val mine = Step.Querying(++querySeq)
         step = mine
         scope.launch {
-            val outcome = NativeClient.queryHost(addr)
+            val outcome = query()
             if (step != mine) return@launch
             step = Step.Address
-            when (outcome) {
-                is NativeClient.QueryOutcome.Failed -> connectError = outcome.reason
-                is NativeClient.QueryOutcome.UnknownHost -> pendingTrust = TrustRequest(addr, outcome.fingerprint)
-                is NativeClient.QueryOutcome.Reached -> {
-                    onRemember(addr)
-                    deviceRows = NativeClient.deviceRows()
-                    authed = outcome.query
-                    authedAddr = addr
-                }
-            }
+            settle(outcome, fallback)
         }
+    }
+
+    val connectByInvite: (String) -> Unit = inviteLambda@{ invite ->
+        val first = NativeClient.pairingInviteAddress(invite)
+        if (first.isEmpty()) {
+            connectError = NativeClient.string(NativeClient.STR_INVITE_INVALID)
+            return@inviteLambda
+        }
+        adoptAddress(first)
+        startQuery(first) { NativeClient.queryHostByInvite(invite) }
+    }
+
+    val connect: (String) -> Unit = connectLambda@{ text ->
+        val trimmed = text.trim()
+        if (NativeClient.isPairingInvite(trimmed)) {
+            connectByInvite(trimmed)
+            return@connectLambda
+        }
+        if (!NativeClient.parseAddress(trimmed)) {
+            connectError = NativeClient.string(NativeClient.STR_INVALID_ADDRESS_HINT)
+            return@connectLambda
+        }
+        startQuery(trimmed) { NativeClient.queryHost(trimmed) }
+    }
+
+    LaunchedEffect(invite) {
+        if (invite == null) return@LaunchedEffect
+        onInviteConsumed()
+        scanning = false
+        section = Section.CLIENT
+        connect(invite)
     }
 
     val openDesktop: () -> Unit = {
@@ -428,22 +494,10 @@ private fun MainScreen(
             },
         )
     } else if (step is Step.Querying) {
-        AlertDialog(
-            onDismissRequest = { step = Step.Address },
-            text = {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
-                    Text(NativeClient.string(NativeClient.STR_QUERYING_SOURCES))
-                }
-            },
-            confirmButton = {},
-            dismissButton = {
-                TextButton(onClick = { step = Step.Address }) {
-                    Text(NativeClient.string(NativeClient.STR_CANCEL_ACTION))
-                }
+        QueryingDialog(
+            onCancel = {
+                NativeClient.cancelListSources()
+                step = Step.Address
             },
         )
     } else if (connectError.isNotEmpty()) {
@@ -467,6 +521,19 @@ private fun MainScreen(
         return
     }
 
+    if (scanning) {
+        QrScanScreen(
+            hint = NativeClient.string(NativeClient.STR_QR_HINT),
+            accepts = { NativeClient.isPairingInvite(it) },
+            onDecoded = { decoded ->
+                scanning = false
+                connect(decoded)
+            },
+            onClose = { scanning = false },
+        )
+        return
+    }
+
     when (val s = step) {
         is Step.Address, is Step.Querying ->
             HomeScreen(
@@ -486,6 +553,7 @@ private fun MainScreen(
                 authed = authed,
                 authedAddr = authedAddr,
                 onConnect = connect,
+                onScanQr = { scanning = true },
                 onDisconnect = disconnect,
                 onOpenDesktop = openDesktop,
                 onOpenShell = openShell,
@@ -517,6 +585,40 @@ private data class TrustRequest(
     val address: String,
     val fingerprint: String,
 )
+
+@Composable
+private fun QueryingDialog(onCancel: () -> Unit) {
+    var status by remember { mutableStateOf(NativeClient.sourceQueryStatus()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(POLL_INTERVAL_MS)
+            status = NativeClient.sourceQueryStatus()
+        }
+    }
+    AlertDialog(
+        onDismissRequest = onCancel,
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                    Text(NativeClient.string(NativeClient.STR_QUERYING_SOURCES))
+                }
+                if (status.isNotEmpty()) {
+                    Text(status, style = MaterialTheme.typography.bodyMedium, color = MutedColor)
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            TextButton(onClick = onCancel) {
+                Text(NativeClient.string(NativeClient.STR_CANCEL_ACTION))
+            }
+        },
+    )
+}
 
 @Composable
 private fun TrustNewHostDialog(
@@ -569,6 +671,7 @@ private fun HomeScreen(
     authed: NativeClient.HostQuery?,
     authedAddr: String,
     onConnect: (String) -> Unit,
+    onScanQr: () -> Unit,
     onDisconnect: () -> Unit,
     onOpenDesktop: () -> Unit,
     onOpenShell: () -> Unit,
@@ -593,6 +696,7 @@ private fun HomeScreen(
                         authed = authed,
                         authedAddr = authedAddr,
                         onConnect = onConnect,
+                        onScanQr = onScanQr,
                         onDisconnect = onDisconnect,
                         onOpenDesktop = onOpenDesktop,
                         onOpenShell = onOpenShell,
@@ -651,6 +755,17 @@ private fun HostScreen(
     var error by remember { mutableStateOf(NativeHost.shareError) }
     var rows by remember { mutableStateOf(emptyList<NativeHost.HostRow>()) }
     var addresses by remember { mutableStateOf(NativeHost.localAddresses()) }
+    var requests by remember { mutableStateOf(emptyList<NativeClient.AccessRequest>()) }
+    var requestsGeneration by remember { mutableStateOf(UNSEEN_GENERATION) }
+    var qrInvite by remember { mutableStateOf<String?>(null) }
+    val refreshRequests = {
+        requestsGeneration = NativeClient.accessRequestsGeneration()
+        requests = NativeClient.accessRequests()
+    }
+    val hideQr = {
+        if (qrInvite != null) NativeClient.pairingRevoke()
+        qrInvite = null
+    }
 
     LaunchedEffect(Unit) {
         while (true) {
@@ -658,6 +773,7 @@ private fun HostScreen(
             error = NativeHost.shareError
             rows = if (state == NativeHost.ShareState.SHARING) NativeHost.hostRows() else emptyList()
             addresses = NativeHost.localAddresses()
+            if (NativeClient.accessRequestsGeneration() != requestsGeneration) refreshRequests()
             if (state == NativeHost.ShareState.SHARING && !NativeHost.isRunning()) onStopSharing()
             delay(POLL_INTERVAL_MS)
         }
@@ -665,6 +781,9 @@ private fun HostScreen(
 
     val sharing = state == NativeHost.ShareState.SHARING
     val starting = state == NativeHost.ShareState.STARTING
+    LaunchedEffect(sharing) { if (!sharing) hideQr() }
+    val latestHideQr by rememberUpdatedState(hideQr)
+    DisposableEffect(Unit) { onDispose { latestHideQr() } }
 
     Column(
         modifier =
@@ -774,6 +893,26 @@ private fun HostScreen(
             color = MutedColor,
         )
 
+        if (sharing) {
+            OutlinedButton(
+                onClick = {
+                    if (qrInvite != null) {
+                        hideQr()
+                    } else {
+                        qrInvite = NativeClient.pairingInvite(port, bindIp)
+                    }
+                },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(
+                    NativeClient.string(
+                        if (qrInvite != null) NativeClient.STR_HIDE_QR_ACTION else NativeClient.STR_SHOW_QR_ACTION,
+                    ),
+                )
+            }
+            qrInvite?.let { QrInvitePanel(invite = it) }
+        }
+
         SectionLabel(NativeClient.string(NativeClient.STR_HOST_HEADING))
 
         Text(
@@ -791,6 +930,7 @@ private fun HostScreen(
         Button(
             onClick = {
                 if (sharing) {
+                    hideQr()
                     onStopSharing()
                     return@Button
                 }
@@ -832,6 +972,8 @@ private fun HostScreen(
             Text(error, color = MaterialTheme.colorScheme.error)
         }
 
+        AccessRequestsSection(requests = requests, onDecided = refreshRequests)
+
         HostRowList(rows = rows, sharing = sharing)
 
         HorizontalDivider()
@@ -856,6 +998,101 @@ private fun HostScreen(
             style = MaterialTheme.typography.bodySmall,
             color = MutedColor,
         )
+    }
+}
+
+@Composable
+private fun QrInvitePanel(invite: String) {
+    val code = remember(invite) { NativeClient.qrEncode(invite) }
+    if (code != null) {
+        Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+            QrCodeImage(code = code, modifier = Modifier.fillMaxWidth(QR_WIDTH_FRACTION))
+        }
+    }
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        SelectionContainer(modifier = Modifier.weight(1f)) {
+            Text(
+                invite,
+                style = MaterialTheme.typography.bodySmall,
+                fontFamily = FontFamily.Monospace,
+                color = HeadingColor,
+            )
+        }
+        CopyTextButton(NativeClient.string(NativeClient.STR_COPY_BUTTON)) { invite }
+    }
+    Hint(NativeClient.string(NativeClient.STR_QR_HINT))
+}
+
+@Composable
+private fun QrCodeImage(
+    code: NativeClient.QrCode,
+    modifier: Modifier = Modifier,
+) {
+    Canvas(
+        modifier =
+            modifier
+                .aspectRatio(1f)
+                .background(Color.White),
+    ) {
+        val cells = code.size + 2 * QR_QUIET_ZONE_MODULES
+        val cell = size.minDimension / cells
+        val square = Size(cell + QR_CELL_OVERLAP_PX, cell + QR_CELL_OVERLAP_PX)
+        for (y in 0 until code.size) {
+            for (x in 0 until code.size) {
+                if (!code.dark(x, y)) continue
+                val left = (x + QR_QUIET_ZONE_MODULES) * cell
+                val top = (y + QR_QUIET_ZONE_MODULES) * cell
+                drawRect(Color.Black, topLeft = Offset(left, top), size = square)
+            }
+        }
+    }
+}
+
+@Composable
+private fun AccessRequestsSection(
+    requests: List<NativeClient.AccessRequest>,
+    onDecided: () -> Unit,
+) {
+    SectionLabel(NativeClient.string(NativeClient.STR_ACCESS_REQUESTS_HEADING))
+    if (requests.isEmpty()) {
+        Text(
+            NativeClient.string(NativeClient.STR_ACCESS_REQUESTS_EMPTY),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MutedColor,
+        )
+        return
+    }
+    for (request in requests) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(request.name.ifBlank { "(unnamed)" }, color = HeadingColor)
+                Text(
+                    "${request.shortKey}  ·  ${request.address}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MutedColor,
+                )
+            }
+            TextButton(
+                onClick = {
+                    NativeClient.accessApprove(request.fingerprint)
+                    onDecided()
+                },
+            ) { Text(NativeClient.string(NativeClient.STR_APPROVE_ACTION)) }
+            TextButton(
+                onClick = {
+                    NativeClient.accessDeny(request.fingerprint)
+                    onDecided()
+                },
+            ) { Text(NativeClient.string(NativeClient.STR_DENY_ACTION), color = MaterialTheme.colorScheme.error) }
+        }
     }
 }
 
@@ -902,7 +1139,6 @@ private fun HostRowList(
 }
 
 private const val COPIED_FEEDBACK_MS = 1500L
-private const val MAX_KEY_FILE_BYTES = 64 * 1024
 
 @Composable
 private fun AreaHeading(
@@ -949,8 +1185,6 @@ private fun CopyTextButton(
 
 @Composable
 private fun DevicesScreen(onConnectHost: (String) -> Unit) {
-    var keys by remember { mutableStateOf(NativeClient.clientKeys()) }
-
     Column(
         modifier =
             Modifier
@@ -972,13 +1206,13 @@ private fun DevicesScreen(onConnectHost: (String) -> Unit) {
             NativeClient.string(NativeClient.STR_DEVICES_CLIENT_AREA),
             NativeClient.string(NativeClient.STR_DEVICES_CLIENT_AREA_HINT),
         )
-        MyKeysSection(keys = keys, onChanged = { keys = NativeClient.clientKeys() })
         SavedHostsSection(onConnectHost = onConnectHost)
     }
 }
 
 @Composable
 private fun ThisMachineSection() {
+    val context = LocalContext.current
     val fingerprint = remember { NativeClient.hostFingerprint() }
     SectionLabel(NativeClient.string(NativeClient.STR_THIS_MACHINE_HEADING))
     Row(
@@ -995,6 +1229,9 @@ private fun ThisMachineSection() {
             )
         }
         CopyTextButton(NativeClient.string(NativeClient.STR_COPY_BUTTON)) { fingerprint }
+    }
+    OutlinedButton(onClick = { copyToClipboard(context, NativeClient.hostPublicKey()) }) {
+        Text(NativeClient.string(NativeClient.STR_COPY_PUBLIC_KEY_ACTION))
     }
     Hint(NativeClient.string(NativeClient.STR_THIS_MACHINE_HINT))
 }
@@ -1112,224 +1349,6 @@ private fun AllowClientForm(onAllowed: () -> Unit) {
     }
 }
 
-private sealed interface KeyDialog {
-    data object Create : KeyDialog
-
-    data class Import(
-        val privateKey: String,
-    ) : KeyDialog
-
-    data class Delete(
-        val name: String,
-    ) : KeyDialog
-}
-
-@Composable
-private fun MyKeysSection(
-    keys: List<NativeClient.ClientKey>,
-    onChanged: () -> Unit,
-) {
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    var dialog by remember { mutableStateOf<KeyDialog?>(null) }
-    var error by remember { mutableStateOf("") }
-    val importPicker =
-        rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-            if (uri == null) return@rememberLauncherForActivityResult
-            scope.launch {
-                val text = readKeyFile(context, uri)
-                if (text == null) {
-                    error = NativeClient.unreadableKeyText()
-                    return@launch
-                }
-                error = ""
-                dialog = KeyDialog.Import(text)
-            }
-        }
-
-    when (val open = dialog) {
-        null -> {}
-        is KeyDialog.Create ->
-            KeyNameDialog(
-                askPassphrase = false,
-                onCancel = { dialog = null },
-                onConfirm = { name, _ ->
-                    dialog = null
-                    scope.launch {
-                        error = NativeClient.generateClientKey(name).orEmpty()
-                        onChanged()
-                    }
-                },
-            )
-
-        is KeyDialog.Import ->
-            KeyNameDialog(
-                askPassphrase = true,
-                onCancel = { dialog = null },
-                onConfirm = { name, passphrase ->
-                    dialog = null
-                    scope.launch {
-                        error = NativeClient.importClientKey(name, open.privateKey, passphrase).orEmpty()
-                        onChanged()
-                    }
-                },
-            )
-
-        is KeyDialog.Delete ->
-            DeleteKeyDialog(
-                onCancel = { dialog = null },
-                onConfirm = {
-                    dialog = null
-                    scope.launch {
-                        error = NativeClient.deleteClientKey(open.name).orEmpty()
-                        onChanged()
-                    }
-                },
-            )
-    }
-
-    SectionLabel(NativeClient.string(NativeClient.STR_MY_KEYS_HEADING))
-    Text(
-        NativeClient.string(NativeClient.STR_MY_KEYS_HINT),
-        style = MaterialTheme.typography.bodyMedium,
-        color = MutedColor,
-    )
-    for (key in keys) {
-        ClientKeyRow(key, onDelete = { dialog = KeyDialog.Delete(key.name) })
-    }
-    if (error.isNotEmpty()) {
-        Text(error, color = MaterialTheme.colorScheme.error)
-    }
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        OutlinedButton(onClick = { dialog = KeyDialog.Create }) {
-            Text(NativeClient.string(NativeClient.STR_NEW_KEY_ACTION))
-        }
-        OutlinedButton(onClick = { importPicker.launch(arrayOf("*/*")) }) {
-            Text(NativeClient.string(NativeClient.STR_IMPORT_KEY_ACTION))
-        }
-    }
-}
-
-private suspend fun readKeyFile(
-    context: Context,
-    uri: Uri,
-): String? =
-    withContext(Dispatchers.IO) {
-        runCatching {
-            context.contentResolver.openInputStream(uri)?.use { stream ->
-                val bytes = stream.readNBytesCompat(MAX_KEY_FILE_BYTES + 1)
-                if (bytes.size > MAX_KEY_FILE_BYTES) null else String(bytes, Charsets.UTF_8)
-            }
-        }.getOrNull()
-    }
-
-private fun java.io.InputStream.readNBytesCompat(limit: Int): ByteArray {
-    val out = java.io.ByteArrayOutputStream()
-    val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
-    while (out.size() < limit) {
-        val read = read(buffer, 0, minOf(buffer.size, limit - out.size()))
-        if (read < 0) break
-        out.write(buffer, 0, read)
-    }
-    return out.toByteArray()
-}
-
-@Composable
-private fun ClientKeyRow(
-    key: NativeClient.ClientKey,
-    onDelete: () -> Unit,
-) {
-    var expanded by remember { mutableStateOf(false) }
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(key.name, color = HeadingColor)
-            Text(
-                key.fingerprint,
-                modifier = Modifier.clickable { expanded = !expanded },
-                style = MaterialTheme.typography.bodySmall,
-                fontFamily = FontFamily.Monospace,
-                color = MutedColor,
-                maxLines = if (expanded) Int.MAX_VALUE else 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-        CopyTextButton(NativeClient.string(NativeClient.STR_COPY_PUBLIC_KEY_ACTION)) {
-            NativeClient.clientPublicKey(key.name)
-        }
-        if (key.name != NativeClient.DEFAULT_KEY_NAME) {
-            TextButton(onClick = onDelete) {
-                Text(NativeClient.string(NativeClient.STR_DELETE_KEY_ACTION))
-            }
-        }
-    }
-}
-
-@Composable
-private fun DeleteKeyDialog(
-    onCancel: () -> Unit,
-    onConfirm: () -> Unit,
-) {
-    AlertDialog(
-        onDismissRequest = onCancel,
-        text = { Text(NativeClient.string(NativeClient.STR_DELETE_KEY_PROMPT)) },
-        confirmButton = {
-            TextButton(onClick = onConfirm) {
-                Text(NativeClient.string(NativeClient.STR_DELETE_KEY_ACTION), color = MaterialTheme.colorScheme.error)
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onCancel) { Text(NativeClient.string(NativeClient.STR_CANCEL_ACTION)) }
-        },
-    )
-}
-
-@Composable
-private fun KeyNameDialog(
-    askPassphrase: Boolean,
-    onCancel: () -> Unit,
-    onConfirm: (String, String) -> Unit,
-) {
-    var name by remember { mutableStateOf("") }
-    var passphrase by remember { mutableStateOf("") }
-    AlertDialog(
-        onDismissRequest = onCancel,
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it },
-                    label = { Text(NativeClient.string(NativeClient.STR_KEY_NAME_LABEL)) },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                if (askPassphrase) {
-                    OutlinedTextField(
-                        value = passphrase,
-                        onValueChange = { passphrase = it },
-                        label = { Text(NativeClient.string(NativeClient.STR_KEY_PASSPHRASE_LABEL)) },
-                        singleLine = true,
-                        visualTransformation = PasswordVisualTransformation(),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = { onConfirm(name.trim(), passphrase) }, enabled = name.isNotBlank()) {
-                Text("OK")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onCancel) { Text(NativeClient.string(NativeClient.STR_CANCEL_ACTION)) }
-        },
-    )
-}
-
 @Composable
 private fun SavedHostsSection(onConnectHost: (String) -> Unit) {
     var profiles by remember { mutableStateOf(NativeClient.hostProfiles()) }
@@ -1387,7 +1406,7 @@ private fun SavedHostRows(
             Column(modifier = Modifier.weight(1f)) {
                 Text(host.alias.ifBlank { host.endpoint }, color = HeadingColor)
                 Text(
-                    "${host.endpoint}  ·  ${host.identity}",
+                    host.endpoint,
                     style = MaterialTheme.typography.bodySmall,
                     color = MutedColor,
                 )
@@ -1526,6 +1545,7 @@ private fun AddressScreen(
     authed: NativeClient.HostQuery?,
     authedAddr: String,
     onConnect: (String) -> Unit,
+    onScanQr: () -> Unit,
     onDisconnect: () -> Unit,
     onOpenDesktop: () -> Unit,
     onOpenShell: () -> Unit,
@@ -1535,7 +1555,9 @@ private fun AddressScreen(
 ) {
     val trimmed = address.trim()
     val ready = trimmed.isNotEmpty() && !busy
-    val go = { if (ready) onConnect(NativeClient.composeAddress(trimmed, connectPort)) }
+    val target =
+        if (NativeClient.isPairingInvite(trimmed)) trimmed else NativeClient.composeAddress(trimmed, connectPort)
+    val go = { if (ready) onConnect(target) }
 
     Column(
         modifier =
@@ -1581,11 +1603,7 @@ private fun AddressScreen(
                 )
             }
 
-            Button(
-                onClick = go,
-                enabled = ready,
-                modifier = Modifier.fillMaxWidth(),
-            ) { Text(NativeClient.string(NativeClient.STR_CONNECT_BUTTON)) }
+            ConnectButtons(ready = ready, busy = busy, onConnect = go, onScanQr = onScanQr)
         } else {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -1658,6 +1676,45 @@ private fun AddressScreen(
                 onPick = onPickDevice,
             )
         }
+    }
+}
+
+@Composable
+private fun ConnectButtons(
+    ready: Boolean,
+    busy: Boolean,
+    onConnect: () -> Unit,
+    onScanQr: () -> Unit,
+) {
+    val context = LocalContext.current
+    var cameraDenied by remember { mutableStateOf(false) }
+    val cameraConsent =
+        rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            cameraDenied = !granted
+            if (granted) onScanQr()
+        }
+    val scan = {
+        val granted =
+            ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) ==
+                PackageManager.PERMISSION_GRANTED
+        if (granted) onScanQr() else cameraConsent.launch(Manifest.permission.CAMERA)
+    }
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Button(
+            onClick = onConnect,
+            enabled = ready,
+            modifier = Modifier.weight(1f),
+        ) { Text(NativeClient.string(NativeClient.STR_CONNECT_BUTTON)) }
+        OutlinedButton(onClick = scan, enabled = !busy) {
+            Text(NativeClient.string(NativeClient.STR_SCAN_QR_ACTION))
+        }
+    }
+    if (cameraDenied) {
+        Text(NativeClient.string(NativeClient.STR_CAMERA_DENIED), color = MaterialTheme.colorScheme.error)
     }
 }
 

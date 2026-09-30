@@ -31,15 +31,20 @@ enum class HostLinkState : uint8_t {
     Refused = 6,
     Failed = 7,
     Ended = 8,
+    AwaitingApproval = 9,
 };
+
+inline constexpr uint64_t kDefaultApprovalWaitUs = 120'000'000;
 
 struct HostLinkConfig {
     NetAddr host{};
     std::string hostLabel{};
     std::string clientName{};
-    std::string clientIdentityName{};
     bool recoverLink = false;
     bool acceptNewHostKey = false;
+    std::optional<deskhub::Fingerprint> expectedHostKey{};
+    std::vector<uint8_t> pairingToken{};
+    uint64_t approvalWaitUs = kDefaultApprovalWaitUs;
     uint64_t recoverGraceUs = 0;
     uint32_t connectTimeoutMs = 10'000;
     uint32_t authTimeoutMs = 65'000;
@@ -109,7 +114,11 @@ private:
     bool DialAndAdmit();
     bool AwaitEstablished();
     bool SettleTrust();
+    bool PinExpectedHostKey(const deskhub::Fingerprint& expected, const deskhub::Fingerprint& peer,
+        const std::string& endpoint);
     bool RunAuth();
+    bool WaitBeforeRedial(uint32_t attempt);
+    bool KeepWaitingForApproval();
     void PumpReady();
     void Route(std::span<const uint8_t> message);
     void SetState(HostLinkState state, std::string_view message);
@@ -140,6 +149,8 @@ private:
     uint64_t keepaliveIntervalUs_ = 0;
     uint64_t linkLostAtUs_ = 0;
     uint32_t redialAttempts_ = 0;
+    uint64_t approvalStartedUs_ = 0;
+    uint32_t approvalAttempts_ = 0;
     deskhub::LinkPulse pulse_{};
 };
 

@@ -18,16 +18,13 @@ constexpr uint16_t kTestPort = 47793;
 constexpr int kMaxRounds = 600;
 
 struct SavedIdentity {
-    std::string cert{};
     std::string key{};
 
     SavedIdentity() {
-        cert = deskhubp::ReadAppDataFile(deskhubp::kHostCertFileName);
         key = deskhubp::ReadAppDataFile(deskhubp::kHostKeyFileName);
     }
 
     ~SavedIdentity() {
-        if (!cert.empty()) deskhubp::WriteAppDataFile(deskhubp::kHostCertFileName, cert);
         if (!key.empty()) deskhubp::WriteAppDataFile(deskhubp::kHostKeyFileName, key);
     }
 };
@@ -53,7 +50,7 @@ void TestControlTravelsOnAStream() {
 
     const SavedIdentity guard;
     ForgetHostIdentity();
-    const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity("deskhub-test");
+    const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity();
     Check(identity.Valid(), "the host has an identity to present");
     if (!identity.Valid()) return;
 
@@ -63,7 +60,7 @@ void TestControlTravelsOnAStream() {
     viewer.SetRecvTimeout(1);
 
     deskhubp::QuicSettings hostSettings;
-    hostSettings.certPemPath = identity.certPath;
+    hostSettings.certPem = deskhubp::TransportCertificatePem(identity);
     hostSettings.keyPemPath = identity.keyPath;
     const bool listening = host.Listen(hostSettings, kTestPort, "127.0.0.1");
     Check(listening, "the host binds the shared port");
@@ -107,7 +104,7 @@ void TestClientRejectsAnOldAuthChallenge() {
 
     const SavedIdentity guard;
     ForgetHostIdentity();
-    const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity("deskhub-test");
+    const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity();
     Check(identity.Valid(), "the test host has a TLS identity");
     if (!identity.Valid()) return;
 
@@ -116,7 +113,7 @@ void TestClientRejectsAnOldAuthChallenge() {
     host.SetRecvTimeout(1);
     viewer.SetRecvTimeout(1);
     deskhubp::QuicSettings settings;
-    settings.certPemPath = identity.certPath;
+    settings.certPem = deskhubp::TransportCertificatePem(identity);
     settings.keyPemPath = identity.keyPath;
     const bool listening = host.Listen(settings, kTestPort, "127.0.0.1");
     Check(listening, "the test host listens");
@@ -162,7 +159,7 @@ void TestClientRejectsAcceptedBeforeSigning() {
 
     const SavedIdentity guard;
     ForgetHostIdentity();
-    const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity("deskhub-test");
+    const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity();
     Check(identity.Valid(), "the test host has a TLS identity");
     if (!identity.Valid()) return;
 
@@ -171,7 +168,7 @@ void TestClientRejectsAcceptedBeforeSigning() {
     host.SetRecvTimeout(1);
     viewer.SetRecvTimeout(1);
     deskhubp::QuicSettings settings;
-    settings.certPemPath = identity.certPath;
+    settings.certPem = deskhubp::TransportCertificatePem(identity);
     settings.keyPemPath = identity.keyPath;
     Check(host.Listen(settings, kTestPort, "127.0.0.1"), "the test host listens");
     const NetAddr target{0x7F000001u, kTestPort};
@@ -216,7 +213,7 @@ void TestVideoRidesEncryptedDatagrams() {
 
     const SavedIdentity guard;
     ForgetHostIdentity();
-    const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity("deskhub-test");
+    const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity();
     if (!identity.Valid()) return;
 
     deskhubp::SessionTransport host;
@@ -225,7 +222,7 @@ void TestVideoRidesEncryptedDatagrams() {
     viewer.SetRecvTimeout(1);
 
     deskhubp::QuicSettings hostSettings;
-    hostSettings.certPemPath = identity.certPath;
+    hostSettings.certPem = deskhubp::TransportCertificatePem(identity);
     hostSettings.keyPemPath = identity.keyPath;
     if (!host.Listen(hostSettings, uint16_t(kTestPort + 1), "127.0.0.1")) return;
 
@@ -274,13 +271,13 @@ void TestPlaintextDiscoveryIsIgnored() {
 
     const SavedIdentity guard;
     ForgetHostIdentity();
-    const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity("deskhub-test");
+    const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity();
     if (!identity.Valid()) return;
 
     deskhubp::SessionTransport host;
     host.SetRecvTimeout(1);
     deskhubp::QuicSettings hostSettings;
-    hostSettings.certPemPath = identity.certPath;
+    hostSettings.certPem = deskhubp::TransportCertificatePem(identity);
     hostSettings.keyPemPath = identity.keyPath;
     if (!host.Listen(hostSettings, uint16_t(kTestPort + 2), "127.0.0.1")) return;
 
@@ -325,7 +322,7 @@ struct Link {
         host.SetRecvTimeout(1);
         viewer.SetRecvTimeout(1);
         deskhubp::QuicSettings hostSettings;
-        hostSettings.certPemPath = identity.certPath;
+        hostSettings.certPem = deskhubp::TransportCertificatePem(identity);
         hostSettings.keyPemPath = identity.keyPath;
         if (!host.Listen(hostSettings, port, "127.0.0.1")) return false;
         target = NetAddr{0x7F000001u, port};
@@ -378,7 +375,7 @@ void TestAFileBacklogNeverDelaysTheStream() {
 
     const SavedIdentity guard;
     ForgetHostIdentity();
-    const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity("deskhub-test");
+    const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity();
     if (!identity.Valid()) return;
 
     Link link;
@@ -436,7 +433,7 @@ void TestTheFileLaneNeverGrowsPastItsCap() {
 
     const SavedIdentity guard;
     ForgetHostIdentity();
-    const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity("deskhub-test");
+    const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity();
     if (!identity.Valid()) return;
 
     Link link;
@@ -477,7 +474,7 @@ void TestSendBurstsStayBounded() {
 
     const SavedIdentity guard;
     ForgetHostIdentity();
-    const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity("deskhub-test");
+    const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity();
     if (!identity.Valid()) return;
 
     Link link;
@@ -518,7 +515,7 @@ void TestAudioRidesDatagramsNotTheControlStream() {
 
     const SavedIdentity guard;
     ForgetHostIdentity();
-    const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity("deskhub-test");
+    const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity();
     if (!identity.Valid()) return;
 
     Link link;
@@ -581,12 +578,12 @@ void TestAnIdleTransportWaitsInsteadOfSpinning() {
 
     const SavedIdentity guard;
     ForgetHostIdentity();
-    const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity("deskhub-test");
+    const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity();
     if (!identity.Valid()) return;
 
     deskhubp::SessionTransport host;
     deskhubp::QuicSettings settings;
-    settings.certPemPath = identity.certPath;
+    settings.certPem = deskhubp::TransportCertificatePem(identity);
     settings.keyPemPath = identity.keyPath;
     const bool listening = host.Listen(settings, kTestPort, "127.0.0.1");
     Check(listening, "the host binds the shared port");

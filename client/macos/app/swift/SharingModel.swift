@@ -12,6 +12,8 @@ final class SharingModel {
     var port = Int(SharingModel.stored.port)
     var allowInput = SharingModel.stored.allowInput
     var addresses: [LocalAddress] = []
+    let qr = PairingQrModel()
+    let accessRequests = AccessRequestsModel()
 
     var isSharing = false
     var isStarting = false
@@ -49,8 +51,10 @@ final class SharingModel {
         autostart = dh_autostart_enabled()
     }
 
+    var sharingPort: UInt16 { UInt16(max(1, min(65535, port))) }
+
     var statusLine: String {
-        let portNum = UInt16(max(1, min(65535, port)))
+        let portNum = sharingPort
         guard isSharing else {
             if !autoShareWaitNote.isEmpty { return autoShareWaitNote }
             return DeskhubClient.buffered(128) { dh_idle_host_status(portNum, $0, $1) }
@@ -170,7 +174,7 @@ final class SharingModel {
             fps: UInt32(max(1, fps)),
             bitrateMbps: UInt32(max(1, bitrateMbps)),
             maxDim: maxDim <= 0 ? UInt32(0) : UInt32(maxDim),
-            port: UInt16(max(1, min(65535, port))),
+            port: sharingPort,
             allowInput: allowInput,
             terminal: terminal,
             files: files
@@ -202,6 +206,8 @@ final class SharingModel {
 
     func stopSharing() {
         stopPolling()
+        qr.hide()
+        accessRequests.clear()
         DeskhubShare.stop()
         isSharing = false
         sharingScreen = false
@@ -230,6 +236,7 @@ final class SharingModel {
             stopSharing()
             return
         }
+        accessRequests.refresh()
         if clipboardSync { pumpClipboard() }
     }
 }

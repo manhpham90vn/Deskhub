@@ -76,18 +76,6 @@ void dh_send_snapshot(DHSend* handle, DHSendProgress* out) {
     deskhubp::CopyToBuf(out->message, sizeof(out->message), handle->client.Message());
 }
 
-int dh_send_fingerprint(DHSend* handle, char* out, int capacity) {
-    if (!out || capacity <= 0) return 0;
-    out[0] = '\0';
-    if (!handle) return 0;
-    deskhubp::CopyToBuf(out, size_t(capacity), handle->client.FingerprintText());
-    return int(std::strlen(out));
-}
-
-bool dh_send_accept_key(DHSend* handle) {
-    return handle != nullptr && handle->client.AcceptKeyAndRetry();
-}
-
 void dh_send_cancel(DHSend* handle) {
     if (handle) handle->client.Cancel();
 }

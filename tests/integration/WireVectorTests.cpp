@@ -259,28 +259,38 @@ std::vector<Vector> AllVectors() {
                      m.clientName = "Tablet 01";
                      return BuildAuthStart(out, m);
                  },
-        "0360000000000000000008a1a2a3a4a5a6a7a8095461626c657420303106"});
+        "0360000000000000000008a1a2a3a4a5a6a7a8095461626c65742030310007"});
+
+    v.push_back({"AUTH_START_TOKEN", [](std::span<uint8_t> out) {
+                     AuthStart m;
+                     m.publicKey = {0xA1, 0xA2, 0xA3, 0xA4, 0xA5, 0xA6, 0xA7, 0xA8};
+                     m.clientName = "Tablet 01";
+                     m.pairingToken.assign(kPairingTokenBytes, 0x5A);
+                     return BuildAuthStart(out, m);
+                 },
+        "0360000000000000000008a1a2a3a4a5a6a7a8095461626c6574203031"
+        "205a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a07"});
 
     v.push_back({"AUTH_CHALLENGE", [](std::span<uint8_t> out) {
                      AuthChallenge m;
                      m.mode = AuthMode::Signature;
                      return BuildAuthChallenge(out, m);
                  },
-        "03610000000000000601"});
+        "03610000000000000701"});
 
     v.push_back({"AUTH_RESPONSE", [](std::span<uint8_t> out) {
                      AuthResponse m;
                      m.proof = {0xD1, 0xD2, 0xD3, 0xD4, 0xD5};
                      return BuildAuthResponse(out, m);
                  },
-        "0362000000000000060005d1d2d3d4d5"});
+        "0362000000000000070005d1d2d3d4d5"});
 
     v.push_back({"AUTH_RESULT", [](std::span<uint8_t> out) {
                      AuthResult m;
                      m.code = AuthResultCode::NotPaired;
                      return BuildAuthResult(out, m);
                  },
-        "03630000000000000601"});
+        "03630000000000000701"});
 
     v.push_back({"RECORD", [](std::span<uint8_t> out) {
                      uint8_t inner[kMaxDatagram];

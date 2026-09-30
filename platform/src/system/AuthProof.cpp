@@ -21,12 +21,6 @@ struct BioDeleter {
     }
 };
 
-struct X509Deleter {
-    void operator()(X509* cert) const {
-        X509_free(cert);
-    }
-};
-
 struct PkeyDeleter {
     void operator()(EVP_PKEY* key) const {
         EVP_PKEY_free(key);
@@ -52,7 +46,6 @@ struct EcPointDeleter {
 };
 
 using BioPtr = std::unique_ptr<BIO, BioDeleter>;
-using X509Ptr = std::unique_ptr<X509, X509Deleter>;
 using PkeyPtr = std::unique_ptr<EVP_PKEY, PkeyDeleter>;
 using MdCtxPtr = std::unique_ptr<EVP_MD_CTX, MdCtxDeleter>;
 using EcKeyPtr = std::unique_ptr<EC_KEY, EcKeyDeleter>;
@@ -92,13 +85,6 @@ std::vector<uint8_t> SpkiFromKey(EVP_PKEY* key) {
     return out;
 }
 
-X509Ptr CertFromPem(std::string_view pem) {
-    if (pem.empty()) return nullptr;
-    BioPtr bio(BIO_new_mem_buf(pem.data(), int(pem.size())));
-    if (!bio) return nullptr;
-    return X509Ptr(PEM_read_bio_X509(bio.get(), nullptr, nullptr, nullptr));
-}
-
 PkeyPtr PrivateKeyFromPem(std::string_view pem) {
     if (pem.empty()) return nullptr;
     BioPtr bio(BIO_new_mem_buf(pem.data(), int(pem.size())));
@@ -118,21 +104,15 @@ PkeyPtr PublicKeyFromSpki(std::span<const uint8_t> spkiDer) {
 
 }
 
-std::vector<uint8_t> IdentityPublicKey(const HostIdentity& identity) {
-    const X509Ptr cert = CertFromPem(identity.certPem);
-    if (!cert) return {};
-    X509_PUBKEY* pubkey = X509_get_X509_PUBKEY(cert.get());
-    if (pubkey == nullptr) return {};
-    uint8_t* der = nullptr;
-    const int len = i2d_X509_PUBKEY(pubkey, &der);
-    if (len <= 0 || der == nullptr) return {};
-    std::vector<uint8_t> out(der, der + len);
-    OPENSSL_free(der);
-    return out;
+std::string IdentityPublicKeyText(const HostIdentity& identity) {
+    return PublicKeyTextFromSpki(identity.publicKey);
 }
 
-std::string IdentityPublicKeyText(const HostIdentity& identity) {
-    return PublicKeyTextFromSpki(IdentityPublicKey(identity));
+std::string IdentityPublicKeyLine(const HostIdentity& identity, std::string_view label) {
+    auto parsed = deskhub::ParsePublicKeyText(IdentityPublicKeyText(identity));
+    if (!parsed) return {};
+    parsed->label = std::string(label);
+    return deskhub::FormatPublicKeyText(*parsed);
 }
 
 std::string PublicKeyTextFromSpki(std::span<const uint8_t> spkiDer) {

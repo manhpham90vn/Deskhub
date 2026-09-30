@@ -2,8 +2,6 @@
 
 #include <wx/dcbuffer.h>
 #include <wx/dirdlg.h>
-#include <wx/filedlg.h>
-#include <wx/filename.h>
 #include <wx/hyperlink.h>
 #include <wx/init.h>
 #include <wx/listctrl.h>
@@ -12,21 +10,18 @@
 #include <wx/simplebook.h>
 #include <wx/spinctrl.h>
 #include <wx/taskbar.h>
-#include <wx/textdlg.h>
 #include <wx/weakref.h>
 
 #include <algorithm>
 #include <cstdint>
 #include <ctime>
 #include <filesystem>
-#include <fstream>
 #include <functional>
-#include <iterator>
 #include <map>
 #include <memory>
 #include <optional>
 #include <string>
-#include <system_error>
+#include <string_view>
 #include <thread>
 #include <utility>
 #include <vector>
@@ -41,7 +36,9 @@
 #include "deskhub/media/QualityPreset.h"
 #include "deskhub/media/SourceLabel.h"
 #include "deskhub/net/BindAddress.h"
+#include "deskhub/net/PairingInvite.h"
 #include "deskhub/net/TrustStore.h"
+#include "deskhub/qr/QrCode.h"
 #include "deskhub/session/host/ShareFlow.h"
 #include "deskhub/ui/AutoShareGate.h"
 #include "deskhub/ui/HostProfiles.h"
@@ -54,19 +51,22 @@
 #include "deskhubp/media/DisplayEnum.h"
 #include "deskhubp/net/NetInfo.h"
 #include "deskhubp/net/UdpSocket.h"
+#include "deskhubp/host/PairingInvite.h"
 #include "deskhubp/host/ShareDriver.h"
 #include "deskhubp/host/SharingHost.h"
 #include "deskhubp/client/HostProfiles.h"
+#include "deskhubp/client/SourceQuery.h"
 #include "deskhubp/client/SourceQueryAsync.h"
 #include "deskhubp/host/ShareController.h"
+#include "deskhubp/system/AccessRequestsFile.h"
+#include "deskhubp/system/AuthProof.h"
 #include "deskhubp/system/FileStore.h"
 #include "deskhubp/system/FolderOpen.h"
 #include "deskhubp/system/Clock.h"
 #include "deskhubp/system/Autostart.h"
 #include "deskhubp/system/DeviceName.h"
-#include "deskhubp/system/ClientIdentity.h"
-#include "deskhubp/system/ClientKeys.h"
 #include "deskhubp/system/HostIdentity.h"
+#include "deskhubp/system/PairingTokenFile.h"
 #include "deskhubp/system/TrustStoreFile.h"
 #include "deskhubp/system/RecentDevicesFile.h"
 #include "deskhubp/system/AuthorizedKeysFile.h"
@@ -82,8 +82,10 @@ constexpr int kAutoShareTimerId = 4;
 constexpr int kCopiedTimerId = 5;
 constexpr int kCopiedButtonTimerId = 6;
 constexpr int kCopiedRevertMs = 1500;
-constexpr std::uintmax_t kMaxKeyFileBytes = 64 * 1024;
 constexpr int kPrimaryButtonH = 46;
+constexpr int kQrViewDip = 260;
+constexpr int kQrQuietZoneModules = 4;
+constexpr int kQrInviteHeightDip = 72;
 constexpr int kConnectionWindowWidth = 460;
 constexpr int kConnectionWindowCascade = 28;
 constexpr int kListMinH = 130;
@@ -273,20 +275,51 @@ wxStaticText* MakeErrorLabel(wxWindow* parent, const char* text) {
     return label;
 }
 
-std::optional<std::string> ReadKeyFile(const std::filesystem::path& path) {
-    std::error_code error;
-    const std::uintmax_t size = std::filesystem::file_size(path, error);
-    if (error || size > kMaxKeyFileBytes) return std::nullopt;
-    std::ifstream in(path, std::ios::binary);
-    if (!in) return std::nullopt;
-    return std::string(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
-}
-
 void CopyTextToClipboard(const wxString& text) {
     if (text.empty() || !wxTheClipboard->Open()) return;
     wxTheClipboard->SetData(new wxTextDataObject(text));
     wxTheClipboard->Close();
 }
+
+class QrView final : public wxPanel {
+public:
+    explicit QrView(wxWindow* parent) : wxPanel(parent, wxID_ANY) {
+        SetName("pairing-qr");
+        SetBackgroundStyle(wxBG_STYLE_PAINT);
+        SetMinSize(FromDIP(wxSize(kQrViewDip, kQrViewDip)));
+        Bind(wxEVT_PAINT, &QrView::OnPaint, this);
+    }
+
+    void SetCode(std::optional<deskhub::QrCode> code) {
+        code_ = std::move(code);
+        Refresh();
+    }
+
+private:
+    void OnPaint(wxPaintEvent&) {
+        wxAutoBufferedPaintDC dc(this);
+        dc.SetBackground(*wxWHITE_BRUSH);
+        dc.Clear();
+        if (!code_ || code_->size <= 0) return;
+
+        const wxSize area = GetClientSize();
+        const int cells = code_->size + 2 * kQrQuietZoneModules;
+        const int scale = std::max(1, std::min(area.GetWidth(), area.GetHeight()) / cells);
+        const int originX = (area.GetWidth() - scale * cells) / 2 + scale * kQrQuietZoneModules;
+        const int originY = (area.GetHeight() - scale * cells) / 2 + scale * kQrQuietZoneModules;
+
+        dc.SetPen(*wxTRANSPARENT_PEN);
+        dc.SetBrush(*wxBLACK_BRUSH);
+        for (int y = 0; y < code_->size; ++y) {
+            for (int x = 0; x < code_->size; ++x) {
+                if (!code_->Dark(x, y)) continue;
+                dc.DrawRectangle(originX + x * scale, originY + y * scale, scale, scale);
+            }
+        }
+    }
+
+    std::optional<deskhub::QrCode> code_{};
+};
 
 class NavItem final : public wxWindow {
 public:
@@ -384,17 +417,10 @@ private:
     wxSizer* MakeTransferFolderRow(wxWindow* area, const char* label);
     void AddHostKeySection(const SettingsArea& area);
     void AddAllowedClientsSection(const SettingsArea& area);
-    void AddMyKeysSection(const SettingsArea& area);
     void AddSavedHostsSection(const SettingsArea& area);
     void RefreshPairedDevices();
     void ForgetEveryDevice();
     void AllowClientKey();
-    void RefreshClientKeys();
-    void AddClientKeyRow(const deskhubp::ClientIdentityInfo& key, const wxSize& actionSize);
-    void CreateNewClientKey();
-    void ImportClientKeyFile();
-    void ShowClientKeyError(ui::ClientKeyError error);
-    void DeleteClientKey(const std::string& name);
     void CopyWithFeedback(wxButton* button, const wxString& text);
     void RestoreCopiedButton();
     void RefreshSavedHosts();
@@ -438,12 +464,30 @@ private:
     void ShowIdleHostState();
     void ShowPortCard();
     void CopySharePort();
+    wxWindow* BuildQrPanel(wxWindow* parent);
+    void ToggleQrPanel();
+    void ShowQrPanel();
+    void HideQrPanel();
+    wxWindow* BuildAccessRequestsPanel(wxWindow* parent);
+    void RefreshAccessRequests();
+    void RebuildAccessRequestRows();
+    void AddAccessRequestRow(const deskhubp::PendingClient& client, const wxSize& actionSize);
+    void ApproveRequestRow(const deskhub::Fingerprint& fingerprint);
+    void DenyRequestRow(const deskhub::Fingerprint& fingerprint);
+    void AccessRequestsChanged();
 
+    deskhubp::SourceQueryAsync::UiPost UiPoster() const;
+    SourceQueryRequest ConnectRequest();
     void StartConnect(const std::string& addr);
+    void StartConnectByInvite(const std::string& invite);
+    void LaunchQuery(const NetAddr& server, const std::string& invite, const std::string& addr);
+    void ShowConnectProgress(const std::string& text);
+    void CancelConnect();
     void OpenShell(const NetAddr& server);
     void SetClientControl(bool on);
     void ForgetConnection(ConnectionFrame* frame);
     void SetClientStatus(const wxString& text, const wxColour& colour);
+    void ShowAddressInFields(const std::string& addr);
     void ConnectToDevice(const std::string& addr);
     void OnListClick(wxMouseEvent& event);
     void ConnectRow(long row);
@@ -466,6 +510,8 @@ private:
     wxTextCtrl* connectPortCtrl_ = nullptr;
     wxButton* connectBtn_ = nullptr;
     wxStaticText* clientStatus_ = nullptr;
+    wxButton* cancelConnectBtn_ = nullptr;
+    bool connectCancelled_ = false;
     wxListCtrl* deviceList_ = nullptr;
     wxStaticText* deviceHint_ = nullptr;
     std::vector<ConnectionFrame*> connections_;
@@ -475,10 +521,6 @@ private:
     std::vector<deskhubp::AuthorizedClient> pairedDevices_;
     wxTextCtrl* allowClientCtrl_ = nullptr;
     wxStaticText* allowClientError_ = nullptr;
-    wxScrolledWindow* clientKeyList_ = nullptr;
-    wxBoxSizer* clientKeyRows_ = nullptr;
-    wxStaticText* clientKeyError_ = nullptr;
-    std::vector<deskhubp::ClientIdentityInfo> clientKeys_;
     wxWeakRef<wxButton> copiedButton_;
     wxString copiedButtonLabel_;
     wxScrolledWindow* savedHostList_ = nullptr;
@@ -486,6 +528,16 @@ private:
     wxStaticText* savedHostHint_ = nullptr;
     wxStaticText* hostProfileError_ = nullptr;
     wxPanel* hostAddrPanel_ = nullptr;
+    wxButton* qrBtn_ = nullptr;
+    wxWindow* qrPanel_ = nullptr;
+    QrView* qrView_ = nullptr;
+    wxTextCtrl* qrInviteCtrl_ = nullptr;
+    bool qrVisible_ = false;
+    wxWindow* accessRequestsPanel_ = nullptr;
+    wxScrolledWindow* accessRequestList_ = nullptr;
+    wxBoxSizer* accessRequestRows_ = nullptr;
+    wxStaticText* accessRequestHint_ = nullptr;
+    std::optional<uint64_t> accessRequestsSeen_{};
     wxPanel* hostBanner_ = nullptr;
     wxWindow* hostBannerBar_ = nullptr;
     wxStaticText* hostStateLabel_ = nullptr;
@@ -724,10 +776,24 @@ wxWindow* MainFrame::BuildHostPage(wxWindow* parent) {
     netRow->Add(bindChoice_, wxSizerFlags().CentreVertical().Border(wxLEFT, FromDIP(14)));
     sizer->Add(netRow, pad);
 
+    auto* addrRow = new wxBoxSizer(wxHORIZONTAL);
     hostAddrPanel_ = new wxPanel(panel);
-    sizer->Add(hostAddrPanel_,
-        wxSizerFlags().Expand().Border(wxLEFT | wxRIGHT | wxTOP, FromDIP(14)));
+    addrRow->Add(hostAddrPanel_, wxSizerFlags(1).Expand());
+    qrBtn_ = new wxButton(panel, wxID_ANY, ToWx(ui::kShowQrAction));
+    qrBtn_->SetName("toggle-qr");
+    qrBtn_->SetMinSize(FromDIP(wxSize(150, 32)));
+    qrBtn_->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { ToggleQrPanel(); });
+    addrRow->Add(qrBtn_, wxSizerFlags().Top().Border(wxLEFT, FromDIP(14)));
+    sizer->Add(addrRow, wxSizerFlags().Expand().Border(wxLEFT | wxRIGHT | wxTOP, FromDIP(14)));
     RebuildHostAddressRows();
+
+    qrPanel_ = BuildQrPanel(panel);
+    qrPanel_->Hide();
+    sizer->Add(qrPanel_, wxSizerFlags().Expand().Border(wxLEFT | wxRIGHT | wxTOP, FromDIP(14)));
+
+    accessRequestsPanel_ = BuildAccessRequestsPanel(panel);
+    sizer->Add(accessRequestsPanel_,
+        wxSizerFlags().Expand().Border(wxLEFT | wxRIGHT | wxTOP, FromDIP(14)));
 
     hostBanner_ = new wxPanel(panel);
     auto* bannerRow = new wxBoxSizer(wxHORIZONTAL);
@@ -855,6 +921,168 @@ void MainFrame::RebuildHostAddressRows() {
     RelayoutHostPage();
 }
 
+wxWindow* MainFrame::BuildQrPanel(wxWindow* parent) {
+    auto* card = new wxPanel(parent);
+    card->SetBackgroundColour(kPortCardBg);
+    auto* row = new wxBoxSizer(wxHORIZONTAL);
+
+    qrView_ = new QrView(card);
+    row->Add(qrView_, wxSizerFlags().Border(wxALL, FromDIP(10)));
+
+    auto* column = new wxBoxSizer(wxVERTICAL);
+    qrInviteCtrl_ = new wxTextCtrl(card, wxID_ANY, wxString(), wxDefaultPosition,
+        FromDIP(wxSize(-1, kQrInviteHeightDip)), wxTE_MULTILINE | wxTE_READONLY | wxTE_BESTWRAP);
+    qrInviteCtrl_->SetName("pairing-invite");
+    qrInviteCtrl_->SetFont(MonoFont(qrInviteCtrl_));
+    column->Add(qrInviteCtrl_, wxSizerFlags().Expand());
+
+    auto* copy = new wxButton(card, wxID_ANY, ToWx(ui::kCopyButton));
+    copy->SetName("copy-pairing-invite");
+    copy->SetMinSize(FromDIP(wxSize(84, 32)));
+    copy->Bind(wxEVT_BUTTON, [this, copy](wxCommandEvent&) {
+        CopyWithFeedback(copy, qrInviteCtrl_->GetValue());
+    });
+    column->Add(copy, wxSizerFlags().Border(wxTOP, FromDIP(8)));
+
+    auto* hint = MakeHint(card, ToWx(ui::kQrHint));
+    hint->SetBackgroundColour(kPortCardBg);
+    column->Add(hint, wxSizerFlags().Border(wxTOP, FromDIP(8)));
+
+    row->Add(column, wxSizerFlags(1).Expand().Border(wxTOP | wxRIGHT | wxBOTTOM, FromDIP(10)));
+    card->SetSizer(row);
+    return card;
+}
+
+void MainFrame::ToggleQrPanel() {
+    if (qrVisible_) {
+        HideQrPanel();
+        return;
+    }
+    ShowQrPanel();
+}
+
+void MainFrame::ShowQrPanel() {
+    const uint16_t port = uint16_t(hosting_ ? sharePort_ : settings_.port);
+    const std::string invite = deskhubp::BuildPairingInvite(port, settings_.bindIp,
+        ui::TruncateDeviceName(deskhubp::SessionDeviceName()));
+    if (invite.empty()) {
+        wxMessageBox(ToWx(ui::kQrUnavailable), "Deskhub", wxOK | wxICON_WARNING, this);
+        return;
+    }
+    qrVisible_ = true;
+    qrView_->SetCode(deskhub::EncodeQr(invite));
+    qrInviteCtrl_->ChangeValue(ToWx(invite));
+    qrBtn_->SetLabel(ToWx(ui::kHideQrAction));
+    qrPanel_->Show(true);
+    RelayoutHostPage();
+}
+
+void MainFrame::HideQrPanel() {
+    if (!qrVisible_) return;
+    qrVisible_ = false;
+    deskhubp::RevokePairingTokens();
+    qrView_->SetCode(std::nullopt);
+    qrInviteCtrl_->ChangeValue(wxString());
+    qrBtn_->SetLabel(ToWx(ui::kShowQrAction));
+    qrPanel_->Show(false);
+    RelayoutHostPage();
+}
+
+wxWindow* MainFrame::BuildAccessRequestsPanel(wxWindow* parent) {
+    auto* holder = new wxPanel(parent);
+    holder->SetBackgroundColour(*wxWHITE);
+    auto* sizer = new wxBoxSizer(wxVERTICAL);
+
+    sizer->Add(MakeSection(holder, ui::kAccessRequestsHeading));
+
+    accessRequestList_ = new wxScrolledWindow(holder, wxID_ANY, wxDefaultPosition, wxDefaultSize,
+        wxVSCROLL | wxHSCROLL | wxBORDER_SIMPLE);
+    accessRequestList_->SetName("access-requests");
+    accessRequestList_->SetScrollRate(FromDIP(10), FromDIP(10));
+    accessRequestRows_ = new wxBoxSizer(wxVERTICAL);
+    accessRequestList_->SetSizer(accessRequestRows_);
+    accessRequestList_->SetMinSize(FromDIP(wxSize(-1, kListMinH)));
+    sizer->Add(accessRequestList_, wxSizerFlags().Expand().Border(wxTOP, FromDIP(8)));
+
+    accessRequestHint_ = MakeHint(holder, ToWx(ui::kAccessRequestsEmpty));
+    sizer->Add(accessRequestHint_, wxSizerFlags().Border(wxTOP, FromDIP(8)));
+
+    holder->SetSizer(sizer);
+    RebuildAccessRequestRows();
+    return holder;
+}
+
+void MainFrame::RefreshAccessRequests() {
+    const uint64_t generation = deskhubp::AccessRequestsGeneration();
+    if (accessRequestsSeen_ == generation) return;
+    accessRequestsSeen_ = generation;
+    RebuildAccessRequestRows();
+}
+
+void MainFrame::RebuildAccessRequestRows() {
+    const auto requests = deskhubp::ListAccessRequests();
+    const std::vector<deskhubp::PendingClient> pending =
+        requests ? *requests : std::vector<deskhubp::PendingClient>{};
+
+    accessRequestRows_->Clear(true);
+    const wxSize actionSize = FromDIP(wxSize(100, 32));
+    const TableRow header = BeginTableRow(accessRequestList_, kBannerIdleBg);
+    AddTableCell(header, ToWx(ui::kPairedColumnName), 180, true);
+    AddTableCell(header, ToWx(ui::kPairedColumnKey), 130, true);
+    AddTableCell(header, ToWx(ui::kHostAddressLabel), 160, true);
+    header.cells->AddSpacer(actionSize.x + FromDIP(8) + actionSize.x);
+    EndTableRow(accessRequestRows_, header);
+    for (const deskhubp::PendingClient& client : pending) AddAccessRequestRow(client, actionSize);
+    accessRequestHint_->Show(pending.empty());
+    RelayoutTable(accessRequestList_);
+}
+
+void MainFrame::AddAccessRequestRow(const deskhubp::PendingClient& client,
+    const wxSize& actionSize) {
+    const TableRow row = BeginTableRow(accessRequestList_, *wxWHITE);
+    AddTableCell(row, ToWx(client.label.empty() ? std::string(ui::kUnnamedClient) : client.label),
+        180, false);
+    AddTableCell(row, ToWx(deskhub::ShortFingerprint(client.fingerprint)), 130, false)
+        ->SetToolTip(ToWx(deskhub::FormatFingerprint(client.fingerprint)));
+    AddTableCell(row, ToWx(client.address), 160, false);
+
+    const deskhub::Fingerprint fingerprint = client.fingerprint;
+    auto* approve = new wxButton(row.panel, wxID_ANY, ToWx(ui::kApproveAction));
+    approve->SetName("approve-request");
+    approve->SetMinSize(actionSize);
+    PaintButton(approve, kAccent);
+    approve->Bind(wxEVT_BUTTON, [this, fingerprint](wxCommandEvent&) {
+        CallAfter([this, fingerprint] { ApproveRequestRow(fingerprint); });
+    });
+    row.cells->Add(approve, wxSizerFlags().CentreVertical().Border(wxRIGHT, FromDIP(8)));
+
+    auto* deny = new wxButton(row.panel, wxID_ANY, ToWx(ui::kDenyAction));
+    deny->SetName("deny-request");
+    deny->SetMinSize(actionSize);
+    PaintButton(deny, kOffline);
+    deny->Bind(wxEVT_BUTTON, [this, fingerprint](wxCommandEvent&) {
+        CallAfter([this, fingerprint] { DenyRequestRow(fingerprint); });
+    });
+    row.cells->Add(deny, wxSizerFlags().CentreVertical());
+    EndTableRow(accessRequestRows_, row);
+}
+
+void MainFrame::ApproveRequestRow(const deskhub::Fingerprint& fingerprint) {
+    deskhubp::ApproveAccessRequest(fingerprint);
+    AccessRequestsChanged();
+}
+
+void MainFrame::DenyRequestRow(const deskhub::Fingerprint& fingerprint) {
+    deskhubp::DenyAccessRequest(fingerprint);
+    AccessRequestsChanged();
+}
+
+void MainFrame::AccessRequestsChanged() {
+    accessRequestsSeen_.reset();
+    RefreshAccessRequests();
+    RefreshPairedDevices();
+}
+
 wxWindow* MainFrame::BuildClientPage(wxWindow* parent) {
     auto* panel = new wxScrolledWindow(parent);
     panel->SetBackgroundColour(*wxWHITE);
@@ -865,9 +1093,14 @@ wxWindow* MainFrame::BuildClientPage(wxWindow* parent) {
     sizer->Add(MakeHeading(panel, ui::kClientHeading), pad);
 
     auto connectNow = [this](wxCommandEvent&) {
+        const std::string typed = ui::TrimAscii(std::string(addrCtrl_->GetValue().utf8_str()));
+        if (deskhub::IsPairingInvite(typed)) {
+            StartConnectByInvite(typed);
+            return;
+        }
         const uint16_t port =
             ui::PortOrDefault(std::string(connectPortCtrl_->GetValue().utf8_str()));
-        StartConnect(ui::AddressWithPort(std::string(addrCtrl_->GetValue().utf8_str()), port));
+        StartConnect(ui::AddressWithPort(typed, port));
     };
 
     auto* form = new wxPanel(panel);
@@ -904,10 +1137,17 @@ wxWindow* MainFrame::BuildClientPage(wxWindow* parent) {
     form->SetSizer(formSizer);
     sizer->Add(form, wxSizerFlags().Expand().Border(wxLEFT | wxRIGHT, FromDIP(16)));
 
+    auto* statusRow = new wxBoxSizer(wxHORIZONTAL);
     clientStatus_ = new wxStaticText(panel, wxID_ANY, wxString());
     clientStatus_->SetName("client-status");
     clientStatus_->SetForegroundColour(kMutedText);
-    sizer->Add(clientStatus_, wxSizerFlags().Centre().Border(wxTOP, FromDIP(8)));
+    statusRow->Add(clientStatus_, wxSizerFlags(1).CentreVertical());
+    cancelConnectBtn_ = new wxButton(panel, wxID_ANY, ToWx(ui::kCancelAction));
+    cancelConnectBtn_->SetName("cancel-connect");
+    cancelConnectBtn_->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { CancelConnect(); });
+    cancelConnectBtn_->Hide();
+    statusRow->Add(cancelConnectBtn_, wxSizerFlags().CentreVertical().Border(wxLEFT, FromDIP(8)));
+    sizer->Add(statusRow, wxSizerFlags().Expand().Border(wxLEFT | wxRIGHT | wxTOP, FromDIP(16)));
 
     auto* devices = new wxPanel(panel);
     devices->SetBackgroundColour(*wxWHITE);
@@ -954,7 +1194,6 @@ wxWindow* MainFrame::BuildDevicesPage(wxWindow* parent) {
 
     const SettingsArea clientArea =
         MakeDevicesArea(panel, ui::kDevicesClientArea, ui::kDevicesClientAreaHint);
-    AddMyKeysSection(clientArea);
     AddSavedHostsSection(clientArea);
     sizer->Add(clientArea.card, areaFlags);
     sizer->AddSpacer(FromDIP(16));
@@ -962,16 +1201,13 @@ wxWindow* MainFrame::BuildDevicesPage(wxWindow* parent) {
     panel->SetSizer(sizer);
     panel->FitInside();
     RefreshPairedDevices();
-    RefreshClientKeys();
     RefreshSavedHosts();
     return panel;
 }
 
 void MainFrame::AddHostKeySection(const SettingsArea& area) {
     AddAreaSection(area, ui::kThisMachineHeading);
-    const std::string name =
-        settings_.deviceName.empty() ? deskhubp::LocalDeviceName() : settings_.deviceName;
-    const deskhubp::HostIdentity hostIdentity = deskhubp::LoadOrCreateHostIdentity(name);
+    const deskhubp::HostIdentity hostIdentity = deskhubp::LoadOrCreateHostIdentity();
     const bool valid = hostIdentity.Valid();
 
     auto* row = new wxBoxSizer(wxHORIZONTAL);
@@ -991,6 +1227,16 @@ void MainFrame::AddHostKeySection(const SettingsArea& area) {
         CopyWithFeedback(copy, fingerprint->GetValue());
     });
     row->Add(copy, wxSizerFlags().CentreVertical().Border(wxLEFT, FromDIP(8)));
+
+    auto* copyPublicKey = new wxButton(area.body, wxID_ANY, ToWx(ui::kCopyPublicKeyAction));
+    copyPublicKey->SetName("copy-public-key");
+    copyPublicKey->Enable(valid);
+    copyPublicKey->Bind(wxEVT_BUTTON, [this, copyPublicKey, hostIdentity](wxCommandEvent&) {
+        CopyWithFeedback(copyPublicKey,
+            ToWx(deskhubp::IdentityPublicKeyLine(hostIdentity,
+                ui::TruncateDeviceName(deskhubp::SessionDeviceName()))));
+    });
+    row->Add(copyPublicKey, wxSizerFlags().CentreVertical().Border(wxLEFT, FromDIP(8)));
     area.sizer->Add(row, wxSizerFlags().Expand().Border(wxLEFT | wxRIGHT | wxTOP, FromDIP(16)));
     AddAreaHint(area, ui::kThisMachineHint);
 }
@@ -1044,126 +1290,6 @@ void MainFrame::AllowClientKey() {
     allowClientError_->Show(!allowed);
     if (allowed) allowClientCtrl_->Clear();
     RefreshPairedDevices();
-}
-
-void MainFrame::AddMyKeysSection(const SettingsArea& area) {
-    const wxSizerFlags pad = wxSizerFlags().Border(wxLEFT | wxRIGHT | wxTOP, FromDIP(16));
-    AddAreaSection(area, ui::kMyKeysHeading);
-    AddAreaHint(area, ui::kMyKeysHint);
-
-    clientKeyList_ = new wxScrolledWindow(area.body, wxID_ANY, wxDefaultPosition, wxDefaultSize,
-        wxVSCROLL | wxHSCROLL | wxBORDER_SIMPLE);
-    clientKeyList_->SetScrollRate(FromDIP(10), FromDIP(10));
-    clientKeyRows_ = new wxBoxSizer(wxVERTICAL);
-    clientKeyList_->SetSizer(clientKeyRows_);
-    clientKeyList_->SetMinSize(FromDIP(wxSize(-1, kListMinH)));
-    area.sizer->Add(clientKeyList_,
-        wxSizerFlags().Expand().Border(wxLEFT | wxRIGHT | wxTOP, FromDIP(16)));
-
-    auto* actions = new wxBoxSizer(wxHORIZONTAL);
-    auto* newKey = new wxButton(area.body, wxID_ANY, ToWx(ui::kNewKeyAction));
-    newKey->SetName("new-client-key");
-    newKey->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { CreateNewClientKey(); });
-    actions->Add(newKey, wxSizerFlags().CentreVertical());
-    auto* importKey = new wxButton(area.body, wxID_ANY, ToWx(ui::kImportKeyAction));
-    importKey->SetName("import-client-key");
-    importKey->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { ImportClientKeyFile(); });
-    actions->Add(importKey, wxSizerFlags().CentreVertical().Border(wxLEFT, FromDIP(8)));
-    area.sizer->Add(actions, pad);
-
-    clientKeyError_ = MakeErrorLabel(area.body, "");
-    clientKeyError_->SetName("client-key-error");
-    area.sizer->Add(clientKeyError_, pad);
-}
-
-void MainFrame::RefreshClientKeys() {
-    if (clientKeyList_ == nullptr) return;
-    clientKeys_ = deskhubp::LoadClientKeys();
-
-    clientKeyRows_->Clear(true);
-    const wxSize actionSize = FromDIP(wxSize(150, 32));
-    const TableRow header = BeginTableRow(clientKeyList_, kBannerIdleBg);
-    AddTableCell(header, ToWx(ui::kKeyNameLabel), 200, true);
-    AddTableCell(header, ToWx(ui::kPairedColumnKey), 150, true);
-    header.cells->AddSpacer(actionSize.x * 2 + FromDIP(8));
-    EndTableRow(clientKeyRows_, header);
-    for (const deskhubp::ClientIdentityInfo& key : clientKeys_) AddClientKeyRow(key, actionSize);
-    RelayoutTable(clientKeyList_);
-}
-
-void MainFrame::AddClientKeyRow(const deskhubp::ClientIdentityInfo& key,
-    const wxSize& actionSize) {
-    const TableRow row = BeginTableRow(clientKeyList_, *wxWHITE);
-    AddTableCell(row, ToWx(key.name), 200, false);
-    AddTableCell(row, ToWx(deskhub::ShortFingerprint(key.fingerprint)), 150, false)
-        ->SetToolTip(ToWx(deskhub::FormatFingerprint(key.fingerprint)));
-    auto* copy = new wxButton(row.panel, wxID_ANY, ToWx(ui::kCopyPublicKeyAction));
-    copy->SetName("copy-public-key");
-    copy->SetMinSize(actionSize);
-    copy->Bind(wxEVT_BUTTON, [this, copy, publicKey = ToWx(key.publicKeyText)](wxCommandEvent&) {
-        CopyWithFeedback(copy, publicKey);
-    });
-    row.cells->Add(copy, wxSizerFlags().CentreVertical().Border(wxRIGHT, FromDIP(8)));
-    if (key.name != ui::kDefaultIdentityName) {
-        auto* remove = new wxButton(row.panel, wxID_ANY, ToWx(ui::kDeleteKeyAction));
-        remove->SetName("delete-client-key");
-        remove->SetMinSize(actionSize);
-        PaintButton(remove, kOffline);
-        remove->Bind(wxEVT_BUTTON, [this, name = key.name](wxCommandEvent&) {
-            CallAfter([this, name] { DeleteClientKey(name); });
-        });
-        row.cells->Add(remove, wxSizerFlags().CentreVertical());
-    }
-    EndTableRow(clientKeyRows_, row);
-}
-
-void MainFrame::DeleteClientKey(const std::string& name) {
-    wxMessageDialog dialog(this, ToWx(ui::kDeleteKeyPrompt), "Deskhub",
-        wxOK | wxCANCEL | wxCANCEL_DEFAULT | wxICON_WARNING);
-    dialog.SetOKCancelLabels(ToWx(ui::kDeleteKeyAction), ToWx(ui::kCancelAction));
-    if (dialog.ShowModal() != wxID_OK) return;
-    ShowClientKeyError(deskhubp::DeleteClientKey(name));
-    RefreshClientKeys();
-}
-
-void MainFrame::CreateNewClientKey() {
-    wxTextEntryDialog dialog(this, ToWx(ui::kKeyNameLabel), ToWx(ui::kNewKeyAction));
-    if (dialog.ShowModal() != wxID_OK) return;
-    const std::string name = ui::TrimAscii(std::string(dialog.GetValue().utf8_str()));
-    ShowClientKeyError(deskhubp::CreateClientKey(name));
-    RefreshClientKeys();
-}
-
-void MainFrame::ImportClientKeyFile() {
-    wxFileDialog picker(this, ToWx(ui::kImportKeyAction), wxString(), wxString(),
-        wxFileSelectorDefaultWildcardStr, wxFD_OPEN | wxFD_FILE_MUST_EXIST);
-    if (picker.ShowModal() != wxID_OK) return;
-    const std::optional<std::string> keyText =
-        ReadKeyFile(std::filesystem::path(picker.GetPath().ToStdWstring()));
-    if (!keyText) {
-        ShowClientKeyError(ui::ClientKeyError::UnreadableKey);
-        return;
-    }
-
-    wxTextEntryDialog nameDialog(this, ToWx(ui::kKeyNameLabel), ToWx(ui::kImportKeyAction),
-        wxFileName(picker.GetPath()).GetName());
-    if (nameDialog.ShowModal() != wxID_OK) return;
-    wxPasswordEntryDialog passphraseDialog(this, ToWx(ui::kKeyPassphraseLabel),
-        ToWx(ui::kImportKeyAction));
-    if (passphraseDialog.ShowModal() != wxID_OK) return;
-
-    const std::string name = ui::TrimAscii(std::string(nameDialog.GetValue().utf8_str()));
-    const std::string passphrase(passphraseDialog.GetValue().utf8_str());
-    ShowClientKeyError(deskhubp::ImportClientKey(name, *keyText, passphrase));
-    RefreshClientKeys();
-}
-
-void MainFrame::ShowClientKeyError(ui::ClientKeyError error) {
-    const bool failed = error != ui::ClientKeyError::None;
-    clientKeyError_->SetLabel(failed ? ToWx(ui::ClientKeyErrorText(error)) : wxString());
-    clientKeyError_->Wrap(FromDIP(kHintWrapDip));
-    clientKeyError_->Show(failed);
-    RelayoutTable(clientKeyList_);
 }
 
 void MainFrame::CopyWithFeedback(wxButton* button, const wxString& text) {
@@ -1248,7 +1374,6 @@ void MainFrame::RefreshSavedHosts() {
     const TableRow header = BeginTableRow(savedHostList_, kBannerIdleBg);
     AddTableCell(header, ToWx(ui::kHostNameLabel), 150, true);
     AddTableCell(header, ToWx(ui::kHostAddressLabel), 170, true);
-    AddTableCell(header, ToWx(ui::kHostIdentityLabel), 110, true);
     AddTableCell(header, ToWx(ui::kHostKeyLabel), 130, true);
     header.cells->AddSpacer(actionSize.x + FromDIP(8) + actionSize.x);
     EndTableRow(savedHostRows_, header);
@@ -1256,7 +1381,6 @@ void MainFrame::RefreshSavedHosts() {
         const TableRow row = BeginTableRow(savedHostList_, *wxWHITE);
         AddTableCell(row, ToWx(host.label), 150, false);
         AddTableCell(row, ToWx(host.endpoint), 170, false);
-        AddTableCell(row, ToWx(ui::ProfileIdentityName(host)), 110, false);
         AddTableCell(row, ToWx(deskhub::ShortFingerprint(host.fingerprint)), 130, false)
             ->SetToolTip(ToWx(deskhub::FormatFingerprint(host.fingerprint)));
 
@@ -1457,7 +1581,6 @@ void MainFrame::SelectPage(int page) {
     if (page == kPageHost && !Sharing()) RefreshDisplayChoices();
     if (page != kPageDevices) return;
     RefreshPairedDevices();
-    RefreshClientKeys();
     RefreshSavedHosts();
 }
 
@@ -1734,6 +1857,9 @@ void MainFrame::ApplyHostState(HostShareState state, const wxString& detail) {
     shareBtn_->Refresh();
 
     bindChoice_->Enable(!live);
+    qrBtn_->Show(live);
+    if (!live) HideQrPanel();
+    accessRequestsPanel_->Show(live);
     ShowHostTable(live);
 }
 
@@ -1858,13 +1984,7 @@ void MainFrame::StartHosting(const std::vector<ShareSource>& sources,
 
     shareDriver_.Join();
     shareDriver_.StartAsync(
-        share_.sharingHost(), sources, options,
-        [alive = alive_](std::function<void()> fn) {
-            if (!wxTheApp) return;
-            wxTheApp->CallAfter([alive, fn = std::move(fn)] {
-                if (*alive) fn();
-            });
-        },
+        share_.sharingHost(), sources, options, UiPoster(),
         [this, port = options.port, allowInput = options.allowInput](bool started,
             const std::string& error) { OnHostStarted(started, error, port, allowInput); });
 }
@@ -1891,6 +2011,8 @@ void MainFrame::OnHostStarted(bool started, const std::string& error, uint16_t p
     if (terminalRequested_) share_.StartTerminalShare();
     if (filesRequested_) StartFileShare();
     ApplySharingBanner();
+    accessRequestsSeen_.reset();
+    RefreshAccessRequests();
     hostTimer_.Start(int(deskhubp::kShareStatusPollMs));
     if (settings_.clipboardSync) clipTimer_.Start(1000);
 }
@@ -1961,6 +2083,7 @@ void MainFrame::OnHostTimer(wxTimerEvent&) {
     share_.RefreshShells();
     share_.RefreshTransfers();
     UpdateHostRows(hostStatus_);
+    RefreshAccessRequests();
 }
 
 void MainFrame::UpdateHostRows(const std::vector<ShareSourceStatus>& rows) {
@@ -2044,6 +2167,23 @@ void MainFrame::OpenShell(const NetAddr& server) {
         SetClientStatus(ToWx(ui::kTerminalUnreachable), kOffline);
 }
 
+deskhubp::SourceQueryAsync::UiPost MainFrame::UiPoster() const {
+    return [alive = alive_](std::function<void()> fn) {
+        if (!wxTheApp) return;
+        wxTheApp->CallAfter([alive, fn = std::move(fn)] {
+            if (*alive) fn();
+        });
+    };
+}
+
+SourceQueryRequest MainFrame::ConnectRequest() {
+    SourceQueryRequest request;
+    request.onProgress = [this, post = UiPoster()](std::string_view text) {
+        post([this, line = std::string(text)] { ShowConnectProgress(line); });
+    };
+    return request;
+}
+
 void MainFrame::StartConnect(const std::string& rawAddr) {
     LOGI("[UI] Connect requested for \"%s\".", rawAddr.c_str());
     SetClientStatus(wxString(), kMutedText);
@@ -2060,21 +2200,35 @@ void MainFrame::StartConnect(const std::string& rawAddr) {
             "Deskhub", wxOK | wxICON_ERROR, this);
         return;
     }
+    LaunchQuery(server, std::string(), addr);
+}
 
-    const bool started = connectDriver_.QueryAsync(
-        server,
-        [alive = alive_](std::function<void()> fn) {
-            if (!wxTheApp) return;
-            wxTheApp->CallAfter([alive, fn = std::move(fn)] {
-                if (*alive) fn();
-            });
-        },
+void MainFrame::StartConnectByInvite(const std::string& invite) {
+    LOGI("[UI] Connect requested with a pairing invite.");
+    SetClientStatus(wxString(), kMutedText);
+    LaunchQuery(NetAddr{}, invite, std::string());
+}
+
+void MainFrame::LaunchQuery(const NetAddr& server, const std::string& invite,
+    const std::string& addr) {
+    const bool started = connectDriver_.QueryAsync(server, ConnectRequest(), invite, UiPoster(),
         [this, addr](const deskhubp::ConnectOutcome& outcome) { OnSourcesReady(addr, outcome); });
-    if (!started) {
-        SetClientStatus(ToWx(ui::kQueryingSources), kMutedText);
-        return;
+    if (started) {
+        connectCancelled_ = false;
+        connectBtn_->Disable();
     }
-    connectBtn_->Disable();
+    SetClientStatus(ToWx(ui::kQueryingSources), kMutedText);
+}
+
+void MainFrame::ShowConnectProgress(const std::string& text) {
+    cancelConnectBtn_->Show(!connectCancelled_);
+    SetClientStatus(ToWx(text), kMutedText);
+}
+
+void MainFrame::CancelConnect() {
+    connectCancelled_ = true;
+    connectDriver_.Cancel();
+    cancelConnectBtn_->Hide();
     SetClientStatus(ToWx(ui::kQueryingSources), kMutedText);
 }
 
@@ -2100,38 +2254,48 @@ void MainFrame::ConnectRow(long row) {
     ConnectToDevice(addr);
 }
 
-void MainFrame::ConnectToDevice(const std::string& addr) {
+void MainFrame::ShowAddressInFields(const std::string& addr) {
     const uint16_t port = ui::AddressPort(addr);
     addrCtrl_->ChangeValue(ToWx(ui::AddressHost(addr)));
     connectPortCtrl_->ChangeValue(
         ToWx(std::to_string(port != 0 ? port : deskhub::kDeskhubPort)));
+}
+
+void MainFrame::ConnectToDevice(const std::string& addr) {
+    ShowAddressInFields(addr);
     StartConnect(addr);
 }
 
 void MainFrame::OnSourcesReady(const std::string& addr, const deskhubp::ConnectOutcome& outcome) {
     connectBtn_->Enable();
+    cancelConnectBtn_->Hide();
     SetClientStatus(wxString(), kMutedText);
     DeselectAllRows();
 
+    const std::string address = outcome.answeredAddress.empty() ? addr : outcome.answeredAddress;
     if (!outcome.ok && outcome.unknownHostKey) {
-        ConfirmNewHost(addr, *outcome.unknownHostKey);
+        ConfirmNewHost(address, *outcome.unknownHostKey);
         return;
     }
     if (!outcome.ok) {
-        wxMessageBox(ToWx(outcome.failure), "Deskhub", wxOK | wxICON_ERROR, this);
+        if (!connectCancelled_)
+            wxMessageBox(ToWx(outcome.failure), "Deskhub", wxOK | wxICON_ERROR, this);
         return;
     }
 
-    deskhubp::RememberRecentDevice(addr, outcome.hostName);
+    const bool connectedByInvite = addr.empty();
+    if (connectedByInvite) ShowAddressInFields(address);
+    deskhubp::RememberRecentDevice(address, outcome.hostName);
     recent_ = deskhubp::LoadRecentDevices();
     RefreshDeviceList();
 
-    OpenConnectionWindow(addr, outcome);
+    OpenConnectionWindow(address, outcome);
 }
 
 void MainFrame::ConfirmNewHost(const std::string& addr, const deskhub::Fingerprint& fingerprint) {
-    const std::string prompt =
-        ui::TrustNewHostPrompt(addr, deskhub::FormatFingerprint(fingerprint));
+    const std::string prompt = ui::TrustNewHostPrompt(addr,
+        deskhub::FormatFingerprint(fingerprint),
+        deskhubp::PreviousOwnerWarningFor(addr, fingerprint));
     wxMessageDialog dialog(this, ToWx(prompt), ToWx(ui::kTrustNewHostTitle),
         wxOK | wxCANCEL | wxCANCEL_DEFAULT | wxICON_WARNING);
     dialog.SetOKCancelLabels(ToWx(ui::kTrustNewHostAction), ToWx(ui::kCancelAction));
@@ -2236,6 +2400,7 @@ void MainFrame::OnClose(wxCloseEvent& event) {
         trayIcon_ = nullptr;
     }
     *alive_ = false;
+    HideQrPanel();
     CloseEveryConnection();
     share_.terminalHost().Stop();
     hostTimer_.Stop();

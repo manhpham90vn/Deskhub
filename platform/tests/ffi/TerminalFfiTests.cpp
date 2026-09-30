@@ -7,7 +7,6 @@
 #include "deskhubp/host/TerminalHost.h"
 #include "deskhubp/system/AppDataFile.h"
 #include "deskhubp/system/Clock.h"
-#include "deskhubp/system/ClientIdentity.h"
 #include "deskhubp/system/HostIdentity.h"
 #include "deskhubp/system/AuthorizedKeysFile.h"
 #include "deskhubp/system/Pty.h"
@@ -39,7 +38,7 @@ struct FfiHostRig {
     bool Start(const deskhubp::HostIdentity& identity) {
         sock.SetRecvTimeout(1);
         deskhubp::QuicSettings settings;
-        settings.certPemPath = identity.certPath;
+        settings.certPem = deskhubp::TransportCertificatePem(identity);
         settings.keyPemPath = identity.keyPath;
         if (!sock.Listen(settings, kFfiTestPort, "127.0.0.1")) return false;
 
@@ -176,7 +175,6 @@ void RunTerminalFfiTests() {
         return;
     }
 
-    const std::string savedCert = deskhubp::ReadAppDataFile(deskhubp::kHostCertFileName);
     const std::string savedKey = deskhubp::ReadAppDataFile(deskhubp::kHostKeyFileName);
     const std::string savedTrust = deskhubp::ReadAppDataFile(deskhubp::kTrustStoreFileName);
     const std::string savedAuthorizedKeys = deskhubp::ReadAppDataFile(deskhubp::kAuthorizedKeysFileName);
@@ -184,7 +182,7 @@ void RunTerminalFfiTests() {
     deskhubp::RemoveAppDataFile(deskhubp::kTrustStoreFileName);
     RevokeAllClientKeys();
 
-    const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity("deskhub-test");
+    const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity();
     FfiHostRig rig;
     if (!rig.Start(identity)) {
         Check(false, "the host rig starts");
@@ -206,10 +204,10 @@ void RunTerminalFfiTests() {
     callbacks.user = &seen;
 
     const std::string address = "127.0.0.1:" + std::to_string(kFfiTestPort);
-    const auto client = deskhubp::LoadOrCreateClientIdentity();
+    const auto client = deskhubp::LoadOrCreateHostIdentity();
     Check(client.Valid() && GrantClientKey(client),
         "the viewer public key is authorized before opening the terminal");
-    Check(deskhubp::RememberTrustedHost(address, address, identity.fingerprint,
+    Check(deskhubp::RememberTrustedHost(identity.fingerprint, "ffi-host", address,
               NowUnixSeconds()),
         "the host public key is pinned before opening the terminal");
     DHTermSession* session = dh_term_open(address.c_str(), 80, 24, &callbacks);
@@ -314,7 +312,6 @@ void RunTerminalFfiTests() {
     }
 
     rig.Stop();
-    if (!savedCert.empty()) deskhubp::WriteAppDataFile(deskhubp::kHostCertFileName, savedCert);
     if (!savedKey.empty()) deskhubp::WriteAppDataFile(deskhubp::kHostKeyFileName, savedKey);
     if (savedTrust.empty())
         deskhubp::RemoveAppDataFile(deskhubp::kTrustStoreFileName);

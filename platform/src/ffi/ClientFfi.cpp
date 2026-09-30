@@ -20,9 +20,12 @@
 #include "deskhubp/system/RecentDevicesFile.h"
 #include "deskhubp/input/NativeKeyMap.h"
 #include "deskhubp/client/SourceQuery.h"
+#include "deskhub/net/PairingInvite.h"
 
+#include <atomic>
 #include <cstddef>
 #include <cstdio>
+#include <mutex>
 #include <iterator>
 #include <cstring>
 #include <string>
@@ -131,20 +134,22 @@ const char* dh_string(DHStringId id) {
         case DHStrAllowClientPlaceholder: return deskhub::ui::kAllowClientPlaceholder;
         case DHStrAllowClientAction: return deskhub::ui::kAllowClientAction;
         case DHStrAllowClientInvalid: return deskhub::ui::kAllowClientInvalid;
-        case DHStrMyKeysHeading: return deskhub::ui::kMyKeysHeading;
-        case DHStrMyKeysHint: return deskhub::ui::kMyKeysHint;
         case DHStrCopyPublicKeyAction: return deskhub::ui::kCopyPublicKeyAction;
-        case DHStrNewKeyAction: return deskhub::ui::kNewKeyAction;
-        case DHStrImportKeyAction: return deskhub::ui::kImportKeyAction;
-        case DHStrKeyNameLabel: return deskhub::ui::kKeyNameLabel;
-        case DHStrKeyPassphraseLabel: return deskhub::ui::kKeyPassphraseLabel;
+        case DHStrShowQrAction: return deskhub::ui::kShowQrAction;
+        case DHStrHideQrAction: return deskhub::ui::kHideQrAction;
+        case DHStrScanQrAction: return deskhub::ui::kScanQrAction;
+        case DHStrQrHint: return deskhub::ui::kQrHint;
+        case DHStrAccessRequestsHeading: return deskhub::ui::kAccessRequestsHeading;
+        case DHStrAccessRequestsEmpty: return deskhub::ui::kAccessRequestsEmpty;
+        case DHStrApproveAction: return deskhub::ui::kApproveAction;
+        case DHStrDenyAction: return deskhub::ui::kDenyAction;
+        case DHStrCameraDenied: return deskhub::ui::kCameraDenied;
+        case DHStrInviteInvalid: return deskhub::ui::kInviteInvalid;
         case DHStrTrustNewHostTitle: return deskhub::ui::kTrustNewHostTitle;
         case DHStrTrustNewHostAction: return deskhub::ui::kTrustNewHostAction;
         case DHStrCancelAction: return deskhub::ui::kCancelAction;
         case DHStrCopiedButton: return deskhub::ui::kCopiedButton;
         case DHStrDeviceNameHint: return deskhub::ui::kDeviceNameHint;
-        case DHStrDeleteKeyAction: return deskhub::ui::kDeleteKeyAction;
-        case DHStrDeleteKeyPrompt: return deskhub::ui::kDeleteKeyPrompt;
         case DHStrSidebarHost: return deskhub::ui::kSidebarHost;
         case DHStrSidebarClient: return deskhub::ui::kSidebarClient;
         case DHStrSidebarSettings: return deskhub::ui::kSidebarSettings;
@@ -349,30 +354,32 @@ DHAutoShareStep dh_auto_share_step(bool displays_ready, uint32_t waited_ms) {
     }
     return DHAutoShareKeepWaiting;
 }
+}
 
-int dh_list_sources(const char* address, DHSourceInfo* out, int capacity, DHHostCaps* out_caps,
-    char* failure, int failure_capacity, char* new_host_key, int new_host_key_capacity) {
-    if (out_caps) *out_caps = DHHostCaps{false, false, false, false};
-    if (failure && failure_capacity > 0) failure[0] = '\0';
-    if (new_host_key && new_host_key_capacity > 0) new_host_key[0] = '\0';
-    if (!address || !out || capacity <= 0) return DH_SOURCE_QUERY_FAILED;
+namespace {
 
-    NetAddr server;
-    if (!ParseNetAddr(address, server)) {
-        LOGE("[Bridge] Invalid address: %s", address);
-        deskhubp::FillText(failure, failure_capacity, deskhub::ui::InvalidAddressLine(address));
-        return DH_SOURCE_QUERY_FAILED;
-    }
+std::atomic<bool>& QueryCancelFlag() {
+    static std::atomic<bool> cancel{false};
+    return cancel;
+}
 
-    SourceQueryReply reply;
-    if (!QuerySources(server, reply)) {
-        deskhubp::FillText(failure, failure_capacity, reply.failure);
-        if (reply.unknownHostKey)
-            deskhubp::FillText(new_host_key, new_host_key_capacity,
-                deskhub::FormatFingerprint(*reply.unknownHostKey));
-        return DH_SOURCE_QUERY_FAILED;
-    }
-    deskhubp::RememberRecentDevice(address, reply.hostName);
+std::mutex& QueryStatusMutex() {
+    static std::mutex mutex;
+    return mutex;
+}
+
+std::string& QueryStatusText() {
+    static std::string text;
+    return text;
+}
+
+void SetQueryStatus(std::string_view text) {
+    const std::lock_guard<std::mutex> lock(QueryStatusMutex());
+    QueryStatusText().assign(text);
+}
+
+int FillSources(const SourceQueryReply& reply, DHSourceInfo* out, int capacity,
+    DHHostCaps* out_caps) {
     const std::vector<deskhub::SourceInfo>& sources = reply.sources;
     const deskhub::HostCaps& caps = reply.caps;
     if (out_caps)
@@ -393,6 +400,69 @@ int dh_list_sources(const char* address, DHSourceInfo* out, int capacity, DHHost
             deskhub::media::SourcePickerLabel(src.name, src.sourceId, src.width, src.height));
     }
     return count;
+}
+
+}
+
+extern "C" {
+
+int dh_list_sources(const char* address, const char* pairing_invite, DHSourceInfo* out,
+    int capacity, DHHostCaps* out_caps, char* failure, int failure_capacity, char* new_host_key,
+    int new_host_key_capacity, char* answered_address, int answered_address_capacity,
+    int* out_failure_kind) {
+    if (out_caps) *out_caps = DHHostCaps{false, false, false, false};
+    if (failure && failure_capacity > 0) failure[0] = '\0';
+    if (new_host_key && new_host_key_capacity > 0) new_host_key[0] = '\0';
+    if (answered_address && answered_address_capacity > 0) answered_address[0] = '\0';
+    if (out_failure_kind) *out_failure_kind = DHSourceQueryLocalError;
+    if (!out || capacity <= 0) return DH_SOURCE_QUERY_FAILED;
+    const std::string invite = pairing_invite ? pairing_invite : "";
+    if (invite.empty() && !address) return DH_SOURCE_QUERY_FAILED;
+
+    QueryCancelFlag().store(false, std::memory_order_release);
+    SetQueryStatus({});
+    SourceQueryRequest request;
+    request.cancel = &QueryCancelFlag();
+    request.onProgress = [](std::string_view text) { SetQueryStatus(text); };
+
+    SourceQueryReply reply;
+    bool ok = false;
+    if (!invite.empty()) {
+        ok = QuerySourcesByInvite(invite, reply, request);
+    } else {
+        NetAddr server;
+        if (!ParseNetAddr(address, server)) {
+            LOGE("[Bridge] Invalid address: %s", address);
+            deskhubp::FillText(failure, failure_capacity, deskhub::ui::InvalidAddressLine(address));
+            return DH_SOURCE_QUERY_FAILED;
+        }
+        ok = QuerySources(server, reply, request);
+    }
+    SetQueryStatus({});
+    deskhubp::FillText(answered_address, answered_address_capacity, reply.answeredAddress);
+    if (out_failure_kind) *out_failure_kind = int(reply.failureKind);
+    if (!ok) {
+        deskhubp::FillText(failure, failure_capacity, reply.failure);
+        if (reply.unknownHostKey)
+            deskhubp::FillText(new_host_key, new_host_key_capacity,
+                deskhub::FormatFingerprint(*reply.unknownHostKey));
+        return DH_SOURCE_QUERY_FAILED;
+    }
+    deskhubp::RememberRecentDevice(reply.answeredAddress, reply.hostName);
+    return FillSources(reply, out, capacity, out_caps);
+}
+
+void dh_list_sources_cancel(void) {
+    QueryCancelFlag().store(true, std::memory_order_release);
+}
+
+int dh_source_query_status(char* out, int capacity) {
+    const std::lock_guard<std::mutex> lock(QueryStatusMutex());
+    return deskhubp::FillText(out, capacity, QueryStatusText());
+}
+
+bool dh_is_pairing_invite(const char* text) {
+    return text != nullptr && deskhub::IsPairingInvite(text);
 }
 
 bool dh_connect_decision(const DHSourceInfo* sources, int count, uint8_t* out_source_id) {

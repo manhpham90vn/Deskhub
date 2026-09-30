@@ -1,6 +1,10 @@
 #pragma once
+#include "deskhubp/system/AccessRequestsFile.h"
+#include "deskhubp/system/AppDataFile.h"
+#include "deskhubp/system/AuthProof.h"
 #include "deskhubp/system/AuthorizedKeysFile.h"
-#include "deskhubp/system/ClientIdentity.h"
+#include "deskhubp/system/HostIdentity.h"
+#include "deskhubp/system/PairingTokenFile.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -8,12 +12,14 @@
 #include <span>
 #include <string>
 
-inline bool GrantClientKey(const deskhubp::ClientIdentity& identity) {
-    return deskhubp::RememberAuthorizedKey(deskhubp::ClientPublicKeyText(identity)) ||
+inline bool GrantClientKey(const deskhubp::HostIdentity& identity) {
+    return deskhubp::RememberAuthorizedKey(deskhubp::IdentityPublicKeyText(identity)) ||
            deskhubp::IsClientKeyAuthorized(identity.publicKey);
 }
 
 inline bool RevokeAllClientKeys() {
+    deskhubp::RemoveAppDataFile(deskhubp::kAccessRequestsFileName);
+    deskhubp::RevokePairingTokens();
     return deskhubp::ClearAuthorizedKeys();
 }
 

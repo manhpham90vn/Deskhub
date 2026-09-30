@@ -94,11 +94,11 @@ sudo apt install deskhub-cli   # CLI；也可以单独安装
   <tr>
     <td align="center" width="33%">
       <img src="docs/imgs/macos_2.png" alt="macOS 上 Deskhub 的 Client 页：host 地址与 UDP port 输入框，用于选择 remote desktop、control 和 terminal 的勾选框，Connect 按钮，以及最近使用的地址列表及各自的上次连接时间">
-      <br><sub><b>Client</b> —— 输入地址，或选择最近使用的 host 或受信任的 host，然后选择要打开的内容：屏幕、control 权限、shell，或其组合。</sub>
+      <br><sub><b>Client</b> —— 输入地址、粘贴 host 的 QR 链接，或选择最近使用的 host 或受信任的 host，然后选择要打开的内容：屏幕、control 权限、shell，或其组合。</sub>
     </td>
     <td align="center" width="33%">
-      <img src="docs/imgs/macos_3.png" alt="macOS 上 Deskhub 的 Devices 页：一个区域对应本机作为 host，显示其 SHA256 host key 和允许 connect 的 client key；另一个区域对应本机作为 client，显示本机自己的 key 和受信任的 host">
-      <br><sub><b>Devices</b> —— 作为 host：本机的 host key，以及允许接入的 client key，可逐个移除。作为 client：你自己的 key，以及你信任的 host。</sub>
+      <img src="docs/imgs/macos_3.png" alt="macOS 上 Deskhub 的 Devices 页：一个区域对应本机作为 host，显示其 SHA256 key fingerprint、Copy public key 按钮和允许 connect 的 client key；另一个区域对应本机作为 client，显示受信任的 host">
+      <br><sub><b>Devices</b> —— 作为 host：本机的 key，以及允许接入的设备——经批准、扫码或粘贴加入——可逐个移除。作为 client：你信任的 host，以 key 为准。</sub>
     </td>
     <td align="center" width="33%">
       <img src="docs/imgs/macos_4.png" alt="macOS 上 Deskhub 的 Settings 页：设备名称，fps、bitrate 与 quality，UDP port，决定 viewer 能否 control 本机的开关，clipboard 与防休眠开关，Screen Recording 和 Accessibility permission 的当前状态，以及开机自启开关">
@@ -110,15 +110,15 @@ sudo apt install deskhub-cli   # CLI；也可以单独安装
 <p align="center">
   <img src="docs/imgs/ios_1.png" alt="iOS 上 Deskhub 的 Client 页：地址和 port 输入框，Connect 与 Terminal 按钮，control 远端机器的开关，以及最近使用的地址列表" width="195">
   <img src="docs/imgs/ios_2.png" alt="iOS 上 Deskhub 的 Host 页：Share on network、Start sharing，以及供其他机器 connect 的 IP 地址" width="195">
-  <img src="docs/imgs/ios_3.png" alt="iOS 上 Deskhub 的 Devices 页：本设备的 SHA256 host key、允许 connect 的 client key、本设备自己的 client key，以及受信任的 host" width="195">
+  <img src="docs/imgs/ios_3.png" alt="iOS 上 Deskhub 的 Devices 页：本设备的 SHA256 key、允许 connect 的 client key，以及受信任的 host" width="195">
   <img src="docs/imgs/ios_4.png" alt="iOS 上 Deskhub 的连接 settings 页：UDP port，以及 clipboard 同步和保持唤醒两个开关" width="195">
 </p>
-<p align="center"><sub><b>iPhone</b> —— 同样的四个页面。Connect 到受信任的 host，将画面作为 trackpad 进行操作；也可以 host 手机自身的屏幕，仅限 view-only。</sub></p>
+<p align="center"><sub><b>iPhone</b> —— 同样的四个页面。扫描 host 的 QR code 即可 connect，将画面作为 trackpad 进行操作；也可以 host 手机自身的屏幕，仅限 view-only。</sub></p>
 
 <p align="center">
   <img src="docs/imgs/android_1.png" alt="Android 上 Deskhub 的 Client 页：地址和 port 输入框，Connect 与 Terminal 按钮，control 勾选框，以及最近使用的地址列表" width="195">
   <img src="docs/imgs/android_2.png" alt="Android 上 Deskhub 的 Host 页：Share on network、Start sharing，以及供其他机器 connect 的 IP 地址" width="195">
-  <img src="docs/imgs/android_3.png" alt="Android 上 Deskhub 的 Devices 页：本设备的 SHA256 host key、允许 connect 的 client key、本设备自己的 client key，以及受信任的 host" width="195">
+  <img src="docs/imgs/android_3.png" alt="Android 上 Deskhub 的 Devices 页：本设备的 SHA256 key、允许 connect 的 client key，以及受信任的 host" width="195">
   <img src="docs/imgs/android_4.png" alt="Android 上 Deskhub 的连接 settings 页：UDP port，以及 clipboard 同步和保持唤醒两个勾选框" width="195">
 </p>
 <p align="center"><sub><b>Android</b> —— 同样的四个页面，采用 Material Design。作为 host 时，Android 10+ 仅支持 view-only 的屏幕共享。</sub></p>
@@ -135,11 +135,12 @@ sudo apt install deskhub-cli   # CLI；也可以单独安装
 | ------ | ---------- | --------- |
 | 在适用的硬件上可按 60 fps stream。video 处理会在可用时使用 GPU 内存。 | 可通过 package manager 安装，也可下载 release。无需账号或 background service。 | **Share** 一块 display，或 **Connect** 到一个 IP。桌面端还可共享 **shell** 并接收**文件**；手机可用 view-only 模式共享屏幕。 |
 
-Session 在 **QUIC/TLS** 上以 end-to-end 方式 encrypt，访问方式与 SSH 相同：client 只有在
-其 public key 列于 host 的 `authorized_keys` 中时才能接入；client 会将 host 的 key 与首次
-connect 时信任的 key 比对，一旦发生变化便直接拒绝。不会通过 network 进行任何批准，Deskhub
-也从不 scan network。请使用可信的 network 或 VPN，并且**不要对 UDP 47777 做
-port-forward**。完整的 threat model 见
+Session 在 **QUIC/TLS** 上以 end-to-end 方式 encrypt，访问方式与 SSH 相同：每台机器只有
+一把 key，client 只有在 host 的所有者放行了这把 key 之后才能接入——批准它的 connection
+request、在共享时向它展示 **QR code**，或粘贴它的 public key。client 会 pin 住 host 的 key，
+并在发送任何内容之前先核对；信任跟随 key 而非地址，因此 host 更换地址后信任依然保留。没有
+passcode，没有 discovery，也没有任何放陌生人进来的开关。请使用可信的 network 或 VPN，并且
+**不要对 UDP 47777 做 port-forward**。完整的 threat model 见
 [`SECURITY.zh.md`](SECURITY.zh.md)。
 
 <a id="why"></a>

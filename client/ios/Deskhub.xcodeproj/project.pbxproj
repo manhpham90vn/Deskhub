@@ -476,6 +476,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = Deskhub;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
+				INFOPLIST_KEY_NSCameraUsageDescription = "Deskhub uses the camera only while you scan a pairing QR code shown by another Deskhub host. Frames never leave this device.";
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Deskhub needs local network access to connect to your desktop.";
 				INFOPLIST_FILE = "Deskhub-Info.plist";
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "When another device sends you photos or videos over a Deskhub file transfer, Deskhub saves them into your photo library so they appear in the Photos app. Deskhub only adds new items and never reads, edits, or deletes your existing photos.";
@@ -528,6 +529,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = Deskhub;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
+				INFOPLIST_KEY_NSCameraUsageDescription = "Deskhub uses the camera only while you scan a pairing QR code shown by another Deskhub host. Frames never leave this device.";
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Deskhub needs local network access to connect to your desktop.";
 				INFOPLIST_FILE = "Deskhub-Info.plist";
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "When another device sends you photos or videos over a Deskhub file transfer, Deskhub saves them into your photo library so they appear in the Photos app. Deskhub only adds new items and never reads, edits, or deletes your existing photos.";

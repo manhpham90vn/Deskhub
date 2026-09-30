@@ -54,16 +54,12 @@ bool FileTransferClient::Start(const FileTransferClientConfig& config,
     linkConfig.host = config_.host;
     linkConfig.hostLabel = config_.hostLabel;
     linkConfig.clientName = config_.clientName;
-    linkConfig.clientIdentityName = config_.clientIdentityName;
     linkConfig.acceptNewHostKey = config_.acceptNewHostKey;
     linkConfig.authTimeoutMs = kAuthTimeoutMs;
 
     HostLinkCallbacks hooks;
     hooks.onState = [this](HostLinkState state, std::string_view message) {
         OnLinkState(state, message);
-    };
-    hooks.onTrustAsked = [this](deskhub::TrustVerdict, std::string_view fingerprint) {
-        if (cb_.onKeyChanged) cb_.onKeyChanged(fingerprint);
     };
     hooks.onStreamBroken = [this](uint64_t streamId) {
         if (streamId == kQuicFileStream && upload_) upload_->LinkLost();
@@ -77,14 +73,6 @@ bool FileTransferClient::Start(const FileTransferClientConfig& config,
         return false;
     }
     thread_ = std::thread([this] { Loop(); });
-    return true;
-}
-
-bool FileTransferClient::AcceptKeyAndRetry() {
-    if (State() != FileTransferClientState::KeyChanged) return false;
-    if (link_.State() != HostLinkState::Deciding) return false;
-    SetState(FileTransferClientState::Connecting, deskhub::ui::kTransferConnecting);
-    link_.AcceptFingerprint();
     return true;
 }
 
@@ -106,8 +94,7 @@ bool FileTransferClient::Finished() const {
     const FileTransferClientState state = State();
     return state == FileTransferClientState::Done ||
            state == FileTransferClientState::Refused ||
-           state == FileTransferClientState::Failed ||
-           state == FileTransferClientState::KeyChanged;
+           state == FileTransferClientState::Failed;
 }
 
 std::string FileTransferClient::Message() const {
@@ -131,10 +118,7 @@ deskhub::ui::TransferView FileTransferClient::View() const {
                   state == FileTransferClientState::Sending;
     view.done = state == FileTransferClientState::Done;
     view.failed = state == FileTransferClientState::Refused ||
-                  state == FileTransferClientState::Failed ||
-                  state == FileTransferClientState::KeyChanged;
-    view.keyChanged = state == FileTransferClientState::KeyChanged;
-    if (view.keyChanged) view.fingerprint = link_.FingerprintText();
+                  state == FileTransferClientState::Failed;
 
     const std::lock_guard<std::mutex> lock(mutex_);
     view.fileIndex = progress_.fileIndex;
@@ -157,12 +141,10 @@ void FileTransferClient::SetState(FileTransferClientState state, std::string_vie
 
 void FileTransferClient::OnLinkState(HostLinkState state, std::string_view message) {
     const FileTransferClientState current = State();
-    const bool beforeUpload = current == FileTransferClientState::Connecting ||
-                              current == FileTransferClientState::KeyChanged;
+    const bool beforeUpload = current == FileTransferClientState::Connecting;
     switch (state) {
-        case HostLinkState::Deciding:
-            if (beforeUpload)
-                SetState(FileTransferClientState::KeyChanged, deskhub::ui::kTrustChangedBody);
+        case HostLinkState::AwaitingApproval:
+            if (beforeUpload) SetState(FileTransferClientState::Connecting, message);
             return;
         case HostLinkState::Refused:
             if (beforeUpload) SetState(FileTransferClientState::Refused, message);

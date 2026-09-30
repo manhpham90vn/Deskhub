@@ -14,7 +14,6 @@ struct DevicesPage: View {
     let trustedHostsRevision: Int
     let onConnectHost: @MainActor (String) -> Void
     @State private var devices: [PairedDeviceRow] = []
-    @State private var keys = ClientKeysModel()
     @State private var hostFingerprint = ""
     @State private var confirmForgetAll = false
     @State private var publicKeyInput = ""
@@ -32,7 +31,6 @@ struct DevicesPage: View {
 
             DeskhubArea(title: DeskhubClient.string(DHStrDevicesClientArea)) {
                 deskhubHint(DeskhubClient.string(DHStrDevicesClientAreaHint))
-                MyKeysSection(model: keys)
                 SavedHostsSection(
                     trustedHostsRevision: trustedHostsRevision,
                     onConnect: onConnectHost
@@ -63,6 +61,11 @@ struct DevicesPage: View {
                 CopyButton { hostFingerprint }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
+                CopyButton(DeskhubClient.string(DHStrCopyPublicKeyAction)) {
+                    DeskhubClient.hostPublicKey()
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
             }
             deskhubHint(DeskhubClient.string(DHStrThisMachineHint))
         }
@@ -184,7 +187,6 @@ struct DevicesPage: View {
         hostFingerprint = DeskhubClient.buffered(Self.hostFingerprintCapacity) {
             dh_host_fingerprint($0, $1)
         }
-        keys.refresh()
         devices = DeskhubClient.ffiList(
             128, DHPairedDevice(),
             { dh_paired_devices($0, $1) },

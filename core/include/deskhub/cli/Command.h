@@ -29,12 +29,11 @@ enum class Verb {
 enum class DevicesAction { List,
     Add,
     Public,
-    Import,
-    Generate,
-    Identities,
     Forget,
     ForgetAll,
-    DeleteKey };
+    Requests,
+    Approve,
+    Deny };
 
 enum class TrustAction { List,
     Add,
@@ -53,7 +52,6 @@ enum class ExitCode {
     Usage = 2,
     Unreachable = 3,
     Refused = 4,
-    KeyChanged = 5,
     NothingToShare = 6,
     BindFailed = 8,
     Unsupported = 9,
@@ -63,6 +61,7 @@ enum class ExitCode {
 inline constexpr uint32_t kDefaultStatusIntervalMs = 5000;
 inline constexpr uint32_t kMinStatusIntervalMs = 200;
 inline constexpr uint32_t kMaxStatusIntervalMs = 3600000;
+inline constexpr uint32_t kMaxApprovalWaitSeconds = 600;
 
 inline constexpr const char* kEveryDisplay = "all";
 
@@ -89,6 +88,7 @@ struct ShareOptions {
     std::optional<std::string> filesDir{};
     uint32_t statusIntervalMs = kDefaultStatusIntervalMs;
     bool status = true;
+    bool qr = false;
 
     std::optional<uint32_t> fps{};
     std::optional<uint32_t> bitrateMbps{};
@@ -111,19 +111,18 @@ struct Command {
 
     std::string address{};
     std::string profileAlias{};
+    std::string pairingInvite{};
     uint16_t port = kDeskhubPort;
     bool portGiven = false;
 
     std::optional<std::string> deviceName{};
-    std::optional<std::string> identityName{};
     bool acceptNewHostKey = false;
+    std::optional<uint32_t> approvalWaitSeconds{};
 
     DevicesAction devices = DevicesAction::List;
     TrustAction trust = TrustAction::List;
     SettingsAction settings = SettingsAction::List;
     std::string target{};
-    bool keyPassphraseStdin = false;
-    std::string keyName{};
     bool forget = false;
     std::string key{};
     std::string value{};

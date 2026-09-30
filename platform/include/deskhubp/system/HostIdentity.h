@@ -6,27 +6,27 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace deskhubp {
 
 inline constexpr const char* kHostKeyFileName = "host_key.pem";
-inline constexpr const char* kHostCertFileName = "host_cert.pem";
 
 struct HostIdentity {
-    std::string certPem{};
     std::string keyPem{};
-    std::string certPath{};
     std::string keyPath{};
+    std::vector<uint8_t> publicKey{};
     deskhub::Fingerprint fingerprint{};
 
     bool Valid() const {
-        return !certPem.empty() && !keyPem.empty() && !deskhub::IsZero(fingerprint);
+        return !keyPem.empty() && !publicKey.empty() && !deskhub::IsZero(fingerprint);
     }
 };
 
 bool QuicAvailable();
 
 HostIdentity LoadHostIdentity();
-HostIdentity LoadOrCreateHostIdentity(std::string_view commonName);
+HostIdentity LoadOrCreateHostIdentity();
+std::string TransportCertificatePem(const HostIdentity& identity);
 std::optional<deskhub::Fingerprint> FingerprintOfCertDer(std::span<const uint8_t> der);
 }

@@ -75,22 +75,48 @@ ExitCode RunDisplays(const Command& command) {
 }
 
 SourceQueryRequest QueryRequestOf(const Command& command) {
-    return SourceQueryRequest{command.identityName.value_or(""), command.acceptNewHostKey};
+    SourceQueryRequest request;
+    request.acceptNewHostKey = command.acceptNewHostKey;
+    request.pairingInvite = command.pairingInvite;
+    if (command.approvalWaitSeconds) request.approvalWaitMs = *command.approvalWaitSeconds * 1000;
+    if (!command.quiet)
+        request.onProgress = [](std::string_view line) { PrintError(line); };
+    return request;
 }
 
 ExitCode ReportQueryFailure(const SourceQueryReply& reply) {
     PrintConnectFailure(reply.failure);
     if (reply.unknownHostKey)
         PrintError(deskhub::ui::NewHostKeyCliHint(deskhub::FormatFingerprint(*reply.unknownHostKey)));
+    if (reply.failureKind == SourceQueryFailure::Refused ||
+        reply.failureKind == SourceQueryFailure::AwaitingApproval)
+        PrintError(deskhub::ui::kAuthNotPairedCliHint);
     switch (reply.failureKind) {
         case SourceQueryFailure::Unreachable: return ExitCode::Unreachable;
-        case SourceQueryFailure::HostKeyChanged: return ExitCode::KeyChanged;
         case SourceQueryFailure::LocalError: return ExitCode::Failed;
         case SourceQueryFailure::None:
         case SourceQueryFailure::UntrustedHost:
+        case SourceQueryFailure::InviteMismatch:
+        case SourceQueryFailure::AwaitingApproval:
         case SourceQueryFailure::Refused: break;
     }
     return ExitCode::Refused;
+}
+
+bool AdmitByInvite(Command& command) {
+    if (!deskhubp::QuicAvailable()) {
+        PrintError(deskhub::ui::kShareNoQuicLibrary);
+        return false;
+    }
+    SourceQueryReply reply;
+    if (!QuerySourcesByInvite(command.pairingInvite, reply, QueryRequestOf(command))) {
+        ReportQueryFailure(reply);
+        return false;
+    }
+    command.address = reply.answeredAddress;
+    command.port = deskhub::ui::AddressPort(reply.answeredAddress);
+    command.pairingInvite.clear();
+    return true;
 }
 
 ExitCode RunSources(const Command& command) {

@@ -127,25 +127,30 @@ client.
 | `shell ADDRESS` | mở một shell trên host, ngay trong terminal hiện tại |
 | `send ADDRESS FILE...` | gửi file tới host đang nhận file |
 | `displays`, `sources ADDRESS` | màn hình cục bộ và những gì một host đã xác thực đang share |
-| `key`, `access`, `host`, `host-key public` | khóa client, khóa được phép, host đã lưu và khóa host này |
+| `key public`, `access`, `host`, `host-key public` | public key của máy này, client được phép và yêu cầu kết nối, host đã lưu và khóa host này |
 | `devices`, `trust`, `settings` | các lệnh cũ dùng cùng file cấu hình |
 
-Tạo khóa client bằng `key generate --name laptop-a`, rồi lấy public key bằng
-`key public --name laptop-a`. Trên host, chuyển dòng đó vào `access add --stdin`.
+Mỗi máy có một khóa. Xem nửa public của nó bằng `key public`; trên host, chuyển dòng đó
+vào `access add --stdin` để cho phép bằng tay. Client kết nối khi chưa được cho phép sẽ để
+lại một **yêu cầu kết nối** trên host: `access requests` liệt kê chúng và
+`access approve --fingerprint SHA256:...` hoặc `access deny --fingerprint SHA256:...` xử lý
+một yêu cầu; `share --qr` in ra mã QR mà link `deskhub://pair/...` của nó cho một thiết bị
+tự vào, và link đó dùng được thay cho địa chỉ với `connect`, `sources`, `shell` và `send`.
 Chuyển kết quả `host-key public` của host sang client rồi đưa vào
-`host add office --address 192.168.1.10:47777 --identity laptop-a --host-key-stdin`.
+`host add office --address 192.168.1.10:47777 --host-key-stdin` để ghim host trước.
 Sau đó dùng `connect office`, `sources office`, `shell office` hoặc `send office FILE`.
-`host update office` đổi địa chỉ, identity hoặc khóa ghim; `host remove office` xóa
-profile. `access remove --fingerprint SHA256:...` thu hồi khóa client.
-`sources`, `connect`, `shell` và `send` nhận một địa chỉ hoặc alias đã lưu, `--identity NAME`
-để chọn khóa client, và `--accept-new-host-key` để lưu khóa của host gặp lần đầu; không có cờ
-này thì host lạ bị từ chối và fingerprint của nó được in ra, còn host có khóa đã thay đổi
-luôn bị từ chối. Không có scan network và không có cờ passcode.
+`host update office` đổi địa chỉ hoặc khóa ghim; `host remove office` xóa profile.
+`access remove --fingerprint SHA256:...` thu hồi khóa client.
+`sources`, `connect`, `shell` và `send` nhận một địa chỉ, một link mời hoặc alias đã lưu,
+`--accept-new-host-key` để lưu khóa của host gặp lần đầu, và `--approval-wait SEC` để đổi
+thời gian chờ chủ host approve (mặc định 120). Không có `--accept-new-host-key` thì host lạ
+bị từ chối và fingerprint của nó được in ra. Trust đi theo khóa của host, nên host đổi địa
+chỉ vẫn được trust. Không có scan network và không có cờ passcode.
 `--config-dir PATH` chọn chung thư mục cấu hình cho mọi lệnh, đặt trước hoặc sau lệnh.
 
 `deskhub-cli help COMMAND` in ra các cờ. Các lệnh liệt kê hỗ trợ `--json`, và exit code cho biết
-nguyên nhân lỗi: `2` sai cờ, `3` không có phản hồi, `4` bị từ chối, `5` host key đã thay
-đổi, `9` bản build này không hỗ trợ.
+nguyên nhân lỗi: `2` sai cờ, `3` không có phản hồi, `4` bị từ chối hoặc không được approve
+kịp thời, `9` bản build này không hỗ trợ.
 
 Linux hỗ trợ mọi lệnh trong bảng. Trên Windows, `connect` dùng lại mã cửa sổ của app
 desktop. Trên macOS, bạn có thể share và mở remote shell; lệnh `connect` sẽ báo rằng bản

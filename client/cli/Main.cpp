@@ -52,9 +52,12 @@ bool ResolveProfile(deskhub::cli::Command& command) {
         return false;
     }
     command.address = match->endpoint;
-    if (!command.identityName)
-        command.identityName = match->identityName.empty() ? "default" : match->identityName;
     return true;
+}
+
+bool ResolveInvite(deskhub::cli::Command& command) {
+    if (command.pairingInvite.empty()) return true;
+    return deskhubcli::AdmitByInvite(command);
 }
 
 }
@@ -70,6 +73,7 @@ int main(int argc, char** argv) {
         }
     }
     if (!ResolveProfile(command)) return Report(deskhubcli::ExitCode::Failed);
+    if (!ResolveInvite(command)) return Report(deskhubcli::ExitCode::Refused);
 
     switch (command.verb) {
         case deskhub::cli::Verb::Help: return RunHelp(command);

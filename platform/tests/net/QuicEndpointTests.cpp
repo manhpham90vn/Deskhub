@@ -62,10 +62,9 @@ void TestHandshakeStreamAndDatagram() {
         return;
     }
 
-    const std::string savedCert = deskhubp::ReadAppDataFile(deskhubp::kHostCertFileName);
     const std::string savedKey = deskhubp::ReadAppDataFile(deskhubp::kHostKeyFileName);
     ForgetHostIdentity();
-    const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity("deskhub-test");
+    const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity();
     Check(identity.Valid(), "the host has an identity to present");
     if (!identity.Valid()) return;
 
@@ -73,7 +72,7 @@ void TestHandshakeStreamAndDatagram() {
     Peer client;
 
     deskhubp::QuicSettings serverSettings;
-    serverSettings.certPemPath = identity.certPath;
+    serverSettings.certPem = deskhubp::TransportCertificatePem(identity);
     serverSettings.keyPemPath = identity.keyPath;
     const bool listening =
         server.endpoint.Listen(serverSettings, "127.0.0.1", kTestPort, HooksFor(server));
@@ -140,7 +139,6 @@ void TestHandshakeStreamAndDatagram() {
     server.endpoint.Close();
     Check(!client.endpoint.IsOpen() && !server.endpoint.IsOpen(), "both endpoints close cleanly");
 
-    if (!savedCert.empty()) deskhubp::WriteAppDataFile(deskhubp::kHostCertFileName, savedCert);
     if (!savedKey.empty()) deskhubp::WriteAppDataFile(deskhubp::kHostKeyFileName, savedKey);
 }
 
@@ -151,17 +149,16 @@ void TestARefusedStreamIsResetNotTruncated() {
         return;
     }
 
-    const std::string savedCert = deskhubp::ReadAppDataFile(deskhubp::kHostCertFileName);
     const std::string savedKey = deskhubp::ReadAppDataFile(deskhubp::kHostKeyFileName);
     ForgetHostIdentity();
-    const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity("deskhub-test");
+    const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity();
     if (!identity.Valid()) return;
 
     Peer server;
     Peer client;
 
     deskhubp::QuicSettings serverSettings;
-    serverSettings.certPemPath = identity.certPath;
+    serverSettings.certPem = deskhubp::TransportCertificatePem(identity);
     serverSettings.keyPemPath = identity.keyPath;
     if (!server.endpoint.Listen(serverSettings, "127.0.0.1", uint16_t(kTestPort + 1),
             HooksFor(server)))
@@ -205,7 +202,6 @@ void TestARefusedStreamIsResetNotTruncated() {
     client.endpoint.Close();
     server.endpoint.Close();
 
-    if (!savedCert.empty()) deskhubp::WriteAppDataFile(deskhubp::kHostCertFileName, savedCert);
     if (!savedKey.empty()) deskhubp::WriteAppDataFile(deskhubp::kHostKeyFileName, savedKey);
 }
 
@@ -216,17 +212,16 @@ void TestAFloodedStreamIsDrainedInBoundedSlices() {
         return;
     }
 
-    const std::string savedCert = deskhubp::ReadAppDataFile(deskhubp::kHostCertFileName);
     const std::string savedKey = deskhubp::ReadAppDataFile(deskhubp::kHostKeyFileName);
     ForgetHostIdentity();
-    const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity("deskhub-test");
+    const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity();
     if (!identity.Valid()) return;
 
     Peer server;
     Peer client;
 
     deskhubp::QuicSettings serverSettings;
-    serverSettings.certPemPath = identity.certPath;
+    serverSettings.certPem = deskhubp::TransportCertificatePem(identity);
     serverSettings.keyPemPath = identity.keyPath;
     if (!server.endpoint.Listen(serverSettings, "127.0.0.1", uint16_t(kTestPort + 2),
             HooksFor(server)))
@@ -272,7 +267,6 @@ void TestAFloodedStreamIsDrainedInBoundedSlices() {
     client.endpoint.Close();
     server.endpoint.Close();
 
-    if (!savedCert.empty()) deskhubp::WriteAppDataFile(deskhubp::kHostCertFileName, savedCert);
     if (!savedKey.empty()) deskhubp::WriteAppDataFile(deskhubp::kHostKeyFileName, savedKey);
 }
 
@@ -314,15 +308,14 @@ void TestEveryConnectionBindsItsOwnAuthSession() {
     std::printf("[quic] a reconnect gets a fresh auth session, never a resumed one...\n");
     if (!deskhubp::QuicAvailable()) return;
 
-    const std::string savedCert = deskhubp::ReadAppDataFile(deskhubp::kHostCertFileName);
     const std::string savedKey = deskhubp::ReadAppDataFile(deskhubp::kHostKeyFileName);
     ForgetHostIdentity();
-    const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity("deskhub-test");
+    const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity();
     Check(identity.Valid(), "the host has an identity to present");
 
     Peer server;
     deskhubp::QuicSettings settings;
-    settings.certPemPath = identity.certPath;
+    settings.certPem = deskhubp::TransportCertificatePem(identity);
     settings.keyPemPath = identity.keyPath;
     const NetAddr target{0x7F000001u, kReconnectPort};
     const bool listening = identity.Valid() &&
@@ -339,7 +332,6 @@ void TestEveryConnectionBindsItsOwnAuthSession() {
         server.endpoint.Close();
     }
 
-    if (!savedCert.empty()) deskhubp::WriteAppDataFile(deskhubp::kHostCertFileName, savedCert);
     if (!savedKey.empty()) deskhubp::WriteAppDataFile(deskhubp::kHostKeyFileName, savedKey);
 }
 

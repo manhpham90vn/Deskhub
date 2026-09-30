@@ -181,13 +181,14 @@ bool HostEngine::Start(const std::vector<deskhub::media::ShareSource>& sources,
 
     const std::string commonName =
         opt_.deviceName.empty() ? LocalDeviceName() : opt_.deviceName;
-    const HostIdentity identity = LoadOrCreateHostIdentity(commonName);
+    const HostIdentity identity = LoadOrCreateHostIdentity();
     if (!identity.Valid()) return Fail(std::string(deskhub::ui::kShareNoHostIdentity));
     sourceList_.SetHostName(deskhub::ui::TruncateDeviceName(commonName));
 
     QuicSettings settings;
-    settings.certPemPath = identity.certPath;
+    settings.certPem = TransportCertificatePem(identity);
     settings.keyPemPath = identity.keyPath;
+    if (settings.certPem.empty()) return Fail(std::string(deskhub::ui::kShareNoHostIdentity));
     if (!sock_.Listen(settings, opt_.port, chosen.ip))
         return Fail(policy_.portError ? policy_.portError(sock_)
                                       : DefaultPortError(sock_, opt_.port));
@@ -202,8 +203,13 @@ bool HostEngine::Start(const std::vector<deskhub::media::ShareSource>& sources,
         LOGI("[Host] %s is paired with this machine.", std::string(name).c_str());
         if (policy_.onPaired) policy_.onPaired();
     };
-    authHooks.onRefused = [](const NetAddr& peer, deskhub::AuthResultCode) {
-        LOGW("[Host] %s was refused.", peer.ToString().c_str());
+    authHooks.onRefused = [this](const NetAddr& peer, deskhub::AuthResultCode code) {
+        if (code != deskhub::AuthResultCode::AwaitingApproval) {
+            LOGW("[Host] %s was refused.", peer.ToString().c_str());
+            return;
+        }
+        LOGI("[Host] %s is waiting for approval.", peer.ToString().c_str());
+        if (policy_.onAccessRequested) policy_.onAccessRequested();
     };
     sock_.SetHostAuth(std::move(auth), std::move(authHooks));
     sock_.SetOnPeerGone([this](const NetAddr& peer) {

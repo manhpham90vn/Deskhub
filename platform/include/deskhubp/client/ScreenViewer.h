@@ -55,7 +55,6 @@ struct ScreenViewerConfig {
     const char* statusSeparator = "  ";
     std::string displayName;
     std::string hostLabel;
-    std::string clientIdentityName;
 
     std::function<void(deskhub::TrustVerdict, std::string_view fingerprint)> onTrustAsked;
     std::function<void(uint32_t width, uint32_t height, uint8_t fps)> onParams;
@@ -99,7 +98,6 @@ public:
         linkConfig.hostLabel = HostLabel();
         linkConfig.clientName =
             cfg_.displayName.empty() ? SessionDeviceName() : cfg_.displayName;
-        linkConfig.clientIdentityName = cfg_.clientIdentityName;
         linkConfig.connectTimeoutMs = kHandshakeTimeoutMs;
         linkConfig.authTimeoutMs = kAuthTimeoutMs;
         linkConfig.recvWaitMs = 10;
@@ -444,6 +442,9 @@ private:
             case HostLinkState::Recovering:
                 EnterReattach();
                 return;
+            case HostLinkState::AwaitingApproval:
+                if (cfg_.onStatus) cfg_.onStatus(std::string(message).c_str());
+                return;
             case HostLinkState::Connecting:
             case HostLinkState::Authing: {
                 ClientPhase expected = ClientPhase::Deciding;
@@ -551,7 +552,7 @@ private:
             std::string reason;
             {
                 std::lock_guard<std::mutex> lk(textMutex_);
-                if (endReason_.empty()) endReason_ = deskhub::ui::kTrustReject;
+                if (endReason_.empty()) endReason_ = deskhub::ui::kTerminalUnreachable;
                 reason = endReason_;
             }
             NotifyEnded(reason.c_str());

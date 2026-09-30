@@ -8,8 +8,9 @@
 #include "deskhubp/system/AuthProof.h"
 #include "deskhubp/system/Clock.h"
 #include "deskhubp/system/HostIdentity.h"
+#include "deskhubp/system/AccessRequestsFile.h"
 #include "deskhubp/system/AuthorizedKeysFile.h"
-#include "deskhubp/system/ClientIdentity.h"
+#include "deskhubp/system/PairingTokenFile.h"
 
 #include <array>
 #include <atomic>
@@ -29,19 +30,17 @@ constexpr int kSettleMillis = 5000;
 constexpr int kQuietMillis = 300;
 
 struct SavedState {
-    std::string cert{};
     std::string key{};
     std::string authorizedKeys{};
 
     SavedState() {
-        cert = deskhubp::ReadAppDataFile(deskhubp::kHostCertFileName);
         key = deskhubp::ReadAppDataFile(deskhubp::kHostKeyFileName);
         authorizedKeys = deskhubp::ReadAppDataFile(deskhubp::kAuthorizedKeysFileName);
         RevokeAllClientKeys();
     }
 
     ~SavedState() {
-        if (!cert.empty()) deskhubp::WriteAppDataFile(deskhubp::kHostCertFileName, cert);
+        RevokeAllClientKeys();
         if (!key.empty()) deskhubp::WriteAppDataFile(deskhubp::kHostKeyFileName, key);
         if (authorizedKeys.empty())
             deskhubp::RemoveAppDataFile(deskhubp::kAuthorizedKeysFileName);
@@ -57,11 +56,11 @@ struct Machines {
 
     bool Make() {
         ForgetHostIdentity();
-        viewer = deskhubp::LoadOrCreateHostIdentity("admission-viewer");
+        viewer = deskhubp::LoadOrCreateHostIdentity();
         ForgetHostIdentity();
-        impostor = deskhubp::LoadOrCreateHostIdentity("admission-impostor");
+        impostor = deskhubp::LoadOrCreateHostIdentity();
         ForgetHostIdentity();
-        host = deskhubp::LoadOrCreateHostIdentity("admission-host");
+        host = deskhubp::LoadOrCreateHostIdentity();
         return viewer.Valid() && impostor.Valid() && host.Valid() &&
                !(viewer.fingerprint == host.fingerprint) &&
                !(viewer.fingerprint == impostor.fingerprint);
@@ -98,7 +97,7 @@ struct AdmissionRig {
         viewer.SetRecvTimeout(1);
 
         deskhubp::QuicSettings settings;
-        settings.certPemPath = machines.host.certPath;
+        settings.certPem = deskhubp::TransportCertificatePem(machines.host);
         settings.keyPemPath = machines.host.keyPath;
         if (!host.Listen(settings, kAdmissionPort, "127.0.0.1")) return false;
 
@@ -127,12 +126,19 @@ struct AdmissionRig {
         return WaitUntil([this] { return Peer().Pack() != 0; }, kSettleMillis);
     }
 
-    bool SignIn(deskhubp::SessionTransport& client, const deskhubp::HostIdentity& identity) {
+    bool SignIn(deskhubp::SessionTransport& client, const deskhubp::HostIdentity& identity,
+        std::vector<uint8_t> pairingToken = {}) {
+        deskhub::AuthResultCode code = deskhub::AuthResultCode::NotPaired;
+        return SignInWithCode(client, identity, code, std::move(pairingToken));
+    }
+
+    bool SignInWithCode(deskhubp::SessionTransport& client, const deskhubp::HostIdentity& identity,
+        deskhub::AuthResultCode& code, std::vector<uint8_t> pairingToken = {}) {
         deskhubp::ClientAuthConfig config;
         config.identity = identity;
         config.hostFingerprint = machines.host.fingerprint;
         config.clientName = "admission-viewer";
-        deskhub::AuthResultCode code = deskhub::AuthResultCode::NotPaired;
+        config.pairingToken = std::move(pairingToken);
         return client.RunClientAuth(target, std::move(config), kAuthTimeoutMs, code);
     }
 
@@ -169,7 +175,7 @@ bool Skipped(const char* tag) {
 bool BeginWithoutAnswer(deskhubp::SessionTransport& viewer, const NetAddr& target,
     const deskhubp::HostIdentity& identity) {
     deskhub::AuthStart start;
-    start.publicKey = deskhubp::IdentityPublicKey(identity);
+    start.publicKey = identity.publicKey;
     start.clientName = "pending-auth-test";
     std::vector<uint8_t> message(deskhub::kMaxRecordSize);
     message.resize(deskhub::BuildAuthStart(message, start));
@@ -301,7 +307,7 @@ void TestRepeatedBadProofsAreLimited() {
               blocked.WaitEstablished(rig.target, kAuthTimeoutMs),
         "a new QUIC connection can still be made");
     deskhub::AuthStart start;
-    start.publicKey = deskhubp::IdentityPublicKey(rig.machines.viewer);
+    start.publicKey = rig.machines.viewer.publicKey;
     start.clientName = "rate-limit-test";
     std::vector<uint8_t> message(deskhub::kMaxRecordSize);
     message.resize(deskhub::BuildAuthStart(message, start));
@@ -350,7 +356,7 @@ void TestPendingAuthHasACapAndDeadline() {
               excess.WaitEstablished(rig.target, kAuthTimeoutMs),
         "an extra client establishes QUIC");
     deskhub::AuthStart start;
-    start.publicKey = deskhubp::IdentityPublicKey(rig.machines.viewer);
+    start.publicKey = rig.machines.viewer.publicKey;
     start.clientName = "excess-auth-test";
     std::vector<uint8_t> message(deskhub::kMaxRecordSize);
     message.resize(deskhub::BuildAuthStart(message, start));
@@ -451,7 +457,7 @@ void TestASecondHandshakeOnOneConnectionIsRefused() {
     const NetAddr peer = rig.Peer();
 
     deskhub::AuthStart again;
-    again.publicKey = deskhubp::IdentityPublicKey(rig.machines.impostor);
+    again.publicKey = rig.machines.impostor.publicKey;
     again.clientName = "someone-else";
     std::vector<uint8_t> message(deskhub::kMaxRecordSize);
     message.resize(deskhub::BuildAuthStart(message, again));
@@ -484,7 +490,7 @@ void TestAnOldAuthStartIsRefused() {
     if (!started) return;
 
     deskhub::AuthStart start;
-    start.publicKey = deskhubp::IdentityPublicKey(rig.machines.viewer);
+    start.publicKey = rig.machines.viewer.publicKey;
     start.clientName = "old-client";
     std::vector<uint8_t> message(deskhub::kMaxRecordSize);
     message.resize(deskhub::BuildAuthStart(message, start));
@@ -529,7 +535,7 @@ void TestForgettingADeviceClosesItsLiveConnection() {
     Check(started, "the viewer is let in and paired");
     if (!started) return;
     const NetAddr peer = rig.Peer();
-    Check(deskhubp::IsClientKeyAuthorized(deskhubp::ClientIdentity(rig.machines.viewer).publicKey),
+    Check(deskhubp::IsClientKeyAuthorized(rig.machines.viewer.publicKey),
         "the authorized key remains on the list");
 
     GrantClientKey(rig.machines.impostor);
@@ -662,10 +668,10 @@ void TestAProofForAnotherConnectionIsRefused() {
 
     deskhub::AuthSessionId elsewhere{};
     elsewhere.fill(0x41);
-    const deskhubp::ClientIdentity client(rig.machines.viewer);
     const auto transcript = deskhub::AuthTranscript(deskhub::AuthRole::Client, elsewhere,
-        client.publicKey, rig.machines.host.fingerprint);
-    Check(SendProof(rig.viewer, rig.target, deskhubp::SignWithClientIdentity(client, transcript)),
+        rig.machines.viewer.publicKey, rig.machines.host.fingerprint);
+    Check(SendProof(rig.viewer, rig.target,
+              deskhubp::SignWithIdentity(rig.machines.viewer, transcript)),
         "the real key's signature bound to another TLS session is rejected as a bad signature");
     Check(rig.Peer().Pack() == 0 && !rig.host.Authenticated(LoopbackPeer(rig.viewer)),
         "and the connection is not admitted");
@@ -684,7 +690,7 @@ void TestAKeySwapMidHandshakeClosesTheConnection() {
         "the first key receives a challenge");
 
     deskhub::AuthStart swap;
-    swap.publicKey = deskhubp::IdentityPublicKey(rig.machines.impostor);
+    swap.publicKey = rig.machines.impostor.publicKey;
     swap.clientName = "swapped";
     Check(SendBuilt(rig.viewer, rig.target, deskhubp::kQuicControlStream,
               [&](std::span<uint8_t> out) { return deskhub::BuildAuthStart(out, swap); }),
@@ -732,7 +738,80 @@ void TestRevokingAKeyClosesEveryConnectionItHolds() {
 
 }
 
+void TestAnUnknownKeyWaitsForApprovalAndGetsInWhenApproved() {
+    std::printf("[admission] an unknown key leaves a request and is admitted once approved...\n");
+    if (Skipped("admission")) return;
+    const SavedState guard;
+    AdmissionRig rig;
+    const bool started = rig.Start(false);
+    Check(started, "the host and a viewer establish QUIC");
+    if (!started) return;
+
+    deskhub::AuthResultCode code = deskhub::AuthResultCode::Accepted;
+    Check(!rig.SignInWithCode(rig.viewer, rig.machines.impostor, code) &&
+              code == deskhub::AuthResultCode::AwaitingApproval,
+        "an unlisted key is told to wait for approval");
+    const auto requests = deskhubp::ListAccessRequests();
+    Check(requests && requests->size() == 1 &&
+              requests->front().fingerprint == rig.machines.impostor.fingerprint &&
+              requests->front().label == "admission-viewer" &&
+              !requests->front().address.empty(),
+        "the host recorded who asked, under its name and address");
+    Check(!rig.host.Authenticated(LoopbackPeer(rig.viewer)), "and admitted nothing");
+
+    Check(deskhubp::ApproveAccessRequest(rig.machines.impostor.fingerprint),
+        "the owner approves the request");
+    deskhubp::SessionTransport again;
+    Check(rig.Dial(again) && rig.SignIn(again, rig.machines.impostor),
+        "the next connection from that key is admitted");
+    Check(WaitUntil([&] { return rig.host.Authenticated(LoopbackPeer(again)); }, kSettleMillis),
+        "and the host counts it as admitted");
+    Check(deskhubp::ListAccessRequests() && deskhubp::ListAccessRequests()->empty(),
+        "the request is gone once approved");
+}
+
+void TestAPairingTokenAdmitsAnUnknownKeyOnce() {
+    std::printf("[admission] a live pairing token admits an unknown key at once, and only once...\n");
+    if (Skipped("admission")) return;
+    const SavedState guard;
+    AdmissionRig rig;
+    const bool started = rig.Start(false);
+    Check(started, "the host and a viewer establish QUIC");
+    if (!started) return;
+
+    const auto token = deskhubp::IssuePairingToken(deskhub::kPairingTokenTtlSeconds);
+    Check(token.has_value(), "the host issued a pairing token");
+    if (!token) return;
+    std::vector<uint8_t> wrong(token->begin(), token->end());
+    wrong[0] ^= 0xFF;
+    deskhub::AuthResultCode code = deskhub::AuthResultCode::Accepted;
+    Check(!rig.SignInWithCode(rig.viewer, rig.machines.impostor, code, wrong) &&
+              code == deskhub::AuthResultCode::AwaitingApproval,
+        "a wrong token earns no admission, only a request to approve");
+    Check(!deskhubp::IsClientKeyAuthorized(rig.machines.impostor.publicKey),
+        "and the key is not allowed in");
+
+    deskhubp::SessionTransport invited;
+    Check(rig.Dial(invited) &&
+              rig.SignIn(invited, rig.machines.impostor,
+                  std::vector<uint8_t>(token->begin(), token->end())),
+        "the right token admits the key at once");
+    Check(WaitUntil([&] { return rig.host.Authenticated(LoopbackPeer(invited)); }, kSettleMillis),
+        "the host counts the invited connection as admitted");
+    Check(deskhubp::IsClientKeyAuthorized(rig.machines.impostor.publicKey),
+        "and the key is now on the allowed list");
+    const auto allowed = deskhubp::ListAuthorizedClients();
+    Check(allowed && allowed->size() == 2, "beside the viewer that was allowed before");
+
+    deskhubp::SessionTransport third;
+    Check(rig.Dial(third) && rig.SignIn(third, rig.machines.impostor),
+        "the invited key stays allowed without the token");
+    Check(!deskhubp::RedeemPairingToken(*token), "the token itself is spent");
+}
+
 void RunTransportAdmissionTests() {
+    TestAnUnknownKeyWaitsForApprovalAndGetsInWhenApproved();
+    TestAPairingTokenAdmitsAnUnknownKeyOnce();
     TestRepeatedBadProofsAreLimited();
     TestPendingAuthHasACapAndDeadline();
     TestAClosedConnectionTakesItsAdmissionWithIt();

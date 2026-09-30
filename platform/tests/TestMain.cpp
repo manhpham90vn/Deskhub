@@ -62,7 +62,8 @@ int main() {
 
     std::printf("--- system: the host's own key pair and the machines it trusts ---\n");
     RunHostIdentityTests();
-    RunClientIdentityTests();
+    RunAccessRequestsFileTests();
+    RunPairingTokenFileTests();
 
     std::printf("--- system: proving which machine, and that it knows the code ---\n");
     RunAuthProofTests();

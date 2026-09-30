@@ -36,6 +36,7 @@ add_library(core STATIC
     src/session/host/FileReceiver.cpp
 
     src/transfer/Crc32.cpp
+    src/qr/QrCode.cpp
     src/transfer/SafeName.cpp
     src/session/LinkRecovery.cpp
     src/session/LinkPulse.cpp
@@ -67,9 +68,13 @@ add_library(core STATIC
 
     src/net/Ipv4.cpp
     src/net/BindAddress.cpp
+    src/net/Base64.cpp
     src/net/TrustStore.cpp
     src/net/PublicKeyText.cpp
     src/net/AuthorizedKeys.cpp
+    src/net/AccessRequests.cpp
+    src/net/PairingInvite.cpp
+    src/auth/PairingTokens.cpp
 
     src/terminal/VtParser.cpp
     src/terminal/Screen.cpp
@@ -83,7 +88,6 @@ add_library(core STATIC
     src/ui/TransferView.cpp
     src/ui/RecentDevices.cpp
     src/ui/HostProfiles.cpp
-    src/ui/ClientKeys.cpp
     src/ui/UiSettings.cpp
     src/ui/AutostartConfig.cpp
     src/ui/AutoShareGate.cpp
@@ -115,6 +119,7 @@ if(DESKHUB_CORE_TESTS)
         tests/support/TestSupport.cpp
         tests/auth/FailureLimiterTests.cpp
         tests/auth/TranscriptTests.cpp
+        tests/qr/QrCodeTests.cpp
 
         tests/protocol/ByteOrderTests.cpp
         tests/protocol/WireTests.cpp
@@ -183,6 +188,10 @@ if(DESKHUB_CORE_TESTS)
         tests/net/BindAddressTests.cpp
         tests/net/TrustStoreTests.cpp
         tests/net/PublicKeyTextTests.cpp
+        tests/net/Base64Tests.cpp
+        tests/net/AccessRequestsTests.cpp
+        tests/net/PairingInviteTests.cpp
+        tests/auth/PairingTokensTests.cpp
 
         tests/terminal/VtParserTests.cpp
         tests/terminal/ScreenTests.cpp
@@ -198,7 +207,6 @@ if(DESKHUB_CORE_TESTS)
         tests/ui/TransferViewTests.cpp
         tests/ui/RecentDevicesTests.cpp
         tests/ui/HostProfilesTests.cpp
-        tests/ui/ClientKeysTests.cpp
         tests/ui/UiSettingsTests.cpp
         tests/ui/AutostartConfigTests.cpp
         tests/ui/AutoShareGateTests.cpp
@@ -277,4 +285,5 @@ if(DESKHUB_FUZZ)
     deskhub_fuzz_target(fuzz_uitext fuzz/FuzzUiText.cpp)
     deskhub_fuzz_target(fuzz_term fuzz/FuzzTerm.cpp)
     deskhub_fuzz_target(fuzz_keys fuzz/FuzzKeys.cpp)
+    deskhub_fuzz_target(fuzz_qr fuzz/FuzzQr.cpp)
 endif()

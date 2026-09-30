@@ -23,19 +23,34 @@ public:
     using DoneHandler = std::function<void(const ConnectOutcome&)>;
 
     bool QueryAsync(const NetAddr& server, UiPost postToUi, DoneHandler onDone) {
+        return QueryAsync(server, SourceQueryRequest{}, std::string{}, std::move(postToUi),
+            std::move(onDone));
+    }
+
+    bool QueryAsync(const NetAddr& server, SourceQueryRequest request, std::string invite,
+        UiPost postToUi, DoneHandler onDone) {
         if (pending_->exchange(true, std::memory_order_acq_rel)) return false;
-        std::thread([pending = pending_, server,
-                        postToUi = std::move(postToUi), onDone = std::move(onDone)] {
+        cancel_->store(false, std::memory_order_release);
+        if (request.cancel == nullptr) request.cancel = cancel_.get();
+        std::thread([pending = pending_, cancel = cancel_, server, request = std::move(request),
+                        invite = std::move(invite), postToUi = std::move(postToUi),
+                        onDone = std::move(onDone)] {
             auto outcome = std::make_shared<ConnectOutcome>();
-            outcome->ok = QuerySources(server, *outcome);
+            outcome->ok = invite.empty() ? QuerySources(server, *outcome, request)
+                                         : QuerySourcesByInvite(invite, *outcome, request);
             pending->store(false, std::memory_order_release);
             postToUi([outcome, onDone] { onDone(*outcome); });
         }).detach();
         return true;
     }
 
+    void Cancel() {
+        cancel_->store(true, std::memory_order_release);
+    }
+
 private:
     std::shared_ptr<std::atomic<bool>> pending_ = std::make_shared<std::atomic<bool>>(false);
+    std::shared_ptr<std::atomic<bool>> cancel_ = std::make_shared<std::atomic<bool>>(false);
 };
 
 }

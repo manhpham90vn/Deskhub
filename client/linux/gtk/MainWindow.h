@@ -7,11 +7,13 @@
 #include <functional>
 #include <map>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
 #include "TrayIcon.h"
 #include "deskhub/net/TrustStore.h"
+#include "deskhub/qr/QrCode.h"
 #include "deskhub/session/client/ConnectFlow.h"
 #include "deskhub/session/client/OpenViewers.h"
 #include "deskhub/ui/AutoShareGate.h"
@@ -19,8 +21,8 @@
 #include "deskhub/ui/HostRows.h"
 #include "deskhub/ui/UiSettings.h"
 #include "deskhubp/host/ShareDriver.h"
+#include "deskhubp/system/AccessRequestsFile.h"
 #include "deskhubp/system/AuthorizedKeysFile.h"
-#include "deskhubp/system/ClientIdentity.h"
 #include "deskhubp/host/SharingHost.h"
 #include "deskhubp/client/SourceQueryAsync.h"
 #include "deskhubp/host/ShareController.h"
@@ -83,17 +85,13 @@ private:
     void RefreshPairedDevices();
     void BuildHostKeySection(GtkWidget* box);
     void BuildAllowedClientsSection(GtkWidget* box);
-    void BuildMyKeysSection(GtkWidget* box);
-    void RefreshClientKeys();
     void ShowInlineError(GtkWidget* label, const char* text);
     void AllowPastedClient();
     void OfferToTrustNewHost(const std::string& addr, const deskhub::Fingerprint& key);
     static void OnAllowClientClicked(GtkButton* button, gpointer user);
     static void OnAllowClientActivate(GtkEntry* entry, gpointer user);
     static void OnCopyTextClicked(GtkButton* button, gpointer user);
-    static void OnNewKeyClicked(GtkButton* button, gpointer user);
-    static void OnDeleteKeyClicked(GtkButton* button, gpointer user);
-    static void OnImportKeyClicked(GtkButton* button, gpointer user);
+    static void OnCopyPublicKeyClicked(GtkButton* button, gpointer user);
     void BuildSavedHostsSection(GtkWidget* box);
     void RefreshSavedHosts();
     void ShowSavedHostsError(const char* text);
@@ -115,12 +113,33 @@ private:
     void SaveSettings();
     void PopulateBindCombo();
     void RebuildHostAddressRows();
+    GtkWidget* BuildQrPanel();
+    void BuildAccessRequestsSection(GtkWidget* box);
+    void ToggleQrPanel();
+    void ShowQrPanel();
+    void HideQrPanel();
+    void RevokeInviteIfShown();
+    void ShowSharingOnlyWidgets(bool live);
+    void RefreshAccessRequests(bool force);
+    const deskhubp::PendingClient* AccessRequestOf(GtkButton* button) const;
+    GtkWidget* AccessRequestAction(const char* label, size_t index, GCallback onClick,
+        bool destructive);
+    static gboolean OnQrDraw(GtkWidget* area, cairo_t* cr, gpointer user);
+    static void OnQrToggleClicked(GtkButton* b, gpointer user);
+    static void OnApproveRequestClicked(GtkButton* button, gpointer user);
+    static void OnDenyRequestClicked(GtkButton* button, gpointer user);
 
     void RefreshDeviceList();
 
     void ConnectToDevice(const std::string& addr);
     void StartConnect(const std::string& addr);
+    void StartConnectByInvite(const std::string& invite);
+    void BeginQuery(const NetAddr& server, const std::string& invite, const std::string& addr);
+    SourceQueryRequest MakeQueryRequest();
+    void ShowApprovalWait(const std::string& text);
+    void FillAddressFields(const std::string& addr);
     void OnSourcesReady(const std::string& addr, const deskhubp::ConnectOutcome& outcome);
+    static void OnCancelConnectClicked(GtkButton* b, gpointer user);
     void OpenConnectionWindow(const std::string& addr, const deskhubp::ConnectOutcome& outcome);
     ConnectionWindow* ConnectionFor(const std::string& addr) const;
     void ForgetConnection(ConnectionWindow* window);
@@ -198,6 +217,18 @@ private:
     GtkWidget* navButtons_[kPageCount] = {};
 
     GtkWidget* hostAddrBox_ = nullptr;
+    GtkWidget* qrToggle_ = nullptr;
+    GtkWidget* qrPanel_ = nullptr;
+    GtkWidget* qrArea_ = nullptr;
+    GtkWidget* qrInviteLabel_ = nullptr;
+    GtkWidget* qrCopy_ = nullptr;
+    std::optional<deskhub::QrCode> qrCode_;
+    std::string pairingInvite_;
+    GtkWidget* requestsSection_ = nullptr;
+    GtkWidget* requestsGrid_ = nullptr;
+    GtkWidget* requestsHint_ = nullptr;
+    std::vector<deskhubp::PendingClient> accessRequests_;
+    uint64_t accessRequestsSeen_ = 0;
     GtkWidget* hostBanner_ = nullptr;
     GtkWidget* hostStateLabel_ = nullptr;
     GtkWidget* hostStatusLabel_ = nullptr;
@@ -224,6 +255,8 @@ private:
     GtkWidget* deviceNameEntry_ = nullptr;
     GtkWidget* connectButton_ = nullptr;
     GtkWidget* clientStatusLabel_ = nullptr;
+    GtkWidget* cancelConnectButton_ = nullptr;
+    bool connectCancelled_ = false;
     GtkWidget* addressFormBox_ = nullptr;
     GtkWidget* devicesBox_ = nullptr;
     std::vector<ConnectionWindow*> connections_;
@@ -233,9 +266,6 @@ private:
     std::vector<deskhubp::AuthorizedClient> pairedDevices_;
     GtkWidget* allowClientEntry_ = nullptr;
     GtkWidget* allowClientError_ = nullptr;
-    GtkWidget* clientKeysView_ = nullptr;
-    GtkWidget* clientKeysError_ = nullptr;
-    std::vector<deskhubp::ClientIdentityInfo> clientKeys_;
     GtkWidget* savedHostsView_ = nullptr;
     GtkWidget* savedHostsHint_ = nullptr;
     GtkWidget* savedHostsError_ = nullptr;

@@ -101,6 +101,8 @@ resolved at runtime; it is not bundled.
 | --- | --- | --- |
 | [AndroidX](https://developer.android.com/jetpack/androidx) — Core KTX, Activity, Compose UI, Material 3 | Apache-2.0 | dynamic |
 | [Kotlin](https://kotlinlang.org) standard library | Apache-2.0 | dynamic |
+| [CameraX](https://developer.android.com/media/camera/camerax) 1.4 — `camera-camera2`, `camera-lifecycle`, `camera-view` (QR scanning) | Apache-2.0 | dynamic |
+| [ZXing](https://github.com/zxing/zxing) `core` 3.5 (QR decoding) | Apache-2.0 | dynamic |
 | MediaCodec, NDK media APIs | Android SDK / NDK | OS component |
 
 ## QUIC transport (all apps)

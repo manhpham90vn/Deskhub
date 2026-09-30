@@ -7,7 +7,6 @@
 #include "deskhub/session/host/SourcePipeline.h"
 
 #include "deskhubp/system/Clock.h"
-#include "deskhubp/system/ClientIdentity.h"
 #include "deskhubp/system/HostIdentity.h"
 #include "deskhubp/system/TrustStoreFile.h"
 
@@ -173,12 +172,12 @@ bool SharingHost::Start(const std::vector<deskhub::media::ShareSource>& sources,
         return deskhub::RetargetStream(st, engine->options().maxDim);
     };
 
-    const auto client = deskhubp::LoadOrCreateClientIdentity();
-    const auto host = deskhubp::LoadOrCreateHostIdentity("integration-host");
+    const auto client = deskhubp::LoadOrCreateHostIdentity();
+    const auto host = deskhubp::LoadOrCreateHostIdentity();
     const std::string address = NetAddr{0x7F000001u, port}.ToString();
     if (!client.Valid() || !host.Valid() ||
         !GrantClientKey(client) ||
-        !deskhubp::RememberTrustedHost(address, "127.0.0.1", host.fingerprint, std::time(nullptr)))
+        !deskhubp::RememberTrustedHost(host.fingerprint, "loopback-host", address, std::time(nullptr)))
         return false;
     return engine_.Start(sources, opt, std::move(policy));
 }

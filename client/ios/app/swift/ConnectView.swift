@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ConnectView: View {
     @Bindable var model: AppModel
+    @State private var scanning = false
 
     private var connected: Bool { model.connect.authed != nil }
 
@@ -30,6 +31,19 @@ struct ConnectView: View {
                     .tint(DeskhubPalette.accent)
                     .disabled(model.connect.address.isEmpty || model.connect.isConnecting)
 
+                    Button {
+                        scanning = true
+                    } label: {
+                        Label(
+                            DeskhubClient.string(DHStrScanQrAction),
+                            systemImage: "qrcode.viewfinder"
+                        )
+                        .deskhubPrimaryLabel()
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.large)
+                    .disabled(model.connect.isConnecting)
+
                     deskhubHeading(DeskhubClient.string(DHStrDevicesHeading))
                     DeviceListView(
                         rows: model.recent.devices,
@@ -57,6 +71,9 @@ struct ConnectView: View {
             Text(model.connect.connectError)
         }
         .hostTrustAlert(model.connect) { model.beginConnect(to: $0) }
+        .sheet(isPresented: $scanning) {
+            QrScannerView { model.beginConnect(invite: $0) }
+        }
         .task { model.recent.refresh() }
     }
 
@@ -143,7 +160,12 @@ struct ConnectView: View {
                     ProgressView()
                     Text(DeskhubClient.string(DHStrQueryingSources))
                 }
-                Button(DeskhubClient.string(DHStrCancelAction), action: model.dropHost)
+                if !model.connect.waitingStatus.isEmpty {
+                    Text(model.connect.waitingStatus)
+                        .foregroundStyle(DeskhubPalette.muted)
+                        .multilineTextAlignment(.center)
+                }
+                Button(DeskhubClient.string(DHStrCancelAction), action: model.cancelConnect)
             }
             .padding(24)
             .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))

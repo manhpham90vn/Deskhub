@@ -16,7 +16,6 @@ typedef enum {
     DHSendDone = 3,
     DHSendRefused = 4,
     DHSendFailed = 5,
-    DHSendKeyChanged = 6,
 } DHSendState;
 
 typedef struct {
@@ -36,10 +35,6 @@ DHSend* dh_send_start(const char* address, const char* name, const char* const* 
     int count);
 
 void dh_send_snapshot(DHSend* handle, DHSendProgress* out);
-
-int dh_send_fingerprint(DHSend* handle, char* out, int capacity);
-
-bool dh_send_accept_key(DHSend* handle);
 
 void dh_send_cancel(DHSend* handle);
 

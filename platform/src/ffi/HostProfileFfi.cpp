@@ -12,7 +12,7 @@ namespace {
 
 namespace ui = deskhub::ui;
 
-static_assert(int(DHHostProfileWriteFailed) == int(ui::HostProfileError::WriteFailed),
+static_assert(int(DHHostProfileKeyExists) == int(ui::HostProfileError::KeyExists),
     "DHHostProfileError must carry the core value of every ui::HostProfileError");
 
 std::string TextOf(const char* text) {
@@ -33,7 +33,6 @@ int dh_host_profiles(DHHostProfile* out, int capacity) {
         DHHostProfile& row = out[count++];
         deskhubp::CopyToBuf(row.alias, sizeof(row.alias), host.label);
         deskhubp::CopyToBuf(row.endpoint, sizeof(row.endpoint), host.endpoint);
-        deskhubp::CopyToBuf(row.identity, sizeof(row.identity), ui::ProfileIdentityName(host));
         deskhubp::CopyToBuf(row.fingerprint, sizeof(row.fingerprint),
             deskhub::FormatFingerprint(host.fingerprint));
     }
@@ -56,7 +55,10 @@ DHHostProfileError dh_host_trust_new(const char* address, const char* fingerprin
 
 int dh_trust_new_host_prompt(const char* address, const char* fingerprint, char* out,
     int capacity) {
+    const auto key = deskhub::ParseFingerprint(TextOf(fingerprint));
+    const std::string warning =
+        key ? deskhubp::PreviousOwnerWarningFor(TextOf(address), *key) : std::string();
     return deskhubp::FillText(out, capacity,
-        ui::TrustNewHostPrompt(TextOf(address), TextOf(fingerprint)));
+        ui::TrustNewHostPrompt(TextOf(address), TextOf(fingerprint), warning));
 }
 }

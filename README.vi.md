@@ -95,11 +95,11 @@ Chi tiết và quyền cần cấp trên từng nền tảng: [INSTALL.vi.md](do
   <tr>
     <td align="center" width="33%">
       <img src="docs/imgs/macos_2.png" alt="Trang Client của Deskhub trên macOS: ô địa chỉ host và UDP port, các checkbox chọn remote desktop, control và terminal, nút Connect, cùng danh sách địa chỉ gần đây với thời điểm connect gần nhất của từng địa chỉ">
-      <br><sub><b>Client</b> — nhập địa chỉ hoặc chọn một host gần đây hay đã trust, sau đó chọn nội dung cần mở: màn hình, quyền control, shell, hoặc kết hợp.</sub>
+      <br><sub><b>Client</b> — nhập địa chỉ, dán link QR của một host, hoặc chọn một host gần đây hay đã trust, sau đó chọn nội dung cần mở: màn hình, quyền control, shell, hoặc kết hợp.</sub>
     </td>
     <td align="center" width="33%">
-      <img src="docs/imgs/macos_3.png" alt="Trang Devices của Deskhub trên macOS: một khu vực cho máy này khi làm host, với host key SHA256 của nó và các client key được phép connect, và một khu vực cho máy này khi làm client, với các key của chính nó và các host đã trust">
-      <br><sub><b>Devices</b> — khi làm host: host key của máy này và các client key được phép vào, có thể gỡ từng key. Khi làm client: các key của chính bạn và các host bạn đã trust.</sub>
+      <img src="docs/imgs/macos_3.png" alt="Trang Devices của Deskhub trên macOS: một khu vực cho máy này khi làm host, với fingerprint key SHA256 của nó, nút Copy public key và các client key được phép connect, và một khu vực cho máy này khi làm client, với các host đã trust">
+      <br><sub><b>Devices</b> — khi làm host: key của máy này và các thiết bị được phép vào — đã approve, đã scan hoặc đã dán — có thể gỡ từng thiết bị. Khi làm client: các host bạn đã trust, theo key.</sub>
     </td>
     <td align="center" width="33%">
       <img src="docs/imgs/macos_4.png" alt="Trang Settings của Deskhub trên macOS: tên thiết bị, fps, bitrate và quality, UDP port, switch cho phép viewer control máy này, các switch clipboard và chống sleep, trạng thái hiện thời của permission Screen Recording và Accessibility, cùng switch khởi động khi đăng nhập">
@@ -111,15 +111,15 @@ Chi tiết và quyền cần cấp trên từng nền tảng: [INSTALL.vi.md](do
 <p align="center">
   <img src="docs/imgs/ios_1.png" alt="Trang Client của Deskhub trên iOS: các ô địa chỉ và port, nút Connect và Terminal, switch control máy từ xa, và danh sách địa chỉ gần đây" width="195">
   <img src="docs/imgs/ios_2.png" alt="Trang Host của Deskhub trên iOS: Share on network, Start sharing, và các địa chỉ IP để máy khác connect tới" width="195">
-  <img src="docs/imgs/ios_3.png" alt="Trang Devices của Deskhub trên iOS: host key SHA256 của thiết bị này, các client key được phép connect, các client key của chính nó và các host đã trust" width="195">
+  <img src="docs/imgs/ios_3.png" alt="Trang Devices của Deskhub trên iOS: key SHA256 của thiết bị này, các client key được phép connect và các host đã trust" width="195">
   <img src="docs/imgs/ios_4.png" alt="Trang settings kết nối của Deskhub trên iOS: UDP port, cùng các switch sync clipboard và giữ thiết bị không sleep" width="195">
 </p>
-<p align="center"><sub><b>iPhone</b> — vẫn bốn trang đó. Connect tới một host đã trust, dùng khung video như trackpad để điều khiển; hoặc host màn hình của chính điện thoại ở chế độ view-only.</sub></p>
+<p align="center"><sub><b>iPhone</b> — vẫn bốn trang đó. Scan mã QR của một host để connect, dùng khung video như trackpad để điều khiển; hoặc host màn hình của chính điện thoại ở chế độ view-only.</sub></p>
 
 <p align="center">
   <img src="docs/imgs/android_1.png" alt="Trang Client của Deskhub trên Android: các ô địa chỉ và port, nút Connect và Terminal, checkbox control, và danh sách địa chỉ gần đây" width="195">
   <img src="docs/imgs/android_2.png" alt="Trang Host của Deskhub trên Android: Share on network, Start sharing, và các địa chỉ IP để máy khác connect tới" width="195">
-  <img src="docs/imgs/android_3.png" alt="Trang Devices của Deskhub trên Android: host key SHA256 của thiết bị này, các client key được phép connect, các client key của chính nó và các host đã trust" width="195">
+  <img src="docs/imgs/android_3.png" alt="Trang Devices của Deskhub trên Android: key SHA256 của thiết bị này, các client key được phép connect và các host đã trust" width="195">
   <img src="docs/imgs/android_4.png" alt="Trang settings kết nối của Deskhub trên Android: UDP port, cùng các checkbox sync clipboard và giữ thiết bị không sleep" width="195">
 </p>
 <p align="center"><sub><b>Android</b> — vẫn bốn trang đó, theo Material Design. Khi làm host, Android 10+ chỉ share màn hình ở chế độ view-only.</sub></p>
@@ -137,11 +137,13 @@ chung xử lý protocol cho cả năm nền tảng.
 | ------ | ---------- | --------- |
 | Stream ở 60 fps trên phần cứng phù hợp. Đường xử lý video dùng bộ nhớ GPU khi có thể. | Cài qua package manager hoặc tải bản release. Không cần tài khoản hay background service. | **Share** một display hoặc **Connect** tới một IP. Máy desktop còn share được **shell** và nhận **file**; điện thoại share màn hình ở chế độ view-only. |
 
-Session được encrypt end-to-end trên **QUIC/TLS**, và quyền truy cập hoạt động như SSH: client
-chỉ được vào khi public key của nó có trong `authorized_keys` của host, và client kiểm tra key
-của host với key mà nó đã trust ở lần connect đầu tiên, từ chối ngay nếu key đó thay đổi.
-Không có gì được chấp thuận qua network và Deskhub không bao giờ scan network. Hãy dùng network tin cậy hoặc VPN, và **không port-forward
-UDP 47777**. Threat model đầy đủ nằm trong [`SECURITY.vi.md`](SECURITY.vi.md).
+Session được encrypt end-to-end trên **QUIC/TLS**, và quyền truy cập hoạt động như SSH: mỗi
+máy có một key, và client chỉ được vào khi chủ host đã cho key đó vào — bằng cách approve
+yêu cầu kết nối của nó, cho nó xem **mã QR** trong lúc share, hoặc dán public key của nó.
+Client ghim key của host và kiểm tra trước khi gửi bất cứ thứ gì; trust đi theo key, nên
+host vẫn giữ được trust khi đổi địa chỉ. Không passcode, không discovery, không công tắc nào
+cho người lạ vào. Hãy dùng network tin cậy hoặc VPN, và **không port-forward UDP 47777**.
+Threat model đầy đủ nằm trong [`SECURITY.vi.md`](SECURITY.vi.md).
 
 <a id="why"></a>
 

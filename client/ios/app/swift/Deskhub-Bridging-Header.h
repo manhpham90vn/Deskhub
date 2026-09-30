@@ -4,6 +4,6 @@
 #import "deskhubp/ffi/DevicesFfi.h"
 #import "deskhubp/ffi/SettingsFfi.h"
 #import "deskhubp/ffi/HostProfileFfi.h"
-#import "deskhubp/ffi/ClientKeyFfi.h"
+#import "deskhubp/ffi/PairingFfi.h"
 #import "deskhubp/ffi/TerminalFfi.h"
 #import "deskhubp/ffi/SendFfi.h"

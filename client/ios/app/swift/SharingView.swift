@@ -51,6 +51,13 @@ struct SharingView: View {
                     }
                 }
 
+                if model.status.sharing {
+                    PairingQrToggleButton(model: model.qr, port: model.port, bindIp: model.bindIp)
+                    if model.qr.shown {
+                        PairingQrPanel(model: model.qr)
+                    }
+                }
+
                 deskhubHint(DeskhubClient.string(DHStrSharingConnectHint))
 
                 let receiving = FilesHost.shared.receiving
@@ -84,6 +91,7 @@ struct SharingView: View {
                 }
                 if model.status.sharing {
                     deskhubHint(viewerLine)
+                    AccessRequestsSection(model: model.accessRequests)
                 }
 
                 Divider()

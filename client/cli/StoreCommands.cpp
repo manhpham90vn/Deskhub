@@ -12,13 +12,14 @@
 
 #include "deskhub/cli/Json.h"
 #include "deskhub/net/TrustStore.h"
+#include "deskhub/ui/HostProfiles.h"
+#include "deskhub/ui/Strings.h"
 #include "deskhub/ui/UiSettings.h"
 #include "deskhubp/system/HostIdentity.h"
 #include "deskhubp/system/AuthProof.h"
 #include "deskhubp/client/HostProfiles.h"
+#include "deskhubp/system/AccessRequestsFile.h"
 #include "deskhubp/system/AuthorizedKeysFile.h"
-#include "deskhubp/system/ClientIdentity.h"
-#include "deskhubp/system/ClientKeys.h"
 #include "deskhubp/system/Clock.h"
 #include "deskhubp/system/TrustStoreFile.h"
 #include "deskhubp/system/UiSettingsStore.h"
@@ -48,7 +49,6 @@ ExitCode RunHostProfile(const Command& command) {
     deskhub::ui::HostProfileRequest request;
     request.alias = command.profileAlias;
     request.address = command.target;
-    request.identityName = command.identityName.value_or(std::string());
     if (command.value == "-") {
         std::string text;
         if (!std::getline(std::cin, text)) {
@@ -66,7 +66,64 @@ ExitCode RunHostProfile(const Command& command) {
 }
 
 std::string ClientName(const deskhubp::AuthorizedClient& client) {
-    return client.label.empty() ? std::string("(unnamed)") : client.label;
+    return client.label.empty() ? std::string(deskhub::ui::kUnnamedClient) : client.label;
+}
+
+std::optional<deskhub::Fingerprint> FingerprintTarget(const Command& command) {
+    const std::optional<deskhub::Fingerprint> fingerprint =
+        deskhub::ParseFingerprint(command.target);
+    if (!fingerprint) PrintError("not a key fingerprint: " + command.target);
+    return fingerprint;
+}
+
+ExitCode RunAccessRequests(const Command& command) {
+    const auto requests = deskhubp::ListAccessRequests();
+    if (!requests) {
+        PrintError("could not read access_requests");
+        return ExitCode::Failed;
+    }
+    if (command.json) {
+        deskhub::cli::JsonWriter json;
+        json.ArrayBegin();
+        for (const deskhubp::PendingClient& client : *requests) {
+            json.ObjectBegin();
+            json.Field("fingerprint", deskhub::FormatFingerprint(client.fingerprint));
+            json.Field("name", client.label);
+            json.Field("address", client.address);
+            json.Field("requestedUnix", client.requestedUnix);
+            json.Field("publicKey", client.publicKeyText);
+            json.ObjectEnd();
+        }
+        json.ArrayEnd();
+        PrintLine(json.Text());
+        return ExitCode::Ok;
+    }
+    if (requests->empty()) {
+        if (!command.quiet) PrintLine(deskhub::ui::kAccessRequestsEmpty);
+        return ExitCode::Ok;
+    }
+    Table table;
+    table.Row({"FINGERPRINT", "NAME", "ADDRESS", "ASKED"});
+    for (const deskhubp::PendingClient& client : *requests)
+        table.Row({deskhub::FormatFingerprint(client.fingerprint),
+            client.label.empty() ? std::string(deskhub::ui::kUnnamedClient) : client.label, client.address,
+            FormatUnixMinute(client.requestedUnix)});
+    table.Print();
+    return ExitCode::Ok;
+}
+
+ExitCode RunAccessDecision(const Command& command, bool approve) {
+    const auto fingerprint = FingerprintTarget(command);
+    if (!fingerprint) return ExitCode::Usage;
+    const bool done = approve ? deskhubp::ApproveAccessRequest(*fingerprint)
+                              : deskhubp::DenyAccessRequest(*fingerprint);
+    if (!done) {
+        PrintError("no device with that key is waiting for approval");
+        return ExitCode::Failed;
+    }
+    if (!command.quiet)
+        PrintLine(approve ? "Approved: that device can connect now." : "Denied: the request was dropped.");
+    return ExitCode::Ok;
 }
 
 std::vector<std::string> SettingsKeys(const std::string& text) {
@@ -116,54 +173,10 @@ std::string UnknownKeyMessage(std::string_view key, const std::vector<std::strin
 }
 
 ExitCode RunDevices(const Command& command) {
-    if (command.devices == DevicesAction::Import) {
-        std::ifstream file(command.target, std::ios::binary);
-        if (!file) {
-            PrintError("could not read the private key file");
-            return ExitCode::Failed;
-        }
-        std::string pem(65537, '\0');
-        file.read(pem.data(), std::streamsize(pem.size()));
-        const std::streamsize length = file.gcount();
-        if (length <= 0 || length > 65536 || file.bad()) {
-            PrintError("invalid private key file size");
-            return ExitCode::Usage;
-        }
-        pem.resize(size_t(length));
-        if (pem.find("-----BEGIN RSA PRIVATE KEY-----") != std::string::npos) {
-            PrintError("RSA private keys are not supported; use Ed25519 or P-256");
-            return ExitCode::Usage;
-        }
-        if (!command.keyPassphraseStdin &&
-            pem.find("-----BEGIN ENCRYPTED PRIVATE KEY-----") != std::string::npos) {
-            PrintError("this private key is encrypted; pass its unlock phrase with --passphrase-stdin");
-            return ExitCode::Usage;
-        }
-        std::string passphrase;
-        if (command.keyPassphraseStdin && !std::getline(std::cin, passphrase)) {
-            PrintError("no key passphrase arrived on stdin");
-            return ExitCode::Usage;
-        }
-        const bool imported = command.keyName.empty()
-                                  ? deskhubp::ImportClientIdentity(pem, passphrase)
-                                  : deskhubp::ImportClientIdentity(command.keyName, pem, passphrase);
-        if (!imported) {
-            PrintError("could not import identity: use an Ed25519 or P-256 OpenSSH/PKCS#8 private key; check its passphrase and whether the name already exists");
-            return ExitCode::Usage;
-        }
-        if (!command.quiet) {
-            PrintLine("Client identity imported. Update the public key on each host that allows it.");
-        }
-        return ExitCode::Ok;
-    }
-
     if (command.devices == DevicesAction::Public) {
-        const bool defaultKey =
-            command.keyName.empty() || command.keyName == deskhub::ui::kDefaultIdentityName;
-        const deskhubp::ClientIdentity identity = defaultKey
-                                                      ? deskhubp::LoadOrCreateClientIdentity()
-                                                      : deskhubp::LoadClientIdentity(command.keyName);
-        const std::string publicKey = deskhubp::ClientPublicKeyLine(identity, command.keyName);
+        const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity();
+        const std::string publicKey = deskhubp::IdentityPublicKeyLine(identity,
+            deskhub::ui::TruncateDeviceName(deskhubp::SessionDeviceName()));
         if (publicKey.empty()) {
             PrintError("could not read this machine's public key");
             return ExitCode::Failed;
@@ -172,39 +185,9 @@ ExitCode RunDevices(const Command& command) {
         return ExitCode::Ok;
     }
 
-    if (command.devices == DevicesAction::Generate) {
-        const auto identity = deskhubp::GenerateClientIdentity(command.keyName);
-        if (!identity.Valid()) {
-            PrintError("could not create identity: check the name and whether it already exists");
-            return ExitCode::Failed;
-        }
-        if (!command.quiet) PrintLine(deskhubp::ClientPublicKeyLine(identity, command.keyName));
-        return ExitCode::Ok;
-    }
-
-    if (command.devices == DevicesAction::Identities) {
-        const auto identities = deskhubp::ListClientIdentities();
-        if (command.json) {
-            deskhub::cli::JsonWriter json;
-            json.ArrayBegin();
-            for (const auto& identity : identities) {
-                json.ObjectBegin();
-                json.Field("name", identity.name);
-                json.Field("publicKey", identity.publicKeyText);
-                json.Field("fingerprint", identity.valid
-                                              ? deskhub::FormatFingerprint(identity.fingerprint)
-                                              : std::string());
-                json.Field("valid", identity.valid);
-                json.ObjectEnd();
-            }
-            json.ArrayEnd();
-            PrintLine(json.Text());
-        } else {
-            for (const auto& identity : identities)
-                PrintLine(identity.name + " " + (identity.valid ? deskhub::FormatFingerprint(identity.fingerprint) : "unusable"));
-        }
-        return ExitCode::Ok;
-    }
+    if (command.devices == DevicesAction::Requests) return RunAccessRequests(command);
+    if (command.devices == DevicesAction::Approve) return RunAccessDecision(command, true);
+    if (command.devices == DevicesAction::Deny) return RunAccessDecision(command, false);
 
     if (command.devices == DevicesAction::Add) {
         std::string text = command.target;
@@ -225,17 +208,6 @@ ExitCode RunDevices(const Command& command) {
             return ExitCode::Failed;
         }
         if (!command.quiet) PrintLine(deskhub::FormatFingerprint(*fingerprint));
-        return ExitCode::Ok;
-    }
-
-    if (command.devices == DevicesAction::DeleteKey) {
-        const deskhub::ui::ClientKeyError error = deskhubp::DeleteClientKey(command.keyName);
-        if (error != deskhub::ui::ClientKeyError::None) {
-            PrintError(deskhub::ui::ClientKeyErrorText(error));
-            return error == deskhub::ui::ClientKeyError::WriteFailed ? ExitCode::Failed
-                                                                     : ExitCode::Usage;
-        }
-        if (!command.quiet) PrintLine("Key deleted.");
         return ExitCode::Ok;
     }
 
@@ -340,7 +312,7 @@ ExitCode RunTrust(const Command& command) {
         command.trust != TrustAction::List)
         return RunHostProfile(command);
     if (command.trust == TrustAction::Public) {
-        const auto identity = deskhubp::LoadOrCreateHostIdentity("deskhub");
+        const auto identity = deskhubp::LoadOrCreateHostIdentity();
         const std::string publicKey = deskhubp::IdentityPublicKeyText(identity);
         if (publicKey.empty()) {
             PrintError("could not read this host's public key");
@@ -363,9 +335,13 @@ ExitCode RunTrust(const Command& command) {
             PrintError("expected an address and host public key or SHA256 fingerprint");
             return ExitCode::Usage;
         }
-        if (!deskhubp::RememberTrustedHostProfile(command.target,
-                command.deviceName.value_or(command.target), *fingerprint,
-                command.identityName.value_or("default"), NowUnixSeconds())) {
+        const std::optional<std::string> endpoint = deskhub::ui::CanonicalHostEndpoint(command.target);
+        if (!endpoint) {
+            PrintError(deskhub::ui::InvalidAddressLine(command.target));
+            return ExitCode::Usage;
+        }
+        if (!deskhubp::RememberTrustedHost(*fingerprint, command.deviceName.value_or(*endpoint),
+                *endpoint, NowUnixSeconds())) {
             PrintError("could not save the trusted host key");
             return ExitCode::Failed;
         }
@@ -383,9 +359,25 @@ ExitCode RunTrust(const Command& command) {
     }
 
     if (command.trust == TrustAction::Forget) {
-        if (!deskhubp::ForgetTrustedHost(command.target)) {
-            PrintError("could not remove trusted host at " + command.target +
-                       "; check the address, known_hosts, and its permissions");
+        const auto store = deskhubp::TryLoadTrustStore();
+        if (!store) {
+            PrintError("could not read known_hosts; fix the file before changing trusted hosts");
+            return ExitCode::Failed;
+        }
+        std::optional<deskhub::Fingerprint> target = deskhub::ParseFingerprint(command.target);
+        if (!target) {
+            const std::optional<std::string> endpoint =
+                deskhub::ui::CanonicalHostEndpoint(command.target);
+            const auto byAddress = endpoint ? store->FindByEndpoint(*endpoint) : std::nullopt;
+            if (byAddress) target = byAddress->fingerprint;
+        }
+        if (!target) {
+            const auto byAlias = deskhub::ui::FindHostProfile(*store, command.target);
+            if (byAlias.host) target = byAlias.host->fingerprint;
+        }
+        if (!target || !deskhubp::ForgetTrustedHost(*target)) {
+            PrintError("no trusted host matches " + command.target +
+                       "; give its fingerprint, alias or last address");
             return ExitCode::Failed;
         }
         if (!command.quiet) PrintLine("That saved host key has been removed. Add its key before connecting again.");
@@ -405,7 +397,6 @@ ExitCode RunTrust(const Command& command) {
             json.ObjectBegin();
             json.Field("endpoint", host.endpoint);
             json.Field("label", host.label);
-            json.Field("identity", host.identityName.empty() ? "default" : host.identityName);
             json.Field("fingerprint", deskhub::FormatFingerprint(host.fingerprint));
             json.Field("firstSeenUnix", host.firstSeenUnix);
             json.Field("lastSeenUnix", host.lastSeenUnix);
@@ -422,11 +413,9 @@ ExitCode RunTrust(const Command& command) {
     }
 
     Table table;
-    table.Row({"ALIAS", "ENDPOINT", "CLIENT KEY", "HOST KEY"});
+    table.Row({"ALIAS", "LAST ADDRESS", "HOST KEY"});
     for (const deskhub::TrustedHost& host : store->Hosts())
-        table.Row({host.label, host.endpoint,
-            host.identityName.empty() ? "default" : host.identityName,
-            deskhub::ShortFingerprint(host.fingerprint)});
+        table.Row({host.label, host.endpoint, deskhub::ShortFingerprint(host.fingerprint)});
     table.Print();
     return ExitCode::Ok;
 }

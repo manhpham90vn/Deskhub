@@ -42,16 +42,34 @@ void TestEveryLabelSaysSomething() {
         ui::kSettingsSectionSession, ui::kSettingsSectionLaunch,
         ui::kAuthVersionMismatch, ui::kSavedHostsHeading, ui::kSavedHostsHint,
         ui::kSavedHostsEmpty, ui::kHostNameLabel, ui::kHostAddressLabel, ui::kHostKeyLabel,
-        ui::kHostIdentityLabel,
         ui::kRemoveHostAction, ui::kDevicesHostArea, ui::kDevicesHostAreaHint,
         ui::kDevicesClientArea, ui::kDevicesClientAreaHint, ui::kAllowClientPlaceholder,
-        ui::kAllowClientAction, ui::kAllowClientInvalid, ui::kMyKeysHeading, ui::kMyKeysHint,
-        ui::kCopyPublicKeyAction, ui::kNewKeyAction, ui::kImportKeyAction, ui::kKeyNameLabel,
-        ui::kKeyPassphraseLabel, ui::kTrustNewHostTitle, ui::kTrustNewHostAction,
-        ui::kCancelAction, ui::kDeviceNameHint, ui::kDeleteKeyAction, ui::kDeleteKeyPrompt, ui::kAuthNotPairedCliHint};
+        ui::kAllowClientAction, ui::kAllowClientInvalid,
+        ui::kCopyPublicKeyAction, ui::kShowQrAction, ui::kHideQrAction, ui::kScanQrAction,
+        ui::kQrHint, ui::kQrUnavailable, ui::kUnnamedClient, ui::kAccessRequestsHeading, ui::kAccessRequestsEmpty, ui::kApproveAction,
+        ui::kDenyAction, ui::kCameraDenied, ui::kInviteHostMismatch, ui::kInviteInvalid,
+        ui::kAuthAwaitingApproval, ui::kTrustNewHostTitle, ui::kTrustNewHostAction,
+        ui::kCancelAction, ui::kDeviceNameHint, ui::kAuthNotPairedCliHint};
     const std::string prompt = ui::TrustNewHostPrompt("192.168.1.10:47777", "SHA256:abc");
     Check(Contains(prompt, "192.168.1.10:47777") && Contains(prompt, "SHA256:abc"),
         "the first-connection prompt names the host and shows its whole fingerprint");
+    const std::string warning =
+        ui::PreviousOwnerWarning("192.168.1.10:47777", "office", "SHA256:old");
+    Check(Contains(warning, "office") && Contains(warning, "SHA256:old"),
+        "the warning names the machine that used to answer at that address");
+    Check(ui::PreviousOwnerWarning("192.168.1.10:47777", "", "").empty(),
+        "and says nothing when the address is new");
+    Check(Contains(ui::TrustNewHostPrompt("1.2.3.4:1", "SHA256:new", warning), "office"),
+        "the prompt carries the warning when there is one");
+    Check(Contains(ui::AwaitingApprovalLine("office"), "office"),
+        "the waiting line names the host being waited on");
+    const std::string cliLine = ui::AccessRequestCliLine("phone", "SHA256:abc", "10.0.0.2:1");
+    Check(Contains(cliLine, "phone") && Contains(cliLine, "access approve --fingerprint SHA256:abc"),
+        "the CLI line names the device and gives the exact command to approve it");
+    Check(Contains(ui::AccessRequestCliLine("", "SHA256:abc", "10.0.0.2:1"), "unnamed"),
+        "a device with no name is still described");
+    Check(ui::AuthRefusalText(AuthResultCode::AwaitingApproval) == ui::kAuthAwaitingApproval,
+        "the waiting verdict has its own explanation");
     for (const char* s : labels) Check(s && *s, "every shared UI string is non-empty");
 }
 

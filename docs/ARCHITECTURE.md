@@ -30,14 +30,16 @@ client/     per-OS apps: windows, linux, macos, ios, android (depend on platform
 | `core/session` | Session state machines, split by role: `session/host` (per-viewer sessions, viewer table, `SourceListResponder`, file receiver, auth throttle), `session/client` (screen client, file sender, terminal client, connect flow), and shared pieces beside them (transfer types, terminal session table, clipboard sync, link recovery) |
 | `core/control` | Bitrate controller, quality ladder, stream sizing, clock offset |
 | `core/terminal` | The VT emulator every client shares: `VtParser`, `Screen`, `KeyEncoder`, `Palette` |
-| `core/net` | Trust store (client side), authorized keys (host side), OpenSSH public-key text, bind-address selection |
-| `core/ui` | Every user-visible string, settings parsing, table-row builders, recent devices, host profiles (`HostProfiles`) and client-key rows (`ClientKeys`) — so all five clients say the same things |
+| `core/net` | Trust store keyed by fingerprint (client side), authorized keys (host side), pending connection requests (`AccessRequests`), the `deskhub://pair/` invite record (`PairingInvite`), OpenSSH public-key text, one `Base64` for every caller, bind-address selection |
+| `core/auth` | The signed auth transcript (`Transcript`), the per-key-and-address failure limiter, and the one-time QR tokens (`PairingTokens`) |
+| `core/qr` | `QrCode` — the QR encoder every client and the CLI draw the pairing code with |
+| `core/ui` | Every user-visible string, settings parsing, table-row builders, recent devices and host profiles (`HostProfiles`) — so all five clients say the same things |
 | `platform/net` | `UdpSocket` (per-OS), `QuicEndpoint` (quiche behind a pimpl), `SessionTransport` |
-| `platform/auth` | `AuthNegotiation` — the one key-signature handshake both sides speak |
-| `platform/client` | `HostLink` (dial + trust + auth + channels, shared by every surface), `ScreenViewer`, `TerminalViewer`, `FileTransferClient`, `SourceQuery`, `HostProfiles` (trusted hosts and the client key each uses) |
-| `platform/host` | `HostEngine`, `HostNetLoop`, `SharingHost`, `TerminalHost`, `FileHost`, `ViewerBroadcast` |
-| `platform/system` | Clock, random, PTY (ConPTY / forkpty), host identity (`HostIdentity`), client keys (`ClientKeys`, `ClientIdentity`), `authorized_keys` and `known_hosts` files, the recent list (`RecentDevicesFile`), device name, autostart, keep-awake |
-| `platform/ffi` | The C surface the Swift and Kotlin apps call: `SettingsFfi` (settings, device name), `DevicesFfi` (recent devices, allowed clients, this host's fingerprint), `HostProfileFfi` (trusted hosts), `ClientKeyFfi` (client keys), plus the share, screen, terminal and send surfaces |
+| `platform/auth` | `AuthNegotiation` — the one key-signature handshake both sides speak, with its four host-side outcomes (section 3) |
+| `platform/client` | `HostLink` (dial + trust + auth + approval wait + channels, shared by every surface), `ScreenViewer`, `TerminalViewer`, `FileTransferClient`, `SourceQuery`, `HostProfiles` (trusted hosts by fingerprint, with name and last address) |
+| `platform/host` | `HostEngine`, `HostNetLoop`, `SharingHost`, `TerminalHost`, `FileHost`, `ViewerBroadcast`, `PairingInvite` (issues a token and builds the invite this host shows) |
+| `platform/system` | Clock, random, PTY (ConPTY / forkpty), the machine key (`HostIdentity`), `authorized_keys` and `known_hosts` files, pending requests (`AccessRequestsFile`) and live QR tokens (`PairingTokenFile`), the recent list (`RecentDevicesFile`), device name, autostart, keep-awake |
+| `platform/ffi` | The C surface the Swift and Kotlin apps call: `SettingsFfi` (settings, device name), `DevicesFfi` (recent devices, allowed clients, connection requests, this machine's fingerprint and public key), `HostProfileFfi` (trusted hosts), `PairingFfi` (invite, QR modules, revoke), plus the share, screen, terminal and send surfaces |
 | `core/cli` | The command-line grammar and its JSON writer — pure text in, validated command out |
 | `client/<os>` | Capture, encode, decode, render, windowing, dialogs — nothing protocol-shaped |
 | `client/cli` | Flags to sessions: one binary that hosts, connects and opens shells with no GUI toolkit. It links the same per-OS media library the desktop app does |
@@ -93,32 +95,52 @@ then a brief locked `Poll`). Holding it across the wait starves every sender.
 
 ## 3. Admission: keys, like SSH
 
-Every machine creates an ECDSA P-256 host key on first run (`HostIdentity`) and never
-replaces it automatically; its SHA-256 SPKI hash is the fingerprint people see. TLS
-uses a self-signed certificate over that key. A client signs in with one of its client
-keys (`ClientKeys`): Ed25519 when generated, Ed25519 or ECDSA P-256 when imported from
-an OpenSSH or PKCS#8 file. The host admits only public keys listed in its
-`authorized_keys` (`AuthorizedKeys`, at most 128 lines of `ssh-ed25519 AAAA… label` or
-`ecdsa-sha2-nistp256 AAAA… label`); the label is a display name, never a permission.
-Nothing is approved over the network — there is no passcode, no approval prompt and no
-switch that lets unknown keys in.
+Every machine creates one ECDSA P-256 key on first run (`HostIdentity`, `host_key.pem`)
+and never replaces it automatically. That one key is the machine in both roles: a host
+presents it through TLS, and a client signs in with it. Its SHA-256 hash of the DER
+SubjectPublicKeyInfo is the one fingerprint people see, in the Devices page, the QR code,
+the connection-request list, `authorized_keys` and `known_hosts` alike. TLS needs an
+X.509 certificate, so each time the port opens `HostIdentity` builds a self-signed one
+around the key **in memory** and hands it to quiche; nothing is written. Because the
+fingerprint hashes the SPKI and not the certificate, a fresh certificate per start changes
+nothing anyone pinned, and the `host_cert.pem` older versions stored is neither read nor
+needed. The host admits only public keys listed in its `authorized_keys`
+(`AuthorizedKeys`, at most 128 lines of `ecdsa-sha2-nistp256 AAAA… label` — Ed25519
+lines are still parsed for hand-pasted keys); the label is a display name, never a
+permission.
 
-On top of TLS, an application-level handshake (`AuthNegotiation`, auth version 6)
+On top of TLS, an application-level handshake (`AuthNegotiation`, auth version 7)
 decides admission per connection. The transport runs it, and the host sends nothing
 application-level to a connection whose auth has not settled:
 
-1. QUIC/TLS completes. The client checks the host's key against `known_hosts` **before
-   sending anything** (see below).
-2. The client sends `AuthStart` with its public key and device name.
-3. The client signs a transcript — domain label, auth version, role, the session value
-   exported from this QUIC/TLS connection, its public key and the host's TLS
-   fingerprint (`core/auth/Transcript`) — and the host verifies it against the key,
-   which must be in `authorized_keys`.
+1. QUIC/TLS completes. The client settles trust in the host's key **before sending
+   anything** (`HostLink::SettleTrust`, see below).
+2. The client sends `AuthStart`: `00 | u16 keyLen | key | u8 nameLen | name |
+   u8 tokenLen | token | 07` — its public key, its device name, the 32-byte pairing
+   token when it came from a QR code (`tokenLen` is 0 or 32), and the auth version last.
+3. `HostAuth::Begin` answers one `AuthChallenge` out of four:
+   - the key is in `authorized_keys` → `Signature`;
+   - the key is unknown and the token matches a live entry in `pairing_tokens` → the key
+     is appended to `authorized_keys` labelled with the client's name, the token is
+     consumed, and the answer is `Signature`;
+   - the key is unknown and a token was sent but is wrong → one failure is charged to the
+     source address in the existing limiter (3 per minute, then a 10 s block), and the
+     offer is then treated as if it carried no token;
+   - the key is unknown and no usable token → a connection request (name, key,
+     fingerprint, address, time) is written to `access_requests` and the answer is
+     `AwaitingApproval`. The connection is closed as a refusal is today; the host keeps
+     nothing unauthenticated waiting for a click.
+4. On `Signature`, the client signs a transcript — domain label, auth version, role, the
+   session value exported from this QUIC/TLS connection, its public key and the host's
+   TLS fingerprint (`core/auth/Transcript`) — and the host verifies it against the key.
 
 A signature is bound to that one connection, so a reconnect signs again; there is no
 0-RTT or session resumption. The host keeps at most 8 connections waiting to
 authenticate and drops each after 10 seconds; 3 bad signatures from one key and source
-IP within a minute block that pair for 10 seconds (`AuthThrottle`).
+IP within a minute block that pair for 10 seconds (`AuthThrottle`). `access_requests`
+holds at most 16 requests, one per key (a repeat refreshes the address and time), each
+for 10 minutes; *Approve* moves the key into `authorized_keys` with the device's name,
+*Deny* deletes the row and tells the client nothing.
 
 Admission belongs to one QUIC connection, not to an address. It is dropped the moment
 that connection closes, so the next connection from the same address and port has to
@@ -128,13 +150,33 @@ never proved, and a refused key cannot be retried in place. Removing a client ke
 the Devices page (or `access remove`) also closes any connection it has open at that
 moment.
 
-Client side, `known_hosts` (`TrustStore`) pins host keys per address and port, beside
-each trusted host's name and the client key to use with it (`HostProfiles`). This is
-trust on first use, as in SSH: an **unknown** key fails the link as *not trusted yet*;
-the app then shows the fingerprint in its *New host* dialog and redials with
-`acceptNewHostKey` once the user chooses *Trust and connect*, and the CLI does the same
-only with `--accept-new-host-key`. A **changed** key is a hard failure with no bypass:
-the host must be removed from *Trusted hosts* and trusted again.
+Client side, `known_hosts` (`TrustStore`) is keyed by the host's **fingerprint**; each
+entry carries the host's name, the last address it answered at and first/last-seen
+times (`HostProfiles`). `HostLink::SettleTrust` runs once TLS is up, on the fingerprint
+of the key the far end presented:
+
+- Dialled from a QR invite: the fingerprint must equal the one inside the invite. Equal
+  means the machine answering holds the private key of the machine that made the code,
+  so the host is pinned silently and the token is sent in `AuthStart`. Different means
+  something else answers at that address: the link fails with `InviteMismatch` and the
+  token never leaves the client.
+- Already in `known_hosts`: the entry's last address is refreshed (`TouchTrustedHost`)
+  and the link goes on — at whatever address the host is reached, since nothing is
+  keyed by address any more.
+- Otherwise the link fails as *not trusted yet* with the fingerprint attached; the app
+  shows its *New host* dialog and redials with `acceptNewHostKey` after *Trust and
+  connect*, the CLI does the same only with `--accept-new-host-key`. If
+  `FindByEndpoint` says the address used to answer as some other trusted host,
+  `PreviousOwnerWarningFor` adds that host's name and fingerprint to the prompt. There
+  is no *changed key* verdict: a new key at an old address is a new host.
+
+When the challenge is `AwaitingApproval`, `HostLink` parks in the state of the same
+name, shows `AwaitingApprovalLine`, and redials with the backoff the recovering links
+already use, for up to `kDefaultApprovalWaitUs` (120 s) or until the caller cancels;
+each redial is a full connection and a fresh `AuthStart`, so the first one after the
+owner's *Approve* gets `Signature` and completes. Past the deadline the link fails with
+`AuthResultCode::AwaitingApproval`, whose text tells the user to ask for *Approve* and
+connect again.
 
 The wire carries the public key itself, never a bare fingerprint — the host hashes
 what it receives, so wearing someone else's identity would mean signing with a key
@@ -242,8 +284,10 @@ reason.
 
 The source query (`QuerySources`) rides the same link in a one-shot, blocking form.
 The UI still posts intents (keys, resize) into command queues. An unknown host key
-fails the link with its fingerprint attached, for the UI to show in its *New host*
-dialog; a changed one fails it for good. The terminal window never parses escape sequences — `core/terminal` turns the
+fails the link with its fingerprint attached — and the previous-owner warning when the
+address used to answer as another trusted host — for the UI to show in its *New host*
+dialog; a host that has not allowed this key parks the link in `AwaitingApproval`, whose
+status line the UI polls while the user can cancel. The terminal window never parses escape sequences — `core/terminal` turns the
 byte stream into a cell grid, and the window only draws cells and forwards key
 events. Today each window still holds its own link; sharing one admitted link across
 every window aimed at the same host is the intended next step, and it slots in at
@@ -252,8 +296,8 @@ every window aimed at the same host is the intended next step, and it slots in a
 ## 6. Finding hosts
 
 There is no discovery: nothing scans the network and the host answers no plaintext
-packet. A client dials an address the user typed, a recent host or a trusted host
-(`HostProfiles`). `SourceListResponder` answers `LIST_SOURCES` only over an admitted
+packet. A client dials an address the user typed, a recent host, a trusted host
+(`HostProfiles`) or the addresses inside a QR invite. `SourceListResponder` answers `LIST_SOURCES` only over an admitted
 connection; the answer carries what the host can do — whether it takes input, whether
 it shares a terminal — in the `SOURCE_LIST` header flags, so a client knows before it
 opens any window that a phone can only be watched. After the source records the payload
@@ -267,20 +311,44 @@ at most 10. The FFI `dh_list_sources` records a host there only when it answered
 apps no longer touch the list themselves and `dh_recent_touch` is gone. The old
 `recent-devices.txt` is deleted, not converted.
 
+The QR code is the one out-of-band channel, and it stays out of band: the host never
+transmits it, the owner shows it and someone reads it off the screen or pastes the link.
+`deskhubp::BuildPairingInvite(port, bindIp, hostName)` issues a random 32-byte token
+(kept in `pairing_tokens` with a 5-minute expiry, at most 4 live at once, all revoked by
+`RevokePairingTokens` when the panel is hidden or sharing stops) and formats
+`core/net/PairingInvite`: the text is `deskhub://pair/` followed by the base64url of a
+binary record — a version byte, the endpoint count `n`, then `n × (IPv4, port)` for up to
+4 of the host's addresses, the 32-byte fingerprint, the 32-byte token and a
+length-prefixed host name of at most 32 bytes. The record is capped at 180 characters so
+that at error-correction level M it fits a QR code of version 10 or smaller, which a
+phone reads off a laptop screen at arm's length. `core/qr/QrCode` (`EncodeQr`, plus
+`RenderQrText` for the CLI's `share --qr`) is the only encoder; every client draws the
+module grid it returns, Android through `dh_qr_encode`. `ParsePairingInvite` on the
+client side gives `HostLink` its endpoints, the fingerprint to demand and the token to
+send; `dh_pairing_invite_address` gives the apps the first `ip:port` to show in the
+address field. Scanning is the one per-platform piece — CameraX + ZXing on Android,
+AVFoundation on iOS — and both hand back nothing but the decoded text.
+
 ## 7. Data on disk
 
 Everything lives in the user's Deskhub folder (`~/.deskhub`,
 `%USERPROFILE%\.deskhub`, a `.deskhub` folder inside the App Group container on iOS,
 internal storage on Android;
-`DESKHUB_CONFIG_DIR` or the CLI's `--config-dir` override it): `host_key.pem` +
-`host_cert.pem` (host identity), `client_key.pem` + `client_key.<name>.pem` (client keys,
-DPAPI-protected on Windows), `authorized_keys` (client keys this host admits),
-`known_hosts` (trusted hosts with their profiles), `ui-settings.txt` (including the
-device name), `recent-hosts.txt` (address, last-connected time and host name),
+`DESKHUB_CONFIG_DIR` or the CLI's `--config-dir` override it): `host_key.pem` (the one
+machine key — the TLS certificate is built in memory at every start, so `host_cert.pem`
+is no longer written and a leftover one is ignored), `authorized_keys` (client keys this
+host admits), `known_hosts` (trusted hosts by fingerprint, with name and last address),
+`access_requests` (connection requests waiting for Approve or Deny — name, public key,
+address, time; at most 16, each dropped after 10 minutes), `pairing_tokens` (the QR
+tokens currently live, with their expiry), `ui-settings.txt` (including the device
+name), `recent-hosts.txt` (address, last-connected time and host name),
 `portal-restore-token.txt` on Linux (the desktop's own token for the screens picked in
-its screen-sharing dialog), and per-run logs. No passcode is stored anywhere. POSIX
+its screen-sharing dialog), and per-run logs. No passcode is stored anywhere, and
+no `client_key*.pem`: the files older versions kept are ignored, not migrated. POSIX
 directories are `0700` and files `0600`, written atomically; on Windows the ACL admits
-the user, SYSTEM and Administrators. File I/O
+the user, SYSTEM and Administrators. On iOS the app and the broadcast extension share
+the folder, which is how the extension's request reaches the app's list and the app's
+*Approve* reaches the extension. File I/O
 stays in `platform/`; the parsing and the data structures live in `core/` and are
 unit-tested.
 
@@ -297,9 +365,9 @@ control bytes, characters Windows rejects and reserved device names all go — b
 
 | Suite | Runs | Covers |
 | --- | --- | --- |
-| `make test` | offline, no sockets | all of `core/`: wire, framing, FEC, sessions, VT emulator, settings, strings, deterministic structured fuzzing |
-| `make test-platform` | loopback sockets | real QUIC handshakes, key-signature authentication end-to-end, host-key pinning, terminal host + viewer over the wire, PTY against a real shell, bad-signature lockout |
-| `make test-integration` | loopback, fake capture/encode | full host↔client sessions: negotiation, video across the wire, input, authorized-key admission, junk resistance, and lag under cross-load — a file transfer, a flooded terminal and keystrokes beside a live stream, each gated on its worst observed stall |
+| `make test` | offline, no sockets | all of `core/`: wire (including the `AuthStart` token field), framing, FEC, sessions, VT emulator, settings, strings, deterministic structured fuzzing, and the pairing pieces — `Base64`, `PairingInvite` round trips and limits, `PairingTokens` issue/consume/expire, `AccessRequests` capacity and expiry, `QrCode` against known encodings |
+| `make test-platform` | loopback sockets | real QUIC handshakes, key-signature authentication end-to-end, fingerprint-keyed host pinning, `AccessRequestsFile` (a request is recorded, approved and denied) and `PairingTokenFile` (a token is issued, redeemed once and revoked), admission by approval and by token through the real `HostAuth`, terminal host + viewer over the wire, PTY against a real shell, bad-signature lockout |
+| `make test-integration` | loopback, fake capture/encode | full host↔client sessions: negotiation, video across the wire, input, authorized-key admission, the `AUTH_START_TOKEN` wire vector beside the other golden messages, junk resistance, and lag under cross-load — a file transfer, a flooded terminal and keystrokes beside a live stream, each gated on its worst observed stall |
 | fuzz targets | 30 s per target on every PR, 15 min per target nightly | parsers for wire, H.264, reassembly, terminal bytes and UI text, plus the host and viewer session state machines |
 | `make test-perf` | release build, offline + loopback | the hot paths measured rather than only exercised: `core_perf` covers the pure-C++ paths, `platform_perf` covers real QUIC over loopback; both fail on allocations per unit, on the cost at 4× the input, and on drift against a baseline recorded on that machine |
 
@@ -338,14 +406,23 @@ line.
   The host periodically rechecks live admissions so a file replacement from another
   process can revoke active connections without an in-process generation update.
 
-- **A host pin belongs to one endpoint**: a TLS host key trusted at one address and
-  port does not automatically authorize the same key at another endpoint. The new
-  endpoint must be pinned explicitly before connection.
+- **Trust follows the key, not the address**: `known_hosts` is keyed by the host's
+  fingerprint, and the address beside it is only the last one that answered. The
+  earlier rule — a pin belongs to one `ip:port`, and a key that changed there is a hard
+  block with no accept button — made every DHCP lease change look like an attack and
+  taught people to remove and re-trust hosts by reflex, which is the habit the block
+  existed to prevent. A trusted host reached at a new address now simply connects, and a
+  *different* key at a known address is treated as what it is, a machine this client has
+  never met: the *New host* dialog with a warning naming the host that used to answer
+  there (`PreviousOwnerWarningFor`). The warning keeps the one signal the block carried
+  — "something at this address is not who it was" — while leaving the old host in
+  *Trusted hosts* untouched, so trusting the new one is never a click through a change,
+  only a first meeting with its fingerprint on show.
 
 - **The new client allowlist contains full public keys**: `authorized_keys` accepts
   bounded OpenSSH public key lines and rejects malformed or duplicate entries. It is
   the only allowlist: a missing file admits nobody. `known_hosts`
-  stores each endpoint's alias and selected client identity beside its TLS pin.
+  stores each trusted host's alias and last address beside its fingerprint.
   Config writes use an OS file lock across processes and atomic replacement.
   A service can set its configuration directory with `SetConfigDir` or
   `DESKHUB_CONFIG_DIR` independently from the log directory.
@@ -368,28 +445,40 @@ line.
   64 pairs; a successful proof clears its failure count.
 
 - **Auth has its own version inside protocol version 3**: `AuthStart` keeps a zero byte
-  before the key as a compatibility prefix and puts auth version 6 after the client name.
-  An older host can read the offer and send its old challenge; the new client then detects
-  the incompatible challenge and closes. A new host rejects an offer without the version
-  suffix, sends `VersionMismatch`, and closes. Challenge, response, and result carry only
-  versioned signature data.
+  before the key as a compatibility prefix and puts the auth version last — now 7, after
+  the pairing-token field that version 6 did not have: `00 | u16 keyLen | key |
+  u8 nameLen | name | u8 tokenLen | token | 07`. An older host can read the offer and
+  send its old challenge; the new client then detects the incompatible challenge and
+  closes. A new host rejects an offer whose trailing byte is not 7, sends
+  `VersionMismatch`, and closes — which is why a 7.0.x device and a 7.1 device report
+  that their versions do not match rather than half-working. `AuthMode` gained
+  `AwaitingApproval`, and `AuthResultCode::AwaitingApproval` exists only on the client
+  side, to name the outcome of a wait that ran out. Challenge, response, and result
+  carry only versioned data.
 
-- **Trust on first use, hard block on change**: an unknown host key is shown to the
+- **Trust on first use, a warning on change**: an unknown host key is shown to the
   user once, as SSH does, and pinned only when they accept it (`--accept-new-host-key`
-  in the CLI); a changed key is refused with no accept button at all. A prompt that
-  lets people click through a key change teaches them to click through the one that
-  is an attack, so the only way past it is removing the host from *Trusted hosts* —
-  a deliberate act away from the connection that tripped it.
+  in the CLI). A key that differs from the one that used to answer at the same address is
+  not a *change* to click through — there is no accept-the-new-key button and no
+  `HostKeyChanged` result any more — it is a host this client has never trusted, met
+  through the ordinary *New host* dialog with the previous owner named. The old host's
+  pin survives, so nothing is overwritten by that click; the user has only trusted one
+  more machine, with its fingerprint in front of them.
 
 - **One device name**: Settings → General → *Device name* (empty means the OS name) is
   the only name a machine has — hosts show it to viewers and send it to the clients
-  they admit, clients send it when they connect, and it labels every public key the machine copies
-  (`<device name>` or `<device name> (<key name>)`). The Client page lost its own
+  they admit, clients send it when they connect, it labels the public key the machine
+  copies, and it is the label a host writes into `authorized_keys` when it approves
+  the machine's request or admits it by QR token. The Client page lost its own
   name field so the name a host sees and the label in its `authorized_keys` agree.
 
 - **No migration of old data**: passcodes, the old `paired_devices` list and its
   activation marker are not converted — nothing in them proves a client holds a key —
-  and leftover files are deleted. An `authorized_keys` or `known_hosts` that cannot be
+  and leftover files are deleted. The 7.0.x `client_key.pem`, `client_key.<name>.pem`
+  and `host_cert.pem` are simply ignored: the machine key was already `host_key.pem`, so
+  fingerprints did not change, and a client's old Ed25519 identity is not carried into
+  the new one — the host owner allows the machine key once, by Approve or QR. An
+  `authorized_keys` or `known_hosts` that cannot be
   read is never guessed at: while it is unreadable the host denies everyone and the
   client refuses every host, and the next change writes it afresh.
 
@@ -697,17 +786,17 @@ line.
   refresh their picker on the OS display-change signal, which is what keeps the list
   right when a monitor is plugged in later.
 - **quiche over msquic/ngtcp2**: the only QUIC library with production evidence on
-  both Android and iOS. It brings BoringSSL, which also serves the host identity and
-  the client-key signatures — no second crypto library.
+  both Android and iOS. It brings BoringSSL, which also serves the machine key, its
+  in-memory certificate and the transcript signatures — no second crypto library.
 - **No connection migration**: no usable client-side support in any candidate
   library. Reconnect-and-reattach (tmux-style, already required for mobile
   backgrounding) covers it; kept shells can also be listed (`TermList`) and resumed
   by id from a fresh client.
 - **ECDSA P-256, not Ed25519**: BoringSSL's server side will not sign a TLS
-  handshake with Ed25519 through quiche. A stored unsupported or mismatched
-  certificate and private key makes startup fail without changing either file.
-  Only an installation with neither file creates a new host identity, so an
-  existing host fingerprint never changes silently.
+  handshake with Ed25519 through quiche, and one key now has to serve TLS as well as
+  the client signature. A stored key that is not a P-256 key makes startup fail
+  without touching the file. Only an installation with no `host_key.pem` creates a
+  new identity, so an existing fingerprint never changes silently.
 - **quiche is prebuilt, not FetchContent**: `scripts/build-quiche.sh` writes one
   directory per rust target under `third_party/quiche/` plus a shared `include/` —
   quiche.h and the BoringSSL headers boring-sys vendors, copied out because Deskhub
@@ -802,10 +891,62 @@ line.
   matches too: `_ITERATOR_DEBUG_LEVEL=0`, `/U_DEBUG`, `/RTC1` stripped — the
   release CRT has no `_CrtDbgReport` and no run-time check support. Any mismatch
   ends in a wall of LNK2038.
-- **Passcode, approval prompt and LAN scan were removed**: a 4-digit code is a short
-  secret on an open port, an approval prompt can be clicked by the wrong person, and a
-  plaintext discovery answer tells anyone on the network that a host is there. Keys the
-  owner copies deliberately replace all three.
+- **Passcode and LAN scan stay removed**: a 4-digit code is a short secret on an open
+  port, and a plaintext discovery answer tells anyone on the network that a host is
+  there. Nothing in 7.1 brings either back — the QR code is read off a screen, and a
+  request is written only after a completed TLS handshake.
+
+- **Approval rides the authenticated channel and shows identity, not a secret**: the
+  objection of 2026-09-28 to an approval prompt was that it could be clicked by the wrong
+  person for the wrong machine — a passcode prompt showed a code anyone could have typed.
+  A connection request shows nothing typed: the device's name, the fingerprint of the key
+  it actually holds (the host hashed the key it received over TLS) and the address it
+  came from, and *Approve* acts on that fingerprint, never on a row position. Nothing
+  travels in plaintext and nothing is guessable; the only thing the owner can get wrong
+  is approving a machine they did not expect, which the row is there to let them check.
+  The host also keeps no connection open while it waits — the request is a file entry,
+  the client redials — so a flood of requests costs 16 rows, not 16 sockets.
+
+- **A QR code carries the host fingerprint and a one-shot token, pinned before
+  `AuthStart`**: the token is a secret worth stealing for five minutes, so the client
+  spends it only on a machine that has already proved, through the TLS handshake, that it
+  holds the private key whose fingerprint is printed in the code. A man-in-the-middle at
+  the address in the code cannot present that key, so the client stops at
+  `InviteMismatch` and the token never crosses the wire. On the host the token is
+  compared in constant time, consumed on first use, expires after 5 minutes, dies with
+  the panel that showed it, and a wrong guess is charged to the source address in the
+  same limiter that counts bad signatures — 3 per minute, then a 10 s block — so 2^256
+  possibilities are never tried at speed.
+
+- **Requests and tokens live in files so a second process can act on them**: on iOS the
+  broadcast extension receives `AuthStart` while the app draws the QR code and the
+  request list; in the CLI, `share` runs while `access approve` is typed in another
+  terminal. `access_requests` and `pairing_tokens` sit in the shared config folder under
+  the same lock and atomic replacement as `authorized_keys`, `AccessRequestsGeneration`
+  gives pollers a cheap change counter, and an *Approve* is nothing more than a move from
+  one file to another that the next `AuthStart` reads back.
+
+- **One key per machine, certificate in memory**: two keys per machine meant two
+  fingerprints, a *My keys* page, import and passphrase code, a stored certificate that
+  could disagree with its key, and a `known_hosts` that had to remember which client key
+  to use where. One ECDSA P-256 key in `host_key.pem` serves TLS on the host side and the
+  transcript signature on the client side; the X.509 that TLS insists on is built around
+  it at every start and never written. The fingerprint was always SHA-256 of the SPKI,
+  never of the certificate, so a host that upgraded kept the fingerprint every client had
+  pinned; a client's identity did change — from Ed25519 to the machine key — which is why
+  every client is allowed once more, with an Approve or a scan rather than a paste.
+
+- **The QR encoder is ours**: `core/` admits no third-party header, and a QR library per
+  platform would have been five renderings of one code plus a sixth for the CLI.
+  `core/qr/QrCode` is a byte-mode encoder at error-correction level M, tested offline
+  against known encodings, and every client only fills squares from the module grid it
+  returns. Decoding is the opposite case — it needs a camera and a fast detector — so the
+  two phones use the platform's own (CameraX + ZXing on Android, AVFoundation on iOS) and
+  hand back a string.
+
+- **Base64 lives in one place**: the OpenSSH key lines and the invite record both needed
+  it, and two copies had already grown apart. `core/net/Base64` is the only encoder and
+  decoder, standard and URL-safe alphabets alike, with its own tests.
 - **The VT emulator is ours**: no platform terminal widget is available on all five
   clients under a usable licence, and owning it makes terminal behaviour testable
   offline and identical everywhere.
@@ -825,9 +966,10 @@ line.
   did. `HostLink` is now the only client-side code that dials or authenticates; a
   service opens its `Chan`, gets its own inbox queue, and drains it on its own
   thread. The terminal's redial-with-backoff moved into the link so every surface
-  that asks for recovery inherits it, and the trust rules live in one place: an
-  unknown key fails the link until the user trusts it (`acceptNewHostKey`), and a
-  changed key always fails it.
+  that asks for recovery inherits it — and the approval wait reuses the same redial —
+  and the trust rules live in one place: an unknown key fails the link until the user
+  trusts it (`acceptNewHostKey`), an invite pins only the key it names, and a known key
+  is recognised at any address.
 - **`HostLink` sends through `Send`, not `SendMessage`**: on Windows the OS headers
   behind the platform layer define `SendMessage` as a macro for `SendMessageA`, and
   in `HostLink.cpp` they landed after the class declaration but before the method

@@ -35,16 +35,11 @@ struct SavedHostsSection: View {
                     .font(.caption)
                     .foregroundStyle(DeskhubPalette.muted)
                     .textSelection(.enabled)
-                HStack(spacing: 6) {
-                    Text(host.identity)
-                    Text("·")
-                    Text(host.shortKey)
-                        .font(.system(.caption, design: .monospaced))
-                        .help(host.fingerprint)
-                        .accessibilityValue(host.fingerprint)
-                }
-                .font(.caption)
-                .foregroundStyle(DeskhubPalette.muted)
+                Text(host.shortKey)
+                    .font(.system(.caption, design: .monospaced))
+                    .foregroundStyle(DeskhubPalette.muted)
+                    .help(host.fingerprint)
+                    .accessibilityValue(host.fingerprint)
             }
             Spacer(minLength: 0)
             Button(DeskhubClient.string(DHStrConnectButton)) {

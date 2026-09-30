@@ -13,6 +13,7 @@ using SettingsAction = deskhub::cli::SettingsAction;
 
 SourceQueryRequest QueryRequestOf(const Command& command);
 ExitCode ReportQueryFailure(const SourceQueryReply& reply);
+bool AdmitByInvite(Command& command);
 
 ExitCode RunDisplays(const Command& command);
 ExitCode RunSources(const Command& command);

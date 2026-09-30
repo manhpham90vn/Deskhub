@@ -29,7 +29,12 @@ HostIdentity LoadHostIdentity() {
     return {};
 }
 
-HostIdentity LoadOrCreateHostIdentity(std::string_view) {
+HostIdentity LoadOrCreateHostIdentity() {
+    WarnOnce();
+    return {};
+}
+
+std::string TransportCertificatePem(const HostIdentity&) {
     WarnOnce();
     return {};
 }

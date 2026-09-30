@@ -14,8 +14,8 @@
 
 namespace deskhubp {
 
-std::vector<uint8_t> IdentityPublicKey(const HostIdentity& identity);
 std::string IdentityPublicKeyText(const HostIdentity& identity);
+std::string IdentityPublicKeyLine(const HostIdentity& identity, std::string_view label);
 std::string PublicKeyTextFromSpki(std::span<const uint8_t> spkiDer);
 std::vector<uint8_t> PublicKeySpkiFromText(std::string_view text);
 std::optional<deskhub::Fingerprint> FingerprintOfPublicKey(std::span<const uint8_t> spkiDer);

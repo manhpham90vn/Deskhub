@@ -10,9 +10,12 @@ final class SharingModel {
     var status = BroadcastStatus()
     var addresses: [LocalAddress] = []
     var bindIp = DeskhubClient.buffered(64) { dh_bind_ip($0, $1) }
+    let qr = PairingQrModel()
+    let accessRequests = AccessRequestsModel()
+
+    var port: UInt16 { UInt16(dh_settings_load().port) }
 
     var screenStatusLine: String {
-        let port = UInt16(dh_settings_load().port)
         if status.sharing {
             return DeskhubClient.buffered(320) {
                 dh_sharing_status(port, false, true, false, false, $0, $1)
@@ -23,7 +26,6 @@ final class SharingModel {
 
     var filesStatusLine: String {
         guard FilesHost.shared.receiving else { return "" }
-        let port = UInt16(dh_settings_load().port)
         return DeskhubClient.buffered(320) {
             dh_sharing_status(port, false, false, false, true, $0, $1)
         }
@@ -37,7 +39,17 @@ final class SharingModel {
         while !Task.isCancelled {
             status = BroadcastStatus.load()
             addresses = LocalAddress.all()
+            refreshHostSide()
             try? await Task.sleep(for: SharingModel.pollInterval)
         }
+    }
+
+    private func refreshHostSide() {
+        guard status.sharing else {
+            qr.hide()
+            accessRequests.clear()
+            return
+        }
+        accessRequests.refresh()
     }
 }

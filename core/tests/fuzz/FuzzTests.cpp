@@ -69,9 +69,11 @@ bool ExerciseWireParsers(std::span<const uint8_t> d) {
         ok = ok && !authStart->publicKey.empty() &&
              authStart->publicKey.size() <= kMaxAuthBlobBytes;
         ok = ok && authStart->clientName.size() <= kMaxClientNameBytes;
+        ok = ok && (authStart->pairingToken.empty() ||
+                       authStart->pairingToken.size() == kPairingTokenBytes);
     }
     if (const auto authChallenge = ParseAuthChallenge(pl)) {
-        ok = ok && uint8_t(authChallenge->mode) <= uint8_t(AuthMode::ConfigError);
+        ok = ok && uint8_t(authChallenge->mode) <= uint8_t(AuthMode::AwaitingApproval);
     }
     if (const auto authResponse = ParseAuthResponse(pl))
         ok = ok && authResponse->proof.size() <= kMaxAuthBlobBytes;
@@ -198,12 +200,14 @@ Datagram BuildRandomValidDatagram() {
             if (m.publicKey.empty()) m.publicKey.push_back(uint8_t(Rnd()));
             m.clientName.assign(Rnd() % 40, ' ');
             for (auto& c : m.clientName) c = char('a' + Rnd() % 26);
+            if (Rnd() % 2 == 0) m.pairingToken = RandomJunk(kPairingTokenBytes);
+            if (!m.pairingToken.empty()) m.pairingToken.resize(kPairingTokenBytes, 0x11);
             n = BuildAuthStart(buf, m);
             break;
         }
         case 17: {
             AuthChallenge m;
-            m.mode = AuthMode(Rnd() % (uint8_t(AuthMode::Signature) + 1));
+            m.mode = AuthMode(Rnd() % (uint8_t(AuthMode::AwaitingApproval) + 1));
             n = BuildAuthChallenge(buf, m);
             break;
         }

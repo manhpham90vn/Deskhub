@@ -34,7 +34,6 @@ ExitCode CodeFor(deskhubp::FileTransferClientState state) {
     switch (state) {
         case deskhubp::FileTransferClientState::Done: return ExitCode::Ok;
         case deskhubp::FileTransferClientState::Refused: return ExitCode::Refused;
-        case deskhubp::FileTransferClientState::KeyChanged: return ExitCode::KeyChanged;
         case deskhubp::FileTransferClientState::Failed: return ExitCode::Unreachable;
         default: break;
     }
@@ -82,7 +81,6 @@ ExitCode RunSend(const Command& command) {
     config.hostLabel = command.address;
     config.clientName =
         command.deviceName ? *command.deviceName : deskhubp::SessionDeviceName();
-    config.clientIdentityName = command.identityName.value_or("");
     config.acceptNewHostKey = command.acceptNewHostKey;
     config.files = std::move(paths);
 
@@ -93,13 +91,6 @@ ExitCode RunSend(const Command& command) {
                 progress.fileCount, progress.batchBytes, progress.batchSize));
         };
     }
-    hooks.onKeyChanged = [](std::string_view fingerprint) {
-        PrintError(deskhub::ui::kTrustChangedTitle);
-        PrintError(deskhub::ui::kTrustChangedBody);
-        PrintError(std::string(deskhub::ui::kTrustFingerprintLabel) + " " +
-                   std::string(fingerprint));
-    };
-
     WatchForInterrupt();
 
     deskhubp::FileTransferClient client;

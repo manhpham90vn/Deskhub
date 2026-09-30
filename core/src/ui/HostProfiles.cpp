@@ -38,13 +38,6 @@ std::string AliasBase(std::string_view endpoint) {
     return base.substr(0, kMaxTrustLabelBytes - kAliasSuffixRoom);
 }
 
-std::string ChosenIdentity(const HostProfileRequest& request,
-    const std::optional<TrustedHost>& existing) {
-    if (!request.identityName.empty()) return request.identityName;
-    if (existing) return ProfileIdentityName(*existing);
-    return std::string(kDefaultIdentityName);
-}
-
 }
 
 bool IsValidHostAlias(std::string_view alias) {
@@ -59,10 +52,6 @@ std::optional<std::string> CanonicalHostEndpoint(std::string_view address) {
     uint16_t port = kDeskhubPort;
     if (!SplitHostPort(TrimAscii(address), host, port) || !ParseIPv4(host)) return std::nullopt;
     return host + ":" + std::to_string(port);
-}
-
-std::string ProfileIdentityName(const TrustedHost& host) {
-    return host.identityName.empty() ? std::string(kDefaultIdentityName) : host.identityName;
 }
 
 std::string SuggestHostAlias(const TrustStore& store, std::string_view endpoint) {
@@ -108,15 +97,16 @@ HostProfilePlan PlanHostProfile(const TrustStore& store, HostProfileMode mode,
                                     : std::nullopt);
     if (!hostKey || IsZero(*hostKey)) return Refuse(HostProfileError::MissingHostKey);
 
-    const bool movesAddress = !existing || existing->endpoint != *endpoint;
-    if (movesAddress && store.Find(*endpoint)) return Refuse(HostProfileError::AddressInUse);
+    const std::optional<TrustedHost> sameKey = store.Find(*hostKey);
+    const bool keyBelongsElsewhere =
+        sameKey && (!existing || sameKey->fingerprint != existing->fingerprint);
+    if (keyBelongsElsewhere) return Refuse(HostProfileError::KeyExists);
     if (!existing && store.Size() >= kMaxTrustedHosts) return Refuse(HostProfileError::StoreFull);
 
     HostProfilePlan plan;
     plan.existing = existing;
-    plan.profile = TrustedHost{*endpoint, request.alias, *hostKey,
-        existing ? existing->firstSeenUnix : 0, existing ? existing->lastSeenUnix : 0,
-        ChosenIdentity(request, existing)};
+    plan.profile = TrustedHost{*hostKey, request.alias, *endpoint,
+        existing ? existing->firstSeenUnix : 0, existing ? existing->lastSeenUnix : 0};
     return plan;
 }
 
@@ -131,17 +121,16 @@ const char* HostProfileErrorText(HostProfileError error) {
         case HostProfileError::MissingHostKey: return "The host's public key is required.";
         case HostProfileError::InvalidHostKey:
             return "That is not a supported host public key or SHA256 fingerprint.";
-        case HostProfileError::UnknownIdentity:
-            return "That client key does not exist or cannot be read.";
         case HostProfileError::AliasExists: return "A saved host already has that name.";
         case HostProfileError::AliasMissing: return "No saved host has that name.";
         case HostProfileError::AliasAmbiguous:
             return "Several saved hosts share that name; fix known_hosts first.";
-        case HostProfileError::AddressInUse: return "Another saved host already uses that address.";
         case HostProfileError::StoreUnreadable:
             return "The saved hosts file cannot be read; fix known_hosts before changing it.";
         case HostProfileError::StoreFull: return "The list of saved hosts is full.";
         case HostProfileError::WriteFailed: return "The saved hosts file could not be written.";
+        case HostProfileError::KeyExists:
+            return "A saved host already has that key; it is the same machine under another name.";
     }
     return "";
 }

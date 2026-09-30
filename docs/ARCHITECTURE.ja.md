@@ -32,14 +32,16 @@ client/     OS ごとの app: windows、linux、macos、ios、android（platform
 | `core/session` | session state machine を役割ごとに分割: `session/host`（viewer ごとの session、viewer 表、`SourceListResponder`、file receiver、auth throttle）、`session/client`（screen client、file sender、terminal client、connect の流れ）、およびそれらの隣に置いた共有部品（transfer の型、terminal session 表、clipboard sync、link recovery） |
 | `core/control` | Bitrate controller、quality ladder、stream のサイズ決定、clock offset |
 | `core/terminal` | すべての client が共有する VT emulator: `VtParser`、`Screen`、`KeyEncoder`、`Palette` |
-| `core/net` | Trust store（client 側）、authorized keys（host 側）、OpenSSH public key のテキスト、bind アドレスの選択 |
-| `core/ui` | 利用者に表示されるすべての文字列、settings の解析、表の行の構築、最近のデバイス、host profile（`HostProfiles`）と client key の行（`ClientKeys`）。5 つの client が同一の内容を表示するためのもの |
+| `core/net` | fingerprint を key とする trust store（client 側）、authorized keys（host 側）、待機中の接続要求（`AccessRequests`）、`deskhub://pair/` の招待レコード（`PairingInvite`）、OpenSSH public key のテキスト、すべての呼び出し元が使う唯一の `Base64`、bind アドレスの選択 |
+| `core/auth` | 署名対象の auth transcript（`Transcript`）、key とアドレスごとの失敗の limiter、1 回限りの QR token（`PairingTokens`） |
+| `core/qr` | `QrCode` —— すべての client と CLI が pairing code を描くのに用いる QR encoder |
+| `core/ui` | 利用者に表示されるすべての文字列、settings の解析、表の行の構築、最近のデバイスと host profile（`HostProfiles`）。5 つの client が同一の内容を表示するためのもの |
 | `platform/net` | `UdpSocket`（OS ごとの実装）、`QuicEndpoint`（quiche を pimpl の背後に配置）、`SessionTransport` |
-| `platform/auth` | `AuthNegotiation` —— 双方が用いる唯一の key 署名 handshake |
-| `platform/client` | `HostLink`（dial、trust、auth、channel。すべての画面が共有）、`ScreenViewer`、`TerminalViewer`、`FileTransferClient`、`SourceQuery`、`HostProfiles`（信頼済み host と、それぞれに用いる client key） |
-| `platform/host` | `HostEngine`、`HostNetLoop`、`SharingHost`、`TerminalHost`、`FileHost`、`ViewerBroadcast` |
-| `platform/system` | Clock、random、PTY（ConPTY / forkpty）、host identity（`HostIdentity`）、client key（`ClientKeys`、`ClientIdentity`）、`authorized_keys` と `known_hosts` のファイル、最近の一覧（`RecentDevicesFile`）、デバイス名、autostart、keep-awake |
-| `platform/ffi` | Swift と Kotlin の app が呼び出す C の surface: `SettingsFfi`（settings、デバイス名）、`DevicesFfi`（最近のデバイス、許可済み client、本 host の fingerprint）、`HostProfileFfi`（信頼済み host）、`ClientKeyFfi`（client key）、および share、screen、terminal、send の各 surface |
+| `platform/auth` | `AuthNegotiation` —— 双方が用いる唯一の key 署名 handshake。host 側の 4 つの結果を持つ（3 節） |
+| `platform/client` | `HostLink`（dial、trust、auth、承認待ち、channel。すべての画面が共有）、`ScreenViewer`、`TerminalViewer`、`FileTransferClient`、`SourceQuery`、`HostProfiles`（fingerprint を key とする信頼済み host。名前と最後のアドレスを伴う） |
+| `platform/host` | `HostEngine`、`HostNetLoop`、`SharingHost`、`TerminalHost`、`FileHost`、`ViewerBroadcast`、`PairingInvite`（token を発行し、この host が表示する招待を構築する） |
+| `platform/system` | Clock、random、PTY（ConPTY / forkpty）、machine key（`HostIdentity`）、`authorized_keys` と `known_hosts` のファイル、待機中の要求（`AccessRequestsFile`）と有効な QR token（`PairingTokenFile`）、最近の一覧（`RecentDevicesFile`）、デバイス名、autostart、keep-awake |
+| `platform/ffi` | Swift と Kotlin の app が呼び出す C の surface: `SettingsFfi`（settings、デバイス名）、`DevicesFfi`（最近のデバイス、許可済み client、接続要求、本マシンの fingerprint と public key）、`HostProfileFfi`（信頼済み host）、`PairingFfi`（招待、QR モジュール、無効化）、および share、screen、terminal、send の各 surface |
 | `core/cli` | command line の文法とその JSON writer。入力は平文、出力は検証済みの command |
 | `client/<os>` | Capture、encode、decode、render、windowing、ダイアログ。protocol に関する要素は含まない |
 | `client/cli` | flag から session まで: GUI toolkit なしで host、connect、shell の起動を行う binary 1 つ。デスクトップ app と同じ OS ごとの media ライブラリを link する |
@@ -97,33 +99,50 @@ quiche がない場合は configure が失敗する。stub の binary では sha
 
 ## 3. 受け入れの判定: SSH と同様の key
 
-各マシンは初回起動時に ECDSA P-256 の host key を生成し（`HostIdentity`）、自動的に
-置き換えることはない。その SHA-256 SPKI ハッシュが利用者に表示される fingerprint である。
-TLS はこの key に基づく自己署名 certificate を使用する。client は自身の client key
-（`ClientKeys`）のいずれかで sign in する。生成した場合は Ed25519、OpenSSH または
-PKCS#8 のファイルから import した場合は Ed25519 または ECDSA P-256 である。host は
-`authorized_keys`（`AuthorizedKeys`。`ssh-ed25519 AAAA… label` または
-`ecdsa-sha2-nistp256 AAAA… label` の行を最大 128 行）に記載された public key のみを
-受け入れる。label は表示名であり、権限を意味することはない。network 越しに何かを承認
-することはない。passcode も、承認プロンプトも、未知の key を受け入れるスイッチも存在
-しない。
+各マシンは初回起動時に ECDSA P-256 の key を 1 つ生成し（`HostIdentity`、
+`host_key.pem`）、自動的に置き換えることはない。この 1 つの key が両方の役割における
+マシンそのものである。host は TLS を通じてこれを提示し、client はこれで sign in する。
+DER SubjectPublicKeyInfo の SHA-256 ハッシュが、Devices ページ、QR code、接続要求の一覧、
+`authorized_keys`、`known_hosts` のいずれでも利用者に表示される唯一の fingerprint である。
+TLS には X.509 certificate が必要なため、port を開くたびに `HostIdentity` がこの key を
+中心に自己署名 certificate を**メモリ上で**構築して quiche に渡す。何も書き込まれない。
+fingerprint は certificate ではなく SPKI をハッシュしたものなので、起動ごとに新しい
+certificate になっても誰かが固定した内容は何も変わらず、旧バージョンが保存していた
+`host_cert.pem` は読み取られることも必要とされることもない。host は `authorized_keys`
+（`AuthorizedKeys`。`ecdsa-sha2-nistp256 AAAA… label` の行を最大 128 行 —— 手で貼り
+付けた key のために Ed25519 の行も引き続き解析する）に記載された public key のみを
+受け入れる。label は表示名であり、権限を意味することはない。
 
-TLS の上位では、アプリケーション層の handshake（`AuthNegotiation`、auth version 6）が
+TLS の上位では、アプリケーション層の handshake（`AuthNegotiation`、auth version 7）が
 connection ごとに受け入れの可否を決定する。transport がこれを実行し、auth が完了して
 いない connection に対して host はアプリケーション層のデータを一切送信しない。
 
-1. QUIC/TLS が完了する。client は**何かを送信する前に**、host の key を `known_hosts`
-   と照合する（後述）。
-2. client は自身の public key とデバイス名を含む `AuthStart` を送信する。
-3. client は transcript —— ドメインのラベル、auth version、役割、この QUIC/TLS
-   connection から export した session の値、自身の public key、host の TLS
-   fingerprint（`core/auth/Transcript`）—— に署名し、host はそれを当該 key で検証する。
-   その key は `authorized_keys` に含まれていなければならない。
+1. QUIC/TLS が完了する。client は**何かを送信する前に**、host の key に対する trust を
+   確定する（`HostLink::SettleTrust`。後述）。
+2. client は `AuthStart` を送信する。`00 | u16 keyLen | key | u8 nameLen | name |
+   u8 tokenLen | token | 07` —— 自身の public key、デバイス名、QR code 経由で来た場合は
+   32 バイトの pairing token（`tokenLen` は 0 または 32）、最後に auth version。
+3. `HostAuth::Begin` は 4 つのうち 1 つの `AuthChallenge` を返す。
+   - key が `authorized_keys` にある → `Signature`。
+   - key が未知で、token が `pairing_tokens` の有効なエントリに一致する → key を client
+     の名前をラベルとして `authorized_keys` に追記し、token を消費し、応答は `Signature`。
+   - key が未知で、token が送られたが誤っている → 既存の limiter で送信元アドレスに失敗
+     1 回を課し（1 分に 3 回で 10 秒間ブロック）、以降は token を伴わない要求として扱う。
+   - key が未知で、使える token がない → 接続要求（名前、key、fingerprint、アドレス、
+     時刻）を `access_requests` に書き込み、応答は `AwaitingApproval`。connection は
+     現状の拒否と同様に閉じられる。host はクリックを待つ未 authenticate の接続を保持
+     しない。
+4. `Signature` に対して、client は transcript —— ドメインのラベル、auth version、役割、
+   この QUIC/TLS connection から export した session の値、自身の public key、host の
+   TLS fingerprint（`core/auth/Transcript`）—— に署名し、host はそれを当該 key で検証する。
 
 署名は 1 本の connection に束縛されるため、再接続の際には改めて署名する。0-RTT や
 session resumption は存在しない。host が保持する authenticate 待ちの connection は最大
 8 で、それぞれ 10 秒後に切断される。1 つの key と送信元 IP から 1 分以内に 3 回不正な
 署名があると、その組み合わせは 10 秒間ブロックされる（`AuthThrottle`）。
+`access_requests` は最大 16 件の要求を key ごとに 1 件（再要求はアドレスと時刻を更新
+する）、それぞれ 10 分間保持する。*Approve* は key をデバイスの名前とともに
+`authorized_keys` へ移し、*Deny* は行を削除して client には何も伝えない。
 
 受け入れは 1 本の QUIC connection に属するものであり、アドレスに属するものではない。その
 connection が閉じた時点で受け入れは取り消されるため、同じアドレスと port からの次の
@@ -133,14 +152,33 @@ connection は改めて証明を行う必要がある。handshake を開始済�
 Devices ページで client key を削除する（または `access remove`）と、その時点でその key が
 開いている connection も閉じられる。
 
-client 側では `known_hosts`（`TrustStore`）が host の key をアドレスと port ごとに固定し、
-各信頼済み host の名前と、その host に用いる client key を併せて保持する
-（`HostProfiles`）。これは SSH と同じ初回接続時の信頼（trust on first use）である。
-**未知の** key は *not trusted yet* として link を失敗させる。app はその後 *New host*
-ダイアログに fingerprint を表示し、利用者が *Trust and connect* を選ぶと
-`acceptNewHostKey` を付けて再接続する。CLI も `--accept-new-host-key` を指定した場合に
-限り同じ動作をする。key が**変化した**場合は回避手段のない失敗となり、その host を
-*Trusted hosts* から削除して改めて信頼する必要がある。
+client 側では `known_hosts`（`TrustStore`）が host の **fingerprint** を key とし、各
+エントリは host の名前、最後に応答したアドレス、初回・最終確認時刻を保持する
+（`HostProfiles`）。`HostLink::SettleTrust` は TLS が確立した時点で、相手が提示した key の
+fingerprint に対して一度実行される。
+
+- QR 招待から dial した場合: fingerprint は招待内のものと一致しなければならない。
+  一致は、応答したマシンが code を作ったマシンの private key を保持していることを意味
+  するため、host は黙って固定され、token が `AuthStart` で送られる。不一致は、その
+  アドレスで別の何かが応答していることを意味する。link は `InviteMismatch` で失敗し、
+  token は client から出ない。
+- 既に `known_hosts` にある場合: エントリの最後のアドレスを更新し（`TouchTrustedHost`）、
+  link は先へ進む —— host にどのアドレスで到達しても構わない。アドレスを key とする
+  ものはもう存在しないためである。
+- それ以外の場合: link は fingerprint を添えて *not trusted yet* として失敗する。app は
+  *New host* ダイアログを表示し、*Trust and connect* の後に `acceptNewHostKey` を付けて
+  再接続する。CLI は `--accept-new-host-key` を指定した場合に限り同じ動作をする。
+  `FindByEndpoint` がそのアドレスは以前別の信頼済み host として応答していたと告げる
+  場合、`PreviousOwnerWarningFor` がその host の名前と fingerprint をプロンプトに加える。
+  *changed key* という判定は存在しない。古いアドレスの新しい key は新しい host である。
+
+challenge が `AwaitingApproval` の場合、`HostLink` は同名の状態で待機し、
+`AwaitingApprovalLine` を表示し、recovery 中の link が既に用いている backoff で、最長
+`kDefaultApprovalWaitUs`（120 秒）または呼び出し元がキャンセルするまで再接続する。各
+再接続は完全な connection と新しい `AuthStart` であるため、所有者の *Approve* の後の
+最初の 1 回が `Signature` を受け取って完了する。期限を過ぎると link は
+`AuthResultCode::AwaitingApproval` で失敗し、その文言は利用者に *Approve* を求めて再度
+接続するよう伝える。
 
 ネットワーク上を流れるのは public key そのものであり、fingerprint 単体ではない。host は
 受け取った内容を自身でハッシュするため、他者の identity を名乗るには、なりすます側が
@@ -245,8 +283,10 @@ session が先に問題を検出した場合は `HostLink::RequestRedial` が再
 
 source の問い合わせ（`QuerySources`）は、同じ link を一度限りのブロッキング形式で使用
 する。UI は各種の要求（キー入力、resize）を command キューへ送る。未知の host key は
-fingerprint を添えて link を失敗させ、UI がそれを *New host* ダイアログに表示する。変化
-した host key は link を完全に失敗させる。terminal のウィンドウは escape sequence を解析しない。`core/terminal` が
+fingerprint を添えて —— そのアドレスが以前別の信頼済み host として応答していた場合は
+以前の所有者の警告も添えて —— link を失敗させ、UI がそれを *New host* ダイアログに
+表示する。この key を許可していない host は link を `AwaitingApproval` で待機させ、利用者
+がキャンセルできる間、UI はその status 行を poll する。terminal のウィンドウは escape sequence を解析しない。`core/terminal` が
 byte stream をセルのグリッドに変換し、ウィンドウはセルの描画とキーイベントの転送のみを
 行う。現時点では各ウィンドウが個別に link を保持している。同一の host に向けたすべての
 ウィンドウで受け入れ済みの link を共有することは想定済みの次の段階であり、`HostLink`
@@ -256,8 +296,8 @@ byte stream をセルのグリッドに変換し、ウィンドウはセルの�
 ## 6. host の見つけ方
 
 discovery は存在しない。network を scan するものはなく、host は平文の packet に一切
-応答しない。client が接続する先は、利用者が入力したアドレス、最近の host、または信頼済み
-host（`HostProfiles`）である。`SourceListResponder` は受け入れ済みの connection 上でのみ
+応答しない。client が接続する先は、利用者が入力したアドレス、最近の host、信頼済み
+host（`HostProfiles`）、または QR 招待内のアドレスである。`SourceListResponder` は受け入れ済みの connection 上でのみ
 `LIST_SOURCES` に応答する。この応答は `SOURCE_LIST` のヘッダフラグによって host の能力
 （input を受け取るか、terminal を共有するか）も示すため、client はウィンドウを開く前に、
 スマートフォンは閲覧のみであることを把握できる。source のレコードの後に、payload は host
@@ -271,19 +311,43 @@ FFI の `dh_list_sources` は host が応答したときにのみそこへ記録
 一覧を更新することはなくなり、`dh_recent_touch` は削除された。旧 `recent-devices.txt` は
 変換されずに削除される。
 
+QR code は唯一の out-of-band の経路であり、out-of-band のままである。host がそれを送信
+することはなく、所有者が見せ、誰かが画面から読み取るかリンクを貼り付ける。
+`deskhubp::BuildPairingInvite(port, bindIp, hostName)` はランダムな 32 バイトの token を
+発行し（`pairing_tokens` に 5 分の期限で保持。同時に有効なのは最大 4 つで、パネルを隠す
+か共有を停止すると `RevokePairingTokens` がすべて無効化する）、`core/net/PairingInvite`
+を整形する。テキストは `deskhub://pair/` に続けて、バイナリレコードの base64url ——
+version バイト、endpoint 数 `n`、host のアドレス最大 4 つ分の `n × (IPv4, port)`、
+32 バイトの fingerprint、32 バイトの token、長さ接頭辞付きの最大 32 バイトの host 名 ——
+である。レコードは 180 文字に制限されており、誤り訂正レベル M で version 10 以下の QR
+code に収まる。これはスマートフォンが腕の長さの距離からノート PC の画面を読み取れる
+大きさである。`core/qr/QrCode`（`EncodeQr`、および CLI の `share --qr` 向けの
+`RenderQrText`）が唯一の encoder であり、すべての client はそれが返すモジュールグリッド
+を描く。Android は `dh_qr_encode` を通じて描く。client 側の `ParsePairingInvite` が
+`HostLink` に endpoint、要求すべき fingerprint、送るべき token を与え、
+`dh_pairing_invite_address` は app にアドレス欄へ表示する最初の `ip:port` を与える。
+スキャンだけがプラットフォームごとの部分 —— Android は CameraX + ZXing、iOS は
+AVFoundation —— であり、どちらも decode したテキスト以外は何も返さない。
+
 ## 7. ディスク上のデータ
 
 すべてのデータは利用者の Deskhub フォルダ（`~/.deskhub`、`%USERPROFILE%\.deskhub`、
 iOS では App Group のコンテナ内の `.deskhub` フォルダ、Android では内部ストレージ。`DESKHUB_CONFIG_DIR` または
-CLI の `--config-dir` で変更できる）に置かれる。`host_key.pem` と `host_cert.pem`（host
-identity）、`client_key.pem` と `client_key.<name>.pem`（client key。Windows では DPAPI
-で保護）、`authorized_keys`（この host が受け入れる client key）、`known_hosts`（信頼
-済み host とその profile）、`ui-settings.txt`（デバイス名を含む）、`recent-hosts.txt`
-（アドレス、最終接続時刻、host の名前）、Linux では `portal-restore-token.txt`（選択した画面に対して
+CLI の `--config-dir` で変更できる）に置かれる。`host_key.pem`（唯一の machine key。
+TLS certificate は起動ごとにメモリ上で構築されるため、`host_cert.pem` はもう書き込まれ
+ず、残っていても無視される）、`authorized_keys`（この host が受け入れる client key）、
+`known_hosts`（fingerprint を key とする信頼済み host。名前と最後のアドレスを伴う）、
+`access_requests`（Approve または Deny を待つ接続要求 —— 名前、public key、アドレス、
+時刻。最大 16 件、それぞれ 10 分後に破棄）、`pairing_tokens`（現在有効な QR token と
+その期限）、`ui-settings.txt`（デバイス名を含む）、`recent-hosts.txt`（アドレス、最終
+接続時刻、host の名前）、Linux では `portal-restore-token.txt`（選択した画面に対して
 デスクトップが発行した token）、および実行ごとの log である。passcode はどこにも保存
-されない。POSIX ではディレクトリは `0700`、ファイルは `0600` で、atomic に書き込まれる。
-Windows では ACL が利用者本人、SYSTEM、Administrators のみを許可する。ファイル I/O は
-`platform/` に置き、解析処理とデータ構造は `core/` に置いて unit test を備える。
+されず、`client_key*.pem` も存在しない。旧バージョンが保持していたファイルは無視され、
+移行されない。POSIX ではディレクトリは `0700`、ファイルは `0600` で、atomic に書き込ま
+れる。Windows では ACL が利用者本人、SYSTEM、Administrators のみを許可する。iOS では
+app と broadcast extension がこのフォルダを共有しており、それによって extension の要求が
+app の一覧に届き、app の *Approve* が extension に届く。ファイル I/O は `platform/` に
+置き、解析処理とデータ構造は `core/` に置いて unit test を備える。
 
 viewer が送信したファイルは別の場所に保存される。host が選択したフォルダ
 （`ui-settings.txt` の `transfer_dir`。既定は利用者のホームディレクトリ直下の
@@ -298,9 +362,9 @@ Windows が受け付けない文字、予約デバイス名が除去される。
 
 | Suite | 実行環境 | 対象範囲 |
 | --- | --- | --- |
-| `make test` | オフライン、socket なし | `core/` の全体: wire、framing、FEC、session、VT emulator、settings、文字列、決定的な structured fuzzing |
-| `make test-platform` | loopback socket | 実際の QUIC handshake、end-to-end の key 署名による認証、host key の固定、ネットワーク越しの terminal host と viewer、実 shell に対する PTY、不正な署名による lockout |
-| `make test-integration` | loopback、capture/encode は模擬実装 | host↔client の session 一式: negotiation、ネットワーク越しの video、input、許可済み key による受け入れ、不正データへの耐性、および交差負荷下の遅延 —— 動作中の stream と並行してファイル転送、大量出力の terminal、キー入力を実行し、それぞれ観測された最大の停止時間で判定する |
+| `make test` | オフライン、socket なし | `core/` の全体: wire（`AuthStart` の token フィールドを含む）、framing、FEC、session、VT emulator、settings、文字列、決定的な structured fuzzing、および pairing の各部品 —— `Base64`、`PairingInvite` の往復と制限、`PairingTokens` の発行・消費・失効、`AccessRequests` の容量と失効、既知の encoding に対する `QrCode` |
+| `make test-platform` | loopback socket | 実際の QUIC handshake、end-to-end の key 署名による認証、fingerprint を key とする host の固定、`AccessRequestsFile`（要求の記録、承認、拒否）と `PairingTokenFile`（token の発行、1 回限りの引き換え、無効化）、実際の `HostAuth` を通じた承認と token による受け入れ、ネットワーク越しの terminal host と viewer、実 shell に対する PTY、不正な署名による lockout |
+| `make test-integration` | loopback、capture/encode は模擬実装 | host↔client の session 一式: negotiation、ネットワーク越しの video、input、許可済み key による受け入れ、他の golden message と並ぶ `AUTH_START_TOKEN` の wire vector、不正データへの耐性、および交差負荷下の遅延 —— 動作中の stream と並行してファイル転送、大量出力の terminal、キー入力を実行し、それぞれ観測された最大の停止時間で判定する |
 | fuzz target | PR ごとに各 target 30 秒、nightly は各 15 分 | wire、H.264、reassembly、terminal のバイト列、UI テキストの parser、および host 側と viewer 側の session state machine |
 | `make test-perf` | release build、オフラインと loopback | hot path を実測する: `core_perf` は純 C++ の経路、`platform_perf` は loopback 上の実際の QUIC を対象とする。いずれも単位あたりの allocation 回数、入力 4 倍時のコスト、当該マシンで記録した baseline からの乖離によって判定する |
 
@@ -338,14 +402,22 @@ scaling の 2 つの判定とともに実行する（共有 runner には時間�
   して扱う。ホストは接続中の認証状態を定期的に再確認するため、別プロセスが
   ファイルを置き換えた場合も、プロセス内の generation 更新なしに接続を取り消せる。
 
-- **ホストのピンは一つのアドレスとポートに属する**: ある endpoint で信頼した
-  TLS ホスト鍵は、別の endpoint で同じ鍵が使われても自動的には認可しない。
-  新しいアドレスとポートは接続前に明示的にピン留めする必要がある。
+- **信頼はアドレスではなく鍵に従う**: `known_hosts` はホストの fingerprint を key と
+  し、その隣のアドレスは最後に応答したものにすぎない。以前の規則 —— ピンは一つの
+  `ip:port` に属し、そこで鍵が変わればボタンのない完全な遮断 —— は、DHCP のリース変更
+  のたびに攻撃のように見せ、利用者にホストを反射的に削除して再信頼する習慣を教えて
+  しまった。それこそ遮断が防ごうとしていた習慣である。新しいアドレスで到達した信頼済み
+  ホストは今では単に接続し、既知のアドレスにある*別の*鍵はそのまま、このクライアントが
+  一度も会っていないマシンとして扱われる。以前そこで応答していたホストの名前を示す警告
+  付きの *New host* ダイアログである（`PreviousOwnerWarningFor`）。この警告は遮断が
+  担っていた唯一の信号 —— 「このアドレスにいるものは以前のものではない」—— を保ちつつ、
+  古いホストを *Trusted hosts* に手を付けずに残す。したがって新しいホストを信頼する
+  ことは変更をクリックで通過することにはならず、fingerprint を示した初対面にしかならない。
 
 - **新しいクライアント許可リストは完全な public key を保持する**:
   `authorized_keys` は長さを制限した OpenSSH public key 行を受け入れ、不正な行や
   重複鍵を拒否する。これが唯一の許可リストであり、ファイルがなければ誰も受け入れない。
-  `known_hosts` は TLS pin とともに endpoint ごとの別名と選択した client identity を
+  `known_hosts` は fingerprint とともに各信頼済みホストの別名と最後のアドレスを
   保存する。設定の書き込みにはプロセス間のファイルロックと原子的な置換を使う。
   Service は `SetConfigDir` または `DESKHUB_CONFIG_DIR` で、ログ用とは別の設定
   ディレクトリを指定できる。
@@ -367,28 +439,39 @@ scaling の 2 つの判定とともに実行する（共有 runner には時間�
   メモリ上の表は最大 64 組を保持し、認証成功時に失敗回数を消去する。
 
 - **認証はプロトコルバージョン 3 の中で独立したバージョンを持つ**：`AuthStart` は公開鍵の
-  前に互換性のための 0 バイトを残し、クライアント名の後に認証バージョン 6 を置く。
-  旧ホストは開始メッセージを読んで旧 challenge を返せるため、新クライアントは非互換を
-  検出して接続を閉じる。新ホストはバージョン接尾辞のない開始メッセージを拒否し、
-  `VersionMismatch` を送って接続を閉じる。challenge、response、result はバージョン付きの
-  署名データだけを運ぶ。
+  前に互換性のための 0 バイトを残し、認証バージョンを最後に置く —— バージョン 6 には
+  なかった pairing token のフィールドの後で、今は 7 である: `00 | u16 keyLen | key |
+  u8 nameLen | name | u8 tokenLen | token | 07`。旧ホストは開始メッセージを読んで旧
+  challenge を返せるため、新クライアントは非互換を検出して接続を閉じる。新ホストは
+  末尾のバイトが 7 でない開始メッセージを拒否し、`VersionMismatch` を送って接続を閉じる。
+  7.0.x のデバイスと 7.1 のデバイスが中途半端に動くのではなくバージョン不一致を報告する
+  のはこのためである。`AuthMode` に `AwaitingApproval` が加わり、
+  `AuthResultCode::AwaitingApproval` はクライアント側にのみ存在し、時間切れになった待機の
+  結果を表す。challenge、response、result はバージョン付きのデータだけを運ぶ。
 
-- **初回接続時は信頼、変更時は完全に遮断**：未知のホスト鍵は SSH と同様に一度だけ利用者に
-  示し、利用者が受け入れた場合にのみ固定する（CLI では `--accept-new-host-key`）。変化した
-  鍵は拒否し、受け入れのボタンは一切設けない。鍵の変化をクリックで通過させるプロンプトは、
-  攻撃であるその一回もクリックで通過させるよう利用者を慣らしてしまう。そのため通過する唯一の
-  方法は、ホストを *Trusted hosts* から削除することであり、これは問題を検出した接続とは
-  切り離された意図的な操作である。
+- **初回接続時は信頼、変更時は警告**：未知のホスト鍵は SSH と同様に一度だけ利用者に
+  示し、利用者が受け入れた場合にのみ固定する（CLI では `--accept-new-host-key`）。同じ
+  アドレスで以前応答していたものと異なる鍵は、クリックで通過する*変更*ではない ——
+  新しい鍵を受け入れるボタンも `HostKeyChanged` という結果ももう存在しない —— この
+  クライアントが一度も信頼したことのないホストであり、以前の所有者の名前を添えた通常の
+  *New host* ダイアログで出会う。古いホストのピンは残るため、そのクリックで何かが
+  上書きされることはない。利用者はただ、fingerprint を目の前にして、もう 1 台のマシンを
+  信頼しただけである。
 
 - **デバイス名は一つ**：Settings → General → *Device name*（空の場合は OS の名前）は、
   マシンが持つ唯一の名前である。ホストは viewer に表示して受け入れたクライアントに送信し、クライアントは接続時に送信し、
-  マシンがコピーするすべての公開鍵のラベルにもなる（`<device name>` または
-  `<device name> (<key name>)`）。Client ページから独自の名前欄を削除したのは、ホストが
-  目にする名前と、その `authorized_keys` にあるラベルを一致させるためである。
+  マシンがコピーする公開鍵のラベルにもなり、ホストがそのマシンの要求を承認するか QR
+  token で受け入れた際に `authorized_keys` に書き込むラベルでもある。Client ページから
+  独自の名前欄を削除したのは、ホストが目にする名前と、その `authorized_keys` にある
+  ラベルを一致させるためである。
 
 - **旧データは移行しない**：passcode、以前の `paired_devices` の一覧とその有効化マーカーは
   変換しない —— いずれもクライアントが鍵を保持していることを何ら証明しない —— 残った
-  ファイルは削除する。読み取れない `authorized_keys` や `known_hosts` の内容を推測で補う
+  ファイルは削除する。7.0.x の `client_key.pem`、`client_key.<name>.pem`、`host_cert.pem`
+  は単に無視する。machine key は既に `host_key.pem` だったため fingerprint は変わらず、
+  クライアントの旧 Ed25519 identity は新しい identity に引き継がれない —— ホストの所有者が
+  Approve または QR で machine key を一度許可する。読み取れない `authorized_keys` や
+  `known_hosts` の内容を推測で補う
   ことはない。読み取れない間、ホストは全員を拒否し、クライアントはすべてのホストを拒否し、
   次の変更時にファイルを新たに書き込む。
 
@@ -700,15 +783,17 @@ scaling の 2 つの判定とともに実行する（共有 runner には時間�
   log に出力する。デスクトップの client は OS の display 変更シグナルでも選択一覧を更新
   する。これにより、後からディスプレイを接続した場合も一覧が正しく保たれる。
 - **msquic や ngtcp2 ではなく quiche を採用する。** Android と iOS の双方で本番環境での
-  実績がある唯一の QUIC ライブラリである。BoringSSL を同梱しており、これが host
-  identity と client key の署名にも利用できるため、暗号ライブラリを 2 つ抱える必要がない。
+  実績がある唯一の QUIC ライブラリである。BoringSSL を同梱しており、これが machine key、
+  そのメモリ上の certificate、transcript の署名にも利用できるため、暗号ライブラリを 2 つ
+  抱える必要がない。
 - **connection migration は使用しない。** 候補となるライブラリのいずれにも、利用可能な
   client 側の対応がなかった。reconnect と reattach の機構（tmux と同様の方式であり、
   モバイルのバックグラウンド動作のために元より必要であった）がこの要件を満たしている。保持されている shell は一覧（`TermList`）して新しい client から id で resume することもできる。
 - **Ed25519 ではなく ECDSA P-256 を使用する。** BoringSSL のサーバ側は、quiche を通じて
-  Ed25519 で TLS handshake に署名しない。保存済みの証明書と秘密鍵が未対応、または
-  一致しない場合、host の起動を失敗させて両ファイルを保持する。両ファイルが存在しない
-  場合に限り新しい host identity を作成するため、既存の host fingerprint は勝手に変わらない。
+  Ed25519 で TLS handshake に署名せず、今は 1 つの key が TLS と client の署名の両方を
+  担わなければならない。保存済みの key が P-256 でない場合、ファイルに触れずに起動を
+  失敗させる。`host_key.pem` が存在しない場合に限り新しい identity を作成するため、既存の
+  fingerprint は勝手に変わらない。
 - **quiche は事前に build し、FetchContent は使用しない。**
   `scripts/build-quiche.sh` が `third_party/quiche/` の下に rust target ごとの
   ディレクトリと、共有の `include/` を生成する。後者には quiche.h と、boring-sys が
@@ -810,10 +895,60 @@ scaling の 2 つの判定とともに実行する（共有 runner には時間�
   同様に揃える。`_ITERATOR_DEBUG_LEVEL=0`、`/U_DEBUG`、`/RTC1` の除去である。release の
   CRT には `_CrtDbgReport` がなく、run-time check にも対応していないためである。不一致
   があれば多数の LNK2038 で終わる。
-- **passcode、承認プロンプト、LAN scan は削除した。** 4 桁のコードは開いた port 上の
-  短い秘密であり、承認プロンプトは誤った人物がクリックしうるものであり、平文の discovery
-  への応答は network 上の誰に対しても host の存在を知らせてしまう。所有者が意図して
-  コピーする key が、この 3 つすべてを置き換える。
+- **passcode と LAN scan は削除したままである。** 4 桁のコードは開いた port 上の短い
+  秘密であり、平文の discovery への応答は network 上の誰に対しても host の存在を知らせて
+  しまう。7.1 はどちらも復活させない —— QR code は画面から読み取るものであり、要求は
+  TLS handshake の完了後にのみ書き込まれる。
+
+- **承認は authenticate 済みの経路に乗り、秘密ではなく identity を示す。** 2026-09-28 に
+  承認プロンプトへ向けられた反対は、誤った人物が誤ったマシンのためにクリックしうると
+  いうものだった —— passcode のプロンプトは誰でも入力しえたコードを表示していた。接続
+  要求は入力されたものを何も示さない。デバイスの名前、実際に保持している key の
+  fingerprint（host が TLS 上で受け取った key をハッシュしたもの）、送信元アドレスで
+  あり、*Approve* は行の位置ではなくその fingerprint に対して作用する。平文で流れるもの
+  はなく、推測できるものもない。所有者が誤りうるのは想定していないマシンを承認すること
+  だけであり、それを確認できるようにするために行が存在する。host は待機中も connection
+  を開いたままにしない —— 要求はファイルのエントリであり、client が再接続する —— ため、
+  要求の flood は 16 個の socket ではなく 16 行を費やすだけである。
+
+- **QR code は host の fingerprint と 1 回限りの token を運び、`AuthStart` の前に固定
+  する。** token は 5 分間盗む価値のある秘密であるため、client は、code に印字された
+  fingerprint の private key を保持していることを TLS handshake で既に証明したマシンに
+  対してのみそれを使う。code 内のアドレスにいる中間者はその key を提示できないため、
+  client は `InviteMismatch` で停止し、token はネットワークを渡らない。host 側では token
+  を定数時間で比較し、初回使用で消費し、5 分で失効させ、それを表示したパネルとともに
+  消し、誤った推測は不正な署名を数えるのと同じ limiter で送信元アドレスに課す —— 1 分に
+  3 回、その後 10 秒間ブロック —— ため、2^256 の可能性が高速に試されることはない。
+
+- **要求と token はファイルに置き、別の process が作用できるようにする。** iOS では
+  broadcast extension が `AuthStart` を受け取る一方で、app が QR code と要求の一覧を描く。
+  CLI では `share` が動作している間に、別の terminal で `access approve` が入力される。
+  `access_requests` と `pairing_tokens` は共有の設定フォルダに、`authorized_keys` と同じ
+  lock と atomic な置換の下で置かれ、`AccessRequestsGeneration` が poll する側に安価な
+  変更カウンタを与え、*Approve* は一方のファイルから他方への移動にすぎず、次の
+  `AuthStart` がそれを読み戻す。
+
+- **マシンごとに 1 つの key、certificate はメモリ上。** マシンごとに 2 つの key があると、
+  fingerprint が 2 つ、*My keys* ページ、import と passphrase のコード、key と食い違い
+  うる保存済み certificate、そしてどこでどの client key を使うかを記憶しなければならない
+  `known_hosts` を意味した。`host_key.pem` の 1 つの ECDSA P-256 key が host 側の TLS と
+  client 側の transcript 署名を担い、TLS が要求する X.509 は起動ごとにその周りに構築
+  され、決して書き込まれない。fingerprint は常に certificate ではなく SPKI の SHA-256
+  だったため、アップグレードした host はすべての client が固定していた fingerprint を
+  保った。client の identity は変わった —— Ed25519 から machine key へ —— ため、すべての
+  client は貼り付けではなく Approve かスキャンで、改めて一度許可される。
+
+- **QR encoder は本プロジェクトで実装している。** `core/` はサードパーティのヘッダを
+  許さず、プラットフォームごとの QR ライブラリでは 1 つの code の描画が 5 通り、CLI 用に
+  6 通り目が必要になる。`core/qr/QrCode` は誤り訂正レベル M のバイトモード encoder で、
+  既知の encoding に対してオフラインでテストされ、すべての client はそれが返すモジュール
+  グリッドの四角を塗るだけである。decode は逆の事情 —— カメラと高速な検出器が必要 ——
+  であるため、2 つのスマートフォンはプラットフォーム自身のもの（Android は CameraX +
+  ZXing、iOS は AVFoundation）を使い、文字列を返す。
+
+- **Base64 は 1 箇所に置く。** OpenSSH の key 行と招待レコードの両方が必要とし、2 つの
+  コピーは既に食い違い始めていた。`core/net/Base64` が標準と URL-safe の両アルファベット
+  に対する唯一の encoder と decoder であり、独自のテストを備える。
 - **VT emulator は本プロジェクトで実装している。** 5 つの client すべてで利用でき、かつ
   適切なライセンスを備えたプラットフォーム標準の terminal ウィジェットは存在しない。
   自前で実装することで、terminal の挙動をオフラインでテスト可能にし、各プラットフォーム
@@ -834,9 +969,10 @@ scaling の 2 つの判定とともに実行する（共有 runner には時間�
   現在、client 側で dial または authenticate を行うコードは `HostLink` のみである。
   service は自身の `Chan` を開き、専用の inbox キューを受け取り、自身の thread で処理
   する。terminal の backoff を伴う再接続は link に移され、recovery を必要とするすべての
-  画面がこれを継承する。trust の規則も 1 箇所に集約されている。未知の key は利用者
-  がそれを信頼する（`acceptNewHostKey`）まで link を失敗させ、変化した key は常に link を
-  失敗させる。
+  画面がこれを継承する —— 承認待ちも同じ再接続を再利用する —— trust の規則も 1 箇所に
+  集約されている。未知の key は利用者がそれを信頼する（`acceptNewHostKey`）まで link を
+  失敗させ、招待はそれが名指しする key だけを固定し、既知の key はどのアドレスでも
+  認識される。
 - **`HostLink` は `SendMessage` ではなく `Send` で送信する。** Windows では platform 層
   の背後にある OS ヘッダが `SendMessage` を `SendMessageA` のマクロとして定義しており、
   `HostLink.cpp` ではそれがクラス宣言の後、メソッド定義の前に位置していた。その結果

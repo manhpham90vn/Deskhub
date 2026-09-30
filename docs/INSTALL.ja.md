@@ -234,7 +234,8 @@ Android と同様に、iPhone と iPad の host は view-only に限られる。
 `deskhub-cli` では画面の共有や remote shell の起動をコマンドで行える。スクリプトや
 SSH からも利用可能。Windows と Linux の `connect` はリモート画面のウィンドウを開く。
 macOS で画面を見る場合はデスクトップ app を使う。コマンド一覧は `deskhub-cli help`
-で確認できる。settings、client key、許可済み client、信頼済み host は app と共通である。
+で確認できる。settings、マシンの key、許可済み client、接続要求、信頼済み host は app と
+共通である。
 
 | プラットフォーム | ファイル |
 | --- | --- |
@@ -275,24 +276,32 @@ app を使用する。
 ## 🔒 画面を共有する前に
 
 session が運ぶ内容 —— video、キー入力、mouse、clipboard、terminal のトラフィック ——
-はすべて **QUIC/TLS** 上を通り、アクセスは SSH と同じ仕組みで行われる。デバイスが
-connect できるようにするには、次のようにする。
+はすべて **QUIC/TLS** 上を通り、アクセスは SSH と同じ仕組みで行われる。host は自分の
+リストにある key を持つデバイスだけを通し、すべてのデバイスは key を 1 つ持つ。デバイスを
+そのリストに載せる方法は 3 つあり、どれか 1 つで足りる。
 
-1. connect する側のデバイスで **Devices** → *When this machine is the client* →
-   **My keys** を開き、*Copy public key* を押す（CLI: `deskhub-cli key public --name default`）。
-2. host で **Devices** → *When this machine is the host* → **Clients allowed to
-   connect to this machine** を開き、*Allow* を押してその key を貼り付ける（CLI:
-   `deskhub-cli access add --stdin`）。
-3. アドレスで Connect する。初回は **New host** ダイアログが host の key の fingerprint
-   を表示する。host の Devices ページの **This machine's host key** と照合したうえで、
-   *Trust and connect* を押す。以後、その host は **Trusted hosts** に表示される。
+- **QR code をスキャンする。** host が共有している間に、アドレス一覧の横の **Show QR
+  code** を押す。スマートフォンでは Client ページの **Scan QR code** を押して画面に向ける。
+  それ以外のデバイスでは、code の下のリンクをコピーしてアドレス欄に貼り付ける。デバイスは
+  一度の手順で信頼・許可・接続される。
+- **要求を承認する。** デバイスで host のアドレスを入力し *Connect* を押す。host の Host
+  ページに **Connection requests** として、名前、key の fingerprint、アドレスとともに表示
+  される。**Approve** を押せば、デバイスは次の試行で接続される —— デバイスは 2 分間、
+  自動的に再試行を続ける。
+- **key を貼り付ける。** デバイスで **Devices** → **Copy public key**。host で **Devices**
+  → **Clients allowed to connect to this machine** → *Allow*、貼り付けて完了。
 
-各手順を app と CLI の両方で説明し、key の追加、スクリプト、取り消しと入れ替えも扱う
+アドレスで初めて Connect すると、**New host** ダイアログが host の key の fingerprint を
+表示する。host の Devices ページの **This machine's host key** と照合したうえで、*Trust
+and connect* を押す。QR code は fingerprint を含むため、このダイアログを省く。以後、その
+host は **Trusted hosts** に表示され、アドレスが変わっても信頼されたままである。
+
+各方法を app と CLI の両方で説明し、スクリプトと取り消しも扱う
 [Key とアクセス](#-key-とアクセス) を参照。
 
-network 越しに何かを承認することはなく、Deskhub が network を scan することもない。
-信頼済み host の key が変わった場合、接続は即座に拒否される。key が変わった理由を把握
-している場合に限り、その host を *Trusted hosts* から削除し、改めて信頼すること。
+passcode も、未知のマシンを受け入れるスイッチも存在しない。自分の *Approve*、自分が
+見せた QR code、または自分が貼り付けた key なしに接続できる者はいない。Deskhub が
+network を scan することもない。
 
 Deskhub は**信頼できる network** または **VPN** 上で使い、**UDP 47777 を
 port-forward しないこと**。Encrypt は session の内容を守るが、host への初回の
@@ -305,59 +314,88 @@ Connect では、fingerprint を照合しない限り、提示された key が�
 
 ## 🔑 Key とアクセス
 
-Deskhub は SSH と同じく key ペアでサインインする。connect する各デバイスは **client key**
-を持ち、各 host は **host key** を持つ。host は自分のリストにある client key だけを通し、
-client は key を信頼済みの host にだけ connect する。操作はすべて **Devices** ページにあり、
-*When this machine is the host* と *When this machine is the client* に分かれている。
-以下の各手順には対応する `deskhub-cli` コマンドがある。app と CLI は同じファイルを読むので、
-一方での変更はもう一方にも反映される。
+Deskhub は SSH と同じく key ペアでサインインする。すべてのマシンは Deskhub の初回起動時に
+作られる **1 つの key** を持ち、その key が、共有中でも connect 中でも、そのマシンそのもの
+である。connect するときに照合する fingerprint と、host が受け入れる際に保存する public
+key は同じ key である。host は自分のリストにある key だけを通し、client は key を信頼済みの
+host にだけ connect する。操作はすべて **Devices** ページにあり、*When this machine is the
+host* と *When this machine is the client* に分かれている。以下の各手順には対応する
+`deskhub-cli` コマンドがある。app と CLI は同じファイルを読むので、一方での変更はもう一方
+にも反映される。
 
 ### 自分の key
 
-自分の key は **Devices** → *When this machine is the client* → **My keys** にある。
-private の側がマシンの外に出ることはない。
-
-- **`default` key。** app は Devices ページを初めて開いたときに `default` という key を
-  作成し、CLI はどこかへ初めて connect したとき、または
-  `deskhub-cli key public --name default` で表示したときに作成する。ほとんどの場合、ほかの
-  key は必要ない。
-- **key を追加する。** *New key* を押して名前を付ける（CLI:
-  `deskhub-cli key generate --name NAME`）。ある host のアクセスだけをほかに影響を与えずに
-  取り消したい場合は、別の key を使う。
-- **既存の key を使う。** *Import key…* を押し、private key のファイルを選んで名前を付け、
-  ファイルが暗号化されていれば passphrase を入力する（CLI:
-  `deskhub-cli key import --name NAME --file PATH`。passphrase を標準入力から読むには
-  `--passphrase-stdin` を付ける）。Deskhub が読めるのは、Ed25519 または ECDSA P-256 の
-  key を含む OpenSSH（`ssh-keygen`）形式と PKCS#8 形式のファイルである。RSA には対応して
-  いない。passphrase は import 時にファイルを開くためだけに使われ、保存されず、host へ
-  送られることもない。
-- **自分の public key。** key の横の *Copy public key* を押す（CLI:
-  `deskhub-cli key public --name NAME`）。`ssh-ed25519 AAAA… laptop` のような 1 行が得られ
-  る。末尾のラベルはこのデバイスの名前で、**Settings** → *General* → **Device name** で
-  設定する。host の所有者はこれで誰の key かを見分けられる。この行を host の所有者に送る。
-  共有しても安全である。
-- **key を削除する。** 横の *Delete* を押す。`default` key は削除できず、信頼済み host が
-  まだ使っている key も削除できない。先にその host を別の key に切り替えること。削除した
-  private key は復元できない。CLI では `deskhub-cli key list` で key を一覧し、
-  `deskhub-cli key delete --name NAME` で削除できる（同じ制約が適用される）。
+**Devices** → *When this machine is the host* → **This machine's host key** に key の
+fingerprint `SHA256:…` が *Copy* ボタン付きで表示される。自分に connect してくる人が照合
+するのはこれである。その横の **Copy public key**（CLI: `deskhub-cli key public`）は
+`ecdsa-sha2-nistp256 AAAA… laptop` のような 1 行をコピーする。末尾のラベルはこのデバイスの
+名前で、**Settings** → *General* → **Device name** で設定する。host の所有者はこれで誰の
+key かを見分けられる。QR code も要求も都合が悪いときに host の所有者へ渡すのがこの行で
+ある。共有しても安全である。private の側がマシンの外に出ることはなく、生成や import は
+不要で、key が勝手に置き換えられることもない。`host_key.pem` を削除するとマシンは新しい
+identity になる。host には改めて受け入れてもらう必要があり、このマシンを信頼していた
+デバイスには新しい host として見える。
 
 ### デバイスの接続を許可する
 
-host で次のようにする。
+判断するのは host の所有者で、方法は 3 つある。どれを使っても、デバイスは **Devices** →
+*When this machine is the host* → **Clients allowed to connect to this machine** に名前を
+ラベルとして表示される。横の *Remove* で外せる。*Remove every client* は確認のうえで
+リストを空にする。
 
-1. connect する人に public key の行をもらう（[自分の key](#自分の-key) を参照）。
+**QR code で接続する** —— 最も速く、fingerprint の照合が不要な唯一の方法。host が共有
+している間に、アドレス一覧の横の **Show QR code** を押す。code には host のアドレスと
+port、key の fingerprint、名前、そして 5 分間有効なランダムな 1 回限りの token が含まれる。
+
+- スマートフォンやタブレットでは、Client ページを開いて **Scan QR code** を押す。初回は
+  system がカメラの permission を求める。Deskhub がカメラを使うのはここだけで、frame は
+  端末上で decode し、何も保存しない。system のカメラやメッセージから
+  `deskhub://pair/…` リンクを開いても同じ結果になる。
+- デスクトップを含むどのデバイスでも、code の下に表示されるリンクをコピーしてアドレス欄に
+  貼り付け、*Connect* を押す（CLI: `deskhub-cli connect 'deskhub://pair/…'`。`sources`、
+  `shell`、`send` もこのリンクを受け取る）。
+
+デバイスは、応答したマシンが code に印字された key を保持していることを確認する ——
+そのアドレスで別のマシンが応答した場合は停止し、QR code はそのマシンのものではないと
+告げる —— その後 host を信頼し、token を送り、一度の手順で受け入れられて接続される。
+各 code は一度だけ使える。**Hide QR code** を押すか共有を停止すると、誰も使っていなくても
+無効になる。すでに許可されているデバイスは、host の現在のアドレスを取得するためだけに
+code をスキャンすることもできる。
+
+**接続要求を承認する** —— デバイスが同じ部屋にないとき。
+
+1. デバイスで host のアドレス（`192.168.1.10`、host が 47777 以外を使う場合は
+   `192.168.1.10:PORT`）を入力し、*Connect* を押す。**New host** ダイアログを後述のとおり
+   確認する。ページには host の所有者の承認を待っている旨が表示され、2 分間自動的に
+   再試行を続ける。*Cancel* で中止できる。
+2. host では、Host ページの **Connection requests** にそのデバイスが表示される —— 名前、
+   fingerprint の先頭部分、アドレスに、**Approve** と **Deny** が添えられる。fingerprint が
+   デバイスの Devices ページのものと一致し、アドレスがデバイスのあるはずの場所であること
+   を確認したうえで、*Approve* を押す。デバイスは次の試行で接続される。*Deny* は要求を
+   破棄する。デバイスには、時間内に誰も承認しなかったとだけ伝わる。
+3. 要求は 10 分間残り、host は最大 16 件を保持する。デバイスが諦めた後に承認した場合は、
+   もう一度 *Connect* を押すだけでよい。
+
+command line では、`deskhub-cli access requests`（スクリプト向けには `--json` を付ける）
+が待機中の要求を一覧し、`deskhub-cli access approve --fingerprint SHA256:…` が受け入れ、
+`deskhub-cli access deny --fingerprint SHA256:…` が破棄する。実行中の `deskhub-cli share`
+は、新しい要求が届くたびに、別の terminal に貼り付けるための approve コマンドとともに
+表示する。
+
+**key を貼り付ける** —— key を自分で運びたいとき。
+
+1. connect する人に、その Devices ページで **Copy public key** を押してもらい（[自分の
+   key](#自分の-key) を参照）、その行を送ってもらう。
 2. **Devices** → *When this machine is the host* → **Clients allowed to connect to this
    machine** を開き、その行を貼り付けて *Allow* を押す。受け付けるのは Ed25519 と
    ECDSA P-256 の public key だけである。
-3. key がラベル付きでリストに表示される。key の横の *Remove* で外せる。*Remove every
-   client* は確認のうえでリストを空にする。
 
 command line では、その行を `access add` に pipe する。
 
 ```sh
-deskhub-cli key public --name default                          # client で
+deskhub-cli key public                                         # デバイスで
 deskhub-cli access add --stdin                                 # host で: 貼り付けて Ctrl-D
-deskhub-cli key public --name default | ssh me@host deskhub-cli access add --stdin
+deskhub-cli key public | ssh me@host deskhub-cli access add --stdin
 deskhub-cli access list                                        # host で
 deskhub-cli access remove --fingerprint SHA256:…               # host で
 ```
@@ -366,89 +404,107 @@ deskhub-cli access remove --fingerprint SHA256:…               # host で
 
 ### 初めて connect する
 
-1. client で host のアドレス（`192.168.1.10`、host が 47777 以外を使う場合は
-   `192.168.1.10:PORT`）を入力し、*Connect* を押す。
-2. **New host** ダイアログが host key の fingerprint（`SHA256:…`）を表示する。
+QR code はこれを代わりに行う。アドレスで初めて connect する場合は SSH と同じ流れになる。
+
+1. client で host のアドレスを入力し、*Connect* を押す。
+2. **New host** ダイアログが host の key の fingerprint（`SHA256:…`）を表示する。その
+   アドレスが以前は信頼済みの別の host のものだった場合、ダイアログはその旨を告げ、その
+   host の名前を示す —— 既知のアドレスにある別の key は別のマシンなので、どのマシンが
+   応答しているのかを確かめてから先へ進むこと。
 3. host で **Devices** → *When this machine is the host* → **This machine's host key**
    を開く（*Copy* でクリップボードにコピーできる）。2 つの fingerprint を、すでに信頼して
    いる経路 —— 対面、電話、相手本人と分かっているチャットなど —— で照合する。
 4. 一致すれば *Trust and connect* を押す。一致しなければ *Cancel* を押す。
 
-その host は、使用する client key とともに **Trusted hosts** に表示され、以後の接続では
-ダイアログが出ない。
+その host は名前、fingerprint、最後に応答したアドレスとともに **Trusted hosts** に表示
+される。信頼はアドレスではなく key に従う。host のアドレスが変わったら、新しいアドレスを
+入力して connect すればよい —— ダイアログも新たな承認も不要で、一覧は次回に向けて新しい
+アドレスを記憶する。
 
 **host を事前に固定する。** CLI を使えば、初回接続の前に host key を保存でき、ダイアログは
 不要になる。
 
 ```sh
 deskhub-cli host-key public                                    # host で
-deskhub-cli host add office --address 192.168.1.10 --identity default --host-key-stdin
+deskhub-cli host add office --address 192.168.1.10 --host-key-stdin
 ```
 
 2 つ目のコマンド（client 側）に host の行を貼り付け、Ctrl-D を押す。`office` は自由に
 決められる alias で、`connect office`、`sources office`、`shell office`、
 `send office FILE` のいずれでも使える。`deskhub-cli host list` は保存済みのすべての host
 を表示する。app で信頼した host も含まれ、それらには `192-168-1-10-47777` のようにアドレス
-から作られた alias が付く。`host update ALIAS` はアドレス（`--address`）、client key
-（`--identity`）、固定した host key（`--host-key-stdin`）を変更し、`host remove ALIAS` は
-その host を削除する。app は新しい host に `default` で connect する。ある host に別の key
-を使うには、ここで `--identity` で設定する。app もその key を使うようになる。
+から作られた alias が付く。`host update ALIAS` はアドレス（`--address`）または固定した
+host key（`--host-key-stdin`）を変更し、`host remove ALIAS` はその host を削除する。
+`deskhub-cli trust forget` も fingerprint、alias、または最後のアドレスを指定して同じことを
+行う。
 
 ### スクリプトと command line
 
 - **未知の host は拒否される。** `sources`、`connect`、`shell`、`send` は key が保存されて
   いない host とは通信せず、代わりにその fingerprint を表示する。host と照合したうえで
-  `--accept-new-host-key` を付けて再実行すると保存される。このフラグが保存するのは初めて
-  見た key だけで、key が *変わった* host は常に拒否される。
-- **key を選ぶ。** `--identity NAME` はそのコマンドで使う client key を選ぶ。指定しない
-  場合は保存済み host の key が使われ、それがない host では `default` が使われる。
+  `--accept-new-host-key` を付けて再実行すると保存される。アドレスの代わりに招待リンクを
+  渡した場合は、リンクから host を固定するのでフラグは不要である。
+- **承認を待つ。** このマシンをまだ許可していない host には承認を求める。`connect`、
+  `shell`、`send`、`sources` はその旨を 1 行表示し、所有者が *Approve* を押すまで最長
+  2 分間待ち、誰も押さなければ理由を示して失敗する。
+- **code を表示する。** `deskhub-cli share --qr` は、スマートフォンが terminal から
+  スキャンできるように、QR code をブロック文字で招待リンクとともに表示する。
 - **別の設定を使う。** `--config-dir DIR`（コマンドの前後どちらにも置ける）または環境変数
-  `DESKHUB_CONFIG_DIR` で、key、許可済み client、信頼済み host、settings を別のディレクトリ
-  から読ませられる。service account やテスト環境に便利である。
-- **exit code。** スクリプトは exit code で、接続の拒否や host key の変更をほかの失敗と
-  区別できる。各コードは `BUILD.ja.md` の
-  [Command line client](BUILD.ja.md#command-line-client) に記載している。一覧系のコマンドは
-  `--json` に対応している。
+  `DESKHUB_CONFIG_DIR` で、key、許可済み client、要求、信頼済み host、settings を別の
+  ディレクトリから読ませられる。service account やテスト環境に便利である。
+- **7.1 で削除されたもの。** `key generate`、`key import`、`key delete`、`key list`、
+  `key public --name`、`devices identities`、`--identity`、`host add --identity` はなくなった。
+  マシンごとに key は 1 つである。exit code `5`（"the host key changed"）もなくなった。
+  別の key は未知の host として扱われるためである。
+- **exit code。** スクリプトは exit code で、接続の拒否をほかの失敗と区別できる。各コードは
+  `BUILD.ja.md` の [Command line client](BUILD.ja.md#command-line-client) に記載している。
+  一覧系のコマンドは `--json` に対応している。
 
-### key の取り消しと入れ替え
+### デバイスのアクセスを取り消す
 
-**デバイスのアクセスを取り消す。** host でその key の横の *Remove* を押すか、
+host でその key の横の *Remove* を押すか、
 `deskhub-cli access remove --fingerprint SHA256:…` を実行する。そのデバイスが開いている
-session はすぐに終了し、key が再び許可されるまで connect できない。
+session はすぐに終了し、改めて受け入れるまで —— 次の要求を承認する、QR code を見せる、
+または key を貼り付ける —— connect できない。
 
-**client key を入れ替える。**
-
-1. 新しい key を作る。*New key*、または `deskhub-cli key generate --name NAME`。
-2. その key を受け入れるべき各 host で、public key を許可してもらう。
-3. 信頼済み host が新しい key を使うようにする。`deskhub-cli host update ALIAS --identity NAME`、
-   または host を削除してから `host add … --identity NAME` で追加し直す。一度 connect して
-   確認する。
-4. host の所有者に古い key を外してもらい、このマシンで古い key を *Delete* する。
-
-**host の key が変わったとき。** Deskhub は connect を拒否し、"This host's key has changed"
-と表示する。host が Deskhub を入れ直したか settings ディレクトリを失った場合に起こる。
-あるいは、そのアドレスで別のマシンが応答している可能性もある。key が変わった理由を把握して
-いる場合に限り、その host を **Trusted hosts** から削除し（*Remove*、または
-`deskhub-cli host remove ALIAS`）、改めて connect して、初回と同じように新しい fingerprint
-を照合する。CLI では `host update ALIAS --host-key-stdin` で新しい key を直接固定できる。
+**既知のアドレスで別の key が応答したとき。** host が Deskhub を入れ直したか settings
+フォルダを失った場合に起こる。あるいは、別のマシンがそのアドレスを引き継いだ場合もある。
+Deskhub は拒否しない。そのマシンを一度も会ったことのないものとして扱い、以前そこで応答して
+いた host の名前を示す警告とともに **New host** ダイアログを表示する。理由を把握している
+場合に限り信頼すること。以前の host は *Remove*（または `deskhub-cli host remove ALIAS`）
+するまで **Trusted hosts** に残る。CLI では `host update ALIAS --host-key-stdin` で alias を
+新しい key に直接固定し直せる。
 
 ### 以前の Deskhub から移行する
 
-移行されるものはない。以前の Deskhub の passcode とペアリング済みデバイスのリストは引き
-継がれない。上の手順どおりに key を作成またはコピーし、各 host で許可し、各 host を改めて
-信頼すること。両方のマシンにこのバージョンが必要である。どちらか一方でも以前の Deskhub
-だと connect できず、"That machine uses an incompatible authentication version" として
-拒否される。
+**7.0.x から。** 両方のマシンに 7.1 が必要である。どちらか一方でも 7.0.x の Deskhub だと
+connect できず、"That machine uses an incompatible authentication version" として拒否
+される。各マシンはすでに持っていた key と fingerprint をそのまま保つので、信頼していた
+host は信頼されたままである。変わるのはデバイスがサインイン*する*key で、これが同じ
+マシンの key になったため、すべてのデバイスを改めて受け入れる必要がある —— *Approve*
+1 回、QR code のスキャン 1 回、または key の貼り付け 1 回。7.0.x が書き込んだ
+`client_key*.pem` と `host_cert.pem` は無視される。その内容は読み取られず移行もされない
+ので、削除してよい。
+
+**6.x 以前から。** 移行されるものはない。passcode とペアリング済みデバイスのリストは引き
+継がれない。上の手順どおりに各デバイスを受け入れ、各 host を改めて信頼すること。
 
 ## 🆘 問題が起きたとき
 
 - **接続先が見つからない** —— 2 台が同じ network（または同じ Tailscale tailnet）にあり、
   host 側で UDP 47777 が開いている必要がある。
-- **"This device's key is not authorized on that machine yet"** —— host がこの client key を
-  記載していない。host の Devices ページでその public key を許可する
-  （[デバイスの接続を許可する](#デバイスの接続を許可する) を参照）。以前の Deskhub で許可
-  されていた client は、改めて許可する必要がある。
-- **"This host's key has changed"** —— [key の取り消しと入れ替え](#key-の取り消しと入れ替え) を参照。
+- **"Waiting for the owner of … to approve this device"** —— host がこのデバイスをまだ
+  記載していない。所有者に、Host ページの **Connection requests** で *Approve* を押して
+  もらうか、QR code を見せてもらうか、自分の key を貼り付けてもらう
+  （[デバイスの接続を許可する](#デバイスの接続を許可する) を参照）。7.0.x で許可されて
+  いたデバイスは、改めて受け入れる必要がある。
+- **"The owner of that machine did not approve this device in time"** —— *Approve* なしに
+  2 分が経過した。要求は host に 10 分間残るので、依頼したうえで再び *Connect* を押す。
+- **"The machine that answered is not the one that made this QR code"** —— code に含まれる
+  アドレスで別のものが応答している。host で code を再表示してもう一度スキャンする。繰り
+  返し起こる場合は、どのマシンがそのアドレスを持っているかを確認する。
+- **すでに信頼している host に対する New host ダイアログ** —— そのアドレスで別の key が
+  応答している。[デバイスのアクセスを取り消す](#デバイスのアクセスを取り消す) を参照。
 - **"That machine uses an incompatible authentication version"** —— どちらかが以前の
   Deskhub を使っている。両方のマシンを更新する。[以前の Deskhub から移行する](#以前の-deskhub-から移行する)
   を参照。

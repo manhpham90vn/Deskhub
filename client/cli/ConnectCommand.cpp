@@ -59,7 +59,6 @@ ExitCode RunConnect(const Command& command) {
     request.hostLabel = command.address;
     request.displayName =
         command.deviceName ? *command.deviceName : deskhubp::SessionDeviceName();
-    request.clientIdentityName = command.identityName.value_or("");
     request.control = command.connect.control && reply.caps.acceptsInput;
     request.audio = command.connect.audio.value_or(settings.playAudio) && reply.caps.audio;
     for (size_t index : pick.indices) request.sources.push_back(offered[index]);

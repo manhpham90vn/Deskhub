@@ -9,9 +9,11 @@
 #include <quiche.h>
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <cstddef>
 #include <cstring>
+#include <filesystem>
 #include <map>
 #include <string>
 #include <string_view>
@@ -21,6 +23,7 @@
 #include "deskhub/protocol/Wire.h"
 #include "deskhubp/diag/Log.h"
 #include "deskhubp/system/Clock.h"
+#include "deskhubp/system/AppDataFile.h"
 #include "deskhubp/system/HostIdentity.h"
 #include "deskhubp/system/Random.h"
 
@@ -72,12 +75,50 @@ sockaddr_in ToSockAddr(const NetAddr& addr) {
     return out;
 }
 
+void FillRandomConnId(uint8_t* out, size_t len);
+
+class TransientCertificateFile {
+public:
+    explicit TransientCertificateFile(const std::string& certPem) {
+        if (certPem.empty()) return;
+        std::array<uint8_t, 8> random{};
+        FillRandomConnId(random.data(), random.size());
+        constexpr std::string_view hex = "0123456789abcdef";
+        std::string name = "transport_cert.";
+        for (uint8_t byte : random) {
+            name += hex[byte >> 4];
+            name += hex[byte & 15];
+        }
+        name += ".pem";
+        if (!WriteAppDataFileAtomic(name, certPem)) return;
+        path_ = AppDataFilePath(name).string();
+    }
+
+    ~TransientCertificateFile() noexcept {
+        if (path_.empty()) return;
+        std::error_code ignored;
+        std::filesystem::remove(std::filesystem::path(path_), ignored);
+    }
+
+    TransientCertificateFile(const TransientCertificateFile&) = delete;
+    TransientCertificateFile& operator=(const TransientCertificateFile&) = delete;
+
+    const std::string& Path() const {
+        return path_;
+    }
+
+private:
+    std::string path_{};
+};
+
 quiche_config* MakeConfig(const QuicSettings& settings, bool server) {
     quiche_config* cfg = quiche_config_new(QUICHE_PROTOCOL_VERSION);
     if (cfg == nullptr) return nullptr;
 
     if (server) {
-        if (quiche_config_load_cert_chain_from_pem_file(cfg, settings.certPemPath.c_str()) < 0 ||
+        const TransientCertificateFile certificate(settings.certPem);
+        if (certificate.Path().empty() ||
+            quiche_config_load_cert_chain_from_pem_file(cfg, certificate.Path().c_str()) < 0 ||
             quiche_config_load_priv_key_from_pem_file(cfg, settings.keyPemPath.c_str()) < 0) {
             LOGE("quic: could not load the host certificate or key");
             quiche_config_free(cfg);

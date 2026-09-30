@@ -4,7 +4,6 @@
 #include "deskhubp/diag/LogFile.h"
 #include "deskhubp/system/AppDataFile.h"
 #include "deskhubp/system/AuthorizedKeysFile.h"
-#include "deskhubp/system/ClientIdentity.h"
 #include "deskhubp/system/Clock.h"
 #include "deskhubp/system/ConfigFileLock.h"
 #include "deskhubp/system/TrustStoreFile.h"
@@ -146,8 +145,13 @@ void TestUnknownSettingsKeysAreIgnored() {
         "a failed atomic write leaves the previous settings intact");
 }
 
-bool IsAuthorized(const deskhubp::ClientIdentity& identity) {
+bool IsAuthorized(const deskhubp::HostIdentity& identity) {
     return deskhubp::IsClientKeyAuthorized(identity.publicKey);
+}
+
+deskhubp::HostIdentity FreshIdentity() {
+    ForgetHostIdentity();
+    return deskhubp::LoadOrCreateHostIdentity();
 }
 
 bool DamageAuthorizedKeys(const std::string& valid) {
@@ -164,8 +168,8 @@ void TestADamagedAuthorizedKeysFileDeniesThenStartsFresh() {
         return;
     }
 
-    const auto laptop = deskhubp::GenerateClientIdentity("laptop");
-    const auto phone = deskhubp::GenerateClientIdentity("phone");
+    const auto laptop = FreshIdentity();
+    const auto phone = FreshIdentity();
     Check(laptop.Valid() && phone.Valid(), "two client keys are created in the isolated store");
     if (!laptop.Valid() || !phone.Valid()) return;
 
@@ -226,8 +230,8 @@ void TestAuthorizedClientsAreListedAndForgotten() {
         return;
     }
 
-    const auto laptop = deskhubp::GenerateClientIdentity("laptop");
-    const auto phone = deskhubp::GenerateClientIdentity("phone");
+    const auto laptop = FreshIdentity();
+    const auto phone = FreshIdentity();
     Check(laptop.Valid() && phone.Valid(), "two client keys are created in the isolated store");
     if (!laptop.Valid() || !phone.Valid()) return;
 
@@ -245,10 +249,10 @@ void TestAuthorizedClientsAreListedAndForgotten() {
     const auto empty = deskhubp::ListAuthorizedClients();
     Check(empty && empty->empty(), "a missing authorized_keys is an empty list");
 
-    Check(deskhubp::RememberAuthorizedKey(deskhubp::ClientPublicKeyText(laptop) + " work laptop"),
+    Check(deskhubp::RememberAuthorizedKey(deskhubp::IdentityPublicKeyText(laptop) + " work laptop"),
         "a labelled public key is saved");
     Check(GrantClientKey(phone), "a second key is saved");
-    Check(!deskhubp::RememberAuthorizedKey(deskhubp::ClientPublicKeyText(phone)),
+    Check(!deskhubp::RememberAuthorizedKey(deskhubp::IdentityPublicKeyText(phone)),
         "a duplicate public key is not stored twice");
     const auto clients = deskhubp::ListAuthorizedClients();
     Check(clients && clients->size() == 2, "both clients are listed");
@@ -336,8 +340,8 @@ void TestConcurrentEditsNeverLoseAnEntry() {
         "and every key is in the file afterwards, none overwritten by the other writer");
 
     const size_t hostsAdded = RunWritersTogether([](size_t writer, size_t entry) {
-        return deskhubp::RememberTrustedHost(SyntheticEndpoint(writer, entry), "host",
-            SyntheticFingerprint(writer, entry), 1);
+        return deskhubp::RememberTrustedHost(SyntheticFingerprint(writer, entry), "host",
+            SyntheticEndpoint(writer, entry), 1);
     });
     Check(hostsAdded == expected, "every concurrent host pin write reports success");
     const auto hosts = deskhubp::TryLoadTrustStore();
@@ -346,10 +350,11 @@ void TestConcurrentEditsNeverLoseAnEntry() {
     for (size_t writer = 0; writer < kWritersPerStore && hosts; ++writer)
         for (size_t entry = 0; entry < kEntriesPerWriter; ++entry)
             allPinned = allPinned &&
-                        hosts->Check(SyntheticEndpoint(writer, entry),
-                            SyntheticFingerprint(writer, entry)) ==
-                            deskhub::TrustVerdict::Trusted;
-    Check(allPinned, "each endpoint keeps the key its own writer pinned");
+                        hosts->Check(SyntheticFingerprint(writer, entry)) ==
+                            deskhub::TrustVerdict::Trusted &&
+                        hosts->Find(SyntheticFingerprint(writer, entry))->endpoint ==
+                            SyntheticEndpoint(writer, entry);
+    Check(allPinned, "each key keeps the address its own writer pinned");
 }
 
 void TestAnotherProcessHoldingTheFileLockIsWaitedFor() {
@@ -394,15 +399,15 @@ void TestKnownHostsFailuresNeverGrantTrust() {
 
     const auto missing = deskhubp::TryLoadTrustStore();
     Check(missing && missing->Size() == 0, "a missing known_hosts reads as an empty list");
-    Check(deskhubp::CheckTrustedHost(endpoint, pinned) == deskhub::TrustVerdict::Unknown,
+    Check(deskhubp::CheckTrustedHost(pinned) == deskhub::TrustVerdict::Unknown,
         "and trusts nobody");
 
-    Check(deskhubp::RememberTrustedHost(endpoint, "host", pinned, 1), "a host is pinned");
+    Check(deskhubp::RememberTrustedHost(pinned, "host", endpoint, 1), "a host is pinned");
     const std::string valid = deskhubp::ReadAppDataFile(deskhubp::kTrustStoreFileName);
     Check(deskhubp::WriteAppDataFile(deskhubp::kTrustStoreFileName, valid + "damaged row\n"),
         "known_hosts is damaged behind the app's back");
     Check(!deskhubp::TryLoadTrustStore(), "a reload reports the damage instead of a partial list");
-    Check(deskhubp::CheckTrustedHost(endpoint, pinned) == deskhub::TrustVerdict::Unknown,
+    Check(deskhubp::CheckTrustedHost(pinned) == deskhub::TrustVerdict::Unknown,
         "and even the valid row no longer vouches for the host");
 
     const auto target = deskhubp::AppDataFilePath(deskhubp::kTrustStoreFileName);
@@ -410,15 +415,15 @@ void TestKnownHostsFailuresNeverGrantTrust() {
     std::filesystem::remove(target, error);
     std::filesystem::create_directory(target, error);
     Check(!error, "a directory blocks replacement of known_hosts");
-    Check(!deskhubp::RememberTrustedHost(endpoint, "host", pinned, 1),
+    Check(!deskhubp::RememberTrustedHost(pinned, "host", endpoint, 1),
         "a failed known_hosts write reports failure");
     Check(!deskhubp::TryLoadTrustStore() &&
-              deskhubp::CheckTrustedHost(endpoint, pinned) == deskhub::TrustVerdict::Unknown,
+              deskhubp::CheckTrustedHost(pinned) == deskhub::TrustVerdict::Unknown,
         "and an unreadable store trusts nobody");
 
     std::filesystem::remove(target, error);
-    Check(deskhubp::RememberTrustedHost(endpoint, "host", pinned, 1) &&
-              deskhubp::CheckTrustedHost(endpoint, pinned) == deskhub::TrustVerdict::Trusted,
+    Check(deskhubp::RememberTrustedHost(pinned, "host", endpoint, 1) &&
+              deskhubp::CheckTrustedHost(pinned) == deskhub::TrustVerdict::Trusted,
         "once the path is writable again the pin is saved and read back");
 }
 

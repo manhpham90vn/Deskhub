@@ -10,7 +10,6 @@
 #include "deskhubp/ffi/SendFfi.h"
 #include "deskhubp/client/FileUpload.h"
 #include "deskhubp/system/Clock.h"
-#include "deskhubp/system/ClientIdentity.h"
 #include "deskhubp/system/FileStore.h"
 #include "deskhubp/system/HostIdentity.h"
 #include "deskhubp/system/TrustStoreFile.h"
@@ -82,7 +81,7 @@ struct HostRig {
     bool Start(const deskhubp::HostIdentity& identity, const std::filesystem::path& dir) {
         sock.SetRecvTimeout(1);
         deskhubp::QuicSettings settings;
-        settings.certPemPath = identity.certPath;
+        settings.certPem = deskhubp::TransportCertificatePem(identity);
         settings.keyPemPath = identity.keyPath;
         if (!sock.Listen(settings, kFileTestPort, "127.0.0.1")) return false;
 
@@ -140,7 +139,7 @@ struct ViewerRig {
         if (!sock.WaitEstablished(host, kAuthTimeoutMs)) return false;
 
         deskhubp::ClientAuthConfig auth;
-        auth.identity = deskhubp::LoadOrCreateHostIdentity("file-test-viewer");
+        auth.identity = deskhubp::LoadOrCreateHostIdentity();
         auth.hostFingerprint = hostKey;
         auth.clientName = "file-test-viewer";
         if (!GrantClientKey(auth.identity))
@@ -416,7 +415,7 @@ void TestABatchCrossesARealConnection() {
     const std::filesystem::path source = Scratch("send");
     const std::filesystem::path landing = Scratch("land");
 
-    const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity("file-test-host");
+    const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity();
     HostRig host;
     Check(host.Start(identity, landing), "the host takes files in");
 
@@ -454,7 +453,7 @@ void TestAHostThatTakesNoFilesRefuses() {
     const std::filesystem::path source = Scratch("send-refused");
     const std::filesystem::path landing = Scratch("land-refused");
 
-    const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity("file-test-host");
+    const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity();
     HostRig host;
     Check(host.Start(identity, landing), "the host starts");
     host.files.SetAccepting(false);
@@ -483,7 +482,7 @@ void TestAHostThatStopsMidBatchSaysWhy() {
     const std::filesystem::path source = Scratch("send-stopped");
     const std::filesystem::path landing = Scratch("land-stopped");
 
-    const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity("file-test-host");
+    const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity();
     HostRig host;
     Check(host.Start(identity, landing), "the host takes files in");
 
@@ -516,7 +515,7 @@ void TestTheSendSurfaceTheClientPageDrives() {
     const std::filesystem::path source = Scratch("ffi-send");
     const std::filesystem::path landing = Scratch("ffi-land");
 
-    const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity("file-test-host");
+    const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity();
     HostRig host;
     Check(host.Start(identity, landing), "a host takes files in");
 
@@ -535,10 +534,10 @@ void TestTheSendSurfaceTheClientPageDrives() {
     Check(dh_send_check(paths, 1, problem, int(sizeof(problem))) == 1, "a real file passes");
 
     const std::string address = std::string("127.0.0.1:") + std::to_string(kFileTestPort);
-    const auto clientKey = deskhubp::LoadOrCreateClientIdentity();
+    const auto clientKey = deskhubp::LoadOrCreateHostIdentity();
     Check(clientKey.Valid() && GrantClientKey(clientKey),
         "the sender public key is authorized");
-    Check(deskhubp::RememberTrustedHost(address, address, identity.fingerprint,
+    Check(deskhubp::RememberTrustedHost(identity.fingerprint, "file-host", address,
               NowUnixSeconds()),
         "the host public key is pinned");
     Check(dh_send_start("nonsense", "page", paths, 1) == nullptr,
@@ -583,19 +582,20 @@ void TestTheSendSurfaceTheClientPageDrives() {
     host.Shutdown();
 }
 
-void TestASenderRejectsAChangedHostKey() {
-    std::printf("[files] a changed host key stops the send without a prompt...\n");
+void TestASenderRefusesAnUntrustedHost() {
+    std::printf("[files] an untrusted host key stops the send without a prompt...\n");
     const std::filesystem::path source = Scratch("send-key-change");
     const std::filesystem::path landing = Scratch("land-key-change");
 
-    const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity("file-test-host");
+    const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity();
     HostRig host;
     Check(host.Start(identity, landing), "the host takes files in");
 
     const std::string endpoint = std::string("127.0.0.1:") + std::to_string(kFileTestPort);
+    Check(deskhubp::ForgetTrustedHost(identity.fingerprint) || true, "the host is not trusted");
     deskhub::Fingerprint stale;
     stale.bytes.fill(0x5A);
-    Check(deskhubp::RememberTrustedHost(endpoint, "127.0.0.1", stale, NowUnixSeconds()),
+    Check(deskhubp::RememberTrustedHost(stale, "someone-else", endpoint, NowUnixSeconds()),
         "another machine's key is on record for the host's address");
 
     const std::vector<uint8_t> bytes = Pattern(deskhub::kMaxFileChunkBytes + 11, 4);
@@ -613,42 +613,32 @@ void TestASenderRejectsAChangedHostKey() {
         return progress.finished;
     };
     Check(WaitUntil(settled, 20000), "the sender settles inside the deadline");
-    Check(progress.state == DHSendFailed, "and fails on the changed key");
+    Check(progress.state == DHSendFailed, "and fails on the untrusted key");
     std::error_code ec;
     Check(std::filesystem::is_empty(landing, ec), "before a byte is offered");
-
-    char fingerprint[96] = {};
-    Check(dh_send_fingerprint(send, fingerprint, int(sizeof(fingerprint))) > 0,
-        "the new fingerprint is there to show");
-    Check(std::string(fingerprint) == deskhub::FormatFingerprint(identity.fingerprint),
-        "and it is the host's real key");
-
-    Check(!dh_send_accept_key(nullptr), "a null handle accepts nothing");
-    Check(!dh_send_accept_key(send), "a connection-time call cannot accept the new key");
     dh_send_stop(send);
 
     Check(!std::filesystem::exists(landing / "guarded.bin"), "no file is sent");
-    Check(deskhubp::CheckTrustedHost(endpoint, stale) ==
-              deskhub::TrustVerdict::Trusted,
-        "the configured pin is not silently changed");
+    Check(deskhubp::CheckTrustedHost(stale) == deskhub::TrustVerdict::Trusted,
+        "the other machine's pin is not silently changed");
+    Check(deskhubp::CheckTrustedHost(identity.fingerprint) == deskhub::TrustVerdict::Unknown,
+        "and the host stays untrusted");
+    deskhubp::ForgetTrustedHost(stale);
 
     host.Shutdown();
 }
 
-void TestTheDesktopSendSurfaceRejectsTheChangedKey() {
+void TestTheDesktopSendSurfaceRefusesTheUntrustedHost() {
     std::printf("[files] the desktop send surface fails without a trust question...\n");
     const std::filesystem::path source = Scratch("send-key-view");
     const std::filesystem::path landing = Scratch("land-key-view");
 
-    const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity("file-test-host");
+    const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity();
     HostRig host;
     Check(host.Start(identity, landing), "the host takes files in");
 
     const std::string endpoint = std::string("127.0.0.1:") + std::to_string(kFileTestPort);
-    deskhub::Fingerprint stale;
-    stale.bytes.fill(0x3C);
-    Check(deskhubp::RememberTrustedHost(endpoint, "127.0.0.1", stale, NowUnixSeconds()),
-        "another machine's key is on record for the host's address");
+    deskhubp::ForgetTrustedHost(identity.fingerprint);
 
     const std::vector<uint8_t> bytes = Pattern(2048, 6);
     const std::filesystem::path file = WriteFile(source, "window.bin", bytes);
@@ -668,7 +658,6 @@ void TestTheDesktopSendSurfaceRejectsTheChangedKey() {
 
     const deskhub::ui::TransferView asked = client.View();
     Check(asked.failed && !asked.keyChanged, "the view shows a failure without a key question");
-    Check(!client.AcceptKeyAndRetry(), "the old approval action cannot retry the batch");
     client.Stop();
 
     Check(!std::filesystem::exists(landing / "window.bin"), "no file is sent");
@@ -706,6 +695,6 @@ void RunFileTransferPlatformTests() {
     TestABatchCrossesARealConnection();
     TestAHostThatTakesNoFilesRefuses();
     TestAHostThatStopsMidBatchSaysWhy();
-    TestASenderRejectsAChangedHostKey();
-    TestTheDesktopSendSurfaceRejectsTheChangedKey();
+    TestASenderRefusesAnUntrustedHost();
+    TestTheDesktopSendSurfaceRefusesTheUntrustedHost();
 }

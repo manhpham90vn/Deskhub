@@ -5,6 +5,7 @@
 
 #include "deskhub/media/SourceLabel.h"
 #include "deskhub/net/Ipv4.h"
+#include "deskhub/net/PairingInvite.h"
 #include "deskhub/ui/Strings.h"
 
 namespace deskhub::cli {
@@ -192,12 +193,21 @@ FlagResult ApplyConnectionFlag(Command& command, const Flag& flag, Cursor& curso
         command.acceptNewHostKey = true;
         return FlagResult::Handled;
     }
-    return ApplyTextFlag(command, flag, cursor, "--identity", command.identityName);
+    return ApplyBoundedFlag(command, flag, cursor, "--approval-wait", 1, kMaxApprovalWaitSeconds,
+        command.approvalWaitSeconds);
 }
 
 bool TakeAddress(Command& command, std::string_view token) {
     std::string host;
     uint16_t port = command.port;
+    if (IsPairingInvite(token)) {
+        if (!ParsePairingInvite(token)) {
+            command.error = ui::kInviteInvalid;
+            return false;
+        }
+        command.pairingInvite = std::string(ui::TrimAscii(token));
+        return true;
+    }
     if ((command.verb == Verb::Connect || command.verb == Verb::Sources ||
             command.verb == Verb::Shell || command.verb == Verb::Send) &&
         !token.empty() && token.find(':') == std::string_view::npos &&
@@ -329,16 +339,6 @@ void ParseDevices(Command& command, Cursor& cursor) {
         command.devices = DevicesAction::List;
     } else if (action == "public") {
         command.devices = DevicesAction::Public;
-        if (More(cursor) && !IsFlagToken(Look(cursor))) command.keyName = std::string(Take(cursor));
-    } else if (action == "identities") {
-        command.devices = DevicesAction::Identities;
-    } else if (action == "generate") {
-        command.devices = DevicesAction::Generate;
-        if (!More(cursor) || IsFlagToken(Look(cursor))) {
-            command.error = NeedsAction(Verb::Devices, "generate NAME");
-            return;
-        }
-        command.keyName = std::string(Take(cursor));
     } else if (action == "add") {
         command.devices = DevicesAction::Add;
         if (!More(cursor) || IsFlagToken(Look(cursor))) {
@@ -346,35 +346,13 @@ void ParseDevices(Command& command, Cursor& cursor) {
             return;
         }
         command.target = std::string(Take(cursor));
-    } else if (action == "import") {
-        command.devices = DevicesAction::Import;
-        if (!More(cursor) || IsFlagToken(Look(cursor))) {
-            command.error = NeedsAction(Verb::Devices, "import PRIVATE_KEY_FILE");
-            return;
-        }
-        command.target = std::string(Take(cursor));
-        while (More(cursor)) {
-            if (Look(cursor) == "--passphrase-stdin") {
-                command.keyPassphraseStdin = true;
-                Take(cursor);
-            } else if (Look(cursor) == "--name") {
-                Take(cursor);
-                if (!More(cursor) || IsFlagToken(Look(cursor))) {
-                    command.error = "--name needs a value";
-                    return;
-                }
-                command.keyName = std::string(Take(cursor));
-            } else {
-                break;
-            }
-        }
     } else if (action == "forget") {
         bool forgetAll = false;
         if (!TakeForgetTarget(command, cursor, forgetAll)) return;
         command.devices = forgetAll ? DevicesAction::ForgetAll : DevicesAction::Forget;
     } else {
         command.error = NeedsAction(Verb::Devices,
-            "list, public, identities, generate NAME, add PUBLIC_KEY, import PRIVATE_KEY_FILE, forget FINGERPRINT, forget all");
+            "list, public, add PUBLIC_KEY, forget FINGERPRINT, forget all");
         return;
     }
     ParseNoArgVerb(command, cursor);
@@ -425,9 +403,6 @@ void ParseTrust(Command& command, Cursor& cursor) {
             const FlagResult name = ApplyTextFlag(command, flag, cursor, "--name", command.deviceName);
             if (name == FlagResult::Failed) return;
             if (name == FlagResult::Handled) continue;
-            const FlagResult identity = ApplyTextFlag(command, flag, cursor, "--identity", command.identityName);
-            if (identity == FlagResult::Failed) return;
-            if (identity == FlagResult::Handled) continue;
             command.error = UnknownOption(flag.name, command.verb);
             return;
         }
@@ -450,60 +425,12 @@ void ParseKey(Command& command, Cursor& cursor) {
         command.verb = Verb::Help;
         return;
     }
-    if (!More(cursor) || IsFlagToken(Look(cursor))) {
-        command.error = "key needs generate, import, public, delete, or list";
+    if (!More(cursor) || IsFlagToken(Look(cursor)) || Take(cursor) != "public") {
+        command.error = "key needs public";
         return;
     }
-    const std::string_view action = Take(cursor);
-    if (action == "list")
-        command.devices = DevicesAction::Identities;
-    else if (action == "generate")
-        command.devices = DevicesAction::Generate;
-    else if (action == "import")
-        command.devices = DevicesAction::Import;
-    else if (action == "public")
-        command.devices = DevicesAction::Public;
-    else if (action == "delete")
-        command.devices = DevicesAction::DeleteKey;
-    else {
-        command.error = "key needs generate, import, public, delete, or list";
-        return;
-    }
-    while (More(cursor)) {
-        const Flag flag = SplitFlag(Take(cursor));
-        if (WantsHelp(flag)) {
-            command.helpFor = Verb::Devices;
-            command.verb = Verb::Help;
-            return;
-        }
-        const FlagResult global = ApplyGlobalFlag(command, flag, cursor);
-        if (global == FlagResult::Failed) return;
-        if (global == FlagResult::Handled) continue;
-        if (flag.name == "--passphrase-stdin" && !flag.hasInlineValue &&
-            command.devices == DevicesAction::Import) {
-            command.keyPassphraseStdin = true;
-            continue;
-        }
-        if (flag.name == "--name" && command.devices != DevicesAction::Identities) {
-            if (!ValueOf(flag, cursor, command.keyName, command.error)) return;
-            continue;
-        }
-        if (flag.name == "--file" && command.devices == DevicesAction::Import) {
-            if (!ValueOf(flag, cursor, command.target, command.error)) return;
-            continue;
-        }
-        command.error = UnknownOption(flag.name, Verb::Devices);
-        return;
-    }
-    if (command.devices == DevicesAction::Generate && command.keyName.empty())
-        command.error = "key generate needs --name NAME";
-    if (command.devices == DevicesAction::Import &&
-        (command.keyName.empty() || command.target.empty()))
-        command.error = "key import needs --name NAME and --file PATH";
-    if (command.devices == DevicesAction::Public && command.keyName.empty())
-        command.error = "key public needs --name NAME";
-    if (command.devices == DevicesAction::DeleteKey && command.keyName.empty())
-        command.error = "key delete needs --name NAME";
+    command.devices = DevicesAction::Public;
+    ParseNoArgVerb(command, cursor);
 }
 
 void ParseAccess(Command& command, Cursor& cursor) {
@@ -513,8 +440,10 @@ void ParseAccess(Command& command, Cursor& cursor) {
         command.verb = Verb::Help;
         return;
     }
+    constexpr const char* kActions =
+        "access needs add, list, requests, approve, deny, remove, or clear";
     if (!More(cursor) || IsFlagToken(Look(cursor))) {
-        command.error = "access needs add, list, remove, or clear";
+        command.error = kActions;
         return;
     }
     const std::string_view action = Take(cursor);
@@ -522,14 +451,23 @@ void ParseAccess(Command& command, Cursor& cursor) {
         command.devices = DevicesAction::Add;
     else if (action == "list")
         command.devices = DevicesAction::List;
+    else if (action == "requests")
+        command.devices = DevicesAction::Requests;
+    else if (action == "approve")
+        command.devices = DevicesAction::Approve;
+    else if (action == "deny")
+        command.devices = DevicesAction::Deny;
     else if (action == "remove")
         command.devices = DevicesAction::Forget;
     else if (action == "clear")
         command.devices = DevicesAction::ForgetAll;
     else {
-        command.error = "access needs add, list, remove, or clear";
+        command.error = kActions;
         return;
     }
+    const bool wantsFingerprint = command.devices == DevicesAction::Forget ||
+                                  command.devices == DevicesAction::Approve ||
+                                  command.devices == DevicesAction::Deny;
     while (More(cursor)) {
         const Flag flag = SplitFlag(Take(cursor));
         if (WantsHelp(flag)) {
@@ -545,15 +483,16 @@ void ParseAccess(Command& command, Cursor& cursor) {
             command.target = "-";
             continue;
         }
-        if (command.devices == DevicesAction::Forget && flag.name == "--fingerprint") {
+        if (wantsFingerprint && flag.name == "--fingerprint") {
             if (!ValueOf(flag, cursor, command.target, command.error)) return;
             continue;
         }
         command.error = UnknownOption(flag.name, Verb::Devices);
         return;
     }
-    if ((command.devices == DevicesAction::Add || command.devices == DevicesAction::Forget) &&
-        command.target.empty()) command.error = "access add needs --stdin; access remove needs --fingerprint";
+    if ((command.devices == DevicesAction::Add || wantsFingerprint) && command.target.empty())
+        command.error =
+            "access add needs --stdin; access approve, deny and remove need --fingerprint";
 }
 
 void ParseHost(Command& command, Cursor& cursor) {
@@ -609,11 +548,6 @@ void ParseHost(Command& command, Cursor& cursor) {
             if (!ValueOf(flag, cursor, command.target, command.error)) return;
             continue;
         }
-        if (flag.name == "--identity" && command.trust != TrustAction::List &&
-            command.trust != TrustAction::Public && command.trust != TrustAction::Forget) {
-            if (ApplyTextFlag(command, flag, cursor, "--identity", command.identityName) == FlagResult::Failed) return;
-            continue;
-        }
         if (flag.name == "--host-key-stdin" && !flag.hasInlineValue &&
             (command.trust == TrustAction::Add || command.trust == TrustAction::Update)) {
             command.value = "-";
@@ -622,11 +556,9 @@ void ParseHost(Command& command, Cursor& cursor) {
         command.error = UnknownOption(flag.name, Verb::Host);
         return;
     }
-    if (command.trust == TrustAction::Add &&
-        (command.target.empty() || !command.identityName || command.value.empty()))
-        command.error = "host add needs --address, --identity, and --host-key-stdin";
-    if (command.trust == TrustAction::Update && command.target.empty() &&
-        !command.identityName && command.value.empty())
+    if (command.trust == TrustAction::Add && (command.target.empty() || command.value.empty()))
+        command.error = "host add needs --address and --host-key-stdin";
+    if (command.trust == TrustAction::Update && command.target.empty() && command.value.empty())
         command.error = "host update needs a field to change";
 }
 
@@ -762,6 +694,10 @@ void ParseShare(Command& command, Cursor& cursor) {
             }
             if (flag.name == "--no-status") {
                 share.status = false;
+                continue;
+            }
+            if (flag.name == "--qr") {
+                share.qr = true;
                 continue;
             }
         }
@@ -1129,8 +1065,8 @@ std::string UsageText() {
            "  sources ADDRESS     ask a host what it is sharing\n"
            "  devices             machines allowed to connect to this one\n"
            "  trust               hosts this machine has decided to trust\n"
-           "  key                 manage named client identities\n"
-           "  access              manage allowed client public keys\n"
+           "  key public          print this machine's public key\n"
+           "  access              allowed clients and pending connection requests\n"
            "  host                manage saved host profiles\n"
            "  host-key public     print this host's public key\n"
            "  settings            the settings the desktop app also uses\n"
@@ -1155,32 +1091,30 @@ std::string UsageText(Verb verb) {
                    "              sent no frame - the saved choice has gone stale.\n";
         case Verb::Sources:
             return "Usage: " + program +
-                   " sources ADDRESS[:PORT] [--identity NAME] [--accept-new-host-key]\n"
+                   " sources ADDRESS[:PORT]|INVITE [--accept-new-host-key] [--approval-wait SEC]\n"
                    "\n"
                    "Ask a host what it is sharing. A host whose key is not saved yet is refused\n"
                    "and its fingerprint is printed; compare it with the host, then rerun with\n"
-                   "--accept-new-host-key to save it. A host whose key changed is always refused.\n";
+                   "--accept-new-host-key to save it. An INVITE is the deskhub://pair/ link a\n"
+                   "host shows as a QR code: it pins the host and lets this machine in at once.\n";
         case Verb::Devices:
             return "Usage: " + program +
-                   " key generate --name NAME\n"
-                   "       " +
-                   program +
-                   " key import --name NAME --file PATH [--passphrase-stdin]\n"
-                   "       " +
-                   program +
-                   " key public --name NAME\n"
-                   "       " +
-                   program +
-                   " key delete --name NAME\n"
-                   "       " +
-                   program +
-                   " key list [--json]\n"
+                   " key public\n"
                    "       " +
                    program +
                    " access add --stdin\n"
                    "       " +
                    program +
                    " access list [--json]\n"
+                   "       " +
+                   program +
+                   " access requests [--json]\n"
+                   "       " +
+                   program +
+                   " access approve --fingerprint SHA256:...\n"
+                   "       " +
+                   program +
+                   " access deny --fingerprint SHA256:...\n"
                    "       " +
                    program +
                    " access remove --fingerprint SHA256:...\n"
@@ -1192,19 +1126,10 @@ std::string UsageText(Verb verb) {
                    " devices [list]\n"
                    "       " +
                    program +
-                   " devices public [NAME]\n"
-                   "       " +
-                   program +
-                   " devices identities\n"
-                   "       " +
-                   program +
-                   " devices generate NAME\n"
+                   " devices public\n"
                    "       " +
                    program +
                    " devices add PUBLIC_KEY|-\n"
-                   "       " +
-                   program +
-                   " devices import PRIVATE_KEY_FILE [--name NAME] [--passphrase-stdin]\n"
                    "       " +
                    program +
                    " devices forget FINGERPRINT\n"
@@ -1212,9 +1137,10 @@ std::string UsageText(Verb verb) {
                    program +
                    " devices forget all\n"
                    "\n"
-                   "Client keys allowed to connect to this machine (authorized_keys). Forgetting a\n"
-                   "key means that device needs its public key added again. --passphrase-stdin\n"
-                   "unlocks the imported private key file locally; it is never sent to a host.\n";
+                   "Machines allowed to connect to this one (authorized_keys), and the machines\n"
+                   "waiting for approval (access requests). A device that connects without\n"
+                   "being allowed waits up to ten minutes for 'access approve'; 'access deny'\n"
+                   "drops its request. 'key public' prints this machine's own public key line.\n";
         case Verb::Trust:
             return "Usage: " + program +
                    " trust [list]\n"
@@ -1223,7 +1149,7 @@ std::string UsageText(Verb verb) {
                    " trust public\n"
                    "       " +
                    program +
-                   " trust add ADDRESS PUBLIC_KEY|-|FINGERPRINT [--name ALIAS] [--identity NAME]\n"
+                   " trust add ADDRESS PUBLIC_KEY|-|FINGERPRINT [--name ALIAS]\n"
                    "       " +
                    program +
                    " trust forget ADDRESS\n"
@@ -1231,15 +1157,15 @@ std::string UsageText(Verb verb) {
                    program +
                    " trust forget all\n"
                    "\n"
-                   "Hosts this machine has decided to trust, by key. --name saves an alias;\n"
-                   "--identity chooses the client key for that host. A connection flag overrides\n"
-                   "the saved choice. Forgetting a host blocks new connections until pinned.\n";
+                   "Hosts this machine has decided to trust, by key. --name saves an alias. Trust\n"
+                   "follows the key, so a host stays trusted when its address changes. Forgetting\n"
+                   "a host asks for its fingerprint again on the next connection.\n";
         case Verb::Host:
             return "Usage: " + program +
-                   " host add ALIAS --address IP[:PORT] --identity NAME --host-key-stdin\n"
+                   " host add ALIAS --address IP[:PORT] --host-key-stdin\n"
                    "       " +
                    program +
-                   " host update ALIAS [--address IP[:PORT]] [--identity NAME] [--host-key-stdin]\n"
+                   " host update ALIAS [--address IP[:PORT]] [--host-key-stdin]\n"
                    "       " +
                    program +
                    " host remove ALIAS\n"
@@ -1267,22 +1193,24 @@ std::string UsageText(Verb verb) {
                    "The same settings the desktop app reads and writes.\n";
         case Verb::Connect:
             return "Usage: " + program +
-                   " connect ADDRESS[:PORT] [--source ID|NAME|all] [flags]\n"
+                   " connect ADDRESS[:PORT]|INVITE [--source ID|NAME|all] [flags]\n"
                    "\n"
                    "Open a window on a host's screen and drive it. Without --source the host's\n"
-                   "first screen is shown; 'all' opens one window each.\n"
+                   "first screen is shown; 'all' opens one window each. A host that has not\n"
+                   "allowed this machine yet is asked to; connect waits up to two minutes for\n"
+                   "its owner to press Approve. An INVITE (deskhub://pair/...) skips both steps.\n"
                    "\n"
                    "  --source ID|NAME|all  which of the host's screens to watch\n"
                    "  --view-only           watch without typing or clicking\n"
                    "  --audio / --no-audio  play the host's sound, or do not\n"
                    "  --name NAME           what the host sees this machine called\n"
-                   "  --identity NAME       client key to use for this connection\n"
                    "  --accept-new-host-key save the key of a host seen for the first time\n"
+                   "  --approval-wait SEC   how long to wait for the host owner to approve (1-600, default 120)\n"
                    "\n"
                    "F9 locks the pointer to the window, Escape lets it go again.\n";
         case Verb::Shell:
             return "Usage: " + program +
-                   " shell ADDRESS[:PORT] [--name NAME] [--identity NAME] [--resume ID] [--list]\n"
+                   " shell ADDRESS[:PORT]|INVITE [--name NAME] [--resume ID] [--list]\n"
                    "\n"
                    "Open a shell on a host and drive it from this terminal. Everything the\n"
                    "shell prints is written straight through, so your own terminal draws it.\n"
@@ -1291,13 +1219,12 @@ std::string UsageText(Verb verb) {
                    "--resume ID picks one back up instead of opening a new one.\n"
                    "\n"
                    "  --name NAME       what the host sees this machine called\n"
-                   "  --identity NAME   client key to use for this connection\n"
                    "  --accept-new-host-key  save the key of a host seen for the first time\n"
                    "  --resume ID       reattach a shell the host is keeping, by its id\n"
                    "  --list            list the shells open on the host, then quit\n";
         case Verb::Send:
             return "Usage: " + program +
-                   " send ADDRESS[:PORT] FILE [FILE...] [--name NAME] [--identity NAME]\n"
+                   " send ADDRESS[:PORT]|INVITE FILE [FILE...] [--name NAME]\n"
                    "\n"
                    "Send files to a host that was started with --files. The host stores them in\n"
                    "its transfer folder without asking, so it only takes files from machines it\n"
@@ -1305,7 +1232,6 @@ std::string UsageText(Verb verb) {
                    "and nothing already there is ever overwritten.\n"
                    "\n"
                    "  --name NAME       what the host sees this machine called\n"
-                   "  --identity NAME   client key to use for this connection\n"
                    "  --accept-new-host-key  save the key of a host seen for the first time\n"
                    "\n"
                    "At most " +
@@ -1334,6 +1260,7 @@ std::string UsageText(Verb verb) {
                    "  --name NAME            what viewers see this machine called\n"
                    "  --status-interval MS   how often to print the status line\n"
                    "  --no-status            print nothing until it stops\n"
+                   "  --qr                   print a QR code a phone scans to connect at once\n"
                    "\n"
                    "Anything not named here comes from the settings the desktop app uses.\n";
         case Verb::Version:

@@ -122,26 +122,31 @@ not a client.
 | `shell ADDRESS` | open a shell on a host, in the terminal you are already in |
 | `send ADDRESS FILE...` | send files to a host that accepts them |
 | `displays`, `sources ADDRESS` | local displays, and what an authenticated host shares |
-| `key`, `access`, `host`, `host-key public` | client identities, allowed keys, saved hosts, and this host's key |
+| `key public`, `access`, `host`, `host-key public` | this machine's public key, allowed clients and connection requests, saved hosts, and this host's key |
 | `devices`, `trust`, `settings` | older commands for the same configuration files |
 
-Create a named client key with `key generate --name laptop-a`, then copy its public key
-from `key public --name laptop-a`. On the host, pipe that line to `access add --stdin`.
+Every machine has one key. Show its public half with `key public`; on a host, pipe that
+line to `access add --stdin` to allow it by hand. A client that connects without being
+allowed leaves a **connection request** on the host: `access requests` lists them and
+`access approve --fingerprint SHA256:...` or `access deny --fingerprint SHA256:...` settles
+one; `share --qr` prints a QR code whose `deskhub://pair/...` link lets one device in on its
+own, and that link works in place of an address for `connect`, `sources`, `shell` and `send`.
 Copy the host's `host-key public` output to the client and pipe it to
-`host add office --address 192.168.1.10:47777 --identity laptop-a --host-key-stdin`.
+`host add office --address 192.168.1.10:47777 --host-key-stdin` to pin a host in advance.
 Then use `connect office`, `sources office`, `shell office`, or `send office FILE`.
-`host update office` changes the address, identity, or pinned key explicitly;
-`host remove office` removes the profile. `access remove --fingerprint SHA256:...`
-revokes a client key. `sources`, `connect`, `shell` and `send` take an address or a saved
-alias, `--identity NAME` to pick the client key, and `--accept-new-host-key` to save the
-key of a host seen for the first time; without it an unknown host is refused and its
-fingerprint printed, and a host whose key changed is always refused. There is no network
-scan and no passcode flag. `--config-dir PATH` selects one configuration directory for every
-command and can be placed before or after the command.
+`host update office` changes the address or pinned key explicitly; `host remove office`
+removes the profile. `access remove --fingerprint SHA256:...` revokes a client key.
+`sources`, `connect`, `shell` and `send` take an address, an invite link or a saved alias,
+`--accept-new-host-key` to save the key of a host seen for the first time, and
+`--approval-wait SEC` to change how long they wait for the host owner's approval (default
+120). Without `--accept-new-host-key` an unknown host is refused and its fingerprint
+printed. Trust follows the host's key, so a host that changes address stays trusted. There
+is no network scan and no passcode flag. `--config-dir PATH` selects one configuration
+directory for every command and can be placed before or after the command.
 
 `deskhub-cli help COMMAND` prints the flags. Listing commands support `--json`, and the exit
-code says what went wrong: `2` bad flags, `3` nobody answered, `4` refused, `5` the host
-key changed, `9` this build cannot do it.
+code says what went wrong: `2` bad flags, `3` nobody answered, `4` refused or not approved
+in time, `9` this build cannot do it.
 
 Linux supports all the listed commands. Windows uses the desktop app's window code for
 `connect`. macOS supports sharing and remote shells; `connect` reports that screen

@@ -1,11 +1,11 @@
 #include "deskhub/net/PublicKeyText.h"
 
+#include "deskhub/net/Base64.h"
+
 namespace deskhub {
 
 namespace {
 
-constexpr std::string_view kAlphabet =
-    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 constexpr std::string_view kEd25519 = "ssh-ed25519";
 constexpr std::string_view kEcdsaP256 = "ecdsa-sha2-nistp256";
 constexpr std::string_view kCurve = "nistp256";
@@ -17,55 +17,6 @@ std::string_view Trim(std::string_view text) {
     if (first == std::string_view::npos) return {};
     const size_t last = text.find_last_not_of(" \t\r\n");
     return text.substr(first, last - first + 1);
-}
-
-int DecodeChar(char value) {
-    const size_t at = kAlphabet.find(value);
-    return at == std::string_view::npos ? -1 : int(at);
-}
-
-std::optional<std::vector<uint8_t>> DecodeBase64(std::string_view text) {
-    if (text.empty() || text.size() % 4 == 1) return std::nullopt;
-    const size_t padding = text.ends_with("==") ? 2 : text.ends_with('=') ? 1
-                                                                          : 0;
-    if (padding != 0 && text.size() % 4 != 0) return std::nullopt;
-    const size_t length = text.size() - padding;
-    std::vector<uint8_t> out;
-    out.reserve(text.size() * 3 / 4);
-    uint32_t bits = 0;
-    int count = 0;
-    for (size_t i = 0; i < length; ++i) {
-        const int value = DecodeChar(text[i]);
-        if (value < 0) return std::nullopt;
-        bits = (bits << 6) | uint32_t(value);
-        count += 6;
-        if (count >= 8) {
-            count -= 8;
-            out.push_back(uint8_t((bits >> count) & 0xff));
-        }
-    }
-    if ((count != 0 && (bits & ((1u << count) - 1)) != 0) ||
-        (padding == 1 && count != 2) || (padding == 2 && count != 4))
-        return std::nullopt;
-    return out;
-}
-
-std::string EncodeBase64(std::span<const uint8_t> bytes) {
-    std::string out;
-    out.reserve((bytes.size() + 2) / 3 * 4);
-    uint32_t bits = 0;
-    int count = 0;
-    for (uint8_t byte : bytes) {
-        bits = (bits << 8) | byte;
-        count += 8;
-        while (count >= 6) {
-            count -= 6;
-            out.push_back(kAlphabet[(bits >> count) & 63]);
-        }
-    }
-    if (count != 0) out.push_back(kAlphabet[(bits << (6 - count)) & 63]);
-    while (out.size() % 4 != 0) out.push_back('=');
-    return out;
 }
 
 std::optional<std::span<const uint8_t>> ReadString(std::span<const uint8_t>& input) {

@@ -19,7 +19,6 @@ if(DESKHUB_QUIC)
     set(deskhub_platform_quic
         src/net/QuicEndpoint.cpp
         src/system/HostIdentity.cpp
-        src/system/ClientIdentity.cpp
         src/system/AuthProof.cpp
     )
 else()
@@ -29,7 +28,6 @@ else()
     set(deskhub_platform_quic
         src/net/QuicEndpointNone.cpp
         src/system/HostIdentityNone.cpp
-        src/system/ClientIdentityNone.cpp
         src/system/AuthProofNone.cpp
     )
 endif()
@@ -203,9 +201,11 @@ add_library(platform STATIC
     src/audio/AudioPlayer.cpp
     src/audio/AudioBroadcaster.cpp
     src/system/TrustStoreFile.cpp
-    src/system/ClientKeys.cpp
     src/system/RecentDevicesFile.cpp
     src/system/AuthorizedKeysFile.cpp
+    src/system/AccessRequestsFile.cpp
+    src/system/PairingTokenFile.cpp
+    src/host/PairingInvite.cpp
     src/auth/AuthNegotiation.cpp
     src/client/HostLink.cpp
     src/client/HostProfiles.cpp
@@ -228,7 +228,7 @@ add_library(platform STATIC
     src/ffi/SendFfi.cpp
     src/ffi/TerminalFfi.cpp
     src/ffi/HostProfileFfi.cpp
-    src/ffi/ClientKeyFfi.cpp
+    src/ffi/PairingFfi.cpp
 )
 target_include_directories(platform PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 target_compile_definitions(platform PUBLIC $<$<CONFIG:Debug>:DESKHUB_DEV_BUILD>)
@@ -335,6 +335,8 @@ if(DESKHUB_PLATFORM_TESTS)
         tests/system/AppDataFileTests.cpp
         tests/system/HostIdentityTests.cpp
         tests/system/AuthProofTests.cpp
+        tests/system/AccessRequestsFileTests.cpp
+        tests/system/PairingTokenFileTests.cpp
         tests/system/PtyTests.cpp
         tests/net/QuicEndpointTests.cpp
         tests/net/SessionTransportTests.cpp
@@ -351,10 +353,7 @@ if(DESKHUB_PLATFORM_TESTS)
     )
     target_link_libraries(platform_tests PRIVATE platform)
     if(DESKHUB_QUIC)
-        target_sources(platform_tests PRIVATE tests/system/ClientIdentityTests.cpp)
         target_link_libraries(platform_tests PRIVATE deskhub::quiche)
-    else()
-        target_sources(platform_tests PRIVATE tests/system/ClientIdentityTestsNone.cpp)
     endif()
     target_include_directories(platform_tests PRIVATE tests)
     target_compile_definitions(platform_tests PRIVATE

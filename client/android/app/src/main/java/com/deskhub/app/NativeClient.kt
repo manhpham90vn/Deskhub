@@ -11,6 +11,7 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlin.math.sqrt
 
 object NativeClient {
     const val PHASE_IDLE = 0
@@ -126,29 +127,31 @@ object NativeClient {
     const val STR_ALLOW_CLIENT_PLACEHOLDER = 185
     const val STR_ALLOW_CLIENT_ACTION = 186
     const val STR_ALLOW_CLIENT_INVALID = 187
-    const val STR_MY_KEYS_HEADING = 188
-    const val STR_MY_KEYS_HINT = 189
     const val STR_COPY_PUBLIC_KEY_ACTION = 190
-    const val STR_NEW_KEY_ACTION = 191
-    const val STR_IMPORT_KEY_ACTION = 192
-    const val STR_KEY_NAME_LABEL = 193
-    const val STR_KEY_PASSPHRASE_LABEL = 194
     const val STR_TRUST_NEW_HOST_TITLE = 195
     const val STR_TRUST_NEW_HOST_ACTION = 196
     const val STR_CANCEL_ACTION = 197
     const val STR_COPIED_BUTTON = 198
     const val STR_DEVICE_NAME_LABEL = 115
     const val STR_DEVICE_NAME_HINT = 199
-    const val STR_DELETE_KEY_ACTION = 200
-    const val STR_DELETE_KEY_PROMPT = 201
-    const val DEFAULT_KEY_NAME = "default"
+    const val STR_SHOW_QR_ACTION = 202
+    const val STR_HIDE_QR_ACTION = 203
+    const val STR_SCAN_QR_ACTION = 204
+    const val STR_QR_HINT = 205
+    const val STR_ACCESS_REQUESTS_HEADING = 206
+    const val STR_ACCESS_REQUESTS_EMPTY = 207
+    const val STR_APPROVE_ACTION = 208
+    const val STR_DENY_ACTION = 209
+    const val STR_CAMERA_DENIED = 210
+    const val STR_INVITE_INVALID = 211
 
     private const val HOST_PROFILE_OK = 0
     private const val HOST_PROFILE_STORE_UNREADABLE = 10
-    private const val CLIENT_KEY_OK = 0
-    private const val CLIENT_KEY_UNREADABLE = 3
     private const val FAILURE_SLOT = 0
     private const val NEW_HOST_KEY_SLOT = 1
+    private const val ANSWERED_ADDRESS_SLOT = 2
+    private const val QUERY_TEXT_SLOTS = 3
+    private const val QUERY_FAILURE_AWAITING_APPROVAL = 4
 
     private external fun nativeString(id: Int): String
 
@@ -233,15 +236,89 @@ object NativeClient {
     fun isZoomed(zoom: Float): Boolean = nativeIsZoomed(zoom)
 
     private external fun nativeListSources(
-        addr: String,
+        addr: String?,
+        invite: String?,
         capsOut: BooleanArray,
-        failureOut: Array<String>,
+        textOut: Array<String>,
+        failureKindOut: IntArray,
     ): Array<Source>?
+
+    private external fun nativeListSourcesCancel()
+
+    private external fun nativeSourceQueryStatus(): String
+
+    private external fun nativeIsPairingInvite(text: String): Boolean
+
+    fun cancelListSources() = nativeListSourcesCancel()
+
+    fun sourceQueryStatus(): String = nativeSourceQueryStatus()
+
+    fun isPairingInvite(text: String): Boolean = nativeIsPairingInvite(text)
+
+    private external fun nativePairingInvite(
+        port: Int,
+        bindIp: String,
+    ): String
+
+    private external fun nativePairingRevoke()
+
+    private external fun nativeQrEncode(text: String): ByteArray
+
+    private external fun nativePairingInviteAddress(invite: String): String
+
+    fun pairingInvite(
+        port: Int,
+        bindIp: String,
+    ): String = nativePairingInvite(port, bindIp)
+
+    fun pairingRevoke() = nativePairingRevoke()
+
+    class QrCode(
+        val size: Int,
+        private val modules: ByteArray,
+    ) {
+        fun dark(
+            x: Int,
+            y: Int,
+        ): Boolean = modules[y * size + x] != 0.toByte()
+    }
+
+    fun qrEncode(text: String): QrCode? {
+        val modules = nativeQrEncode(text)
+        val size = sqrt(modules.size.toDouble()).toInt()
+        if (size <= 0 || size * size != modules.size) return null
+        return QrCode(size, modules)
+    }
+
+    fun pairingInviteAddress(invite: String): String = nativePairingInviteAddress(invite)
+
+    data class AccessRequest(
+        val name: String,
+        val address: String,
+        val shortKey: String,
+        val fingerprint: String,
+        val requestedAt: String,
+    )
+
+    private external fun nativeAccessRequests(): Array<AccessRequest>?
+
+    private external fun nativeAccessApprove(fingerprint: String): Boolean
+
+    private external fun nativeAccessDeny(fingerprint: String): Boolean
+
+    private external fun nativeAccessRequestsGeneration(): Long
+
+    fun accessRequests(): List<AccessRequest> = nativeAccessRequests()?.toList() ?: emptyList()
+
+    fun accessApprove(fingerprint: String): Boolean = nativeAccessApprove(fingerprint)
+
+    fun accessDeny(fingerprint: String): Boolean = nativeAccessDeny(fingerprint)
+
+    fun accessRequestsGeneration(): Long = nativeAccessRequestsGeneration()
 
     data class HostProfile(
         val alias: String,
         val endpoint: String,
-        val identity: String,
         val fingerprint: String,
     )
 
@@ -260,27 +337,6 @@ object NativeClient {
         address: String,
         fingerprint: String,
     ): String
-
-    data class ClientKey(
-        val name: String,
-        val fingerprint: String,
-    )
-
-    private external fun nativeClientKeys(): Array<ClientKey>?
-
-    private external fun nativeClientPublicKey(name: String): String
-
-    private external fun nativeClientKeyGenerate(name: String): Int
-
-    private external fun nativeClientKeyImport(
-        name: String,
-        privateKey: String,
-        passphrase: String,
-    ): Int
-
-    private external fun nativeClientKeyDelete(name: String): Int
-
-    private external fun nativeClientKeyErrorText(error: Int): String
 
     sealed interface HostProfiles {
         data class Loaded(
@@ -311,33 +367,6 @@ object NativeClient {
         fingerprint: String,
     ): String = nativeTrustNewHostPrompt(address, fingerprint)
 
-    private fun clientKeyFailure(error: Int): String? =
-        if (error ==
-            CLIENT_KEY_OK
-        ) {
-            null
-        } else {
-            nativeClientKeyErrorText(error)
-        }
-
-    fun unreadableKeyText(): String = nativeClientKeyErrorText(CLIENT_KEY_UNREADABLE)
-
-    fun clientKeys(): List<ClientKey> = nativeClientKeys()?.toList() ?: emptyList()
-
-    fun clientPublicKey(name: String): String = nativeClientPublicKey(name)
-
-    suspend fun generateClientKey(name: String): String? =
-        withContext(Dispatchers.IO) { clientKeyFailure(nativeClientKeyGenerate(name)) }
-
-    suspend fun importClientKey(
-        name: String,
-        privateKey: String,
-        passphrase: String,
-    ): String? = withContext(Dispatchers.IO) { clientKeyFailure(nativeClientKeyImport(name, privateKey, passphrase)) }
-
-    suspend fun deleteClientKey(name: String): String? =
-        withContext(Dispatchers.IO) { clientKeyFailure(nativeClientKeyDelete(name)) }
-
     data class DeviceRow(
         val addr: String,
         val name: String,
@@ -360,6 +389,8 @@ object NativeClient {
 
     private external fun nativeHostFingerprint(): String
 
+    private external fun nativeHostPublicKey(): String
+
     fun pairedDevices(): List<PairedDevice> = nativePairedDevices()?.toList() ?: emptyList()
 
     fun pairedForget(fingerprint: String): Boolean = nativePairedForget(fingerprint)
@@ -369,6 +400,8 @@ object NativeClient {
     fun pairedAddPublicKey(publicKey: String): Boolean = nativePairedAddPublicKey(publicKey)
 
     fun hostFingerprint(): String = nativeHostFingerprint()
+
+    fun hostPublicKey(): String = nativeHostPublicKey()
 
     private external fun nativeDefaultPort(): Int
 
@@ -428,10 +461,6 @@ object NativeClient {
 
     private external fun nativeSendSnapshot(handle: Long): Transfer?
 
-    private external fun nativeSendChangedKey(handle: Long): String
-
-    private external fun nativeSendAcceptKey(handle: Long): Boolean
-
     private external fun nativeSendCancel(handle: Long)
 
     private external fun nativeSendStop(handle: Long)
@@ -445,10 +474,6 @@ object NativeClient {
     ): Long = nativeSendStart(addr, name, paths.toTypedArray())
 
     fun sendSnapshot(handle: Long): Transfer = nativeSendSnapshot(handle) ?: Transfer()
-
-    fun sendChangedKey(handle: Long): String = nativeSendChangedKey(handle)
-
-    fun sendAcceptKey(handle: Long): Boolean = nativeSendAcceptKey(handle)
 
     fun sendCancel(handle: Long) = nativeSendCancel(handle)
 
@@ -883,28 +908,44 @@ object NativeClient {
     )
 
     sealed interface QueryOutcome {
+        val answeredAddress: String
+
         data class Reached(
             val query: HostQuery,
+            override val answeredAddress: String,
         ) : QueryOutcome
 
         data class UnknownHost(
             val fingerprint: String,
             val reason: String,
+            override val answeredAddress: String,
         ) : QueryOutcome
 
         data class Failed(
             val reason: String,
+            val awaitingApproval: Boolean,
+            override val answeredAddress: String,
         ) : QueryOutcome
     }
 
-    suspend fun queryHost(addr: String): QueryOutcome =
-        withContext(Dispatchers.IO) {
-            val caps = BooleanArray(2)
-            val failure = arrayOf("", "")
-            val sources = nativeListSources(addr, caps, failure)
-            if (sources != null) return@withContext QueryOutcome.Reached(HostQuery(sources.toList(), caps[0], caps[1]))
-            val reason = failure[FAILURE_SLOT].ifBlank { sourceQueryFailed(addr) }
-            val newHostKey = failure[NEW_HOST_KEY_SLOT]
-            if (newHostKey.isBlank()) QueryOutcome.Failed(reason) else QueryOutcome.UnknownHost(newHostKey, reason)
-        }
+    suspend fun queryHost(addr: String): QueryOutcome = withContext(Dispatchers.IO) { listSources(addr, null) }
+
+    suspend fun queryHostByInvite(invite: String): QueryOutcome =
+        withContext(Dispatchers.IO) { listSources(null, invite) }
+
+    private fun listSources(
+        addr: String?,
+        invite: String?,
+    ): QueryOutcome {
+        val caps = BooleanArray(2)
+        val text = Array(QUERY_TEXT_SLOTS) { "" }
+        val failureKind = IntArray(1)
+        val sources = nativeListSources(addr, invite, caps, text, failureKind)
+        val answered = text[ANSWERED_ADDRESS_SLOT]
+        if (sources != null) return QueryOutcome.Reached(HostQuery(sources.toList(), caps[0], caps[1]), answered)
+        val reason = text[FAILURE_SLOT].ifBlank { sourceQueryFailed(addr ?: answered) }
+        val newHostKey = text[NEW_HOST_KEY_SLOT]
+        if (newHostKey.isNotBlank()) return QueryOutcome.UnknownHost(newHostKey, reason, answered)
+        return QueryOutcome.Failed(reason, failureKind[0] == QUERY_FAILURE_AWAITING_APPROVAL, answered)
+    }
 }

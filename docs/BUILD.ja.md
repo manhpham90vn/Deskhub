@@ -129,26 +129,33 @@ coverage・fuzz の preset には影響しない。有効にすると、OS ご�
 | `shell ADDRESS` | 現在の terminal 内で host 上の shell を開く |
 | `send ADDRESS FILE...` | ファイルの受信を許可している host へファイルを送る |
 | `displays`、`sources ADDRESS` | ローカルの display、および認証済み host が共有しているもの |
-| `key`、`access`、`host`、`host-key public` | client ID、許可済み鍵、保存済み host、この host の鍵 |
+| `key public`、`access`、`host`、`host-key public` | このマシンの公開鍵、許可済み client と接続要求、保存済み host、この host の鍵 |
 | `devices`、`trust`、`settings` | 同じ設定ファイルを使う従来のコマンド |
 
-`key generate --name laptop-a` で client 鍵を作り、`key public --name laptop-a`
-で公開鍵を取得する。host ではその一行を `access add --stdin` に入力する。
+すべてのマシンは鍵を 1 つ持つ。その公開鍵は `key public` で表示し、host では
+その一行を `access add --stdin` に入力して手動で許可する。許可されていない状態で
+接続してきた client は host に**接続要求**を残す。`access requests` がそれを一覧し、
+`access approve --fingerprint SHA256:...` または `access deny --fingerprint SHA256:...`
+で決着させる。`share --qr` は QR code を表示し、その `deskhub://pair/...` リンクは
+1 台のデバイスを単独で受け入れる。このリンクは `connect`、`sources`、`shell`、`send`
+でアドレスの代わりに使える。
 host の `host-key public` の出力を client に渡し、
-`host add office --address 192.168.1.10:47777 --identity laptop-a --host-key-stdin`
-に入力する。その後 `connect office`、`sources office`、`shell office`、
-`send office FILE` を使用できる。`host update office` でアドレス、ID、固定鍵を
-明示的に変更し、`host remove office` で profile を削除する。
+`host add office --address 192.168.1.10:47777 --host-key-stdin`
+に入力すれば host を事前に固定できる。その後 `connect office`、`sources office`、
+`shell office`、`send office FILE` を使用できる。`host update office` でアドレスまたは
+固定鍵を明示的に変更し、`host remove office` で profile を削除する。
 `access remove --fingerprint SHA256:...` は client 鍵を取り消す。`sources`、`connect`、
-`shell`、`send` はアドレスまたは保存済みの alias を受け取り、`--identity NAME` で client
-鍵を選び、`--accept-new-host-key` で初めて見る host の鍵を保存する。これを付けない場合、
-未知の host は拒否されてその fingerprint が表示され、鍵が変わった host は常に拒否される。
-network の scan も passcode のフラグも存在しない。
-`--config-dir PATH` は全コマンドで同じ設定ディレクトリを選び、コマンドの前後に置ける。
+`shell`、`send` はアドレス、招待リンク、または保存済みの alias を受け取り、
+`--accept-new-host-key` で初めて見る host の鍵を保存し、`--approval-wait SEC` で host の
+所有者の承認を待つ時間を変更する（既定は 120）。`--accept-new-host-key` を付けない場合、
+未知の host は拒否されてその fingerprint が表示される。信頼は host の鍵に従うため、
+アドレスが変わった host も信頼されたままである。network の scan も passcode のフラグも
+存在しない。`--config-dir PATH` は全コマンドで同じ設定ディレクトリを選び、コマンドの
+前後に置ける。
 
 フラグは `deskhub-cli help COMMAND` が表示する。一覧コマンドは `--json` に対応し、
-exit code が失敗の理由を示す。`2` フラグの誤り、`3` 応答なし、`4` 拒否、`5` host key
-の変更、`9` この build では未対応。
+exit code が失敗の理由を示す。`2` フラグの誤り、`3` 応答なし、`4` 拒否または時間内に
+承認されなかった、`9` この build では未対応。
 
 Linux は上表のコマンドをすべて利用できる。Windows の `connect` はデスクトップ app の
 ウィンドウコードを再利用する。macOS では share と remote shell を利用できるが、

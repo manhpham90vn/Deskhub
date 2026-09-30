@@ -101,6 +101,8 @@ nó không được đóng gói kèm.
 | --- | --- | --- |
 | [AndroidX](https://developer.android.com/jetpack/androidx) — Core KTX, Activity, Compose UI, Material 3 | Apache-2.0 | động |
 | Thư viện chuẩn [Kotlin](https://kotlinlang.org) | Apache-2.0 | động |
+| [CameraX](https://developer.android.com/media/camera/camerax) 1.4 — `camera-camera2`, `camera-lifecycle`, `camera-view` (quét QR) | Apache-2.0 | động |
+| [ZXing](https://github.com/zxing/zxing) `core` 3.5 (giải mã QR) | Apache-2.0 | động |
 | MediaCodec, các media API của NDK | Android SDK / NDK | thành phần OS |
 
 ## QUIC transport (mọi app)

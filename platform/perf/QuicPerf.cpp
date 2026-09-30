@@ -61,7 +61,7 @@ struct LoopbackPair {
 
     bool Start(const HostIdentity& identity, uint16_t port) {
         QuicSettings serverSettings;
-        serverSettings.certPemPath = identity.certPath;
+        serverSettings.certPem = deskhubp::TransportCertificatePem(identity);
         serverSettings.keyPemPath = identity.keyPath;
         if (!server.Listen(serverSettings, "127.0.0.1", port, HooksFor(serverSink)))
             return false;
@@ -101,13 +101,10 @@ void RunQuicPerf() {
         return;
     }
 
-    const std::string savedCert = ReadAppDataFile(kHostCertFileName);
     const std::string savedKey = ReadAppDataFile(kHostKeyFileName);
-    RemoveAppDataFile(kHostCertFileName);
     RemoveAppDataFile(kHostKeyFileName);
-    const HostIdentity identity = LoadOrCreateHostIdentity("deskhub-perf");
+    const HostIdentity identity = LoadOrCreateHostIdentity();
     const auto restoreIdentity = [&] {
-        if (!savedCert.empty()) WriteAppDataFile(kHostCertFileName, savedCert);
         if (!savedKey.empty()) WriteAppDataFile(kHostKeyFileName, savedKey);
     };
     if (!identity.Valid()) {

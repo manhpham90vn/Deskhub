@@ -31,14 +31,16 @@ client/     各 OS 的 app: windows、linux、macos、ios、android（依赖 pla
 | `core/session` | session state machine，按角色划分：`session/host`（按 viewer 的 session、viewer 表、`SourceListResponder`、file receiver、auth throttle）、`session/client`（screen client、file sender、terminal client、connect 流程），以及置于其旁的共享组件（transfer 类型、terminal session 表、clipboard sync、link recovery） |
 | `core/control` | Bitrate controller、quality ladder、stream 尺寸计算、clock offset |
 | `core/terminal` | 所有 client 共享的 VT emulator: `VtParser`、`Screen`、`KeyEncoder`、`Palette` |
-| `core/net` | Trust store（client 侧）、authorized keys（host 侧）、OpenSSH public key 文本、bind 地址选择 |
-| `core/ui` | 全部面向用户的字符串、settings 解析、表格行构造器、最近设备、host profile（`HostProfiles`）以及 client key 行（`ClientKeys`），使五个 client 呈现一致的内容 |
+| `core/net` | 按 fingerprint 索引的 trust store（client 侧）、authorized keys（host 侧）、等待中的 connection request（`AccessRequests`）、`deskhub://pair/` invite 记录（`PairingInvite`）、OpenSSH public key 文本、供所有调用方共用的唯一 `Base64`、bind 地址选择 |
+| `core/auth` | 带签名的 auth transcript（`Transcript`）、按 key 与地址计数的失败限制器，以及一次性 QR token（`PairingTokens`） |
+| `core/qr` | `QrCode` —— 所有 client 与 CLI 绘制 pairing code 所用的 QR encoder |
+| `core/ui` | 全部面向用户的字符串、settings 解析、表格行构造器、最近设备以及 host profile（`HostProfiles`），使五个 client 呈现一致的内容 |
 | `platform/net` | `UdpSocket`（按 OS 实现）、`QuicEndpoint`（quiche 置于 pimpl 之后）、`SessionTransport` |
-| `platform/auth` | `AuthNegotiation` —— 双方共用的唯一基于 key 签名的 handshake |
-| `platform/client` | `HostLink`（dial、trust、auth、channel，由所有界面共用）、`ScreenViewer`、`TerminalViewer`、`FileTransferClient`、`SourceQuery`、`HostProfiles`（受信任的 host 及各自使用的 client key） |
-| `platform/host` | `HostEngine`、`HostNetLoop`、`SharingHost`、`TerminalHost`、`FileHost`、`ViewerBroadcast` |
-| `platform/system` | Clock、random、PTY（ConPTY / forkpty）、host identity（`HostIdentity`）、client key（`ClientKeys`、`ClientIdentity`）、`authorized_keys` 与 `known_hosts` 文件、最近列表（`RecentDevicesFile`）、设备名称、autostart、keep-awake |
-| `platform/ffi` | Swift 与 Kotlin app 调用的 C 接口：`SettingsFfi`（settings、设备名称）、`DevicesFfi`（最近设备、允许的 client、本 host 的 fingerprint）、`HostProfileFfi`（受信任的 host）、`ClientKeyFfi`（client key），以及 share、screen、terminal 和 send 各接口 |
+| `platform/auth` | `AuthNegotiation` —— 双方共用的唯一基于 key 签名的 handshake，及其 host 侧的四种结果（第 3 节） |
+| `platform/client` | `HostLink`（dial、trust、auth、等待批准、channel，由所有界面共用）、`ScreenViewer`、`TerminalViewer`、`FileTransferClient`、`SourceQuery`、`HostProfiles`（按 fingerprint 索引的受信任 host，附名称与最后地址） |
+| `platform/host` | `HostEngine`、`HostNetLoop`、`SharingHost`、`TerminalHost`、`FileHost`、`ViewerBroadcast`、`PairingInvite`（签发 token 并构造本 host 展示的 invite） |
+| `platform/system` | Clock、random、PTY（ConPTY / forkpty）、机器 key（`HostIdentity`）、`authorized_keys` 与 `known_hosts` 文件、等待中的 request（`AccessRequestsFile`）与有效的 QR token（`PairingTokenFile`）、最近列表（`RecentDevicesFile`）、设备名称、autostart、keep-awake |
+| `platform/ffi` | Swift 与 Kotlin app 调用的 C 接口：`SettingsFfi`（settings、设备名称）、`DevicesFfi`（最近设备、允许的 client、connection request、本机的 fingerprint 与 public key）、`HostProfileFfi`（受信任的 host）、`PairingFfi`（invite、QR module、撤销），以及 share、screen、terminal 和 send 各接口 |
 | `core/cli` | command line 语法及其 JSON writer：输入纯文本，输出经校验的 command |
 | `client/<os>` | Capture、encode、decode、render、windowing、对话框；不包含任何 protocol 相关内容 |
 | `client/cli` | 从 flag 到 session：一个 binary 即可完成 host、connect 与打开 shell，无需 GUI toolkit。它 link 桌面 app 所用的同一套各 OS media 库 |
@@ -92,30 +94,45 @@ migration。按约定，quiche 的 connection 是 single-threaded 的，因此�
 
 ## 3. 准入：key，与 SSH 相同
 
-每台机器在首次运行时创建一个 ECDSA P-256 host key（`HostIdentity`），且从不自动替换；
-其 SHA-256 SPKI hash 即为用户所见的 fingerprint。TLS 使用基于该 key 的自签 certificate。
-client 使用其某个 client key（`ClientKeys`）登录：生成的 key 为 Ed25519，从 OpenSSH 或
-PKCS#8 文件导入的 key 为 Ed25519 或 ECDSA P-256。host 仅接受列于其 `authorized_keys`
-（`AuthorizedKeys`，最多 128 行 `ssh-ed25519 AAAA… label` 或
-`ecdsa-sha2-nistp256 AAAA… label`）中的 public key；label 只是显示名称，从不代表权限。
-不会通过网络进行任何批准 —— 没有 passcode，没有批准提示，也没有让未知 key 接入的开关。
+每台机器在首次运行时创建一把 ECDSA P-256 key（`HostIdentity`，`host_key.pem`），且从不
+自动替换。这一把 key 在两种角色下都代表该机器：host 通过 TLS 出示它，client 用它登录。
+其 DER SubjectPublicKeyInfo 的 SHA-256 hash 即为用户在 Devices 页、QR code、connection
+request 列表、`authorized_keys` 与 `known_hosts` 中所见的那一个 fingerprint。TLS 需要
+X.509 certificate，因此每次打开 port 时 `HostIdentity` 都会**在内存中**围绕该 key 构建一
+份自签 certificate 交给 quiche；不写入任何内容。由于 fingerprint 对 SPKI 而非 certificate
+求 hash，每次启动生成新 certificate 不会改变任何人固定下来的内容，旧版本保存的
+`host_cert.pem` 既不被读取也不再需要。host 仅接受列于其 `authorized_keys`
+（`AuthorizedKeys`，最多 128 行 `ecdsa-sha2-nistp256 AAAA… label` —— 为手动粘贴的 key
+仍解析 Ed25519 行）中的 public key；label 只是显示名称，从不代表权限。
 
-在 TLS 之上，应用层 handshake（`AuthNegotiation`，auth version 6）按 connection 决定
+在 TLS 之上，应用层 handshake（`AuthNegotiation`，auth version 7）按 connection 决定
 准入。transport 负责执行该 handshake，且 host 不会向 auth 尚未完成的 connection 发送
 任何应用层内容：
 
-1. QUIC/TLS 完成。client 在**发送任何内容之前**，先将 host 的 key 与 `known_hosts` 比对
-   （见下文）。
-2. client 发送 `AuthStart`，其中包含其 public key 与设备名称。
-3. client 对一份 transcript 签名 —— 包括 domain label、auth version、角色、从这条
-   QUIC/TLS connection 导出的 session 值、其 public key 以及 host 的 TLS fingerprint
-   （`core/auth/Transcript`）—— host 使用该 key 验证签名，而该 key 必须在
-   `authorized_keys` 中。
+1. QUIC/TLS 完成。client 在**发送任何内容之前**，先确定对 host key 的信任
+   （`HostLink::SettleTrust`，见下文）。
+2. client 发送 `AuthStart`：`00 | u16 keyLen | key | u8 nameLen | name |
+   u8 tokenLen | token | 07` —— 其 public key、其设备名称、来自 QR code 时的 32 字节
+   pairing token（`tokenLen` 为 0 或 32），最后是 auth version。
+3. `HostAuth::Begin` 以四种 `AuthChallenge` 之一应答：
+   - key 在 `authorized_keys` 中 → `Signature`；
+   - key 未知，且 token 与 `pairing_tokens` 中某条有效条目匹配 → 以 client 的名称为
+     label 将该 key 追加到 `authorized_keys`，消耗该 token，应答 `Signature`；
+   - key 未知，发送了 token 但不正确 → 在现有限制器中为 source 地址计一次失败（每分钟
+     3 次，随后封锁 10 秒），随后把该请求当作未携带 token 处理；
+   - key 未知且没有可用的 token → 把一条 connection request（名称、key、fingerprint、
+     地址、时间）写入 `access_requests`，应答 `AwaitingApproval`。connection 像现在的
+     拒绝一样被关闭；host 不会保留任何未 authenticate 的连接等待点击。
+4. 收到 `Signature` 时，client 对一份 transcript 签名 —— 包括 domain label、auth
+   version、角色、从这条 QUIC/TLS connection 导出的 session 值、其 public key 以及
+   host 的 TLS fingerprint（`core/auth/Transcript`）—— host 使用该 key 验证签名。
 
 签名绑定到这一条 connection，因此重新连接时需再次签名；不支持 0-RTT 或 session
 resumption。host 同时最多保留 8 个等待 authenticate 的 connection，并在 10 秒后断开
 每一个；同一 key 与 source IP 在一分钟内出现 3 次无效签名，该组合将被封锁 10 秒
-（`AuthThrottle`）。
+（`AuthThrottle`）。`access_requests` 最多保存 16 条 request，每把 key 一条（重复请求
+刷新地址与时间），每条保留 10 分钟；*Approve* 把该 key 连同设备名称移入
+`authorized_keys`，*Deny* 删除该行且不告知 client 任何内容。
 
 接入资格属于单条 QUIC connection，而非某个地址。该 connection 一旦关闭，资格即被撤销，因此来自同
 一地址和 port 的下一条 connection 必须重新证明自己。在已开始 handshake 的 connection 上再次发送
@@ -123,12 +140,28 @@ resumption。host 同时最多保留 8 个等待 authenticate 的 connection，�
 key 也不能在原 connection 上重试。在 Devices 页上移除某个 client key（或执行 `access remove`），
 也会关闭它当时打开的所有 connection。
 
-在 client 侧，`known_hosts`（`TrustStore`）按地址与 port 固定 host 的 key，并在旁边保存
-每个受信任 host 的名称及与之配合使用的 client key（`HostProfiles`）。这与 SSH 一样是
-trust on first use（首次使用时信任）：**未知**的 key 会使 link 以 *not trusted yet* 失败；
-app 随后在 *New host* 对话框中显示 fingerprint，待用户选择 *Trust and connect* 后，带
-`acceptNewHostKey` 重新 dial；CLI 仅在使用 `--accept-new-host-key` 时才这样做。key
-**发生变化**则是无法绕过的硬性失败：必须从 *Trusted hosts* 中移除该 host，再重新信任。
+在 client 侧，`known_hosts`（`TrustStore`）按 host 的 **fingerprint** 索引；每个条目
+携带 host 的名称、它最后一次应答的地址，以及首次/最后见到的时间（`HostProfiles`）。
+TLS 建立后，`HostLink::SettleTrust` 针对对端出示的 key 的 fingerprint 运行一次：
+
+- 由 QR invite 拨出：fingerprint 必须等于 invite 中的那一个。相等意味着应答的机器持有
+  制作该码的机器的 private key，因此静默固定该 host，并在 `AuthStart` 中发送 token。
+  不等意味着该地址上应答的是别的东西：link 以 `InviteMismatch` 失败，token 永不离开
+  client。
+- 已在 `known_hosts` 中：刷新该条目的最后地址（`TouchTrustedHost`），link 继续 ——
+  无论从哪个地址到达 host，因为不再有任何内容按地址索引。
+- 否则 link 以 *not trusted yet* 失败并附带 fingerprint；app 在 *New host* 对话框中显示
+  它，待用户选择 *Trust and connect* 后带 `acceptNewHostKey` 重新 dial，CLI 仅在使用
+  `--accept-new-host-key` 时才这样做。若 `FindByEndpoint` 表明该地址曾以另一个受信任
+  host 的身份应答，`PreviousOwnerWarningFor` 会把那个 host 的名称与 fingerprint 加入
+  提示。不存在 *changed key* 这一判定：旧地址上的新 key 就是一个新 host。
+
+当 challenge 为 `AwaitingApproval` 时，`HostLink` 停在同名状态，显示
+`AwaitingApprovalLine`，并以恢复中的 link 已在使用的 backoff 重新 dial，最长持续
+`kDefaultApprovalWaitUs`（120 秒）或直到调用方取消；每次重新 dial 都是一条完整的
+connection 与一份新的 `AuthStart`，因此所有者 *Approve* 之后的第一次即得到 `Signature`
+并完成。超过期限后 link 以 `AuthResultCode::AwaitingApproval` 失败，其文案提示用户请
+对方 *Approve* 后再次 connect。
 
 线上传输的是 public key 本身，而非单独的 fingerprint：host 对收到的内容自行计算 hash，
 因此冒用他人身份需要使用冒名者并不持有的 key 进行签名。由于准入在每条 connection 上仅
@@ -218,8 +251,10 @@ reattach 提示），而不是直接结束。当 session 先发现问题时，`H
 仍未恢复，窗口按常规流程连同原因关闭。
 
 source 查询（`QuerySources`）以一次性、阻塞的形式使用同一条 link。UI 仍将各项请求（按
-键、resize）送入 command 队列。未知的 host key 会使 link 失败并附带其 fingerprint，供
-UI 在 *New host* 对话框中显示；已变更的 key 则使 link 永久失败。terminal 窗口不解析 escape sequence：
+键、resize）送入 command 队列。未知的 host key 会使 link 失败并附带其 fingerprint ——
+以及该地址曾以另一个受信任 host 应答时的先前所有者警告 —— 供 UI 在 *New host* 对话框中
+显示；尚未允许该 key 的 host 则使 link 停在 `AwaitingApproval`，UI 轮询其 status 行，
+用户随时可取消。terminal 窗口不解析 escape sequence：
 `core/terminal` 将 byte stream 转换为字符网格，窗口仅负责绘制单元格并转发按键事件。目
 前每个窗口仍各自持有一条 link；让指向同一 host 的所有窗口共享一条已准入的 link 是既定
 的下一步，将在 `HostLink` 处以 registry 加 observer fan-out 的形式实现，而不是新增一次
@@ -228,7 +263,8 @@ handshake。
 ## 6. 查找 host
 
 不存在 discovery：不会 scan network，host 也不应答任何明文 packet。client dial 的是用户
-输入的地址、最近使用的 host 或受信任的 host（`HostProfiles`）。`SourceListResponder` 仅在已准入的 connection 上应答
+输入的地址、最近使用的 host、受信任的 host（`HostProfiles`），或 QR invite 中的地址。
+`SourceListResponder` 仅在已准入的 connection 上应答
 `LIST_SOURCES`；该应答通过 `SOURCE_LIST` 的 header flag 说明 host 的能力 —— 是否接受
 input、是否共享 terminal —— 因此 client 在打开任何窗口之前即可得知手机只能被观看。
 source 记录之后，payload 还携带 host 的设备名称（一个长度字节加最多 64 字节 UTF-8；可为
@@ -240,17 +276,37 @@ source 记录之后，payload 还携带 host 的设备名称（一个长度字�
 `dh_list_sources` 仅在 host 应答后才将其记入列表，因此各 app 不再自行更新列表，
 `dh_recent_touch` 已移除。旧的 `recent-devices.txt` 会被删除，而不是转换。
 
+QR code 是唯一的带外通道，并且始终留在带外：host 从不传输它，由所有者展示，再由他人从
+屏幕上读取或粘贴链接。`deskhubp::BuildPairingInvite(port, bindIp, hostName)` 签发一个
+随机的 32 字节 token（保存在 `pairing_tokens` 中，有效 5 分钟，同时最多 4 个有效，面板
+隐藏或停止共享时由 `RevokePairingTokens` 全部撤销），并格式化 `core/net/PairingInvite`：
+文本为 `deskhub://pair/` 加上一段二进制记录的 base64url —— 一个版本字节、endpoint 数量
+`n`、随后 `n × (IPv4, port)` 表示 host 最多 4 个地址、32 字节 fingerprint、32 字节 token，
+以及带长度前缀、最多 32 字节的 host 名称。该记录上限为 180 个字符，使其在纠错级别 M 下
+能放进 version 10 或更小的 QR code，手机在一臂距离外即可从笔记本屏幕上读取。
+`core/qr/QrCode`（`EncodeQr`，加上供 CLI `share --qr` 使用的 `RenderQrText`）是唯一的
+encoder；所有 client 都绘制它返回的 module 网格，Android 通过 `dh_qr_encode`。client
+侧的 `ParsePairingInvite` 为 `HostLink` 提供 endpoint、要求的 fingerprint 与要发送的
+token；`dh_pairing_invite_address` 为各 app 提供显示在地址框中的第一个 `ip:port`。扫描
+是唯一按平台实现的部分 —— Android 用 CameraX + ZXing，iOS 用 AVFoundation —— 两者都只
+返回解码出的文本。
+
 ## 7. 磁盘上的数据
 
 全部数据位于用户的 Deskhub 文件夹（`~/.deskhub`、`%USERPROFILE%\.deskhub`、iOS 上
 App Group container 内的 `.deskhub` 文件夹、Android 上的内部存储；`DESKHUB_CONFIG_DIR` 或 CLI 的
-`--config-dir` 可覆盖该位置）：`host_key.pem` 与 `host_cert.pem`（host identity）、
-`client_key.pem` 与 `client_key.<name>.pem`（client key，Windows 上以 DPAPI 保护）、
-`authorized_keys`（本 host 接受的 client key）、`known_hosts`（受信任的 host 及其
-profile）、`ui-settings.txt`（包括设备名称）、`recent-hosts.txt`（地址、上次连接
-时间与 host 名称）、Linux 上的 `portal-restore-token.txt`（桌面针对所选屏幕签发的 token），以及每次
-运行的 log。任何地方都不保存 passcode。POSIX 上目录为 `0700`、文件为 `0600`，以原子方式
-写入；Windows 上的 ACL 仅允许该用户、SYSTEM 与 Administrators 访问。文件
+`--config-dir` 可覆盖该位置）：`host_key.pem`（唯一的机器 key —— TLS certificate 在每次
+启动时于内存中构建，因此不再写入 `host_cert.pem`，遗留的会被忽略）、`authorized_keys`
+（本 host 接受的 client key）、`known_hosts`（按 fingerprint 索引的受信任 host，附名称
+与最后地址）、`access_requests`（等待 Approve 或 Deny 的 connection request —— 名称、
+public key、地址、时间；最多 16 条，每条 10 分钟后丢弃）、`pairing_tokens`（当前有效的
+QR token 及其过期时间）、`ui-settings.txt`（包括设备名称）、`recent-hosts.txt`（地址、
+上次连接时间与 host 名称）、Linux 上的 `portal-restore-token.txt`（桌面针对所选屏幕签发
+的 token），以及每次运行的 log。任何地方都不保存 passcode，也没有 `client_key*.pem`：
+旧版本保留的这些文件会被忽略，而不是迁移。POSIX 上目录为 `0700`、文件为 `0600`，以原子
+方式写入；Windows 上的 ACL 仅允许该用户、SYSTEM 与 Administrators 访问。iOS 上 app 与
+broadcast extension 共用该文件夹，extension 记录的 request 由此到达 app 的列表，app 中的
+*Approve* 也由此到达 extension。文件
 I/O 位于 `platform/`；解析逻辑与数据结构位于 `core/`，并具备 unit test。
 
 viewer 发送的文件保存在其他位置：由 host 选定的文件夹（`ui-settings.txt` 中的
@@ -264,9 +320,9 @@ viewer 发送的文件保存在其他位置：由 host 选定的文件夹（`ui-
 
 | Suite | 运行环境 | 覆盖内容 |
 | --- | --- | --- |
-| `make test` | 离线，不使用 socket | 整个 `core/`: wire、framing、FEC、session、VT emulator、settings、文案、确定性的 structured fuzzing |
-| `make test-platform` | loopback socket | 真实的 QUIC handshake、端到端的 key 签名 authenticate、host key 固定、经由网络的 terminal host 与 viewer、面向真实 shell 的 PTY、无效签名导致的 lockout |
-| `make test-integration` | loopback，capture/encode 为模拟实现 | 完整的 host↔client session: negotiation、经网络传输的视频、input、基于 authorized key 的准入、对无效数据的容错，以及交叉负载下的时延 —— 文件传输、大量输出的 terminal 与按键操作与运行中的 stream 并行，各自按观测到的最大停顿设定阈值 |
+| `make test` | 离线，不使用 socket | 整个 `core/`: wire（包括 `AuthStart` 的 token 字段）、framing、FEC、session、VT emulator、settings、文案、确定性的 structured fuzzing，以及 pairing 相关部分 —— `Base64`、`PairingInvite` 的往返与上限、`PairingTokens` 的签发/消耗/过期、`AccessRequests` 的容量与过期、`QrCode` 与已知编码的比对 |
+| `make test-platform` | loopback socket | 真实的 QUIC handshake、端到端的 key 签名 authenticate、按 fingerprint 索引的 host 固定、`AccessRequestsFile`（记录、批准与拒绝一条 request）与 `PairingTokenFile`（签发一个 token、兑换一次并撤销）、经由真实 `HostAuth` 的批准准入与 token 准入、经由网络的 terminal host 与 viewer、面向真实 shell 的 PTY、无效签名导致的 lockout |
+| `make test-integration` | loopback，capture/encode 为模拟实现 | 完整的 host↔client session: negotiation、经网络传输的视频、input、基于 authorized key 的准入、与其他 golden message 并列的 `AUTH_START_TOKEN` wire vector、对无效数据的容错，以及交叉负载下的时延 —— 文件传输、大量输出的 terminal 与按键操作与运行中的 stream 并行，各自按观测到的最大停顿设定阈值 |
 | fuzz target | 每个 PR 上每个 target 30 秒，nightly 每个 15 分钟 | wire、H.264、reassembly、terminal 字节与 UI 文本的 parser，以及 host 与 viewer 两侧的 session state machine |
 | `make test-perf` | release build，离线与 loopback | 对 hot path 进行实测: `core_perf` 覆盖纯 C++ 的路径，`platform_perf` 覆盖 loopback 上的真实 QUIC；两者均按每单位的 allocation 次数、4 倍输入下的开销，以及相对本机 baseline 的偏移进行判定 |
 
@@ -298,12 +354,19 @@ runner 上与 base commit 的 A/B 结果（偏移仅作为警告，不导致失�
   过大、格式错误或包含重复密钥，整个配置就视为失败。主机会定期重新检查已接纳连接
   的权限，因此其他进程替换文件后，即使进程内 generation 未变化也能撤销连接。
 
-- **主机密钥固定值属于单个地址和端口**：在一个 endpoint 受信任的 TLS 主机密钥，
-  不会自动授权另一个 endpoint 使用同一密钥；连接前必须显式固定新地址和端口。
+- **信任跟随密钥，而非地址**：`known_hosts` 按主机的 fingerprint 索引，旁边的地址只是
+  最后一次应答的地址。此前的规则 —— 固定值属于单个 `ip:port`，该处密钥变化即硬性阻止且
+  没有接受按钮 —— 让每一次 DHCP 租约变化都像一次攻击，并教会人们习惯性地移除并重新信任
+  主机，而这正是该阻止本想防止的习惯。现在，从新地址到达的受信任主机直接连接；已知地址
+  上的*另一把*密钥则被如实对待：一台该客户端从未见过的机器 —— 显示 *New host* 对话框，
+  并附警告指出以前在该地址应答的主机（`PreviousOwnerWarningFor`）。该警告保留了阻止机制
+  所承载的唯一信号 —— "这个地址上的东西已不是原来那个" —— 同时让旧主机在 *Trusted hosts*
+  中原样保留，因此信任新主机从来不是点击跳过一次变更，而只是一次 fingerprint 展示在眼前
+  的初次见面。
 
 - **新的客户端许可列表保存完整 public key**：`authorized_keys` 只接受有限长度的
   OpenSSH public key 行，并拒绝损坏或重复的密钥。它是唯一的许可列表：文件不存在时不接纳任何人。`known_hosts` 在
-  TLS pin 旁保存各 endpoint 的别名和选用的 client identity。配置写入使用跨进程
+  fingerprint 旁保存各受信任主机的别名和最后地址。配置写入使用跨进程
   文件锁与原子替换。
   Service 可通过 `SetConfigDir` 或 `DESKHUB_CONFIG_DIR` 独立于日志目录选择配置目录。
 
@@ -322,24 +385,33 @@ runner 上与 base commit 的 A/B 结果（偏移仅作为警告，不导致失�
   内存表最多保存 64 个组合；验证成功后清除其失败计数。
 
 - **认证在协议版本 3 内有独立版本**：`AuthStart` 在公钥前保留一个值为 0 的兼容字节，
-  并在客户端名称后写入认证版本 6。旧主机能够读取请求并发送旧版 challenge；新客户端
-  据此识别不兼容版本并关闭连接。新主机拒绝缺少版本后缀的请求，发送
-  `VersionMismatch` 后关闭连接。challenge、response 和 result 只携带带版本的签名数据。
+  并把认证版本放在最后 —— 现在是 7，位于版本 6 所没有的 pairing token 字段之后：
+  `00 | u16 keyLen | key | u8 nameLen | name | u8 tokenLen | token | 07`。旧主机能够读取
+  请求并发送旧版 challenge；新客户端据此识别不兼容版本并关闭连接。新主机拒绝末尾字节
+  不为 7 的请求，发送 `VersionMismatch` 后关闭连接 —— 这正是 7.0.x 设备与 7.1 设备报告
+  版本不匹配、而非半工作状态的原因。`AuthMode` 新增 `AwaitingApproval`，而
+  `AuthResultCode::AwaitingApproval` 仅存在于客户端一侧，用于命名等待超时的结果。
+  challenge、response 和 result 只携带带版本的数据。
 
-- **首次使用时信任，变更时硬性阻止**：未知的主机密钥会像 SSH 一样向用户展示一次，
-  仅在用户接受后才被固定（CLI 中为 `--accept-new-host-key`）；已变更的密钥会被拒绝，
-  完全不提供接受按钮。允许用户点击跳过密钥变更的提示，会让人习惯性地跳过真正属于攻击的
-  那一次，因此唯一的解决方式是从 *Trusted hosts* 中移除该主机 —— 这是一个脱离触发该
-  问题的连接之外、需要刻意执行的操作。
+- **首次使用时信任，变更时给出警告**：未知的主机密钥会像 SSH 一样向用户展示一次，
+  仅在用户接受后才被固定（CLI 中为 `--accept-new-host-key`）。与同一地址上以前应答的
+  密钥不同的密钥，不是一次可以点击跳过的*变更* —— 不再有接受新密钥的按钮，也不再有
+  `HostKeyChanged` 结果 —— 而是一台该客户端从未信任过的主机，通过普通的 *New host*
+  对话框见面，并指出先前的所有者。旧主机的固定值得以保留，因此那一次点击不会覆盖任何
+  内容；用户只是在 fingerprint 展示在眼前的情况下，多信任了一台机器。
 
 - **只有一个设备名称**：Settings → General → *Device name*（留空表示使用 OS 名称）是
-  一台机器唯一的名称 —— 主机将其显示给 viewer 并发送给它准入的客户端，客户端在连接时发送它，并且它作为该机器
-  复制的每个 public key 的 label（`<device name>` 或 `<device name> (<key name>)`）。
+  一台机器唯一的名称 —— 主机将其显示给 viewer 并发送给它准入的客户端，客户端在连接时发送它，它作为该机器
+  复制的 public key 的 label，也是主机在批准该机器的 request 或通过 QR token 准入它时写入
+  `authorized_keys` 的 label。
   Client 页面去掉了自己的名称字段，使主机看到的名称与其 `authorized_keys` 中的 label
   保持一致。
 
 - **不迁移旧数据**：passcode、旧的 `paired_devices` 列表及其启用标记不会被转换 ——
-  其中没有任何内容能证明客户端持有某个密钥 —— 遗留文件会被删除。无法读取的
+  其中没有任何内容能证明客户端持有某个密钥 —— 遗留文件会被删除。7.0.x 的
+  `client_key.pem`、`client_key.<name>.pem` 与 `host_cert.pem` 则直接忽略：机器密钥本来
+  就是 `host_key.pem`，因此 fingerprint 没有变化；客户端旧的 Ed25519 身份不会带入新身份
+  —— 主机所有者通过 Approve 或 QR 放行机器密钥一次即可。无法读取的
   `authorized_keys` 或 `known_hosts` 永远不会被猜测：在其无法读取期间，主机拒绝所有人，
   客户端拒绝所有主机，下一次更改会重新写入该文件。
 
@@ -589,14 +661,14 @@ runner 上与 base commit 的 A/B 结果（偏移仅作为警告，不导致失�
   与 log。桌面 client 还会在 OS 的 display 变更信号上刷新其选择列表，这使得之后接入显示
   器时列表仍然正确。
 - **选择 quiche 而非 msquic 或 ngtcp2。** 这是唯一在 Android 与 iOS 上均有生产使用证据
-  的 QUIC 库。它附带 BoringSSL，后者同时服务于 host identity 与 client key 签名，因此无需第二个
-  密码学库。
+  的 QUIC 库。它附带 BoringSSL，后者同时服务于机器 key、其内存中的 certificate 与
+  transcript 签名，因此无需第二个密码学库。
 - **不使用 connection migration。** 候选库均缺乏可用的 client 侧支持。reconnect 与
   reattach 机制（类似 tmux，本就是移动端进入后台所必需）已覆盖该需求；被保留的 shell 也可被列出（`TermList`）并由新 client 按 id resume。
 - **使用 ECDSA P-256 而非 Ed25519。** BoringSSL 的服务端不会通过 quiche 以 Ed25519 对
-  TLS handshake 签名。已保存但不受支持或不匹配的证书和私钥会使 host 启动失败，
-  两个文件均保持原样。只有两个文件都不存在时才创建新的 host identity，因此已有的
-  host fingerprint 不会悄然改变。
+  TLS handshake 签名，而现在一把 key 既要服务 TLS，也要服务 client 签名。已保存但不是
+  P-256 的 key 会使启动失败，文件保持原样。只有不存在 `host_key.pem` 时才创建新的
+  identity，因此已有的 fingerprint 不会悄然改变。
 - **quiche 预先构建，不使用 FetchContent。** `scripts/build-quiche.sh` 在
   `third_party/quiche/` 下为每个 rust target 生成一个目录，另有共享的 `include/`，其中
   包含 quiche.h 与 boring-sys 附带的 BoringSSL 头文件。这些头文件被单独取出，因为
@@ -678,9 +750,52 @@ runner 上与 base commit 的 A/B 结果（偏移仅作为警告，不导致失�
   构建，因此 Debug 配置同样对齐：`_ITERATOR_DEBUG_LEVEL=0`、`/U_DEBUG`、移除 `/RTC1`，
   因为 release CRT 不含 `_CrtDbgReport`，也不支持 run-time check。任何不一致都会导致
   大量 LNK2038 错误。
-- **已移除 passcode、批准提示与 LAN scan。** 4 位数字码是开放 port 上的短密钥，批准提示
-  可能被错误的人点击，而明文的 discovery 应答会让 network 上的任何人得知 host 的存在。
-  由所有者刻意复制的 key 取代了这三者。
+- **passcode 与 LAN scan 保持移除。** 4 位数字码是开放 port 上的短密钥，而明文的
+  discovery 应答会让 network 上的任何人得知 host 的存在。7.1 中没有任何东西把二者带回
+  —— QR code 是从屏幕上读取的，request 只在 TLS handshake 完成之后才写入。
+
+- **批准经由已 authenticate 的通道进行，展示的是身份而非秘密。** 2026-09-28 对批准提示
+  的反对理由是，它可能被错误的人为错误的机器点击 —— passcode 提示展示的是任何人都可能
+  输入的一个码。connection request 不展示任何输入的内容：设备的名称、它实际持有的 key
+  的 fingerprint（host 对通过 TLS 收到的 key 求了 hash）以及它的来源地址，而 *Approve*
+  作用于该 fingerprint，从不作用于行的位置。没有任何东西以明文传输，也没有任何东西可以
+  猜测；所有者唯一可能犯的错误是批准了一台并非预期的机器，而那一行正是为了让他们核对。
+  host 在等待期间也不保持任何 connection 打开 —— request 是文件中的一条记录，由 client
+  重新 dial —— 因此一波 request 洪水的代价是 16 行，而不是 16 个 socket。
+
+- **QR code 携带 host fingerprint 与一次性 token，在 `AuthStart` 之前先固定。** token
+  是一个在五分钟内值得窃取的秘密，因此 client 只把它花在一台已经通过 TLS handshake
+  证明自己持有码中所印 fingerprint 对应 private key 的机器上。位于码中地址处的中间人
+  无法出示该 key，于是 client 停在 `InviteMismatch`，token 永不过线。在 host 上，token
+  以常量时间比较，首次使用即消耗，5 分钟后过期，随展示它的面板一同失效，而错误的猜测
+  会按 source 地址计入统计无效签名的同一限制器 —— 每分钟 3 次，随后封锁 10 秒 —— 因此
+  2^256 种可能永远无法被高速尝试。
+
+- **request 与 token 保存在文件中，以便第二个 process 能对其操作。** 在 iOS 上，收到
+  `AuthStart` 的是 broadcast extension，而绘制 QR code 与 request 列表的是 app；在 CLI
+  中，`share` 运行的同时，`access approve` 在另一个 terminal 中输入。`access_requests`
+  与 `pairing_tokens` 位于共用的配置文件夹中，与 `authorized_keys` 使用同一把锁与原子
+  替换，`AccessRequestsGeneration` 为轮询方提供廉价的变更计数器，而一次 *Approve* 不过
+  是从一个文件移到另一个文件，由下一次 `AuthStart` 读回。
+
+- **每台机器一把 key，certificate 在内存中。** 每台机器两把 key 意味着两个 fingerprint、
+  一个 *My keys* 页、导入与 passphrase 代码、一份可能与其 key 不一致的已保存 certificate，
+  以及一个必须记住在哪里用哪把 client key 的 `known_hosts`。`host_key.pem` 中的一把
+  ECDSA P-256 key 在 host 侧服务 TLS，在 client 侧服务 transcript 签名；TLS 坚持要求的
+  X.509 在每次启动时围绕它构建，从不写入。fingerprint 一直是 SPKI 的 SHA-256，而非
+  certificate 的，因此升级后的 host 保留了每个 client 固定下来的 fingerprint；client 的
+  身份确实变了 —— 从 Ed25519 变为机器 key —— 这正是每个 client 需要重新放行一次的原因，
+  用一次 Approve 或一次扫描而非粘贴。
+
+- **QR encoder 由本项目实现。** `core/` 不允许任何第三方头文件，而每个平台一个 QR 库将
+  意味着同一个码的五种渲染，再加上 CLI 的第六种。`core/qr/QrCode` 是纠错级别 M 的
+  byte-mode encoder，离线对照已知编码测试，每个 client 只负责按它返回的 module 网格填充
+  方块。解码则是相反的情形 —— 它需要摄像头与快速的检测器 —— 因此两款手机使用平台自带的
+  实现（Android 用 CameraX + ZXing，iOS 用 AVFoundation），并返回一个字符串。
+
+- **Base64 只在一处。** OpenSSH key 行与 invite 记录都需要它，而两份副本早已各自演化。
+  `core/net/Base64` 是唯一的 encoder 与 decoder，同时支持标准与 URL-safe 字母表，并有
+  自己的测试。
 - **VT emulator 由本项目实现。** 没有任何平台自带的 terminal 控件能够同时在五个 client
   上使用并具备合适的许可证；自行实现使 terminal 行为可以离线测试，并在各平台保持一致。
 - **host 侧的 shell mirror 自首字节起即开始更新。** PTY 的输出是具破坏性的单消费者
@@ -694,9 +809,9 @@ runner 上与 base commit 的 A/B 结果（偏移仅作为警告，不导致失�
   `QuicEndpoint` 上的 terminal。这导致文件发送部分比 viewer 晚三个修复才获知 host key
   已变更。现在 `HostLink` 是 client 侧唯一执行 dial 或 authenticate 的代码；service 打
   开自己的 `Chan`，获得独立的 inbox 队列，并在自身 thread 上处理。terminal 的 backoff
-  重连已移入 link，使所有需要 recovery 的界面都继承该行为，trust 规则也集中于一处：未知
-  的 key 使 link 失败，直至用户信任它（`acceptNewHostKey`）；变更过的 key 则始终使 link
-  失败。
+  重连已移入 link，使所有需要 recovery 的界面都继承该行为 —— 等待批准也复用同一套
+  重新 dial —— trust 规则也集中于一处：未知的 key 使 link 失败，直至用户信任它
+  （`acceptNewHostKey`）；invite 只固定它所指名的 key；已知的 key 在任何地址都会被识别。
 - **`HostLink` 通过 `Send` 发送，而非 `SendMessage`。** 在 Windows 上，platform 层背后
   的 OS 头文件将 `SendMessage` 定义为 `SendMessageA` 的宏，而在 `HostLink.cpp` 中这些
   头文件位于类声明之后、方法定义之前，导致 MSVC 要求为一个没有任何头文件声明过的

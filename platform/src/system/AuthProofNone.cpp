@@ -2,11 +2,11 @@
 
 namespace deskhubp {
 
-std::vector<uint8_t> IdentityPublicKey(const HostIdentity&) {
+std::string IdentityPublicKeyText(const HostIdentity&) {
     return {};
 }
 
-std::string IdentityPublicKeyText(const HostIdentity&) {
+std::string IdentityPublicKeyLine(const HostIdentity&, std::string_view) {
     return {};
 }
 

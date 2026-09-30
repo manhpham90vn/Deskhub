@@ -72,6 +72,9 @@ int main() {
     std::printf("--- transfer: client-to-host file batches (offer, chunks, checksums) ---\n");
     RunFileTransferTests();
 
+    std::printf("--- qr ---\n");
+    RunQrCodeTests();
+
     std::printf("--- session: keeping a link alive and getting it back ---\n");
     RunLinkRecoveryTests();
 
@@ -179,6 +182,10 @@ int main() {
 
     std::printf("--- net: which machines this host has paired with ---\n");
     RunPublicKeyTextTests();
+    RunBase64Tests();
+    RunAccessRequestsTests();
+    RunPairingInviteTests();
+    RunPairingTokensTests();
 
     std::printf("--- terminal: the VT escape-sequence parser ---\n");
     RunVtParserTests();
@@ -220,7 +227,6 @@ int main() {
     RunHostProfilesTests();
 
     std::printf("--- ui: this machine's client keys ---\n");
-    RunClientKeysTests();
 
     std::printf("--- ui: persisted share settings ---\n");
     RunUiSettingsTests();

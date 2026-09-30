@@ -119,7 +119,6 @@ bool TerminalViewer::Start(const TerminalViewerConfig& config,
     linkConfig.host = config_.host;
     linkConfig.hostLabel = config_.hostLabel;
     linkConfig.clientName = config_.clientName;
-    linkConfig.clientIdentityName = config_.clientIdentityName;
     linkConfig.acceptNewHostKey = config_.acceptNewHostKey;
     linkConfig.recoverLink = true;
     linkConfig.recoverGraceUs = deskhub::kTerminalReattachGraceUs;
@@ -162,10 +161,13 @@ void TerminalViewer::OnLinkState(HostLinkState state, std::string_view message) 
             SetState(TerminalViewerState::Connecting, deskhub::ui::kTerminalConnecting);
             return;
         case HostLinkState::Deciding:
-            SetState(TerminalViewerState::Deciding, deskhub::ui::kTrustChangedBody);
+            SetState(TerminalViewerState::Deciding, deskhub::ui::kAuthUntrustedHost);
             return;
         case HostLinkState::Authing:
             SetState(TerminalViewerState::Opening, deskhub::ui::kTerminalConnecting);
+            return;
+        case HostLinkState::AwaitingApproval:
+            SetState(TerminalViewerState::Connecting, message);
             return;
         case HostLinkState::Recovering:
             SetState(TerminalViewerState::Reattaching, deskhub::ui::kTerminalReattaching);

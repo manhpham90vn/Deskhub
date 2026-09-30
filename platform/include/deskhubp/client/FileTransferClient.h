@@ -26,14 +26,12 @@ enum class FileTransferClientState : uint8_t {
     Done = 3,
     Refused = 4,
     Failed = 5,
-    KeyChanged = 6,
 };
 
 struct FileTransferClientConfig {
     NetAddr host{};
     std::string hostLabel{};
     std::string clientName{};
-    std::string clientIdentityName{};
     bool acceptNewHostKey = false;
     std::vector<std::filesystem::path> files{};
 };
@@ -41,7 +39,6 @@ struct FileTransferClientConfig {
 struct FileTransferClientCallbacks {
     std::function<void(const deskhub::TransferProgress&)> onProgress;
     std::function<void(FileTransferClientState, std::string_view message)> onState;
-    std::function<void(std::string_view fingerprint)> onKeyChanged;
 };
 
 class FileTransferClient {
@@ -52,7 +49,6 @@ public:
     FileTransferClient& operator=(const FileTransferClient&) = delete;
 
     bool Start(const FileTransferClientConfig& config, FileTransferClientCallbacks callbacks);
-    bool AcceptKeyAndRetry();
     void Cancel();
     void Stop();
 

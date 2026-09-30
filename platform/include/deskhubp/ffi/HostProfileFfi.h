@@ -18,20 +18,18 @@ typedef enum {
     DHHostProfileInvalidAddress = 2,
     DHHostProfileMissingHostKey = 3,
     DHHostProfileInvalidHostKey = 4,
-    DHHostProfileUnknownIdentity = 5,
     DHHostProfileAliasExists = 6,
     DHHostProfileAliasMissing = 7,
     DHHostProfileAliasAmbiguous = 8,
-    DHHostProfileAddressInUse = 9,
     DHHostProfileStoreUnreadable = 10,
     DHHostProfileStoreFull = 11,
     DHHostProfileWriteFailed = 12,
+    DHHostProfileKeyExists = 13,
 } DHHostProfileError;
 
 typedef struct {
     char alias[DH_HOST_NAME_CAP];
     char endpoint[DH_HOST_ENDPOINT_CAP];
-    char identity[DH_HOST_NAME_CAP];
     char fingerprint[DH_HOST_FINGERPRINT_CAP];
 } DHHostProfile;
 

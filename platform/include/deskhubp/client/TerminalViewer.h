@@ -36,7 +36,6 @@ struct TerminalViewerConfig {
     NetAddr host{};
     std::string hostLabel{};
     std::string clientName{};
-    std::string clientIdentityName{};
     bool acceptNewHostKey = false;
     deskhub::TermSize size{};
     uint32_t resumeId = 0;

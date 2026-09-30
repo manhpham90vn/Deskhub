@@ -97,14 +97,27 @@ jfloatArray NewFloatArray2(JNIEnv* env, jfloat a, jfloat b) {
 
 constexpr int kFailureCapacity = 512;
 constexpr int kNewHostKeyCapacity = 128;
+constexpr int kAnsweredAddressCapacity = 64;
+constexpr int kQueryStatusCapacity = 320;
+constexpr int kHostPublicKeyCapacity = 512;
 constexpr jsize kFailureSlot = 0;
 constexpr jsize kNewHostKeySlot = 1;
+constexpr jsize kAnsweredAddressSlot = 2;
 
 void StoreText(JNIEnv* env, jobjectArray out, jsize slot, const char* value) {
     if (!out || env->GetArrayLength(out) <= slot) return;
     jstring text = env->NewStringUTF(value);
     env->SetObjectArrayElement(out, slot, text);
     env->DeleteLocalRef(text);
+}
+
+void StoreInt(JNIEnv* env, jintArray out, jint value) {
+    if (!out || env->GetArrayLength(out) < 1) return;
+    env->SetIntArrayRegion(out, 0, 1, &value);
+}
+
+const char* OptionalText(const std::string& text) {
+    return text.empty() ? nullptr : text.c_str();
 }
 
 void DropWindow() {
@@ -201,7 +214,7 @@ Java_com_deskhub_app_NativeClient_nativeIsZoomed(JNIEnv*, jobject, jfloat zoom) 
 
 JNIEXPORT jobjectArray JNICALL
 Java_com_deskhub_app_NativeClient_nativeListSources(JNIEnv* env, jobject, jstring addrStr,
-    jbooleanArray capsOut, jobjectArray failureOut) {
+    jstring inviteStr, jbooleanArray capsOut, jobjectArray textOut, jintArray failureKindOut) {
     jclass cls = env->FindClass(kSourceClass);
     if (!cls) return nullptr;
     jmethodID ctor =
@@ -209,15 +222,21 @@ Java_com_deskhub_app_NativeClient_nativeListSources(JNIEnv* env, jobject, jstrin
     if (!ctor) return nullptr;
 
     const std::string addr = FromJString(env, addrStr);
+    const std::string invite = FromJString(env, inviteStr);
     DHSourceInfo sources[deskhub::kMaxSources];
     DHHostCaps caps{};
     char failure[kFailureCapacity] = {};
     char newHostKey[kNewHostKeyCapacity] = {};
-    const int count = dh_list_sources(addr.c_str(), sources, int(deskhub::kMaxSources), &caps,
-        failure, int(sizeof(failure)), newHostKey, int(sizeof(newHostKey)));
+    char answeredAddress[kAnsweredAddressCapacity] = {};
+    int failureKind = DHSourceQueryLocalError;
+    const int count = dh_list_sources(OptionalText(addr), OptionalText(invite), sources,
+        int(deskhub::kMaxSources), &caps, failure, int(sizeof(failure)), newHostKey,
+        int(sizeof(newHostKey)), answeredAddress, int(sizeof(answeredAddress)), &failureKind);
+    StoreText(env, textOut, kAnsweredAddressSlot, answeredAddress);
+    StoreInt(env, failureKindOut, jint(failureKind));
     if (count == DH_SOURCE_QUERY_FAILED) {
-        StoreText(env, failureOut, kFailureSlot, failure);
-        StoreText(env, failureOut, kNewHostKeySlot, newHostKey);
+        StoreText(env, textOut, kFailureSlot, failure);
+        StoreText(env, textOut, kNewHostKeySlot, newHostKey);
         return nullptr;
     }
 
@@ -239,6 +258,23 @@ Java_com_deskhub_app_NativeClient_nativeListSources(JNIEnv* env, jobject, jstrin
         env->DeleteLocalRef(displayName);
     }
     return arr;
+}
+
+JNIEXPORT void JNICALL
+Java_com_deskhub_app_NativeClient_nativeListSourcesCancel(JNIEnv*, jobject) {
+    dh_list_sources_cancel();
+}
+
+JNIEXPORT jstring JNICALL
+Java_com_deskhub_app_NativeClient_nativeSourceQueryStatus(JNIEnv* env, jobject) {
+    char buf[kQueryStatusCapacity] = {};
+    dh_source_query_status(buf, int(sizeof(buf)));
+    return env->NewStringUTF(buf);
+}
+
+JNIEXPORT jboolean JNICALL
+Java_com_deskhub_app_NativeClient_nativeIsPairingInvite(JNIEnv* env, jobject, jstring textStr) {
+    return dh_is_pairing_invite(FromJString(env, textStr).c_str()) ? JNI_TRUE : JNI_FALSE;
 }
 
 JNIEXPORT jint JNICALL
@@ -387,28 +423,9 @@ Java_com_deskhub_app_NativeClient_nativeSendSnapshot(JNIEnv* env, jobject, jlong
     dh_send_snapshot(send, &raw);
     const bool active = raw.state == DHSendConnecting || raw.state == DHSendSending;
     const bool done = raw.state == DHSendDone;
-    const bool failed =
-        raw.state == DHSendRefused || raw.state == DHSendFailed || raw.state == DHSendKeyChanged;
+    const bool failed = raw.state == DHSendRefused || raw.state == DHSendFailed;
     return NewTransfer(env, active, done, failed, raw.fileIndex, raw.fileCount, raw.bytes,
         raw.total, raw.name, raw.message);
-}
-
-JNIEXPORT jstring JNICALL
-Java_com_deskhub_app_NativeClient_nativeSendChangedKey(JNIEnv* env, jobject, jlong handle) {
-    auto* send = reinterpret_cast<DHSend*>(uintptr_t(handle));
-    char text[96] = {};
-    if (send) {
-        DHSendProgress raw{};
-        dh_send_snapshot(send, &raw);
-        if (raw.state == DHSendKeyChanged) dh_send_fingerprint(send, text, int(sizeof(text)));
-    }
-    return env->NewStringUTF(text);
-}
-
-JNIEXPORT jboolean JNICALL
-Java_com_deskhub_app_NativeClient_nativeSendAcceptKey(JNIEnv*, jobject, jlong handle) {
-    return dh_send_accept_key(reinterpret_cast<DHSend*>(uintptr_t(handle))) ? JNI_TRUE
-                                                                            : JNI_FALSE;
 }
 
 JNIEXPORT void JNICALL
@@ -560,6 +577,13 @@ JNIEXPORT jstring JNICALL
 Java_com_deskhub_app_NativeClient_nativeHostFingerprint(JNIEnv* env, jobject) {
     char buf[128];
     dh_host_fingerprint(buf, int(sizeof(buf)));
+    return env->NewStringUTF(buf);
+}
+
+JNIEXPORT jstring JNICALL
+Java_com_deskhub_app_NativeClient_nativeHostPublicKey(JNIEnv* env, jobject) {
+    char buf[kHostPublicKeyCapacity] = {};
+    dh_host_public_key(buf, int(sizeof(buf)));
     return env->NewStringUTF(buf);
 }
 

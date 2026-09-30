@@ -2,7 +2,9 @@
 #include "deskhub/net/PublicKeyText.h"
 #include "deskhub/net/TrustStore.h"
 #include "deskhub/protocol/Wire.h"
-#include "deskhub/ui/ClientKeys.h"
+#include "deskhub/auth/PairingTokens.h"
+#include "deskhub/net/AccessRequests.h"
+#include "deskhub/net/PairingInvite.h"
 #include "deskhub/ui/HostProfiles.h"
 
 #include <cstddef>
@@ -50,8 +52,33 @@ void CheckTrustStore(std::string_view text) {
 void CheckNames(std::string_view text) {
     const auto endpoint = deskhub::ui::CanonicalHostEndpoint(text);
     if (endpoint) Require(deskhub::ui::CanonicalHostEndpoint(*endpoint) == endpoint);
-    const std::string label = deskhub::ui::ClientKeyLabel(text, text);
-    Require(label.size() <= deskhub::kMaxClientNameBytes);
+}
+
+void CheckPairingInvite(std::string_view text) {
+    const auto invite = deskhub::ParsePairingInvite(text);
+    if (!invite) return;
+    const std::string link = deskhub::FormatPairingInvite(*invite);
+    Require(!link.empty() && link.size() <= deskhub::kMaxPairingInviteChars);
+    const auto again = deskhub::ParsePairingInvite(link);
+    Require(again && *again == *invite);
+}
+
+void CheckAccessRequests(std::string_view text) {
+    const auto requests = deskhub::ParseAccessRequests(text, 0);
+    if (!requests) return;
+    Require(requests->Requests().size() <= deskhub::kMaxAccessRequests);
+    const std::string file = deskhub::SerializeAccessRequests(*requests);
+    const auto again = deskhub::ParseAccessRequests(file, 0);
+    Require(again && deskhub::SerializeAccessRequests(*again) == file);
+}
+
+void CheckPairingTokens(std::string_view text) {
+    const auto tokens = deskhub::ParsePairingTokens(text, 0);
+    if (!tokens) return;
+    Require(tokens->Tokens().size() <= deskhub::kMaxPairingTokens);
+    const std::string file = deskhub::SerializePairingTokens(*tokens);
+    const auto again = deskhub::ParsePairingTokens(file, 0);
+    Require(again && again->Tokens() == tokens->Tokens());
 }
 
 }
@@ -62,5 +89,8 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
     CheckAuthorizedKeys(text);
     CheckTrustStore(text);
     CheckNames(text);
+    CheckPairingInvite(text);
+    CheckAccessRequests(text);
+    CheckPairingTokens(text);
     return 0;
 }

@@ -171,7 +171,13 @@ struct MainMenuView: View {
                     ProgressView().controlSize(.small)
                     Text(DeskhubClient.string(DHStrQueryingSources))
                 }
-                Button(DeskhubClient.string(DHStrCancelAction)) { connect.forgetHost() }
+                if !connect.waitingStatus.isEmpty {
+                    Text(connect.waitingStatus)
+                        .foregroundStyle(DeskhubPalette.muted)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: 360)
+                }
+                Button(DeskhubClient.string(DHStrCancelAction)) { connect.cancelConnect() }
             }
             .padding(24)
             .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
@@ -228,7 +234,6 @@ extension MainMenuView {
 
     private func beginConnect() {
         guard !connect.address.isEmpty, !connect.isConnecting else { return }
-        guard connect.acceptAddress() != nil else { return }
         Task {
             guard let found = await connect.connectAuth() else { return }
             let address = connect.acceptedAddress

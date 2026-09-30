@@ -25,4 +25,9 @@ std::optional<uint32_t> ParseIPv4(std::string_view text) {
     return ip;
 }
 
+std::string FormatIPv4(uint32_t ip) {
+    return std::to_string((ip >> 24) & 0xFF) + "." + std::to_string((ip >> 16) & 0xFF) + "." +
+           std::to_string((ip >> 8) & 0xFF) + "." + std::to_string(ip & 0xFF);
+}
+
 }

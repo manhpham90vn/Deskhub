@@ -118,28 +118,40 @@ nonisolated enum DeskhubClient {
     private static let queryFailureCapacity = 512
     private static let hostKeyCapacity = 128
     private static let trustPromptCapacity = 640
+    private static let answeredAddressCapacity = 128
+    private static let queryStatusCapacity = 320
+    private static let pairingInviteCapacity = Int(DH_PAIRING_INVITE_CAP)
+    private static let qrModuleCapacity = Int(DH_QR_MAX_SIZE) * Int(DH_QR_MAX_SIZE)
+    private static let publicKeyCapacity = 512
+    private static let accessRequestCapacity = 16
 
     static func trustNewHostPrompt(_ address: String, fingerprint: String) -> String {
         buffered(trustPromptCapacity) { dh_trust_new_host_prompt(address, fingerprint, $0, $1) }
     }
 
-    static func listSources(address: String) -> HostQueryOutcome {
+    static func listSources(address: String, invite: String) -> HostQueryOutcome {
         var buf = [DHSourceInfo](repeating: DHSourceInfo(), count: Int(dh_max_sources()))
         var caps = DHHostCaps()
         var failure = [CChar](repeating: 0, count: queryFailureCapacity)
         var newHostKey = [CChar](repeating: 0, count: hostKeyCapacity)
+        var answered = [CChar](repeating: 0, count: answeredAddressCapacity)
+        var failureKind: Int32 = 0
         let count = buf.withUnsafeMutableBufferPointer { ptr in
             dh_list_sources(
-                address, ptr.baseAddress, Int32(ptr.count), &caps,
+                address, invite, ptr.baseAddress, Int32(ptr.count), &caps,
                 &failure, Int32(queryFailureCapacity),
-                &newHostKey, Int32(hostKeyCapacity)
+                &newHostKey, Int32(hostKeyCapacity),
+                &answered, Int32(answeredAddressCapacity),
+                &failureKind
             )
         }
-        guard count >= 0 else {
-            return HostQueryOutcome(
-                failure: String(cString: failure), newHostKey: String(cString: newHostKey)
-            )
-        }
+        var outcome = HostQueryOutcome(
+            failure: String(cString: failure),
+            newHostKey: String(cString: newHostKey),
+            answeredAddress: String(cString: answered),
+            failureKind: failureKind
+        )
+        guard count >= 0 else { return outcome }
         let sources = buf.prefix(Int(count)).map { info in
             Source(
                 id: info.sourceId,
@@ -149,10 +161,76 @@ nonisolated enum DeskhubClient {
                 pickerLabel: cString(info.pickerLabel)
             )
         }
-        return HostQueryOutcome(query: HostQuery(
+        outcome.query = HostQuery(
             sources: sources,
             caps: HostCaps(acceptsInput: caps.acceptsInput, terminal: caps.terminal,
                            files: caps.files)
-        ))
+        )
+        return outcome
+    }
+
+    static func cancelSourceQuery() {
+        dh_list_sources_cancel()
+    }
+
+    static func sourceQueryStatus() -> String {
+        buffered(queryStatusCapacity) { dh_source_query_status($0, $1) }
+    }
+
+    static func isPairingInvite(_ text: String) -> Bool {
+        dh_is_pairing_invite(text)
+    }
+
+    static func pairingInviteAddress(_ invite: String) -> String {
+        buffered(answeredAddressCapacity) { dh_pairing_invite_address(invite, $0, $1) }
+    }
+
+    static func pairingInvite(port: UInt16, bindIp: String) -> String {
+        buffered(pairingInviteCapacity) { dh_pairing_invite(port, bindIp, $0, $1) }
+    }
+
+    static func revokePairingInvite() {
+        dh_pairing_revoke()
+    }
+
+    static func qrModules(_ text: String) -> [[Bool]] {
+        var modules = [UInt8](repeating: 0, count: qrModuleCapacity)
+        let size = Int(dh_qr_encode(text, &modules, Int32(qrModuleCapacity)))
+        guard size > 0 else { return [] }
+        return (0 ..< size).map { y in
+            (0 ..< size).map { x in modules[y * size + x] != 0 }
+        }
+    }
+
+    static func hostPublicKey() -> String {
+        buffered(publicKeyCapacity) { dh_host_public_key($0, $1) }
+    }
+
+    static func accessRequests() -> [AccessRequestRow] {
+        ffiList(
+            accessRequestCapacity, DHAccessRequest(),
+            { dh_access_requests($0, $1) },
+            { raw in
+                AccessRequestRow(
+                    name: cString(raw.name),
+                    address: cString(raw.address),
+                    shortKey: cString(raw.shortKey),
+                    fingerprint: cString(raw.fingerprint),
+                    requestedAt: cString(raw.requestedAt)
+                )
+            }
+        )
+    }
+
+    static func approveAccess(_ fingerprint: String) -> Bool {
+        dh_access_approve(fingerprint)
+    }
+
+    static func denyAccess(_ fingerprint: String) -> Bool {
+        dh_access_deny(fingerprint)
+    }
+
+    static var accessRequestsGeneration: UInt64 {
+        dh_access_requests_generation()
     }
 }

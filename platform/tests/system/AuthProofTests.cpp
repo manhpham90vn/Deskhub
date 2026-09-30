@@ -10,16 +10,13 @@
 namespace {
 
 struct SavedIdentity {
-    std::string cert{};
     std::string key{};
 
     SavedIdentity() {
-        cert = deskhubp::ReadAppDataFile(deskhubp::kHostCertFileName);
         key = deskhubp::ReadAppDataFile(deskhubp::kHostKeyFileName);
     }
 
     ~SavedIdentity() {
-        if (!cert.empty()) deskhubp::WriteAppDataFile(deskhubp::kHostCertFileName, cert);
         if (!key.empty()) deskhubp::WriteAppDataFile(deskhubp::kHostKeyFileName, key);
     }
 };
@@ -33,15 +30,18 @@ void TestAKeyProvesTheMachineItBelongsTo() {
 
     const SavedIdentity guard;
     ForgetHostIdentity();
-    const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity("deskhub-test");
+    const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity();
     Check(identity.Valid(), "the machine has an identity");
     if (!identity.Valid()) return;
 
-    const std::vector<uint8_t> pub = deskhubp::IdentityPublicKey(identity);
+    const std::vector<uint8_t> pub = identity.publicKey;
     Check(!pub.empty(), "its public key can be put on the wire");
 
     const std::string publicText = deskhubp::IdentityPublicKeyText(identity);
     Check(!publicText.empty(), "the key can be copied as OpenSSH text");
+    const std::string labelled = deskhubp::IdentityPublicKeyLine(identity, "Study PC");
+    Check(labelled.ends_with(" Study PC") && labelled.starts_with(publicText),
+        "the copied line can carry the device name as its label");
     Check(deskhubp::PublicKeySpkiFromText(publicText) == pub,
         "copying the text back gives the same public key used by authentication");
     Check(deskhubp::PublicKeySpkiFromText("ssh-ed25519 AAAA").empty(),
@@ -69,8 +69,8 @@ void TestAKeyProvesTheMachineItBelongsTo() {
     Check(!deskhubp::VerifySignature({}, message, signature), "an empty key verifies nothing");
 
     ForgetHostIdentity();
-    const deskhubp::HostIdentity other = deskhubp::LoadOrCreateHostIdentity("deskhub-test");
-    const std::vector<uint8_t> otherPub = deskhubp::IdentityPublicKey(other);
+    const deskhubp::HostIdentity other = deskhubp::LoadOrCreateHostIdentity();
+    const std::vector<uint8_t> otherPub = other.publicKey;
     Check(!deskhubp::VerifySignature(otherPub, message, signature),
         "and a different machine cannot pass off someone else's signature as its own");
 }

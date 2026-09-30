@@ -196,21 +196,33 @@ typedef enum {
     DHStrAllowClientPlaceholder = 185,
     DHStrAllowClientAction = 186,
     DHStrAllowClientInvalid = 187,
-    DHStrMyKeysHeading = 188,
-    DHStrMyKeysHint = 189,
     DHStrCopyPublicKeyAction = 190,
-    DHStrNewKeyAction = 191,
-    DHStrImportKeyAction = 192,
-    DHStrKeyNameLabel = 193,
-    DHStrKeyPassphraseLabel = 194,
     DHStrTrustNewHostTitle = 195,
     DHStrTrustNewHostAction = 196,
     DHStrCancelAction = 197,
     DHStrCopiedButton = 198,
     DHStrDeviceNameHint = 199,
-    DHStrDeleteKeyAction = 200,
-    DHStrDeleteKeyPrompt = 201,
+    DHStrShowQrAction = 202,
+    DHStrHideQrAction = 203,
+    DHStrScanQrAction = 204,
+    DHStrQrHint = 205,
+    DHStrAccessRequestsHeading = 206,
+    DHStrAccessRequestsEmpty = 207,
+    DHStrApproveAction = 208,
+    DHStrDenyAction = 209,
+    DHStrCameraDenied = 210,
+    DHStrInviteInvalid = 211,
 } DHStringId;
+
+typedef enum {
+    DHSourceQueryOk = 0,
+    DHSourceQueryUnreachable = 1,
+    DHSourceQueryUntrustedHost = 2,
+    DHSourceQueryRefused = 3,
+    DHSourceQueryAwaitingApproval = 4,
+    DHSourceQueryInviteMismatch = 5,
+    DHSourceQueryLocalError = 6,
+} DHSourceQueryFailure;
 
 typedef enum {
     DHThemeSidebar = 0,
@@ -257,8 +269,16 @@ bool dh_is_escape_vk(int32_t vk);
 
 bool dh_parse_address(const char* address);
 
-int dh_list_sources(const char* address, DHSourceInfo* out, int capacity, DHHostCaps* out_caps,
-    char* failure, int failure_capacity, char* new_host_key, int new_host_key_capacity);
+int dh_list_sources(const char* address, const char* pairing_invite, DHSourceInfo* out,
+    int capacity, DHHostCaps* out_caps, char* failure, int failure_capacity, char* new_host_key,
+    int new_host_key_capacity, char* answered_address, int answered_address_capacity,
+    int* out_failure_kind);
+
+void dh_list_sources_cancel(void);
+
+int dh_source_query_status(char* out, int capacity);
+
+bool dh_is_pairing_invite(const char* text);
 
 int dh_max_sources(void);
 

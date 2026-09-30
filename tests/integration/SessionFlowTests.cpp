@@ -9,7 +9,6 @@
 #include "deskhubp/net/UdpSocket.h"
 #include "deskhubp/client/ScreenViewer.h"
 #include "deskhubp/system/HostIdentity.h"
-#include "deskhubp/system/ClientIdentity.h"
 #include "deskhubp/system/AuthorizedKeysFile.h"
 #include "deskhubp/system/TrustStoreFile.h"
 
@@ -569,7 +568,7 @@ void TestRevokedClientCannotReadSources() {
     Check(!QuerySources(HostAddr(port), reply) && reply.sources.empty(),
         "a revoked client cannot read display names");
 
-    const auto client = deskhubp::LoadOrCreateClientIdentity();
+    const auto client = deskhubp::LoadOrCreateHostIdentity();
     Check(client.Valid() &&
               GrantClientKey(client),
         "the client key can be explicitly granted again");

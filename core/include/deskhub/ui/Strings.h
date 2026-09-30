@@ -116,13 +116,17 @@ inline constexpr const char* kTrayHideWindow = "Hide window";
 inline constexpr const char* kTrayQuit = "Quit Deskhub";
 inline constexpr const char* kLanDevicesEmpty = "Saved devices appear here after a connection.";
 inline constexpr const char* kAuthNotPaired =
-    "This device's key is not authorized on that machine yet. To fix it: on this device "
-    "open Devices > My keys and press Copy public key (use the key this host connects with); "
-    "send it to the owner of that machine, who pastes it under Devices > Clients allowed to "
-    "connect and presses Allow. Then connect again.";
+    "That machine has not allowed this device yet. Connect again so its owner sees the "
+    "request under Connection requests and presses Approve, scan the QR code it shows, or "
+    "send it this device's public key (Devices > Copy public key) to paste under Clients "
+    "allowed to connect.";
 inline constexpr const char* kAuthNotPairedCliHint =
-    "From the command line: run `deskhub-cli key public` here and pipe that line into "
+    "From the command line: the host approves with `deskhub-cli access approve --fingerprint "
+    "SHA256:...`, or run `deskhub-cli key public` here and pipe that line into "
     "`deskhub-cli access add --stdin` on the other machine.";
+inline constexpr const char* kAuthAwaitingApproval =
+    "The owner of that machine did not approve this device in time. Ask them to press "
+    "Approve under Connection requests on their Host page, then connect again.";
 inline constexpr const char* kAuthRefused =
     "That machine refused this connection. Ask its owner to check that this device's public "
     "key is still listed under Devices > Clients allowed to connect, then connect again.";
@@ -141,12 +145,14 @@ inline constexpr const char* kAuthConfigError =
 inline constexpr const char* kAuthUntrustedHost =
     "This host is not trusted yet. Check its fingerprint and trust it, or add its host key "
     "first.";
-inline constexpr const char* kAuthHostKeyChanged =
-    "This host's key has changed. Deskhub will not connect until you remove it from "
-    "Trusted hosts and trust it again - only do that if you know why the key changed.";
 inline constexpr const char* kAuthLocalKeyUnavailable =
-    "This device's key cannot be loaded. Open Devices > My keys and create a new key, or "
-    "remove this host from Trusted hosts and connect again so it uses the default key.";
+    "This device's key cannot be loaded. Check that Deskhub can read and write its data "
+    "folder, then try again.";
+inline constexpr const char* kInviteHostMismatch =
+    "The machine that answered is not the one that made this QR code. Show the code again "
+    "on the host and scan it once more.";
+inline constexpr const char* kInviteInvalid =
+    "That is not a Deskhub QR code or invite link.";
 
 inline const char* AuthRefusalText(AuthResultCode code) {
     switch (code) {
@@ -156,8 +162,8 @@ inline const char* AuthRefusalText(AuthResultCode code) {
         case AuthResultCode::BadSignature: return kAuthBadSignature;
         case AuthResultCode::ConfigError: return kAuthConfigError;
         case AuthResultCode::UntrustedHost: return kAuthUntrustedHost;
-        case AuthResultCode::HostKeyChanged: return kAuthHostKeyChanged;
         case AuthResultCode::LocalKeyUnavailable: return kAuthLocalKeyUnavailable;
+        case AuthResultCode::AwaitingApproval: return kAuthAwaitingApproval;
         case AuthResultCode::Accepted: return "Connected.";
         case AuthResultCode::NotPaired: break;
     }
@@ -168,11 +174,12 @@ inline constexpr const char* kSidebarDevices = "Devices";
 inline constexpr const char* kPairedHeading =
     "Clients allowed to connect to this machine";
 inline constexpr const char* kPairedHint =
-    "Paste the public key of each device that may connect. Only keys listed here get in; "
-    "nothing is approved over the network.";
+    "Only the devices listed here get in. A device joins the list when you approve its "
+    "connection request, when it scans this machine's QR code, or when you paste its public "
+    "key below.";
 inline constexpr const char* kPairedEmpty =
-    "No device can connect to this machine yet. Ask the person connecting for their public "
-    "key (Devices > My keys > Copy public key), paste it above and press Allow.";
+    "No device can connect to this machine yet. Show the QR code while sharing, approve a "
+    "connection request, or paste a device's public key above and press Allow.";
 inline constexpr const char* kPairedForget =
     "Remove";
 inline constexpr const char* kPairedForgetAll =
@@ -184,8 +191,10 @@ inline constexpr const char* kPairedForgetNote =
 inline constexpr const char* kThisMachineHeading =
     "This machine's host key";
 inline constexpr const char* kThisMachineHint =
-    "A device connecting here for the first time is shown this fingerprint. Ask its user "
-    "to compare it before they trust this machine.";
+    "This fingerprint is this machine's identity as host and as client. A device connecting "
+    "here for the first time is shown it; ask its user to compare before they trust this "
+    "machine. Copy public key gives the line another host's owner can paste to allow this "
+    "machine.";
 inline constexpr const char* kPairedColumnName =
     "Client";
 inline constexpr const char* kPairedColumnKey = "Key";
@@ -193,14 +202,14 @@ inline constexpr const char* kDevicesHeading = "Devices";
 inline constexpr const char* kSavedHostsHeading =
     "Trusted hosts";
 inline constexpr const char* kSavedHostsHint =
-    "A host is added here when you confirm its fingerprint on the first connection. If a "
-    "host's key changes, Deskhub refuses to connect until you remove the host here.";
+    "A host is added here when you confirm its fingerprint on the first connection or scan "
+    "its QR code. Trust follows the host's key, so it stays trusted when its address "
+    "changes; the address shown is the last one it answered at.";
 inline constexpr const char* kSavedHostsEmpty =
     "(no trusted hosts yet)";
 inline constexpr const char* kHostNameLabel = "Name";
 inline constexpr const char* kHostAddressLabel = "Address";
 inline constexpr const char* kHostKeyLabel = "Host key";
-inline constexpr const char* kHostIdentityLabel = "Client key";
 inline constexpr const char* kRemoveHostAction = "Remove";
 inline constexpr const char* kDevicesHostArea = "When this machine is the host";
 inline constexpr const char* kDevicesHostAreaHint = "Other devices connect to this machine.";
@@ -210,19 +219,26 @@ inline constexpr const char* kAllowClientPlaceholder = "ssh-ed25519 AAAA\xE2\x80
 inline constexpr const char* kAllowClientAction = "Allow";
 inline constexpr const char* kAllowClientInvalid =
     "That is not a supported Ed25519 or ECDSA P-256 public key, or it is already allowed.";
-inline constexpr const char* kMyKeysHeading = "My keys";
-inline constexpr const char* kMyKeysHint =
-    "Give a key's public key to the owner of a host so they can allow it. The private key "
-    "never leaves this machine.";
 inline constexpr const char* kCopyPublicKeyAction = "Copy public key";
-inline constexpr const char* kNewKeyAction = "New key";
-inline constexpr const char* kDeleteKeyAction = "Delete";
-inline constexpr const char* kDeleteKeyPrompt =
-    "Delete this key? Hosts that allow only this key will stop letting this device in, and "
-    "the private key cannot be recovered.";
-inline constexpr const char* kImportKeyAction = "Import key\xE2\x80\xA6";
-inline constexpr const char* kKeyNameLabel = "Key name";
-inline constexpr const char* kKeyPassphraseLabel = "Passphrase (only if the key has one)";
+inline constexpr const char* kShowQrAction = "Show QR code";
+inline constexpr const char* kHideQrAction = "Hide QR code";
+inline constexpr const char* kScanQrAction = "Scan QR code";
+inline constexpr const char* kQrHint =
+    "Scan this with Deskhub on a phone or tablet, or paste the link into another Deskhub's "
+    "address field. It lets one device in and stops working after five minutes or when it "
+    "is hidden.";
+inline constexpr const char* kQrUnavailable =
+    "Could not make a QR code: this machine has no identity key or no network address.";
+inline constexpr const char* kUnnamedClient = "(unnamed)";
+inline constexpr const char* kAccessRequestsHeading = "Connection requests";
+inline constexpr const char* kAccessRequestsEmpty =
+    "No device is waiting. A device that connects without being allowed appears here for "
+    "ten minutes.";
+inline constexpr const char* kApproveAction = "Approve";
+inline constexpr const char* kDenyAction = "Deny";
+inline constexpr const char* kCameraDenied =
+    "Deskhub cannot use the camera. Allow camera access in the system settings, or paste "
+    "the invite link into the address field instead.";
 inline constexpr const char* kTrustNewHostTitle = "New host";
 inline constexpr const char* kTrustNewHostAction = "Trust and connect";
 inline constexpr const char* kCancelAction = "Cancel";
@@ -233,11 +249,37 @@ inline std::string NewHostKeyCliHint(std::string_view fingerprint) {
            "--accept-new-host-key.";
 }
 
-inline std::string TrustNewHostPrompt(std::string_view address, std::string_view fingerprint) {
-    return "This device has not connected to " + std::string(address) +
-           " before. Its host key fingerprint is:\n\n" + std::string(fingerprint) +
-           "\n\nCompare it with the fingerprint shown on that machine's Devices page. Trust it "
-           "only if they match.";
+inline std::string PreviousOwnerWarning(std::string_view address, std::string_view label,
+    std::string_view fingerprint) {
+    if (fingerprint.empty()) return {};
+    std::string owner = label.empty() ? std::string(fingerprint)
+                                      : std::string(label) + " (" + std::string(fingerprint) + ")";
+    return "Careful: " + std::string(address) + " used to belong to " + owner +
+           ", which stays in Trusted hosts. This is a different machine.";
+}
+
+inline std::string TrustNewHostPrompt(std::string_view address, std::string_view fingerprint,
+    std::string_view previousOwnerWarning = {}) {
+    std::string prompt = "This device has not connected to " + std::string(address) +
+                         " before. Its host key fingerprint is:\n\n" + std::string(fingerprint) +
+                         "\n\nCompare it with the fingerprint shown on that machine's Devices "
+                         "page. Trust it only if they match.";
+    if (!previousOwnerWarning.empty()) prompt += "\n\n" + std::string(previousOwnerWarning);
+    return prompt;
+}
+
+inline std::string AwaitingApprovalLine(std::string_view host) {
+    return "Waiting for the owner of " + std::string(host) +
+           " to approve this device\xE2\x80\xA6 They see it under Connection requests on their "
+           "Host page.";
+}
+
+inline std::string AccessRequestCliLine(std::string_view name, std::string_view fingerprint,
+    std::string_view address) {
+    const std::string who = name.empty() ? std::string("An unnamed device") : std::string(name);
+    return who + " (" + std::string(fingerprint) + ", " + std::string(address) +
+           ") wants to connect. Approve with: deskhub-cli access approve --fingerprint " +
+           std::string(fingerprint);
 }
 
 inline constexpr const char* kTerminalSourceName = "Terminal";
@@ -357,13 +399,6 @@ inline std::string TransferProgressLine(std::string_view name, uint16_t index, u
     out += "  " + std::to_string(bytes * 100 / total) + "%";
     return out;
 }
-
-inline constexpr const char* kTrustChangedTitle = "This machine's key has changed";
-inline constexpr const char* kTrustChangedBody =
-    "The key does not match the one recorded the first time. Either the machine was reinstalled, "
-    "or something is sitting between you and it. Do not continue unless you know why it changed.";
-inline constexpr const char* kTrustFingerprintLabel = "Fingerprint:";
-inline constexpr const char* kTrustReject = "Do not connect";
 
 inline constexpr const char* kTerminalExtraKeysHint =
     "Ctrl and Alt latch: tap one, then a letter.";

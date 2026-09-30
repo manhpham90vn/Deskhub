@@ -47,8 +47,7 @@ bool Finished(deskhubp::TerminalViewerState state) {
            state == deskhubp::TerminalViewerState::Ended;
 }
 
-ExitCode CodeFor(deskhubp::TerminalViewerState state, bool keyChanged) {
-    if (keyChanged) return ExitCode::KeyChanged;
+ExitCode CodeFor(deskhubp::TerminalViewerState state) {
     if (state == deskhubp::TerminalViewerState::Refused) return ExitCode::Refused;
     if (state == deskhubp::TerminalViewerState::Failed) return ExitCode::Unreachable;
     return ExitCode::Ok;
@@ -60,7 +59,6 @@ ExitCode ListShells(const Command& command, const NetAddr& host) {
     config.hostLabel = command.address;
     config.clientName =
         command.deviceName ? *command.deviceName : deskhubp::SessionDeviceName();
-    config.clientIdentityName = command.identityName.value_or("");
     config.acceptNewHostKey = command.acceptNewHostKey;
     config.size = SizeNow();
     config.deferOpen = true;
@@ -68,7 +66,6 @@ ExitCode ListShells(const Command& command, const NetAddr& host) {
     std::mutex mutex;
     deskhub::TermSessionList sessions;
     bool listed = false;
-    std::atomic<bool> keyChanged{false};
 
     deskhubp::TerminalViewerCallbacks hooks;
     hooks.onSessions = [&](const deskhub::TermSessionList& list) {
@@ -84,10 +81,6 @@ ExitCode ListShells(const Command& command, const NetAddr& host) {
         if (!command.quiet && !message.empty() && state != deskhubp::TerminalViewerState::Live)
             PrintConnectFailure(message);
     };
-    hooks.onTrustAsked = [&](deskhub::TrustVerdict verdict, std::string_view) {
-        if (verdict == deskhub::TrustVerdict::Changed) keyChanged.store(true);
-    };
-
     deskhubp::TerminalViewer viewer;
     if (!viewer.Start(config, std::move(hooks))) {
         PrintError(deskhub::ui::CouldNotConnectTo(command.address));
@@ -100,14 +93,13 @@ ExitCode ListShells(const Command& command, const NetAddr& host) {
             const std::lock_guard<std::mutex> lock(mutex);
             if (listed) break;
         }
-        if (keyChanged.load() || Finished(viewer.State())) break;
+        if (Finished(viewer.State())) break;
         if (std::chrono::steady_clock::now() >= deadline) break;
         std::this_thread::sleep_for(std::chrono::milliseconds(kReadTimeoutMs));
     }
 
     const deskhubp::TerminalViewerState last = viewer.State();
     viewer.Stop();
-    if (keyChanged.load()) return ExitCode::KeyChanged;
     if (last == deskhubp::TerminalViewerState::Refused) return ExitCode::Refused;
     if (last == deskhubp::TerminalViewerState::Failed) return ExitCode::Unreachable;
     if (!command.quiet) {
@@ -141,11 +133,8 @@ ExitCode RunShell(const Command& command) {
     if (command.shell.list) return ListShells(command, host);
     config.clientName =
         command.deviceName ? *command.deviceName : deskhubp::SessionDeviceName();
-    config.clientIdentityName = command.identityName.value_or("");
     config.acceptNewHostKey = command.acceptNewHostKey;
     config.size = SizeNow();
-
-    std::atomic<bool> keyChanged{false};
 
     deskhubp::TerminalViewerCallbacks hooks;
     hooks.onOutput = [](std::span<const uint8_t> bytes) { WriteThrough(bytes); };
@@ -154,16 +143,6 @@ ExitCode RunShell(const Command& command) {
         if (state == deskhubp::TerminalViewerState::Live) return;
         PrintConnectFailure(message);
     };
-    hooks.onTrustAsked = [&keyChanged](deskhub::TrustVerdict verdict,
-                             std::string_view fingerprint) {
-        if (verdict != deskhub::TrustVerdict::Changed) return;
-        keyChanged.store(true);
-        PrintError(deskhub::ui::kTrustChangedTitle);
-        PrintError(deskhub::ui::kTrustChangedBody);
-        PrintError(std::string(deskhub::ui::kTrustFingerprintLabel) + " " +
-                   std::string(fingerprint));
-    };
-
     WatchForInterrupt();
 
     deskhubp::TerminalViewer viewer;
@@ -176,7 +155,7 @@ ExitCode RunShell(const Command& command) {
     std::string pending;
     bool typingDone = false;
 
-    while (!Interrupted() && !keyChanged.load() && !Finished(viewer.State())) {
+    while (!Interrupted() && !Finished(viewer.State())) {
         if (deskhubp::ConsoleResized()) viewer.Resize(SizeNow());
 
         if (viewer.State() != deskhubp::TerminalViewerState::Live) {
@@ -212,7 +191,7 @@ ExitCode RunShell(const Command& command) {
     const deskhubp::TerminalViewerState last = viewer.State();
     viewer.Stop();
     if (!command.quiet) PrintError("");
-    return CodeFor(last, keyChanged.load());
+    return CodeFor(last);
 }
 
 }

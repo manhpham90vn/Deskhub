@@ -15,7 +15,7 @@ add_library(deskhub SHARED
     HostBridge.cpp
     TerminalBridge.cpp
     HostProfileBridge.cpp
-    ClientKeyBridge.cpp
+    PairingBridge.cpp
     SharingHost.cpp
     ScreenFfiAndroid.cpp
 

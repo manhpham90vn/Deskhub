@@ -233,8 +233,8 @@ into the device it runs on.
 `deskhub-cli` provides commands for sharing a screen, opening a remote shell and
 connecting from a script or over SSH. On Windows and Linux, `connect` opens a window for
 the remote screen; on macOS, use the desktop app to watch a screen. Run `deskhub-cli help`
-for the command list. The CLI and app use the same settings, client keys, allowed clients
-and trusted hosts.
+for the command list. The CLI and app use the same settings, machine key, allowed clients,
+connection requests and trusted hosts.
 
 | Platform | File |
 | --- | --- |
@@ -274,23 +274,32 @@ and says so; use the app for that.
 ## 🔒 Before you share a screen
 
 Everything a session carries — video, keystrokes, mouse, clipboard and terminal traffic —
-runs over **QUIC/TLS**, and access works like SSH. To let a device connect:
+runs over **QUIC/TLS**, and access works like SSH: a host lets in only the devices whose
+key it lists, and every device has one key. There are three ways to put a device on that
+list, and you only need one of them:
 
-1. On the device that will connect, open **Devices** → *When this machine is the client*
-   → **My keys** and press *Copy public key* (CLI: `deskhub-cli key public --name default`).
-2. On the host, open **Devices** → *When this machine is the host* → **Clients allowed to
-   connect to this machine**, press *Allow* and paste that key (CLI:
-   `deskhub-cli access add --stdin`).
-3. Connect by address. The first time, a **New host** dialog shows the host's key
-   fingerprint: compare it with **This machine's host key** on the host's Devices page,
-   then press *Trust and connect*. From then on the host is under **Trusted hosts**.
+- **Scan the QR code.** While the host is sharing, press **Show QR code** beside its
+  address list. On the phone, press **Scan QR code** on the Client page and point it at
+  the screen; on any other device, copy the link under the code and paste it into the
+  address field. The device is trusted, allowed and connected in one step.
+- **Approve the request.** On the device, type the host's address and press *Connect*.
+  The host's Host page lists it under **Connection requests** with its name, key
+  fingerprint and address; press **Approve** and the device connects on its next try —
+  it keeps trying for two minutes on its own.
+- **Paste the key.** On the device, **Devices** → **Copy public key**; on the host,
+  **Devices** → **Clients allowed to connect to this machine** → *Allow*, paste, done.
 
-[Keys and access](#-keys-and-access) walks through each step in the app and the CLI,
-along with extra keys, scripts, revoking and rotating.
+Connecting by address the first time shows a **New host** dialog with the host's key
+fingerprint: compare it with **This machine's host key** on the host's Devices page, then
+press *Trust and connect*. A QR code skips that dialog, because it carries the
+fingerprint. From then on the host is under **Trusted hosts**, and stays trusted even when
+its address changes.
 
-Nothing is approved over the network and Deskhub never scans it. If a trusted host's key
-ever changes, the connection is refused outright; remove the host from *Trusted hosts*
-only if you know why its key changed, then trust it again.
+[Keys and access](#-keys-and-access) walks through each way in the app and the CLI,
+along with scripts and revoking.
+
+There is no passcode and no switch that lets unknown machines in: nobody connects without
+your *Approve*, a QR code you showed, or a key you pasted. Deskhub never scans the network.
 
 Use Deskhub on a **network you trust** or through a **VPN**. Do not port-forward UDP
 47777. Encryption protects session contents, but the first connection to a host trusts
@@ -303,57 +312,89 @@ and how to report a vulnerability.
 
 ## 🔑 Keys and access
 
-Deskhub signs in with key pairs, the way SSH does. Every device that connects has a
-**client key**, and every host has a **host key**. A host lets in only the client keys it
-lists, and a client connects only to hosts whose key it trusts. All of it lives on the
-**Devices** page, split into *When this machine is the host* and *When this machine is
-the client*. Each step below also has a `deskhub-cli` command; the app and the CLI read the
-same files, so a change made in one shows up in the other.
+Deskhub signs in with key pairs, the way SSH does. Every machine has **one key**, created
+the first time Deskhub runs, and that key is the machine whether it is sharing or
+connecting: the fingerprint you compare when you connect to it and the public key a host
+stores when it lets it in are the same key. A host lets in only the keys it lists, and a
+client connects only to hosts whose key it trusts. All of it lives on the **Devices**
+page, split into *When this machine is the host* and *When this machine is the client*.
+Each step below also has a `deskhub-cli` command; the app and the CLI read the same
+files, so a change made in one shows up in the other.
 
-### Your keys
+### Your key
 
-Your keys are under **Devices** → *When this machine is the client* → **My keys**. The
-private half never leaves the machine.
-
-- **The `default` key.** The app creates a key called `default` the first time you open
-  the Devices page, and the CLI creates it the first time it connects anywhere or prints
-  it with `deskhub-cli key public --name default`. Most people never need another one.
-- **More keys.** Press *New key* and give it a name (CLI:
-  `deskhub-cli key generate --name NAME`). Use a separate key when you want to revoke one
-  host's access without touching the others.
-- **An existing key.** Press *Import key…*, pick the private key file, give it a name and,
-  if the file is encrypted, its passphrase (CLI:
-  `deskhub-cli key import --name NAME --file PATH`, adding `--passphrase-stdin` to read the
-  passphrase from standard input). Deskhub reads OpenSSH (`ssh-keygen`) and PKCS#8 files
-  holding an Ed25519 or ECDSA P-256 key; RSA is not supported. The passphrase is used only
-  to unlock the file during the import — it is not stored and never sent to a host.
-- **Your public key.** Press *Copy public key* beside a key (CLI:
-  `deskhub-cli key public --name NAME`). You get one line such as
-  `ssh-ed25519 AAAA… laptop`; the label at the end is this device's name, set under
-  **Settings** → *General* → **Device name**, so the host owner can tell whose key it is.
-  This line is what you send to the owner of a host — it is safe to share.
-- **Deleting a key.** Press *Delete* beside it. The `default` key cannot be deleted, and
-  neither can a key a trusted host still uses — point that host at another key first. A
-  deleted private key cannot be recovered. From the CLI: `deskhub-cli key list` and
-  `deskhub-cli key delete --name NAME`, with the same rules.
+**Devices** → *When this machine is the host* → **This machine's host key** shows the
+key's fingerprint, `SHA256:…`, with a *Copy* button — that is what someone connecting to
+you compares against. **Copy public key** beside it (CLI: `deskhub-cli key public`) copies
+one line such as `ecdsa-sha2-nistp256 AAAA… laptop`; the label at the end is this device's
+name, set under **Settings** → *General* → **Device name**, so a host's owner can tell whose
+key it is. That line is what you hand to the owner of a host when neither the QR code nor a
+request is convenient — it is safe to share. The private half never leaves the machine,
+there is nothing to generate or import, and the key is never replaced on its own. If you
+delete `host_key.pem`, the machine gets a new identity: hosts have to let it in again,
+and devices that trusted it see it as a new host.
 
 ### Letting a device in
 
-On the host:
+The host's owner decides, in one of three ways. Whichever you use, the device then appears
+under **Devices** → *When this machine is the host* → **Clients allowed to connect to this
+machine**, labelled with its name; *Remove* beside it takes it out again, and *Remove every
+client* empties the list after asking you to confirm.
 
-1. Ask the person connecting for their public key line (see [Your keys](#your-keys)).
+**Connecting with a QR code** — the quickest, and the only one that needs no fingerprint
+comparison. While the host is sharing, press **Show QR code** beside its address list. The
+code carries the host's addresses and port, its key fingerprint, its name and a random
+one-time token that lasts five minutes.
+
+- On a phone or tablet, open the Client page and press **Scan QR code**. The first time,
+  the system asks for camera permission; Deskhub uses the camera only here, decodes the
+  frames on the device and stores nothing. Opening a `deskhub://pair/…` link with the
+  system camera or from a message does the same.
+- On any device, including a desktop, copy the link shown under the code and paste it
+  into the address field, then press *Connect* (CLI: `deskhub-cli connect 'deskhub://pair/…'`;
+  `sources`, `shell` and `send` take the link too).
+
+The device checks that the machine answering holds the key printed in the code — if a
+different machine answers at that address, it stops and says the QR code is not from that
+machine — then trusts the host, sends the token, and is let in and connected in one go.
+Each code works once; press **Hide QR code**, or stop sharing, and it stops working even
+if nobody used it. A device that is already allowed can scan the code just to pick up the
+host's current address.
+
+**Approving a connection request** — when the device is not in the same room.
+
+1. On the device, type the host's address (`192.168.1.10`, or `192.168.1.10:PORT` when
+   the host does not use 47777) and press *Connect*; confirm the **New host** dialog as
+   described below. The page then says it is waiting for the host's owner to approve, and
+   keeps trying on its own for two minutes. *Cancel* stops it.
+2. On the host, the Host page lists the device under **Connection requests** — its name,
+   the start of its fingerprint and its address, with **Approve** and **Deny**. Check that
+   the fingerprint matches the one on the device's Devices page and that the address is
+   where you expect the device to be, then press *Approve*. The device connects on its next
+   try. *Deny* drops the request; the device is only told that nobody approved it in time.
+3. A request stays for ten minutes and a host keeps at most sixteen. If you approve after
+   the device gave up, it only has to press *Connect* once more.
+
+From the command line: `deskhub-cli access requests` (add `--json` for scripts) lists what
+is waiting, `deskhub-cli access approve --fingerprint SHA256:…` lets one in and
+`deskhub-cli access deny --fingerprint SHA256:…` drops it. A running `deskhub-cli share`
+prints each new request as it arrives, with the approve command to paste into another
+terminal.
+
+**Pasting the key** — when you would rather move the key yourself.
+
+1. Ask the person connecting to press **Copy public key** on their Devices page (see
+   [Your key](#your-key)) and send you the line.
 2. Open **Devices** → *When this machine is the host* → **Clients allowed to connect to
    this machine**, paste the line and press *Allow*. Only Ed25519 and ECDSA P-256 public
    keys are accepted.
-3. The key now appears in the list with its label. *Remove* beside a key takes it out;
-   *Remove every client* empties the list after asking you to confirm.
 
 From the command line, pipe the line into `access add`:
 
 ```sh
-deskhub-cli key public --name default                          # on the client
+deskhub-cli key public                                         # on the device
 deskhub-cli access add --stdin                                 # on the host: paste, then Ctrl-D
-deskhub-cli key public --name default | ssh me@host deskhub-cli access add --stdin
+deskhub-cli key public | ssh me@host deskhub-cli access add --stdin
 deskhub-cli access list                                        # on the host
 deskhub-cli access remove --fingerprint SHA256:…               # on the host
 ```
@@ -362,92 +403,108 @@ deskhub-cli access remove --fingerprint SHA256:…               # on the host
 
 ### Connecting the first time
 
-1. On the client, type the host's address (`192.168.1.10`, or `192.168.1.10:PORT` when
-   the host does not use 47777) and press *Connect*.
-2. A **New host** dialog shows the host-key fingerprint, `SHA256:…`.
+A QR code does this for you. Connecting by address the first time works like SSH:
+
+1. On the client, type the host's address and press *Connect*.
+2. A **New host** dialog shows the host's key fingerprint, `SHA256:…`. If that address
+   used to belong to another host you trust, the dialog says so and names it — a
+   different key at a known address is a different machine, so be sure you know which one
+   is answering before you go on.
 3. On the host, open **Devices** → *When this machine is the host* → **This machine's
    host key** (*Copy* puts it on the clipboard). Compare the two fingerprints over a
    channel you already trust — in person, by phone, over chat you know is theirs.
 4. If they match, press *Trust and connect*. If they don't, press *Cancel*.
 
-The host is now listed under **Trusted hosts**, with the client key it uses, and later
-connections skip the dialog.
+The host is now listed under **Trusted hosts** with its name, fingerprint and the last
+address it answered at. Trust follows the key, not the address: when the host gets a new
+address, type it and connect — no dialog, no new approval — and the list remembers the new
+address for next time.
 
 **Pinning a host in advance.** With the CLI you can save the host key before the first
 connection, so no dialog is needed:
 
 ```sh
 deskhub-cli host-key public                                    # on the host
-deskhub-cli host add office --address 192.168.1.10 --identity default --host-key-stdin
+deskhub-cli host add office --address 192.168.1.10 --host-key-stdin
 ```
 
 Paste the host's line into the second command (on the client), then Ctrl-D. `office` is an
 alias of your choosing: `connect office`, `sources office`, `shell office` and
 `send office FILE` all accept it. `deskhub-cli host list` shows every saved host, including
 the ones trusted from the app — those get an alias built from their address, such as
-`192-168-1-10-47777`. `host update ALIAS` changes the address (`--address`), the client
-key (`--identity`) or the pinned host key (`--host-key-stdin`); `host remove ALIAS` forgets
-the host. The app connects to a new host with `default`; to use another key for a host,
-set it here with `--identity` — the app then uses it too.
+`192-168-1-10-47777`. `host update ALIAS` changes the address (`--address`) or the pinned
+host key (`--host-key-stdin`); `host remove ALIAS` forgets the host, and so does
+`deskhub-cli trust forget` given its fingerprint, alias or last address.
 
 ### Scripts and the command line
 
 - **Unknown hosts are refused.** `sources`, `connect`, `shell` and `send` will not talk to
   a host whose key is not saved. They print its fingerprint instead; compare it with the
-  host, then rerun with `--accept-new-host-key` to save it. That flag only saves a key seen
-  for the first time — a host whose key *changed* is always refused.
-- **Choosing a key.** `--identity NAME` picks the client key for one command. Without it
-  the saved host's key is used, and `default` for a host that has none.
+  host, then rerun with `--accept-new-host-key` to save it. Given an invite link instead of
+  an address, they pin the host from the link and need no flag.
+- **Waiting for approval.** A host that has not allowed this machine yet is asked to;
+  `connect`, `shell`, `send` and `sources` print one line saying so and wait up to two
+  minutes for its owner to press *Approve*, then fail with the reason if nobody did.
+- **Showing the code.** `deskhub-cli share --qr` prints the QR code in block characters
+  together with the invite link, for a phone to scan off the terminal.
 - **A separate configuration.** `--config-dir DIR` (before or after the command) or the
-  `DESKHUB_CONFIG_DIR` environment variable points the CLI at another directory of keys,
-  allowed clients, trusted hosts and settings — handy for a service account or a test
-  setup.
-- **Exit codes.** A script can tell a refused connection or a changed host key from other
-  failures by the exit code; the codes are listed under
+  `DESKHUB_CONFIG_DIR` environment variable points the CLI at another directory holding
+  the key, allowed clients, requests, trusted hosts and settings — handy for a service
+  account or a test setup.
+- **Removed in 7.1.** `key generate`, `key import`, `key delete`, `key list`, `key public
+  --name`, `devices identities`, `--identity` and `host add --identity` are gone: there is
+  one key per machine. Exit code `5` ("the host key changed") is gone too, since a
+  different key is now an unknown host.
+- **Exit codes.** A script can tell a refused connection from other failures by the exit
+  code; the codes are listed under
   [The command-line client](BUILD.md#the-command-line-client) in `BUILD.md`. Listing
   commands take `--json`.
 
-### Revoking and rotating keys
+### Revoking a device
 
-**Revoking a device.** On the host, press *Remove* beside its key, or run
+On the host, press *Remove* beside its key, or run
 `deskhub-cli access remove --fingerprint SHA256:…`. Any session that device has open ends
-at once, and it cannot connect again until its key is allowed again.
+at once, and it cannot connect again until you let it in again — by approving its next
+request, showing it the QR code, or pasting its key.
 
-**Rotating a client key.**
-
-1. Create a new key: *New key*, or `deskhub-cli key generate --name NAME`.
-2. Have each host that should accept it allow its public key.
-3. Make the trusted host use it: `deskhub-cli host update ALIAS --identity NAME`, or
-   remove the host and add it again with `host add … --identity NAME`. Connect once to
-   check.
-4. Ask the host owner to remove the old key, then *Delete* the old key here.
-
-**When a host's key changes.** Deskhub refuses to connect and says
-"This host's key has changed". That happens when the host reinstalled Deskhub or lost its
-settings directory — or when a different machine is answering at that address. Only if you
-know why the key changed, remove the host from **Trusted hosts** (*Remove*, or
-`deskhub-cli host remove ALIAS`), connect again and compare the new fingerprint as on the
-first connection. With the CLI, `host update ALIAS --host-key-stdin` pins the new key
-directly.
+**When a different key answers at a known address.** That happens when the host
+reinstalled Deskhub or lost its settings folder — or when a different machine has taken
+that address. Deskhub does not refuse; it treats the machine as one you have never met
+and shows the **New host** dialog with a warning naming the host that used to answer
+there. Trust it only if you know why. The old host stays under **Trusted hosts** until you
+*Remove* it (or `deskhub-cli host remove ALIAS`); with the CLI,
+`host update ALIAS --host-key-stdin` re-pins an alias to the new key directly.
 
 ### Coming from an older Deskhub
 
-Nothing is migrated. Passcodes and the list of paired devices from older versions of
-Deskhub are not carried over: create or copy your keys, allow them on each host and trust
-each host again, as described above. Both machines need this version — an older Deskhub on
-either side cannot connect and is refused with "That machine uses an incompatible
-authentication version".
+**From 7.0.x.** Both machines need 7.1 — a 7.0.x Deskhub on either side cannot connect and
+is refused with "That machine uses an incompatible authentication version". Each machine
+keeps the key and fingerprint it already had, so hosts you trusted stay trusted. What
+changes is the key a device signs in *with*: it is now that same machine key, so every
+device has to be let in once more — one *Approve*, one scan of the QR code, or one paste of
+its key. The `client_key*.pem` and `host_cert.pem` files 7.0.x wrote are ignored; nothing
+in them is read or migrated, and you can delete them.
+
+**From 6.x or older.** Nothing is migrated. Passcodes and the list of paired devices are
+not carried over: let each device in and trust each host again, as described above.
 
 ## 🆘 If something doesn't work
 
 - **Nothing to connect to** — both machines must be on the same network (or the same
   Tailscale tailnet), and UDP 47777 must be open on the host.
-- **"This device's key is not authorized on that machine yet"** — the host does not list this
-  client key; allow its public key on the host's Devices page — see
-  [Letting a device in](#letting-a-device-in). Clients allowed by an older Deskhub must be
-  allowed again.
-- **"This host's key has changed"** — see
-  [Revoking and rotating keys](#revoking-and-rotating-keys).
+- **"Waiting for the owner of … to approve this device"** — the host does not list this
+  device yet; its owner needs to press *Approve* under **Connection requests** on their
+  Host page, show you the QR code, or paste your key — see
+  [Letting a device in](#letting-a-device-in). Devices allowed by 7.0.x must be let in
+  again.
+- **"The owner of that machine did not approve this device in time"** — two minutes
+  passed without an *Approve*. The request stays on the host for ten minutes: ask, then
+  press *Connect* again.
+- **"The machine that answered is not the one that made this QR code"** — something else
+  is answering at the address in the code. Show the code again on the host and scan it
+  once more; if it keeps happening, check which machine has that address.
+- **A New host dialog for a host you already trust** — a different key is answering at
+  that address; see [Revoking a device](#revoking-a-device).
 - **"That machine uses an incompatible authentication version"** — one side runs an older
   Deskhub; update both machines. See [Coming from an older Deskhub](#coming-from-an-older-deskhub).
 - **Linux: sharing fails immediately** — run `vainfo | grep -E 'H264.*Enc'`; an empty

@@ -95,11 +95,11 @@ Details and permissions per platform: [INSTALL.md](docs/INSTALL.md).
   <tr>
     <td align="center" width="33%">
       <img src="docs/imgs/macos_2.png" alt="Deskhub Client page on macOS: host address and UDP port fields, tickboxes to pick remote desktop, control and terminal, a Connect button, and a list of recent addresses with the time each was last connected">
-      <br><sub><b>Client</b> — type an address or pick a recent or trusted host, and choose what to open: the screen, control of it, a shell, or any mix.</sub>
+      <br><sub><b>Client</b> — type an address, paste a host's QR link, or pick a recent or trusted host, and choose what to open: the screen, control of it, a shell, or any mix.</sub>
     </td>
     <td align="center" width="33%">
-      <img src="docs/imgs/macos_3.png" alt="Deskhub Devices page on macOS: one area for this machine as the host, with its SHA256 host key and the client keys allowed to connect, and one area for this machine as the client, with its own keys and the trusted hosts">
-      <br><sub><b>Devices</b> — as the host: this machine's host key and the client keys allowed in, each removable. As the client: your own keys and the hosts you trust.</sub>
+      <img src="docs/imgs/macos_3.png" alt="Deskhub Devices page on macOS: one area for this machine as the host, with its SHA256 key fingerprint, a Copy public key button and the client keys allowed to connect, and one area for this machine as the client, with the trusted hosts">
+      <br><sub><b>Devices</b> — as the host: this machine's key and the devices allowed in — approved, scanned or pasted — each removable. As the client: the hosts you trust, by key.</sub>
     </td>
     <td align="center" width="33%">
       <img src="docs/imgs/macos_4.png" alt="Deskhub Settings page on macOS: device name, fps, bitrate and quality, UDP port, a switch for whether viewers can control this machine, clipboard and stay-awake toggles, the live state of the Screen Recording and Accessibility permissions, and a start-at-login switch">
@@ -111,15 +111,15 @@ Details and permissions per platform: [INSTALL.md](docs/INSTALL.md).
 <p align="center">
   <img src="docs/imgs/ios_1.png" alt="Deskhub iOS Client page: address and port fields, Connect and Terminal buttons, a switch for controlling the remote machine, and a list of recent addresses" width="195">
   <img src="docs/imgs/ios_2.png" alt="Deskhub iOS Host page: Share on network, Start sharing, and the IP addresses others use to connect" width="195">
-  <img src="docs/imgs/ios_3.png" alt="Deskhub iOS Devices page: this device's SHA256 host key, the client keys allowed to connect, its own client keys and the trusted hosts" width="195">
+  <img src="docs/imgs/ios_3.png" alt="Deskhub iOS Devices page: this device's SHA256 key, the client keys allowed to connect and the trusted hosts" width="195">
   <img src="docs/imgs/ios_4.png" alt="Deskhub iOS Connection settings page: the UDP port, plus clipboard sync and keep-awake switches" width="195">
 </p>
-<p align="center"><sub><b>iPhone</b> — the same four pages. Connect to a trusted host, drive it with the video as a trackpad; or host the phone's own screen, view-only.</sub></p>
+<p align="center"><sub><b>iPhone</b> — the same four pages. Scan a host's QR code to connect, drive it with the video as a trackpad; or host the phone's own screen, view-only.</sub></p>
 
 <p align="center">
   <img src="docs/imgs/android_1.png" alt="Deskhub Android Client page: address and port fields, Connect and Terminal buttons, a control tickbox, and a list of recent addresses" width="195">
   <img src="docs/imgs/android_2.png" alt="Deskhub Android Host page: Share on network, Start sharing, and the IP addresses others use to connect" width="195">
-  <img src="docs/imgs/android_3.png" alt="Deskhub Android Devices page: this device's SHA256 host key, the client keys allowed to connect, its own client keys and the trusted hosts" width="195">
+  <img src="docs/imgs/android_3.png" alt="Deskhub Android Devices page: this device's SHA256 key, the client keys allowed to connect and the trusted hosts" width="195">
   <img src="docs/imgs/android_4.png" alt="Deskhub Android Connection settings page: the UDP port, plus clipboard sync and keep-awake tickboxes" width="195">
 </p>
 <p align="center"><sub><b>Android</b> — the same four pages in Material dress. Hosting is a view-only screen share on Android 10+.</sub></p>
@@ -137,12 +137,13 @@ so the controls stay familiar as you move between a Mac, PC, phone or tablet. A 
 | ------ | ---------- | --------- |
 | Streams at 60 fps on supported hardware. The video path uses GPU memory where available. | Install with a package manager or download a release. No account or background service is required. | **Share** a display or **Connect** to an IP. Desktops can also share a **shell** and receive **files**. Phones can share their screens in view-only mode. |
 
-Sessions are encrypted end to end over **QUIC/TLS**, and access works like SSH: a client
-gets in only if its public key is listed in the host's `authorized_keys`, and it checks the
-host's key against the one it trusted on first connection, refusing outright if it ever
-changes. Nothing is approved over the network and Deskhub never scans it. Use a network you
-trust or a VPN, and **never port-forward UDP 47777**. Full threat model in
-[`SECURITY.md`](SECURITY.md).
+Sessions are encrypted end to end over **QUIC/TLS**, and access works like SSH: every
+machine has one key, and a client gets in only if the host's owner has let that key in —
+by approving its connection request, by showing it a **QR code** while sharing, or by
+pasting its public key. The client pins the host's key and checks it before sending
+anything; trust follows the key, so a host keeps it when its address changes. No passcode,
+no discovery, no switch that lets strangers in. Use a network you trust or a VPN, and
+**never port-forward UDP 47777**. Full threat model in [`SECURITY.md`](SECURITY.md).
 
 <a id="why"></a>
 

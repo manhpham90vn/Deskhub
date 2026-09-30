@@ -37,7 +37,7 @@ struct QuicSendStats {
 
 struct QuicSettings {
     std::string alpn = "deskhub";
-    std::string certPemPath{};
+    std::string certPem{};
     std::string keyPemPath{};
     uint64_t idleTimeoutMs = kQuicIdleTimeoutMs;
     size_t maxUdpPayload = kQuicMaxUdpPayload;

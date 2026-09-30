@@ -2,7 +2,7 @@
 #include "deskhub/net/TrustStore.h"
 #include "deskhub/protocol/Wire.h"
 #include "deskhubp/system/AuthProof.h"
-#include "deskhubp/system/ClientIdentity.h"
+#include "deskhubp/system/HostIdentity.h"
 
 #include <memory>
 #include <optional>
@@ -15,6 +15,7 @@ namespace deskhubp {
 struct HostAuthConfig {
     HostIdentity identity{};
     deskhub::AuthSessionId sessionId{};
+    std::string peerAddress{};
 };
 
 enum class HostAuthState : uint8_t {
@@ -36,6 +37,7 @@ public:
     deskhub::AuthResult Respond(const deskhub::AuthResponse& response);
 
     HostAuthState State() const;
+    bool PairingTokenRejected() const;
     const deskhub::Fingerprint& PeerFingerprint() const;
     const std::vector<uint8_t>& PeerPublicKey() const;
     const std::string& PeerName() const;
@@ -46,10 +48,11 @@ private:
 };
 
 struct ClientAuthConfig {
-    ClientIdentity identity{};
+    HostIdentity identity{};
     deskhub::Fingerprint hostFingerprint{};
     deskhub::AuthSessionId sessionId{};
     std::string clientName{};
+    std::vector<uint8_t> pairingToken{};
 };
 
 class ClientAuth {

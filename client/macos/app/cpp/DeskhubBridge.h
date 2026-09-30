@@ -10,7 +10,7 @@
 #include "deskhubp/ffi/DevicesFfi.h"
 #include "deskhubp/ffi/SettingsFfi.h"
 #include "deskhubp/ffi/HostProfileFfi.h"
-#include "deskhubp/ffi/ClientKeyFfi.h"
+#include "deskhubp/ffi/PairingFfi.h"
 #include "deskhubp/ffi/TerminalFfi.h"
 
 #ifdef __cplusplus

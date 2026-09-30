@@ -77,9 +77,8 @@ void TestAddressParsing() {
     Check(Ok(bare, cli::Verb::Sources), "sources parses");
     Check(bare.port == kDeskhubPort, "the default port fills in");
     Check(bare.address == "192.168.1.10:" + std::to_string(kDeskhubPort), "the address carries the port");
-    Check(Parse({"sources", "192.168.1.10", "--identity", "phone"})
-                  .identityName.value_or("") == "phone",
-        "source queries can choose a client signing key");
+    Check(!Parse({"sources", "192.168.1.10", "--identity", "phone"}).error.empty(),
+        "a client no longer picks between keys: the machine has one");
 
     const cli::Command explicitPort = Parse({"sources", "192.168.1.10:50000"});
     Check(explicitPort.port == 50000, "a port in the address wins");
@@ -126,27 +125,17 @@ void TestDevicesAndTrust() {
     Check(Parse({"devices", "--json"}).json, "devices takes global flags with no action");
     Check(Parse({"devices", "public"}).devices == cli::DevicesAction::Public,
         "devices public requests this machine's shareable key");
-    Check(Parse({"devices", "public", "laptop"}).keyName == "laptop",
-        "devices public can select a named client identity");
-    Check(Parse({"devices", "identities"}).devices == cli::DevicesAction::Identities,
-        "client identities can be listed separately from authorized peers");
-    const cli::Command generated = Parse({"devices", "generate", "laptop"});
-    Check(generated.devices == cli::DevicesAction::Generate && generated.keyName == "laptop",
-        "a named client identity can be generated");
+    Check(!Parse({"devices", "public", "laptop"}).error.empty(),
+        "devices public takes no key name: the machine has one key");
+    Check(!Parse({"devices", "identities"}).error.empty(),
+        "there is no separate list of client identities any more");
+    Check(!Parse({"devices", "generate", "laptop"}).error.empty(),
+        "nor can extra client keys be generated");
     const cli::Command add = Parse({"devices", "add", "-"});
     Check(add.devices == cli::DevicesAction::Add && add.target == "-",
         "devices add reads public key text from stdin");
-    Check(Parse({"devices", "import", "client.pem"}).devices == cli::DevicesAction::Import,
-        "devices import names a private key file");
-    Check(Parse({"devices", "import", "client.pem", "--passphrase-stdin"})
-              .keyPassphraseStdin,
-        "an encrypted private key can read its passphrase from stdin");
-    const cli::Command namedImport = Parse(
-        {"devices", "import", "client.pem", "--name", "phone", "--passphrase-stdin"});
-    Check(namedImport.keyName == "phone" && namedImport.keyPassphraseStdin,
-        "an imported key can have a name and read its passphrase from stdin");
-    Check(!Parse({"devices", "import", "client.pem", "--name"}).error.empty(),
-        "an import name cannot be missing");
+    Check(!Parse({"devices", "import", "client.pem"}).error.empty(),
+        "private keys are no longer imported");
 
     const cli::Command forget = Parse({"devices", "forget", "SHA256:abc"});
     Check(forget.devices == cli::DevicesAction::Forget, "devices forget");
@@ -162,10 +151,12 @@ void TestDevicesAndTrust() {
               trustAdd.value == "SHA256:abc",
         "trust add takes the address and host fingerprint");
     const cli::Command profile = Parse({"trust", "add", "1.2.3.4:47777", "SHA256:abc",
-        "--name", "Office", "--identity", "phone"});
-    Check(profile.error.empty() && profile.deviceName == "Office" &&
-              profile.identityName == "phone",
-        "trust add can save a separate alias and selected client key");
+        "--name", "Office"});
+    Check(profile.error.empty() && profile.deviceName == "Office",
+        "trust add can save a separate alias");
+    Check(!Parse({"trust", "add", "1.2.3.4:47777", "SHA256:abc", "--identity", "phone"})
+              .error.empty(),
+        "and no longer picks a client key per host");
     Check(Parse({"trust", "forget", "1.2.3.4"}).trust == cli::TrustAction::Forget, "trust forget");
     Check(Parse({"trust", "forget", "all"}).trust == cli::TrustAction::ForgetAll, "trust forget all");
 
@@ -178,34 +169,49 @@ void TestDevicesAndTrust() {
 }
 
 void TestProfileCommands() {
-    const cli::Command generated = Parse({"key", "generate", "--name", "laptop-a"});
-    Check(Ok(generated, cli::Verb::Devices) && generated.devices == cli::DevicesAction::Generate &&
-              generated.keyName == "laptop-a",
-        "key generation uses a named identity");
-    const cli::Command imported = Parse({"key", "import", "--name", "imported-key",
-        "--file", "private.pem", "--passphrase-stdin"});
-    Check(imported.error.empty() && imported.devices == cli::DevicesAction::Import &&
-              imported.target == "private.pem" && imported.keyPassphraseStdin,
-        "key import reads a named private key file");
-    Check(Parse({"key", "public", "--name", "laptop-a"}).keyName == "laptop-a",
-        "key public selects a named identity");
-    Check(!Parse({"key", "generate"}).error.empty(), "key generate needs a name");
+    const cli::Command publicKey = Parse({"key", "public"});
+    Check(Ok(publicKey, cli::Verb::Devices) && publicKey.devices == cli::DevicesAction::Public,
+        "key public prints this machine's one key");
+    Check(!Parse({"key", "generate", "--name", "laptop-a"}).error.empty(),
+        "key generate is gone with named identities");
+    Check(!Parse({"key", "import", "--name", "k", "--file", "private.pem"}).error.empty(),
+        "so is key import");
+    Check(!Parse({"key", "public", "--name", "laptop-a"}).error.empty(),
+        "and key public takes no name");
     Check(Parse({"access", "add", "--stdin"}).target == "-", "access add reads stdin");
     Check(Parse({"access", "list", "--json"}).json, "access list supports JSON");
     Check(Parse({"access", "remove", "--fingerprint", "SHA256:abc"}).target ==
               "SHA256:abc",
         "access remove selects a fingerprint");
     Check(!Parse({"access", "remove"}).error.empty(), "access remove needs a fingerprint");
+    const cli::Command requests = Parse({"access", "requests", "--json"});
+    Check(Ok(requests, cli::Verb::Devices) && requests.devices == cli::DevicesAction::Requests &&
+              requests.json,
+        "access requests lists the devices waiting for approval");
+    const cli::Command approve = Parse({"access", "approve", "--fingerprint", "SHA256:abc"});
+    Check(Ok(approve, cli::Verb::Devices) && approve.devices == cli::DevicesAction::Approve &&
+              approve.target == "SHA256:abc",
+        "access approve names the device to let in");
+    const cli::Command deny = Parse({"access", "deny", "--fingerprint", "SHA256:abc"});
+    Check(Ok(deny, cli::Verb::Devices) && deny.devices == cli::DevicesAction::Deny &&
+              deny.target == "SHA256:abc",
+        "access deny names the device to turn away");
+    Check(!Parse({"access", "approve"}).error.empty(), "access approve needs a fingerprint");
+    Check(!Parse({"access", "deny"}).error.empty(), "so does access deny");
     const cli::Command added = Parse({"host", "add", "office", "--address",
-        "192.168.1.10:47777", "--identity", "laptop-a", "--host-key-stdin"});
+        "192.168.1.10:47777", "--host-key-stdin"});
     Check(added.error.empty() && added.verb == cli::Verb::Host &&
               added.trust == cli::TrustAction::Add && added.profileAlias == "office" &&
               added.target == "192.168.1.10:47777" && added.value == "-",
-        "host add stores an alias, endpoint, identity, and key source");
+        "host add stores an alias, endpoint and key source");
+    Check(!Parse({"host", "add", "office", "--address", "192.168.1.10", "--identity", "k",
+                     "--host-key-stdin"})
+              .error.empty(),
+        "host add no longer takes a client key");
     Check(Parse({"host", "list", "--json"}).json, "host list supports JSON");
-    Check(Parse({"host", "update", "office", "--identity", "phone"}).trust ==
+    Check(Parse({"host", "update", "office", "--address", "10.0.0.9"}).trust ==
               cli::TrustAction::Update,
-        "host update can change the identity");
+        "host update can change the address");
     Check(Parse({"host", "remove", "office"}).trust == cli::TrustAction::Forget,
         "host remove selects an alias");
     Check(Parse({"host-key", "public"}).trust == cli::TrustAction::Public,
@@ -309,9 +315,8 @@ void TestShell() {
     Check(Ok(command, cli::Verb::Shell), "shell parses");
     Check(command.address == "10.0.0.5:" + std::to_string(kDeskhubPort), "the address");
     Check(command.deviceName.value_or("") == "laptop", "the name");
-    Check(Parse({"shell", "10.0.0.5", "--identity", "phone"})
-                  .identityName.value_or("") == "phone",
-        "shell can choose a client signing key");
+    Check(!Parse({"shell", "10.0.0.5", "--identity", "phone"}).error.empty(),
+        "shell no longer chooses between client keys");
     Check(!Parse({"shell"}).error.empty(), "shell needs an address");
     Check(!Parse({"shell", "1.2.3.4", "--fps", "30"}).error.empty(), "a shell has no frame rate");
     const cli::Command resumed = Parse({"shell", "10.0.0.5", "--resume", "3"});
@@ -340,9 +345,8 @@ void TestConnect() {
     Check(!picked.connect.control, "--view-only");
     Check(picked.connect.audio.has_value() && !*picked.connect.audio, "--no-audio");
     Check(picked.deviceName.value_or("") == "couch", "--name");
-    Check(Parse({"connect", "1.2.3.4", "--identity", "laptop-a"})
-                  .identityName.value_or("") == "laptop-a",
-        "connect can choose a client signing key");
+    Check(!Parse({"connect", "1.2.3.4", "--identity", "laptop-a"}).error.empty(),
+        "connect no longer chooses between client keys");
     Check(Parse({"connect", "1.2.3.4", "--audio"}).connect.audio.value_or(false), "--audio");
 
     Check(!Parse({"connect"}).error.empty(), "connect needs an address");
@@ -416,9 +420,8 @@ void TestSend() {
         "the address is the first word, with the default port filled in");
     Check(one.send.files.size() == 1 && one.send.files[0] == "report.pdf",
         "and the rest are files");
-    Check(Parse({"send", "10.0.0.4", "report.pdf", "--identity", "phone"})
-                  .identityName.value_or("") == "phone",
-        "send can choose a client signing key");
+    Check(!Parse({"send", "10.0.0.4", "report.pdf", "--identity", "phone"}).error.empty(),
+        "send no longer chooses between client keys");
 
     const cli::Command many = Parse({"send", "host:47800", "a.txt", "b/c.txt", "../d.bin"});
     Check(Ok(many, cli::Verb::Send), "several files parse");
@@ -489,18 +492,39 @@ void TestAcceptNewHostKey() {
         "and send");
     Check(!Parse({"sources", "192.168.1.10", "--accept-new-host-key=yes"}).error.empty(),
         "the flag takes no value");
+    Check(Parse({"sources", "192.168.1.10", "--approval-wait", "5"}).approvalWaitSeconds.value_or(0) == 5,
+        "the approval wait can be shortened");
+    Check(!Parse({"connect", "192.168.1.10", "--approval-wait", "0"}).error.empty(),
+        "but not to nothing");
+    Check(!Parse({"connect", "192.168.1.10", "--approval-wait", "601"}).error.empty(),
+        "nor past ten minutes");
 }
 
 void TestKeyDeleteAndAccessClear() {
-    std::printf("[cli] keys can be deleted and every client removed from the command line...\n");
-    const cli::Command removed = Parse({"key", "delete", "--name", "work"});
-    Check(removed.error.empty() && removed.devices == cli::DevicesAction::DeleteKey &&
-              removed.keyName == "work",
-        "key delete names the key to delete");
-    Check(!Parse({"key", "delete"}).error.empty(), "key delete without a name is refused");
+    std::printf("[cli] every client can be removed from the command line, keys cannot...\n");
+    Check(!Parse({"key", "delete", "--name", "work"}).error.empty(),
+        "the machine's one key cannot be deleted");
     const cli::Command cleared = Parse({"access", "clear"});
     Check(cleared.error.empty() && cleared.devices == cli::DevicesAction::ForgetAll,
         "access clear removes every allowed client");
+}
+
+void TestInvitesAndQr() {
+    std::printf("[cli] a QR invite stands in for an address, and share can print one...\n");
+    Check(Parse({"share", "--qr"}).share.qr, "share --qr asks for the QR code");
+    Check(!Parse({"share"}).share.qr, "and it is off by default");
+    const std::string invite =
+        "deskhub://pair/AQHAqAEKuqEAAQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eH6ChoqOkpaanqKmqq6ytrq-w"
+        "sbKztLW2t7i5uru8vb6_AA";
+    const cli::Command connect = Parse({"connect", invite.c_str()});
+    Check(Ok(connect, cli::Verb::Connect) && connect.pairingInvite == invite &&
+              connect.address.empty(),
+        "connect takes the invite instead of an address");
+    Check(Ok(Parse({"sources", invite.c_str()}), cli::Verb::Sources), "so does sources");
+    Check(!Parse({"connect", "deskhub://pair/notreal"}).error.empty(),
+        "a damaged invite is refused with an explanation");
+    Check(!Parse({"connect", invite.c_str(), "1.2.3.4"}).error.empty(),
+        "an invite and an address together is one address too many");
 }
 
 void TestUsageText() {
@@ -547,5 +571,6 @@ void RunCliCommandTests() {
     TestPickDisplays();
     TestAcceptNewHostKey();
     TestKeyDeleteAndAccessClear();
+    TestInvitesAndQr();
     TestUsageText();
 }

@@ -763,9 +763,27 @@ void TestAuthWire() {
     Check(gotStart && gotStart->publicKey == start.publicKey,
         "and the key arrives byte for byte - the host hashes it to get the fingerprint");
     Check(gotStart && gotStart->clientName == "manh laptop", "so does the name it goes by");
+    Check(gotStart && gotStart->pairingToken.empty(), "and a plain offer carries no token");
     Check(buf[kCommonHeaderSize] == 0 && GetU16(buf + kCommonHeaderSize + 1) == 91 &&
-              buf[n - 1] == kAuthVersion,
-        "the compatibility prefix is fixed and the auth version follows the name");
+              buf[n - 2] == 0 && buf[n - 1] == kAuthVersion,
+        "the compatibility prefix is fixed, an empty token length follows the name, then the "
+        "auth version");
+
+    AuthStart invited = start;
+    invited.pairingToken.assign(kPairingTokenBytes, 0x5A);
+    const size_t tokened = BuildAuthStart(buf, invited);
+    Check(tokened == n + kPairingTokenBytes, "a pairing token adds exactly its own bytes");
+    const std::optional<AuthStart> gotInvited =
+        ParseAuthStart(PayloadOf(std::span<const uint8_t>(buf, tokened)));
+    Check(gotInvited && gotInvited->pairingToken == invited.pairingToken &&
+              gotInvited->publicKey == start.publicKey && gotInvited->clientName == start.clientName,
+        "the token arrives whole beside the key and name");
+    invited.pairingToken.resize(kPairingTokenBytes - 1);
+    Check(BuildAuthStart(buf, invited) == 0, "a token of the wrong length cannot be sent");
+    buf[kCommonHeaderSize + 1 + 2 + 91 + 1 + 11] = kPairingTokenBytes - 1;
+    Check(!ParseAuthStart(PayloadOf(std::span<const uint8_t>(buf, tokened))).has_value(),
+        "nor received");
+    n = BuildAuthStart(buf, start);
     buf[n - 1] = kAuthVersion - 1;
     Check(!ParseAuthStart(PayloadOf(std::span<const uint8_t>(buf, n))).has_value(),
         "a different auth version is refused");
@@ -801,6 +819,14 @@ void TestAuthWire() {
     gotChallenge = ParseAuthChallenge(PayloadOf(std::span<const uint8_t>(buf, n)));
     Check(gotChallenge && gotChallenge->mode == AuthMode::ConfigError,
         "a broken host authorization file has a distinct challenge mode");
+    challenge.mode = AuthMode::AwaitingApproval;
+    n = BuildAuthChallenge(buf, challenge);
+    gotChallenge = ParseAuthChallenge(PayloadOf(std::span<const uint8_t>(buf, n)));
+    Check(gotChallenge && gotChallenge->mode == AuthMode::AwaitingApproval,
+        "a host waiting for its owner to approve says so in the challenge");
+    AuthResult local;
+    local.code = AuthResultCode::AwaitingApproval;
+    Check(BuildAuthResult(buf, local) == 0, "the waiting verdict is a client-side code, never sent");
     challenge.mode = AuthMode::Signature;
     n = BuildAuthChallenge(buf, challenge);
     buf[kCommonHeaderSize] = uint8_t(AuthMode::Signature);

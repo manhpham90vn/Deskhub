@@ -22,19 +22,22 @@
 #include "deskhubp/system/FolderOpen.h"
 #include "deskhubp/system/Autostart.h"
 #include "deskhubp/system/DeviceName.h"
-#include "deskhubp/system/ClientIdentity.h"
 #include "deskhubp/system/HostIdentity.h"
 #include "deskhubp/system/TrustStoreFile.h"
 #include "deskhubp/client/HostProfiles.h"
 #include "deskhubp/system/RecentDevicesFile.h"
-#include "deskhubp/system/ClientKeys.h"
-#include "deskhub/ui/ClientKeys.h"
+#include "deskhubp/system/AccessRequestsFile.h"
+#include "deskhubp/system/AuthProof.h"
 #include "deskhubp/system/AuthorizedKeysFile.h"
+#include "deskhubp/system/PairingTokenFile.h"
 #include "deskhubp/system/UiSettingsStore.h"
+#include "deskhubp/host/PairingInvite.h"
 
 #include "deskhub/media/QualityPreset.h"
 #include "deskhub/media/SourceLabel.h"
+#include "deskhub/net/PairingInvite.h"
 #include "deskhub/net/TrustStore.h"
+#include "deskhub/qr/QrCode.h"
 #include "deskhub/protocol/Wire.h"
 #include "deskhub/session/client/ConnectFlow.h"
 #include "deskhub/session/host/ShareFlow.h"
@@ -55,6 +58,9 @@ constexpr int kConnectionWindowWidth = 460;
 constexpr int kPrimaryButtonH = 46;
 
 constexpr guint kCopiedRevertMs = 1500;
+constexpr int kQrQuietZoneModules = 4;
+constexpr int kQrAreaPx = 240;
+constexpr int kInviteLabelChars = 44;
 
 float ColumnXAlign(ui::ColumnAlign align) {
     return align == ui::ColumnAlign::Trailing ? 1.f : 0.f;
@@ -236,48 +242,6 @@ GtkWidget* ErrorLabel() {
     gtk_label_set_line_wrap(GTK_LABEL(label), TRUE);
     gtk_widget_set_no_show_all(label, TRUE);
     return label;
-}
-
-std::optional<std::string> AskText(GtkWindow* parent, const char* title, const char* label,
-    bool secret) {
-    GtkWidget* dlg = gtk_dialog_new_with_buttons(title, parent, GTK_DIALOG_MODAL, ui::kCancelAction,
-        GTK_RESPONSE_CANCEL, "_OK", GTK_RESPONSE_ACCEPT, nullptr);
-    gtk_dialog_set_default_response(GTK_DIALOG(dlg), GTK_RESPONSE_ACCEPT);
-    GtkWidget* content = gtk_dialog_get_content_area(GTK_DIALOG(dlg));
-    gtk_box_set_spacing(GTK_BOX(content), 8);
-    gtk_container_set_border_width(GTK_CONTAINER(content), 16);
-    gtk_box_pack_start(GTK_BOX(content), Label(label), FALSE, FALSE, 0);
-    GtkWidget* entry = gtk_entry_new();
-    gtk_entry_set_visibility(GTK_ENTRY(entry), !secret);
-    gtk_entry_set_activates_default(GTK_ENTRY(entry), TRUE);
-    gtk_box_pack_start(GTK_BOX(content), entry, FALSE, FALSE, 0);
-    gtk_widget_show_all(dlg);
-    const bool accepted = gtk_dialog_run(GTK_DIALOG(dlg)) == GTK_RESPONSE_ACCEPT;
-    std::optional<std::string> text;
-    if (accepted) text = std::string(gtk_entry_get_text(GTK_ENTRY(entry)));
-    gtk_widget_destroy(dlg);
-    return text;
-}
-
-std::optional<std::string> ReadChosenFile(GtkWindow* parent) {
-    GtkWidget* chooser = gtk_file_chooser_dialog_new(ui::kImportKeyAction, parent,
-        GTK_FILE_CHOOSER_ACTION_OPEN, ui::kCancelAction, GTK_RESPONSE_CANCEL, "_Open",
-        GTK_RESPONSE_ACCEPT, nullptr);
-    std::optional<std::string> contents;
-    if (gtk_dialog_run(GTK_DIALOG(chooser)) == GTK_RESPONSE_ACCEPT) {
-        gchar* path = gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(chooser));
-        gchar* data = nullptr;
-        gsize length = 0;
-        if (path != nullptr && g_file_get_contents(path, &data, &length, nullptr))
-            contents = std::string(data, length);
-        if (data != nullptr) {
-            std::memset(data, 0, length);
-            g_free(data);
-        }
-        g_free(path);
-    }
-    gtk_widget_destroy(chooser);
-    return contents;
 }
 
 GtkWidget* Hint(const std::string& text) {
@@ -708,9 +672,18 @@ GtkWidget* MainWindow::BuildHostPage() {
     gtk_box_pack_start(GTK_BOX(netRow), bindCombo_, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(box), netRow, FALSE, FALSE, 0);
 
+    GtkWidget* addrRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 14);
     hostAddrBox_ = gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
-    gtk_box_pack_start(GTK_BOX(box), hostAddrBox_, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(addrRow), hostAddrBox_, TRUE, TRUE, 0);
+    qrToggle_ = gtk_button_new_with_label(ui::kShowQrAction);
+    gtk_widget_set_valign(qrToggle_, GTK_ALIGN_START);
+    g_signal_connect(qrToggle_, "clicked", G_CALLBACK(OnQrToggleClicked), this);
+    gtk_box_pack_end(GTK_BOX(addrRow), qrToggle_, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(box), addrRow, FALSE, FALSE, 0);
     RebuildHostAddressRows();
+
+    qrPanel_ = BuildQrPanel();
+    gtk_box_pack_start(GTK_BOX(box), qrPanel_, FALSE, FALSE, 0);
 
     hostBanner_ = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
     AddClass(hostBanner_, "deskhub-banner");
@@ -751,6 +724,10 @@ GtkWidget* MainWindow::BuildHostPage() {
     hostPickerFrame_ = ListFrame(pickerBox, kListH + 40);
     gtk_box_pack_start(GTK_BOX(box), hostPickerFrame_, TRUE, TRUE, 0);
 
+    requestsSection_ = gtk_box_new(GTK_ORIENTATION_VERTICAL, 6);
+    BuildAccessRequestsSection(requestsSection_);
+    gtk_box_pack_start(GTK_BOX(box), requestsSection_, FALSE, FALSE, 0);
+
     hostTable_ = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
     gtk_widget_set_valign(hostTable_, GTK_ALIGN_START);
     hostTableFrame_ = ListFrame(hostTable_, kListH + 40);
@@ -772,6 +749,205 @@ GtkWidget* MainWindow::BuildHostPage() {
     RefreshDisplayChoices();
     ShowIdleHostState();
     return WrapPage(box);
+}
+
+GtkWidget* MainWindow::BuildQrPanel() {
+    GtkWidget* panel = gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
+    AddClass(panel, "deskhub-info-card");
+
+    qrArea_ = gtk_drawing_area_new();
+    gtk_widget_set_size_request(qrArea_, kQrAreaPx, kQrAreaPx);
+    gtk_widget_set_halign(qrArea_, GTK_ALIGN_CENTER);
+    g_signal_connect(qrArea_, "draw", G_CALLBACK(OnQrDraw), this);
+    gtk_box_pack_start(GTK_BOX(panel), qrArea_, FALSE, FALSE, 0);
+
+    GtkWidget* inviteRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+    qrInviteLabel_ = StyledLabel(std::string(), "deskhub-info-code-small");
+    gtk_label_set_selectable(GTK_LABEL(qrInviteLabel_), TRUE);
+    gtk_label_set_ellipsize(GTK_LABEL(qrInviteLabel_), PANGO_ELLIPSIZE_MIDDLE);
+    gtk_label_set_max_width_chars(GTK_LABEL(qrInviteLabel_), kInviteLabelChars);
+    gtk_box_pack_start(GTK_BOX(inviteRow), qrInviteLabel_, TRUE, TRUE, 0);
+    qrCopy_ = gtk_button_new_with_label(ui::kCopyButton);
+    gtk_widget_set_valign(qrCopy_, GTK_ALIGN_CENTER);
+    g_signal_connect(qrCopy_, "clicked", G_CALLBACK(OnCopyTextClicked), this);
+    gtk_box_pack_end(GTK_BOX(inviteRow), qrCopy_, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(panel), inviteRow, FALSE, FALSE, 0);
+
+    gtk_box_pack_start(GTK_BOX(panel), Hint(ui::kQrHint), FALSE, FALSE, 0);
+
+    gtk_widget_show_all(panel);
+    gtk_widget_hide(panel);
+    gtk_widget_set_no_show_all(panel, TRUE);
+    return panel;
+}
+
+gboolean MainWindow::OnQrDraw(GtkWidget* area, cairo_t* cr, gpointer user) {
+    auto* self = static_cast<MainWindow*>(user);
+    const int width = gtk_widget_get_allocated_width(area);
+    const int height = gtk_widget_get_allocated_height(area);
+    cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
+    cairo_paint(cr);
+    if (!self->qrCode_) return TRUE;
+
+    const deskhub::QrCode& code = *self->qrCode_;
+    const int modulesAcross = code.size + 2 * kQrQuietZoneModules;
+    const int modulePx = std::max(1, std::min(width, height) / modulesAcross);
+    const int originX = (width - modulePx * modulesAcross) / 2 + modulePx * kQrQuietZoneModules;
+    const int originY = (height - modulePx * modulesAcross) / 2 + modulePx * kQrQuietZoneModules;
+    cairo_set_source_rgb(cr, 0.0, 0.0, 0.0);
+    for (int y = 0; y < code.size; ++y) {
+        for (int x = 0; x < code.size; ++x) {
+            if (!code.Dark(x, y)) continue;
+            cairo_rectangle(cr, originX + x * modulePx, originY + y * modulePx, modulePx,
+                modulePx);
+        }
+    }
+    cairo_fill(cr);
+    return TRUE;
+}
+
+void MainWindow::OnQrToggleClicked(GtkButton*, gpointer user) {
+    static_cast<MainWindow*>(user)->ToggleQrPanel();
+}
+
+void MainWindow::ToggleQrPanel() {
+    if (gtk_widget_get_visible(qrPanel_)) {
+        HideQrPanel();
+        return;
+    }
+    ShowQrPanel();
+}
+
+void MainWindow::ShowQrPanel() {
+    if (!hosting_) return;
+    RevokeInviteIfShown();
+    const std::string invite =
+        deskhubp::BuildPairingInvite(sharePort_, settings_.bindIp, ClientDeviceName());
+    qrCode_ = invite.empty() ? std::nullopt : deskhub::EncodeQr(invite);
+    if (!qrCode_) {
+        deskhubp::RevokePairingTokens();
+        ShowWarning(GTK_WINDOW(window_), "Deskhub", ui::kQrUnavailable);
+        return;
+    }
+    pairingInvite_ = invite;
+    gtk_label_set_text(GTK_LABEL(qrInviteLabel_), pairingInvite_.c_str());
+    gtk_widget_set_tooltip_text(qrInviteLabel_, pairingInvite_.c_str());
+    g_object_set_data_full(G_OBJECT(qrCopy_), "deskhub-copy-text",
+        g_strdup(pairingInvite_.c_str()), g_free);
+    gtk_button_set_label(GTK_BUTTON(qrCopy_), ui::kCopyButton);
+    gtk_button_set_label(GTK_BUTTON(qrToggle_), ui::kHideQrAction);
+    gtk_widget_show(qrPanel_);
+    gtk_widget_queue_draw(qrArea_);
+}
+
+void MainWindow::HideQrPanel() {
+    RevokeInviteIfShown();
+    qrCode_.reset();
+    gtk_widget_hide(qrPanel_);
+    gtk_button_set_label(GTK_BUTTON(qrToggle_), ui::kShowQrAction);
+}
+
+void MainWindow::RevokeInviteIfShown() {
+    if (pairingInvite_.empty()) return;
+    pairingInvite_.clear();
+    deskhubp::RevokePairingTokens();
+}
+
+void MainWindow::ShowSharingOnlyWidgets(bool live) {
+    for (GtkWidget* widget : {qrToggle_, requestsSection_}) {
+        gtk_widget_set_no_show_all(widget, !live);
+        if (live)
+            gtk_widget_show_all(widget);
+        else
+            gtk_widget_hide(widget);
+    }
+    if (!live) {
+        HideQrPanel();
+        return;
+    }
+    gtk_widget_set_visible(requestsHint_, accessRequests_.empty());
+}
+
+void MainWindow::BuildAccessRequestsSection(GtkWidget* box) {
+    gtk_box_pack_start(GTK_BOX(box), Section(ui::kAccessRequestsHeading), FALSE, FALSE, 0);
+    requestsGrid_ = gtk_grid_new();
+    gtk_grid_set_column_spacing(GTK_GRID(requestsGrid_), 12);
+    gtk_grid_set_row_spacing(GTK_GRID(requestsGrid_), 4);
+    gtk_box_pack_start(GTK_BOX(box), requestsGrid_, FALSE, FALSE, 0);
+    requestsHint_ = Hint(ui::kAccessRequestsEmpty);
+    gtk_box_pack_start(GTK_BOX(box), requestsHint_, FALSE, FALSE, 0);
+}
+
+void MainWindow::RefreshAccessRequests(bool force) {
+    const uint64_t generation = deskhubp::AccessRequestsGeneration();
+    if (!force && generation == accessRequestsSeen_) return;
+    accessRequestsSeen_ = generation;
+    const auto pending = deskhubp::ListAccessRequests();
+    accessRequests_ = pending ? *pending : std::vector<deskhubp::PendingClient>{};
+
+    GList* children = gtk_container_get_children(GTK_CONTAINER(requestsGrid_));
+    for (GList* child = children; child != nullptr; child = child->next)
+        gtk_widget_destroy(GTK_WIDGET(child->data));
+    g_list_free(children);
+    const auto addCell = [this](const std::string& value, int width, int column, int row) {
+        GtkWidget* label = StyledLabel(value, "deskhub-row-cell");
+        gtk_label_set_ellipsize(GTK_LABEL(label), PANGO_ELLIPSIZE_END);
+        gtk_widget_set_size_request(label, width, -1);
+        gtk_grid_attach(GTK_GRID(requestsGrid_), label, column, row, 1, 1);
+        return label;
+    };
+    for (size_t i = 0; i < accessRequests_.size(); ++i) {
+        const deskhubp::PendingClient& client = accessRequests_[i];
+        const int row = int(i);
+        addCell(client.label.empty() ? ui::kUnnamedClient : client.label, 180, 0, row);
+        GtkWidget* key = addCell(deskhub::ShortFingerprint(client.fingerprint), 130, 1, row);
+        gtk_widget_set_tooltip_text(key, deskhub::FormatFingerprint(client.fingerprint).c_str());
+        addCell(client.address, 170, 2, row);
+        gtk_grid_attach(GTK_GRID(requestsGrid_),
+            AccessRequestAction(ui::kApproveAction, i, G_CALLBACK(OnApproveRequestClicked), false),
+            3, row, 1, 1);
+        gtk_grid_attach(GTK_GRID(requestsGrid_),
+            AccessRequestAction(ui::kDenyAction, i, G_CALLBACK(OnDenyRequestClicked), true), 4,
+            row, 1, 1);
+    }
+    gtk_widget_show_all(requestsGrid_);
+    gtk_widget_set_visible(requestsHint_, accessRequests_.empty());
+}
+
+GtkWidget* MainWindow::AccessRequestAction(const char* label, size_t index, GCallback onClick,
+    bool destructive) {
+    GtkWidget* button = gtk_button_new_with_label(label);
+    AddClass(button, "deskhub-row-action");
+    AddClass(button, destructive ? "deskhub-row-action-stop" : "deskhub-row-action-open");
+    gtk_widget_set_size_request(button, ui::kHostActionWidth, ui::kHostActionHeight);
+    gtk_widget_set_valign(button, GTK_ALIGN_CENTER);
+    g_object_set_data(G_OBJECT(button), "deskhub-request-row", GINT_TO_POINTER(gint(index) + 1));
+    g_signal_connect(button, "clicked", onClick, this);
+    return button;
+}
+
+const deskhubp::PendingClient* MainWindow::AccessRequestOf(GtkButton* button) const {
+    const int row =
+        GPOINTER_TO_INT(g_object_get_data(G_OBJECT(button), "deskhub-request-row")) - 1;
+    if (row < 0 || size_t(row) >= accessRequests_.size()) return nullptr;
+    return &accessRequests_[size_t(row)];
+}
+
+void MainWindow::OnApproveRequestClicked(GtkButton* button, gpointer user) {
+    auto* self = static_cast<MainWindow*>(user);
+    const deskhubp::PendingClient* client = self->AccessRequestOf(button);
+    if (client == nullptr) return;
+    deskhubp::ApproveAccessRequest(client->fingerprint);
+    self->RefreshAccessRequests(true);
+    self->RefreshPairedDevices();
+}
+
+void MainWindow::OnDenyRequestClicked(GtkButton* button, gpointer user) {
+    auto* self = static_cast<MainWindow*>(user);
+    const deskhubp::PendingClient* client = self->AccessRequestOf(button);
+    if (client == nullptr) return;
+    deskhubp::DenyAccessRequest(client->fingerprint);
+    self->RefreshAccessRequests(true);
 }
 
 void MainWindow::RefreshDisplayChoices() {
@@ -977,8 +1153,15 @@ GtkWidget* MainWindow::BuildClientPage() {
     gtk_box_pack_start(GTK_BOX(addressFormBox_), connectButton_, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(box), addressFormBox_, FALSE, FALSE, 0);
 
+    GtkWidget* statusRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
     clientStatusLabel_ = Hint(std::string());
-    gtk_box_pack_start(GTK_BOX(box), clientStatusLabel_, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(statusRow), clientStatusLabel_, TRUE, TRUE, 0);
+    cancelConnectButton_ = gtk_button_new_with_label(ui::kCancelAction);
+    gtk_widget_set_valign(cancelConnectButton_, GTK_ALIGN_START);
+    gtk_widget_set_no_show_all(cancelConnectButton_, TRUE);
+    g_signal_connect(cancelConnectButton_, "clicked", G_CALLBACK(OnCancelConnectClicked), this);
+    gtk_box_pack_end(GTK_BOX(statusRow), cancelConnectButton_, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(box), statusRow, FALSE, FALSE, 0);
 
     devicesBox_ = gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
     gtk_box_pack_start(GTK_BOX(devicesBox_), Heading(ui::kDevicesHeading), FALSE, FALSE, 0);
@@ -1012,21 +1195,17 @@ GtkWidget* MainWindow::BuildDevicesPage() {
 
     GtkWidget* client = SettingsArea(ui::kDevicesClientArea);
     gtk_box_pack_start(GTK_BOX(client), Hint(ui::kDevicesClientAreaHint), FALSE, FALSE, 0);
-    BuildMyKeysSection(client);
     BuildSavedHostsSection(client);
     gtk_box_pack_start(GTK_BOX(box), client, FALSE, FALSE, 0);
 
     RefreshPairedDevices();
-    RefreshClientKeys();
     RefreshSavedHosts();
     return WrapPage(box);
 }
 
 void MainWindow::BuildHostKeySection(GtkWidget* box) {
     gtk_box_pack_start(GTK_BOX(box), Section(ui::kThisMachineHeading), FALSE, FALSE, 0);
-    const std::string name =
-        settings_.deviceName.empty() ? deskhubp::LocalDeviceName() : settings_.deviceName;
-    const deskhubp::HostIdentity hostIdentity = deskhubp::LoadOrCreateHostIdentity(name);
+    const deskhubp::HostIdentity hostIdentity = deskhubp::LoadOrCreateHostIdentity();
     const std::string fingerprint = hostIdentity.Valid()
                                         ? deskhub::FormatFingerprint(hostIdentity.fingerprint)
                                         : std::string(ui::kShareNoHostIdentity);
@@ -1040,8 +1219,21 @@ void MainWindow::BuildHostKeySection(GtkWidget* box) {
         g_free);
     g_signal_connect(copy, "clicked", G_CALLBACK(OnCopyTextClicked), this);
     gtk_box_pack_start(GTK_BOX(row), copy, FALSE, FALSE, 0);
+    GtkWidget* copyPublicKey = gtk_button_new_with_label(ui::kCopyPublicKeyAction);
+    gtk_widget_set_sensitive(copyPublicKey, hostIdentity.Valid());
+    g_signal_connect(copyPublicKey, "clicked", G_CALLBACK(OnCopyPublicKeyClicked), this);
+    gtk_box_pack_start(GTK_BOX(row), copyPublicKey, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(box), row, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(box), Hint(ui::kThisMachineHint), FALSE, FALSE, 0);
+}
+
+void MainWindow::OnCopyPublicKeyClicked(GtkButton* button, gpointer user) {
+    auto* self = static_cast<MainWindow*>(user);
+    const deskhubp::HostIdentity identity = deskhubp::LoadHostIdentity();
+    if (!identity.Valid()) return;
+    const std::string line = deskhubp::IdentityPublicKeyLine(identity, self->ClientDeviceName());
+    gtk_clipboard_set_text(gtk_clipboard_get(GDK_SELECTION_CLIPBOARD), line.c_str(), -1);
+    gtk_button_set_label(button, ui::kCopiedButton);
 }
 
 void MainWindow::BuildAllowedClientsSection(GtkWidget* box) {
@@ -1077,92 +1269,6 @@ void MainWindow::BuildAllowedClientsSection(GtkWidget* box) {
     gtk_box_pack_start(GTK_BOX(box), Hint(ui::kPairedForgetNote), FALSE, FALSE, 0);
 }
 
-void MainWindow::BuildMyKeysSection(GtkWidget* box) {
-    gtk_box_pack_start(GTK_BOX(box), Section(ui::kMyKeysHeading), FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(box), Hint(ui::kMyKeysHint), FALSE, FALSE, 0);
-
-    clientKeysView_ = gtk_grid_new();
-    gtk_container_set_border_width(GTK_CONTAINER(clientKeysView_), 12);
-    gtk_grid_set_column_spacing(GTK_GRID(clientKeysView_), 8);
-    gtk_grid_set_row_spacing(GTK_GRID(clientKeysView_), 4);
-    gtk_box_pack_start(GTK_BOX(box), ListFrame(clientKeysView_, kListH), TRUE, TRUE, 0);
-
-    GtkWidget* actions = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
-    GtkWidget* create = gtk_button_new_with_label(ui::kNewKeyAction);
-    g_signal_connect(create, "clicked", G_CALLBACK(OnNewKeyClicked), this);
-    gtk_box_pack_start(GTK_BOX(actions), create, FALSE, FALSE, 0);
-    GtkWidget* import = gtk_button_new_with_label(ui::kImportKeyAction);
-    g_signal_connect(import, "clicked", G_CALLBACK(OnImportKeyClicked), this);
-    gtk_box_pack_start(GTK_BOX(actions), import, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(box), actions, FALSE, FALSE, 0);
-    clientKeysError_ = ErrorLabel();
-    gtk_box_pack_start(GTK_BOX(box), clientKeysError_, FALSE, FALSE, 0);
-}
-
-void MainWindow::RefreshClientKeys() {
-    if (clientKeysView_ == nullptr) return;
-    clientKeys_ = deskhubp::LoadClientKeys();
-
-    GList* children = gtk_container_get_children(GTK_CONTAINER(clientKeysView_));
-    for (GList* child = children; child != nullptr; child = child->next)
-        gtk_widget_destroy(GTK_WIDGET(child->data));
-    g_list_free(children);
-    GtkWidget* nameHeader = StyledLabel(ui::kKeyNameLabel, "deskhub-row-header");
-    gtk_widget_set_size_request(nameHeader, 180, -1);
-    gtk_grid_attach(GTK_GRID(clientKeysView_), nameHeader, 0, 0, 1, 1);
-    GtkWidget* keyHeader = StyledLabel(ui::kPairedColumnKey, "deskhub-row-header");
-    gtk_widget_set_size_request(keyHeader, 160, -1);
-    gtk_grid_attach(GTK_GRID(clientKeysView_), keyHeader, 1, 0, 1, 1);
-    for (size_t i = 0; i < clientKeys_.size(); ++i) {
-        const deskhubp::ClientIdentityInfo& key = clientKeys_[i];
-        const int row = int(i) + 1;
-        gtk_grid_attach(GTK_GRID(clientKeysView_), StyledLabel(key.name, "deskhub-row-cell"), 0,
-            row, 1, 1);
-        GtkWidget* fingerprint =
-            StyledLabel(deskhub::ShortFingerprint(key.fingerprint), "deskhub-row-cell");
-        gtk_widget_set_tooltip_text(fingerprint, deskhub::FormatFingerprint(key.fingerprint).c_str());
-        gtk_grid_attach(GTK_GRID(clientKeysView_), fingerprint, 1, row, 1, 1);
-        GtkWidget* copy = gtk_button_new_with_label(ui::kCopyPublicKeyAction);
-        AddClass(copy, "deskhub-row-action");
-        AddClass(copy, "deskhub-row-action-open");
-        gtk_widget_set_valign(copy, GTK_ALIGN_CENTER);
-        g_object_set_data_full(G_OBJECT(copy), "deskhub-copy-text",
-            g_strdup(key.publicKeyText.c_str()), g_free);
-        g_signal_connect(copy, "clicked", G_CALLBACK(OnCopyTextClicked), this);
-        gtk_grid_attach(GTK_GRID(clientKeysView_), copy, 2, row, 1, 1);
-        if (key.name == ui::kDefaultIdentityName) continue;
-        GtkWidget* remove = gtk_button_new_with_label(ui::kDeleteKeyAction);
-        AddClass(remove, "deskhub-row-action");
-        AddClass(remove, "deskhub-row-action-stop");
-        gtk_widget_set_valign(remove, GTK_ALIGN_CENTER);
-        g_object_set_data_full(G_OBJECT(remove), "deskhub-key-name", g_strdup(key.name.c_str()),
-            g_free);
-        g_signal_connect(remove, "clicked", G_CALLBACK(OnDeleteKeyClicked), this);
-        gtk_grid_attach(GTK_GRID(clientKeysView_), remove, 3, row, 1, 1);
-    }
-    gtk_widget_show_all(clientKeysView_);
-}
-
-void MainWindow::OnDeleteKeyClicked(GtkButton* button, gpointer user) {
-    auto* self = static_cast<MainWindow*>(user);
-    const auto* name =
-        static_cast<const char*>(g_object_get_data(G_OBJECT(button), "deskhub-key-name"));
-    if (name == nullptr) return;
-    const std::string keyName = name;
-    GtkWidget* dlg = gtk_message_dialog_new(GTK_WINDOW(self->window_), GTK_DIALOG_MODAL,
-        GTK_MESSAGE_WARNING, GTK_BUTTONS_NONE, "%s", keyName.c_str());
-    gtk_message_dialog_format_secondary_text(GTK_MESSAGE_DIALOG(dlg), "%s", ui::kDeleteKeyPrompt);
-    gtk_dialog_add_buttons(GTK_DIALOG(dlg), ui::kCancelAction, GTK_RESPONSE_CANCEL,
-        ui::kDeleteKeyAction, GTK_RESPONSE_ACCEPT, nullptr);
-    gtk_dialog_set_default_response(GTK_DIALOG(dlg), GTK_RESPONSE_CANCEL);
-    const bool confirmed = gtk_dialog_run(GTK_DIALOG(dlg)) == GTK_RESPONSE_ACCEPT;
-    gtk_widget_destroy(dlg);
-    if (!confirmed) return;
-    const ui::ClientKeyError error = deskhubp::DeleteClientKey(keyName);
-    self->ShowInlineError(self->clientKeysError_, ui::ClientKeyErrorText(error));
-    self->RefreshClientKeys();
-}
-
 void MainWindow::ShowInlineError(GtkWidget* label, const char* text) {
     gtk_label_set_text(GTK_LABEL(label), text);
     gtk_widget_set_visible(label, *text != '\0');
@@ -1192,32 +1298,6 @@ void MainWindow::OnCopyTextClicked(GtkButton* button, gpointer) {
     if (text == nullptr || *text == '\0') return;
     gtk_clipboard_set_text(gtk_clipboard_get(GDK_SELECTION_CLIPBOARD), text, -1);
     gtk_button_set_label(button, ui::kCopiedButton);
-}
-
-void MainWindow::OnNewKeyClicked(GtkButton*, gpointer user) {
-    auto* self = static_cast<MainWindow*>(user);
-    const std::optional<std::string> name =
-        AskText(GTK_WINDOW(self->window_), ui::kNewKeyAction, ui::kKeyNameLabel, false);
-    if (!name) return;
-    const ui::ClientKeyError error = deskhubp::CreateClientKey(ui::TrimAscii(*name));
-    self->ShowInlineError(self->clientKeysError_, ui::ClientKeyErrorText(error));
-    self->RefreshClientKeys();
-}
-
-void MainWindow::OnImportKeyClicked(GtkButton*, gpointer user) {
-    auto* self = static_cast<MainWindow*>(user);
-    const std::optional<std::string> privateKey = ReadChosenFile(GTK_WINDOW(self->window_));
-    if (!privateKey) return;
-    const std::optional<std::string> name =
-        AskText(GTK_WINDOW(self->window_), ui::kImportKeyAction, ui::kKeyNameLabel, false);
-    if (!name) return;
-    const std::optional<std::string> passphrase =
-        AskText(GTK_WINDOW(self->window_), ui::kImportKeyAction, ui::kKeyPassphraseLabel, true);
-    if (!passphrase) return;
-    const ui::ClientKeyError error =
-        deskhubp::ImportClientKey(ui::TrimAscii(*name), *privateKey, *passphrase);
-    self->ShowInlineError(self->clientKeysError_, ui::ClientKeyErrorText(error));
-    self->RefreshClientKeys();
 }
 
 void MainWindow::BuildSavedHostsSection(GtkWidget* box) {
@@ -1258,22 +1338,20 @@ void MainWindow::RefreshSavedHosts() {
     };
     addCell(ui::kHostNameLabel, 150, 0, 0, "deskhub-row-header");
     addCell(ui::kHostAddressLabel, 170, 1, 0, "deskhub-row-header");
-    addCell(ui::kHostIdentityLabel, 110, 2, 0, "deskhub-row-header");
-    addCell(ui::kHostKeyLabel, 130, 3, 0, "deskhub-row-header");
+    addCell(ui::kHostKeyLabel, 130, 2, 0, "deskhub-row-header");
     for (size_t i = 0; i < savedHosts_.size(); ++i) {
         const deskhub::TrustedHost& host = savedHosts_[i];
         const int row = int(i) + 1;
         addCell(host.label, 150, 0, row, "deskhub-row-cell");
         addCell(host.endpoint, 170, 1, row, "deskhub-row-cell");
-        addCell(ui::ProfileIdentityName(host), 110, 2, row, "deskhub-row-cell");
         GtkWidget* key =
-            addCell(deskhub::ShortFingerprint(host.fingerprint), 130, 3, row, "deskhub-row-cell");
+            addCell(deskhub::ShortFingerprint(host.fingerprint), 130, 2, row, "deskhub-row-cell");
         gtk_widget_set_tooltip_text(key, deskhub::FormatFingerprint(host.fingerprint).c_str());
         gtk_grid_attach(GTK_GRID(savedHostsView_),
-            SavedHostAction(ui::kConnectButton, i, G_CALLBACK(OnConnectHostClicked), false), 4,
+            SavedHostAction(ui::kConnectButton, i, G_CALLBACK(OnConnectHostClicked), false), 3,
             row, 1, 1);
         gtk_grid_attach(GTK_GRID(savedHostsView_),
-            SavedHostAction(ui::kRemoveHostAction, i, G_CALLBACK(OnRemoveHostClicked), true), 5,
+            SavedHostAction(ui::kRemoveHostAction, i, G_CALLBACK(OnRemoveHostClicked), true), 4,
             row, 1, 1);
     }
     gtk_widget_show_all(savedHostsView_);
@@ -1339,7 +1417,7 @@ void MainWindow::RefreshPairedDevices() {
     for (size_t i = 0; i < pairedDevices_.size(); ++i) {
         const deskhubp::AuthorizedClient& device = pairedDevices_[i];
         const int row = int(i) + 1;
-        addCell(device.label.empty() ? "(unnamed)" : device.label, 200, 0, row,
+        addCell(device.label.empty() ? ui::kUnnamedClient : device.label, 200, 0, row,
             "deskhub-row-cell");
         addCell(deskhub::ShortFingerprint(device.fingerprint), 130, 1, row,
             "deskhub-row-cell");
@@ -1551,7 +1629,6 @@ void MainWindow::SelectPage(int page) {
     if (page == kPageHost && !Sharing()) RefreshDisplayChoices();
     if (page == kPageDevices) {
         RefreshPairedDevices();
-        RefreshClientKeys();
         RefreshSavedHosts();
     }
 }
@@ -1606,6 +1683,7 @@ void MainWindow::ApplyHostState(HostShareState state, const std::string& detail)
     }
 
     gtk_widget_set_sensitive(bindCombo_, !live);
+    ShowSharingOnlyWidgets(live);
     ShowHostTable(live);
 }
 
@@ -1740,11 +1818,15 @@ void MainWindow::OnDeviceRowActivated(GtkTreeView*, GtkTreePath* path, GtkTreeVi
     self->ConnectToDevice(addr);
 }
 
-void MainWindow::ConnectToDevice(const std::string& addr) {
+void MainWindow::FillAddressFields(const std::string& addr) {
     const uint16_t port = ui::AddressPort(addr);
     gtk_entry_set_text(GTK_ENTRY(addressEntry_), ui::AddressHost(addr).c_str());
     gtk_entry_set_text(GTK_ENTRY(portEntry_),
         std::to_string(port != 0 ? port : deskhub::kDeskhubPort).c_str());
+}
+
+void MainWindow::ConnectToDevice(const std::string& addr) {
+    FillAddressFields(addr);
     StartConnect(addr);
 }
 
@@ -1760,6 +1842,19 @@ void MainWindow::SetClientStatus(const std::string& text, bool isError) {
 void MainWindow::SetBusy(bool busy, const char* what) {
     gtk_widget_set_sensitive(connectButton_, !busy);
     SetClientStatus(busy && what ? std::string(what) : std::string(), false);
+    if (!busy) gtk_widget_hide(cancelConnectButton_);
+}
+
+void MainWindow::ShowApprovalWait(const std::string& text) {
+    SetClientStatus(text, false);
+    gtk_widget_show(cancelConnectButton_);
+}
+
+void MainWindow::OnCancelConnectClicked(GtkButton*, gpointer user) {
+    auto* self = static_cast<MainWindow*>(user);
+    self->connectCancelled_ = true;
+    self->connectDriver_.Cancel();
+    gtk_widget_set_sensitive(self->cancelConnectButton_, FALSE);
 }
 
 void MainWindow::ShowAfterSession() {
@@ -1779,6 +1874,10 @@ void MainWindow::OnConnectClicked(GtkButton*, gpointer user) {
             "Enter the host machine's IP address first (e.g., 192.168.1.10).");
         return;
     }
+    if (deskhub::IsPairingInvite(text)) {
+        self->StartConnectByInvite(text);
+        return;
+    }
 
     const uint16_t port =
         ui::PortOrDefault(gtk_entry_get_text(GTK_ENTRY(self->portEntry_)));
@@ -1793,13 +1892,38 @@ void MainWindow::StartConnect(const std::string& addr) {
             ui::InvalidAddressLine(addr) + "\n" + ui::InvalidAddressHint());
         return;
     }
+    BeginQuery(server, std::string(), addr);
+}
 
-    const bool started = connectDriver_.QueryAsync(
-        server, [this](const std::function<void()>& fn) { PostToUi(fn); },
-        [this, addr](const deskhubp::ConnectOutcome& outcome) {
-            OnSourcesReady(addr, outcome);
+void MainWindow::StartConnectByInvite(const std::string& invite) {
+    SetClientStatus(std::string(), false);
+    if (!deskhub::ParsePairingInvite(invite)) {
+        SetClientStatus(ui::kInviteInvalid, true);
+        return;
+    }
+    BeginQuery(NetAddr{}, invite, std::string());
+}
+
+SourceQueryRequest MainWindow::MakeQueryRequest() {
+    SourceQueryRequest request;
+    request.onProgress = [this, alive = alive_](std::string_view message) {
+        RunOnMain([this, alive, text = std::string(message)] {
+            if (alive->load()) ShowApprovalWait(text);
         });
-    if (started) SetBusy(true, ui::kQueryingSources);
+    };
+    return request;
+}
+
+void MainWindow::BeginQuery(const NetAddr& server, const std::string& invite,
+    const std::string& addr) {
+    const bool started = connectDriver_.QueryAsync(
+        server, MakeQueryRequest(), invite,
+        [this](const std::function<void()>& fn) { PostToUi(fn); },
+        [this, addr](const deskhubp::ConnectOutcome& outcome) { OnSourcesReady(addr, outcome); });
+    if (!started) return;
+    connectCancelled_ = false;
+    gtk_widget_set_sensitive(cancelConnectButton_, TRUE);
+    SetBusy(true, ui::kQueryingSources);
 }
 
 void MainWindow::OpenShell(const NetAddr& server) {
@@ -1821,9 +1945,11 @@ void MainWindow::OpenFileSend(const NetAddr& server) {
 
 void MainWindow::OnSourcesReady(const std::string& addr, const deskhubp::ConnectOutcome& outcome) {
     SetBusy(false, nullptr);
+    const std::string answered = outcome.answeredAddress.empty() ? addr : outcome.answeredAddress;
 
+    if (!outcome.ok && connectCancelled_) return;
     if (!outcome.ok && outcome.unknownHostKey) {
-        OfferToTrustNewHost(addr, *outcome.unknownHostKey);
+        OfferToTrustNewHost(answered, *outcome.unknownHostKey);
         return;
     }
     if (!outcome.ok) {
@@ -1831,18 +1957,22 @@ void MainWindow::OnSourcesReady(const std::string& addr, const deskhubp::Connect
         return;
     }
 
-    deskhubp::RememberRecentDevice(addr, outcome.hostName);
+    FillAddressFields(answered);
+    deskhubp::RememberRecentDevice(answered, outcome.hostName);
     recent_ = deskhubp::LoadRecentDevices();
     RefreshDeviceList();
+    RefreshSavedHosts();
 
-    OpenConnectionWindow(addr, outcome);
+    OpenConnectionWindow(answered, outcome);
 }
 
 void MainWindow::OfferToTrustNewHost(const std::string& addr, const deskhub::Fingerprint& key) {
     GtkWidget* dlg = gtk_message_dialog_new(GTK_WINDOW(window_), GTK_DIALOG_MODAL,
         GTK_MESSAGE_QUESTION, GTK_BUTTONS_NONE, "%s", ui::kTrustNewHostTitle);
     gtk_message_dialog_format_secondary_text(GTK_MESSAGE_DIALOG(dlg), "%s",
-        ui::TrustNewHostPrompt(addr, deskhub::FormatFingerprint(key)).c_str());
+        ui::TrustNewHostPrompt(addr, deskhub::FormatFingerprint(key),
+            deskhubp::PreviousOwnerWarningFor(addr, key))
+            .c_str());
     gtk_dialog_add_buttons(GTK_DIALOG(dlg), ui::kCancelAction, GTK_RESPONSE_CANCEL,
         ui::kTrustNewHostAction, GTK_RESPONSE_ACCEPT, nullptr);
     gtk_dialog_set_default_response(GTK_DIALOG(dlg), GTK_RESPONSE_CANCEL);
@@ -2082,6 +2212,7 @@ void MainWindow::OnHostStarted(bool started, const std::string& error,
     if (filesRequested_) StartFileShare();
     ApplySharingBanner();
     tray_.SetSharing(hosting_);
+    RefreshAccessRequests(true);
 
     if (hostTimerId_) g_source_remove(hostTimerId_);
     hostTimerId_ = g_timeout_add(deskhubp::kShareStatusPollMs, OnHostTimer, this);
@@ -2118,6 +2249,7 @@ void MainWindow::StopHosting() {
         g_source_remove(clipTimerId_);
         clipTimerId_ = 0;
     }
+    HideQrPanel();
     share_.StopTerminalShare();
     share_.StopFileShare();
     share_.sharingHost().Stop();
@@ -2176,6 +2308,7 @@ gboolean MainWindow::OnHostTimer(gpointer user) {
     self->share_.RefreshShells();
     self->share_.RefreshTransfers();
     self->UpdateHostRows(self->hostStatus_);
+    self->RefreshAccessRequests(false);
     return G_SOURCE_CONTINUE;
 }
 
@@ -2359,6 +2492,7 @@ gboolean MainWindow::OnDeleteEvent(GtkWidget*, GdkEvent*, gpointer user) {
 void MainWindow::OnDestroy(GtkWidget*, gpointer user) {
     auto* self = static_cast<MainWindow*>(user);
     self->alive_->store(false);
+    self->RevokeInviteIfShown();
     self->CloseEveryConnection();
     self->tray_.Detach();
     if (self->hostTimerId_) g_source_remove(self->hostTimerId_);

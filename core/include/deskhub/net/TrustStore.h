@@ -30,35 +30,35 @@ std::string ShortFingerprint(const Fingerprint& fp);
 enum class TrustVerdict : uint8_t {
     Unknown = 0,
     Trusted = 1,
-    Changed = 2,
 };
 
 struct TrustedHost {
-    std::string endpoint{};
-    std::string label{};
     Fingerprint fingerprint{};
+    std::string label{};
+    std::string endpoint{};
     int64_t firstSeenUnix = 0;
     int64_t lastSeenUnix = 0;
-    std::string identityName{};
 
     bool operator==(const TrustedHost&) const = default;
 };
 
 inline constexpr size_t kMaxTrustedHosts = 256;
 inline constexpr size_t kMaxTrustLabelBytes = 64;
+inline constexpr size_t kMaxTrustEndpointBytes = 64;
 
 class TrustStore {
 public:
-    TrustVerdict Check(std::string_view endpoint, const Fingerprint& fp) const;
-    void Remember(std::string_view endpoint, std::string_view label, const Fingerprint& fp,
+    TrustVerdict Check(const Fingerprint& fp) const;
+    void Remember(const Fingerprint& fp, std::string_view label, std::string_view endpoint,
         int64_t nowUnix);
+    bool Touch(const Fingerprint& fp, std::string_view endpoint, int64_t nowUnix);
     void Insert(const TrustedHost& host);
-    bool SetProfile(std::string_view endpoint, std::string_view label,
-        std::string_view identityName);
-    bool Forget(std::string_view endpoint);
+    bool SetLabel(const Fingerprint& fp, std::string_view label);
+    bool Forget(const Fingerprint& fp);
     void Clear();
 
-    std::optional<TrustedHost> Find(std::string_view endpoint) const;
+    std::optional<TrustedHost> Find(const Fingerprint& fp) const;
+    std::optional<TrustedHost> FindByEndpoint(std::string_view endpoint) const;
     const std::vector<TrustedHost>& Hosts() const {
         return hosts_;
     }

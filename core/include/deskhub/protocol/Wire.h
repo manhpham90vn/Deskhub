@@ -170,13 +170,16 @@ struct HelloAck {
 };
 
 inline constexpr size_t kAuthSessionIdBytes = 32;
-inline constexpr uint8_t kAuthVersion = 6;
+inline constexpr uint8_t kAuthVersion = 7;
 inline constexpr size_t kMaxAuthBlobBytes = 256;
+inline constexpr size_t kPairingTokenBytes = 32;
+using PairingToken = std::array<uint8_t, kPairingTokenBytes>;
 
 enum class AuthMode : uint8_t {
     Denied = 0,
     Signature = 1,
     ConfigError = 2,
+    AwaitingApproval = 3,
 };
 
 enum class AuthResultCode : uint8_t {
@@ -188,13 +191,14 @@ enum class AuthResultCode : uint8_t {
     BadSignature = 5,
     ConfigError = 6,
     UntrustedHost = 7,
-    HostKeyChanged = 8,
-    LocalKeyUnavailable = 9,
+    LocalKeyUnavailable = 8,
+    AwaitingApproval = 9,
 };
 
 struct AuthStart {
     std::vector<uint8_t> publicKey{};
     std::string clientName{};
+    std::vector<uint8_t> pairingToken{};
 };
 
 struct AuthChallenge {

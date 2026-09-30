@@ -2,7 +2,7 @@
 
 # Deskhub Security Policy
 
-_Last updated: September 29, 2026_
+_Last updated: September 30, 2026_
 
 ## ⚠️ Read this first
 
@@ -11,11 +11,15 @@ expose a sharing machine directly to the Internet.**
 
 Sessions run over QUIC/TLS, including video, keystrokes, mouse, clipboard and terminal
 traffic. Access works like SSH: a client gets in only if its public key is listed in the
-host's `authorized_keys`, and it proves it holds the matching private key. The client
-checks the host's key against the one it pinned on first connection before sending
-anything, and refuses outright if it has changed. Nothing is approved over the network —
-there is no passcode and no approval prompt — and the host answers no plaintext packet:
-anything outside an encrypted connection is dropped.
+host's `authorized_keys`, and it proves it holds the matching private key. A key gets
+onto that list only by an act of the host's owner — pressing **Approve** on the
+device's connection request, showing the device a **QR code** while sharing, or pasting
+the device's public key. There is no passcode and no switch that lets unknown machines
+in. Every machine has one key, and a client pins the host's key — on first connection
+after comparing the fingerprint, or from the QR code — and checks it before sending
+anything; a host that changes address stays trusted, and a different key at a known
+address is treated as a machine never met before, with a warning. The host answers no
+plaintext packet: anything outside an encrypted connection is dropped.
 
 Every host can also share **view-only** (input is dropped instead of injected).
 
@@ -39,8 +43,8 @@ or terminal.
 | Someone reading your traffic | Every session runs inside QUIC/TLS — video frames, keystrokes, clipboard text and terminal bytes are all encrypted between the two machines. A packet capture yields traffic volume and timing, not content. Unencrypted packets arriving at the port are dropped, and the host sends nothing at the application level — not even what it shares — before a client has authenticated. |
 | A remote viewer fighting you for the machine | "Host wins": the moment you touch the real mouse or keyboard, remote input is paused (Windows, macOS and Linux hosts alike). |
 | Keys left stuck down | Any key the remote side is holding is released automatically when the session ends or the viewer switches away. |
-| A stranger connecting uninvited | Only a client whose public key is in the host's `authorized_keys` gets in, and it must sign a transcript of this very connection with the matching private key. There is no secret to guess and nothing is approved over the network; a missing `authorized_keys` file means nobody gets in. A host keeps at most 8 connections waiting to authenticate and drops each after 10 seconds; 3 bad signatures from one key and address within a minute block that pair for 10 seconds. Removing a key on the host's Devices page also closes that device's running sessions at once. Admission lasts only as long as the connection that earned it. |
-| A machine-in-the-middle | Every host has a key. A client pins it on first connection, after the user compares the fingerprint, and checks it before sending anything on every later one. A changed key is refused outright, with no way to accept it from the prompt: the host must be removed from *Trusted hosts* and trusted again. The client's signature covers a session identifier exported from the TLS session and the host key fingerprint the client saw, so a signature relayed to another host, or replayed on another connection, does not verify. |
+| A stranger connecting uninvited | Only a client whose public key is in the host's `authorized_keys` gets in, and it must sign a transcript of this very connection with the matching private key. A key reaches that list in three ways only, each in the owner's hands: the owner presses **Approve** on the device's connection request — a row showing the device's name, the fingerprint of the key it actually presented and its address — the device scans the QR code the owner shows while sharing, whose random 32-byte token works once, for 5 minutes, and dies when the code is hidden or sharing stops, or the owner pastes the device's public key. A stranger who connects is not let in: the host records a request the owner can ignore, and the connection is closed. There is no passcode, a missing `authorized_keys` file means nobody gets in, and nothing lets the client talk its way past the owner. A host keeps at most 8 connections waiting to authenticate and drops each after 10 seconds; it keeps at most 16 requests, each for 10 minutes; 3 bad signatures from one key and address within a minute block that pair for 10 seconds, and a wrong QR token counts against the same limit for its source address. Removing a key on the host's Devices page also closes that device's running sessions at once. Admission lasts only as long as the connection that earned it. |
+| A machine-in-the-middle | Every machine has one key. A client pins the host's key — on first connection after the user compares the fingerprint, or from the QR code, which carries it — and checks it before sending anything on every later one. Trust follows the key, so a host at a new address is still the host; a *different* key at an address the client knows is refused as trusted and shown as a **New host** with a warning naming the machine that used to answer there — it cannot be accepted as a "change", only trusted afresh with its fingerprint on show. A client that scans a QR code sends the token only after the machine answering has proved, through the TLS handshake, that it holds the key printed in the code; anything else at that address gets nothing. The client's signature covers a session identifier exported from the TLS session and the host key fingerprint the client saw, so a signature relayed to another host, or replayed on another connection, does not verify. |
 | Viewers fighting each other for the mouse | Up to 5 viewers may watch one host, but only one drives input: the earliest to have joined wins, and a later viewer's input is dropped until the earlier one has been idle for a second. A 6th viewer is rejected as `Busy`. |
 | A viewer you only want to show the screen to | View-only sharing, available on every host, drops input packets at the host before anything is injected — it is not enforced by asking the client to behave. Android and iOS hosts are view-only unconditionally. |
 | A phone left sharing by accident | The operating system, not Deskhub, is the backstop: Android keeps a permanent notification up and re-asks for recording consent on every single share, and iOS keeps its broadcast indicator visible. Either can stop the share without opening the app. |
@@ -60,11 +64,25 @@ This is the honest list. Nothing below is solved today:
   carry on in it. Remove a key you no longer trust, and close the shells you are
   finished with rather than leaving them.
 - **The first meeting is a leap of faith.** Pinning the host key stops a
-  machine-in-the-middle who arrives *later* — a change is refused outright. It cannot
-  stop one who is already in the middle at the very first contact unless you compare the
-  fingerprint the *New host* dialog shows with the one on the host's Devices page, as the
-  dialog asks. `deskhub-cli` refuses an unknown host unless told `--accept-new-host-key`,
-  or you can pin the key in advance with `host add … --host-key-stdin`.
+  machine-in-the-middle who arrives *later* — a different key is a different host, and
+  the dialog says so. It cannot stop one who is already in the middle at the very first
+  contact unless you compare the fingerprint the *New host* dialog shows with the one on
+  the host's Devices page, as the dialog asks. Scanning the host's QR code does that
+  comparison for you, because the code carries the fingerprint. `deskhub-cli` refuses an
+  unknown host unless told `--accept-new-host-key`, or you can pin the key in advance
+  with `host add … --host-key-stdin`.
+- **Approving the wrong request is the owner's mistake, and Deskhub cannot catch it.**
+  A connection request shows a name the device chose for itself, the fingerprint of the
+  key it holds, and the address it came from. The name proves nothing; check the
+  fingerprint against the device's own Devices page, and the address against where you
+  expect it to be, before pressing *Approve*. Anyone on the network can leave a request;
+  only you can turn one into access.
+- **A QR code is a secret for five minutes, to anyone who can see the screen.** It lets
+  one device in without any click on the host. Someone who photographs it — over your
+  shoulder, from a screenshot, from a shared screen — can use it in your place until it
+  expires, is used, or is hidden. Show it only to the person you mean to let in, and
+  hide it as soon as they are connected; the device it admitted then appears under
+  *Clients allowed to connect*, where you can remove it if it is not the one you expected.
 - **Traffic analysis still works.** Encryption hides content, not existence: an observer
   sees that a session is running, how much video is flowing, and when you type.
 - **No rate limiting or DoS resistance.** Flooding the port will disrupt a session.
@@ -74,9 +92,11 @@ This is the honest list. Nothing below is solved today:
   anything, so a stranger who knows the address can still learn that something is
   listening, and see the host's certificate.
 - **The device name is shown and logged.** The device name a client sends is encrypted in
-  transit, but it is shown on the host's screen and written into the host's logs, and it
-  is the label of every public key the machine copies — so it ends up in the
-  `authorized_keys` of each host that allows that key. A host also sends its own device
+  transit, but it is shown on the host's screen and written into the host's logs, it
+  appears in every connection request the machine leaves, and it is the label of the
+  public key the machine copies and of the key a host stores when it approves the
+  machine or admits it by QR code — so it ends up in the `authorized_keys` of each host
+  that allows that key. A host also sends its own device
   name to every client that has authenticated with an allowed key — never before — and
   that client keeps it in its recent list. It defaults to the machine's own
   hostname — often the owner's real name. Set a nickname in Settings → General → *Device
@@ -135,10 +155,16 @@ running, they can:
 1. Find it by trying a QUIC handshake against UDP 47777 on each address. No plaintext
    packet gets an answer, but the handshake itself does, so the machine gives itself away
    to a targeted scan.
-2. Try to get in — which takes a private key whose public half the host owner has added
-   to `authorized_keys`. There is no passcode to guess and no prompt to trick someone
-   into clicking. Without such a key, the most they can do is try to sit in the middle of
-   a client's *first* connection to a host, which the fingerprint comparison catches.
+2. Try to get in — which takes a private key whose public half is in `authorized_keys`,
+   and only the owner's *Approve*, a live QR token or a paste puts one there. What a
+   stranger *can* do is leave a connection request that the owner sees on the Host page,
+   under a name of their choosing; it expires after 10 minutes, and only an *Approve*
+   turns it into access. They can guess at a QR token, but a wrong token is charged to
+   their address like a bad signature — 3 in a minute and they are blocked for 10
+   seconds — and a token is 32 random bytes that lives 5 minutes and works once.
+   Beyond that, the most they can do is try to sit in the middle of a client's *first*
+   connection to a host, which the fingerprint comparison — or the fingerprint inside
+   the QR code — catches.
 3. Watch the traffic without getting in — and learn only volume and timing. The
    session's content, video included, is encrypted; a capture no longer reconstructs
    the screen or the keystrokes.
@@ -157,6 +183,11 @@ If you want to keep using Deskhub as it is today, these are worth doing:
 - [ ] Allow only the client keys you need on the host, and compare the host key
       fingerprint on the first connection from each client. Review the Devices page and
       remove keys you no longer recognize. Untick *Viewers can control this machine* when only viewing is needed.
+- [ ] Approve only the connection requests you were expecting, and check the fingerprint
+      and address in the row before you do. Deny or ignore the rest — they expire on
+      their own.
+- [ ] Hide the QR code as soon as the device you showed it to is connected, and never
+      show it on a screen you are sharing or presenting.
 - [ ] Quit Deskhub when you are not actively using it. It does not run as a background
       service — closing it closes the hole.
 - [ ] On Linux, if you use `ufw`, scope the rule instead of opening it wide:
@@ -165,10 +196,12 @@ If you want to keep using Deskhub as it is today, these are worth doing:
 - [ ] Do not leave a share running on a laptop that you carry onto other networks.
 - [ ] Lock your machine when you walk away, so an unattended session cannot be taken
       over silently.
-- [ ] With `deskhub-cli`, use `key public --name NAME` to display a client public key
-      and `host-key public` to display this host's key. Transfer each over a channel
-      you trust, then use `access add --stdin` on the host and `host add … --host-key-stdin`
-      on the client.
+- [ ] With `deskhub-cli`, use `key public` to display this machine's public key
+      and `host-key public` to display its key as a host — they are the same key.
+      Transfer it over a channel you trust, then use `access add --stdin` on the host
+      and `host add … --host-key-stdin` on the client. To approve a request from a
+      terminal, read `access requests` and answer with
+      `access approve --fingerprint SHA256:…` only for the fingerprint you expected.
 
 ## Local artifacts
 
@@ -180,25 +213,29 @@ The desktop apps and `deskhub-cli` share those files; `DESKHUB_CONFIG_DIR` or th
 `--config-dir` points both at another folder. They keep more in that folder:
 `ui-settings.txt` (fps, bitrate, resolution cap, port, the view-only switch, the device
 name, the bind address and the other toggles), `recent-hosts.txt` (the last 10
-hosts you connected to — address, when, and the name each host reported), `client_key.pem` and `client_key.<name>.pem`
-(this machine's client private keys — anyone who copies one can sign in wherever that key
-is allowed; on Windows they are protected with DPAPI), `host_key.pem` + `host_cert.pem`
-(this machine's host private key and self-signed certificate — the identity behind its
-fingerprint; anyone who copies the key file can impersonate this machine as a host),
-`authorized_keys` (the client public keys allowed into this host, each with its label),
-`known_hosts` (the hosts this machine trusts — address, pinned fingerprint, name and the
-client key to use) and, on Linux, `portal-restore-token.txt` (the desktop's own token for
-the screens you picked, meaningful only to your desktop session and never transmitted).
-No passcode is stored anywhere. On POSIX systems the folder is created `0700` and every
-file `0600`, written atomically; on Windows they are restricted to your user, SYSTEM and
-Administrators. The mobile apps keep the same files inside their own sandbox — on iOS in a
-`.deskhub` folder inside the app group container, on Android in the app's internal storage. Treat that folder as
-readable by anything running as you.
+hosts you connected to — address, when, and the name each host reported), `host_key.pem`
+(this machine's one private key — the identity behind its fingerprint in both roles;
+anyone who copies it can impersonate this machine as a host *and* sign in wherever this
+machine is allowed; no certificate is stored, the TLS certificate is built in memory each
+time the port opens), `authorized_keys` (the client public keys allowed into this host,
+each with its label), `known_hosts` (the hosts this machine trusts — pinned fingerprint,
+name and the last address each answered at), `access_requests` (the devices waiting for
+your *Approve* — name, public key, address and time; at most 16, each dropped after 10
+minutes), `pairing_tokens` (the QR tokens currently live and when each expires — a copy
+of this file is as good as the code on screen until they expire) and, on Linux,
+`portal-restore-token.txt` (the desktop's own token for the screens you picked,
+meaningful only to your desktop session and never transmitted). No passcode is stored
+anywhere. On POSIX systems the folder is created `0700` and every file `0600`, written
+atomically; on Windows they are restricted to your user, SYSTEM and Administrators. The
+mobile apps keep the same files inside their own sandbox — on iOS in a `.deskhub` folder
+inside the app group container, shared by the app and its broadcast extension, on Android
+in the app's internal storage. Treat that folder as readable by anything running as you.
 
 An `authorized_keys` or `known_hosts` file that cannot be read is not guessed at: while it
 is unreadable, the host lets nobody in and the client refuses every host, and the next
 change writes it afresh. Data from older versions — passcodes, the old paired-machines
-list — is not converted; leftover files are deleted.
+list — is not converted; leftover files are deleted. The `client_key*.pem` and
+`host_cert.pem` that 7.0.x wrote are ignored, never read; delete them if you like.
 
 Files another machine sends land outside that folder, in the directory the receiving
 machine chose for them (`Deskhub` in the user's home folder unless another is picked,
@@ -212,14 +249,17 @@ Nothing uploads any of this; delete the folder at any time.
 
 Tracked, in the order they are intended to land:
 
-1. **Storing the host key and client keys in the OS keychain** instead of files, on the
-   platforms where they are not already protected.
+1. **Storing the machine key in the OS keychain** instead of a file.
 
 Shipped since the last revision of this list: SSH-style access — clients admitted only by
-public keys listed in the host's `authorized_keys`, each connection signed afresh; host
-keys pinned on first connection with a hard refusal when one changes; the passcode,
-approval prompt and pairing switch removed; LAN discovery removed, so the host answers no
-plaintext packet at all; and limits on pending authentications and bad signatures.
+public keys listed in the host's `authorized_keys`, each connection signed afresh; the
+passcode and pairing switch removed; LAN discovery removed, so the host answers no
+plaintext packet at all; limits on pending authentications and bad signatures; then, in
+7.1, one key per machine with the certificate no longer stored, trust that follows the
+host's key rather than its address (the hard refusal on a changed key became a *New host*
+dialog that names the previous owner), connection requests the owner approves by
+fingerprint over the authenticated channel, and QR pairing with a one-time token the
+client sends only to the machine whose fingerprint the code names.
 
 This list is a statement of intent, not a schedule. Deskhub is maintained by one person
 in their spare time. Treat the current state as the state, not the plan.

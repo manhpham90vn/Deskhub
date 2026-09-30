@@ -3,6 +3,7 @@
 #include "deskhub/ui/HostProfiles.h"
 
 #include <optional>
+#include <string>
 #include <string_view>
 
 namespace deskhubp {
@@ -12,6 +13,8 @@ deskhub::ui::HostProfileError SaveHostProfile(deskhub::ui::HostProfileMode mode,
     const deskhub::ui::HostProfileRequest& request);
 deskhub::ui::HostProfileError RemoveHostProfile(std::string_view alias);
 deskhub::ui::HostProfileError TrustNewHost(std::string_view address,
+    const deskhub::Fingerprint& fingerprint);
+std::string PreviousOwnerWarningFor(std::string_view address,
     const deskhub::Fingerprint& fingerprint);
 
 }

@@ -1,3 +1,3 @@
-• Deskhub 7 signs in with keys, like SSH. Passcodes and pairing are gone; 7.x cannot connect to 6.x, so update every device
-• Earlier pairings are not kept: allow each client again
-• To connect: copy your key under Devices → My keys, paste it on the computer under Devices → Clients allowed to connect and press Allow, then type its address here and press Trust and connect
+• Connect by QR code: press Show QR code on the sharing computer, then Scan QR code here. Camera is used only for that, on the device
+• Or type the address and have the owner press Approve under Connection requests; this device retries for two minutes
+• One key per device, My keys is gone; every device must be let in once more. 7.1 cannot connect to 7.0, update every device

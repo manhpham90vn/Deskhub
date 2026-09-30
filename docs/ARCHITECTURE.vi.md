@@ -33,14 +33,16 @@ client/     app theo từng OS: windows, linux, macos, ios, android (phụ thu�
 | `core/session` | Các session state machine, chia theo vai trò: `session/host` (session theo từng viewer, bảng viewer, `SourceListResponder`, file receiver, auth throttle), `session/client` (screen client, file sender, terminal client, luồng connect), cùng các thành phần dùng chung đặt cạnh chúng (kiểu dữ liệu transfer, bảng terminal session, clipboard sync, link recovery) |
 | `core/control` | Bitrate controller, quality ladder, tính kích thước stream, clock offset |
 | `core/terminal` | VT emulator dùng chung cho mọi client: `VtParser`, `Screen`, `KeyEncoder`, `Palette` |
-| `core/net` | Trust store (phía client), authorized keys (phía host), văn bản public key OpenSSH, chọn bind address |
-| `core/ui` | Toàn bộ chuỗi hiển thị cho người dùng, phần parse settings, các builder dòng bảng, thiết bị gần đây, host profile (`HostProfiles`) và các dòng client key (`ClientKeys`), để cả năm client hiển thị cùng nội dung |
+| `core/net` | Trust store theo fingerprint (phía client), authorized keys (phía host), các yêu cầu kết nối đang chờ (`AccessRequests`), record lời mời `deskhub://pair/` (`PairingInvite`), văn bản public key OpenSSH, một `Base64` duy nhất cho mọi nơi gọi, chọn bind address |
+| `core/auth` | Transcript auth được ký (`Transcript`), bộ giới hạn thất bại theo key và địa chỉ, và các token QR dùng một lần (`PairingTokens`) |
+| `core/qr` | `QrCode` — bộ encode QR mà mọi client và CLI dùng để vẽ mã pairing |
+| `core/ui` | Toàn bộ chuỗi hiển thị cho người dùng, phần parse settings, các builder dòng bảng, thiết bị gần đây và host profile (`HostProfiles`), để cả năm client hiển thị cùng nội dung |
 | `platform/net` | `UdpSocket` (theo từng OS), `QuicEndpoint` (quiche đặt sau pimpl), `SessionTransport` |
-| `platform/auth` | `AuthNegotiation` — handshake chữ ký bằng key duy nhất mà cả hai phía sử dụng |
-| `platform/client` | `HostLink` (dial, trust, auth, channel; dùng chung cho mọi giao diện), `ScreenViewer`, `TerminalViewer`, `FileTransferClient`, `SourceQuery`, `HostProfiles` (các host đã trust và client key mà mỗi host dùng) |
-| `platform/host` | `HostEngine`, `HostNetLoop`, `SharingHost`, `TerminalHost`, `FileHost`, `ViewerBroadcast` |
-| `platform/system` | Clock, random, PTY (ConPTY / forkpty), host identity (`HostIdentity`), client key (`ClientKeys`, `ClientIdentity`), file `authorized_keys` và `known_hosts`, danh sách gần đây (`RecentDevicesFile`), tên thiết bị, autostart, keep-awake |
-| `platform/ffi` | Giao diện C mà app Swift và Kotlin gọi: `SettingsFfi` (settings, tên thiết bị), `DevicesFfi` (thiết bị gần đây, client được phép, fingerprint của host này), `HostProfileFfi` (host đã trust), `ClientKeyFfi` (client key), cùng các giao diện share, screen, terminal và send |
+| `platform/auth` | `AuthNegotiation` — handshake chữ ký bằng key duy nhất mà cả hai phía sử dụng, với bốn kết cục phía host của nó (mục 3) |
+| `platform/client` | `HostLink` (dial, trust, auth, chờ approve, channel; dùng chung cho mọi giao diện), `ScreenViewer`, `TerminalViewer`, `FileTransferClient`, `SourceQuery`, `HostProfiles` (các host đã trust theo fingerprint, kèm tên và địa chỉ gần nhất) |
+| `platform/host` | `HostEngine`, `HostNetLoop`, `SharingHost`, `TerminalHost`, `FileHost`, `ViewerBroadcast`, `PairingInvite` (phát hành token và dựng lời mời mà host này hiển thị) |
+| `platform/system` | Clock, random, PTY (ConPTY / forkpty), key của máy (`HostIdentity`), file `authorized_keys` và `known_hosts`, các yêu cầu đang chờ (`AccessRequestsFile`) và token QR còn hiệu lực (`PairingTokenFile`), danh sách gần đây (`RecentDevicesFile`), tên thiết bị, autostart, keep-awake |
+| `platform/ffi` | Giao diện C mà app Swift và Kotlin gọi: `SettingsFfi` (settings, tên thiết bị), `DevicesFfi` (thiết bị gần đây, client được phép, yêu cầu kết nối, fingerprint và public key của máy này), `HostProfileFfi` (host đã trust), `PairingFfi` (lời mời, các module QR, thu hồi), cùng các giao diện share, screen, terminal và send |
 | `core/cli` | Cú pháp command line và bộ ghi JSON của nó: nhận văn bản thuần, trả về command đã được kiểm tra |
 | `client/<os>` | Capture, encode, decode, render, windowing, hộp thoại; không chứa thành phần nào thuộc protocol |
 | `client/cli` | Từ cờ tới session: một binary có thể host, connect và mở shell mà không cần GUI toolkit. Nó link cùng thư viện media theo từng OS mà app desktop sử dụng |
@@ -97,32 +99,52 @@ lần chờ sẽ chặn mọi bên gửi.
 
 ## 3. Cơ chế chấp nhận: key, như SSH
 
-Mỗi máy tạo một host key ECDSA P-256 trong lần chạy đầu tiên (`HostIdentity`) và không bao
-giờ tự động thay nó; hash SHA-256 của SPKI chính là fingerprint mà người dùng nhìn thấy. TLS
-sử dụng một certificate tự ký trên key đó. Client đăng nhập bằng một trong các client key
-của nó (`ClientKeys`): Ed25519 khi được tạo mới, Ed25519 hoặc ECDSA P-256 khi import từ file
-OpenSSH hoặc PKCS#8. Host chỉ chấp nhận public key có trong `authorized_keys` của nó
-(`AuthorizedKeys`, tối đa 128 dòng dạng `ssh-ed25519 AAAA… label` hoặc
-`ecdsa-sha2-nistp256 AAAA… label`); label chỉ là tên hiển thị, không bao giờ là quyền.
-Không có gì được chấp thuận qua network — không có passcode, không có prompt phê duyệt và
-không có switch nào cho key lạ vào.
+Mỗi máy tạo một key ECDSA P-256 duy nhất trong lần chạy đầu tiên (`HostIdentity`,
+`host_key.pem`) và không bao giờ tự động thay nó. Key duy nhất đó chính là máy ở cả hai vai:
+host đưa nó ra qua TLS, và client đăng nhập bằng nó. Hash SHA-256 của DER
+SubjectPublicKeyInfo là fingerprint duy nhất mà người dùng nhìn thấy, trên trang Devices,
+trong mã QR, trong danh sách yêu cầu kết nối, trong `authorized_keys` và `known_hosts` như
+nhau. TLS cần một certificate X.509, nên mỗi lần port mở, `HostIdentity` dựng một
+certificate tự ký quanh key đó **trong bộ nhớ** và giao cho quiche; không có gì được ghi ra.
+Vì fingerprint hash SPKI chứ không hash certificate, một certificate mới ở mỗi lần khởi
+động không làm thay đổi bất cứ thứ gì ai đó đã ghim, và file `host_cert.pem` mà các phiên
+bản cũ lưu không được đọc cũng không cần tới. Host chỉ chấp nhận public key có trong
+`authorized_keys` của nó (`AuthorizedKeys`, tối đa 128 dòng dạng
+`ecdsa-sha2-nistp256 AAAA… label` — dòng Ed25519 vẫn được parse cho key dán bằng tay);
+label chỉ là tên hiển thị, không bao giờ là quyền.
 
-Bên trên TLS, một handshake ở tầng ứng dụng (`AuthNegotiation`, auth version 6) quyết
+Bên trên TLS, một handshake ở tầng ứng dụng (`AuthNegotiation`, auth version 7) quyết
 định việc chấp nhận theo từng connection. Transport thực thi handshake này, và host không
 gửi gì ở tầng ứng dụng cho connection chưa hoàn tất phần auth:
 
-1. QUIC/TLS hoàn tất. Client kiểm tra key của host với `known_hosts` **trước khi gửi bất
-   cứ thứ gì** (xem bên dưới).
-2. Client gửi `AuthStart` kèm public key và tên thiết bị của nó.
-3. Client ký một transcript — domain label, auth version, vai trò, giá trị session export
-   từ chính QUIC/TLS connection này, public key của nó và fingerprint TLS của host
-   (`core/auth/Transcript`) — và host xác minh chữ ký với key đó, key này phải có trong
-   `authorized_keys`.
+1. QUIC/TLS hoàn tất. Client xác định trust với key của host **trước khi gửi bất cứ thứ
+   gì** (`HostLink::SettleTrust`, xem bên dưới).
+2. Client gửi `AuthStart`: `00 | u16 keyLen | key | u8 nameLen | name |
+   u8 tokenLen | token | 07` — public key của nó, tên thiết bị của nó, token pairing 32 byte
+   khi nó đến từ mã QR (`tokenLen` là 0 hoặc 32), và auth version ở cuối.
+3. `HostAuth::Begin` trả lời bằng một trong bốn `AuthChallenge`:
+   - key có trong `authorized_keys` → `Signature`;
+   - key chưa biết và token khớp một mục còn hiệu lực trong `pairing_tokens` → key được
+     nối vào `authorized_keys` với nhãn là tên của client, token bị tiêu thụ, và câu trả
+     lời là `Signature`;
+   - key chưa biết và có gửi token nhưng token sai → một lần thất bại được tính cho địa
+     chỉ nguồn trong bộ giới hạn hiện có (3 lần mỗi phút, rồi chặn 10 giây), và lời mở đầu
+     sau đó được xử lý như không mang token;
+   - key chưa biết và không có token dùng được → một yêu cầu kết nối (tên, key,
+     fingerprint, địa chỉ, thời điểm) được ghi vào `access_requests` và câu trả lời là
+     `AwaitingApproval`. Connection bị đóng như một lần từ chối hiện nay; host không giữ
+     connection chưa authenticate nào chờ một cú click.
+4. Khi nhận `Signature`, client ký một transcript — domain label, auth version, vai trò,
+   giá trị session export từ chính QUIC/TLS connection này, public key của nó và
+   fingerprint TLS của host (`core/auth/Transcript`) — và host xác minh chữ ký với key đó.
 
 Một chữ ký chỉ gắn với đúng một connection, nên mỗi lần kết nối lại phải ký lại; không có
 0-RTT hay session resumption. Host giữ tối đa 8 connection đang chờ authenticate và loại
 bỏ từng connection sau 10 giây; 3 chữ ký sai từ một key và một IP nguồn trong vòng một
-phút sẽ chặn cặp đó trong 10 giây (`AuthThrottle`).
+phút sẽ chặn cặp đó trong 10 giây (`AuthThrottle`). `access_requests` giữ tối đa 16 yêu
+cầu, mỗi key một yêu cầu (lần xin lại làm mới địa chỉ và thời điểm), mỗi yêu cầu trong 10
+phút; *Approve* chuyển key vào `authorized_keys` kèm tên thiết bị, *Deny* xoá dòng đó và
+không báo gì cho client.
 
 Việc được chấp nhận gắn với một QUIC connection, không gắn với địa chỉ. Nó bị huỷ ngay khi
 connection đó đóng, nên connection tiếp theo từ cùng địa chỉ và port phải chứng minh lại từ
@@ -131,13 +153,32 @@ connection đó đóng, nên connection tiếp theo từ cùng địa chỉ và 
 và một key bị từ chối không thể được thử lại ngay trên connection đó. Gỡ một client key
 trên trang Devices (hoặc `access remove`) cũng đóng mọi connection mà key đó đang mở.
 
-Ở phía client, `known_hosts` (`TrustStore`) ghim host key theo từng địa chỉ và port, cạnh
-tên của từng host đã trust và client key dùng với host đó (`HostProfiles`). Đây là trust on
-first use, giống SSH: một key **chưa biết** khiến link thất bại với trạng thái *chưa được
-trust*; sau đó app hiển thị fingerprint trong hộp thoại *New host* và dial lại với
-`acceptNewHostKey` khi người dùng chọn *Trust and connect*, còn CLI chỉ làm vậy khi có
-`--accept-new-host-key`. Một key **đã thay đổi** là lỗi cứng, không có cách bỏ qua: host
-phải được gỡ khỏi *Trusted hosts* rồi trust lại.
+Ở phía client, `known_hosts` (`TrustStore`) được đánh khoá theo **fingerprint** của host;
+mỗi mục mang tên host, địa chỉ gần nhất mà host trả lời và thời điểm gặp lần đầu/lần cuối
+(`HostProfiles`). `HostLink::SettleTrust` chạy ngay khi TLS xong, trên fingerprint của key
+mà đầu kia đưa ra:
+
+- Dial từ một lời mời QR: fingerprint phải bằng fingerprint trong lời mời. Bằng nghĩa là
+  máy đang trả lời giữ private key của máy đã tạo mã, nên host được ghim âm thầm và token
+  được gửi trong `AuthStart`. Khác nghĩa là có thứ khác trả lời ở địa chỉ đó: link thất
+  bại với `InviteMismatch` và token không bao giờ rời khỏi client.
+- Đã có trong `known_hosts`: địa chỉ gần nhất của mục đó được làm mới (`TouchTrustedHost`)
+  và link tiếp tục — ở bất kỳ địa chỉ nào tới được host, vì không còn gì được đánh khoá
+  theo địa chỉ nữa.
+- Ngoài ra, link thất bại với trạng thái *chưa được trust* kèm fingerprint; app hiển thị
+  hộp thoại *New host* và dial lại với `acceptNewHostKey` sau *Trust and connect*, còn CLI
+  chỉ làm vậy khi có `--accept-new-host-key`. Nếu `FindByEndpoint` cho biết địa chỉ đó
+  từng trả lời với tư cách một host đã trust khác, `PreviousOwnerWarningFor` thêm tên và
+  fingerprint của host đó vào lời nhắc. Không có phán quyết *key đã thay đổi*: một key mới
+  ở một địa chỉ cũ là một host mới.
+
+Khi challenge là `AwaitingApproval`, `HostLink` đỗ lại ở trạng thái cùng tên, hiển thị
+`AwaitingApprovalLine`, và dial lại với backoff mà các link đang recovery đã dùng, trong
+tối đa `kDefaultApprovalWaitUs` (120 giây) hoặc cho tới khi nơi gọi huỷ; mỗi lần dial lại
+là một connection đầy đủ và một `AuthStart` mới, nên lần đầu tiên sau *Approve* của chủ
+host nhận được `Signature` và hoàn tất. Quá hạn, link thất bại với
+`AuthResultCode::AwaitingApproval`, thông báo của nó bảo người dùng nhờ *Approve* rồi connect
+lại.
 
 Dữ liệu truyền đi là bản thân public key, không phải một fingerprint đơn lẻ: host tự hash
 nội dung nhận được, nên việc mạo danh đòi hỏi phải ký bằng một key mà kẻ mạo danh không
@@ -241,8 +282,10 @@ sổ kết thúc kèm lý do như thông thường.
 
 Phần truy vấn source (`QuerySources`) sử dụng cùng link đó theo hình thức một lần, dạng
 blocking. UI vẫn đẩy các yêu cầu (phím, resize) vào các hàng đợi lệnh. Một
-host key chưa biết khiến link thất bại kèm fingerprint của nó, để UI hiển thị trong hộp
-thoại *New host*; một host key đã thay đổi khiến link thất bại hẳn. Cửa sổ terminal không parse escape sequence: `core/terminal`
+host key chưa biết khiến link thất bại kèm fingerprint của nó — và cảnh báo chủ cũ khi địa
+chỉ đó từng trả lời với tư cách một host đã trust khác — để UI hiển thị trong hộp thoại
+*New host*; host chưa cho phép key này đỗ link ở `AwaitingApproval`, mà dòng trạng thái của
+nó được UI poll trong khi người dùng có thể huỷ. Cửa sổ terminal không parse escape sequence: `core/terminal`
 chuyển byte stream thành lưới ô, còn cửa sổ chỉ vẽ ô và chuyển tiếp sự kiện phím. Hiện mỗi
 cửa sổ vẫn giữ link riêng; việc dùng chung một link đã được chấp nhận cho mọi cửa sổ trỏ
 tới cùng một host là bước tiếp theo đã dự kiến, và sẽ được bổ sung tại `HostLink` dưới
@@ -251,8 +294,8 @@ dạng một registry cùng cơ chế fan-out cho observer, không phải thêm 
 ## 6. Tìm host
 
 Không có discovery: không thành phần nào scan network và host không trả lời packet
-plaintext nào. Client dial tới một địa chỉ người dùng nhập, một host gần đây hoặc một host
-đã trust (`HostProfiles`). `SourceListResponder` chỉ trả lời `LIST_SOURCES` trên một
+plaintext nào. Client dial tới một địa chỉ người dùng nhập, một host gần đây, một host
+đã trust (`HostProfiles`) hoặc các địa chỉ trong một lời mời QR. `SourceListResponder` chỉ trả lời `LIST_SOURCES` trên một
 connection đã được chấp nhận; phản hồi này cho biết host hỗ trợ những gì — có nhận input
 hay không, có share terminal hay không — thông qua các flag trong header `SOURCE_LIST`,
 nhờ đó client biết trước khi mở bất kỳ cửa sổ nào rằng một điện thoại chỉ có thể được xem.
@@ -266,22 +309,44 @@ host, tối đa 10. FFI `dh_list_sources` chỉ ghi một host vào đó khi hos
 các app không còn tự cập nhật danh sách và `dh_recent_touch` đã bị bỏ. File
 `recent-devices.txt` cũ bị xoá, không được chuyển đổi.
 
+Mã QR là kênh out-of-band duy nhất, và nó luôn nằm ngoài băng: host không bao giờ truyền
+nó, chủ host hiển thị nó và ai đó đọc từ màn hình hoặc dán link.
+`deskhubp::BuildPairingInvite(port, bindIp, hostName)` phát hành một token ngẫu nhiên 32
+byte (giữ trong `pairing_tokens` với hạn 5 phút, tối đa 4 token còn hiệu lực cùng lúc, tất
+cả bị `RevokePairingTokens` thu hồi khi panel bị ẩn hoặc share dừng) và định dạng
+`core/net/PairingInvite`: văn bản là `deskhub://pair/` theo sau là base64url của một record
+nhị phân — một byte version, số endpoint `n`, rồi `n × (IPv4, port)` cho tối đa 4 địa chỉ
+của host, fingerprint 32 byte, token 32 byte và tên host có tiền tố độ dài, tối đa 32 byte.
+Record bị giới hạn ở 180 ký tự để ở mức sửa lỗi M nó vừa một mã QR version 10 hoặc nhỏ
+hơn, thứ mà điện thoại đọc được từ màn hình laptop ở khoảng cách một tầm tay.
+`core/qr/QrCode` (`EncodeQr`, cùng `RenderQrText` cho `share --qr` của CLI) là bộ encode
+duy nhất; mọi client vẽ lưới module mà nó trả về, Android qua `dh_qr_encode`.
+`ParsePairingInvite` ở phía client cho `HostLink` các endpoint, fingerprint cần đòi và
+token cần gửi; `dh_pairing_invite_address` cho các app `ip:port` đầu tiên để hiển thị trong
+ô địa chỉ. Scan là phần duy nhất theo từng nền tảng — CameraX + ZXing trên Android,
+AVFoundation trên iOS — và cả hai chỉ trả về đúng văn bản đã giải mã.
+
 ## 7. Dữ liệu trên đĩa
 
 Mọi dữ liệu nằm trong thư mục Deskhub của người dùng (`~/.deskhub`,
 `%USERPROFILE%\.deskhub`, thư mục `.deskhub` bên trong App Group container trên iOS,
 internal storage trên Android;
-`DESKHUB_CONFIG_DIR` hoặc `--config-dir` của CLI ghi đè vị trí này): `host_key.pem` và
-`host_cert.pem` (host identity), `client_key.pem` và `client_key.<name>.pem` (client key,
-được bảo vệ bằng DPAPI trên Windows), `authorized_keys` (các client key mà host này chấp
-nhận), `known_hosts` (các host đã trust cùng profile của chúng), `ui-settings.txt` (bao gồm
-tên thiết bị), `recent-hosts.txt` (địa chỉ, thời điểm kết nối gần nhất và tên host),
-`portal-restore-token.txt` trên Linux (token của chính desktop cho những màn hình đã chọn
-trong hộp thoại chia sẻ màn hình), cùng log theo từng lần chạy. Không có passcode nào được
-lưu ở bất cứ đâu. Trên POSIX, thư mục có quyền `0700` và file `0600`, được ghi atomic; trên
-Windows, ACL chỉ cho phép tài khoản người dùng, SYSTEM và Administrators. Phần file
-I/O nằm trong `platform/`; phần parse và các cấu trúc dữ liệu nằm trong `core/` và có unit
-test.
+`DESKHUB_CONFIG_DIR` hoặc `--config-dir` của CLI ghi đè vị trí này): `host_key.pem` (key
+duy nhất của máy — certificate TLS được dựng trong bộ nhớ ở mỗi lần khởi động, nên
+`host_cert.pem` không còn được ghi và file còn sót bị bỏ qua), `authorized_keys` (các client
+key mà host này chấp nhận), `known_hosts` (các host đã trust theo fingerprint, kèm tên và
+địa chỉ gần nhất), `access_requests` (các yêu cầu kết nối đang chờ Approve hoặc Deny — tên,
+public key, địa chỉ, thời điểm; tối đa 16, mỗi yêu cầu bị loại bỏ sau 10 phút),
+`pairing_tokens` (các token QR đang còn hiệu lực, kèm hạn của chúng), `ui-settings.txt`
+(bao gồm tên thiết bị), `recent-hosts.txt` (địa chỉ, thời điểm kết nối gần nhất và tên
+host), `portal-restore-token.txt` trên Linux (token của chính desktop cho những màn hình đã
+chọn trong hộp thoại chia sẻ màn hình), cùng log theo từng lần chạy. Không có passcode nào
+được lưu ở bất cứ đâu, và không có `client_key*.pem`: các file mà phiên bản cũ giữ bị bỏ
+qua, không được migrate. Trên POSIX, thư mục có quyền `0700` và file `0600`, được ghi
+atomic; trên Windows, ACL chỉ cho phép tài khoản người dùng, SYSTEM và Administrators. Trên
+iOS, app và broadcast extension dùng chung thư mục này, và đó là cách yêu cầu của extension
+tới được danh sách của app và *Approve* của app tới được extension. Phần file I/O nằm trong
+`platform/`; phần parse và các cấu trúc dữ liệu nằm trong `core/` và có unit test.
 
 File do viewer gửi được lưu ở nơi khác: một thư mục do host chọn (trường `transfer_dir`
 trong `ui-settings.txt`, mặc định là `Deskhub` trong thư mục home của người dùng).
@@ -296,9 +361,9 @@ với filesystem.
 
 | Suite | Phạm vi chạy | Nội dung kiểm tra |
 | --- | --- | --- |
-| `make test` | offline, không socket | toàn bộ `core/`: wire, framing, FEC, session, VT emulator, settings, chuỗi văn bản, structured fuzzing tất định |
-| `make test-platform` | socket loopback | QUIC handshake thật, xác thực bằng chữ ký key end-to-end, ghim host key, terminal host và viewer qua đường truyền, PTY với shell thật, lockout khi chữ ký sai |
-| `make test-integration` | loopback, capture/encode giả lập | session host↔client đầy đủ: negotiation, video qua đường truyền, input, chấp nhận theo authorized key, khả năng chịu dữ liệu không hợp lệ, và độ trễ dưới tải chéo — một phiên truyền file, một terminal có lượng output lớn và các phím gõ chạy song song với một stream đang hoạt động, mỗi hạng mục được kiểm theo độ trễ lớn nhất quan sát được |
+| `make test` | offline, không socket | toàn bộ `core/`: wire (gồm trường token của `AuthStart`), framing, FEC, session, VT emulator, settings, chuỗi văn bản, structured fuzzing tất định, và các mảnh pairing — `Base64`, round trip và giới hạn của `PairingInvite`, phát hành/tiêu thụ/hết hạn của `PairingTokens`, sức chứa và hết hạn của `AccessRequests`, `QrCode` so với các encoding đã biết |
+| `make test-platform` | socket loopback | QUIC handshake thật, xác thực bằng chữ ký key end-to-end, ghim host theo fingerprint, `AccessRequestsFile` (một yêu cầu được ghi, approve và deny) và `PairingTokenFile` (một token được phát hành, dùng một lần và thu hồi), chấp nhận bằng approve và bằng token qua `HostAuth` thật, terminal host và viewer qua đường truyền, PTY với shell thật, lockout khi chữ ký sai |
+| `make test-integration` | loopback, capture/encode giả lập | session host↔client đầy đủ: negotiation, video qua đường truyền, input, chấp nhận theo authorized key, vector wire `AUTH_START_TOKEN` bên cạnh các golden message khác, khả năng chịu dữ liệu không hợp lệ, và độ trễ dưới tải chéo — một phiên truyền file, một terminal có lượng output lớn và các phím gõ chạy song song với một stream đang hoạt động, mỗi hạng mục được kiểm theo độ trễ lớn nhất quan sát được |
 | fuzz target | 30 giây mỗi target trên mỗi PR, 15 phút mỗi target hằng đêm | parser cho wire, H.264, reassembly, byte terminal và chuỗi UI, cùng các session state machine phía host và phía viewer |
 | `make test-perf` | bản release, offline và loopback | đo thực tế các hot path: `core_perf` bao phủ các đường thuần C++, `platform_perf` bao phủ QUIC thật qua loopback; cả hai fail theo số allocation trên mỗi đơn vị, theo chi phí ở mức input gấp 4 lần, và theo độ lệch so với baseline ghi trên chính máy đó |
 
@@ -335,15 +400,24 @@ coverage của core.
   Host kiểm tra lại quyền của kết nối đang chạy theo chu kỳ, nên file được thay từ
   tiến trình khác vẫn có thể thu hồi kết nối mà không cần generation nội bộ đổi.
 
-- **Pin khóa host gắn với một địa chỉ/cổng**: khóa TLS host được tin cậy ở một
-  endpoint không tự cấp quyền cho cùng khóa ở endpoint khác. Địa chỉ/cổng mới phải
-  được ghim rõ trước khi kết nối.
+- **Trust đi theo key, không theo địa chỉ**: `known_hosts` được đánh khoá theo
+  fingerprint của host, và địa chỉ bên cạnh chỉ là địa chỉ gần nhất đã trả lời. Quy tắc
+  trước đây — một pin gắn với một `ip:port`, và key thay đổi ở đó là chặn cứng không có
+  nút chấp nhận — khiến mỗi lần DHCP đổi lease trông như một cuộc tấn công và tập cho
+  người dùng thói quen gỡ rồi trust lại host theo phản xạ, chính là thói quen mà việc chặn
+  sinh ra để ngăn. Host đã trust tới được ở địa chỉ mới giờ đơn giản là connect, và một
+  key *khác* ở địa chỉ đã biết được xử lý đúng như bản chất của nó, một máy mà client này
+  chưa từng gặp: hộp thoại *New host* kèm cảnh báo nêu tên host từng trả lời ở đó
+  (`PreviousOwnerWarningFor`). Cảnh báo giữ lại tín hiệu duy nhất mà việc chặn mang theo —
+  "thứ gì đó ở địa chỉ này không còn là ai nó từng là" — trong khi để nguyên host cũ trong
+  *Trusted hosts*, nên việc trust host mới không bao giờ là một cú click qua một thay đổi,
+  chỉ là một lần gặp đầu tiên với fingerprint hiển thị rõ.
 
 - **Danh sách cấp quyền mới chứa public key đầy đủ**: `authorized_keys` nhận các dòng
   public key OpenSSH có giới hạn và từ chối dòng hỏng hoặc trùng khóa. Đây là danh
-  sách cấp quyền duy nhất: thiếu file thì không ai được nhận. `known_hosts` lưu alias và khóa client được chọn cho
-  từng endpoint cạnh pin TLS. Ghi cấu hình dùng khóa file liên tiến trình và thay
-  thế file atomic.
+  sách cấp quyền duy nhất: thiếu file thì không ai được nhận. `known_hosts` lưu alias và
+  địa chỉ gần nhất của từng host đã trust cạnh fingerprint của nó. Ghi cấu hình dùng khóa
+  file liên tiến trình và thay thế file atomic.
   Service có thể chọn thư mục cấu hình qua `SetConfigDir` hoặc `DESKHUB_CONFIG_DIR`
   độc lập với thư mục log.
 
@@ -364,27 +438,39 @@ coverage của core.
   cặp đó mười giây. Bảng trong bộ nhớ giữ tối đa 64 cặp; chữ ký đúng xóa bộ đếm lỗi.
 
 - **Auth có phiên bản riêng trong protocol version 3**: `AuthStart` giữ một byte bằng 0
-  trước khóa làm tiền tố tương thích và đặt auth version 6 sau tên client. Host cũ có thể
-  đọc lời mở đầu và gửi challenge cũ; client mới nhận ra challenge không tương thích rồi
-  đóng kết nối. Host mới từ chối lời mở đầu thiếu hậu tố version, gửi `VersionMismatch`
-  rồi đóng kết nối. Challenge, response và result chỉ mang dữ liệu chữ ký có version.
+  trước khóa làm tiền tố tương thích và đặt auth version ở cuối — giờ là 7, sau trường
+  token pairing mà version 6 chưa có: `00 | u16 keyLen | key | u8 nameLen | name |
+  u8 tokenLen | token | 07`. Host cũ có thể đọc lời mở đầu và gửi challenge cũ; client mới
+  nhận ra challenge không tương thích rồi đóng kết nối. Host mới từ chối lời mở đầu có byte
+  cuối khác 7, gửi `VersionMismatch` rồi đóng kết nối — đó là lý do một thiết bị 7.0.x và
+  một thiết bị 7.1 báo rằng phiên bản của chúng không khớp thay vì hoạt động nửa vời.
+  `AuthMode` có thêm `AwaitingApproval`, và `AuthResultCode::AwaitingApproval` chỉ tồn tại
+  ở phía client, để gọi tên kết cục của một lần chờ đã hết hạn. Challenge, response và
+  result chỉ mang dữ liệu có version.
 
-- **Trust on first use, chặn cứng khi thay đổi**: host key chưa biết được hiển thị cho
+- **Trust on first use, cảnh báo khi thay đổi**: host key chưa biết được hiển thị cho
   người dùng một lần, như SSH, và chỉ được ghim khi người dùng chấp nhận
-  (`--accept-new-host-key` trong CLI); key đã thay đổi bị từ chối và không có nút chấp
-  nhận nào. Một prompt cho phép bấm qua việc key thay đổi sẽ tập cho người dùng thói quen
-  bấm qua đúng lần đó là một cuộc tấn công, nên cách duy nhất để vượt qua là gỡ host khỏi
-  *Trusted hosts* — một hành động có chủ ý, tách khỏi connection đã gây ra lỗi.
+  (`--accept-new-host-key` trong CLI). Một key khác với key từng trả lời ở cùng địa chỉ
+  không phải là một *thay đổi* để bấm qua — không có nút chấp-nhận-key-mới và không còn
+  kết quả `HostKeyChanged` — mà là một host mà client này chưa từng trust, được gặp qua hộp
+  thoại *New host* thông thường với tên chủ cũ được nêu ra. Pin của host cũ vẫn tồn tại,
+  nên cú click đó không ghi đè gì; người dùng chỉ trust thêm một máy nữa, với fingerprint
+  của nó ngay trước mắt.
 
 - **Một tên thiết bị duy nhất**: Settings → General → *Device name* (để trống nghĩa là
   dùng tên của OS) là tên duy nhất của một máy — host hiển thị nó cho viewer và gửi nó tới
-  các client mà host cho vào, client gửi nó khi connect, và nó là nhãn của mọi public key mà máy copy ra
-  (`<device name>` hoặc `<device name> (<key name>)`). Trang Client bỏ ô nhập tên riêng
+  các client mà host cho vào, client gửi nó khi connect, nó là nhãn của public key mà máy
+  copy ra, và nó là nhãn mà host ghi vào `authorized_keys` khi approve yêu cầu của máy
+  hoặc cho máy vào bằng token QR. Trang Client bỏ ô nhập tên riêng
   để tên mà host nhìn thấy và nhãn trong `authorized_keys` của nó luôn khớp nhau.
 
 - **Không chuyển đổi dữ liệu cũ**: passcode, danh sách `paired_devices` cũ và dấu kích
   hoạt của nó không được chuyển đổi — không thứ gì trong đó chứng minh được client giữ
-  một key — và các file còn sót lại bị xoá. File `authorized_keys` hoặc `known_hosts`
+  một key — và các file còn sót lại bị xoá. Các file `client_key.pem`,
+  `client_key.<name>.pem` và `host_cert.pem` của 7.0.x đơn giản bị bỏ qua: key của máy vốn
+  đã là `host_key.pem`, nên fingerprint không đổi, và danh tính Ed25519 cũ của client không
+  được mang sang danh tính mới — chủ host cho phép key của máy một lần, bằng Approve hoặc
+  QR. File `authorized_keys` hoặc `known_hosts`
   không đọc được sẽ không bao giờ bị suy đoán: trong khi file không đọc được, host từ chối
   mọi client và client từ chối mọi host, và lần thay đổi tiếp theo sẽ ghi mới file đó.
 
@@ -696,16 +782,16 @@ coverage của core.
   màn hình được kết nối sau.
 - **Chọn quiche thay vì msquic hoặc ngtcp2.** Đây là thư viện QUIC duy nhất có bằng chứng
   sử dụng trong môi trường production trên cả Android và iOS. Nó đi kèm BoringSSL, thành
-  phần cũng phục vụ host identity và chữ ký client key, nên không cần thư viện mật mã thứ
-  hai.
+  phần cũng phục vụ key của máy, certificate trong bộ nhớ của nó và chữ ký transcript, nên
+  không cần thư viện mật mã thứ hai.
 - **Không sử dụng connection migration.** Không thư viện ứng viên nào có hỗ trợ phía client
   dùng được. Cơ chế reconnect và reattach (tương tự tmux, vốn đã cần thiết cho việc app di
   động chạy nền) đã đáp ứng yêu cầu này; các shell đang được giữ cũng có thể được liệt kê (`TermList`) và resume theo id từ một client mới.
 - **Sử dụng ECDSA P-256 thay vì Ed25519.** Phía server của BoringSSL không ký TLS
-  handshake bằng Ed25519 thông qua quiche. Certificate và private key đã lưu nhưng
-  không được hỗ trợ hoặc không khớp khiến host không khởi động và giữ nguyên cả hai file.
-  Chỉ khi cả hai file đều chưa có, ứng dụng mới tạo identity host, nên fingerprint host
-  hiện có không tự đổi.
+  handshake bằng Ed25519 thông qua quiche, và giờ một key phải phục vụ cả TLS lẫn chữ ký
+  phía client. Một key đã lưu mà không phải key P-256 khiến host không khởi động và giữ
+  nguyên file. Chỉ khi chưa có `host_key.pem`, ứng dụng mới tạo identity mới, nên
+  fingerprint hiện có không bao giờ tự đổi.
 - **quiche được build sẵn, không dùng FetchContent.** `scripts/build-quiche.sh` tạo một
   thư mục cho mỗi rust target dưới `third_party/quiche/` cùng một thư mục `include/` dùng
   chung, chứa quiche.h và các header BoringSSL do boring-sys cung cấp. Các header này được
@@ -800,10 +886,61 @@ coverage của core.
   `_ITERATOR_DEBUG_LEVEL=0`, `/U_DEBUG`, loại bỏ `/RTC1`, vì CRT release không có
   `_CrtDbgReport` và không hỗ trợ run-time check. Mọi sai lệch đều dẫn tới một loạt lỗi
   LNK2038.
-- **Passcode, prompt phê duyệt và scan LAN đã bị gỡ bỏ.** Mã 4 chữ số là một bí mật ngắn
-  trên một port đang mở, prompt phê duyệt có thể bị người khác nhấn nhầm, và một phản hồi
-  discovery không encrypt cho mọi người trên network biết có một host ở đó. Các key mà chủ
-  máy chủ động copy thay thế cả ba.
+- **Passcode và scan LAN vẫn bị gỡ bỏ.** Mã 4 chữ số là một bí mật ngắn trên một port
+  đang mở, và một phản hồi discovery không encrypt cho mọi người trên network biết có một
+  host ở đó. Không gì trong 7.1 đưa hai thứ đó trở lại — mã QR được đọc từ màn hình, và
+  một yêu cầu chỉ được ghi sau khi TLS handshake đã hoàn tất.
+
+- **Approve đi trên kênh đã authenticate và hiển thị danh tính, không phải bí mật**: phản
+  đối ngày 2026-09-28 với prompt phê duyệt là nó có thể bị người không đúng bấm cho máy
+  không đúng — prompt passcode hiển thị một mã mà bất kỳ ai cũng có thể đã gõ. Một yêu cầu
+  kết nối không hiển thị gì được gõ vào: tên thiết bị, fingerprint của key nó thực sự giữ
+  (host đã hash key nhận được qua TLS) và địa chỉ nó đến từ, và *Approve* tác động lên
+  fingerprint đó, không bao giờ lên vị trí dòng. Không gì đi trong plaintext và không gì
+  đoán được; điều duy nhất chủ host có thể làm sai là approve một máy họ không mong đợi,
+  và hàng đó ở đó để họ kiểm tra. Host cũng không giữ connection nào mở trong khi chờ —
+  yêu cầu là một mục trong file, client dial lại — nên một trận lụt yêu cầu tốn 16 dòng,
+  không phải 16 socket.
+
+- **Mã QR mang fingerprint của host và một token dùng một lần, được ghim trước
+  `AuthStart`**: token là một bí mật đáng bị đánh cắp trong năm phút, nên client chỉ tiêu
+  nó cho một máy đã chứng minh, qua TLS handshake, rằng nó giữ private key có fingerprint
+  in trong mã. Kẻ xen giữa ở địa chỉ trong mã không đưa ra được key đó, nên client dừng ở
+  `InviteMismatch` và token không bao giờ đi qua đường truyền. Trên host, token được so
+  sánh trong thời gian hằng, bị tiêu thụ ở lần dùng đầu, hết hạn sau 5 phút, chết cùng
+  panel đã hiển thị nó, và một lần đoán sai được tính cho địa chỉ nguồn trong cùng bộ giới
+  hạn đếm chữ ký sai — 3 lần mỗi phút, rồi chặn 10 giây — nên 2^256 khả năng không bao
+  giờ được thử ở tốc độ cao.
+
+- **Yêu cầu và token nằm trong file để một process thứ hai có thể tác động lên chúng**:
+  trên iOS, broadcast extension nhận `AuthStart` trong khi app vẽ mã QR và danh sách yêu
+  cầu; trong CLI, `share` chạy trong khi `access approve` được gõ ở terminal khác.
+  `access_requests` và `pairing_tokens` nằm trong thư mục cấu hình dùng chung, dưới cùng
+  khoá và cơ chế thay thế atomic như `authorized_keys`, `AccessRequestsGeneration` cho các
+  poller một bộ đếm thay đổi rẻ, và một lần *Approve* chẳng là gì hơn một lần chuyển từ file
+  này sang file khác mà `AuthStart` tiếp theo đọc lại.
+
+- **Một key cho mỗi máy, certificate trong bộ nhớ**: hai key cho mỗi máy nghĩa là hai
+  fingerprint, một trang *My keys*, code import và passphrase, một certificate được lưu có
+  thể lệch với key của nó, và một `known_hosts` phải nhớ dùng client key nào ở đâu. Một
+  key ECDSA P-256 trong `host_key.pem` phục vụ TLS ở phía host và chữ ký transcript ở phía
+  client; X.509 mà TLS đòi hỏi được dựng quanh nó ở mỗi lần khởi động và không bao giờ
+  được ghi. Fingerprint luôn là SHA-256 của SPKI, không bao giờ của certificate, nên host
+  nâng cấp giữ nguyên fingerprint mà mọi client đã ghim; danh tính của client thì có đổi —
+  từ Ed25519 sang key của máy — đó là lý do mọi client được cho phép thêm một lần, bằng
+  Approve hoặc scan thay vì dán.
+
+- **Bộ encode QR do dự án tự triển khai**: `core/` không nhận header bên thứ ba nào, và
+  một thư viện QR cho mỗi nền tảng sẽ là năm cách vẽ của một mã cộng thêm cách thứ sáu cho
+  CLI. `core/qr/QrCode` là bộ encode byte-mode ở mức sửa lỗi M, được test offline so với
+  các encoding đã biết, và mọi client chỉ tô các ô vuông từ lưới module mà nó trả về. Giải
+  mã là trường hợp ngược lại — cần camera và một bộ phát hiện nhanh — nên hai điện thoại
+  dùng của chính nền tảng (CameraX + ZXing trên Android, AVFoundation trên iOS) và trả về
+  một chuỗi.
+
+- **Base64 nằm ở một nơi**: các dòng key OpenSSH và record lời mời đều cần nó, và hai bản
+  copy đã bắt đầu lệch nhau. `core/net/Base64` là bộ encode và decode duy nhất, cho cả bảng
+  chữ cái chuẩn lẫn URL-safe, với test riêng.
 - **VT emulator do dự án tự triển khai.** Không có widget terminal nào của nền tảng vừa có
   mặt trên cả năm client vừa đi kèm giấy phép phù hợp, và việc tự triển khai giúp hành vi
   terminal test được offline và nhất quán trên mọi nền tảng.
@@ -822,10 +959,11 @@ coverage của core.
   host key đã thay đổi muộn hơn viewer ba bản vá. Hiện `HostLink` là phần mã duy nhất phía
   client thực hiện dial hoặc authenticate; mỗi service mở `Chan` của nó, nhận một hàng đợi
   inbox riêng và xử lý trên thread của chính nó. Cơ chế kết nối lại với backoff của
-  terminal đã được chuyển vào link để mọi giao diện yêu cầu recovery đều thừa hưởng, và các
-  quy tắc trust nằm ở một vị trí duy nhất: một key chưa biết khiến link thất bại cho tới
-  khi người dùng trust nó (`acceptNewHostKey`), và một key đã thay đổi luôn khiến link thất
-  bại.
+  terminal đã được chuyển vào link để mọi giao diện yêu cầu recovery đều thừa hưởng — và
+  việc chờ approve dùng lại chính cơ chế dial lại đó — và các quy tắc trust nằm ở một vị trí
+  duy nhất: một key chưa biết khiến link thất bại cho tới khi người dùng trust nó
+  (`acceptNewHostKey`), một lời mời chỉ ghim đúng key nó nêu tên, và một key đã biết được
+  nhận ra ở bất kỳ địa chỉ nào.
 - **`HostLink` gửi dữ liệu qua `Send`, không phải `SendMessage`.** Trên Windows, các OS
   header phía sau layer platform định nghĩa `SendMessage` thành một macro cho
   `SendMessageA`, và trong `HostLink.cpp` chúng xuất hiện sau phần khai báo lớp nhưng trước

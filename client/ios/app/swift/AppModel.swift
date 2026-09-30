@@ -20,9 +20,24 @@ final class AppModel {
     }
 
     func beginConnect() {
+        finishConnect { await $0.connectAuth() }
+    }
+
+    func beginConnect(invite: String) {
+        finishConnect { await $0.connectAuth(invite: invite) }
+    }
+
+    func cancelConnect() {
+        connect.cancelConnect()
+        sources = []
+    }
+
+    private func finishConnect(
+        _ query: @escaping @MainActor (ConnectModel) async -> HostQuery?
+    ) {
         guard !connect.isConnecting else { return }
         Task {
-            guard let found = await connect.connectAuth() else { return }
+            guard let found = await query(connect) else { return }
             await recent.reload()
             sources = found.sources
         }

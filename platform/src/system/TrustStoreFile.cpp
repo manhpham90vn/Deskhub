@@ -99,60 +99,55 @@ bool ClearTrustedHosts() {
     });
 }
 
-deskhub::TrustVerdict CheckTrustedHost(std::string_view endpoint,
-    const deskhub::Fingerprint& fingerprint) {
-    return LoadTrustStore().Check(endpoint, fingerprint);
+deskhub::TrustVerdict CheckTrustedHost(const deskhub::Fingerprint& fingerprint) {
+    return LoadTrustStore().Check(fingerprint);
 }
 
-bool RememberTrustedHost(std::string_view endpoint, std::string_view label,
-    const deskhub::Fingerprint& fingerprint, int64_t nowUnix) {
+bool RememberTrustedHost(const deskhub::Fingerprint& fingerprint, std::string_view label,
+    std::string_view endpoint, int64_t nowUnix) {
+    if (deskhub::IsZero(fingerprint)) return false;
     return ChangeTrustStore([&](deskhub::TrustStore& store) {
-        store.Remember(endpoint, label, fingerprint, nowUnix);
+        store.Remember(fingerprint, label, endpoint, nowUnix);
         return true;
     });
 }
 
-bool RememberTrustedHostProfile(std::string_view endpoint, std::string_view label,
-    const deskhub::Fingerprint& fingerprint, std::string_view identityName,
+bool TouchTrustedHost(const deskhub::Fingerprint& fingerprint, std::string_view endpoint,
     int64_t nowUnix) {
     return ChangeTrustStore([&](deskhub::TrustStore& store) {
-        store.Remember(endpoint, label, fingerprint, nowUnix);
-        return store.SetProfile(endpoint, label, identityName);
+        return store.Touch(fingerprint, endpoint, nowUnix);
     });
 }
 
-bool CreateTrustedHostProfile(std::string_view endpoint, std::string_view label,
-    const deskhub::Fingerprint& fingerprint, std::string_view identityName) {
+bool CreateTrustedHostProfile(const deskhub::TrustedHost& profile) {
     return ChangeTrustStore([&](deskhub::TrustStore& store) {
-        if (store.Find(endpoint) || store.Size() >= deskhub::kMaxTrustedHosts) return false;
+        if (store.Find(profile.fingerprint) || store.Size() >= deskhub::kMaxTrustedHosts)
+            return false;
         for (const auto& host : store.Hosts())
-            if (host.label == label) return false;
-        store.Insert(deskhub::TrustedHost{std::string(endpoint), std::string(label),
-            fingerprint, 0, 0, std::string(identityName)});
-        const auto saved = store.Find(endpoint);
-        return saved && saved->label == label && saved->identityName == identityName;
+            if (host.label == profile.label) return false;
+        store.Insert(profile);
+        const auto saved = store.Find(profile.fingerprint);
+        return saved && saved->label == profile.label && saved->endpoint == profile.endpoint;
     });
 }
 
-bool UpdateTrustedHostProfile(const deskhub::TrustedHost& expected, std::string_view endpoint,
-    std::string_view label, const deskhub::Fingerprint& fingerprint,
-    std::string_view identityName) {
+bool UpdateTrustedHostProfile(const deskhub::TrustedHost& expected,
+    const deskhub::TrustedHost& profile) {
     return ChangeTrustStore([&](deskhub::TrustStore& store) {
-        if (expected.endpoint != endpoint && store.Find(endpoint)) return false;
-        const auto previous = store.Find(expected.endpoint);
+        const auto previous = store.Find(expected.fingerprint);
         if (!previous || *previous != expected) return false;
-        if (!store.Forget(expected.endpoint)) return false;
-        store.Insert(deskhub::TrustedHost{std::string(endpoint), std::string(label),
-            fingerprint, previous->firstSeenUnix, previous->lastSeenUnix,
-            std::string(identityName)});
-        const auto saved = store.Find(endpoint);
-        return saved && saved->label == label && saved->identityName == identityName;
+        if (profile.fingerprint != expected.fingerprint && store.Find(profile.fingerprint))
+            return false;
+        if (!store.Forget(expected.fingerprint)) return false;
+        store.Insert(profile);
+        const auto saved = store.Find(profile.fingerprint);
+        return saved && saved->label == profile.label && saved->endpoint == profile.endpoint;
     });
 }
 
-bool ForgetTrustedHost(std::string_view endpoint) {
+bool ForgetTrustedHost(const deskhub::Fingerprint& fingerprint) {
     return ChangeTrustStore(
-        [&](deskhub::TrustStore& store) { return store.Forget(endpoint); });
+        [&](deskhub::TrustStore& store) { return store.Forget(fingerprint); });
 }
 
 }

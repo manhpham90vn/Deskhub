@@ -59,6 +59,7 @@ struct HostEnginePolicy {
     std::function<void()> onSharing;
     std::function<std::string(const SessionTransport&)> portError;
     std::function<void()> onPaired;
+    std::function<void()> onAccessRequested;
 
     std::function<bool(const deskhub::media::AudioFormat&,
         std::function<void(std::span<const int16_t>)>)>

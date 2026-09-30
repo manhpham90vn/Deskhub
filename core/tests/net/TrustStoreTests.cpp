@@ -49,56 +49,68 @@ void TestFingerprintText() {
     Check(!IsZero(fp), "a real one is not");
 }
 
-void TestThreeTrustStates() {
-    std::printf("[trust] a machine is new, known, or has changed its key...\n");
+void TestTrustFollowsTheKey() {
+    std::printf("[trust] a machine is known by its key, not by its address...\n");
     TrustStore store;
     const Fingerprint mine = MakeFingerprint(1);
     const Fingerprint theirs = MakeFingerprint(200);
 
-    Check(store.Check("192.168.1.10:47777", mine) == TrustVerdict::Unknown,
-        "a machine we have never met is unknown");
-    store.Remember("192.168.1.10:47777", "Workstation", mine, 1000);
-    Check(store.Check("192.168.1.10:47777", mine) == TrustVerdict::Trusted,
-        "once trusted it stays trusted");
-    Check(store.Check("192.168.1.10:47777", theirs) == TrustVerdict::Changed,
-        "a different key at a known address is the man-in-the-middle case");
-
-    Check(store.Check("192.168.1.10:47777", Fingerprint{}) == TrustVerdict::Unknown,
+    Check(store.Check(mine) == TrustVerdict::Unknown, "a machine we have never met is unknown");
+    store.Remember(mine, "Workstation", "192.168.1.10:47777", 1000);
+    Check(store.Check(mine) == TrustVerdict::Trusted, "once trusted it stays trusted");
+    Check(store.Check(theirs) == TrustVerdict::Unknown,
+        "a different key is simply another machine, wherever it answers from");
+    Check(store.Check(Fingerprint{}) == TrustVerdict::Unknown,
         "a host that offered no key is never trusted");
 
-    Check(store.Check("10.0.0.9:47777", mine) == TrustVerdict::Unknown,
-        "a new address needs its own explicit host pin, even for a known key");
-    Check(store.Check("10.0.0.9:47777", theirs) == TrustVerdict::Unknown,
-        "an unknown key at an unknown address is simply new");
+    Check(store.Touch(mine, "10.0.0.9:47777", 2000), "the same key at a new address is touched");
+    const auto moved = store.Find(mine);
+    Check(moved && moved->endpoint == "10.0.0.9:47777" && moved->lastSeenUnix == 2000,
+        "and the row now remembers the new address as the last one it answered at");
+    Check(moved && moved->label == "Workstation" && moved->firstSeenUnix == 1000,
+        "without touching its name or first meeting");
+    Check(!store.Touch(theirs, "10.0.0.9:47777", 2000), "touching a stranger changes nothing");
+
+    const auto previous = store.FindByEndpoint("10.0.0.9:47777");
+    Check(previous && previous->fingerprint == mine,
+        "the store can say which machine last answered at an address");
+    Check(!store.FindByEndpoint("172.16.0.1:1").has_value(), "and that no one did at a new one");
 }
 
 void TestRememberAndForget() {
     std::printf("[trust] the trusted list can be read, refreshed and emptied...\n");
     TrustStore store;
-    store.Remember("a:1", "A", MakeFingerprint(1), 100);
-    store.Remember("b:1", "B", MakeFingerprint(2), 200);
+    store.Remember(MakeFingerprint(1), "A", "a:1", 100);
+    store.Remember(MakeFingerprint(2), "B", "b:1", 200);
     Check(store.Size() == 2, "two machines are remembered");
 
-    const auto a = store.Find("a:1");
+    const auto a = store.Find(MakeFingerprint(1));
     Check(a && a->label == "A" && a->firstSeenUnix == 100 && a->lastSeenUnix == 100,
         "the first meeting is recorded");
 
-    store.Remember("a:1", "A renamed", MakeFingerprint(1), 500);
-    const auto again = store.Find("a:1");
+    store.Remember(MakeFingerprint(1), "A renamed", "a:2", 500);
+    const auto again = store.Find(MakeFingerprint(1));
     Check(store.Size() == 2, "meeting it again does not add a second row");
-    Check(again && again->lastSeenUnix == 500 && again->label == "A renamed",
-        "the last-seen time and the name are refreshed");
+    Check(again && again->lastSeenUnix == 500 && again->label == "A renamed" &&
+              again->endpoint == "a:2",
+        "the last-seen time, the name and the address are refreshed");
     Check(again && again->firstSeenUnix == 100, "but the first meeting is not rewritten");
 
-    store.Remember("c:1", "", MakeFingerprint(1), 600);
+    store.Remember(MakeFingerprint(1), "", "", 600);
+    const auto kept = store.Find(MakeFingerprint(1));
+    Check(kept && kept->label == "A renamed" && kept->endpoint == "a:2",
+        "meeting it without a name or address keeps what was known");
 
-    Check(!store.Forget("nothing:1"), "forgetting a stranger reports nothing happened");
-    Check(store.Forget("a:1") && store.Size() == 2, "forgetting a machine removes exactly it");
-    Check(!store.Find("a:1").has_value(), "and it is gone from the list");
+    Check(!store.Forget(MakeFingerprint(9)), "forgetting a stranger reports nothing happened");
+    Check(store.Forget(MakeFingerprint(1)) && store.Size() == 1,
+        "forgetting a machine removes exactly it");
+    Check(!store.Find(MakeFingerprint(1)).has_value(), "and it is gone from the list");
 
-    store.Remember("", "junk", MakeFingerprint(9), 1);
-    store.Remember("d:1", "junk", Fingerprint{}, 1);
-    Check(store.Size() == 2, "a blank address or an unset key is never stored");
+    store.Remember(Fingerprint{}, "junk", "d:1", 1);
+    Check(store.Size() == 1, "an unset key is never stored");
+    Check(store.SetLabel(MakeFingerprint(2), "Renamed"), "a machine can be renamed");
+    Check(!store.SetLabel(MakeFingerprint(2), "bad\x01name"), "but not to a damaged name");
+    Check(!store.SetLabel(MakeFingerprint(7), "x"), "and a stranger cannot be renamed");
 
     store.Clear();
     Check(store.Size() == 0 && store.Hosts().empty(), "the whole list can be emptied");
@@ -107,45 +119,45 @@ void TestRememberAndForget() {
 void TestCapEvictsOldest() {
     std::printf("[trust] the list is capped and drops the machine seen longest ago...\n");
     TrustStore store;
-    for (size_t i = 0; i < kMaxTrustedHosts; ++i)
-        store.Remember("host" + std::to_string(i) + ":1", "", MakeFingerprint(uint8_t(i)),
-            int64_t(1000 + i));
+    for (size_t i = 0; i < kMaxTrustedHosts; ++i) {
+        Fingerprint fp = MakeFingerprint(uint8_t(i));
+        fp.bytes[31] = uint8_t(i >> 8);
+        store.Remember(fp, "", "host" + std::to_string(i) + ":1", int64_t(1000 + i));
+    }
     Check(store.Size() == kMaxTrustedHosts, "the list fills to the cap");
 
     Fingerprint unseen = MakeFingerprint(1);
     unseen.bytes[0] ^= 0xFF;
-    store.Remember("newcomer:1", "", unseen, 9999);
+    store.Remember(unseen, "", "newcomer:1", 9999);
     Check(store.Size() == kMaxTrustedHosts, "and never grows past it");
-    Check(!store.Find("host0:1").has_value(), "the least recently seen machine is dropped");
-    Check(store.Find("newcomer:1").has_value(), "the newcomer is kept");
+    Check(!store.FindByEndpoint("host0:1").has_value(), "the least recently seen machine is dropped");
+    Check(store.Find(unseen).has_value(), "the newcomer is kept");
 }
 
 void TestSerializeRoundTrip() {
     std::printf("[trust] the known-hosts file survives a round trip...\n");
     TrustStore store;
-    store.Remember("192.168.1.10:47777", "Workstation", MakeFingerprint(5), 111);
-    store.Remember("10.0.0.9:47777", "", MakeFingerprint(6), 222);
-    store.Remember("[fe80::1]:47777", "Laptop with spaces", MakeFingerprint(7), 333);
-    Check(store.SetProfile("192.168.1.10:47777", "Workstation", "phone"),
-        "a host profile selects a named client key");
+    store.Remember(MakeFingerprint(5), "Workstation", "192.168.1.10:47777", 111);
+    store.Remember(MakeFingerprint(6), "", "10.0.0.9:47777", 222);
+    store.Remember(MakeFingerprint(7), "Laptop with spaces", "[fe80::1]:47777", 333);
 
     const std::string text = SerializeTrustStore(store);
     const TrustStore back = ParseTrustStore(text);
     Check(back.Size() == store.Size(), "every row comes back");
     Check(SerializeTrustStore(back) == text, "serialising is a fixpoint");
 
-    const auto one = back.Find("192.168.1.10:47777");
-    Check(one && one->label == "Workstation" && one->fingerprint == MakeFingerprint(5),
+    const auto one = back.Find(MakeFingerprint(5));
+    Check(one && one->label == "Workstation" && one->endpoint == "192.168.1.10:47777",
         "address, name and key all survive");
     Check(one && one->firstSeenUnix == 111 && one->lastSeenUnix == 111,
         "and so do both timestamps");
-    Check(one && one->identityName == "phone",
-        "the selected client key survives serialization");
-    Check(!store.SetProfile("192.168.1.10:47777", "Workstation", "../escape"),
-        "a host profile cannot reference a key outside the identity store");
-    const auto spaced = back.Find("[fe80::1]:47777");
+    const auto spaced = back.Find(MakeFingerprint(7));
     Check(spaced && spaced->label == "Laptop with spaces",
         "a name with spaces is kept whole because it is the last field");
+
+    const std::string legacy = text + FormatFingerprint(MakeFingerprint(8)) + " 1 2 host:9 Old\tphone\n";
+    const auto old = ParseTrustStore(legacy).Find(MakeFingerprint(8));
+    Check(old && old->label == "Old", "a row from an older version with a client key column still reads");
 
     Check(ParseTrustStore("").Size() == 0, "an empty file yields an empty list");
 }
@@ -178,13 +190,13 @@ void TestParseJunk() {
 
     const std::string control =
         FormatFingerprint(MakeFingerprint(8)) + " 1 2 host:2 na\x01me\x7f\n";
-    const auto host = ParseTrustStore(control).Find("host:2");
+    const auto host = ParseTrustStore(control).Find(MakeFingerprint(8));
     Check(host && host->label == "name", "control characters are stripped from a stored name");
 
     std::string over = FormatFingerprint(MakeFingerprint(9)) + " 1 2 host:3 ";
     over.append(kMaxTrustLabelBytes + 40, 'x');
     over += '\n';
-    const auto capped = ParseTrustStore(over).Find("host:3");
+    const auto capped = ParseTrustStore(over).Find(MakeFingerprint(9));
     Check(capped && capped->label.size() == kMaxTrustLabelBytes, "and a long one is bounded");
 
     for (int i = 0; i < 400; ++i) {
@@ -200,18 +212,16 @@ void TestParseJunk() {
 void TestStrictHostProfilesRejectDamage() {
     std::printf("[trust] a damaged host profile file grants no trust...\n");
     TrustStore store;
-    store.Remember("host:1", "Host", MakeFingerprint(4), 1);
-    Check(store.SetProfile("host:1", "Host", "phone"),
-        "the test profile selects a named identity");
+    store.Remember(MakeFingerprint(4), "Host", "host:1", 1);
     const std::string valid = SerializeTrustStore(store);
     const auto parsed = ParseTrustStoreStrict(valid);
-    Check(parsed && parsed->Find("host:1") &&
-              parsed->Find("host:1")->identityName == "phone",
+    Check(parsed && parsed->Find(MakeFingerprint(4)) &&
+              parsed->Find(MakeFingerprint(4))->label == "Host",
         "a valid profile is preserved");
     Check(!ParseTrustStoreStrict(valid + "damaged row\n"),
         "one malformed row invalidates every host pin");
     Check(!ParseTrustStoreStrict(valid + valid),
-        "a duplicate endpoint invalidates the file");
+        "a duplicate key invalidates the file");
     Check(!ParseTrustStoreStrict(std::string(131073, 'x')),
         "an oversized profile file is rejected");
 }
@@ -233,7 +243,7 @@ void TestTheKeyIsShownShortEnoughToRead() {
 void RunTrustStoreTests() {
     TestFingerprintText();
     TestTheKeyIsShownShortEnoughToRead();
-    TestThreeTrustStates();
+    TestTrustFollowsTheKey();
     TestRememberAndForget();
     TestCapEvictsOldest();
     TestSerializeRoundTrip();
