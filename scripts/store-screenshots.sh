@@ -28,6 +28,8 @@ ANDROID_SDK="${ANDROID_HOME:-$HOME/Library/Android/sdk}"
 EMULATOR="$ANDROID_SDK/emulator/emulator"
 ADB="$ANDROID_SDK/platform-tools/adb"
 AVDMANAGER="$ANDROID_SDK/cmdline-tools/latest/bin/avdmanager"
+EMULATOR_PORT_MIN=5554
+EMULATOR_PORT_MAX=5682
 ANDROID_STUDIO_JDK="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
 SERIAL=""
 
@@ -175,10 +177,16 @@ serial_for_avd() {
     return 1
 }
 
+port_is_bound() {
+    lsof -nP -iTCP:"$1" -sTCP:LISTEN >/dev/null 2>&1
+}
+
 free_serial() {
-    local port
-    for port in 5554 5556 5558 5560; do
-        if ! "$ADB" devices | grep -q "^emulator-$port"; then
+    local port attached
+    attached=$("$ADB" devices | awk '/^emulator-/ {print $1}')
+    for port in $(seq "$EMULATOR_PORT_MIN" 2 "$EMULATOR_PORT_MAX"); do
+        if ! grep -qx "emulator-$port" <<<"$attached" &&
+            ! port_is_bound "$port" && ! port_is_bound "$((port + 1))"; then
             echo "emulator-$port"
             return 0
         fi
@@ -194,7 +202,7 @@ shoot_emulator() {
         "$EMULATOR" -list-avds | grep -qx "$avd" ||
             die "no AVD named \"$avd\" - create it in Android Studio's Device Manager with a $size display"
         SERIAL=$(free_serial) ||
-            die "no free emulator port between 5554 and 5560 - close an emulator"
+            die "no free emulator port between $EMULATOR_PORT_MIN and $EMULATOR_PORT_MAX - close an emulator"
         echo "== $avd (booting as $SERIAL)"
         "$EMULATOR" -avd "$avd" -port "${SERIAL#emulator-}" -no-audio -no-boot-anim \
             >/dev/null 2>&1 &
