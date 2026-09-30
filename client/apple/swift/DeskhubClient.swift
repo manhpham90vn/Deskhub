@@ -215,8 +215,7 @@ nonisolated enum DeskhubClient {
                     name: cString(raw.name),
                     address: cString(raw.address),
                     shortKey: cString(raw.shortKey),
-                    fingerprint: cString(raw.fingerprint),
-                    requestedAt: cString(raw.requestedAt)
+                    fingerprint: cString(raw.fingerprint)
                 )
             }
         )

@@ -53,7 +53,6 @@ struct AccessRequestRow: Identifiable, Hashable, Sendable {
     let address: String
     let shortKey: String
     let fingerprint: String
-    let requestedAt: String
 
     var id: String { fingerprint }
 }
