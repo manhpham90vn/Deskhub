@@ -1086,7 +1086,10 @@ private fun AccessRequestsSection(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Text(request.name.ifBlank { NativeClient.string(NativeClient.STR_UNNAMED_CLIENT) }, color = HeadingColor)
+                Text(
+                    request.name.ifBlank { NativeClient.string(NativeClient.STR_UNNAMED_CLIENT) },
+                    color = HeadingColor,
+                )
                 Text(
                     "${request.shortKey}  ·  ${request.address}",
                     style = MaterialTheme.typography.bodySmall,
@@ -1321,7 +1324,10 @@ private fun AllowedClientsSection(revision: Int) {
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Text(device.name.ifBlank { NativeClient.string(NativeClient.STR_UNNAMED_CLIENT) }, color = HeadingColor)
+                Text(
+                    device.name.ifBlank { NativeClient.string(NativeClient.STR_UNNAMED_CLIENT) },
+                    color = HeadingColor,
+                )
                 Text(
                     device.shortKey,
                     style = MaterialTheme.typography.bodySmall,
