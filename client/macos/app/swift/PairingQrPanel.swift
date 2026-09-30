@@ -32,7 +32,6 @@ struct PairingQrShowButton: View {
 struct PairingQrWindow: View {
     private static let qrSide: CGFloat = 240
     private static let contentWidth: CGFloat = 300
-    private static let tick = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
     let sharing: SharingModel
     @Environment(\.dismissWindow) private var dismissWindow
@@ -75,10 +74,13 @@ struct PairingQrWindow: View {
         }
         .padding(16)
         .frame(width: PairingQrWindow.contentWidth, alignment: .topLeading)
-        .onReceive(PairingQrWindow.tick) { date in
-            now = date
-            if sharing.qr.shown, sharing.qr.secondsLeft(at: date) <= 0 {
-                sharing.qr.expire()
+        .task {
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(1))
+                now = Date()
+                if sharing.qr.shown, sharing.qr.secondsLeft(at: now) <= 0 {
+                    sharing.qr.expire()
+                }
             }
         }
         .onChange(of: sharing.isSharing) { _, live in
