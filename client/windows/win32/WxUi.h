@@ -5,7 +5,7 @@
 
 #include "deskhub/ui/Theme.h"
 
-inline constexpr int kHintWrapDip = 620;
+inline constexpr int kHintWrapChars = 64;
 
 inline wxColour ThemeColour(deskhub::ui::ThemeColor color) {
     const deskhub::ui::Rgb rgb = deskhub::ui::ThemeRgb(color, deskhub::ui::ThemeMode::Light);
@@ -21,6 +21,10 @@ inline wxString ToWx(const std::string& s) {
 
 inline wxString ToWx(const char* s) {
     return wxString::FromUTF8(s);
+}
+
+inline int HintWrapWidth(const wxWindow* window) {
+    return window->GetCharWidth() * kHintWrapChars;
 }
 
 inline wxStaticText* MakeHeading(wxWindow* parent, const char* text) {
@@ -40,6 +44,6 @@ inline wxStaticText* MakeSection(wxWindow* parent, const char* text) {
 inline wxStaticText* MakeHint(wxWindow* parent, const wxString& text) {
     auto* hint = new wxStaticText(parent, wxID_ANY, text);
     hint->SetForegroundColour(kMutedText);
-    hint->Wrap(parent->FromDIP(kHintWrapDip));
+    hint->Wrap(HintWrapWidth(hint));
     return hint;
 }

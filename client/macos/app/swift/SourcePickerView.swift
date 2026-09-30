@@ -40,7 +40,7 @@ struct SourcePickerView: View {
         }
         .padding(12)
         .onAppear {
-            if picked.isEmpty, let first = sources.first { picked = [first.id] }
+            if picked.isEmpty { picked = Set(sources.map(\.id)) }
         }
     }
 

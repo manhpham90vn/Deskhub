@@ -31,25 +31,42 @@ final class SharingModel {
         }
     }
 
+    var bindLabel: String {
+        if bindIp.isEmpty { return DeskhubClient.string(DHStrBindAllInterfaces) }
+        guard bindIpIsStale else { return bindIp }
+        return "\(bindIp) (\(DeskhubClient.string(DHStrBindNotConnectedNote)))"
+    }
+
+    var shownAddresses: [LocalAddress] {
+        addresses.filter { bindIp.isEmpty || $0.ip == bindIp }
+    }
+
+    var hostRowsLine: String {
+        guard status.sharing else { return DeskhubClient.string(DHStrNotSharing) }
+        guard status.viewers > 0 else { return DeskhubClient.string(DHStrNothingShared) }
+        guard !status.viewerNames.isEmpty else { return "\(status.viewers)" }
+        return "\(status.viewers): \(status.viewerNames)"
+    }
+
+    private var bindIpIsStale: Bool {
+        !bindIp.isEmpty && !addresses.contains { $0.ip == bindIp }
+    }
+
     func saveBindIp() {
         dh_set_bind_ip(bindIp)
+    }
+
+    func toggleQr() {
+        qr.toggle(port: port, bindIp: bindIp)
     }
 
     func poll() async {
         while !Task.isCancelled {
             status = BroadcastStatus.load()
             addresses = LocalAddress.all()
-            refreshHostSide()
+            if !status.sharing { qr.hide() }
+            accessRequests.refresh()
             try? await Task.sleep(for: SharingModel.pollInterval)
         }
-    }
-
-    private func refreshHostSide() {
-        guard status.sharing else {
-            qr.hide()
-            accessRequests.clear()
-            return
-        }
-        accessRequests.refresh()
     }
 }

@@ -9,7 +9,7 @@ struct StatusOverlay: View {
         if model.phase == .ended {
             ended
         } else if model.reattaching {
-            reattaching
+            SessionBanner(text: DeskhubClient.string(DHStrLinkReattaching))
         } else if !streaming {
             connecting
         }
@@ -23,15 +23,6 @@ struct StatusOverlay: View {
         }
     }
 
-    private var reattaching: some View {
-        VStack(spacing: 12) {
-            ProgressView()
-            Text(DeskhubClient.string(DHStrLinkReattaching))
-                .foregroundStyle(.white)
-        }
-        .allowsHitTesting(false)
-    }
-
     private var ended: some View {
         VStack(spacing: 12) {
             Text(DeskhubClient.string(DHStrSessionEnded))
@@ -41,10 +32,12 @@ struct StatusOverlay: View {
                 .foregroundStyle(.white)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
-            Button("Back", action: onBack)
-                .buttonStyle(.borderedProminent)
+            SessionTextButton("Back", action: onBack)
         }
         .padding(24)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .contentShape(Rectangle())
+        .onTapGesture(perform: onBack)
     }
 }
 
@@ -85,13 +78,15 @@ struct StreamControlPanel: View {
     let streaming: Bool
     @Binding var isOpen: Bool
     @Binding var keyboardOn: Bool
-    @State private var pickerOpen = false
+    @Binding var displayPickerOpen: Bool
 
     var body: some View {
         if isOpen {
             panel
         } else {
-            openButton
+            SessionExpandButton {
+                withAnimation(.easeOut(duration: 0.18)) { isOpen = true }
+            }
         }
     }
 
@@ -101,36 +96,15 @@ struct StreamControlPanel: View {
         )
     }
 
-    private var openButton: some View {
-        Button {
-            withAnimation(.easeOut(duration: 0.18)) { isOpen = true }
-        } label: {
-            Image(systemName: "slider.horizontal.3")
-                .font(.system(size: 17, weight: .semibold))
-                .foregroundStyle(.white)
-                .frame(width: 44, height: 44)
-                .background(.black.opacity(0.45), in: Circle())
-                .overlay(Circle().strokeBorder(.white.opacity(0.25), lineWidth: 1))
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Show controls")
-    }
-
     private var panel: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 6) {
             header
             hotkeyStrip
             actions
         }
         .padding(12)
         .frame(maxWidth: .infinity)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
-        .confirmationDialog("Display", isPresented: $pickerOpen, titleVisibility: .visible) {
-            ForEach(session.sources) { source in
-                Button(sourceLabel(source)) { session.switchSource(to: source.id) }
-            }
-            Button("Cancel", role: .cancel) {}
-        }
+        .background(sessionBannerFill, in: RoundedRectangle(cornerRadius: 16))
     }
 
     private var header: some View {
@@ -154,11 +128,11 @@ struct StreamControlPanel: View {
             Button {
                 withAnimation(.easeOut(duration: 0.18)) { isOpen = false }
             } label: {
-                Image(systemName: "chevron.down")
-                    .font(.system(size: 13, weight: .semibold))
+                Text(verbatim: "\u{2304}")
+                    .font(.system(size: 17))
                     .foregroundStyle(.white)
                     .frame(width: 32, height: 32)
-                    .contentShape(Rectangle())
+                    .contentShape(Circle())
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Hide controls")
@@ -167,35 +141,91 @@ struct StreamControlPanel: View {
 
     private var hotkeyStrip: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
+            HStack(spacing: 6) {
                 ForEach(kHotkeys, id: \.label) { hotkey in
                     Button(hotkey.label) { model.hotkey(hotkey) }
-                        .buttonStyle(.bordered)
+                        .buttonStyle(.deskhubOutlined(horizontalPadding: 12, verticalPadding: 6))
+                        .disabled(!streaming)
                 }
             }
             .padding(.vertical, 1)
         }
-        .disabled(!streaming)
-        .opacity(streaming ? 1 : 0.45)
     }
 
     private var actions: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 8) {
             Button(keyboardOn ? "Hide keyboard" : "Keyboard") { keyboardOn.toggle() }
-                .buttonStyle(.bordered)
+                .buttonStyle(.deskhubOutlined())
                 .disabled(!streaming)
 
             if session.sources.count > 1 {
-                Button("Display") { pickerOpen = true }
-                    .buttonStyle(.bordered)
+                Button("Display") { displayPickerOpen = true }
+                    .buttonStyle(.deskhubOutlined())
             }
 
-            Spacer()
+            Spacer(minLength: 0)
+        }
+    }
+}
+
+struct DisplayPickerDialog: View {
+    let sources: [Source]
+    let currentSourceId: UInt8
+    let onPick: (UInt8) -> Void
+    let onDismiss: () -> Void
+
+    var body: some View {
+        ZStack {
+            Color.black.opacity(0.5)
+                .ignoresSafeArea()
+                .onTapGesture(perform: onDismiss)
+
+            VStack(alignment: .leading, spacing: 16) {
+                Text("Display")
+                    .font(.system(size: 22, weight: .semibold))
+                    .foregroundStyle(.white)
+
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(sources) { source in
+                        row(source)
+                    }
+                }
+
+                HStack {
+                    Spacer(minLength: 0)
+                    SessionTextButton("Cancel", action: onDismiss)
+                }
+            }
+            .padding(24)
+            .frame(maxWidth: 360)
+            .background(Color(white: 0.16), in: RoundedRectangle(cornerRadius: 28))
+            .padding(.horizontal, 32)
         }
     }
 
-    private func sourceLabel(_ source: Source) -> String {
-        let mark = source.id == model.sourceId ? "✓ " : ""
-        return mark + source.pickerLabel
+    private func row(_ source: Source) -> some View {
+        Button {
+            onPick(source.id)
+            onDismiss()
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: source.id == currentSourceId ? "largecircle.fill.circle" : "circle")
+                    .font(.system(size: 20))
+                    .foregroundStyle(
+                        source.id == currentSourceId ? DeskhubPalette.accent : Color.white.opacity(0.7)
+                    )
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(source.displayName)
+                        .foregroundStyle(.white)
+                    Text(source.sizeLabel)
+                        .font(.caption)
+                        .foregroundStyle(.white.opacity(0.7))
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(.vertical, 8)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 }

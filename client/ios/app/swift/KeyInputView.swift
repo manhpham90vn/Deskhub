@@ -27,30 +27,6 @@ final class KeyCaptureUIView: UIView, UIKeyInput {
     weak var model: StreamModel?
     var onKeyboardDismissed: (() -> Void)?
 
-    override var inputAccessoryView: UIView? { accessoryBar }
-
-    private lazy var accessoryBar: UIView = {
-        let bar = UIView(frame: CGRect(x: 0, y: 0, width: 0, height: 48))
-        var config = UIButton.Configuration.gray()
-        config.title = "Done"
-        config.buttonSize = .mini
-        let done = UIButton(
-            configuration: config,
-            primaryAction: UIAction { [weak self] _ in
-                guard let self else { return }
-                onKeyboardDismissed?()
-                resignFirstResponder()
-            }
-        )
-        done.translatesAutoresizingMaskIntoConstraints = false
-        bar.addSubview(done)
-        NSLayoutConstraint.activate([
-            done.trailingAnchor.constraint(equalTo: bar.trailingAnchor, constant: -8),
-            done.topAnchor.constraint(equalTo: bar.topAnchor, constant: 4),
-        ])
-        return bar
-    }()
-
     var keyboardType: UIKeyboardType = .asciiCapable
     var autocorrectionType: UITextAutocorrectionType = .no
     var spellCheckingType: UITextSpellCheckingType = .no

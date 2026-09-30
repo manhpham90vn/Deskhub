@@ -1,16 +1,17 @@
 import SwiftUI
 
-struct PairedDeviceRow: Identifiable {
-    let name: String
-    let shortKey: String
-    let fingerprint: String
-
-    var id: String { fingerprint }
-}
-
 struct DevicesPage: View {
     private static let hostFingerprintCapacity = 128
     private static let accessRequestsPollInterval = Duration.seconds(1)
+
+    private static let sectionSpacing: CGFloat = 10
+    private static let sectionTopMargin: CGFloat = 8
+    private static let itemSpacing: CGFloat = 6
+    private static let pairedNameColumnWidth: CGFloat = 200
+    private static let pairedKeyColumnWidth: CGFloat = 130
+    private static let forgetAllButtonHeight: CGFloat = 46
+    private static let confirmYes = "Yes"
+    private static let confirmNo = "No"
 
     let trustedHostsRevision: Int
     let onConnectHost: @MainActor (String) -> Void
@@ -23,62 +24,73 @@ struct DevicesPage: View {
     @State private var accessRequests = AccessRequestsModel()
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: Self.sectionSpacing) {
             deskhubHeading(DeskhubClient.string(DHStrSidebarDevices))
             thisMachineSection
+                .padding(.top, Self.sectionTopMargin)
             AccessRequestsSection(model: accessRequests)
+                .padding(.top, Self.sectionTopMargin)
             pairedSection
+                .padding(.top, Self.sectionTopMargin)
             SavedHostsSection(
                 trustedHostsRevision: trustedHostsRevision,
                 onConnect: onConnectHost
             )
+            .padding(.top, Self.sectionTopMargin)
         }
         .onAppear(perform: refresh)
         .task { await pollAccessRequests() }
         .onChange(of: accessRequests.requests.map(\.fingerprint)) { _, _ in refresh() }
         .alert("Deskhub", isPresented: $confirmForgetAll) {
-            Button(DeskhubClient.string(DHStrPairedForgetAll), role: .destructive) {
-                dh_paired_forget_all()
-                refresh()
-            }
-            Button(DeskhubClient.string(DHStrCancelAction), role: .cancel) {}
+            forgetAllButtons
         } message: {
             Text(DeskhubClient.string(DHStrPairedForgetAllPrompt))
         }
     }
 
+    @ViewBuilder
+    private var forgetAllButtons: some View {
+        Button(Self.confirmYes, role: .destructive, action: forgetAll)
+        Button(Self.confirmNo, role: .cancel) {}
+            .keyboardShortcut(.defaultAction)
+    }
+
+    private var hasHostIdentity: Bool { !hostFingerprint.isEmpty }
+
+    private var hostFingerprintText: String {
+        hasHostIdentity ? hostFingerprint : DeskhubClient.string(DHStrShareNoHostIdentity)
+    }
+
     private var thisMachineSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: Self.itemSpacing) {
             deskhubSection(DeskhubClient.string(DHStrThisMachineHeading))
             deskhubHint(DeskhubClient.string(DHStrThisMachineHint))
-            HStack(spacing: 8) {
+            HStack(spacing: 10) {
                 Text(DeskhubClient.string(DHStrDeviceNameLabel))
                     .foregroundStyle(DeskhubPalette.muted)
                 Text(deviceName)
-                    .fontWeight(.semibold)
                     .foregroundStyle(DeskhubPalette.heading)
                     .textSelection(.enabled)
             }
-            HStack(spacing: 12) {
-                Text(hostFingerprint)
+            HStack(spacing: 10) {
+                Text(hostFingerprintText)
                     .font(.system(size: 13, design: .monospaced))
                     .foregroundStyle(DeskhubPalette.heading)
                     .textSelection(.enabled)
-                Spacer(minLength: 0)
                 CopyButton { hostFingerprint }
                     .buttonStyle(.bordered)
-                    .controlSize(.small)
+                    .disabled(!hasHostIdentity)
                 CopyButton(DeskhubClient.string(DHStrCopyPublicKeyAction)) {
                     DeskhubClient.hostPublicKey()
                 }
                 .buttonStyle(.bordered)
-                .controlSize(.small)
+                .disabled(!hasHostIdentity)
             }
         }
     }
 
     private var pairedSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: Self.itemSpacing) {
             deskhubSection(DeskhubClient.string(DHStrPairedHeading))
             deskhubHint(DeskhubClient.string(DHStrPairedHint))
             allowClientForm
@@ -98,84 +110,65 @@ struct DevicesPage: View {
                 .onSubmit(allowClient)
                 Button(DeskhubClient.string(DHStrAllowClientAction), action: allowClient)
                     .buttonStyle(.bordered)
-                    .disabled(publicKeyInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
             if publicKeyError {
                 Text(DeskhubClient.string(DHStrAllowClientInvalid))
-                    .foregroundStyle(DeskhubPalette.offline)
+                    .foregroundStyle(DeskhubPalette.errorText)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }
 
     @ViewBuilder
     private var pairedList: some View {
-        #if os(macOS)
-            Table(devices) {
-                TableColumn(DeskhubClient.string(DHStrPairedColumnName)) { device in
-                    Text(device.name.isEmpty ? "(unnamed)" : device.name)
-                }
-                .width(200)
-                TableColumn(DeskhubClient.string(DHStrPairedColumnKey)) {
-                    Text($0.shortKey)
-                }
-                .width(130)
-                TableColumn("") { device in
-                    Button(DeskhubClient.string(DHStrPairedForget)) {
+        DeskhubListFrame {
+            HStack(spacing: DeskhubListMetrics.columnGap) {
+                deskhubListHeaderCell(
+                    DeskhubClient.string(DHStrPairedColumnName),
+                    width: Self.pairedNameColumnWidth
+                )
+                deskhubListHeaderCell(
+                    DeskhubClient.string(DHStrPairedColumnKey),
+                    width: Self.pairedKeyColumnWidth
+                )
+            }
+            ForEach(devices) { device in
+                HStack(spacing: DeskhubListMetrics.columnGap) {
+                    deskhubListCell(
+                        device.name.isEmpty ? DeskhubClient.string(DHStrUnnamedClient) : device.name,
+                        width: Self.pairedNameColumnWidth
+                    )
+                    deskhubListCell(device.shortKey, width: Self.pairedKeyColumnWidth)
+                    DeskhubRowActionButton(
+                        title: DeskhubClient.string(DHStrPairedForget),
+                        tint: DeskhubPalette.offline
+                    ) {
                         forget(device)
                     }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
-                    .tint(DeskhubPalette.offline)
-                }
-                .width(90)
-            }
-            .frame(minHeight: 130)
-
-            if devices.isEmpty {
-                deskhubHint(DeskhubClient.string(DHStrPairedEmpty))
-            }
-
-            Button {
-                confirmForgetAll = true
-            } label: {
-                Text(DeskhubClient.string(DHStrPairedForgetAll))
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.bordered)
-            .controlSize(.large)
-            .disabled(devices.isEmpty)
-        #else
-            if devices.isEmpty {
-                deskhubHint(DeskhubClient.string(DHStrPairedEmpty))
-            } else {
-                ForEach(devices) { device in
-                    HStack(spacing: 12) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(device.name.isEmpty ? "(unnamed)" : device.name)
-                                .foregroundStyle(DeskhubPalette.heading)
-                            Text(device.shortKey)
-                                .font(.caption)
-                                .foregroundStyle(DeskhubPalette.muted)
-                        }
-                        Spacer(minLength: 0)
-                        Button(DeskhubClient.string(DHStrPairedForget)) {
-                            forget(device)
-                        }
-                        .controlSize(.small)
-                    }
-                    .padding(.vertical, 2)
                 }
             }
+        }
 
-            Button(DeskhubClient.string(DHStrPairedForgetAll)) {
-                confirmForgetAll = true
-            }
-            .disabled(devices.isEmpty)
-        #endif
+        if devices.isEmpty {
+            deskhubHint(DeskhubClient.string(DHStrPairedEmpty))
+        }
+
+        Button {
+            if !devices.isEmpty { confirmForgetAll = true }
+        } label: {
+            Text(DeskhubClient.string(DHStrPairedForgetAll))
+                .frame(minHeight: Self.forgetAllButtonHeight)
+        }
+        .buttonStyle(.bordered)
+    }
+
+    private var submittedPublicKey: String {
+        publicKeyInput.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private func allowClient() {
-        guard dh_paired_add_public_key(publicKeyInput) else {
+        let key = submittedPublicKey
+        guard !key.isEmpty, dh_paired_add_public_key(key) else {
             publicKeyError = true
             return
         }
@@ -186,6 +179,11 @@ struct DevicesPage: View {
 
     private func forget(_ device: PairedDeviceRow) {
         _ = dh_paired_forget(device.fingerprint)
+        refresh()
+    }
+
+    private func forgetAll() {
+        dh_paired_forget_all()
         refresh()
     }
 

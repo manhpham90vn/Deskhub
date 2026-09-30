@@ -3,7 +3,9 @@ import Observation
 
 @MainActor @Observable
 final class SettingsModel {
-    var port: Int
+    static let portRange = 1 ... 65535
+
+    private(set) var port: Int
     var clientControl: Bool
     var clipboardSync: Bool
     var shareAudio: Bool
@@ -20,14 +22,16 @@ final class SettingsModel {
         keepAwake = dh_keep_awake()
     }
 
-    var acceptedPort: UInt16 {
-        port >= 1 && port <= 65535 ? UInt16(port) : DeskhubClient.defaultPort
+    func updatePort(_ chosen: Int) {
+        guard SettingsModel.portRange.contains(chosen), chosen != port else { return }
+        port = chosen
+        save()
     }
 
     func save() {
         let stored = dh_settings_load()
         dh_settings_save(
-            stored.fps, stored.bitrateMbps, stored.maxDim, UInt32(acceptedPort),
+            stored.fps, stored.bitrateMbps, stored.maxDim, UInt32(port),
             stored.allowInput, clientControl
         )
         dh_set_clipboard_sync(clipboardSync)

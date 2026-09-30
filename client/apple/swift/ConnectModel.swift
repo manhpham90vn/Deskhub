@@ -6,20 +6,29 @@ final class ConnectModel {
     private static let lastAddressKey = "lastAddress"
     private static let statusPollInterval = Duration.seconds(1)
 
-    private static var lastAddress: String {
-        UserDefaults.standard.string(forKey: lastAddressKey) ?? ""
-    }
+    #if os(macOS)
+        private static let restoredAddress = ""
+        private static let invalidAddressSeparator = "\n"
+    #else
+        private static var restoredAddress: String {
+            UserDefaults.standard.string(forKey: lastAddressKey) ?? ""
+        }
 
-    var address: String = DeskhubClient.addressHost(ConnectModel.lastAddress) {
+        private static let invalidAddressSeparator = " "
+    #endif
+
+    var address: String = DeskhubClient.addressHost(ConnectModel.restoredAddress) {
         didSet { if address != oldValue { authed = nil } }
     }
 
-    var port: String = DeskhubClient.addressPortText(ConnectModel.lastAddress) {
+    var port: String = DeskhubClient.addressPortText(ConnectModel.restoredAddress) {
         didSet { if port != oldValue { authed = nil } }
     }
 
     private(set) var isConnecting = false
     private(set) var waitingStatus = ""
+    private(set) var progressReported = false
+    private(set) var cancelRequested = false
     var connectError = ""
     private(set) var acceptedAddress = ""
     private(set) var authed: HostQuery?
@@ -37,7 +46,8 @@ final class ConnectModel {
         let composed = DeskhubClient.composeAddress(address, portText: port)
         guard let accepted = DeskhubClient.normalizedAddress(composed) else {
             connectError = DeskhubClient.buffered(192) { dh_invalid_address_line(composed, $0, $1) }
-                + " " + DeskhubClient.string(DHStrInvalidAddressHint)
+                + ConnectModel.invalidAddressSeparator
+                + DeskhubClient.string(DHStrInvalidAddressHint)
             return nil
         }
         remember(accepted)
@@ -80,6 +90,12 @@ final class ConnectModel {
         forgetHost()
     }
 
+    func requestCancel() {
+        guard isConnecting, !cancelRequested else { return }
+        cancelRequested = true
+        DeskhubClient.cancelSourceQuery()
+    }
+
     func trustPendingHost() -> String? {
         guard let pending = pendingTrust else { return nil }
         pendingTrust = nil
@@ -105,6 +121,8 @@ final class ConnectModel {
         attempt += 1
         isConnecting = false
         waitingStatus = ""
+        progressReported = false
+        cancelRequested = false
         authed = nil
         pendingTrust = nil
         connectError = ""
@@ -115,14 +133,20 @@ final class ConnectModel {
     {
         isConnecting = true
         waitingStatus = ""
+        progressReported = false
+        cancelRequested = false
         let statusPoll = Task { await pollWaitingStatus() }
         let outcome = await Task.detached {
             DeskhubClient.listSources(address: address, invite: invite)
         }.value
         statusPoll.cancel()
         guard mine == attempt else { return nil }
+        let cancelled = cancelRequested
         isConnecting = false
         waitingStatus = ""
+        progressReported = false
+        cancelRequested = false
+        if cancelled, outcome.query == nil { return nil }
         return outcome
     }
 
@@ -131,6 +155,7 @@ final class ConnectModel {
             try? await Task.sleep(for: ConnectModel.statusPollInterval)
             guard !Task.isCancelled else { return }
             waitingStatus = DeskhubClient.sourceQueryStatus()
+            if !waitingStatus.isEmpty { progressReported = true }
         }
     }
 
@@ -142,6 +167,9 @@ final class ConnectModel {
         }
         remember(answered)
         authed = found
+        #if os(macOS)
+            trustedHostsRevision += 1
+        #endif
         return found
     }
 

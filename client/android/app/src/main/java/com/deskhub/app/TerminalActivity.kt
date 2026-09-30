@@ -273,7 +273,7 @@ private fun TerminalScreen(
             },
             dismissButton = {
                 TextButton(onClick = { closing = null }) {
-                    Text(NativeClient.string(NativeClient.STR_TRANSFER_CANCEL_BUTTON))
+                    Text(NativeClient.string(NativeClient.STR_CANCEL_ACTION))
                 }
             },
         )

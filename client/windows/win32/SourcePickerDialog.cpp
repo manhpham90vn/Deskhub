@@ -117,7 +117,7 @@ bool ShowSourcePickerDialog(HWND owner, const std::vector<deskhub::SourceInfo>& 
             FromUtf8(deskhub::media::SourcePickerLabel(s.name, s.sourceId, s.width, s.height));
         SendMessageW(st.list, LB_ADDSTRING, 0, (LPARAM)line.c_str());
     }
-    SendMessageW(st.list, LB_SETSEL, TRUE, 0);
+    SendMessageW(st.list, LB_SETSEL, TRUE, LPARAM(-1));
     mk(L"STATIC", FromUtf8(deskhub::ui::kPickerEachWindow).c_str(),
         0, 12, kH - 74, kW - 24, 18, kIdHint);
     mk(L"BUTTON", L"View", BS_DEFPUSHBUTTON, kW - 24 - 180, kH - 46, 86, 26, kIdOk);

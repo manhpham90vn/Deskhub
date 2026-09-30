@@ -21,6 +21,8 @@ enum DeskhubPage: Int, CaseIterable, Identifiable {
 
 struct MainMenuView: View {
     private static let focusSettle = Duration.milliseconds(400)
+    private static let emptyAddressWarning =
+        "Enter the host machine's IP address first (e.g., 192.168.1.10)."
 
     @Bindable var connect: ConnectModel
     @Bindable var sharing: SharingModel
@@ -30,12 +32,13 @@ struct MainMenuView: View {
         StartPage.index().flatMap(DeskhubPage.init(rawValue:)) ?? .client
     @State private var shareAlert = ""
     @State private var accessibilityWarning = false
+    @State private var addressMissing = false
+    @State private var clientStatusError = ""
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         HStack(spacing: 0) {
             MainMenuSidebar(page: $page)
-            Divider()
             ScrollView {
                 page(for: page).padding(16)
             }
@@ -59,16 +62,16 @@ struct MainMenuView: View {
                 await autoShare()
             }
         }
-        .overlay {
-            if connect.isConnecting {
-                queryingOverlay
-            }
-        }
         .hostTrustAlert(connect) { beginConnect(to: $0) }
         .alert("Deskhub", isPresented: showingConnectError) {
             Button("OK", role: .cancel) { connect.connectError = "" }
         } message: {
             Text(connect.connectError)
+        }
+        .alert("Deskhub", isPresented: $addressMissing) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(MainMenuView.emptyAddressWarning)
         }
         .alert("Deskhub", isPresented: showingShareAlert) {
             if !sharing.hasScreenRecording {
@@ -111,45 +114,63 @@ struct MainMenuView: View {
             addressForm
 
             Button(action: beginConnect) {
-                Text(DeskhubClient.string(DHStrConnectButton)).deskhubPrimaryLabel()
+                Text(DeskhubClient.string(DHStrConnectButton))
             }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
-            .tint(DeskhubPalette.accent)
-            .disabled(connect.address.isEmpty || connect.isConnecting)
+            .buttonStyle(DeskhubPrimaryButtonStyle(fill: DeskhubPalette.accent))
+            .disabled(connect.isConnecting)
+
+            statusRow
 
             deskhubHeading(DeskhubClient.string(DHStrDevicesHeading))
-            DeviceTable(
-                rows: recent.devices,
-                enabled: !connect.isConnecting,
-                onPick: pick
-            )
+            DeviceTable(rows: recent.devices, onPick: pick)
+            deskhubHint(DeskhubClient.string(DHStrLanDevicesEmpty))
         }
     }
 
     private var addressForm: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 12) {
-                GridRow {
-                    Text(DeskhubClient.string(DHStrClientIpPrompt))
-                    TextField(
-                        DeskhubClient.string(DHStrClientIpPlaceholder), text: $connect.address
-                    )
+        Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 12) {
+            GridRow {
+                Text(DeskhubClient.string(DHStrClientIpPrompt))
+                TextField(
+                    DeskhubClient.string(DHStrClientIpPlaceholder), text: $connect.address
+                )
+                .textFieldStyle(.roundedBorder)
+                .frame(width: 260)
+                .onSubmit(beginConnect)
+            }
+            GridRow {
+                Text(DeskhubClient.string(DHStrUdpPortLabel))
+                TextField("", text: $connect.port)
                     .textFieldStyle(.roundedBorder)
-                    .frame(width: 260)
+                    .frame(width: 80)
                     .onSubmit(beginConnect)
-                    .disabled(connect.isConnecting)
-                }
-                GridRow {
-                    Text(DeskhubClient.string(DHStrUdpPortLabel))
-                    TextField("", text: $connect.port)
-                        .textFieldStyle(.roundedBorder)
-                        .frame(width: 80)
-                        .onSubmit(beginConnect)
-                        .disabled(connect.isConnecting)
-                }
             }
         }
+    }
+
+    private var statusRow: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Text(clientStatusText)
+                .foregroundStyle(clientStatusIsError ? DeskhubPalette.offline : DeskhubPalette.muted)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if connect.isConnecting, connect.progressReported {
+                Button(DeskhubClient.string(DHStrCancelAction)) { connect.requestCancel() }
+                    .buttonStyle(.bordered)
+                    .disabled(connect.cancelRequested)
+            }
+        }
+    }
+
+    private var clientStatusText: String {
+        guard connect.isConnecting else { return clientStatusError }
+        return connect.waitingStatus.isEmpty
+            ? DeskhubClient.string(DHStrQueryingSources)
+            : connect.waitingStatus
+    }
+
+    private var clientStatusIsError: Bool {
+        !connect.isConnecting && !clientStatusError.isEmpty
     }
 
     private var showingShareAlert: Binding<Bool> {
@@ -161,27 +182,6 @@ struct MainMenuView: View {
             get: { !connect.connectError.isEmpty && !connect.isConnecting },
             set: { if !$0 { connect.connectError = "" } }
         )
-    }
-
-    private var queryingOverlay: some View {
-        ZStack {
-            Color.black.opacity(0.35).ignoresSafeArea()
-            VStack(spacing: 16) {
-                HStack(spacing: 12) {
-                    ProgressView().controlSize(.small)
-                    Text(DeskhubClient.string(DHStrQueryingSources))
-                }
-                if !connect.waitingStatus.isEmpty {
-                    Text(connect.waitingStatus)
-                        .foregroundStyle(DeskhubPalette.muted)
-                        .multilineTextAlignment(.center)
-                        .frame(maxWidth: 360)
-                }
-                Button(DeskhubClient.string(DHStrCancelAction)) { connect.cancelConnect() }
-            }
-            .padding(24)
-            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
-        }
     }
 }
 
@@ -233,7 +233,17 @@ extension MainMenuView {
     }
 
     private func beginConnect() {
-        guard !connect.address.isEmpty, !connect.isConnecting else { return }
+        let typed = connect.address.trimmingCharacters(in: .whitespacesAndNewlines)
+        if typed.isEmpty {
+            addressMissing = true
+            return
+        }
+        guard !connect.isConnecting else { return }
+        clientStatusError = ""
+        if DeskhubClient.isPairingInvite(typed), DeskhubClient.pairingInviteAddress(typed).isEmpty {
+            clientStatusError = DeskhubClient.string(DHStrInviteInvalid)
+            return
+        }
         Task {
             guard let found = await connect.connectAuth() else { return }
             let address = connect.acceptedAddress

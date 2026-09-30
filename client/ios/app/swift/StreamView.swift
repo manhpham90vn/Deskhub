@@ -19,6 +19,8 @@ struct StreamView: View {
 
     @State private var panMode = false
 
+    @State private var displayPickerOpen = false
+
     private var streaming: Bool { model.phase == .streaming }
 
     var body: some View {
@@ -45,6 +47,15 @@ struct StreamView: View {
                     .padding(12)
                 controlsLayer
                     .padding(safeArea)
+                if displayPickerOpen {
+                    DisplayPickerDialog(
+                        sources: session.sources,
+                        currentSourceId: model.sourceId,
+                        onPick: { session.switchSource(to: $0) },
+                        onDismiss: { displayPickerOpen = false }
+                    )
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
             }
             .background(Color.black)
             .ignoresSafeArea()
@@ -163,7 +174,8 @@ struct StreamView: View {
                 model: model,
                 streaming: streaming,
                 isOpen: $controlsOpen,
-                keyboardOn: $keyboardOn
+                keyboardOn: $keyboardOn,
+                displayPickerOpen: $displayPickerOpen
             )
         }
         .padding(12)

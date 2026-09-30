@@ -210,6 +210,12 @@ typedef enum {
     DHStrInviteInvalid = 211,
     DHStrHostLastAddressLabel = 212,
     DHStrAccessRequestNotificationTitle = 213,
+    DHStrUnnamedClient = 214,
+    DHStrLanDevicesEmpty = 215,
+    DHStrHostAddressLabel = 216,
+    DHStrShareNoHostIdentity = 217,
+    DHStrHostNameLabel = 218,
+    DHStrHostKeyLabel = 219,
 } DHStringId;
 
 typedef enum {

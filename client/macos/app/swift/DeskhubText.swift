@@ -6,15 +6,19 @@ func deskhubHeading(_ text: String) -> some View {
         .foregroundStyle(DeskhubPalette.heading)
 }
 
+private let deskhubHintMaxWidth: CGFloat = 520
+
 func deskhubSection(_ text: String) -> some View {
     Text(text)
         .font(.system(size: 15, weight: .bold))
         .foregroundStyle(DeskhubPalette.heading)
-        .padding(.top, 8)
 }
 
 func deskhubHint(_ text: String) -> some View {
-    Text(text).foregroundStyle(DeskhubPalette.muted)
+    Text(text)
+        .foregroundStyle(DeskhubPalette.muted)
+        .fixedSize(horizontal: false, vertical: true)
+        .frame(maxWidth: deskhubHintMaxWidth, alignment: .leading)
 }
 
 let deskhubPrimaryButtonHeight: CGFloat = 26

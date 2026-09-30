@@ -3,6 +3,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 private let stagingFolderName = "deskhub-send"
+private let fileRowFontSize: CGFloat = 12
 
 private func stagingDirectory() throws -> URL {
     let dir = FileManager.default.temporaryDirectory
@@ -46,6 +47,24 @@ private struct PickedPhoto: Transferable {
     }
 }
 
+private struct FileRow: View {
+    let name: String
+    let detail: String
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Text(name)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Text(detail)
+                .lineLimit(1)
+                .monospacedDigit()
+        }
+        .font(.system(size: fileRowFontSize))
+    }
+}
+
 struct FileSendView<Driver: TransferDriver>: View {
     let model: Driver
     let subtitle: String
@@ -55,40 +74,43 @@ struct FileSendView<Driver: TransferDriver>: View {
     @State private var browsingFiles = false
     @State private var staging = false
 
+    private var pickersDisabled: Bool { model.transfer.active || staging }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 12) {
-                deskhubHeading(DeskhubClient.string(DHStrTransferSendHeading))
-                Spacer(minLength: 0)
-                SessionCloseButton(action: close, enabled: !model.transfer.active)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                HStack(spacing: 12) {
+                    Text(DeskhubClient.string(DHStrTransferSendHeading))
+                        .font(.system(size: 22, weight: .bold))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    SessionCloseButton(action: close, enabled: !model.transfer.active)
+                }
+
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundStyle(DeskhubPalette.muted)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+
+                pickers
+                chosenList
+
+                if !model.transferError.isEmpty {
+                    Text(model.transferError)
+                        .foregroundStyle(.red)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                sendButton
+
+                if !model.transfer.idle {
+                    progress
+                }
+
+                sent
             }
-
-            Text(subtitle)
-                .font(.caption)
-                .foregroundStyle(DeskhubPalette.muted)
-                .lineLimit(1)
-                .truncationMode(.middle)
-
-            pickers
-            chosenList
-
-            if !model.transferError.isEmpty {
-                Text(model.transferError)
-                    .font(.callout)
-                    .foregroundStyle(.red)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            sendButton
-
-            if !model.transfer.idle {
-                progress
-            }
-
-            sent
-            Spacer(minLength: 0)
+            .padding(16)
         }
-        .padding()
         .onChange(of: photoItems) { _, picked in
             guard !picked.isEmpty else { return }
             Task { await stagePhotos(picked) }
@@ -103,29 +125,24 @@ struct FileSendView<Driver: TransferDriver>: View {
     }
 
     private var pickers: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 8) {
             PhotosPicker(
                 selection: $photoItems,
                 maxSelectionCount: DeskhubClient.maxTransferFiles,
                 matching: .any(of: [.images, .videos])
             ) {
-                Label("Photos", systemImage: "photo.on.rectangle")
+                Text("Photos")
             }
-            .buttonStyle(.bordered)
-            .disabled(model.transfer.active || staging)
+            .buttonStyle(.deskhubOutlined())
+            .simultaneousGesture(TapGesture().onEnded { model.transferError = "" })
+            .disabled(pickersDisabled)
 
-            Button {
+            Button("Files") {
                 model.transferError = ""
                 browsingFiles = true
-            } label: {
-                Label("Files", systemImage: "folder")
             }
-            .buttonStyle(.bordered)
-            .disabled(model.transfer.active || staging)
-
-            if staging {
-                ProgressView()
-            }
+            .buttonStyle(.deskhubOutlined())
+            .disabled(pickersDisabled)
         }
     }
 
@@ -133,38 +150,27 @@ struct FileSendView<Driver: TransferDriver>: View {
     private var chosenList: some View {
         if model.chosenFiles.isEmpty {
             Text(DeskhubClient.string(DHStrTransferNoneChosen))
-                .foregroundStyle(DeskhubPalette.muted)
-                .frame(maxWidth: .infinity, alignment: .leading)
         } else {
-            List(model.chosenFiles, id: \.self) { url in
-                HStack {
-                    Text(url.lastPathComponent).lineLimit(1).truncationMode(.middle)
-                    Spacer()
-                    Text(sizeText(url)).foregroundStyle(DeskhubPalette.muted).monospacedDigit()
+            VStack(alignment: .leading, spacing: 2) {
+                ForEach(model.chosenFiles, id: \.self) { url in
+                    FileRow(name: url.lastPathComponent, detail: sizeText(url))
                 }
             }
-            .listStyle(.plain)
-            .frame(height: 160)
         }
     }
 
     private var progress: some View {
         VStack(alignment: .leading, spacing: 8) {
             ProgressView(value: model.transfer.fraction)
-            HStack {
-                Text(statusText).lineLimit(1).truncationMode(.middle)
-                Spacer()
-                Text(model.transfer.step).monospacedDigit()
-                    .foregroundStyle(DeskhubPalette.muted)
-            }
-            .font(.callout)
-
+            FileRow(name: statusText, detail: model.transfer.step)
             if model.transfer.active {
-                Button(DeskhubClient.string(DHStrTransferCancelButton)) {
+                Button {
                     model.cancelTransfer()
+                } label: {
+                    Text(DeskhubClient.string(DHStrTransferCancelButton))
+                        .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.bordered)
-                .frame(maxWidth: .infinity)
+                .buttonStyle(.deskhubOutlined())
             }
         }
     }
@@ -178,34 +184,30 @@ struct FileSendView<Driver: TransferDriver>: View {
 
     @ViewBuilder private var sent: some View {
         if !model.history.isEmpty {
-            Divider()
             Text(DeskhubClient.string(DHStrTransferSentHeading))
-                .font(.subheadline)
-                .foregroundStyle(DeskhubPalette.muted)
-            List(model.history) { row in
-                HStack(spacing: 8) {
-                    Image(systemName: row.ok ? "checkmark.circle" : "xmark.circle")
-                        .foregroundStyle(row.ok ? DeskhubPalette.online : DeskhubPalette.offline)
-                    Text(row.name).lineLimit(1).truncationMode(.middle)
-                    Spacer()
-                    Text(row.ok ? byteText(row.bytes) : row.detail)
-                        .foregroundStyle(DeskhubPalette.muted)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
+                .font(.system(size: 12, weight: .medium))
+            VStack(alignment: .leading, spacing: 2) {
+                ForEach(model.history) { row in
+                    FileRow(
+                        name: (row.ok ? "\u{2713} " : "\u{2715} ") + row.name,
+                        detail: row.ok ? byteText(row.bytes) : row.detail
+                    )
                 }
             }
-            .listStyle(.plain)
-            .frame(minHeight: 120)
         }
     }
 
     private var sendButton: some View {
-        Button("Send") { model.sendChosenFiles() }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
-            .tint(DeskhubPalette.accent)
-            .frame(maxWidth: .infinity)
-            .disabled(!model.canSend || staging)
+        Button {
+            model.sendChosenFiles()
+        } label: {
+            Text("Send")
+                .font(.system(size: 15, weight: .semibold))
+                .frame(maxWidth: .infinity, minHeight: 28)
+        }
+        .buttonStyle(.borderedProminent)
+        .tint(DeskhubPalette.accent)
+        .disabled(!model.canSend || staging)
     }
 
     private func stagePhotos(_ picked: [PhotosPickerItem]) async {

@@ -29,6 +29,7 @@ final class SavedHostsModel {
 
     private(set) var hosts: [SavedHostRow] = []
     private(set) var listError = ""
+    private(set) var storeUnreadable = false
 
     func refresh() {
         loadHosts()
@@ -49,9 +50,11 @@ final class SavedHostsModel {
         }
         guard count >= 0 else {
             hosts = []
+            storeUnreadable = true
             listError = Self.errorText(DHHostProfileStoreUnreadable)
             return
         }
+        storeUnreadable = false
         listError = ""
         hosts = buf.prefix(Int(count)).map { raw in
             SavedHostRow(

@@ -144,6 +144,12 @@ const char* dh_string(DHStringId id) {
         case DHStrHostLastAddressLabel: return deskhub::ui::kHostLastAddressLabel;
         case DHStrAccessRequestNotificationTitle:
             return deskhub::ui::kAccessRequestNotificationTitle;
+        case DHStrUnnamedClient: return deskhub::ui::kUnnamedClient;
+        case DHStrLanDevicesEmpty: return deskhub::ui::kLanDevicesEmpty;
+        case DHStrHostAddressLabel: return deskhub::ui::kHostAddressLabel;
+        case DHStrShareNoHostIdentity: return deskhub::ui::kShareNoHostIdentity;
+        case DHStrHostNameLabel: return deskhub::ui::kHostNameLabel;
+        case DHStrHostKeyLabel: return deskhub::ui::kHostKeyLabel;
         case DHStrTrustNewHostTitle: return deskhub::ui::kTrustNewHostTitle;
         case DHStrTrustNewHostAction: return deskhub::ui::kTrustNewHostAction;
         case DHStrCancelAction: return deskhub::ui::kCancelAction;

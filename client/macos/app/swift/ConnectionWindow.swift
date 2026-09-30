@@ -22,55 +22,8 @@ struct ConnectionWindow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            header
-            sessionChoices
-            Spacer(minLength: 0)
-        }
-        .padding(16)
-        .frame(minWidth: 380, idealWidth: 460, minHeight: 260)
-        .navigationTitle(request.address)
-        .sheet(isPresented: $picking) {
-            SourcePickerView(
-                sources: request.sources,
-                onCancel: { picking = false },
-                onPick: { chosen in
-                    picking = false
-                    openViewers(chosen, address: request.address, control: control,
-                                openWindow: openWindow)
-                }
-            )
-            .frame(width: 460, height: 340)
-        }
-    }
-
-    private var header: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 12) {
-                Text(request.address)
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(DeskhubPalette.heading)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                Spacer(minLength: 0)
-                Button(DeskhubClient.string(DHStrDisconnectButton)) { dismiss() }
-                    .buttonStyle(.borderedProminent)
-                    .tint(DeskhubPalette.offline)
-            }
-
-            HStack(spacing: 8) {
-                Circle()
-                    .fill(DeskhubPalette.online)
-                    .frame(width: 10, height: 10)
-                Text(DeskhubClient.string(DHStrConnectedPickSession))
-                    .fontWeight(.semibold)
-                    .foregroundStyle(DeskhubPalette.online)
-                Spacer(minLength: 0)
-            }
-        }
-    }
-
-    private var sessionChoices: some View {
-        VStack(alignment: .leading, spacing: 8) {
+            addressRow
+            stateRow
             Button(action: openDesktopSession) {
                 Text(DeskhubClient.string(DHStrOpenDesktopLabel))
                     .frame(maxWidth: .infinity)
@@ -98,6 +51,54 @@ struct ConnectionWindow: View {
             .disabled(!request.caps.files)
             deskhubHint(DeskhubClient.string(DHStrMobileHostNote))
         }
+        .padding(16)
+        .frame(idealWidth: 460, alignment: .topLeading)
+        .navigationTitle(request.address)
+        .sheet(isPresented: $picking) {
+            SourcePickerView(
+                sources: request.sources,
+                onCancel: { picking = false },
+                onPick: { chosen in
+                    picking = false
+                    openViewers(chosen, address: request.address, control: control,
+                                openWindow: openWindow)
+                }
+            )
+            .frame(width: 460, height: 340)
+        }
+    }
+
+    private var addressRow: some View {
+        HStack(spacing: 12) {
+            Text(request.address)
+                .font(.system(size: 15, weight: .bold))
+                .foregroundStyle(DeskhubPalette.heading)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+            Button {
+                dismiss()
+            } label: {
+                Text(DeskhubClient.string(DHStrDisconnectButton)).fontWeight(.bold)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(DeskhubPalette.offline)
+        }
+    }
+
+    private var stateRow: some View {
+        HStack(spacing: 8) {
+            statusPill(DeskhubClient.string(DHStrConnectedPickSession))
+            statusPill("")
+        }
+    }
+
+    private func statusPill(_ text: String) -> some View {
+        Text(text)
+            .fontWeight(.bold)
+            .foregroundStyle(DeskhubPalette.onlineText)
+            .padding(.vertical, 2)
+            .padding(.horizontal, 6)
+            .background(RoundedRectangle(cornerRadius: 4).fill(DeskhubPalette.panelLive))
     }
 
     private func openDesktopSession() {

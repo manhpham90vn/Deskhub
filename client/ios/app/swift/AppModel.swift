@@ -20,7 +20,23 @@ final class AppModel {
     }
 
     func beginConnect() {
+        guard !connect.isConnecting else { return }
+        let typed = connect.address.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !typed.isEmpty else { return }
+        if DeskhubClient.isPairingInvite(typed) {
+            beginConnect(invite: typed)
+            return
+        }
+        let composed = DeskhubClient.composeAddress(typed, portText: connect.port)
+        guard DeskhubClient.normalizedAddress(composed) != nil else {
+            connect.connectError = DeskhubClient.string(DHStrInvalidAddressHint)
+            return
+        }
         finishConnect { await $0.connectAuth() }
+    }
+
+    func closeSourcePicker() {
+        screen = .connect
     }
 
     func beginConnect(invite: String) {
@@ -72,14 +88,7 @@ final class AppModel {
         stream = model
         screen = .stream
 
-        Task {
-            await model.start()
-            guard model.failedToStart, stream === model else { return }
-            stream = nil
-            screen = .connect
-            connect.connectError = DeskhubClient.couldNotConnect(address) + " "
-                + DeskhubClient.string(DHStrInvalidAddressHint)
-        }
+        Task { await model.start() }
     }
 
     func switchSource(to sourceId: UInt8) {
@@ -111,10 +120,7 @@ final class AppModel {
         guard connect.canOpenShell else { return }
         let address = connect.acceptedAddress
         let model = TerminalModel()
-        guard model.open(address: address) else {
-            connect.connectError = DeskhubClient.couldNotConnect(address)
-            return
-        }
+        model.openReportingFailure(address: address)
         terminal = model
         screen = .terminal
     }

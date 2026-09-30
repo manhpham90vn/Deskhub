@@ -3,12 +3,16 @@ import SwiftUI
 struct SettingsPage: View {
     @Bindable var sharing: SharingModel
     @State private var deviceName = DeviceNameModel()
-    @FocusState private var editingDeviceName: Bool
 
     private static let areas = SettingsAreaModel.loadDesktopLayout()
+    private static let maxFps = 240
+    private static let maxBitrateMbps = 1000
+    private static let maxPort = 65535
+    private static let numberFieldWidth: CGFloat = 90
+    private static let deviceNameFieldWidth: CGFloat = 260
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 10) {
             deskhubHeading(DeskhubClient.string(DHStrSidebarSettings))
 
             ForEach(SettingsPage.areas) { area in
@@ -31,10 +35,7 @@ struct SettingsPage: View {
         .onChange(of: sharing.shareAudio) { _, _ in sharing.save() }
         .onChange(of: sharing.playAudio) { _, _ in sharing.save() }
         .onChange(of: sharing.keepAwake) { _, _ in sharing.save() }
-        .onChange(of: editingDeviceName) { _, editing in
-            if !editing { deviceName.commit() }
-        }
-        .onDisappear { deviceName.commit() }
+        .onChange(of: deviceName.name) { _, _ in deviceName.storeEveryChange() }
     }
 
     @ViewBuilder
@@ -63,15 +64,12 @@ struct SettingsPage: View {
         switch field {
         case DHSettingDeviceName:
             TextField(deviceName.placeholder, text: $deviceName.name)
-                .textFieldStyle(.roundedBorder).frame(width: 260)
-                .focused($editingDeviceName)
-                .onSubmit(deviceName.commit)
+                .textFieldStyle(.roundedBorder)
+                .frame(width: SettingsPage.deviceNameFieldWidth)
         case DHSettingFps:
-            TextField("", value: $sharing.fps, format: .number)
-                .textFieldStyle(.roundedBorder).frame(width: 90)
+            spinRow($sharing.fps, upTo: SettingsPage.maxFps, format: .number)
         case DHSettingBitrate:
-            TextField("", value: $sharing.bitrateMbps, format: .number)
-                .textFieldStyle(.roundedBorder).frame(width: 90)
+            spinRow($sharing.bitrateMbps, upTo: SettingsPage.maxBitrateMbps, format: .number)
         case DHSettingQuality:
             Picker("", selection: $sharing.maxDim) {
                 ForEach(DeskhubShare.qualityPresets) { preset in
@@ -79,12 +77,31 @@ struct SettingsPage: View {
                 }
             }
             .labelsHidden()
-            .frame(width: 120)
+            .fixedSize()
         case DHSettingPort:
-            TextField("", value: $sharing.port, format: .number.grouping(.never))
-                .textFieldStyle(.roundedBorder).frame(width: 90)
+            spinRow($sharing.port, upTo: SettingsPage.maxPort, format: .number.grouping(.never))
         default:
             EmptyView()
+        }
+    }
+
+    private func clamped(_ value: Binding<Int>, upTo upper: Int) -> Binding<Int> {
+        Binding(
+            get: { value.wrappedValue },
+            set: { value.wrappedValue = min(max($0, 1), upper) }
+        )
+    }
+
+    private func spinRow(
+        _ value: Binding<Int>, upTo upper: Int, format: IntegerFormatStyle<Int>
+    ) -> some View {
+        let bounded = clamped(value, upTo: upper)
+        return HStack(spacing: 4) {
+            TextField("", value: bounded, format: format)
+                .textFieldStyle(.roundedBorder)
+                .frame(width: SettingsPage.numberFieldWidth)
+            Stepper("", value: bounded, in: 1 ... upper)
+                .labelsHidden()
         }
     }
 
@@ -117,7 +134,7 @@ struct SettingsPage: View {
     }
 
     private func transferFolderRow(_ label: String) -> some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 10) {
             Text(label)
             Text(sharing.transferFolder)
                 .foregroundStyle(DeskhubPalette.muted)

@@ -6,10 +6,12 @@ struct DeskhubArea<Content: View>: View {
     let title: String
     @ViewBuilder let content: Content
 
+    private static var borderWidth: CGFloat { 1 }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text(title)
-                .font(.system(size: 17, weight: .bold))
+                .font(.system(size: 16, weight: .bold))
                 .foregroundStyle(DeskhubPalette.heading)
             content
         }
@@ -19,9 +21,14 @@ struct DeskhubArea<Content: View>: View {
         .overlay(alignment: .leading) {
             Rectangle().fill(DeskhubPalette.accent).frame(width: DeskhubArea.accentBarWidth)
         }
-        .clipShape(RoundedRectangle(cornerRadius: 8))
-        .overlay(
-            RoundedRectangle(cornerRadius: 8).stroke(DeskhubPalette.rowLine, lineWidth: 1)
-        )
+        .overlay(alignment: .top) {
+            Rectangle().fill(DeskhubPalette.rowLine).frame(height: DeskhubArea.borderWidth)
+        }
+        .overlay(alignment: .bottom) {
+            Rectangle().fill(DeskhubPalette.rowLine).frame(height: DeskhubArea.borderWidth)
+        }
+        .overlay(alignment: .trailing) {
+            Rectangle().fill(DeskhubPalette.rowLine).frame(width: DeskhubArea.borderWidth)
+        }
     }
 }

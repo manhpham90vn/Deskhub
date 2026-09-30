@@ -1,68 +1,52 @@
 import SwiftUI
 
 struct ConnectView: View {
+    private static let recentPollInterval = Duration.seconds(1)
+    private static let portFieldWidth: CGFloat = 110
+    private static let queryingCardWidth: CGFloat = 270
+
     @Bindable var model: AppModel
     @State private var scanning = false
+    @State private var cameraDenied = false
 
     private var connected: Bool { model.connect.authed != nil }
+    private var busy: Bool { model.connect.isConnecting }
+
+    private var addressReady: Bool {
+        !model.connect.address.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !busy
+    }
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                deskhubHeading(DeskhubClient.string(DHStrClientHeading))
+            VStack(alignment: .leading, spacing: iosPageSpacing) {
+                iosHeading(DeskhubClient.string(DHStrClientHeading))
 
                 if connected {
                     connectedHeader
                     sessionButtons
-
-                    Toggle(
-                        DeskhubClient.string(DHStrRequestControlLabel),
-                        isOn: $model.settings.clientControl
-                    )
-                    .onChange(of: model.settings.clientControl) { _, _ in model.settings.save() }
                 } else {
                     addressFields
-
-                    Button(action: model.beginConnect) {
-                        Text(DeskhubClient.string(DHStrConnectButton)).deskhubPrimaryLabel()
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
-                    .tint(DeskhubPalette.accent)
-                    .disabled(model.connect.address.isEmpty || model.connect.isConnecting)
-
-                    Button {
-                        scanning = true
-                    } label: {
-                        Label(
-                            DeskhubClient.string(DHStrScanQrAction),
-                            systemImage: "qrcode.viewfinder"
-                        )
-                        .deskhubPrimaryLabel()
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.large)
-                    .disabled(model.connect.isConnecting)
-
-                    deskhubHeading(DeskhubClient.string(DHStrDevicesHeading))
+                    connectButtons
+                    iosHeading(DeskhubClient.string(DHStrDevicesHeading))
                     DeviceListView(
                         rows: model.recent.devices,
-                        enabled: !model.connect.isConnecting,
+                        enabled: !busy,
                         onPick: pick
                     )
+                    .foregroundStyle(DeskhubPalette.muted)
                 }
             }
-            .padding()
+            .padding(iosPagePadding)
         }
         .overlay {
-            if model.connect.isConnecting {
-                queryingOverlay
+            if busy {
+                queryingDialog
             }
         }
         .alert(
             "Deskhub",
             isPresented: Binding(
-                get: { !model.connect.connectError.isEmpty && !model.connect.isConnecting },
+                get: { !model.connect.connectError.isEmpty && !busy },
                 set: { shown in if !shown { model.connect.connectError = "" } }
             )
         ) {
@@ -71,24 +55,21 @@ struct ConnectView: View {
             Text(model.connect.connectError)
         }
         .hostTrustAlert(model.connect) { model.beginConnect(to: $0) }
-        .sheet(isPresented: $scanning) {
+        .fullScreenCover(isPresented: $scanning) {
             QrScannerView { model.beginConnect(invite: $0) }
         }
-        .task { model.recent.refresh() }
+        .task { await pollRecent() }
     }
 
     private var connectedHeader: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: iosPageSpacing) {
             HStack(spacing: 12) {
                 Text(model.connect.acceptedAddress)
-                    .font(.system(size: 17, weight: .semibold))
+                    .font(.system(size: iosSectionSize, weight: .medium))
                     .foregroundStyle(DeskhubPalette.heading)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                Spacer(minLength: 0)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 Button(DeskhubClient.string(DHStrDisconnectButton), action: model.dropHost)
-                    .buttonStyle(.borderedProminent)
-                    .tint(DeskhubPalette.accent)
+                    .buttonStyle(.iosFilled())
             }
 
             HStack(spacing: 8) {
@@ -98,77 +79,114 @@ struct ConnectView: View {
                 Text(DeskhubClient.string(DHStrConnectedPickSession))
                     .fontWeight(.semibold)
                     .foregroundStyle(DeskhubPalette.online)
-                Spacer(minLength: 0)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
     }
 
     private var sessionButtons: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Button(action: model.openDesktop) {
-                Text(DeskhubClient.string(DHStrOpenDesktopLabel)).deskhubPrimaryLabel()
-            }
-            .buttonStyle(.bordered)
-            .controlSize(.large)
-            .disabled(!model.connect.canOpenDesktop)
+        VStack(alignment: .leading, spacing: iosPageSpacing) {
+            Button(DeskhubClient.string(DHStrOpenDesktopLabel), action: model.openDesktop)
+                .buttonStyle(.iosOutlined(fullWidth: true))
+                .disabled(!model.connect.canOpenDesktop)
 
-            Button(action: model.openShell) {
-                Text(DeskhubClient.string(DHStrOpenShellLabel)).deskhubPrimaryLabel()
-            }
-            .buttonStyle(.bordered)
-            .controlSize(.large)
-            .disabled(!model.connect.canOpenShell)
+            Toggle(
+                DeskhubClient.string(DHStrRequestControlLabel),
+                isOn: $model.settings.clientControl
+            )
+            .tint(DeskhubPalette.accent)
+            .onChange(of: model.settings.clientControl) { _, _ in model.settings.save() }
 
-            Button(action: model.openFileSend) {
-                Text(DeskhubClient.string(DHStrOpenFilesLabel)).deskhubPrimaryLabel()
-            }
-            .buttonStyle(.bordered)
-            .controlSize(.large)
-            .disabled(!model.connect.canOpenFiles)
+            Button(DeskhubClient.string(DHStrOpenShellLabel), action: model.openShell)
+                .buttonStyle(.iosOutlined(fullWidth: true))
+                .disabled(!model.connect.canOpenShell)
+
+            Button(DeskhubClient.string(DHStrOpenFilesLabel), action: model.openFileSend)
+                .buttonStyle(.iosOutlined(fullWidth: true))
+                .disabled(!model.connect.canOpenFiles)
         }
     }
 
     private var addressFields: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack(spacing: 12) {
-                TextField(
-                    DeskhubClient.string(DHStrClientIpPlaceholder),
-                    text: $model.connect.address
-                )
-                .textFieldStyle(.roundedBorder)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .keyboardType(.numbersAndPunctuation)
+        HStack(alignment: .top, spacing: 12) {
+            TextField(
+                DeskhubClient.string(DHStrClientIpPrompt),
+                text: $model.connect.address
+            )
+            .textInputAutocapitalization(.never)
+            .autocorrectionDisabled()
+            .keyboardType(.numbersAndPunctuation)
+            .submitLabel(.go)
+            .onSubmit(model.beginConnect)
+            .iosFieldBorder()
+
+            TextField(DeskhubClient.string(DHStrUdpPortLabel), text: $model.connect.port)
+                .keyboardType(.numberPad)
                 .submitLabel(.go)
                 .onSubmit(model.beginConnect)
+                .onChange(of: model.connect.port) { _, typed in
+                    let limited = DigitsOnly.limit(typed, to: DigitsOnly.portLength)
+                    if limited != typed { model.connect.port = limited }
+                }
+                .iosFieldBorder()
+                .frame(width: ConnectView.portFieldWidth)
+        }
+        .disabled(busy)
+    }
 
-                TextField(
-                    DeskhubClient.string(DHStrUdpPortLabel), text: $model.connect.port
-                )
-                .textFieldStyle(.roundedBorder)
-                .keyboardType(.numberPad)
-                .frame(width: 90)
+    private var connectButtons: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 12) {
+                Button(DeskhubClient.string(DHStrConnectButton), action: model.beginConnect)
+                    .buttonStyle(.iosFilled(fullWidth: true))
+                    .disabled(!addressReady)
+                Button(DeskhubClient.string(DHStrScanQrAction), action: scanQr)
+                    .buttonStyle(.iosOutlined())
+                    .disabled(busy)
+            }
+            if cameraDenied {
+                iosError(DeskhubClient.string(DHStrCameraDenied))
             }
         }
     }
 
-    private var queryingOverlay: some View {
+    private var queryingDialog: some View {
         ZStack {
-            Color.black.opacity(0.45).ignoresSafeArea()
-            VStack(spacing: 16) {
+            Color.black.opacity(0.45)
+                .ignoresSafeArea()
+                .onTapGesture(perform: model.cancelConnect)
+            VStack(alignment: .leading, spacing: 12) {
                 HStack(spacing: 12) {
                     ProgressView()
                     Text(DeskhubClient.string(DHStrQueryingSources))
                 }
                 if !model.connect.waitingStatus.isEmpty {
-                    Text(model.connect.waitingStatus)
-                        .foregroundStyle(DeskhubPalette.muted)
-                        .multilineTextAlignment(.center)
+                    iosNote(model.connect.waitingStatus)
                 }
-                Button(DeskhubClient.string(DHStrCancelAction), action: model.cancelConnect)
+                HStack {
+                    Spacer(minLength: 0)
+                    Button(DeskhubClient.string(DHStrCancelAction), action: model.cancelConnect)
+                        .buttonStyle(.iosText())
+                }
             }
-            .padding(24)
-            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+            .padding(20)
+            .frame(width: ConnectView.queryingCardWidth)
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
+        }
+    }
+
+    private func scanQr() {
+        Task {
+            let granted = await CameraAccess.request()
+            cameraDenied = !granted
+            if granted { scanning = true }
+        }
+    }
+
+    private func pollRecent() async {
+        while !Task.isCancelled {
+            await model.recent.reload()
+            try? await Task.sleep(for: ConnectView.recentPollInterval)
         }
     }
 

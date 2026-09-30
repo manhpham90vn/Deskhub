@@ -9,38 +9,54 @@ struct SourcePickerView: View {
     private var selectedId: UInt8 { picked ?? sources.first?.id ?? 0 }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text(model.connect.address)
-                .font(.headline)
+        VStack(spacing: 0) {
+            HStack {
+                Spacer(minLength: 0)
+                Button(DeskhubClient.string(DHStrCancelAction), action: model.closeSourcePicker)
+                    .buttonStyle(.iosText())
+            }
+            .padding(.horizontal, 8)
 
-            ForEach(sources) { source in
-                Button {
-                    picked = source.id
-                } label: {
-                    HStack(spacing: 12) {
-                        Image(systemName: source.id == selectedId
-                            ? "largecircle.fill.circle"
-                            : "circle")
-                        VStack(alignment: .leading) {
-                            Text(source.displayName)
-                            Text(source.sizeLabel)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        Spacer()
+            ScrollView {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(model.connect.acceptedAddress)
+                        .font(.system(size: iosSectionSize, weight: .medium))
+                        .foregroundStyle(DeskhubPalette.heading)
+
+                    ForEach(sources) { source in
+                        sourceRow(source)
                     }
-                    .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
+                .padding(iosPagePadding)
             }
 
-            Spacer()
-
             Button("Start viewing") { model.startStream(sourceId: selectedId) }
-                .buttonStyle(.borderedProminent)
-                .frame(maxWidth: .infinity)
+                .buttonStyle(.iosFilled(fullWidth: true))
                 .disabled(sources.isEmpty)
+                .padding(iosPagePadding)
         }
-        .padding()
+        .background { DeskhubPalette.page.ignoresSafeArea() }
+    }
+
+    private func sourceRow(_ source: Source) -> some View {
+        Button {
+            picked = source.id
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: source.id == selectedId ? "largecircle.fill.circle" : "circle")
+                    .font(.system(size: 20))
+                    .foregroundStyle(DeskhubPalette.accent)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(source.displayName)
+                        .font(.system(size: iosSectionSize))
+                        .foregroundStyle(DeskhubPalette.heading)
+                    iosHint(source.sizeLabel)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(.vertical, 8)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 }

@@ -42,6 +42,7 @@ enum DeskhubPalette {
     static let muted = theme(DHThemeMuted)
     static let online = theme(DHThemeOnline)
     static let offline = theme(DHThemeOffline)
+    static let errorText = theme(DHThemeOfflinePressed)
     static let warning = theme(DHThemeWarning)
     static let rowLine = theme(DHThemeRowLine)
     static let viewerRow = theme(DHThemeViewerRow)

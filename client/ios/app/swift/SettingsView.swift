@@ -1,70 +1,72 @@
 import SwiftUI
+import UIKit
+
+struct IosLabeledField<Field: View>: View {
+    private static var labelInset: CGFloat { 12 }
+    private static var labelLift: CGFloat { -8 }
+
+    let label: String
+    let supportingText: String
+    @ViewBuilder let field: Field
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            ZStack(alignment: .topLeading) {
+                field.iosFieldBorder()
+                Text(label)
+                    .font(.system(size: iosHintSize))
+                    .foregroundStyle(DeskhubPalette.muted)
+                    .padding(.horizontal, 4)
+                    .background(DeskhubPalette.page)
+                    .offset(x: IosLabeledField.labelInset, y: IosLabeledField.labelLift)
+            }
+            iosHint(supportingText)
+                .padding(.horizontal, IosLabeledField.labelInset)
+        }
+    }
+}
 
 struct SettingsView: View {
     private static let portSettle = Duration.milliseconds(600)
 
     @Bindable var settings: SettingsModel
+    @State private var typedPort: String
     @State private var deviceName = DeviceNameModel()
     @FocusState private var editingDeviceName: Bool
 
+    init(settings: SettingsModel) {
+        self.settings = settings
+        _typedPort = State(initialValue: String(settings.port))
+    }
+
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                deskhubHeading(DeskhubClient.string(DHStrClientSettingsHeading))
-                deskhubHint(DeskhubClient.string(DHStrClientSettingsHint))
+            VStack(alignment: .leading, spacing: iosPageSpacing) {
+                iosHeading(DeskhubClient.string(DHStrClientSettingsHeading))
+                iosNote(DeskhubClient.string(DHStrClientSettingsHint))
 
                 deviceNameField
 
-                deskhubSection(DeskhubClient.string(DHStrSettingsSectionConnection))
-                HStack(spacing: 12) {
-                    Text("UDP port")
-                    Spacer(minLength: 0)
-                    TextField("", value: $settings.port, format: .number.grouping(.never))
-                        .textFieldStyle(.roundedBorder)
-                        .keyboardType(.numberPad)
-                        .multilineTextAlignment(.trailing)
-                        .frame(width: 110)
-                }
-                deskhubHint(
-                    DeskhubClient.buffered(64) {
-                        dh_udp_port_line(UInt32(settings.acceptedPort), $0, $1)
-                    }
-                )
+                iosSection(DeskhubClient.string(DHStrSettingsSectionConnection))
+                portField
 
-                deskhubSection(DeskhubClient.string(DHStrSettingsSectionSession))
-                Toggle(isOn: $settings.clipboardSync) {
-                    Text(DeskhubClient.string(DHStrClipboardSyncLabel))
-                }
-                .onChange(of: settings.clipboardSync) { _, _ in
-                    settings.save()
-                }
-                Toggle(isOn: $settings.shareAudio) {
-                    Text(DeskhubClient.string(DHStrShareAudioLabel))
-                }
-                .onChange(of: settings.shareAudio) { _, _ in
-                    settings.save()
-                }
-                Toggle(isOn: $settings.playAudio) {
-                    Text(DeskhubClient.string(DHStrPlayAudioLabel))
-                }
-                .onChange(of: settings.playAudio) { _, _ in
-                    settings.save()
-                }
-                Toggle(isOn: $settings.keepAwake) {
-                    Text(DeskhubClient.string(DHStrKeepAwakeLabel))
-                }
-                .onChange(of: settings.keepAwake) { _, _ in
-                    settings.save()
-                }
+                iosSection(DeskhubClient.string(DHStrSettingsSectionSession))
+                settingToggle(DHStrClipboardSyncLabel, isOn: $settings.clipboardSync)
+                settingToggle(DHStrShareAudioLabel, isOn: $settings.shareAudio)
+                settingToggle(DHStrPlayAudioLabel, isOn: $settings.playAudio)
+                settingToggle(DHStrKeepAwakeLabel, isOn: $settings.keepAwake)
 
                 ProjectFooter()
             }
-            .padding()
+            .padding(iosPagePadding)
         }
-        .task(id: settings.port) {
+        .task(id: typedPort) {
+            guard let chosen = Int(typedPort), SettingsModel.portRange.contains(chosen),
+                  chosen != settings.port
+            else { return }
             try? await Task.sleep(for: SettingsView.portSettle)
             guard !Task.isCancelled else { return }
-            settings.save()
+            settings.updatePort(chosen)
         }
         .onChange(of: editingDeviceName) { _, editing in
             if !editing { deviceName.commit() }
@@ -73,16 +75,38 @@ struct SettingsView: View {
     }
 
     private var deviceNameField: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(DeskhubClient.string(DHStrDeviceNameLabel))
-            TextField(deviceName.placeholder, text: $deviceName.name)
-                .textFieldStyle(.roundedBorder)
+        IosLabeledField(
+            label: DeskhubClient.string(DHStrDeviceNameLabel),
+            supportingText: DeskhubClient.string(DHStrDeviceNameHint)
+        ) {
+            TextField(UIDevice.current.model, text: $deviceName.name)
                 .autocorrectionDisabled()
                 .submitLabel(.done)
                 .focused($editingDeviceName)
                 .onSubmit(deviceName.commit)
-            deskhubHint(DeskhubClient.string(DHStrDeviceNameHint))
         }
+    }
+
+    private var portField: some View {
+        IosLabeledField(
+            label: DeskhubClient.string(DHStrUdpPortLabel),
+            supportingText: DeskhubClient.buffered(64) {
+                dh_udp_port_line(UInt32(settings.port), $0, $1)
+            }
+        ) {
+            TextField(String(settings.port), text: $typedPort)
+                .keyboardType(.numberPad)
+                .onChange(of: typedPort) { _, typed in
+                    let limited = DigitsOnly.limit(typed, to: DigitsOnly.portLength)
+                    if limited != typed { typedPort = limited }
+                }
+        }
+    }
+
+    private func settingToggle(_ label: DHStringId, isOn: Binding<Bool>) -> some View {
+        Toggle(DeskhubClient.string(label), isOn: isOn)
+            .tint(DeskhubPalette.accent)
+            .onChange(of: isOn.wrappedValue) { _, _ in settings.save() }
     }
 }
 
@@ -91,11 +115,11 @@ struct ProjectFooter: View {
         VStack(alignment: .leading, spacing: 4) {
             if let url = URL(string: DeskhubClient.string(DHStrProjectUrl)) {
                 Link(DeskhubClient.string(DHStrProjectLinkLabel), destination: url)
+                    .font(.system(size: iosBodySize))
+                    .foregroundStyle(DeskhubPalette.accent)
             }
 
-            Text(DeskhubClient.buffered(64) { dh_version_line($0, $1) })
-                .font(.caption)
-                .foregroundStyle(DeskhubPalette.muted)
+            iosHint(DeskhubClient.buffered(64) { dh_version_line($0, $1) })
         }
         .padding(.top, 8)
     }

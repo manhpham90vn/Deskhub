@@ -23,7 +23,7 @@ struct HostPage: View {
                 }
                 .labelsHidden()
                 .frame(width: 260)
-                .disabled(sharing.isSharing || sharing.isStarting)
+                .disabled(live)
             }
 
             HStack(alignment: .top, spacing: 14) {
@@ -33,15 +33,16 @@ struct HostPage: View {
                         staleIp: staleBindIp ? sharing.bindIp : nil
                     )
                 }
-                if sharing.isSharing {
+                if live {
                     Spacer(minLength: 0)
                     PairingQrToggleButton(
                         model: sharing.qr, port: sharing.sharingPort, bindIp: sharing.bindIp
                     )
+                    .disabled(!sharing.isSharing)
                 }
             }
 
-            if sharing.isSharing, sharing.qr.shown {
+            if live, sharing.qr.shown {
                 PairingQrPanel(model: sharing.qr)
             }
 
@@ -49,11 +50,8 @@ struct HostPage: View {
                 HostStatusBanner(state: shareState, detail: sharing.statusLine)
             }
 
-            if sharing.isSharing || sharing.isStarting {
-                PortCard(port: sharing.port)
-            }
-
-            if sharing.isSharing {
+            if live {
+                PortCard(port: sharing.shownPort)
                 AccessRequestsSection(model: sharing.accessRequests)
                 HostSourceTable(
                     rows: sharing.rows,
@@ -61,32 +59,21 @@ struct HostPage: View {
                     onAttach: { attachShell($0) },
                     onOpenFolder: { sharing.openFilesFolder($0) }
                 )
-                .frame(minHeight: 170)
+                .frame(minHeight: DeskhubPrimaryMetrics.pickerHeight)
             } else {
-                SharePickerTable(
+                SharePickerList(
                     sources: sharing.shareSources,
                     ticked: $sharing.tickedSources,
                     terminal: $sharing.shareTerminal,
                     files: $sharing.shareFiles
                 )
-                .frame(minHeight: 170)
                 deskhubHint(DeskhubClient.string(DHStrPickSourcesHint))
             }
 
-            Button {
-                onShare()
-            } label: {
-                HStack(spacing: 8) {
-                    if sharing.isStarting {
-                        ProgressView().controlSize(.small)
-                    }
-                    Text(shareState.action)
-                }
-                .deskhubPrimaryLabel()
+            Button(action: onShare) {
+                Text(shareState.action)
             }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
-            .tint(sharing.isSharing ? DeskhubPalette.offline : DeskhubPalette.accent)
+            .buttonStyle(DeskhubPrimaryButtonStyle(fill: shareState.buttonFill))
             .disabled(sharing.isStarting)
         }
         .task { await sharing.refreshShareSources() }
@@ -97,6 +84,10 @@ struct HostPage: View {
     private func attachShell(_ row: HostRow) {
         guard sharing.stopAndAttachShell(row) else { return }
         openWindow(id: "localShell", value: row.termId)
+    }
+
+    private var live: Bool {
+        sharing.isSharing || sharing.isStarting
     }
 
     private var shareState: HostShareState {
@@ -132,12 +123,27 @@ enum HostShareState: Equatable {
 
     var action: String {
         switch self {
-        case .idle, .starting: DeskhubClient.string(DHStrStartSharing)
-        case .sharing: DeskhubClient.string(DHStrStopSharing)
+        case .idle: DeskhubClient.string(DHStrStartSharing)
+        case .starting, .sharing: DeskhubClient.string(DHStrStopSharing)
         }
     }
 
-    var tint: Color {
+    var buttonFill: Color {
+        switch self {
+        case .idle, .starting: DeskhubPalette.accent
+        case .sharing: DeskhubPalette.offline
+        }
+    }
+
+    var textColor: Color {
+        switch self {
+        case .idle: DeskhubPalette.muted
+        case .starting: DeskhubPalette.accentPressed
+        case .sharing: DeskhubPalette.onlineText
+        }
+    }
+
+    var barColor: Color {
         switch self {
         case .idle: DeskhubPalette.muted
         case .starting: DeskhubPalette.accent
@@ -159,23 +165,20 @@ struct HostStatusBanner: View {
     let detail: String
 
     var body: some View {
-        HStack(alignment: .top, spacing: 10) {
-            VStack(alignment: .leading, spacing: 3) {
-                Text(state.label)
-                    .font(.system(size: 15, weight: .bold))
-                    .foregroundStyle(state.tint)
-                Text(detail)
-                    .foregroundStyle(DeskhubPalette.muted)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            Spacer(minLength: 0)
+        VStack(alignment: .leading, spacing: 4) {
+            Text(state.label)
+                .font(.system(size: 15, weight: .bold))
+                .foregroundStyle(state.textColor)
+            Text(detail)
+                .foregroundStyle(DeskhubPalette.muted)
+                .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(12)
+        .padding(10)
         .padding(.leading, 4)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .background(state.background)
         .overlay(alignment: .leading) {
-            Rectangle().fill(state.tint).frame(width: 4)
+            Rectangle().fill(state.barColor).frame(width: 4)
         }
     }
 }
@@ -198,7 +201,6 @@ struct HostSourceTable: View {
     private static let barWidth = CGFloat(metrics.barWidth)
     private static let rowHeight = CGFloat(metrics.rowHeight)
     private static let headerHeight = CGFloat(metrics.headerHeight)
-    private static let actionWidth = CGFloat(metrics.actionWidth)
     private static let ruleMargin = CGFloat(metrics.ruleMargin)
 
     private static let columns = DeskhubClient.ffiList(
@@ -279,12 +281,12 @@ struct HostSourceTable: View {
     @ViewBuilder
     private func action(_ row: HostRow) -> some View {
         if row.files, row.viewer {
-            Color.clear.frame(width: HostSourceTable.actionWidth)
+            Color.clear.frame(width: DeskhubListMetrics.actionWidth)
         } else {
             let remoteRow = row.viewer && !row.attachedLocally
             let title = remoteRow ? DHStrDisconnectViewerAction : DHStrStopDisplayAction
-            rowButton(
-                DeskhubClient.string(title),
+            DeskhubRowActionButton(
+                title: DeskhubClient.string(title),
                 tint: remoteRow ? DeskhubPalette.warning : DeskhubPalette.offline
             ) { onAction(row) }
         }
@@ -293,89 +295,55 @@ struct HostSourceTable: View {
     @ViewBuilder
     private func attach(_ row: HostRow) -> some View {
         if row.canAttachLocally {
-            rowButton(DeskhubClient.string(DHStrAttachShellAction), tint: DeskhubPalette.offline) {
-                onAttach(row)
-            }
+            DeskhubRowActionButton(
+                title: DeskhubClient.string(DHStrAttachShellAction), tint: DeskhubPalette.offline
+            ) { onAttach(row) }
         } else if row.files, !row.viewer {
-            rowButton(DeskhubClient.string(DHStrOpenFolderAction), tint: DeskhubPalette.accent) {
-                onOpenFolder(row)
-            }
+            DeskhubRowActionButton(
+                title: DeskhubClient.string(DHStrOpenFolderAction), tint: DeskhubPalette.accent
+            ) { onOpenFolder(row) }
         }
-    }
-
-    private func rowButton(_ title: String, tint: Color, action: @escaping () -> Void)
-        -> some View
-    {
-        Button(action: action) {
-            Text(title).frame(width: HostSourceTable.actionWidth - 16)
-        }
-        .buttonStyle(.borderedProminent)
-        .controlSize(.small)
-        .tint(tint)
     }
 }
 
-struct SharePickerTable: View {
+extension ShareSource {
+    func pickerLabel(index: Int) -> String {
+        let shownName = name.isEmpty ? "Source \(index)" : name
+        return "\(shownName) (\(width)x\(height))"
+    }
+}
+
+struct SharePickerList: View {
     let sources: [ShareSource]
     @Binding var ticked: Set<UInt32>
     @Binding var terminal: Bool
     @Binding var files: Bool
 
-    private enum Kind {
-        case display(UInt32)
-        case terminal
-        case files
-    }
-
-    private struct Row: Identifiable {
-        let id: String
-        let name: String
-        let size: String
-        let kind: Kind
-    }
-
-    private var rows: [Row] {
-        var all = sources.map { source in
-            Row(id: "source-\(source.id)", name: source.name,
-                size: "\(source.width)x\(source.height)", kind: .display(source.id))
-        }
-        all.append(Row(id: "terminal",
-                       name: DeskhubClient.string(DHStrTerminalPickerLabel),
-                       size: "", kind: .terminal))
-        all.append(Row(id: "files",
-                       name: DeskhubClient.string(DHStrFilesPickerLabel),
-                       size: "", kind: .files))
-        return all
-    }
-
     var body: some View {
-        Table(rows) {
-            TableColumn("") { row in
-                Toggle("", isOn: tick(row)).labelsHidden()
+        VStack(alignment: .leading, spacing: 6) {
+            ForEach(Array(sources.enumerated()), id: \.element.id) { index, source in
+                Toggle(source.pickerLabel(index: index), isOn: tick(source.id))
+                    .toggleStyle(.checkbox)
             }
-            .width(24)
-            TableColumn("Source") { Text($0.name) }.width(220)
-            TableColumn("Size") { Text($0.size) }.width(110)
+            Toggle(DeskhubClient.string(DHStrTerminalPickerLabel), isOn: $terminal)
+                .toggleStyle(.checkbox)
+            Toggle(DeskhubClient.string(DHStrFilesPickerLabel), isOn: $files)
+                .toggleStyle(.checkbox)
         }
+        .padding(8)
+        .deskhubBorderedBox(minHeight: DeskhubPrimaryMetrics.pickerHeight)
     }
 
-    private func tick(_ row: Row) -> Binding<Bool> {
-        switch row.kind {
-        case .terminal:
-            $terminal
-        case .files:
-            $files
-        case let .display(sourceId):
-            Binding(
-                get: { ticked.contains(sourceId) },
-                set: { on in
-                    if on {
-                        ticked.insert(sourceId)
-                    } else {
-                        ticked.remove(sourceId)
-                    }
+    private func tick(_ sourceId: UInt32) -> Binding<Bool> {
+        Binding(
+            get: { ticked.contains(sourceId) },
+            set: { on in
+                if on {
+                    ticked.insert(sourceId)
+                } else {
+                    ticked.remove(sourceId)
                 }
-            )
-        }
+            }
+        )
     }
 }

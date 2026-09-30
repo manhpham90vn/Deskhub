@@ -44,7 +44,9 @@ struct ContentView: View {
             }
         case .terminal:
             if let terminal = model.terminal {
-                TerminalScreen(model: terminal) { model.closeShell() }
+                IosTerminalScreen(model: terminal, address: model.connect.acceptedAddress) {
+                    model.closeShell()
+                }
             }
         }
     }

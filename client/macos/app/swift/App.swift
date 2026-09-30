@@ -4,6 +4,7 @@ import SwiftUI
 struct DeskhubApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @State private var sharing = SharingModel()
+    @State private var tray = TrayPresence()
 
     var body: some Scene {
         Window("Deskhub", id: "main") {
@@ -11,8 +12,9 @@ struct DeskhubApp: App {
                 .onAppear {
                     NSApp.setActivationPolicy(.regular)
                 }
-                .onDisappear {
-                    if sharing.startHidden { NSApp.setActivationPolicy(.accessory) }
+                .onDisappear(perform: mainWindowClosed)
+                .onChange(of: sharing.startHidden) { _, on in
+                    if !on { tray.attachedForSession = false }
                 }
         }
         .windowResizability(.contentMinSize)
@@ -23,7 +25,7 @@ struct DeskhubApp: App {
                 ConnectionWindow(request: request)
             }
         }
-        .windowResizability(.contentMinSize)
+        .windowResizability(.contentSize)
         .defaultSize(width: 460, height: 300)
 
         WindowGroup(id: "viewer", for: ViewerRequest.self) { $request in
@@ -61,10 +63,35 @@ struct DeskhubApp: App {
         MenuBarExtra(
             "Deskhub",
             systemImage: "rectangle.on.rectangle",
-            isInserted: Bindable(sharing).startHidden
+            isInserted: trayInserted
         ) {
             TrayMenu(sharing: sharing)
         }
+    }
+
+    private var trayInserted: Binding<Bool> {
+        Binding(
+            get: { sharing.startHidden || tray.attachedForSession },
+            set: { inserted in
+                guard !inserted else { return }
+                tray.attachedForSession = false
+                sharing.startHidden = false
+            }
+        )
+    }
+
+    private var keepsRunningWithoutMainWindow: Bool {
+        sharing.startHidden || sharing.isSharing || tray.attachedForSession
+    }
+
+    private func mainWindowClosed() {
+        guard !appDelegate.isTerminating else { return }
+        guard keepsRunningWithoutMainWindow else {
+            Task { @MainActor in NSApp.terminate(nil) }
+            return
+        }
+        if sharing.isSharing { tray.attachedForSession = true }
+        NSApp.setActivationPolicy(.accessory)
     }
 }
 

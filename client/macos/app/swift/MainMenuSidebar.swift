@@ -1,14 +1,19 @@
 import SwiftUI
 
 struct MainMenuSidebar: View {
+    private static let width: CGFloat = 180
+    private static let pad: CGFloat = 16
+    private static let linkLeadingPad: CGFloat = 8
+    private static let titleFontSize: CGFloat = 24
+
     @Binding var page: DeskhubPage
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text("Deskhub")
-                .font(.system(size: 26, weight: .bold))
+                .font(.system(size: MainMenuSidebar.titleFontSize, weight: .bold))
                 .foregroundStyle(.white)
-                .padding(16)
+                .padding(MainMenuSidebar.pad)
 
             ForEach(DeskhubPage.allCases) { item in
                 SidebarItem(item: item, selected: page == item) { page = item }
@@ -19,21 +24,24 @@ struct MainMenuSidebar: View {
             if let url = URL(string: DeskhubClient.string(DHStrProjectUrl)) {
                 Link(DeskhubClient.string(DHStrProjectLinkLabel), destination: url)
                     .foregroundStyle(DeskhubPalette.navText)
-                    .padding(.horizontal, 16)
+                    .padding(.leading, MainMenuSidebar.linkLeadingPad)
+                    .padding(.trailing, MainMenuSidebar.pad)
             }
 
             Text(DeskhubClient.buffered(64) { dh_version_line($0, $1) })
-                .font(.caption)
                 .foregroundStyle(DeskhubPalette.footnote)
-                .padding(16)
+                .padding([.leading, .trailing, .bottom], MainMenuSidebar.pad)
         }
-        .frame(width: 180)
+        .frame(width: MainMenuSidebar.width)
         .frame(maxHeight: .infinity)
         .background(DeskhubPalette.sidebar)
     }
 }
 
 private struct SidebarItem: View {
+    private static let fontSize: CGFloat = 15
+    private static let height: CGFloat = 42
+
     let item: DeskhubPage
     let selected: Bool
     let onClick: () -> Void
@@ -43,9 +51,9 @@ private struct SidebarItem: View {
     var body: some View {
         Button(action: onClick) {
             Text(item.label)
-                .font(.system(size: 14, weight: selected ? .bold : .regular))
+                .font(.system(size: SidebarItem.fontSize, weight: selected ? .bold : .regular))
                 .foregroundStyle(selected ? Color.white : DeskhubPalette.navText)
-                .frame(maxWidth: .infinity, minHeight: 42, alignment: .leading)
+                .frame(maxWidth: .infinity, minHeight: SidebarItem.height, alignment: .leading)
                 .padding(.horizontal, 16)
                 .background(
                     RoundedRectangle(cornerRadius: 8).fill(fill)

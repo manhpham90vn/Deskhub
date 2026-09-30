@@ -2,33 +2,45 @@ import AVFoundation
 import SwiftUI
 import UIKit
 
+enum CameraAccess {
+    static func request() async -> Bool {
+        await AVCaptureDevice.requestAccess(for: .video)
+    }
+}
+
 struct QrScannerView: View {
     let onInvite: @MainActor (String) -> Void
 
     @Environment(\.dismiss) private var dismiss
-    @State private var cameraDenied = false
+    @State private var cameraUnavailable = false
 
     var body: some View {
-        NavigationStack {
+        VStack(spacing: 0) {
+            HStack(spacing: 12) {
+                Text(DeskhubClient.string(DHStrScanQrAction))
+                    .font(.system(size: iosHeadingSize, weight: .bold))
+                    .foregroundStyle(DeskhubPalette.heading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                SessionCloseButton { dismiss() }
+            }
+            .padding(iosPagePadding)
+
             Group {
-                if cameraDenied {
-                    Text(DeskhubClient.string(DHStrCameraDenied))
-                        .foregroundStyle(DeskhubPalette.muted)
+                if cameraUnavailable {
+                    iosError(DeskhubClient.string(DHStrCameraDenied))
                         .multilineTextAlignment(.center)
-                        .padding()
+                        .padding(iosPagePadding)
                 } else {
-                    QrCameraView(onInvite: accept) { cameraDenied = true }
-                        .ignoresSafeArea()
+                    QrCameraView(onInvite: accept) { cameraUnavailable = true }
                 }
             }
-            .navigationTitle(DeskhubClient.string(DHStrScanQrAction))
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button(DeskhubClient.string(DHStrCancelAction)) { dismiss() }
-                }
-            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+            iosHint(DeskhubClient.string(DHStrQrHint))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(iosPagePadding)
         }
+        .background { DeskhubPalette.page.ignoresSafeArea() }
     }
 
     private func accept(_ invite: String) {
@@ -66,7 +78,11 @@ final class QrCameraController: UIViewController, AVCaptureMetadataOutputObjects
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = .black
-        requestCameraAccess()
+        guard AVCaptureDevice.authorizationStatus(for: .video) == .authorized else {
+            onDenied()
+            return
+        }
+        configureSession()
     }
 
     override func viewDidLayoutSubviews() {
@@ -79,25 +95,6 @@ final class QrCameraController: UIViewController, AVCaptureMetadataOutputObjects
         let capture = box
         Task.detached {
             if capture.session.isRunning { capture.session.stopRunning() }
-        }
-    }
-
-    private func requestCameraAccess() {
-        switch AVCaptureDevice.authorizationStatus(for: .video) {
-        case .authorized:
-            configureSession()
-        case .notDetermined:
-            Task { [weak self] in
-                let granted = await AVCaptureDevice.requestAccess(for: .video)
-                guard let self else { return }
-                if granted {
-                    configureSession()
-                } else {
-                    onDenied()
-                }
-            }
-        default:
-            onDenied()
         }
     }
 

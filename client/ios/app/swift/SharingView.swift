@@ -1,140 +1,117 @@
 import SwiftUI
-import UIKit
 
 struct SharingView: View {
     @Bindable var model: SharingModel
-    @State private var copiedIp: String?
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                deskhubHeading(DeskhubClient.string(DHStrSidebarHost))
-
-                HStack(spacing: 12) {
-                    Text(DeskhubClient.string(DHStrBindInterfaceLabel))
-                    Spacer(minLength: 0)
-                    Picker("", selection: $model.bindIp) {
-                        Text(DeskhubClient.string(DHStrBindAllInterfaces)).tag("")
-                        ForEach(model.addresses) { address in
-                            Text("\(address.ip)  (\(address.name))").tag(address.ip)
-                        }
-                        if staleBindIp {
-                            Text(staleBindLabel).tag(model.bindIp)
-                        }
-                    }
-                    .labelsHidden()
-                    .disabled(model.status.sharing)
-                }
-                .onChange(of: model.bindIp) { _, _ in model.saveBindIp() }
-
-                deskhubSection(DeskhubClient.string(DHStrHostIpIntro))
-                if model.addresses.isEmpty {
-                    deskhubHint(DeskhubClient.string(DHStrNoNetworkAddress))
-                } else {
-                    ForEach(shownAddresses) { address in
-                        HStack(spacing: 12) {
-                            Text(address.name).foregroundStyle(DeskhubPalette.muted)
-                            Spacer(minLength: 0)
-                            Text(address.ip).fontWeight(.bold).textSelection(.enabled)
-                            Button {
-                                UIPasteboard.general.string = address.ip
-                                copiedIp = address.ip
-                            } label: {
-                                Image(
-                                    systemName: copiedIp == address.ip
-                                        ? "checkmark" : "doc.on.doc"
-                                )
-                            }
-                            .buttonStyle(.borderless)
-                            .accessibilityLabel("Copy address")
-                        }
-                    }
-                }
-
+            VStack(alignment: .leading, spacing: iosPageSpacing) {
+                iosHeading(DeskhubClient.string(DHStrSidebarHost))
+                networkRow
+                addressSection
+                iosHint(DeskhubClient.string(DHStrSharingConnectHint))
                 if model.status.sharing {
-                    PairingQrToggleButton(model: model.qr, port: model.port, bindIp: model.bindIp)
-                    if model.qr.shown {
-                        PairingQrPanel(model: model.qr)
-                    }
+                    qrSection
                 }
-
-                deskhubHint(DeskhubClient.string(DHStrSharingConnectHint))
-
-                let receiving = FilesHost.shared.receiving
-                deskhubSection(DeskhubClient.string(DHStrHostHeading))
-                Text(
-                    DeskhubClient.string(
-                        model.status.sharing ? DHStrShareStateOn : DHStrShareStateOff
-                    )
-                )
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(
-                    model.status.sharing ? DeskhubPalette.online : DeskhubPalette.muted
-                )
-
-                BroadcastPickerButton(
-                    extensionBundleId: SharingModel.extensionBundleId,
-                    title: DeskhubClient.string(
-                        model.status.sharing ? DHStrStopSharing : DHStrStartSharing
-                    )
-                )
-
-                deskhubHint(model.screenStatusLine)
-                if model.status.sharing, model.status.memoryMB > 0 {
-                    deskhubHint(
-                        "\(DeskhubClient.string(DHStrBroadcastMemoryLabel)): "
-                            + "\(model.status.memoryMB) MB"
-                    )
-                }
-                if !model.status.error.isEmpty {
-                    Text(model.status.error).foregroundStyle(DeskhubPalette.offline)
-                }
-                if model.status.sharing {
-                    deskhubHint(viewerLine)
-                    AccessRequestsSection(model: model.accessRequests)
-                }
-
+                shareSection
+                IosAccessRequestsSection(model: model.accessRequests)
+                iosNote(model.hostRowsLine)
                 Divider()
-
-                deskhubSection(DeskhubClient.string(DHStrFilesPickerLabel))
-                if receiving {
-                    Text(DeskhubClient.string(DHStrReceivingFilesState))
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(DeskhubPalette.online)
-                    if !model.filesStatusLine.isEmpty {
-                        deskhubHint(model.filesStatusLine)
-                    }
-                }
-                deskhubHint(DeskhubClient.string(DHStrMobileTakesFilesNote))
+                filesSection
             }
-            .padding()
+            .padding(iosPagePadding)
         }
         .task { await model.poll() }
-        .task(id: copiedIp) {
-            guard copiedIp != nil else { return }
-            try? await Task.sleep(for: .seconds(1.5))
-            copiedIp = nil
+    }
+
+    private var networkRow: some View {
+        HStack(spacing: 8) {
+            Text(DeskhubClient.string(DHStrBindInterfaceLabel))
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Menu {
+                Button(DeskhubClient.string(DHStrBindAllInterfaces)) { model.bindIp = "" }
+                ForEach(model.addresses) { address in
+                    Button("\(address.ip)  (\(address.name))") { model.bindIp = address.ip }
+                }
+            } label: {
+                Text(model.bindLabel)
+                    .font(.system(size: iosBodySize, weight: .semibold))
+                    .foregroundStyle(
+                        model.status.sharing ? DeskhubPalette.muted : DeskhubPalette.accent
+                    )
+                    .padding(.horizontal, 12)
+                    .frame(minHeight: 40)
+            }
+            .disabled(model.status.sharing)
+        }
+        .onChange(of: model.bindIp) { _, _ in model.saveBindIp() }
+    }
+
+    @ViewBuilder private var addressSection: some View {
+        iosHeading(DeskhubClient.string(DHStrHostIpIntro))
+        if model.addresses.isEmpty {
+            iosNote(DeskhubClient.string(DHStrNoNetworkAddress))
+        } else {
+            ForEach(model.shownAddresses) { address in
+                HStack(spacing: 12) {
+                    Text(address.name)
+                        .foregroundStyle(DeskhubPalette.muted)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    Text(address.ip)
+                        .fontWeight(.bold)
+                        .foregroundStyle(DeskhubPalette.heading)
+                        .textSelection(.enabled)
+                    Button(DeskhubClient.string(DHStrCopyButton)) {
+                        DeskhubPasteboard.copy(address.ip)
+                    }
+                    .buttonStyle(.iosText())
+                }
+            }
         }
     }
 
-    private var shownAddresses: [LocalAddress] {
-        model.addresses.filter { model.bindIp.isEmpty || $0.ip == model.bindIp }
-    }
-
-    private var staleBindIp: Bool {
-        !model.bindIp.isEmpty && !model.addresses.contains { $0.ip == model.bindIp }
-    }
-
-    private var staleBindLabel: String {
-        "\(model.bindIp)  (\(DeskhubClient.string(DHStrBindNotConnectedNote)))"
-    }
-
-    private var viewerLine: String {
-        guard model.status.sharing else { return DeskhubClient.string(DHStrNotSharing) }
-        guard model.status.viewers > 0 else {
-            return DeskhubClient.string(DHStrNothingShared)
+    @ViewBuilder private var qrSection: some View {
+        Button(DeskhubClient.string(model.qr.shown ? DHStrHideQrAction : DHStrShowQrAction)) {
+            model.toggleQr()
         }
-        guard !model.status.viewerNames.isEmpty else { return "\(model.status.viewers)" }
-        return "\(model.status.viewers): \(model.status.viewerNames)"
+        .buttonStyle(.iosOutlined(fullWidth: true))
+        if model.qr.shown {
+            IosQrInvitePanel(model: model.qr)
+        }
+    }
+
+    @ViewBuilder private var shareSection: some View {
+        iosSection(DeskhubClient.string(DHStrHostHeading))
+        Text(DeskhubClient.string(model.status.sharing ? DHStrShareStateOn : DHStrShareStateOff))
+            .font(.system(size: iosSectionSize, weight: .medium))
+            .foregroundStyle(model.status.sharing ? DeskhubPalette.online : DeskhubPalette.muted)
+        BroadcastPickerButton(
+            extensionBundleId: SharingModel.extensionBundleId,
+            title: DeskhubClient.string(
+                model.status.sharing ? DHStrStopSharing : DHStrStartSharing
+            )
+        )
+        iosNote(model.screenStatusLine)
+        if model.status.sharing, model.status.memoryMB > 0 {
+            iosNote(
+                "\(DeskhubClient.string(DHStrBroadcastMemoryLabel)): \(model.status.memoryMB) MB"
+            )
+        }
+        if !model.status.error.isEmpty {
+            iosError(model.status.error)
+        }
+    }
+
+    @ViewBuilder private var filesSection: some View {
+        iosSection(DeskhubClient.string(DHStrFilesPickerLabel))
+        if FilesHost.shared.receiving {
+            Text(DeskhubClient.string(DHStrReceivingFilesState))
+                .font(.system(size: iosSectionSize, weight: .medium))
+                .foregroundStyle(DeskhubPalette.online)
+            if !model.filesStatusLine.isEmpty {
+                iosNote(model.filesStatusLine)
+            }
+        }
+        iosHint(DeskhubClient.string(DHStrMobileTakesFilesNote))
     }
 }

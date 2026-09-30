@@ -51,20 +51,16 @@ struct BroadcastPickerButton: View {
     @State private var handle = BroadcastPickerHandle()
 
     var body: some View {
-        Button { handle.present() } label: {
-            Text(title).deskhubPrimaryLabel()
-        }
-        .buttonStyle(.borderedProminent)
-        .controlSize(.large)
-        .tint(DeskhubPalette.accent)
-        .background(
-            BroadcastPickerBridge(extensionBundleId: extensionBundleId, handle: handle)
-                .frame(
-                    width: BroadcastPickerBridge.offscreenSize.width,
-                    height: BroadcastPickerBridge.offscreenSize.height
-                )
-                .opacity(BroadcastPickerBridge.offscreenOpacity)
-                .allowsHitTesting(false)
-        )
+        Button(title) { handle.present() }
+            .buttonStyle(.iosFilled(fullWidth: true))
+            .background(
+                BroadcastPickerBridge(extensionBundleId: extensionBundleId, handle: handle)
+                    .frame(
+                        width: BroadcastPickerBridge.offscreenSize.width,
+                        height: BroadcastPickerBridge.offscreenSize.height
+                    )
+                    .opacity(BroadcastPickerBridge.offscreenOpacity)
+                    .allowsHitTesting(false)
+            )
     }
 }

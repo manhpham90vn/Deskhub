@@ -6,10 +6,7 @@ struct PermissionsSection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Permissions")
-                .font(.system(size: 15, weight: .bold))
-                .foregroundStyle(DeskhubPalette.heading)
-                .padding(.top, 8)
+            deskhubSection("Permissions")
                 .frame(maxWidth: .infinity, alignment: .leading)
 
             PermissionRow(

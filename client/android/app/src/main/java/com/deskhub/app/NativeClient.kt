@@ -142,6 +142,7 @@ object NativeClient {
     const val STR_INVITE_INVALID = 211
     const val STR_HOST_LAST_ADDRESS_LABEL = 212
     const val STR_ACCESS_REQUEST_NOTIFICATION_TITLE = 213
+    const val STR_UNNAMED_CLIENT = 214
 
     private const val HOST_PROFILE_OK = 0
     private const val HOST_PROFILE_STORE_UNREADABLE = 10

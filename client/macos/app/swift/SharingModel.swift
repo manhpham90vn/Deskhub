@@ -41,6 +41,8 @@ final class SharingModel {
     var transferFolder = DeskhubShare.filesFolder
     var didAutoShare = false
     var autoShareWaitNote = ""
+    private(set) var activePort: UInt16 = 0
+    private var rememberedDisplayTicks: [String: Bool] = [:]
     private var sharingScreen = false
     private var sharingTerminal = false
     private var sharingFiles = false
@@ -52,6 +54,10 @@ final class SharingModel {
     }
 
     var sharingPort: UInt16 { UInt16(max(1, min(65535, port))) }
+
+    var shownPort: Int {
+        isSharing && activePort != 0 ? Int(activePort) : Int(sharingPort)
+    }
 
     var statusLine: String {
         let portNum = sharingPort
@@ -187,6 +193,7 @@ final class SharingModel {
         isStarting = false
         isSharing = ok
         if ok {
+            activePort = options.port
             noteSharingBegan(screen: !picked.isEmpty, terminal: terminal, files: files)
         } else {
             clampWarning = ""
@@ -210,6 +217,7 @@ final class SharingModel {
         accessRequests.clear()
         DeskhubShare.stop()
         isSharing = false
+        activePort = 0
         sharingScreen = false
         sharingTerminal = false
         sharingFiles = false
@@ -296,14 +304,22 @@ extension SharingModel {
     private func loadShareSources() async {
         guard !isSharing, !isStarting else { return }
         refreshPermissions()
+        rememberDisplayTicks()
         guard hasScreenRecording else {
             shareSources = []
             tickedSources = []
             return
         }
         let found = await Task.detached { DeskhubShare.listShareSources() }.value
+        rememberDisplayTicks()
         shareSources = found
-        tickedSources = Set(found.map(\.id))
+        tickedSources = Set(found.filter { rememberedDisplayTicks[$0.name] ?? true }.map(\.id))
+    }
+
+    private func rememberDisplayTicks() {
+        for source in shareSources {
+            rememberedDisplayTicks[source.name] = tickedSources.contains(source.id)
+        }
     }
 
     private func pumpClipboard() {

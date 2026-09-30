@@ -7,12 +7,14 @@ struct HomeView: View {
     var body: some View {
         TabView(selection: $page) {
             ConnectView(model: model)
+                .iosPageBackground()
                 .tabItem {
                     Label(DeskhubClient.string(DHStrSidebarClient), systemImage: "display")
                 }
                 .tag(0)
 
             SharingView(model: model.sharing)
+                .iosPageBackground()
                 .tabItem {
                     Label(
                         DeskhubClient.string(DHStrSidebarHost),
@@ -21,14 +23,11 @@ struct HomeView: View {
                 }
                 .tag(1)
 
-            ScrollView {
-                DevicesPage(
-                    trustedHostsRevision: model.connect.trustedHostsRevision,
-                    onConnectHost: connectSavedHost
-                )
-                .padding()
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
+            IosDevicesPage(
+                trustedHostsRevision: model.connect.trustedHostsRevision,
+                onConnectHost: connectSavedHost
+            )
+            .iosPageBackground()
             .tabItem {
                 Label(
                     DeskhubClient.string(DHStrSidebarDevices),
@@ -38,11 +37,13 @@ struct HomeView: View {
             .tag(2)
 
             SettingsView(settings: model.settings)
+                .iosPageBackground()
                 .tabItem {
                     Label(DeskhubClient.string(DHStrSidebarSettings), systemImage: "gearshape")
                 }
                 .tag(3)
         }
+        .tint(DeskhubPalette.accent)
         .onOpenURL(perform: openInvite)
     }
 
