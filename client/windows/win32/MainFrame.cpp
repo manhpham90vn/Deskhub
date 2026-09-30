@@ -5,6 +5,7 @@
 #include <wx/hyperlink.h>
 #include <wx/init.h>
 #include <wx/listctrl.h>
+#include <wx/notifmsg.h>
 #include <wx/scrolwin.h>
 #include <wx/clipbrd.h>
 #include <wx/simplebook.h>
@@ -20,6 +21,7 @@
 #include <map>
 #include <memory>
 #include <optional>
+#include <set>
 #include <string>
 #include <string_view>
 #include <thread>
@@ -28,6 +30,7 @@
 
 #include "MainFrame.h"
 
+#include "AccessRequestListener.h"
 #include "SourcePickerDialog.h"
 #include "FileSendWindow.h"
 #include "TerminalWindow.h"
@@ -81,6 +84,8 @@ constexpr int kClipTimerId = 3;
 constexpr int kAutoShareTimerId = 4;
 constexpr int kCopiedTimerId = 5;
 constexpr int kCopiedButtonTimerId = 6;
+constexpr int kDevicesTimerId = 7;
+constexpr int kDevicesPollMs = 1000;
 constexpr int kCopiedRevertMs = 1500;
 constexpr int kPrimaryButtonH = 46;
 constexpr int kQrViewDip = 260;
@@ -261,10 +266,15 @@ void AddAreaSection(const SettingsArea& area, const char* heading) {
     area.sizer->Add(MakeSection(area.body, heading), AreaRowFlags(area));
 }
 
-SettingsArea MakeDevicesArea(wxWindow* parent, const char* title, const char* hint) {
-    const SettingsArea area = MakeSettingsArea(parent, title);
-    AddAreaHint(area, hint);
-    return area;
+struct AccessRequestsView {
+    wxScrolledWindow* list = nullptr;
+    wxBoxSizer* rows = nullptr;
+    wxStaticText* hint = nullptr;
+};
+
+std::vector<deskhubp::PendingClient> PendingAccessRequests() {
+    const auto requests = deskhubp::ListAccessRequests();
+    return requests ? *requests : std::vector<deskhubp::PendingClient>{};
 }
 
 wxStaticText* MakeErrorLabel(wxWindow* parent, const char* text) {
@@ -415,7 +425,9 @@ private:
     void AddLabelledSetting(const SettingsArea& area, wxFlexGridSizer*& grid, const char* label,
         wxWindow* control);
     wxSizer* MakeTransferFolderRow(wxWindow* area, const char* label);
-    void AddHostKeySection(const SettingsArea& area);
+    void AddThisMachineSection(const SettingsArea& area);
+    void RefreshDeviceNameRow();
+    void AddAccessRequestsSection(const SettingsArea& area);
     void AddAllowedClientsSection(const SettingsArea& area);
     void AddSavedHostsSection(const SettingsArea& area);
     void RefreshPairedDevices();
@@ -433,6 +445,7 @@ private:
     void OnShare(ShareTrigger trigger = ShareTrigger::kUser);
     void BeginAutoShare();
     void OnAutoShareTimer(wxTimerEvent& event);
+    void OnDevicesTimer(wxTimerEvent& event);
     void ReportShareProblem(const wxString& text, const wxString& title);
     bool Sharing() const;
     bool TerminalTicked() const;
@@ -468,10 +481,14 @@ private:
     void ToggleQrPanel();
     void ShowQrPanel();
     void HideQrPanel();
-    wxWindow* BuildAccessRequestsPanel(wxWindow* parent);
+    wxWindow* BuildAccessRequestsPanel(wxWindow* parent, AccessRequestsView& view);
     void RefreshAccessRequests();
-    void RebuildAccessRequestRows();
-    void AddAccessRequestRow(const deskhubp::PendingClient& client, const wxSize& actionSize);
+    void RebuildAccessRequestRows(const AccessRequestsView& view,
+        const std::vector<deskhubp::PendingClient>& pending);
+    void AddAccessRequestRow(const AccessRequestsView& view,
+        const deskhubp::PendingClient& client, const wxSize& actionSize);
+    void AnnounceNewAccessRequests(const std::vector<deskhubp::PendingClient>& pending);
+    void OnAccessRequestedByEngine();
     void ApproveRequestRow(const deskhub::Fingerprint& fingerprint);
     void DenyRequestRow(const deskhub::Fingerprint& fingerprint);
     void AccessRequestsChanged();
@@ -534,10 +551,11 @@ private:
     wxTextCtrl* qrInviteCtrl_ = nullptr;
     bool qrVisible_ = false;
     wxWindow* accessRequestsPanel_ = nullptr;
-    wxScrolledWindow* accessRequestList_ = nullptr;
-    wxBoxSizer* accessRequestRows_ = nullptr;
-    wxStaticText* accessRequestHint_ = nullptr;
+    AccessRequestsView hostRequests_;
+    AccessRequestsView deviceRequests_;
     std::optional<uint64_t> accessRequestsSeen_{};
+    std::set<std::string> announcedRequests_;
+    wxStaticText* deviceNameValue_ = nullptr;
     wxPanel* hostBanner_ = nullptr;
     wxWindow* hostBannerBar_ = nullptr;
     wxStaticText* hostStateLabel_ = nullptr;
@@ -583,6 +601,7 @@ private:
     wxTimer autoShareTimer_;
     wxTimer copiedTimer_;
     wxTimer copiedButtonTimer_;
+    wxTimer devicesTimer_;
     ui::AutoShareGate autoShareGate_;
     ShareTrigger shareTrigger_ = ShareTrigger::kUser;
     bool hosting_ = false;
@@ -639,11 +658,13 @@ MainFrame::MainFrame() : wxFrame(nullptr, wxID_ANY, ToWx(ui::kAppTitle)) {
     autoShareTimer_.SetOwner(this, kAutoShareTimerId);
     copiedTimer_.SetOwner(this, kCopiedTimerId);
     copiedButtonTimer_.SetOwner(this, kCopiedButtonTimerId);
+    devicesTimer_.SetOwner(this, kDevicesTimerId);
     Bind(wxEVT_TIMER, &MainFrame::OnHostTimer, this, kHostTimerId);
     Bind(wxEVT_TIMER, &MainFrame::OnClipboardTimer, this, kClipTimerId);
     Bind(wxEVT_TIMER, &MainFrame::OnAutoShareTimer, this, kAutoShareTimerId);
     Bind(wxEVT_TIMER, [this](wxTimerEvent&) { ShowPortCard(); }, kCopiedTimerId);
     Bind(wxEVT_TIMER, [this](wxTimerEvent&) { RestoreCopiedButton(); }, kCopiedButtonTimerId);
+    Bind(wxEVT_TIMER, &MainFrame::OnDevicesTimer, this, kDevicesTimerId);
     Bind(wxEVT_DISPLAY_CHANGED, &MainFrame::OnDisplayChanged, this);
     Bind(wxEVT_CLOSE_WINDOW, &MainFrame::OnClose, this);
 
@@ -662,7 +683,11 @@ MainFrame::MainFrame() : wxFrame(nullptr, wxID_ANY, ToWx(ui::kAppTitle)) {
     hooks.onBannerChanged = [this] { ApplySharingBanner(); };
     hooks.onNothingLeftShared = [this] { StopHosting(); };
     share_.SetHooks(std::move(hooks));
+    SetAccessRequestedListener([this, post = UiPoster()] {
+        post([this] { OnAccessRequestedByEngine(); });
+    });
 
+    RefreshAccessRequests();
     RefreshDeviceList();
     SelectPage(kPageClient);
     ApplyTrayMode();
@@ -791,7 +816,7 @@ wxWindow* MainFrame::BuildHostPage(wxWindow* parent) {
     qrPanel_->Hide();
     sizer->Add(qrPanel_, wxSizerFlags().Expand().Border(wxLEFT | wxRIGHT | wxTOP, FromDIP(14)));
 
-    accessRequestsPanel_ = BuildAccessRequestsPanel(panel);
+    accessRequestsPanel_ = BuildAccessRequestsPanel(panel, hostRequests_);
     sizer->Add(accessRequestsPanel_,
         wxSizerFlags().Expand().Border(wxLEFT | wxRIGHT | wxTOP, FromDIP(14)));
 
@@ -988,27 +1013,27 @@ void MainFrame::HideQrPanel() {
     RelayoutHostPage();
 }
 
-wxWindow* MainFrame::BuildAccessRequestsPanel(wxWindow* parent) {
+wxWindow* MainFrame::BuildAccessRequestsPanel(wxWindow* parent, AccessRequestsView& view) {
     auto* holder = new wxPanel(parent);
     holder->SetBackgroundColour(*wxWHITE);
     auto* sizer = new wxBoxSizer(wxVERTICAL);
 
     sizer->Add(MakeSection(holder, ui::kAccessRequestsHeading));
 
-    accessRequestList_ = new wxScrolledWindow(holder, wxID_ANY, wxDefaultPosition, wxDefaultSize,
+    view.list = new wxScrolledWindow(holder, wxID_ANY, wxDefaultPosition, wxDefaultSize,
         wxVSCROLL | wxHSCROLL | wxBORDER_SIMPLE);
-    accessRequestList_->SetName("access-requests");
-    accessRequestList_->SetScrollRate(FromDIP(10), FromDIP(10));
-    accessRequestRows_ = new wxBoxSizer(wxVERTICAL);
-    accessRequestList_->SetSizer(accessRequestRows_);
-    accessRequestList_->SetMinSize(FromDIP(wxSize(-1, kListMinH)));
-    sizer->Add(accessRequestList_, wxSizerFlags().Expand().Border(wxTOP, FromDIP(8)));
+    view.list->SetName("access-requests");
+    view.list->SetScrollRate(FromDIP(10), FromDIP(10));
+    view.rows = new wxBoxSizer(wxVERTICAL);
+    view.list->SetSizer(view.rows);
+    view.list->SetMinSize(FromDIP(wxSize(-1, kListMinH)));
+    sizer->Add(view.list, wxSizerFlags().Expand().Border(wxTOP, FromDIP(8)));
 
-    accessRequestHint_ = MakeHint(holder, ToWx(ui::kAccessRequestsEmpty));
-    sizer->Add(accessRequestHint_, wxSizerFlags().Border(wxTOP, FromDIP(8)));
+    view.hint = MakeHint(holder, ToWx(ui::kAccessRequestsEmpty));
+    sizer->Add(view.hint, wxSizerFlags().Border(wxTOP, FromDIP(8)));
 
     holder->SetSizer(sizer);
-    RebuildAccessRequestRows();
+    RebuildAccessRequestRows(view, PendingAccessRequests());
     return holder;
 }
 
@@ -1016,30 +1041,50 @@ void MainFrame::RefreshAccessRequests() {
     const uint64_t generation = deskhubp::AccessRequestsGeneration();
     if (accessRequestsSeen_ == generation) return;
     accessRequestsSeen_ = generation;
-    RebuildAccessRequestRows();
+    const std::vector<deskhubp::PendingClient> pending = PendingAccessRequests();
+    RebuildAccessRequestRows(hostRequests_, pending);
+    RebuildAccessRequestRows(deviceRequests_, pending);
+    AnnounceNewAccessRequests(pending);
 }
 
-void MainFrame::RebuildAccessRequestRows() {
-    const auto requests = deskhubp::ListAccessRequests();
-    const std::vector<deskhubp::PendingClient> pending =
-        requests ? *requests : std::vector<deskhubp::PendingClient>{};
+void MainFrame::OnAccessRequestedByEngine() {
+    accessRequestsSeen_.reset();
+    RefreshAccessRequests();
+}
 
-    accessRequestRows_->Clear(true);
+void MainFrame::AnnounceNewAccessRequests(
+    const std::vector<deskhubp::PendingClient>& pending) {
+    for (const deskhubp::PendingClient& client : pending) {
+        const bool firstSeen =
+            announcedRequests_.insert(deskhub::FormatFingerprint(client.fingerprint)).second;
+        if (!firstSeen) continue;
+        wxNotificationMessage notice(ToWx(ui::kAccessRequestNotificationTitle),
+            ToWx(ui::AccessRequestNotificationBody(client.label, client.address)), this);
+        notice.SetIcon(wxICON(deskhub_app_icon));
+        notice.Show();
+    }
+}
+
+void MainFrame::RebuildAccessRequestRows(const AccessRequestsView& view,
+    const std::vector<deskhubp::PendingClient>& pending) {
+    if (view.list == nullptr) return;
+    view.rows->Clear(true);
     const wxSize actionSize = FromDIP(wxSize(100, 32));
-    const TableRow header = BeginTableRow(accessRequestList_, kBannerIdleBg);
+    const TableRow header = BeginTableRow(view.list, kBannerIdleBg);
     AddTableCell(header, ToWx(ui::kPairedColumnName), 180, true);
     AddTableCell(header, ToWx(ui::kPairedColumnKey), 130, true);
     AddTableCell(header, ToWx(ui::kHostAddressLabel), 160, true);
     header.cells->AddSpacer(actionSize.x + FromDIP(8) + actionSize.x);
-    EndTableRow(accessRequestRows_, header);
-    for (const deskhubp::PendingClient& client : pending) AddAccessRequestRow(client, actionSize);
-    accessRequestHint_->Show(pending.empty());
-    RelayoutTable(accessRequestList_);
+    EndTableRow(view.rows, header);
+    for (const deskhubp::PendingClient& client : pending)
+        AddAccessRequestRow(view, client, actionSize);
+    view.hint->Show(pending.empty());
+    RelayoutTable(view.list);
 }
 
-void MainFrame::AddAccessRequestRow(const deskhubp::PendingClient& client,
-    const wxSize& actionSize) {
-    const TableRow row = BeginTableRow(accessRequestList_, *wxWHITE);
+void MainFrame::AddAccessRequestRow(const AccessRequestsView& view,
+    const deskhubp::PendingClient& client, const wxSize& actionSize) {
+    const TableRow row = BeginTableRow(view.list, *wxWHITE);
     AddTableCell(row, ToWx(client.label.empty() ? std::string(ui::kUnnamedClient) : client.label),
         180, false);
     AddTableCell(row, ToWx(deskhub::ShortFingerprint(client.fingerprint)), 130, false)
@@ -1064,7 +1109,7 @@ void MainFrame::AddAccessRequestRow(const deskhubp::PendingClient& client,
         CallAfter([this, fingerprint] { DenyRequestRow(fingerprint); });
     });
     row.cells->Add(deny, wxSizerFlags().CentreVertical());
-    EndTableRow(accessRequestRows_, row);
+    EndTableRow(view.rows, row);
 }
 
 void MainFrame::ApproveRequestRow(const deskhub::Fingerprint& fingerprint) {
@@ -1180,22 +1225,13 @@ wxWindow* MainFrame::BuildDevicesPage(wxWindow* parent) {
     panel->SetBackgroundColour(*wxWHITE);
     panel->SetScrollRate(0, FromDIP(10));
     auto* sizer = new wxBoxSizer(wxVERTICAL);
-    const wxSizerFlags areaFlags =
-        wxSizerFlags().Expand().Border(wxLEFT | wxRIGHT | wxTOP, FromDIP(16));
+    const SettingsArea page{nullptr, panel, sizer};
 
-    sizer->Add(MakeHeading(panel, ui::kSidebarDevices),
-        wxSizerFlags().Border(wxLEFT | wxRIGHT | wxTOP, FromDIP(16)));
-
-    const SettingsArea hostArea =
-        MakeDevicesArea(panel, ui::kDevicesHostArea, ui::kDevicesHostAreaHint);
-    AddHostKeySection(hostArea);
-    AddAllowedClientsSection(hostArea);
-    sizer->Add(hostArea.card, areaFlags);
-
-    const SettingsArea clientArea =
-        MakeDevicesArea(panel, ui::kDevicesClientArea, ui::kDevicesClientAreaHint);
-    AddSavedHostsSection(clientArea);
-    sizer->Add(clientArea.card, areaFlags);
+    sizer->Add(MakeHeading(panel, ui::kSidebarDevices), AreaRowFlags(page));
+    AddThisMachineSection(page);
+    AddAccessRequestsSection(page);
+    AddAllowedClientsSection(page);
+    AddSavedHostsSection(page);
     sizer->AddSpacer(FromDIP(16));
 
     panel->SetSizer(sizer);
@@ -1205,8 +1241,20 @@ wxWindow* MainFrame::BuildDevicesPage(wxWindow* parent) {
     return panel;
 }
 
-void MainFrame::AddHostKeySection(const SettingsArea& area) {
+void MainFrame::AddThisMachineSection(const SettingsArea& area) {
     AddAreaSection(area, ui::kThisMachineHeading);
+    AddAreaHint(area, ui::kThisMachineHint);
+
+    auto* nameRow = new wxBoxSizer(wxHORIZONTAL);
+    auto* nameLabel = new wxStaticText(area.body, wxID_ANY, ToWx(ui::kDeviceNameLabel));
+    nameLabel->SetForegroundColour(kMutedText);
+    nameRow->Add(nameLabel, wxSizerFlags().CentreVertical().Border(wxRIGHT, FromDIP(14)));
+    deviceNameValue_ = new wxStaticText(area.body, wxID_ANY, wxString());
+    deviceNameValue_->SetName("this-machine-name");
+    nameRow->Add(deviceNameValue_, wxSizerFlags().CentreVertical());
+    area.sizer->Add(nameRow, AreaRowFlags(area));
+    RefreshDeviceNameRow();
+
     const deskhubp::HostIdentity hostIdentity = deskhubp::LoadOrCreateHostIdentity();
     const bool valid = hostIdentity.Valid();
 
@@ -1238,7 +1286,18 @@ void MainFrame::AddHostKeySection(const SettingsArea& area) {
     });
     row->Add(copyPublicKey, wxSizerFlags().CentreVertical().Border(wxLEFT, FromDIP(8)));
     area.sizer->Add(row, wxSizerFlags().Expand().Border(wxLEFT | wxRIGHT | wxTOP, FromDIP(16)));
-    AddAreaHint(area, ui::kThisMachineHint);
+}
+
+void MainFrame::RefreshDeviceNameRow() {
+    if (deviceNameValue_ == nullptr) return;
+    deviceNameValue_->SetLabel(ToWx(deskhubp::SessionDeviceName()));
+    deviceNameValue_->GetParent()->Layout();
+}
+
+void MainFrame::AddAccessRequestsSection(const SettingsArea& area) {
+    area.sizer->AddSpacer(FromDIP(8));
+    area.sizer->Add(BuildAccessRequestsPanel(area.body, deviceRequests_),
+        wxSizerFlags().Expand().Border(wxLEFT | wxRIGHT | wxTOP, FromDIP(16)));
 }
 
 void MainFrame::AddAllowedClientsSection(const SettingsArea& area) {
@@ -1373,7 +1432,7 @@ void MainFrame::RefreshSavedHosts() {
     const wxSize actionSize = FromDIP(wxSize(100, 32));
     const TableRow header = BeginTableRow(savedHostList_, kBannerIdleBg);
     AddTableCell(header, ToWx(ui::kHostNameLabel), 150, true);
-    AddTableCell(header, ToWx(ui::kHostAddressLabel), 170, true);
+    AddTableCell(header, ToWx(ui::kHostLastAddressLabel), 170, true);
     AddTableCell(header, ToWx(ui::kHostKeyLabel), 130, true);
     header.cells->AddSpacer(actionSize.x + FromDIP(8) + actionSize.x);
     EndTableRow(savedHostRows_, header);
@@ -1579,9 +1638,19 @@ void MainFrame::SelectPage(int page) {
     for (int i = 0; i < kPageCount; ++i) pageButtons_[i]->SetSelected(i == page);
     book_->ChangeSelection(size_t(page));
     if (page == kPageHost && !Sharing()) RefreshDisplayChoices();
-    if (page != kPageDevices) return;
+    if (page != kPageDevices) {
+        devicesTimer_.Stop();
+        return;
+    }
+    RefreshDeviceNameRow();
     RefreshPairedDevices();
     RefreshSavedHosts();
+    RefreshAccessRequests();
+    devicesTimer_.Start(kDevicesPollMs);
+}
+
+void MainFrame::OnDevicesTimer(wxTimerEvent&) {
+    RefreshAccessRequests();
 }
 
 void MainFrame::RefreshDisplayChoices() {
@@ -2400,6 +2469,8 @@ void MainFrame::OnClose(wxCloseEvent& event) {
         trayIcon_ = nullptr;
     }
     *alive_ = false;
+    SetAccessRequestedListener(nullptr);
+    devicesTimer_.Stop();
     HideQrPanel();
     CloseEveryConnection();
     share_.terminalHost().Stop();

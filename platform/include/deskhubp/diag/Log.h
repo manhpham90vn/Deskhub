@@ -13,11 +13,11 @@
 
 #include <cstdio>
 
-#define LOGI(...)                  \
-    do {                           \
-        std::printf("[Deskhub] "); \
-        std::printf(__VA_ARGS__);  \
-        std::printf("\n");         \
+#define LOGI(...)                           \
+    do {                                    \
+        std::fprintf(stderr, "[Deskhub] "); \
+        std::fprintf(stderr, __VA_ARGS__);  \
+        std::fprintf(stderr, "\n");         \
     } while (0)
 #define LOGW(...) LOGI(__VA_ARGS__)
 #define LOGE(...) LOGI(__VA_ARGS__)

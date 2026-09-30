@@ -82,7 +82,7 @@ This is the honest list. Nothing below is solved today:
   shoulder, from a screenshot, from a shared screen — can use it in your place until it
   expires, is used, or is hidden. Show it only to the person you mean to let in, and
   hide it as soon as they are connected; the device it admitted then appears under
-  *Clients allowed to connect*, where you can remove it if it is not the one you expected.
+  *Devices allowed to connect to this machine*, where you can remove it if it is not the one you expected.
 - **Traffic analysis still works.** Encryption hides content, not existence: an observer
   sees that a session is running, how much video is flowing, and when you type.
 - **No rate limiting or DoS resistance.** Flooding the port will disrupt a session.

@@ -279,14 +279,14 @@ thiết bị vào danh sách đó, và bạn chỉ cần một trong ba:
   của nó. Trên điện thoại, bấm **Scan QR code** trên trang Client và hướng camera vào màn
   hình; trên thiết bị khác, copy link bên dưới mã và dán vào trường địa chỉ. Thiết bị được
   trust, được cho phép và được connect trong một bước.
-- **Approve yêu cầu.** Trên thiết bị, nhập địa chỉ của host và bấm *Connect*. Trang Host
-  của host liệt kê nó dưới **Connection requests** kèm tên, fingerprint key và địa chỉ;
-  bấm **Approve** và thiết bị connect ở lần thử tiếp theo — nó tự thử lại trong hai phút.
+- **Approve yêu cầu.** Trên thiết bị, nhập địa chỉ của host và bấm *Connect*. Host hiện
+  thông báo *Connection request* và liệt kê nó dưới **Connection requests** trên trang Host
+  và trang Devices, kèm tên, fingerprint key và địa chỉ; bấm **Approve** và thiết bị connect ở lần thử tiếp theo — nó tự thử lại trong hai phút.
 - **Dán key.** Trên thiết bị, **Devices** → **Copy public key**; trên host, **Devices** →
-  **Clients allowed to connect to this machine** → *Allow*, dán, xong.
+  **Devices allowed to connect to this machine** → *Allow*, dán, xong.
 
 Connect theo địa chỉ lần đầu tiên hiển thị hộp thoại **New host** với fingerprint key của
-host: đối chiếu nó với **This machine's host key** trên trang Devices của host, rồi bấm
+host: đối chiếu nó với fingerprint dưới **This machine** trên trang Devices của host, rồi bấm
 *Trust and connect*. Mã QR bỏ qua hộp thoại đó, vì mã mang sẵn fingerprint. Từ đó trở đi,
 host nằm trong **Trusted hosts**, và vẫn được trust ngay cả khi đổi địa chỉ.
 
@@ -311,14 +311,13 @@ Deskhub đăng nhập bằng cặp key, giống SSH. Mỗi máy có **một key*
 Deskhub chạy, và key đó chính là máy dù nó đang share hay đang connect: fingerprint bạn đối
 chiếu khi connect tới nó và public key mà host lưu khi cho nó vào là cùng một key. Host chỉ
 cho vào những key có trong danh sách của nó, còn client chỉ connect tới host có key mà nó
-đã trust. Mọi thứ nằm trên trang **Devices**, chia thành *When this machine is the host* và
-*When this machine is the client*. Mỗi bước bên dưới đều có lệnh `deskhub-cli` tương ứng;
+đã trust. Mọi thứ nằm trên trang **Devices**, gồm bốn mục: **This machine**, **Connection
+requests**, **Devices allowed to connect to this machine** và **Trusted hosts**. Mỗi bước bên dưới đều có lệnh `deskhub-cli` tương ứng;
 app và CLI đọc chung các file, nên thay đổi ở bên này sẽ hiện ra ở bên kia.
 
 ### Key của bạn
 
-**Devices** → *When this machine is the host* → **This machine's host key** hiển thị
-fingerprint của key, dạng `SHA256:…`, kèm nút *Copy* — đó là thứ người connect tới bạn đối
+**Devices** → **This machine** hiển thị tên thiết bị này và fingerprint của key, dạng `SHA256:…`, kèm nút *Copy* — đó là thứ người connect tới bạn đối
 chiếu. **Copy public key** bên cạnh (CLI: `deskhub-cli key public`) copy một dòng như
 `ecdsa-sha2-nistp256 AAAA… laptop`; nhãn ở cuối là tên thiết bị này, đặt ở **Settings** →
 *General* → **Device name**, để chủ host biết key đó của ai. Dòng này là thứ bạn đưa cho
@@ -330,8 +329,7 @@ các thiết bị đã trust nó sẽ thấy nó như một host mới.
 ### Cho phép một thiết bị connect
 
 Chủ host quyết định, theo một trong ba cách. Dù dùng cách nào, thiết bị sau đó xuất hiện
-dưới **Devices** → *When this machine is the host* → **Clients allowed to connect to this
-machine**, gắn nhãn bằng tên của nó; *Remove* cạnh nó sẽ gỡ nó ra, và *Remove every client*
+dưới **Devices** → **Devices allowed to connect to this machine**, gắn nhãn bằng tên của nó; *Remove* cạnh nó sẽ gỡ nó ra, và *Remove every client*
 xoá sạch danh sách sau khi hỏi xác nhận.
 
 **Connect bằng mã QR** — nhanh nhất, và là cách duy nhất không cần đối chiếu fingerprint.
@@ -376,8 +374,7 @@ chạy in ra từng yêu cầu mới khi nó tới, kèm lệnh approve để d�
 
 1. Xin người sẽ connect bấm **Copy public key** trên trang Devices của họ (xem
    [Key của bạn](#key-của-bạn)) và gửi dòng đó cho bạn.
-2. Mở **Devices** → *When this machine is the host* → **Clients allowed to connect to
-   this machine**, dán dòng đó vào và bấm *Allow*. Chỉ chấp nhận public key Ed25519 và
+2. Mở **Devices** → **Devices allowed to connect to this machine**, dán dòng đó vào và bấm *Allow*. Chỉ chấp nhận public key Ed25519 và
    ECDSA P-256.
 
 Từ command line, pipe dòng đó vào `access add`:
@@ -401,8 +398,8 @@ Mã QR làm việc này thay bạn. Connect theo địa chỉ lần đầu tiên
    đó từng thuộc về một host khác bạn đã trust, hộp thoại nói rõ và nêu tên host đó — một
    key khác ở địa chỉ đã biết là một máy khác, nên hãy chắc bạn biết máy nào đang trả lời
    trước khi tiếp tục.
-3. Trên host, mở **Devices** → *When this machine is the host* → **This machine's host
-   key** (*Copy* đưa nó vào clipboard). Đối chiếu hai fingerprint qua một kênh bạn đã tin
+3. Trên host, mở **Devices** → **This machine** (*Copy* cạnh fingerprint đưa nó vào
+   clipboard). Đối chiếu hai fingerprint qua một kênh bạn đã tin
    — gặp trực tiếp, gọi điện, hoặc chat mà bạn biết chắc là của họ.
 4. Nếu khớp, bấm *Trust and connect*. Nếu không khớp, bấm *Cancel*.
 

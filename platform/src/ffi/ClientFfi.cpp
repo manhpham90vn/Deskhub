@@ -127,10 +127,6 @@ const char* dh_string(DHStringId id) {
         case DHStrSavedHostsHint: return deskhub::ui::kSavedHostsHint;
         case DHStrSavedHostsEmpty: return deskhub::ui::kSavedHostsEmpty;
         case DHStrRemoveHostAction: return deskhub::ui::kRemoveHostAction;
-        case DHStrDevicesHostArea: return deskhub::ui::kDevicesHostArea;
-        case DHStrDevicesHostAreaHint: return deskhub::ui::kDevicesHostAreaHint;
-        case DHStrDevicesClientArea: return deskhub::ui::kDevicesClientArea;
-        case DHStrDevicesClientAreaHint: return deskhub::ui::kDevicesClientAreaHint;
         case DHStrAllowClientPlaceholder: return deskhub::ui::kAllowClientPlaceholder;
         case DHStrAllowClientAction: return deskhub::ui::kAllowClientAction;
         case DHStrAllowClientInvalid: return deskhub::ui::kAllowClientInvalid;
@@ -145,6 +141,9 @@ const char* dh_string(DHStringId id) {
         case DHStrDenyAction: return deskhub::ui::kDenyAction;
         case DHStrCameraDenied: return deskhub::ui::kCameraDenied;
         case DHStrInviteInvalid: return deskhub::ui::kInviteInvalid;
+        case DHStrHostLastAddressLabel: return deskhub::ui::kHostLastAddressLabel;
+        case DHStrAccessRequestNotificationTitle:
+            return deskhub::ui::kAccessRequestNotificationTitle;
         case DHStrTrustNewHostTitle: return deskhub::ui::kTrustNewHostTitle;
         case DHStrTrustNewHostAction: return deskhub::ui::kTrustNewHostAction;
         case DHStrCancelAction: return deskhub::ui::kCancelAction;
@@ -463,6 +462,12 @@ int dh_source_query_status(char* out, int capacity) {
 
 bool dh_is_pairing_invite(const char* text) {
     return text != nullptr && deskhub::IsPairingInvite(text);
+}
+
+int dh_access_request_notification(const char* name, const char* address, char* out,
+    int capacity) {
+    return deskhubp::FillText(out, capacity,
+        deskhub::ui::AccessRequestNotificationBody(name ? name : "", address ? address : ""));
 }
 
 bool dh_connect_decision(const DHSourceInfo* sources, int count, uint8_t* out_source_id) {

@@ -31,10 +31,12 @@ struct SavedHostsSection: View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(host.alias).foregroundStyle(DeskhubPalette.heading)
-                Text(host.endpoint)
-                    .font(.caption)
-                    .foregroundStyle(DeskhubPalette.muted)
-                    .textSelection(.enabled)
+                HStack(spacing: 4) {
+                    Text(DeskhubClient.string(DHStrHostLastAddressLabel) + ":")
+                    Text(host.endpoint).textSelection(.enabled)
+                }
+                .font(.caption)
+                .foregroundStyle(DeskhubPalette.muted)
                 Text(host.shortKey)
                     .font(.system(.caption, design: .monospaced))
                     .foregroundStyle(DeskhubPalette.muted)

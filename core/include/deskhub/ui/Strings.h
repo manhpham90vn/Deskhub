@@ -172,7 +172,7 @@ inline const char* AuthRefusalText(AuthResultCode code) {
 
 inline constexpr const char* kSidebarDevices = "Devices";
 inline constexpr const char* kPairedHeading =
-    "Clients allowed to connect to this machine";
+    "Devices allowed to connect to this machine";
 inline constexpr const char* kPairedHint =
     "Only the devices listed here get in. A device joins the list when you approve its "
     "connection request, when it scans this machine's QR code, or when you paste its public "
@@ -188,13 +188,12 @@ inline constexpr const char* kPairedForgetAllPrompt =
     "All client keys will lose access. You can add them again later. Continue?";
 inline constexpr const char* kPairedForgetNote =
     "Removing a key disconnects that device at once.";
-inline constexpr const char* kThisMachineHeading =
-    "This machine's host key";
+inline constexpr const char* kThisMachineHeading = "This machine";
 inline constexpr const char* kThisMachineHint =
-    "This fingerprint is this machine's identity as host and as client. A device connecting "
-    "here for the first time is shown it; ask its user to compare before they trust this "
-    "machine. Copy public key gives the line another host's owner can paste to allow this "
-    "machine.";
+    "Other machines know this one by this fingerprint, whether it hosts or connects. A device "
+    "connecting here for the first time is shown it; ask its user to compare before they "
+    "trust this machine. Copy public key gives the line another host's owner can paste to "
+    "allow this machine.";
 inline constexpr const char* kPairedColumnName =
     "Client";
 inline constexpr const char* kPairedColumnKey = "Key";
@@ -210,11 +209,8 @@ inline constexpr const char* kSavedHostsEmpty =
 inline constexpr const char* kHostNameLabel = "Name";
 inline constexpr const char* kHostAddressLabel = "Address";
 inline constexpr const char* kHostKeyLabel = "Host key";
+inline constexpr const char* kHostLastAddressLabel = "Last address";
 inline constexpr const char* kRemoveHostAction = "Remove";
-inline constexpr const char* kDevicesHostArea = "When this machine is the host";
-inline constexpr const char* kDevicesHostAreaHint = "Other devices connect to this machine.";
-inline constexpr const char* kDevicesClientArea = "When this machine is the client";
-inline constexpr const char* kDevicesClientAreaHint = "This machine connects to other devices.";
 inline constexpr const char* kAllowClientPlaceholder = "ssh-ed25519 AAAA\xE2\x80\xA6 laptop";
 inline constexpr const char* kAllowClientAction = "Allow";
 inline constexpr const char* kAllowClientInvalid =
@@ -234,6 +230,7 @@ inline constexpr const char* kAccessRequestsHeading = "Connection requests";
 inline constexpr const char* kAccessRequestsEmpty =
     "No device is waiting. A device that connects without being allowed appears here for "
     "ten minutes.";
+inline constexpr const char* kAccessRequestNotificationTitle = "Connection request";
 inline constexpr const char* kApproveAction = "Approve";
 inline constexpr const char* kDenyAction = "Deny";
 inline constexpr const char* kCameraDenied =
@@ -272,6 +269,12 @@ inline std::string AwaitingApprovalLine(std::string_view host) {
     return "Waiting for the owner of " + std::string(host) +
            " to approve this device\xE2\x80\xA6 They see it under Connection requests on their "
            "Host page.";
+}
+
+inline std::string AccessRequestNotificationBody(std::string_view name, std::string_view address) {
+    const std::string who = name.empty() ? std::string(kUnnamedClient) : std::string(name);
+    return who + " (" + std::string(address) +
+           ") wants to connect to this machine. Approve or deny it on the Devices page.";
 }
 
 inline std::string AccessRequestCliLine(std::string_view name, std::string_view fingerprint,

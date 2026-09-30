@@ -106,9 +106,10 @@ view-only，到达的 input 将被丢弃而非 inject。在允许操作期间，
 | Android | 屏幕 capture 同意（`MediaProjection`） | 仅在你开始共享本设备屏幕时使用。Android 每次都会询问，且无法保存该回答。 |
 | Android | `FOREGROUND_SERVICE`、`FOREGROUND_SERVICE_MEDIA_PROJECTION` | 在 app 进入后台或屏幕熄灭时维持共享。这是 Android 对屏幕 capture 的要求。 |
 | Android | `RECORD_AUDIO` | Android 将 playback-capture API 置于该 permission 之后，而 playback，即设备自身正在播放的内容，是 Deskhub 唯一 capture 的对象。该 permission 在共享开始时申请；若被拒绝，共享将继续进行但没有声音。Deskhub 不会打开 microphone。 |
-| Android | `POST_NOTIFICATIONS` | 显示 Android 在屏幕共享期间要求的常驻通知，并在其他设备发送文件时说明到达的内容。不发送其他通知。 |
+| Android | `POST_NOTIFICATIONS` | 显示 Android 在屏幕共享期间要求的常驻通知，并在其他设备发送文件时说明到达的内容，以及在有设备请求连接本机时提醒你（一条 *Connection request* 通知，附该设备的名称与地址）。不发送其他通知。 |
 | iOS | 相册，仅添加 | 在他人发送的照片或视频首次到达本设备时申请，用于将其加入 Photos app。Deskhub 只能添加条目，不会读取、修改或删除相册中已有的内容。若被拒绝，文件改存至 app 的 Documents 文件夹。 |
-| iOS | 通知 | 在其他设备发送文件时说明到达的内容。不发送其他通知。 |
+| iOS | 通知 | 在其他设备发送文件时说明到达的内容，以及在有设备请求连接本机时提醒你（一条 *Connection request* 通知，附该设备的名称与地址）。不发送其他通知。 |
+| macOS | 通知 | 在首次有设备请求连接本机时申请，用于显示附该设备名称与地址的 *Connection request* 通知。不通知其他任何内容。 |
 | Android | `CAMERA` | 仅在你于 Client 页点按 *Scan QR code* 时申请，用于从 host 的屏幕上读取其 QR code。画面在设备上解码，从不保存或发送。若被拒绝，你可以改为将 host 的链接粘贴到地址栏中。 |
 | iOS | 摄像头 | 仅在你于 Client 页点按 *Scan QR code* 时申请，用途与限制同 Android。若被拒绝，你可以改为粘贴 host 的链接。 |
 
@@ -197,7 +198,7 @@ https://github.com/manhpham90vn/Deskhub/blob/main/PRIVACY.md
 
 | 版本 | 日期 | 变更内容 |
 |---|---|---|
-| 2.11 | 2026-09-30 | **每台设备一把 key、connection request 与 QR pairing。** 每台设备现在只有一把 key（`host_key.pem`），共享与 connect 时均以它为身份；单独的 client key（`client_key*.pem`）与保存的 certificate（`host_cert.pem`）不再存在 —— certificate 在内存中构建、从不保存，遗留文件被忽略而非转换。受信任的 host 按 key fingerprint 记忆，并附各自最后一次应答的地址，不再按地址记忆。app 文件夹中新增两个文件，均不会传输到相关两台设备之外：`access_requests` 保存每台尚未获允许却请求 connect 的设备的名称、public key、地址与时间（最多 16 条，每条在 10 分钟后或在 *Approve* / *Deny* 时删除）；`pairing_tokens` 保存 host 在共享期间可展示的 QR code 背后的一次性随机 token（在隐藏该码、被使用或 5 分钟后过期时删除）。QR code 本身包含 host 的地址、port、key fingerprint、设备名与 token，任何看到屏幕的人都能读取。设备名现在还会显示在它留下的 connection request 中，并在 host 批准它或通过 QR code 准入它时成为其 key 的 label。在 Android 与 iOS 上，摄像头仅在你扫描 QR code 期间使用，并在那一刻申请 permission；画面在设备上解码，从不保存或发送。 |
+| 2.11 | 2026-09-30 | **每台设备一把 key、connection request 与 QR pairing。** 每台设备现在只有一把 key（`host_key.pem`），共享与 connect 时均以它为身份；单独的 client key（`client_key*.pem`）与保存的 certificate（`host_cert.pem`）不再存在 —— certificate 在内存中构建、从不保存，遗留文件被忽略而非转换。受信任的 host 按 key fingerprint 记忆，并附各自最后一次应答的地址，不再按地址记忆。app 文件夹中新增两个文件，均不会传输到相关两台设备之外：`access_requests` 保存每台尚未获允许却请求 connect 的设备的名称、public key、地址与时间（最多 16 条，每条在 10 分钟后或在 *Approve* / *Deny* 时删除）；`pairing_tokens` 保存 host 在共享期间可展示的 QR code 背后的一次性随机 token（在隐藏该码、被使用或 5 分钟后过期时删除）。QR code 本身包含 host 的地址、port、key fingerprint、设备名与 token，任何看到屏幕的人都能读取。设备名现在还会显示在它留下的 connection request 中，并在 host 批准它或通过 QR code 准入它时成为其 key 的 label。在 Android 与 iOS 上，摄像头仅在你扫描 QR code 期间使用，并在那一刻申请 permission；画面在设备上解码，从不保存或发送。新的 connection request 还会在本设备上触发一条系统通知，说明请求设备的名称与地址；该通知由本设备自己的通知中心显示，不会发往其他任何地方。 |
 | 2.10 | 2026-09-29 | host 现在会将其设备名发送给每个已用允许的 key 完成认证的 client —— 认证之前不发送任何内容 —— client 会将该名称保存在其最近列表中。最近列表改用新文件 `recent-hosts.txt`（地址、最近一次连接的时间、host 名称；最多 10 个）。旧的 `recent-devices.txt` 会被删除而非转换。 |
 | 2.9 | 2026-09-29 | **passcode 已被移除，访问方式与 SSH 相同。** 任何地方都不再保存或传输 passcode。LAN discovery 已被移除：Deskhub 从不 scan 你的 network，host 也不应答任何明文 discovery 请求。host 将其允许的 client public key 保存在 `authorized_keys` 中，各带一个 label；client 将其信任的 host 保存在 `known_hosts` 中，包括固定的 host key fingerprint、地址、名称以及所使用的 client key。在 Settings 中设置的唯一设备名会发送给你所连接的 host，并嵌入你复制的 public key 中。不为允许的 client 记录任何时间。早期版本的数据文件 —— passcode、旧的 `paired_devices` 列表、旧的启用标记 —— 会被删除而非转换。 |
 | 2.8 | 2026-09-28 | Host 可将获准访问的 public key 保存到 `authorized_keys`，并在本地保留启用标记。已保存的 host 配置增加别名和选用的 client identity。旧版仅含 fingerprint 的列表只在新列表启用前使用。 |

@@ -8,6 +8,7 @@
 #include <utility>
 #include <vector>
 
+#include "AccessRequestListener.h"
 #include "capture/ScreenCapture.h"
 #include "deskhubp/diag/Log.h"
 #include "deskhubp/input/LocalInput.h"
@@ -68,6 +69,15 @@ const SourcePipeline& Pipeline(const deskhubp::HostSource& st) {
     return static_cast<const SourcePipeline&>(st);
 }
 
+std::function<void()>& AccessRequestListenerSlot() {
+    static std::function<void()> listener;
+    return listener;
+}
+
+}
+
+void SetAccessRequestListener(std::function<void()> listener) {
+    AccessRequestListenerSlot() = std::move(listener);
 }
 
 bool SharingHost::Start(const std::vector<ShareSource>& sources, const ShareOptions& opt) {
@@ -75,6 +85,7 @@ bool SharingHost::Start(const std::vector<ShareSource>& sources, const ShareOpti
 
     deskhubp::HostEnginePolicy policy;
     deskhubp::UseSystemAudioCapture(policy);
+    policy.onAccessRequested = AccessRequestListenerSlot();
     policy.source = deskhubp::MakeDefaultSourcePolicy<SourcePipeline>();
     policy.status = deskhubp::MakeDefaultStatusHooks<SourcePipeline>();
     policy.noSourceError = "No display to share.";

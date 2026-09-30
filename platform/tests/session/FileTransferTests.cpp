@@ -416,7 +416,8 @@ void TestABatchCrossesARealConnection() {
     const std::filesystem::path landing = Scratch("land");
 
     const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity();
-    HostRig host;
+    const auto hostRig = std::make_unique<HostRig>();
+    HostRig& host = *hostRig;
     Check(host.Start(identity, landing), "the host takes files in");
 
     const std::vector<uint8_t> notes = Pattern(64, 1);
@@ -454,7 +455,8 @@ void TestAHostThatTakesNoFilesRefuses() {
     const std::filesystem::path landing = Scratch("land-refused");
 
     const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity();
-    HostRig host;
+    const auto hostRig = std::make_unique<HostRig>();
+    HostRig& host = *hostRig;
     Check(host.Start(identity, landing), "the host starts");
     host.files.SetAccepting(false);
 
@@ -483,7 +485,8 @@ void TestAHostThatStopsMidBatchSaysWhy() {
     const std::filesystem::path landing = Scratch("land-stopped");
 
     const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity();
-    HostRig host;
+    const auto hostRig = std::make_unique<HostRig>();
+    HostRig& host = *hostRig;
     Check(host.Start(identity, landing), "the host takes files in");
 
     const std::vector<std::filesystem::path> paths{
@@ -516,7 +519,8 @@ void TestTheSendSurfaceTheClientPageDrives() {
     const std::filesystem::path landing = Scratch("ffi-land");
 
     const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity();
-    HostRig host;
+    const auto hostRig = std::make_unique<HostRig>();
+    HostRig& host = *hostRig;
     Check(host.Start(identity, landing), "a host takes files in");
 
     char problem[256] = {};
@@ -588,7 +592,8 @@ void TestASenderRefusesAnUntrustedHost() {
     const std::filesystem::path landing = Scratch("land-key-change");
 
     const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity();
-    HostRig host;
+    const auto hostRig = std::make_unique<HostRig>();
+    HostRig& host = *hostRig;
     Check(host.Start(identity, landing), "the host takes files in");
 
     const std::string endpoint = std::string("127.0.0.1:") + std::to_string(kFileTestPort);
@@ -634,7 +639,8 @@ void TestTheDesktopSendSurfaceRefusesTheUntrustedHost() {
     const std::filesystem::path landing = Scratch("land-key-view");
 
     const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity();
-    HostRig host;
+    const auto hostRig = std::make_unique<HostRig>();
+    HostRig& host = *hostRig;
     Check(host.Start(identity, landing), "the host takes files in");
 
     const std::string endpoint = std::string("127.0.0.1:") + std::to_string(kFileTestPort);

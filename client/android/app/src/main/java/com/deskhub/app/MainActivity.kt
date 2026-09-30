@@ -91,6 +91,7 @@ private const val TAG = "Deskhub"
 class MainActivity : ComponentActivity() {
     private var pendingShare: HostService.ShareRequest? = null
     private var pendingInvite by mutableStateOf<String?>(null)
+    private var pendingSection by mutableStateOf<Section?>(null)
 
     private val projectionConsent =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -126,9 +127,8 @@ class MainActivity : ComponentActivity() {
         val lastAddress = prefs.getString("addr", "").orEmpty()
 
         val debuggable = (applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
-        var startSection = Section.CLIENT
+        val startSection = sectionExtra(intent)
         if (debuggable) {
-            startSection = sectionExtra(intent)
             intent?.getStringExtra("addr")?.let { addr ->
                 intent.removeExtra("addr")
                 openStream(addr, 0)
@@ -145,6 +145,8 @@ class MainActivity : ComponentActivity() {
                             initialAddress = lastAddress,
                             invite = pendingInvite,
                             onInviteConsumed = { pendingInvite = null },
+                            requestedSection = pendingSection,
+                            onSectionConsumed = { pendingSection = null },
                             onRemember = { addr ->
                                 prefs.edit().putString("addr", addr).apply()
                             },
@@ -163,6 +165,7 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         pairingInviteFrom(intent)?.let { pendingInvite = it }
+        if (intent.hasExtra(AccessRequestNotifier.EXTRA_SECTION)) pendingSection = sectionExtra(intent)
     }
 
     private fun askForNotifications() {
@@ -319,7 +322,7 @@ private enum class Section(
 }
 
 private fun sectionExtra(intent: Intent?): Section {
-    val name = intent?.getStringExtra("section") ?: return Section.CLIENT
+    val name = intent?.getStringExtra(AccessRequestNotifier.EXTRA_SECTION) ?: return Section.CLIENT
     return Section.entries.firstOrNull { it.name.equals(name, ignoreCase = true) } ?: Section.CLIENT
 }
 
@@ -346,6 +349,8 @@ private fun MainScreen(
     initialAddress: String,
     invite: String?,
     onInviteConsumed: () -> Unit,
+    requestedSection: Section?,
+    onSectionConsumed: () -> Unit,
     onRemember: (String) -> Unit,
     onOpenStream: (String, Int, List<NativeClient.Source>) -> Unit,
     onOpenShell: (String) -> Unit,
@@ -444,6 +449,12 @@ private fun MainScreen(
         scanning = false
         section = Section.CLIENT
         connect(invite)
+    }
+
+    LaunchedEffect(requestedSection) {
+        if (requestedSection == null) return@LaunchedEffect
+        onSectionConsumed()
+        section = requestedSection
     }
 
     val openDesktop: () -> Unit = {
@@ -758,9 +769,11 @@ private fun HostScreen(
     var requests by remember { mutableStateOf(emptyList<NativeClient.AccessRequest>()) }
     var requestsGeneration by remember { mutableStateOf(UNSEEN_GENERATION) }
     var qrInvite by remember { mutableStateOf<String?>(null) }
+    val context = LocalContext.current
     val refreshRequests = {
         requestsGeneration = NativeClient.accessRequestsGeneration()
         requests = NativeClient.accessRequests()
+        AccessRequestNotifier.announce(context, requests)
     }
     val hideQr = {
         if (qrInvite != null) NativeClient.pairingRevoke()
@@ -1141,22 +1154,6 @@ private fun HostRowList(
 private const val COPIED_FEEDBACK_MS = 1500L
 
 @Composable
-private fun AreaHeading(
-    title: String,
-    hint: String,
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(
-            title,
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.Bold,
-            color = AccentColor,
-        )
-        Text(hint, style = MaterialTheme.typography.bodyMedium, color = MutedColor)
-    }
-}
-
-@Composable
 private fun Hint(text: String) {
     Text(text, style = MaterialTheme.typography.bodySmall, color = MutedColor)
 }
@@ -1185,6 +1182,7 @@ private fun CopyTextButton(
 
 @Composable
 private fun DevicesScreen(onConnectHost: (String) -> Unit) {
+    var allowedRevision by remember { mutableStateOf(0) }
     Column(
         modifier =
             Modifier
@@ -1193,28 +1191,50 @@ private fun DevicesScreen(onConnectHost: (String) -> Unit) {
                 .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        AreaHeading(
-            NativeClient.string(NativeClient.STR_DEVICES_HOST_AREA),
-            NativeClient.string(NativeClient.STR_DEVICES_HOST_AREA_HINT),
-        )
         ThisMachineSection()
-        AllowedClientsSection()
-
-        HorizontalDivider()
-
-        AreaHeading(
-            NativeClient.string(NativeClient.STR_DEVICES_CLIENT_AREA),
-            NativeClient.string(NativeClient.STR_DEVICES_CLIENT_AREA_HINT),
-        )
+        DevicesAccessRequests(onDecided = { allowedRevision += 1 })
+        AllowedClientsSection(revision = allowedRevision)
         SavedHostsSection(onConnectHost = onConnectHost)
     }
+}
+
+@Composable
+private fun DevicesAccessRequests(onDecided: () -> Unit) {
+    val context = LocalContext.current
+    var requests by remember { mutableStateOf(emptyList<NativeClient.AccessRequest>()) }
+    var requestsGeneration by remember { mutableStateOf(UNSEEN_GENERATION) }
+    val refreshRequests = {
+        requestsGeneration = NativeClient.accessRequestsGeneration()
+        requests = NativeClient.accessRequests()
+        AccessRequestNotifier.announce(context, requests)
+    }
+    LaunchedEffect(Unit) {
+        while (true) {
+            if (NativeClient.accessRequestsGeneration() != requestsGeneration) refreshRequests()
+            delay(POLL_INTERVAL_MS)
+        }
+    }
+    AccessRequestsSection(
+        requests = requests,
+        onDecided = {
+            refreshRequests()
+            onDecided()
+        },
+    )
 }
 
 @Composable
 private fun ThisMachineSection() {
     val context = LocalContext.current
     val fingerprint = remember { NativeClient.hostFingerprint() }
+    val deviceName = remember { NativeClient.sessionDeviceName() }
     SectionLabel(NativeClient.string(NativeClient.STR_THIS_MACHINE_HEADING))
+    Text(
+        NativeClient.string(NativeClient.STR_THIS_MACHINE_HINT),
+        style = MaterialTheme.typography.bodyMedium,
+        color = MutedColor,
+    )
+    LabeledValue(NativeClient.string(NativeClient.STR_DEVICE_NAME_LABEL), deviceName)
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
@@ -1233,14 +1253,29 @@ private fun ThisMachineSection() {
     OutlinedButton(onClick = { copyToClipboard(context, NativeClient.hostPublicKey()) }) {
         Text(NativeClient.string(NativeClient.STR_COPY_PUBLIC_KEY_ACTION))
     }
-    Hint(NativeClient.string(NativeClient.STR_THIS_MACHINE_HINT))
 }
 
 @Composable
-private fun AllowedClientsSection() {
+private fun LabeledValue(
+    label: String,
+    value: String,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(label, style = MaterialTheme.typography.bodySmall, color = MutedColor)
+        Text(value, modifier = Modifier.weight(1f), color = HeadingColor)
+    }
+}
+
+@Composable
+private fun AllowedClientsSection(revision: Int) {
     var devices by remember { mutableStateOf(NativeClient.pairedDevices()) }
     var confirmForgetAll by remember { mutableStateOf(false) }
     val refresh: () -> Unit = { devices = NativeClient.pairedDevices() }
+    LaunchedEffect(revision) { refresh() }
 
     if (confirmForgetAll) {
         AlertDialog(
@@ -1406,7 +1441,7 @@ private fun SavedHostRows(
             Column(modifier = Modifier.weight(1f)) {
                 Text(host.alias.ifBlank { host.endpoint }, color = HeadingColor)
                 Text(
-                    host.endpoint,
+                    "${NativeClient.string(NativeClient.STR_HOST_LAST_ADDRESS_LABEL)}: ${host.endpoint}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MutedColor,
                 )

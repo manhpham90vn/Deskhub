@@ -16,6 +16,7 @@
 #include <string>
 #include <utility>
 
+#include "AccessRequestListener.h"
 #include "ElevatedShare.h"
 #include "capture/Downscaler.h"
 #include "gpu/GpuSelect.h"
@@ -70,6 +71,23 @@ SourcePipeline& Pipeline(deskhubp::HostSource& st) {
     return static_cast<SourcePipeline&>(st);
 }
 
+std::mutex accessRequestedListenerMutex;
+std::function<void()> accessRequestedListener;
+
+void FireAccessRequested() {
+    std::function<void()> listener;
+    {
+        const std::lock_guard<std::mutex> lock(accessRequestedListenerMutex);
+        listener = accessRequestedListener;
+    }
+    if (listener) listener();
+}
+
+}
+
+void SetAccessRequestedListener(std::function<void()> listener) {
+    const std::lock_guard<std::mutex> lock(accessRequestedListenerMutex);
+    accessRequestedListener = std::move(listener);
 }
 
 bool SharingHost::Start(const std::vector<ShareSource>& sources, const ShareOptions& opt) {
@@ -100,6 +118,8 @@ bool SharingHost::Start(const std::vector<ShareSource>& sources, const ShareOpti
                 "Firewall for the current network.");
         return std::string();
     };
+
+    policy.onAccessRequested = [] { FireAccessRequested(); };
 
     policy.onSharing = [] {
         const bool elevated = IsProcessElevated();

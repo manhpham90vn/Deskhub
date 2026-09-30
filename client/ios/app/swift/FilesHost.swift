@@ -22,19 +22,12 @@ final class FilesHost {
         }
     }
 
-    static func askNotificationConsent() {
-        let center = UNUserNotificationCenter.current()
-        center.requestAuthorization(options: [.alert, .sound]) { _, _ in }
-    }
-
     private static func notifyArrived(_ names: [String]) {
-        let content = UNMutableNotificationContent()
-        content.title = DeskhubClient.string(DHStrTransferArrivedTitle)
-        content.body = names.joined(separator: ", ")
-        let request = UNNotificationRequest(
-            identifier: UUID().uuidString, content: content, trigger: nil
+        SystemNotifications.post(
+            identifier: UUID().uuidString,
+            title: DeskhubClient.string(DHStrTransferArrivedTitle),
+            body: names.joined(separator: ", ")
         )
-        UNUserNotificationCenter.current().add(request)
     }
 
     func stop() {

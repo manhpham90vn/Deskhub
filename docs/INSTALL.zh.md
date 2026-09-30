@@ -262,14 +262,15 @@ window layer，程序会明确报告这一点。此类用途请使用 app。
 - **扫描 QR code。** host 共享期间，点击其地址列表旁的 **Show QR code**。在手机上，于
   Client 页点击 **Scan QR code** 并对准屏幕；在其他任何设备上，复制码下方的链接并粘贴到
   地址栏。该设备一步完成信任、放行与连接。
-- **批准 request。** 在该设备上输入 host 的地址并点击 *Connect*。host 的 Host 页会在
-  **Connection requests** 下列出它，附其名称、key fingerprint 与地址；点击 **Approve**，
+- **批准 request。** 在该设备上输入 host 的地址并点击 *Connect*。host 会显示一条
+  *Connection request* 通知，并在 Host 页与 Devices 页的 **Connection requests** 下列出它，
+  附其名称、key fingerprint 与地址；点击 **Approve**，
   该设备在下一次尝试时即可 connect —— 它会自行持续尝试两分钟。
 - **粘贴 key。** 在该设备上，**Devices** → **Copy public key**；在 host 上，**Devices** →
-  **Clients allowed to connect to this machine** → *Allow*，粘贴，完成。
+  **Devices allowed to connect to this machine** → *Allow*，粘贴，完成。
 
 首次按地址 connect 时会显示 **New host** 对话框，其中有 host 的 key fingerprint：将其与
-host 的 Devices 页上的 **This machine's host key** 核对，然后点击 *Trust and connect*。
+host 的 Devices 页上 **This machine** 下的 fingerprint 核对，然后点击 *Trust and connect*。
 QR code 会跳过该对话框，因为码中携带了 fingerprint。此后该 host 会列在 **Trusted hosts**
 下，即使更换地址也依然受信任。
 
@@ -291,14 +292,13 @@ connect 某个 host 时会信任其出示的 key。远程访问时，可在两�
 Deskhub 用密钥对登录，方式与 SSH 相同。每台机器只有**一把 key**，在 Deskhub 首次运行时
 创建；无论共享还是 connect，这把 key 就代表这台机器：你 connect 到它时核对的 fingerprint，
 与 host 放行它时保存的 public key，是同一把 key。host 只放行其列表中的 key，client 只
-connect 到其已信任 key 的 host。所有相关操作都在 **Devices** 页上，分为 *When this machine
-is the host* 与 *When this machine is the client* 两部分。下面每一步都有对应的
+connect 到其已信任 key 的 host。所有相关操作都在 **Devices** 页上，分为四节：**This machine**、
+**Connection requests**、**Devices allowed to connect to this machine** 与 **Trusted hosts**。下面每一步都有对应的
 `deskhub-cli` 命令；app 与 CLI 读取同一组文件，因此在一边所做的更改会出现在另一边。
 
 ### 你的 key
 
-**Devices** → *When this machine is the host* → **This machine's host key** 显示该 key 的
-fingerprint，形如 `SHA256:…`，旁有 *Copy* 按钮 —— 这就是 connect 到你的人要核对的内容。
+**Devices** → **This machine** 显示本设备的名称与该 key 的 fingerprint，形如 `SHA256:…`，旁有 *Copy* 按钮 —— 这就是 connect 到你的人要核对的内容。
 其旁的 **Copy public key**（CLI：`deskhub-cli key public`）复制一行形如
 `ecdsa-sha2-nistp256 AAAA… laptop` 的内容；末尾的标签是本设备的名称，在 **Settings** →
 *General* → **Device name** 中设置，host 的所有者可据此分辨这是谁的 key。当 QR code 与
@@ -310,7 +310,7 @@ request 都不方便时，这一行就是你交给 host 所有者的内容 —�
 ### 允许设备 connect
 
 由 host 的所有者决定，有三种方式。无论用哪一种，该设备随后都会出现在 **Devices** →
-*When this machine is the host* → **Clients allowed to connect to this machine** 下，以其
+**Devices allowed to connect to this machine** 下，以其
 名称为标签；其旁的 *Remove* 将其移除，*Remove every client* 在确认后清空整个列表。
 
 **用 QR code connect** —— 最快，也是唯一无需核对 fingerprint 的方式。host 共享期间，点击其
@@ -350,8 +350,7 @@ request 都不方便时，这一行就是你交给 host 所有者的内容 —�
 
 1. 请将要 connect 的人在其 Devices 页点击 **Copy public key**（见[你的 key](#你的-key)），
    并把那一行发给你。
-2. 打开 **Devices** → *When this machine is the host* → **Clients allowed to connect to
-   this machine**，粘贴该行并点击 *Allow*。仅接受 Ed25519 与 ECDSA P-256 public key。
+2. 打开 **Devices** → **Devices allowed to connect to this machine**，粘贴该行并点击 *Allow*。仅接受 Ed25519 与 ECDSA P-256 public key。
 
 在 command line 中，将该行 pipe 给 `access add`：
 
@@ -373,8 +372,8 @@ QR code 会替你完成这一步。首次按地址 connect 的流程与 SSH 相�
 2. **New host** 对话框显示 host key 的 fingerprint，形如 `SHA256:…`。若该地址曾属于你
    信任的另一个 host，对话框会如此说明并指出它的名称 —— 已知地址上的另一把 key 就是另一台
    机器，继续之前请确认应答的到底是哪一台。
-3. 在 host 上打开 **Devices** → *When this machine is the host* → **This machine's host
-   key**（*Copy* 可将其复制到剪贴板）。通过你已信任的渠道核对两个 fingerprint —— 当面、
+3. 在 host 上打开 **Devices** → **This machine**（fingerprint 旁的 *Copy* 可将其复制到
+   剪贴板）。通过你已信任的渠道核对两个 fingerprint —— 当面、
    电话，或确认是对方本人的聊天。
 4. 一致则点击 *Trust and connect*；不一致则点击 *Cancel*。
 

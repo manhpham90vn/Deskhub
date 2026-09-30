@@ -14,3 +14,11 @@ commits = ["0d3c5d58cc25239de11a84654073322579a15899"]
 paths = [
     '''^client/cli/StoreCommands\.cpp$''',
 ]
+
+[[allowlists]]
+description = "A throwaway Ed25519 PKCS#8 key that a test used to prove TLS refuses it; it protects nothing and now lives under the fixtures"
+condition = "AND"
+commits = ["72e078a31a0525fb748e22c54e5af5472f85a100"]
+paths = [
+    '''^platform/tests/system/HostIdentityTests\.cpp$''',
+]

@@ -81,8 +81,8 @@ Hãy xem các giới hạn bên dưới trước khi share màn hình hoặc ter
   thiết bị vào mà không cần click nào trên host. Người chụp lại được mã — qua vai bạn, từ
   một screenshot, từ một màn hình đang share — có thể dùng nó thay bạn cho tới khi mã hết
   hạn, đã được dùng, hoặc bị ẩn. Chỉ cho người bạn định cho vào xem mã, và ẩn mã ngay khi
-  họ đã kết nối; thiết bị được mã cho vào sau đó xuất hiện dưới *Clients allowed to
-  connect*, nơi bạn có thể gỡ nó nếu đó không phải thiết bị bạn mong đợi.
+  họ đã kết nối; thiết bị được mã cho vào sau đó xuất hiện dưới *Devices allowed to
+  connect to this machine*, nơi bạn có thể gỡ nó nếu đó không phải thiết bị bạn mong đợi.
 - **Phân tích lưu lượng vẫn khả thi.** Việc encrypt che giấu nội dung chứ không che giấu
   sự tồn tại: người quan sát biết được có một session đang chạy, lượng video đang truyền,
   và thời điểm bạn gõ phím.

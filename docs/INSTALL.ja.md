@@ -284,15 +284,15 @@ session が運ぶ内容 —— video、キー入力、mouse、clipboard、termin
   code** を押す。スマートフォンでは Client ページの **Scan QR code** を押して画面に向ける。
   それ以外のデバイスでは、code の下のリンクをコピーしてアドレス欄に貼り付ける。デバイスは
   一度の手順で信頼・許可・接続される。
-- **要求を承認する。** デバイスで host のアドレスを入力し *Connect* を押す。host の Host
-  ページに **Connection requests** として、名前、key の fingerprint、アドレスとともに表示
-  される。**Approve** を押せば、デバイスは次の試行で接続される —— デバイスは 2 分間、
+- **要求を承認する。** デバイスで host のアドレスを入力し *Connect* を押す。host は *Connection
+  request* の通知を表示し、Host ページと Devices ページの **Connection requests** に、名前、
+  key の fingerprint、アドレスとともに一覧する。**Approve** を押せば、デバイスは次の試行で接続される —— デバイスは 2 分間、
   自動的に再試行を続ける。
 - **key を貼り付ける。** デバイスで **Devices** → **Copy public key**。host で **Devices**
-  → **Clients allowed to connect to this machine** → *Allow*、貼り付けて完了。
+  → **Devices allowed to connect to this machine** → *Allow*、貼り付けて完了。
 
 アドレスで初めて Connect すると、**New host** ダイアログが host の key の fingerprint を
-表示する。host の Devices ページの **This machine's host key** と照合したうえで、*Trust
+表示する。host の Devices ページの **This machine** にある fingerprint と照合したうえで、*Trust
 and connect* を押す。QR code は fingerprint を含むため、このダイアログを省く。以後、その
 host は **Trusted hosts** に表示され、アドレスが変わっても信頼されたままである。
 
@@ -318,15 +318,14 @@ Deskhub は SSH と同じく key ペアでサインインする。すべての�
 作られる **1 つの key** を持ち、その key が、共有中でも connect 中でも、そのマシンそのもの
 である。connect するときに照合する fingerprint と、host が受け入れる際に保存する public
 key は同じ key である。host は自分のリストにある key だけを通し、client は key を信頼済みの
-host にだけ connect する。操作はすべて **Devices** ページにあり、*When this machine is the
-host* と *When this machine is the client* に分かれている。以下の各手順には対応する
+host にだけ connect する。操作はすべて **Devices** ページにあり、**This machine**、**Connection requests**、
+**Devices allowed to connect to this machine**、**Trusted hosts** の 4 節に分かれている。以下の各手順には対応する
 `deskhub-cli` コマンドがある。app と CLI は同じファイルを読むので、一方での変更はもう一方
 にも反映される。
 
 ### 自分の key
 
-**Devices** → *When this machine is the host* → **This machine's host key** に key の
-fingerprint `SHA256:…` が *Copy* ボタン付きで表示される。自分に connect してくる人が照合
+**Devices** → **This machine** に本デバイスの名前と key の fingerprint `SHA256:…` が *Copy* ボタン付きで表示される。自分に connect してくる人が照合
 するのはこれである。その横の **Copy public key**（CLI: `deskhub-cli key public`）は
 `ecdsa-sha2-nistp256 AAAA… laptop` のような 1 行をコピーする。末尾のラベルはこのデバイスの
 名前で、**Settings** → *General* → **Device name** で設定する。host の所有者はこれで誰の
@@ -339,7 +338,7 @@ identity になる。host には改めて受け入れてもらう必要があり
 ### デバイスの接続を許可する
 
 判断するのは host の所有者で、方法は 3 つある。どれを使っても、デバイスは **Devices** →
-*When this machine is the host* → **Clients allowed to connect to this machine** に名前を
+**Devices allowed to connect to this machine** に名前を
 ラベルとして表示される。横の *Remove* で外せる。*Remove every client* は確認のうえで
 リストを空にする。
 
@@ -386,8 +385,7 @@ command line では、`deskhub-cli access requests`（スクリプト向けに�
 
 1. connect する人に、その Devices ページで **Copy public key** を押してもらい（[自分の
    key](#自分の-key) を参照）、その行を送ってもらう。
-2. **Devices** → *When this machine is the host* → **Clients allowed to connect to this
-   machine** を開き、その行を貼り付けて *Allow* を押す。受け付けるのは Ed25519 と
+2. **Devices** → **Devices allowed to connect to this machine** を開き、その行を貼り付けて *Allow* を押す。受け付けるのは Ed25519 と
    ECDSA P-256 の public key だけである。
 
 command line では、その行を `access add` に pipe する。
@@ -411,8 +409,8 @@ QR code はこれを代わりに行う。アドレスで初めて connect する
    アドレスが以前は信頼済みの別の host のものだった場合、ダイアログはその旨を告げ、その
    host の名前を示す —— 既知のアドレスにある別の key は別のマシンなので、どのマシンが
    応答しているのかを確かめてから先へ進むこと。
-3. host で **Devices** → *When this machine is the host* → **This machine's host key**
-   を開く（*Copy* でクリップボードにコピーできる）。2 つの fingerprint を、すでに信頼して
+3. host で **Devices** → **This machine** を開く（fingerprint 横の *Copy* でクリップ
+   ボードにコピーできる）。2 つの fingerprint を、すでに信頼して
    いる経路 —— 対面、電話、相手本人と分かっているチャットなど —— で照合する。
 4. 一致すれば *Trust and connect* を押す。一致しなければ *Cancel* を押す。
 

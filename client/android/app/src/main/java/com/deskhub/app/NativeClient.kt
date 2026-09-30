@@ -120,10 +120,6 @@ object NativeClient {
     const val STR_REMOVE_HOST_ACTION = 180
     const val STR_PAIRED_FORGET_NOTE = 110
     const val STR_COPY_BUTTON = 117
-    const val STR_DEVICES_HOST_AREA = 181
-    const val STR_DEVICES_HOST_AREA_HINT = 182
-    const val STR_DEVICES_CLIENT_AREA = 183
-    const val STR_DEVICES_CLIENT_AREA_HINT = 184
     const val STR_ALLOW_CLIENT_PLACEHOLDER = 185
     const val STR_ALLOW_CLIENT_ACTION = 186
     const val STR_ALLOW_CLIENT_INVALID = 187
@@ -144,6 +140,8 @@ object NativeClient {
     const val STR_DENY_ACTION = 209
     const val STR_CAMERA_DENIED = 210
     const val STR_INVITE_INVALID = 211
+    const val STR_HOST_LAST_ADDRESS_LABEL = 212
+    const val STR_ACCESS_REQUEST_NOTIFICATION_TITLE = 213
 
     private const val HOST_PROFILE_OK = 0
     private const val HOST_PROFILE_STORE_UNREADABLE = 10
@@ -193,6 +191,11 @@ object NativeClient {
 
     private external fun nativeConnectingTo(addr: String): String
 
+    private external fun nativeAccessRequestNotification(
+        name: String,
+        address: String,
+    ): String
+
     private external fun nativeSourceQueryFailed(addr: String): String
 
     private external fun nativeHostTitle(
@@ -222,6 +225,11 @@ object NativeClient {
     fun couldNotConnect(addr: String): String = nativeCouldNotConnect(addr)
 
     fun connectingTo(addr: String): String = nativeConnectingTo(addr)
+
+    fun accessRequestNotification(
+        name: String,
+        address: String,
+    ): String = nativeAccessRequestNotification(name, address)
 
     fun sourceQueryFailed(addr: String): String = nativeSourceQueryFailed(addr)
 

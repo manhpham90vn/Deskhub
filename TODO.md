@@ -318,5 +318,10 @@ access approve --fingerprint SHA256:…" khi có yêu cầu mới (process khác
       fastlane; mirror đủ vi/zh/ja; THIRD_PARTY_NOTICES thêm CameraX + ZXing.
 - [x] `make format`, `make lint` (format + dead code + detekt), clang-tidy, coverage
       (96 % dòng / 87 % nhánh) đều xanh.
+- [x] Trang Devices làm lại trên cả 5 client: bốn mục phẳng (This machine, Connection
+      requests, Devices allowed to connect to this machine, Trusted hosts), bỏ chia host/client;
+      thông báo hệ thống khi có yêu cầu kết nối mới (GNotification, wxNotificationMessage,
+      UserNotifications, NotificationCompat), mỗi thiết bị một lần. SPEC S-3/H-18, INSTALL,
+      PRIVACY §4 + 2.11, release notes cập nhật và mirror vi/zh/ja.
 - [ ] Còn lại ngoài khả năng trên máy này: biên dịch Windows/macOS/iOS, chạy thử quét QR
       trên điện thoại thật, chụp lại ảnh Devices page trong README (còn hiện My keys).

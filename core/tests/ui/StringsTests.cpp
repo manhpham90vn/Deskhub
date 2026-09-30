@@ -42,11 +42,10 @@ void TestEveryLabelSaysSomething() {
         ui::kSettingsSectionSession, ui::kSettingsSectionLaunch,
         ui::kAuthVersionMismatch, ui::kSavedHostsHeading, ui::kSavedHostsHint,
         ui::kSavedHostsEmpty, ui::kHostNameLabel, ui::kHostAddressLabel, ui::kHostKeyLabel,
-        ui::kRemoveHostAction, ui::kDevicesHostArea, ui::kDevicesHostAreaHint,
-        ui::kDevicesClientArea, ui::kDevicesClientAreaHint, ui::kAllowClientPlaceholder,
+        ui::kRemoveHostAction, ui::kHostLastAddressLabel, ui::kAllowClientPlaceholder,
         ui::kAllowClientAction, ui::kAllowClientInvalid,
         ui::kCopyPublicKeyAction, ui::kShowQrAction, ui::kHideQrAction, ui::kScanQrAction,
-        ui::kQrHint, ui::kQrUnavailable, ui::kUnnamedClient, ui::kAccessRequestsHeading, ui::kAccessRequestsEmpty, ui::kApproveAction,
+        ui::kQrHint, ui::kQrUnavailable, ui::kUnnamedClient, ui::kAccessRequestNotificationTitle, ui::kAccessRequestsHeading, ui::kAccessRequestsEmpty, ui::kApproveAction,
         ui::kDenyAction, ui::kCameraDenied, ui::kInviteHostMismatch, ui::kInviteInvalid,
         ui::kAuthAwaitingApproval, ui::kTrustNewHostTitle, ui::kTrustNewHostAction,
         ui::kCancelAction, ui::kDeviceNameHint, ui::kAuthNotPairedCliHint};
@@ -68,6 +67,9 @@ void TestEveryLabelSaysSomething() {
         "the CLI line names the device and gives the exact command to approve it");
     Check(Contains(ui::AccessRequestCliLine("", "SHA256:abc", "10.0.0.2:1"), "unnamed"),
         "a device with no name is still described");
+    Check(Contains(ui::AccessRequestNotificationBody("phone", "10.0.0.2:1"), "phone") &&
+              Contains(ui::AccessRequestNotificationBody("", "10.0.0.2:1"), "unnamed"),
+        "the notification names the device, or says it is unnamed");
     Check(ui::AuthRefusalText(AuthResultCode::AwaitingApproval) == ui::kAuthAwaitingApproval,
         "the waiting verdict has its own explanation");
     for (const char* s : labels) Check(s && *s, "every shared UI string is non-empty");

@@ -15,6 +15,11 @@ final class DeviceNameModel {
         DeskhubClient.buffered(capacity) { dh_device_name($0, $1) }
     }
 
+    static var sessionName: String {
+        let stored = saved
+        return stored.isEmpty ? systemName : stored
+    }
+
     private static var systemName: String {
         #if os(macOS)
             Host.current().localizedName ?? ProcessInfo.processInfo.hostName

@@ -283,14 +283,15 @@ list, and you only need one of them:
   the screen; on any other device, copy the link under the code and paste it into the
   address field. The device is trusted, allowed and connected in one step.
 - **Approve the request.** On the device, type the host's address and press *Connect*.
-  The host's Host page lists it under **Connection requests** with its name, key
-  fingerprint and address; press **Approve** and the device connects on its next try —
+  The host shows a *Connection request* notification and lists it under **Connection
+  requests** on its Host and Devices pages, with its name, key fingerprint and address;
+  press **Approve** and the device connects on its next try —
   it keeps trying for two minutes on its own.
 - **Paste the key.** On the device, **Devices** → **Copy public key**; on the host,
-  **Devices** → **Clients allowed to connect to this machine** → *Allow*, paste, done.
+  **Devices** → **Devices allowed to connect to this machine** → *Allow*, paste, done.
 
 Connecting by address the first time shows a **New host** dialog with the host's key
-fingerprint: compare it with **This machine's host key** on the host's Devices page, then
+fingerprint: compare it with the one under **This machine** on the host's Devices page, then
 press *Trust and connect*. A QR code skips that dialog, because it carries the
 fingerprint. From then on the host is under **Trusted hosts**, and stays trusted even when
 its address changes.
@@ -317,14 +318,14 @@ the first time Deskhub runs, and that key is the machine whether it is sharing o
 connecting: the fingerprint you compare when you connect to it and the public key a host
 stores when it lets it in are the same key. A host lets in only the keys it lists, and a
 client connects only to hosts whose key it trusts. All of it lives on the **Devices**
-page, split into *When this machine is the host* and *When this machine is the client*.
+page, as four sections: **This machine**, **Connection requests**, **Devices allowed to connect
+to this machine** and **Trusted hosts**.
 Each step below also has a `deskhub-cli` command; the app and the CLI read the same
 files, so a change made in one shows up in the other.
 
 ### Your key
 
-**Devices** → *When this machine is the host* → **This machine's host key** shows the
-key's fingerprint, `SHA256:…`, with a *Copy* button — that is what someone connecting to
+**Devices** → **This machine** shows this device's name and the key's fingerprint, `SHA256:…`, with a *Copy* button — that is what someone connecting to
 you compares against. **Copy public key** beside it (CLI: `deskhub-cli key public`) copies
 one line such as `ecdsa-sha2-nistp256 AAAA… laptop`; the label at the end is this device's
 name, set under **Settings** → *General* → **Device name**, so a host's owner can tell whose
@@ -337,8 +338,7 @@ and devices that trusted it see it as a new host.
 ### Letting a device in
 
 The host's owner decides, in one of three ways. Whichever you use, the device then appears
-under **Devices** → *When this machine is the host* → **Clients allowed to connect to this
-machine**, labelled with its name; *Remove* beside it takes it out again, and *Remove every
+under **Devices** → **Devices allowed to connect to this machine**, labelled with its name; *Remove* beside it takes it out again, and *Remove every
 client* empties the list after asking you to confirm.
 
 **Connecting with a QR code** — the quickest, and the only one that needs no fingerprint
@@ -385,8 +385,7 @@ terminal.
 
 1. Ask the person connecting to press **Copy public key** on their Devices page (see
    [Your key](#your-key)) and send you the line.
-2. Open **Devices** → *When this machine is the host* → **Clients allowed to connect to
-   this machine**, paste the line and press *Allow*. Only Ed25519 and ECDSA P-256 public
+2. Open **Devices** → **Devices allowed to connect to this machine**, paste the line and press *Allow*. Only Ed25519 and ECDSA P-256 public
    keys are accepted.
 
 From the command line, pipe the line into `access add`:
@@ -410,8 +409,8 @@ A QR code does this for you. Connecting by address the first time works like SSH
    used to belong to another host you trust, the dialog says so and names it — a
    different key at a known address is a different machine, so be sure you know which one
    is answering before you go on.
-3. On the host, open **Devices** → *When this machine is the host* → **This machine's
-   host key** (*Copy* puts it on the clipboard). Compare the two fingerprints over a
+3. On the host, open **Devices** → **This machine** (*Copy* beside the fingerprint puts it
+   on the clipboard). Compare the two fingerprints over a
    channel you already trust — in person, by phone, over chat you know is theirs.
 4. If they match, press *Trust and connect*. If they don't, press *Cancel*.
 

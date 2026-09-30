@@ -14,10 +14,11 @@ struct QrCodeView: View {
             let originX = (size.width - cell * cells) / 2 + cell * CGFloat(QrCodeView.quietZoneModules)
             let originY = (size.height - cell * cells) / 2 + cell * CGFloat(QrCodeView.quietZoneModules)
             var dark = Path()
-            for (y, row) in modules.enumerated() {
-                for (x, isDark) in row.enumerated() where isDark {
+            for (rowIndex, row) in modules.enumerated() {
+                for (columnIndex, isDark) in row.enumerated() where isDark {
                     dark.addRect(CGRect(
-                        x: originX + CGFloat(x) * cell, y: originY + CGFloat(y) * cell,
+                        x: originX + CGFloat(columnIndex) * cell,
+                        y: originY + CGFloat(rowIndex) * cell,
                         width: cell, height: cell
                     ))
                 }

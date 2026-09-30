@@ -11,6 +11,7 @@ final class AccessRequestsModel {
         guard current != generation else { return }
         generation = current
         requests = DeskhubClient.accessRequests()
+        AccessRequestNotifier.shared.announce(requests)
     }
 
     func approve(_ row: AccessRequestRow) {

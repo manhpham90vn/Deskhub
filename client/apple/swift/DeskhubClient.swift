@@ -197,8 +197,8 @@ nonisolated enum DeskhubClient {
         var modules = [UInt8](repeating: 0, count: qrModuleCapacity)
         let size = Int(dh_qr_encode(text, &modules, Int32(qrModuleCapacity)))
         guard size > 0 else { return [] }
-        return (0 ..< size).map { y in
-            (0 ..< size).map { x in modules[y * size + x] != 0 }
+        return (0 ..< size).map { row in
+            (0 ..< size).map { column in modules[row * size + column] != 0 }
         }
     }
 
@@ -232,5 +232,9 @@ nonisolated enum DeskhubClient {
 
     static var accessRequestsGeneration: UInt64 {
         dh_access_requests_generation()
+    }
+
+    static func accessRequestNotification(name: String, address: String) -> String {
+        buffered(320) { dh_access_request_notification(name, address, $0, $1) }
     }
 }

@@ -8,6 +8,7 @@
 #include <map>
 #include <memory>
 #include <optional>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -59,6 +60,11 @@ private:
         GtkWidget* attach = nullptr;
     };
 
+    struct AccessRequestsView {
+        GtkWidget* grid = nullptr;
+        GtkWidget* hint = nullptr;
+    };
+
     struct HostMonitor {
         std::string name;
         int x = 0;
@@ -83,7 +89,11 @@ private:
     void SelectPage(int page);
 
     void RefreshPairedDevices();
-    void BuildHostKeySection(GtkWidget* box);
+    void BuildThisMachineSection(GtkWidget* box);
+    void RefreshDeviceNameRow();
+    void StartDevicesPolling();
+    void StopDevicesPolling();
+    static gboolean OnDevicesTimer(gpointer user);
     void BuildAllowedClientsSection(GtkWidget* box);
     void ShowInlineError(GtkWidget* label, const char* text);
     void AllowPastedClient();
@@ -114,7 +124,12 @@ private:
     void PopulateBindCombo();
     void RebuildHostAddressRows();
     GtkWidget* BuildQrPanel();
-    void BuildAccessRequestsSection(GtkWidget* box);
+    AccessRequestsView BuildAccessRequestsSection(GtkWidget* box);
+    void FillAccessRequestsView(const AccessRequestsView& view);
+    void AnnounceNewAccessRequests();
+    void PostAccessRequestNotification(const deskhubp::PendingClient& client,
+        const std::string& notificationId);
+    void WithdrawAccessRequestNotification(const deskhub::Fingerprint& fingerprint);
     void ToggleQrPanel();
     void ShowQrPanel();
     void HideQrPanel();
@@ -212,6 +227,7 @@ private:
     static gboolean OnDeleteEvent(GtkWidget* w, GdkEvent* e, gpointer user);
     static void OnDestroy(GtkWidget* w, gpointer user);
 
+    GApplication* app_ = nullptr;
     GtkWidget* window_ = nullptr;
     GtkWidget* stack_ = nullptr;
     GtkWidget* navButtons_[kPageCount] = {};
@@ -225,10 +241,12 @@ private:
     std::optional<deskhub::QrCode> qrCode_;
     std::string pairingInvite_;
     GtkWidget* requestsSection_ = nullptr;
-    GtkWidget* requestsGrid_ = nullptr;
-    GtkWidget* requestsHint_ = nullptr;
+    AccessRequestsView hostRequests_;
+    AccessRequestsView devicesRequests_;
     std::vector<deskhubp::PendingClient> accessRequests_;
     uint64_t accessRequestsSeen_ = 0;
+    std::set<std::string> announced_;
+    guint devicesTimerId_ = 0;
     GtkWidget* hostBanner_ = nullptr;
     GtkWidget* hostStateLabel_ = nullptr;
     GtkWidget* hostStatusLabel_ = nullptr;
@@ -261,6 +279,7 @@ private:
     GtkWidget* devicesBox_ = nullptr;
     std::vector<ConnectionWindow*> connections_;
 
+    GtkWidget* deviceNameValue_ = nullptr;
     GtkWidget* pairedView_ = nullptr;
     GtkWidget* pairedHintLabel_ = nullptr;
     std::vector<deskhubp::AuthorizedClient> pairedDevices_;

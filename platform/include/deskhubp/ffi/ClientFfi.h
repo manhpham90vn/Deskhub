@@ -189,10 +189,6 @@ typedef enum {
     DHStrSavedHostsHint = 172,
     DHStrSavedHostsEmpty = 173,
     DHStrRemoveHostAction = 180,
-    DHStrDevicesHostArea = 181,
-    DHStrDevicesHostAreaHint = 182,
-    DHStrDevicesClientArea = 183,
-    DHStrDevicesClientAreaHint = 184,
     DHStrAllowClientPlaceholder = 185,
     DHStrAllowClientAction = 186,
     DHStrAllowClientInvalid = 187,
@@ -212,6 +208,8 @@ typedef enum {
     DHStrDenyAction = 209,
     DHStrCameraDenied = 210,
     DHStrInviteInvalid = 211,
+    DHStrHostLastAddressLabel = 212,
+    DHStrAccessRequestNotificationTitle = 213,
 } DHStringId;
 
 typedef enum {
@@ -279,6 +277,8 @@ void dh_list_sources_cancel(void);
 int dh_source_query_status(char* out, int capacity);
 
 bool dh_is_pairing_invite(const char* text);
+
+int dh_access_request_notification(const char* name, const char* address, char* out, int capacity);
 
 int dh_max_sources(void);
 

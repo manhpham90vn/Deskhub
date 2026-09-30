@@ -10,34 +10,32 @@ struct PairedDeviceRow: Identifiable {
 
 struct DevicesPage: View {
     private static let hostFingerprintCapacity = 128
+    private static let accessRequestsPollInterval = Duration.seconds(1)
 
     let trustedHostsRevision: Int
     let onConnectHost: @MainActor (String) -> Void
     @State private var devices: [PairedDeviceRow] = []
     @State private var hostFingerprint = ""
+    @State private var deviceName = ""
     @State private var confirmForgetAll = false
     @State private var publicKeyInput = ""
     @State private var publicKeyError = false
+    @State private var accessRequests = AccessRequestsModel()
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             deskhubHeading(DeskhubClient.string(DHStrSidebarDevices))
-
-            DeskhubArea(title: DeskhubClient.string(DHStrDevicesHostArea)) {
-                deskhubHint(DeskhubClient.string(DHStrDevicesHostAreaHint))
-                thisMachineSection
-                pairedSection
-            }
-
-            DeskhubArea(title: DeskhubClient.string(DHStrDevicesClientArea)) {
-                deskhubHint(DeskhubClient.string(DHStrDevicesClientAreaHint))
-                SavedHostsSection(
-                    trustedHostsRevision: trustedHostsRevision,
-                    onConnect: onConnectHost
-                )
-            }
+            thisMachineSection
+            AccessRequestsSection(model: accessRequests)
+            pairedSection
+            SavedHostsSection(
+                trustedHostsRevision: trustedHostsRevision,
+                onConnect: onConnectHost
+            )
         }
         .onAppear(perform: refresh)
+        .task { await pollAccessRequests() }
+        .onChange(of: accessRequests.requests.map(\.fingerprint)) { _, _ in refresh() }
         .alert("Deskhub", isPresented: $confirmForgetAll) {
             Button(DeskhubClient.string(DHStrPairedForgetAll), role: .destructive) {
                 dh_paired_forget_all()
@@ -52,6 +50,15 @@ struct DevicesPage: View {
     private var thisMachineSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             deskhubSection(DeskhubClient.string(DHStrThisMachineHeading))
+            deskhubHint(DeskhubClient.string(DHStrThisMachineHint))
+            HStack(spacing: 8) {
+                Text(DeskhubClient.string(DHStrDeviceNameLabel))
+                    .foregroundStyle(DeskhubPalette.muted)
+                Text(deviceName)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(DeskhubPalette.heading)
+                    .textSelection(.enabled)
+            }
             HStack(spacing: 12) {
                 Text(hostFingerprint)
                     .font(.system(size: 13, design: .monospaced))
@@ -67,7 +74,6 @@ struct DevicesPage: View {
                 .buttonStyle(.bordered)
                 .controlSize(.small)
             }
-            deskhubHint(DeskhubClient.string(DHStrThisMachineHint))
         }
     }
 
@@ -183,7 +189,16 @@ struct DevicesPage: View {
         refresh()
     }
 
+    @MainActor
+    private func pollAccessRequests() async {
+        while !Task.isCancelled {
+            accessRequests.refresh()
+            try? await Task.sleep(for: Self.accessRequestsPollInterval)
+        }
+    }
+
     private func refresh() {
+        deviceName = DeviceNameModel.sessionName
         hostFingerprint = DeskhubClient.buffered(Self.hostFingerprintCapacity) {
             dh_host_fingerprint($0, $1)
         }

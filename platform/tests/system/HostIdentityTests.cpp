@@ -7,6 +7,8 @@
 
 #include <cstdio>
 #include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <string>
 
 namespace {
@@ -92,11 +94,10 @@ void TestUnusableStoredIdentityDoesNotRotate() {
     Check(deskhubp::ReadAppDataFile(deskhubp::kHostKeyFileName) == "-----BEGIN PRIVATE KEY-----\n",
         "the existing file is left for explicit recovery");
 
-    const char* const kEd25519Key =
-        "-----BEGIN PRIVATE KEY-----\n"
-        "MC4CAQAwBQYDK2VwBCIEIF1ax7f+e1fuIGCnrp1fvdSTe6wMi39Wo9kl2ENAvsWX\n"
-        "-----END PRIVATE KEY-----\n";
-    deskhubp::WriteAppDataFile(deskhubp::kHostKeyFileName, kEd25519Key);
+    std::ifstream fixture(TestFixturesDir() / "openssh" / "ed25519_pkcs8.pem", std::ios::binary);
+    std::string ed25519Key((std::istreambuf_iterator<char>(fixture)), std::istreambuf_iterator<char>());
+    Check(!ed25519Key.empty(), "the Ed25519 fixture key is readable");
+    deskhubp::WriteAppDataFile(deskhubp::kHostKeyFileName, ed25519Key);
     Check(!deskhubp::LoadHostIdentity().Valid(),
         "a key TLS cannot use is refused rather than presented to a peer");
     Check(!deskhubp::LoadOrCreateHostIdentity().Valid(), "and is not rotated either");

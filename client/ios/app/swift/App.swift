@@ -8,7 +8,7 @@ struct DeskhubApp: App {
         }
         NotificationBanners.shared.install()
         if !StartPage.isScreenshotRun {
-            FilesHost.askNotificationConsent()
+            SystemNotifications.requestConsent()
         }
     }
 

@@ -24,6 +24,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 private const val TAG = "Deskhub"
@@ -33,6 +34,7 @@ class HostService : Service() {
     private val mainHandler = Handler(Looper.getMainLooper())
     private val scope = CoroutineScope(SupervisorJob())
     private var clipboardJob: Job? = null
+    private var accessRequestsJob: Job? = null
 
     private val projectionCallback =
         object : MediaProjection.Callback() {
@@ -85,6 +87,14 @@ class HostService : Service() {
                 AudioShare.start(applicationContext, granted)
             }
         }
+        accessRequestsJob?.cancel()
+        accessRequestsJob =
+            scope.launch(Dispatchers.Main) {
+                while (true) {
+                    AccessRequestNotifier.poll(applicationContext)
+                    delay(ACCESS_REQUEST_POLL_MS)
+                }
+            }
         clipboardJob?.cancel()
         if (NativeClient.clipboardSync()) {
             clipboardJob =
@@ -195,6 +205,7 @@ class HostService : Service() {
         private const val EXTRA_MAX_DIM = "maxDim"
         private const val EXTRA_PORT = "port"
         private const val ACTION_STOP = "com.deskhub.app.STOP_SHARING"
+        private const val ACCESS_REQUEST_POLL_MS = 1_000L
 
         fun start(
             context: Context,
