@@ -255,7 +255,7 @@ Không dữ liệu nào trong số này được upload; bạn có thể xoá th
 được chấp nhận qua public key có trong `authorized_keys` của host, mỗi connection được ký
 lại từ đầu; đã gỡ passcode và switch pairing; đã gỡ LAN discovery, nên host không trả lời
 bất kỳ packet plaintext nào; giới hạn số lần authenticate đang chờ cũng như số chữ ký sai;
-rồi, trong 7.1, một key cho mỗi máy với certificate không còn được lưu, trust đi theo key
+rồi, trong 8.0, một key cho mỗi máy với certificate không còn được lưu, trust đi theo key
 của host thay vì địa chỉ (việc từ chối dứt khoát khi key thay đổi trở thành hộp thoại *New
 host* nêu tên chủ cũ), yêu cầu kết nối mà chủ host approve theo fingerprint qua kênh đã
 authenticate, và pairing bằng QR với token một lần mà client chỉ gửi tới máy có fingerprint

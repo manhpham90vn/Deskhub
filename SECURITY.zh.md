@@ -213,7 +213,7 @@ client 放入你设备的文件。
 自本清单上次修订以来已完成的事项：SSH 式的访问控制 —— 仅接受 public key 列于 host 的
 `authorized_keys` 中的 client，每条 connection 重新签名；移除 passcode 与 pairing 开关；
 移除 LAN discovery，使 host 完全不应答明文 packet；对等待中的 authenticate 与无效签名的
-限制；随后在 7.1 中：每台机器一把 key，不再保存 certificate；信任跟随 host 的 key 而非
+限制；随后在 8.0 中：每台机器一把 key，不再保存 certificate；信任跟随 host 的 key 而非
 地址（key 变化时的硬性拒绝变为一个指出先前所有者的 *New host* 对话框）；所有者通过已
 authenticate 的通道按 fingerprint 批准的 connection request；以及 QR pairing —— 其一次性
 token 只会被 client 发送给码中 fingerprint 所指的那台机器。

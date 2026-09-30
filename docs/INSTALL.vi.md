@@ -437,7 +437,7 @@ nhất của host.
 - **Cấu hình riêng.** `--config-dir DIR` (đặt trước hoặc sau lệnh) hoặc biến môi trường
   `DESKHUB_CONFIG_DIR` trỏ CLI tới một thư mục khác chứa key, client được phép, yêu cầu kết
   nối, host đã trust và settings — tiện cho service account hoặc môi trường test.
-- **Đã gỡ trong 7.1.** `key generate`, `key import`, `key delete`, `key list`, `key public
+- **Đã gỡ trong 8.0.** `key generate`, `key import`, `key delete`, `key list`, `key public
   --name`, `devices identities`, `--identity` và `host add --identity` không còn nữa: mỗi
   máy một key. Exit code `5` ("host key đã thay đổi") cũng không còn, vì một key khác giờ
   là một host lạ.
@@ -462,7 +462,7 @@ CLI, `host update ALIAS --host-key-stdin` pin lại một alias sang key mới t
 
 ### Chuyển từ Deskhub cũ
 
-**Từ 7.0.x.** Cả hai máy đều cần 7.1 — Deskhub 7.0.x ở bất kỳ bên nào cũng không connect
+**Từ 7.0.x.** Cả hai máy đều cần 8.0 — Deskhub 7.0.x ở bất kỳ bên nào cũng không connect
 được và bị từ chối với thông báo "That machine uses an incompatible authentication
 version". Mỗi máy giữ nguyên key và fingerprint nó đã có, nên các host bạn đã trust vẫn được
 trust. Điều thay đổi là key mà thiết bị dùng *để đăng nhập*: giờ đó chính là key của máy,

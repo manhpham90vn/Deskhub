@@ -251,7 +251,7 @@ SYSTEM、Administrators のみに制限される。モバイルの app は同じ
 `authorized_keys` に記載された public key によってのみ受け入れられ、connection ごとに
 新たに署名する。passcode と pairing のスイッチの削除。LAN discovery の削除により、host
 は平文の packet に一切応答しなくなった。authenticate 待ちの接続数と不正な署名に対する
-制限。続いて 7.1 では、マシンごとに 1 つの key とし certificate を保存しなくなったこと、
+制限。続いて 8.0 では、マシンごとに 1 つの key とし certificate を保存しなくなったこと、
 アドレスではなく host の key に従う信頼（key が変化した際の即時拒否は、以前の所有者の
 名前を示す *New host* ダイアログになった）、authenticate 済みの経路を通じて所有者が
 fingerprint で承認する接続要求、そして code が名指しする fingerprint を持つマシンにだけ

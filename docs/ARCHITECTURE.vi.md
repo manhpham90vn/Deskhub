@@ -443,7 +443,7 @@ coverage của core.
   u8 tokenLen | token | 07`. Host cũ có thể đọc lời mở đầu và gửi challenge cũ; client mới
   nhận ra challenge không tương thích rồi đóng kết nối. Host mới từ chối lời mở đầu có byte
   cuối khác 7, gửi `VersionMismatch` rồi đóng kết nối — đó là lý do một thiết bị 7.0.x và
-  một thiết bị 7.1 báo rằng phiên bản của chúng không khớp thay vì hoạt động nửa vời.
+  một thiết bị 8.0 báo rằng phiên bản của chúng không khớp thay vì hoạt động nửa vời.
   `AuthMode` có thêm `AwaitingApproval`, và `AuthResultCode::AwaitingApproval` chỉ tồn tại
   ở phía client, để gọi tên kết cục của một lần chờ đã hết hạn. Challenge, response và
   result chỉ mang dữ liệu có version.
@@ -888,7 +888,7 @@ coverage của core.
   LNK2038.
 - **Passcode và scan LAN vẫn bị gỡ bỏ.** Mã 4 chữ số là một bí mật ngắn trên một port
   đang mở, và một phản hồi discovery không encrypt cho mọi người trên network biết có một
-  host ở đó. Không gì trong 7.1 đưa hai thứ đó trở lại — mã QR được đọc từ màn hình, và
+  host ở đó. Không gì trong 8.0 đưa hai thứ đó trở lại — mã QR được đọc từ màn hình, và
   một yêu cầu chỉ được ghi sau khi TLS handshake đã hoàn tất.
 
 - **Approve đi trên kênh đã authenticate và hiển thị danh tính, không phải bí mật**: phản

@@ -1,3 +1,4 @@
 • Connect by QR code: press Show QR code on the sharing computer, then Scan QR code here. Camera is used only for that, on the device
 • Or type the address and have the owner press Approve under Connection requests; this device retries for two minutes
-• One key per device, My keys is gone; every device must be let in once more. 7.1 cannot connect to 7.0, update every device
+• A notification tells you when a device asks to connect here; approve it on the redone Devices page
+• One key per device, My keys is gone; every device must be let in once more. 8.0 cannot connect to 7.x, update every device

@@ -407,7 +407,7 @@ deskhub-cli host add office --address 192.168.1.10 --host-key-stdin
 - **独立的配置。** `--config-dir DIR`（放在命令之前或之后均可）或环境变量
   `DESKHUB_CONFIG_DIR` 让 CLI 使用另一个目录中的 key、允许的 client、request、受信任的
   host 与 settings —— 适用于 service account 或测试环境。
-- **7.1 中已移除。** `key generate`、`key import`、`key delete`、`key list`、`key public
+- **8.0 中已移除。** `key generate`、`key import`、`key delete`、`key list`、`key public
   --name`、`devices identities`、`--identity` 与 `host add --identity` 已不存在：每台机器
   只有一把 key。exit code `5`（"host key 已变更"）也已移除，因为不同的 key 现在就是未知的
   host。
@@ -431,7 +431,7 @@ deskhub-cli host add office --address 192.168.1.10 --host-key-stdin
 
 ### 从旧版 Deskhub 升级
 
-**从 7.0.x 升级。** 两台机器都需要 7.1 —— 任何一方运行 7.0.x 的 Deskhub 都无法 connect，
+**从 7.0.x 升级。** 两台机器都需要 8.0 —— 任何一方运行 7.0.x 的 Deskhub 都无法 connect，
 并会被拒绝，提示 "That machine uses an incompatible authentication version"。每台机器保留
 其原有的 key 与 fingerprint，因此你信任过的 host 依然受信任。变化的是设备*用来*登录的
 key：现在就是那把机器 key，因此每台设备都需要重新放行一次 —— 一次 *Approve*、一次扫描

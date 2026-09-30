@@ -1,4 +1,5 @@
 • Connect by QR code: on the computer press Show QR code while sharing, then Scan QR code here. The camera is asked for only then, and frames never leave the device
 • Or type the address and ask the computer's owner to press Approve under Connection requests; this device keeps trying for two minutes
+• When another device asks to connect to this one, a notification tells you; approve or deny it on the Devices page, which is now four plain sections
 • One key per device now serves both roles, so My keys is gone. Fingerprints are unchanged, but every device has to be let in once more — one Approve or one scan
-• Trusted hosts stay trusted when their address changes. 7.1 cannot connect to 7.0, so update every device
+• Trusted hosts stay trusted when their address changes. 8.0 cannot connect to 7.x, so update every device

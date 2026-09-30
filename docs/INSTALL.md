@@ -450,7 +450,7 @@ host key (`--host-key-stdin`); `host remove ALIAS` forgets the host, and so does
   `DESKHUB_CONFIG_DIR` environment variable points the CLI at another directory holding
   the key, allowed clients, requests, trusted hosts and settings — handy for a service
   account or a test setup.
-- **Removed in 7.1.** `key generate`, `key import`, `key delete`, `key list`, `key public
+- **Removed in 8.0.** `key generate`, `key import`, `key delete`, `key list`, `key public
   --name`, `devices identities`, `--identity` and `host add --identity` are gone: there is
   one key per machine. Exit code `5` ("the host key changed") is gone too, since a
   different key is now an unknown host.
@@ -476,7 +476,7 @@ there. Trust it only if you know why. The old host stays under **Trusted hosts**
 
 ### Coming from an older Deskhub
 
-**From 7.0.x.** Both machines need 7.1 — a 7.0.x Deskhub on either side cannot connect and
+**From 7.0.x.** Both machines need 8.0 — a 7.0.x Deskhub on either side cannot connect and
 is refused with "That machine uses an incompatible authentication version". Each machine
 keeps the key and fingerprint it already had, so hosts you trusted stay trusted. What
 changes is the key a device signs in *with*: it is now that same machine key, so every

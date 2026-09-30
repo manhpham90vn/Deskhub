@@ -450,7 +450,7 @@ host key（`--host-key-stdin`）を変更し、`host remove ALIAS` はその hos
 - **別の設定を使う。** `--config-dir DIR`（コマンドの前後どちらにも置ける）または環境変数
   `DESKHUB_CONFIG_DIR` で、key、許可済み client、要求、信頼済み host、settings を別の
   ディレクトリから読ませられる。service account やテスト環境に便利である。
-- **7.1 で削除されたもの。** `key generate`、`key import`、`key delete`、`key list`、
+- **8.0 で削除されたもの。** `key generate`、`key import`、`key delete`、`key list`、
   `key public --name`、`devices identities`、`--identity`、`host add --identity` はなくなった。
   マシンごとに key は 1 つである。exit code `5`（"the host key changed"）もなくなった。
   別の key は未知の host として扱われるためである。
@@ -475,7 +475,7 @@ Deskhub は拒否しない。そのマシンを一度も会ったことのない
 
 ### 以前の Deskhub から移行する
 
-**7.0.x から。** 両方のマシンに 7.1 が必要である。どちらか一方でも 7.0.x の Deskhub だと
+**7.0.x から。** 両方のマシンに 8.0 が必要である。どちらか一方でも 7.0.x の Deskhub だと
 connect できず、"That machine uses an incompatible authentication version" として拒否
 される。各マシンはすでに持っていた key と fingerprint をそのまま保つので、信頼していた
 host は信頼されたままである。変わるのはデバイスがサインイン*する*key で、これが同じ

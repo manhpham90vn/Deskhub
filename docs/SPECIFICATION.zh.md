@@ -156,7 +156,7 @@ CLI 可在 Windows 和 Linux 上查看远程屏幕；macOS 上请使用 app 观�
 | S-7 | 仅在明确要求时共享 | 在用户开始共享之前不共享任何内容。关闭或停止即结束所有 session。 |
 | S-8 | 受信任的 host 跟随 key | client 固定其信任的每个 host 的 key —— 首次连接时在用户确认 fingerprint 后（C-2），或取自 host 的 QR code（C-12）—— 并在发送任何内容之前进行检查。信任属于 key 而非地址：迁到新地址的受信任 host 在那里同样被识别，无需任何对话框即可 connect，*Trusted hosts* 会把新地址记为其最后地址。已知地址上的另一把 key 只是本机尚未见过的一个 host：*New host* 对话框像任何首次连接一样出现，并附警告说明该地址曾属于另一个受信任的 host；后者会留在列表中，直到用户移除它。CLI 会拒绝未知的 host 并打印其 fingerprint，仅在带 `--accept-new-host-key` 重新运行时才保存；也可以预先固定某个 host（`host add ALIAS --address IP[:PORT] --host-key-stdin`），`trust forget` 接受 fingerprint、alias 或最后一次应答的地址。 |
 | S-9 | 机器 key | 每台机器恰有一把 key，在首次运行时创建，永远不会自动替换；它是两种角色下的身份，没有任何需要生成、导入或挑选的东西。Devices 页上的 *Copy public key*（CLI：`key public`）复制一行 `ecdsa-sha2-nistp256 AAAA… <device name>`，以本机的设备名称（T-27）为 label；host 的所有者粘贴以允许本机的正是这一行，host 在批准本机的 connection request 或通过 QR code 准入本机时保存的也是它。private key 永远不会离开本机。删除该 key 文件会让本机获得新的身份：曾允许它的 host 需要重新允许，曾信任它的 client 会再次看到 *New host* 对话框。 |
-| S-10 | 不沿用旧的访问设置 | 旧版本的访问设置不会被转换。从 7.0.x 升级时，每个 client 都必须重新被放行一次 —— 通过批准、QR code，或粘贴其 key —— 因为 client 现在用来登录的 key 是其机器 key；遗留的 `client_key*.pem` 与 `host_cert.pem` 会被忽略，从不读取或迁移。旧版本无法 connect 到此版本，并会被告知版本不匹配：7.0.x 与 7.1 之间无法互通，请更新所有设备。 |
+| S-10 | 不沿用旧的访问设置 | 旧版本的访问设置不会被转换。从 7.0.x 升级时，每个 client 都必须重新被放行一次 —— 通过批准、QR code，或粘贴其 key —— 因为 client 现在用来登录的 key 是其机器 key；遗留的 `client_key*.pem` 与 `host_cert.pem` 会被忽略，从不读取或迁移。旧版本无法 connect 到此版本，并会被告知版本不匹配：7.0.x 与 8.0 之间无法互通，请更新所有设备。 |
 
 ## 10. Settings
 

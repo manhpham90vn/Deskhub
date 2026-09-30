@@ -388,7 +388,7 @@ runner 上与 base commit 的 A/B 结果（偏移仅作为警告，不导致失�
   并把认证版本放在最后 —— 现在是 7，位于版本 6 所没有的 pairing token 字段之后：
   `00 | u16 keyLen | key | u8 nameLen | name | u8 tokenLen | token | 07`。旧主机能够读取
   请求并发送旧版 challenge；新客户端据此识别不兼容版本并关闭连接。新主机拒绝末尾字节
-  不为 7 的请求，发送 `VersionMismatch` 后关闭连接 —— 这正是 7.0.x 设备与 7.1 设备报告
+  不为 7 的请求，发送 `VersionMismatch` 后关闭连接 —— 这正是 7.0.x 设备与 8.0 设备报告
   版本不匹配、而非半工作状态的原因。`AuthMode` 新增 `AwaitingApproval`，而
   `AuthResultCode::AwaitingApproval` 仅存在于客户端一侧，用于命名等待超时的结果。
   challenge、response 和 result 只携带带版本的数据。
@@ -751,7 +751,7 @@ runner 上与 base commit 的 A/B 结果（偏移仅作为警告，不导致失�
   因为 release CRT 不含 `_CrtDbgReport`，也不支持 run-time check。任何不一致都会导致
   大量 LNK2038 错误。
 - **passcode 与 LAN scan 保持移除。** 4 位数字码是开放 port 上的短密钥，而明文的
-  discovery 应答会让 network 上的任何人得知 host 的存在。7.1 中没有任何东西把二者带回
+  discovery 应答会让 network 上的任何人得知 host 的存在。8.0 中没有任何东西把二者带回
   —— QR code 是从屏幕上读取的，request 只在 TLS handshake 完成之后才写入。
 
 - **批准经由已 authenticate 的通道进行，展示的是身份而非秘密。** 2026-09-28 对批准提示

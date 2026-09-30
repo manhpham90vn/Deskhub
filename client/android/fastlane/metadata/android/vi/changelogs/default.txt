@@ -1,3 +1,4 @@
-• Deskhub 7 đăng nhập bằng khoá, giống SSH. Không còn passcode và ghép đôi; 7.x không kết nối được với 6.x, nên hãy cập nhật mọi thiết bị
-• Các lần ghép đôi trước không được giữ lại: cần cho phép lại từng client
-• Để kết nối: sao chép khoá ở Devices → My keys, dán vào máy tính ở Devices → Clients allowed to connect rồi bấm Allow, sau đó nhập địa chỉ máy đó ở đây và bấm Trust and connect
+• Kết nối bằng mã QR: bấm Show QR code trên máy tính đang chia sẻ, rồi Scan QR code ở đây. Camera chỉ dùng cho việc đó, ngay trên thiết bị
+• Hoặc nhập địa chỉ và nhờ chủ máy bấm Approve dưới Connection requests; thiết bị này tự thử lại trong hai phút
+• Có thông báo khi thiết bị khác xin kết nối tới đây; duyệt trên trang Devices đã làm lại
+• Mỗi thiết bị một khoá, My keys không còn; mỗi thiết bị cần được cho vào lại một lần. 8.0 không kết nối được với 7.x, hãy cập nhật mọi thiết bị

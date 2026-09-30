@@ -255,7 +255,7 @@ Shipped since the last revision of this list: SSH-style access — clients admit
 public keys listed in the host's `authorized_keys`, each connection signed afresh; the
 passcode and pairing switch removed; LAN discovery removed, so the host answers no
 plaintext packet at all; limits on pending authentications and bad signatures; then, in
-7.1, one key per machine with the certificate no longer stored, trust that follows the
+8.0, one key per machine with the certificate no longer stored, trust that follows the
 host's key rather than its address (the hard refusal on a changed key became a *New host*
 dialog that names the previous owner), connection requests the owner approves by
 fingerprint over the authenticated channel, and QR pairing with a one-time token the

@@ -444,7 +444,7 @@ scaling の 2 つの判定とともに実行する（共有 runner には時間�
   u8 nameLen | name | u8 tokenLen | token | 07`。旧ホストは開始メッセージを読んで旧
   challenge を返せるため、新クライアントは非互換を検出して接続を閉じる。新ホストは
   末尾のバイトが 7 でない開始メッセージを拒否し、`VersionMismatch` を送って接続を閉じる。
-  7.0.x のデバイスと 7.1 のデバイスが中途半端に動くのではなくバージョン不一致を報告する
+  7.0.x のデバイスと 8.0 のデバイスが中途半端に動くのではなくバージョン不一致を報告する
   のはこのためである。`AuthMode` に `AwaitingApproval` が加わり、
   `AuthResultCode::AwaitingApproval` はクライアント側にのみ存在し、時間切れになった待機の
   結果を表す。challenge、response、result はバージョン付きのデータだけを運ぶ。
@@ -897,7 +897,7 @@ scaling の 2 つの判定とともに実行する（共有 runner には時間�
   があれば多数の LNK2038 で終わる。
 - **passcode と LAN scan は削除したままである。** 4 桁のコードは開いた port 上の短い
   秘密であり、平文の discovery への応答は network 上の誰に対しても host の存在を知らせて
-  しまう。7.1 はどちらも復活させない —— QR code は画面から読み取るものであり、要求は
+  しまう。8.0 はどちらも復活させない —— QR code は画面から読み取るものであり、要求は
   TLS handshake の完了後にのみ書き込まれる。
 
 - **承認は authenticate 済みの経路に乗り、秘密ではなく identity を示す。** 2026-09-28 に

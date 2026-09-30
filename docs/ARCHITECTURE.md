@@ -450,7 +450,7 @@ line.
   u8 nameLen | name | u8 tokenLen | token | 07`. An older host can read the offer and
   send its old challenge; the new client then detects the incompatible challenge and
   closes. A new host rejects an offer whose trailing byte is not 7, sends
-  `VersionMismatch`, and closes — which is why a 7.0.x device and a 7.1 device report
+  `VersionMismatch`, and closes — which is why a 7.0.x device and an 8.0 device report
   that their versions do not match rather than half-working. `AuthMode` gained
   `AwaitingApproval`, and `AuthResultCode::AwaitingApproval` exists only on the client
   side, to name the outcome of a wait that ran out. Challenge, response, and result
@@ -893,7 +893,7 @@ line.
   ends in a wall of LNK2038.
 - **Passcode and LAN scan stay removed**: a 4-digit code is a short secret on an open
   port, and a plaintext discovery answer tells anyone on the network that a host is
-  there. Nothing in 7.1 brings either back — the QR code is read off a screen, and a
+  there. Nothing in 8.0 brings either back — the QR code is read off a screen, and a
   request is written only after a completed TLS handshake.
 
 - **Approval rides the authenticated channel and shows identity, not a secret**: the
