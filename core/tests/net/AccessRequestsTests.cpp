@@ -140,6 +140,12 @@ void TestFileRoundTrip() {
     Check(!ParseAccessRequests("100 10.0.0.1:1 not-a-key\n", 0).has_value(),
         "a line without a key invalidates the file");
     Check(!ParseAccessRequests(text + text, 1200).has_value(), "a duplicate key invalidates the file");
+    const std::string firstLine = text.substr(0, text.find('\n') + 1);
+    const std::string keyText = firstLine.substr(firstLine.find(' ', firstLine.find(' ') + 1) + 1);
+    Check(!ParseAccessRequests("9999999999999999999 10.0.0.1:1 " + keyText, 0).has_value(),
+        "a time too large for 64 bits invalidates the file instead of overflowing");
+    Check(ParseAccessRequests("9223372036854775807 10.0.0.1:1 " + keyText, 0).has_value(),
+        "while the largest time that fits still reads");
     Check(!ParseAccessRequests(std::string(kMaxAccessRequestsFileBytes + 1, 'x'), 0).has_value(),
         "an oversized file is refused");
 }
