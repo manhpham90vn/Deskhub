@@ -71,12 +71,15 @@ struct SharingView: View {
     }
 
     @ViewBuilder private var qrSection: some View {
-        Button(DeskhubClient.string(model.qr.shown ? DHStrHideQrAction : DHStrShowQrAction)) {
+        Button(DeskhubClient.string(model.qr.open ? DHStrHideQrAction : DHStrShowQrAction)) {
             model.toggleQr()
         }
         .buttonStyle(.iosOutlined(fullWidth: true))
-        if model.qr.shown {
-            IosQrInvitePanel(model: model.qr)
+        if model.qrUnavailable {
+            iosError(DeskhubClient.string(DHStrQrUnavailable))
+        }
+        if model.qr.open {
+            IosQrInvitePanel(sharing: model)
         }
     }
 

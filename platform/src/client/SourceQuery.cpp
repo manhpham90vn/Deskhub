@@ -10,7 +10,6 @@
 
 namespace {
 constexpr uint32_t kHandshakeTimeoutMs = 5'000;
-constexpr uint32_t kAuthTimeoutMs = 65'000;
 constexpr uint64_t kListTimeoutUs = 5'000'000;
 constexpr uint32_t kPollWaitMs = 2;
 
@@ -63,7 +62,6 @@ bool QuerySources(const NetAddr& server, SourceQueryReply& reply,
     config.clientName = deskhubp::SessionDeviceName();
     config.acceptNewHostKey = request.acceptNewHostKey;
     config.connectTimeoutMs = kHandshakeTimeoutMs;
-    config.authTimeoutMs = kAuthTimeoutMs;
     config.approvalWaitUs = uint64_t(request.approvalWaitMs) * 1000;
     config.recvWaitMs = kPollWaitMs;
     if (const auto invite = deskhub::ParsePairingInvite(request.pairingInvite)) {

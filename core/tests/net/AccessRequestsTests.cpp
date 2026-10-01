@@ -140,8 +140,44 @@ void TestFileRoundTrip() {
     Check(!ParseAccessRequests("100 10.0.0.1:1 not-a-key\n", 0).has_value(),
         "a line without a key invalidates the file");
     Check(!ParseAccessRequests(text + text, 1200).has_value(), "a duplicate key invalidates the file");
+    const std::string firstLine = text.substr(0, text.find('\n') + 1);
+    const std::string keyText = firstLine.substr(firstLine.find(' ', firstLine.find(' ') + 1) + 1);
+    Check(!ParseAccessRequests("9999999999999999999 10.0.0.1:1 " + keyText, 0).has_value(),
+        "a time too large for 64 bits invalidates the file instead of overflowing");
+    Check(ParseAccessRequests("9223372036854775807 10.0.0.1:1 " + keyText, 0).has_value(),
+        "while the largest time that fits still reads");
     Check(!ParseAccessRequests(std::string(kMaxAccessRequestsFileBytes + 1, 'x'), 0).has_value(),
         "an oversized file is refused");
+}
+
+void TestDenialHoldsUntilItFades() {
+    std::printf("[requests] a denied device stays turned away until the row fades...\n");
+    AccessRequests requests;
+    requests.Add(AccessRequest{KeyFor(1, "pest"), "10.0.0.9:1", 0}, 100);
+    Check(!requests.Deny(KeyFor(2, ""), 110), "denying a key that never asked does nothing");
+    Check(requests.Deny(KeyFor(1, ""), 120), "a pending request can be denied");
+    Check(requests.IsDenied(KeyFor(1, "")) && !requests.IsDenied(KeyFor(2, "")),
+        "only that key is marked");
+    Check(!requests.Add(AccessRequest{KeyFor(1, "pest"), "10.0.0.9:2", 0}, 130),
+        "asking again is refused instead of filing a fresh request");
+    const auto held = requests.Find(KeyFor(1, ""));
+    Check(held && held->denied && held->requestedUnix == 120 && held->address == "10.0.0.9:1",
+        "and leaves the denial as it was");
+    Check(requests.Add(AccessRequest{KeyFor(3, "neighbour"), "10.0.0.9:3", 0}, 140),
+        "another key from the same address can still ask");
+    Check(requests.IsDenied(KeyFor(1, "")) && requests.Find(KeyFor(3, "")),
+        "without lifting the denial");
+
+    const std::string text = SerializeAccessRequests(requests);
+    const auto back = ParseAccessRequests(text, 150);
+    Check(back && back->IsDenied(KeyFor(1, "")) && !back->IsDenied(KeyFor(3, "")) &&
+              back->Requests().size() == 2,
+        "the denial survives the request file");
+    Check(back && SerializeAccessRequests(*back) == text, "serialising a denial is a fixpoint");
+
+    Check(requests.Expire(120 + kAccessRequestTtlSeconds) == 1, "the denial fades with its row");
+    Check(requests.Add(AccessRequest{KeyFor(1, "pest"), "10.0.0.9:4", 0}, 130 + kAccessRequestTtlSeconds),
+        "after which the device may ask again");
 }
 
 }
@@ -153,4 +189,5 @@ void RunAccessRequestsTests() {
     TestAddressHostForms();
     TestFileKeepsNewestPerAddress();
     TestFileRoundTrip();
+    TestDenialHoldsUntilItFades();
 }

@@ -5,6 +5,7 @@
 
 #include "JniEnv.h"
 
+#include "deskhubp/ffi/ClientFfi.h"
 #include "deskhubp/ffi/DevicesFfi.h"
 #include "deskhubp/ffi/PairingFfi.h"
 
@@ -13,6 +14,7 @@ namespace {
 constexpr const char* kAccessRequestClass = "com/deskhub/app/NativeClient$AccessRequest";
 constexpr int kAccessRequestCapacity = 32;
 constexpr int kInviteAddressCapacity = 64;
+constexpr int kQrExpiryLineCapacity = 64;
 
 using deskhubj::FromJString;
 
@@ -52,6 +54,18 @@ Java_com_deskhub_app_NativeClient_nativePairingInvite(JNIEnv* env, jobject, jint
 JNIEXPORT void JNICALL
 Java_com_deskhub_app_NativeClient_nativePairingRevoke(JNIEnv*, jobject) {
     dh_pairing_revoke();
+}
+
+JNIEXPORT jlong JNICALL
+Java_com_deskhub_app_NativeClient_nativePairingTokenTtlSeconds(JNIEnv*, jobject) {
+    return jlong(dh_pairing_token_ttl_seconds());
+}
+
+JNIEXPORT jstring JNICALL
+Java_com_deskhub_app_NativeClient_nativeQrExpiryLine(JNIEnv* env, jobject, jlong secondsLeft) {
+    char line[kQrExpiryLineCapacity] = {};
+    dh_qr_expiry_line(int64_t(secondsLeft), line, int(sizeof(line)));
+    return NewString(env, line);
 }
 
 JNIEXPORT jbyteArray JNICALL

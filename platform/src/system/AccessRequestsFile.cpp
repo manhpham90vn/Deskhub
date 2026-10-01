@@ -81,11 +81,22 @@ std::optional<deskhub::Fingerprint> FingerprintOfKey(const deskhub::PublicKeyTex
     return FingerprintOfPublicKey(PublicKeySpkiFromText(deskhub::FormatPublicKeyText(key)));
 }
 
-std::optional<deskhub::AccessRequest> FindByFingerprint(const deskhub::AccessRequests& requests,
-    const deskhub::Fingerprint& fingerprint) {
+std::optional<deskhub::AccessRequest> FindPendingByFingerprint(
+    const deskhub::AccessRequests& requests, const deskhub::Fingerprint& fingerprint) {
     for (const deskhub::AccessRequest& request : requests.Requests())
-        if (FingerprintOfKey(request.key) == fingerprint) return request;
+        if (!request.denied && FingerprintOfKey(request.key) == fingerprint) return request;
     return std::nullopt;
+}
+
+uint64_t FileStamp() {
+    const auto path = AppDataFilePath(kAccessRequestsFileName);
+    if (path.empty()) return 0;
+    std::error_code error;
+    const auto written = std::filesystem::last_write_time(path, error);
+    if (error) return 0;
+    const auto size = std::filesystem::file_size(path, error);
+    if (error) return 0;
+    return uint64_t(written.time_since_epoch().count()) ^ (uint64_t(size) << 40);
 }
 
 }
@@ -111,7 +122,7 @@ bool RememberAccessRequest(std::span<const uint8_t> publicKeySpki, std::string_v
 bool ApproveAccessRequest(const deskhub::Fingerprint& fingerprint) {
     std::optional<deskhub::AccessRequest> approved;
     const bool removed = ChangeRequests([&](deskhub::AccessRequests& requests) {
-        approved = FindByFingerprint(requests, fingerprint);
+        approved = FindPendingByFingerprint(requests, fingerprint);
         if (!approved) return false;
         if (!RememberAuthorizedKey(deskhub::FormatPublicKeyText(approved->key)) &&
             !IsClientKeyAuthorized(PublicKeySpkiFromText(deskhub::FormatPublicKeyText(approved->key))))
@@ -123,8 +134,8 @@ bool ApproveAccessRequest(const deskhub::Fingerprint& fingerprint) {
 
 bool DenyAccessRequest(const deskhub::Fingerprint& fingerprint) {
     return ChangeRequests([&](deskhub::AccessRequests& requests) {
-        const auto denied = FindByFingerprint(requests, fingerprint);
-        return denied && requests.Remove(denied->key);
+        const auto denied = FindPendingByFingerprint(requests, fingerprint);
+        return denied && requests.Deny(denied->key, NowUnixSeconds());
     });
 }
 
@@ -133,6 +144,7 @@ std::optional<std::vector<PendingClient>> ListAccessRequests() {
     if (!requests) return std::nullopt;
     std::vector<PendingClient> clients;
     for (const deskhub::AccessRequest& request : requests->Requests()) {
+        if (request.denied) continue;
         const auto fingerprint = FingerprintOfKey(request.key);
         if (!fingerprint) return std::nullopt;
         clients.push_back(PendingClient{request.key.label, request.address, request.requestedUnix,
@@ -145,7 +157,7 @@ std::optional<std::vector<PendingClient>> ListAccessRequests() {
 }
 
 uint64_t AccessRequestsGeneration() {
-    return Generation().load(std::memory_order_acquire);
+    return Generation().load(std::memory_order_acquire) + FileStamp();
 }
 
 }

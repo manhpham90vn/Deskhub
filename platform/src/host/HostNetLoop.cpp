@@ -239,10 +239,9 @@ void RunHostNetLoop(SessionTransport& sock, deskhub::SourceListResponder& source
 
             const deskhub::OfferUpdate update =
                 deskhub::RefreshOffer(*st, uint8_t(hooks.fallbackFps));
-            if (update.sendReconfig) {
-                SendReconfig(sock, *st, update.reconfig);
-                st->forceIdr.store(true);
-            }
+            if (update.sendReconfig) st->forceIdr.store(true);
+            if (const auto reconfig = deskhub::TakeReconfigToSend(*st, now))
+                SendReconfig(sock, *st, *reconfig);
 
             if (hooks.source.flush &&
                 deskhub::TakeFlushReason(*st, now) != deskhub::FlushReason::None)

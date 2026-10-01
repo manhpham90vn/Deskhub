@@ -154,6 +154,14 @@ X.509 certificate，因此每次打开 port 时 `HostIdentity` 都会**在内存
 在应答约两秒后自行关闭该 connection（`kRefusalLingerUs`，QUIC application error 8），
 足以让应答送达；client 也关闭自己一端。host 不会保留任何未 authenticate 的连接等待点击。
 
+host 也会在 handshake 中途关闭某些 connection 而不发送结果：触发 rate limit 之后
+（application error 7）、10 秒期限已过时（5）、遇到无法解析的版本时（4）或 framing 错误时
+（1）。client 不会干等到超时。`QuicEndpoint` 保留对端关闭时使用的 application error，
+`RunClientAuth` 在 connection 消失时立即结束，并把该 error 映射为 `RateLimited`（仅存在于
+client 侧的结果，从不出现在 wire 上）、`TimedOut`、`VersionMismatch` 或 `Refused`。client
+自身等待 handshake 的时间是 host 的期限再加 5 秒（`kClientAuthTimeoutMs`），所有 client
+界面共用这一个常量。
+
 签名绑定到这一条 connection，因此重新连接时需再次签名；不支持 0-RTT 或 session
 resumption。每条尚未 authenticate 的 connection 从 QUIC 接受它的那一刻起有 10 秒时间，
 无论它出示哪把 key、是否发送了 `AuthStart`，host 同时最多保留 8 条这样的 connection ——
@@ -163,7 +171,15 @@ connection 被接受之前将其拒之门外，`onAbandoned` 释放在被通告�
 （`AuthFailureLimiter`）；`AwaitingApproval` 与 `ConfigError` 不算失败。`access_requests` 最多保存 16 条 request，每把 key 最多一条、每个来源地址最多一条
 —— 新 request 会取代 key 相同或 IP 地址相同（忽略 port）的任何一行，因此重复请求会刷新
 地址与时间 —— 16 条全部占满时丢弃最旧的一条，每条保留 10 分钟；*Approve* 把该 key 连同设备名称移入
-`authorized_keys`，*Deny* 删除该行且不告知 client 任何内容。
+`authorized_keys`。
+*Deny* 保留该行并标记为已拒绝，直到其 10 分钟期满：它从所有者看到的列表中消失，从同一地址
+发出请求的另一台设备不会取代它，被拒绝的 key 下一次发送 `AuthStart` 时会得到 `NotPaired`
+应答，而不会提交新的 request。正在等待批准的 client 把该 `NotPaired` 理解为所有者拒绝，
+并停止重新拨号。
+
+在连接期间被移出 `authorized_keys` 的设备会以 application error 3（`kCloseDeviceForgotten`）
+被关闭。`HostLink` 读取该 error，并以 *Refused* 结束该 link，而不是把这次关闭当作链路中断
+并重新连接 —— 那样只会为刚被移除的设备再提交一条新的 connection request。
 
 接入资格属于单条 QUIC connection，而非某个地址。该 connection 一旦关闭，资格即被撤销，因此来自同
 一地址和 port 的下一条 connection 必须重新证明自己。在已开始 handshake 的 connection 上再次发送
@@ -209,7 +225,7 @@ HostEngine（每个 app 一个实例，持有 SessionTransport）
  ├─ net-loop thread: RunHostNetLoop
  │    recv → source 列表/pong 应答（仅限已准入） | video 数据摄入
  │         | Chan::Terminal → TerminalHost | Chan::File → FileHost
- │    按 source 的 session Tick、clipboard flush、reconfig、统计
+ │    按 source 的 session Tick、clipboard flush、reconfig（发送 3 次）、统计
  ├─ capture/encode: 按 source，由 OS 的 capture 回调驱动（client 层）
  │    frame → encoder（按 source 的 mutex）→ Packetizer → FEC → SendTo（datagram）
  ├─ audio worker: capture 回调 → 无锁 frame ring → Opus encode →
@@ -229,8 +245,9 @@ HostEngine（每个 app 一个实例，持有 SessionTransport）
 - 每个 screen source 对应一个 `SourcePipelineState`，拥有各自的 `ScreenHostSession`
   （viewer 表、negotiation、input 仲裁）、encoder、quality ladder 与诊断数据。一次
   encode 服务该 source 的全部 viewer。
-- 反馈环：viewer 每秒发送一次 `Feedback`（loss、RTT、接收速率），host 另外提供一个自身
-  的信号，即 frame 到达发送环节时的时延，也就是 `enc_lat_ms` 报告的量。
+- 反馈环：viewer 每秒发送一次 `Feedback`（loss、RTT、接收速率），host 每秒最多作出一次
+  决定，依据所有 viewer 最新报告中最差的那一份（`kFeedbackDecisionSpacingUs`），因此三个
+  viewer 不会让 bitrate 以三倍速度下降。host 另外提供一个自身的信号，即 frame 到达发送环节时的时延，也就是 `enc_lat_ms` 报告的量。
   `BitrateController`（AIMD）只依据其中两项 —— loss 与 frame 时延 —— 行动，
   `QualityLadder` 跟随它选定的 bitrate 调整分辨率与 fps；RTT 与接收速率仅用于显示。FEC
   自第一个 frame 起即启用，仅在长时间无丢失后才关闭，因为它所防范的丢失会在第一份报告
@@ -245,6 +262,10 @@ HostEngine（每个 app 一个实例，持有 SessionTransport）
   reattach 一个已分离的 shell，并结束其中任意一个：`TERM_CLOSE` 在 data 与 resize
   message 所受的 per-peer guard 之前被处理，而当时身处该 shell 的机器会收到
   `TERM_EXIT`。每次 open、close、detach 与 reattach 均连同地址、名称与 key 记入审计日志。
+  terminal 未运行的 host 会自行以 `TermOpenAck` 拒绝（`NotShared`）应答 `TermOpen` 与
+  `TermList`，正如它以 `NotAccepting` 应答文件发送请求一样，因此 client 会得到告知而不是
+  一直等待。恢复 shell 的 client 会发送它将要绘制的窗口尺寸，而在 open 尚在途中时做出的
+  resize 会在确认之后跟进。
 - 一个 picker，五个 client：`core/ui/ShellPicker` 把 `TermSessionList` 变成每个 client 都
   绘制的那些行 —— id 与尺寸、shell 属于谁，以及本 client 是否可以 reattach 或关闭它。只有
   已 detach 的 shell 才能 reattach，被 host 接管的 shell 两者皆不可。Apple 与 Android 的
@@ -345,8 +366,8 @@ App Group container 内的 `.deskhub` 文件夹、Android 上的内部存储；`
 `transport_cert.<random>.pem` 存在于磁盘上，若 crash 遗留则在下次开始 hosting 时清除；不再写入 `host_cert.pem`，遗留的会被忽略）、`authorized_keys`
 （本 host 接受的 client key）、`known_hosts`（按 fingerprint 索引的受信任 host，附名称
 与最后地址）、`access_requests`（等待 Approve 或 Deny 的 connection request —— 每条一
-行，包括时间、地址，以及以设备名称为 label 的 public key；最多 16 条，每条 10 分钟后丢
-弃）、`pairing_tokens`（当前有效的
+行，包括时间、地址，以及以设备名称为 label 的 public key，被拒绝的一条以 `denied` 为前缀；
+最多 16 条，每条 10 分钟后丢弃）、`pairing_tokens`（当前有效的
 QR token 及其过期时间）、`ui-settings.txt`（包括设备名称）、`recent-hosts.txt`（地址、
 上次连接时间与 host 名称）、Linux 上的 `portal-restore-token.txt`（桌面针对所选屏幕签发
 的 token），以及每次运行的 log（只保留最新的十份，`kKeptSessionLogs`）。任何地方都不保存 passcode —— 旧版
@@ -395,6 +416,26 @@ runner 上与 base commit 的 A/B 结果（偏移仅作为警告，不导致失�
 构建的负载下 integration 数据，以及 core 的 coverage 行。
 
 ## 9. 需要记录的设计决策
+
+- **只有 host 能提前结束 handshake，因此 client 留意它是如何结束的**：client 过去会为
+  `AuthResult` 等待 65 秒 —— 这是批准还在一条保持的 connection 内完成时遗留下来的 —— 而
+  host 会在 10 秒后关闭每条未 authenticate 的 connection，并立即关闭被 rate limit 的
+  connection。QR 扫描被 rate limit 的用户要到一分钟后才看到 *timed out*。现在 client 读取
+  关闭时的 application error，只等待 host 的期限再加一点余量。
+
+- **RECONFIG 发送三次**：它作为一个没有确认的 datagram 传输，而质量主要在丢包严重的链路上
+  下调，恰恰是单个 datagram 最容易丢失的时候。错过它的 viewer 会一直保持旧的尺寸与帧率，
+  直到下一次 Hello。host 每隔 100 ms 重复发送（`kReconfigSends`），viewer 忽略不带来任何
+  变化的那一份，因此这些副本不会导致 decoder 重建。
+
+- **滚轮刻度的小数部分被累积而不是向上取整**：平滑滚动与精密触控板发送的增量远小于 120。
+  把每个增量都向上取整为一整格，会使 Linux 与 macOS host 上的一次滑动滚动数十格。
+  `TakeWheelNotches` 按 host 保留余数，并在方向反转时丢弃它。
+
+- **由 scancode 决定修饰键的左右**：Windows raw input 报告的是不分左右的 Shift、Ctrl 或
+  Alt，左右交给 scancode 区分。Linux 与 macOS 的 key map 曾把不分左右的修饰键解析为左侧
+  按键，因此 AltGr 到达时变成了 Left Alt。`InputApplier` 在任何 backend 看到它之前，把不分
+  左右的修饰键转换为其 Set 1 scancode 所指明的那一侧。
 
 - **主机发送应用数据需要先完成授权**：`SessionTransport` 在连接完成密钥认证前拒绝
   发送记录和数据报。认证 challenge 和结果使用内部认证发送路径。信任存储在单个进程内
@@ -850,8 +891,10 @@ runner 上与 base commit 的 A/B 结果（偏移仅作为警告，不导致失�
   `AuthStart` 的是 broadcast extension，而绘制 QR code 与 request 列表的是 app；在 CLI
   中，`share` 运行的同时，`access approve` 在另一个 terminal 中输入。`access_requests`
   与 `pairing_tokens` 位于共用的配置文件夹中，与 `authorized_keys` 使用同一把锁与原子
-  替换，`AccessRequestsGeneration` 为轮询方提供廉价的变更计数器，而一次 *Approve* 不过
-  是从一个文件移到另一个文件，由下一次 `AuthStart` 读回。
+  替换，而一次 *Approve* 不过是从一个文件移到另一个文件，由下一次 `AuthStart` 读回。
+  `AccessRequestsGeneration` 为轮询方提供一个廉价的变更值，它把 process 内的计数器与该
+  文件的写入时间和大小混合在一起：单靠计数器只存在于一个 process 中，因此 iOS app 从未
+  看到 broadcast extension 写入的 request。
 
 - **每台机器一把 key，certificate 在内存中。** 每台机器两把 key 意味着两个 fingerprint、
   一个 *My keys* 页、导入与 passphrase 代码、一份可能与其 key 不一致的已保存 certificate，

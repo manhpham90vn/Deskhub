@@ -193,6 +193,7 @@ enum class AuthResultCode : uint8_t {
     UntrustedHost = 7,
     LocalKeyUnavailable = 8,
     AwaitingApproval = 9,
+    RateLimited = 10,
 };
 
 constexpr bool IsWireAuthResultCode(uint8_t code) {

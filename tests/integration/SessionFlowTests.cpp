@@ -8,6 +8,8 @@
 #include "deskhubp/client/SourceQuery.h"
 #include "deskhubp/net/UdpSocket.h"
 #include "deskhubp/client/ScreenViewer.h"
+#include "deskhubp/client/TerminalViewer.h"
+#include "deskhub/ui/Strings.h"
 #include "deskhubp/system/HostIdentity.h"
 #include "deskhubp/system/AuthorizedKeysFile.h"
 #include "deskhubp/system/TrustStoreFile.h"
@@ -442,6 +444,45 @@ void TestAViewerLearnsWhatTheHostCannotDo() {
     desktop.Stop();
 }
 
+deskhubp::TerminalViewerState ShellOutcomeAgainst(uint16_t port, bool deferOpen) {
+    deskhubp::TerminalViewerConfig cfg;
+    cfg.host = HostAddr(port);
+    cfg.hostLabel = "no-terminal-host";
+    cfg.clientName = "shell-probe";
+    cfg.deferOpen = deferOpen;
+    deskhubp::TerminalViewer viewer;
+    deskhubp::TerminalViewerCallbacks hooks;
+    hooks.onTrustAsked = [&viewer](deskhub::TrustVerdict, std::string_view) {
+        viewer.AcceptFingerprint();
+    };
+    if (!viewer.Start(cfg, std::move(hooks))) return deskhubp::TerminalViewerState::Failed;
+    WaitFor([&viewer] { return viewer.State() == deskhubp::TerminalViewerState::Refused; },
+        kConnectTimeoutMs);
+    const deskhubp::TerminalViewerState state = viewer.State();
+    const bool explained =
+        viewer.Message() == deskhub::ui::TerminalRefusalText(deskhub::TermReason::NotShared);
+    viewer.Stop();
+    return explained ? state : deskhubp::TerminalViewerState::Failed;
+}
+
+void TestAShellAgainstAHostWithoutATerminalIsRefused() {
+    std::printf("[e2e] a host that shares no terminal refuses a shell instead of ignoring it...\n");
+    ResetObservations();
+    const uint16_t port = NextTestPort();
+
+    fake::SharingHost host;
+    if (!host.Start({fake::Source("Display 1", 1280, 720, 1)}, port)) {
+        Check(false, "the host could not start");
+        return;
+    }
+    Check(ShellOutcomeAgainst(port, false) == deskhubp::TerminalViewerState::Refused,
+        "opening a shell is refused with the not-shared explanation");
+    Check(ShellOutcomeAgainst(port, true) == deskhubp::TerminalViewerState::Refused,
+        "and so is asking which shells the host keeps");
+
+    host.Stop();
+}
+
 void TestTwoViewersShareOneSourceAndOneEncoder() {
     std::printf("[e2e] two viewers watch the same source off a single encode...\n");
     ResetObservations();
@@ -669,6 +710,7 @@ void RunSessionFlowTests() {
     TestTwoViewersShareOneSourceAndOneEncoder();
     TestSourceDiscoveryBeforeAnySession();
     TestAViewerLearnsWhatTheHostCannotDo();
+    TestAShellAgainstAHostWithoutATerminalIsRefused();
     TestTheHostSurvivesAViewerThatVanishes();
     TestJunkDatagramsDoNotDisturbTheStream();
 }

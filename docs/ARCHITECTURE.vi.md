@@ -169,6 +169,15 @@ tự đóng connection khoảng hai giây sau câu trả lời (`kRefusalLingerU
 error 8), đủ lâu để câu trả lời tới nơi; client cũng đóng phía của nó. Host không giữ
 connection chưa authenticate nào chờ một cú click.
 
+Host cũng đóng một số connection giữa chừng handshake mà không gửi kết quả: sau khi chạm
+giới hạn tốc độ (application error 7), khi hạn chót 10 giây trôi qua (5), với một version
+nó không parse được (4) hoặc khi framing sai (1). Client không ngồi chờ hết những trường hợp
+này. `QuicEndpoint` giữ application error mà phía bên kia dùng để đóng, và `RunClientAuth`
+kết thúc ngay khi connection không còn, ánh xạ error đó thành `RateLimited` (một kết quả
+chỉ có ở client, không bao giờ xuất hiện trên đường truyền), `TimedOut`, `VersionMismatch`
+hoặc `Refused`. Thời gian client tự chờ handshake là hạn chót của host cộng thêm 5 giây
+(`kClientAuthTimeoutMs`), một hằng số chung cho mọi giao diện client.
+
 Một chữ ký chỉ gắn với đúng một connection, nên mỗi lần kết nối lại phải ký lại; không có
 0-RTT hay session resumption. Mọi connection chưa authenticate có 10 giây kể từ lúc QUIC
 accept nó, bất kể nó đưa ra key nào hay có gửi `AuthStart` hay không, và host giữ tối đa 8
@@ -179,8 +188,17 @@ một key và một IP nguồn trong vòng một phút sẽ chặn cặp đó tr
 (`AuthFailureLimiter`); `AwaitingApproval` và `ConfigError` không bị tính là thất bại. `access_requests` giữ tối đa 16 yêu
 cầu, tối đa một cho mỗi key và một cho mỗi địa chỉ nguồn — một yêu cầu mới thay thế mọi dòng
 có cùng key hoặc cùng địa chỉ IP, bỏ qua port, nên lần xin lại làm mới địa chỉ và thời điểm —
-bỏ yêu cầu cũ nhất khi cả 16 chỗ đã đầy, mỗi yêu cầu trong 10 phút; *Approve* chuyển key vào `authorized_keys` kèm tên thiết bị, *Deny* xoá dòng đó và
-không báo gì cho client.
+bỏ yêu cầu cũ nhất khi cả 16 chỗ đã đầy, mỗi yêu cầu trong 10 phút; *Approve* chuyển key vào `authorized_keys` kèm tên thiết bị.
+*Deny* giữ dòng đó, đánh dấu là đã bị từ chối, trong phần còn lại của 10 phút: nó rời khỏi
+danh sách mà chủ máy nhìn thấy, một thiết bị khác xin từ cùng địa chỉ không thay thế được
+nó, và `AuthStart` tiếp theo của key bị từ chối được trả lời `NotPaired` thay vì tạo một
+yêu cầu mới. Một client đang chờ approve hiểu `NotPaired` đó là chủ máy đã từ chối và thôi
+quay số lại.
+
+Một thiết bị bị gỡ khỏi `authorized_keys` trong lúc đang kết nối sẽ bị đóng với
+application error 3 (`kCloseDeviceForgotten`). `HostLink` đọc error đó và kết thúc link
+với kết quả *Refused* thay vì coi lần đóng là link bị rớt rồi kết nối lại, vì làm vậy chỉ
+tạo thêm một yêu cầu kết nối mới cho chính thiết bị vừa bị gỡ.
 
 Việc được chấp nhận gắn với một QUIC connection, không gắn với địa chỉ. Nó bị huỷ ngay khi
 connection đó đóng, nên connection tiếp theo từ cùng địa chỉ và port phải chứng minh lại từ
@@ -236,7 +254,7 @@ HostEngine (mỗi app một instance, sở hữu SessionTransport)
  ├─ thread net-loop: RunHostNetLoop
  │    recv → trả lời source-list/pong (chỉ khi đã được chấp nhận) | nạp dữ liệu video
  │         | Chan::Terminal → TerminalHost | Chan::File → FileHost
- │    Tick session theo từng source, flush clipboard, reconfig, thống kê
+ │    Tick session theo từng source, flush clipboard, reconfig (gửi 3 lần), thống kê
  ├─ capture/encode: theo từng source, do callback capture của OS điều khiển (layer client)
  │    frame → encoder (mutex theo source) → Packetizer → FEC → SendTo (datagram)
  ├─ audio worker: callback capture → ring frame lock-free → Opus encode →
@@ -258,7 +276,9 @@ HostEngine (mỗi app một instance, sở hữu SessionTransport)
   viewer, negotiation, phân xử input), encoder, quality ladder và phần chẩn đoán riêng.
   Một lần encode phục vụ mọi viewer của source đó.
 - Vòng phản hồi: viewer gửi `Feedback` (loss, RTT, tốc độ nhận) mỗi giây một lần, và host
-  bổ sung một tín hiệu của riêng nó là tuổi của frame tại thời điểm nó tới bên gửi, cũng
+  quyết định tối đa mỗi giây một lần dựa trên báo cáo tệ nhất trong các báo cáo mới nhất
+  của mọi viewer (`kFeedbackDecisionSpacingUs`), để ba viewer không cắt bitrate nhanh gấp
+  ba lần. Nó bổ sung một tín hiệu của riêng nó là tuổi của frame tại thời điểm nó tới bên gửi, cũng
   chính là đại lượng `enc_lat_ms` báo cáo. `BitrateController` (AIMD) chỉ dựa vào hai
   trong số đó — loss và tuổi frame — còn `QualityLadder` đi theo bitrate nó chọn để hạ độ
   phân giải và fps; RTT và tốc độ nhận chỉ để hiển thị. FEC được bật từ frame
@@ -273,7 +293,12 @@ HostEngine (mỗi app một instance, sở hữu SessionTransport)
   đa 8 shell. Khi mất kết nối, shell được tách ra và PTY được giữ sống cho đến khi tiến trình shell thoát hoặc shell bị đóng — không giới hạn thời gian. Mọi client đã được chấp nhận đều có thể liệt kê các shell đang được giữ (`TermList`/`TermListAck`) và reattach một shell theo id. Mọi thao tác open, close, detach và reattach đều được ghi vào audit log kèm
   địa chỉ, tên và key. `TERM_CLOSE` được trả lời trước guard theo peer mà các message
   data và resize phải đi qua, nên bất kỳ client đã được nhận vào cũng kết thúc được một
-  shell bất kỳ theo id, và máy đang ở trong shell đó nhận `TERM_EXIT`.
+  shell bất kỳ theo id, và máy đang ở trong shell đó nhận `TERM_EXIT`. Một host
+  không chạy terminal tự trả lời `TermOpen` và `TermList` bằng một lời từ chối
+  `TermOpenAck` (`NotShared`), giống cách nó trả lời một lời đề nghị gửi file bằng
+  `NotAccepting`, để client được báo thay vì bị bỏ chờ. Một client resume shell gửi kích
+  thước của cửa sổ nó sẽ vẽ, và một lần resize xảy ra trong lúc lệnh open còn đang trên
+  đường sẽ được gửi theo sau acknowledgement.
 - Một picker cho cả năm client: `core/ui/ShellPicker` biến một `TermSessionList` thành
   các dòng mà mọi client vẽ ra —— id và kích thước, shell thuộc về ai, và client này có
   được reattach hay đóng nó không. Chỉ shell đã detach mới reattach được, còn shell host
@@ -393,8 +418,8 @@ certificate công khai, bị dọn ở lần bắt đầu host kế tiếp nếu
 bị bỏ qua), `authorized_keys` (các client
 key mà host này chấp nhận), `known_hosts` (các host đã trust theo fingerprint, kèm tên và
 địa chỉ gần nhất), `access_requests` (các yêu cầu kết nối đang chờ Approve hoặc Deny — thời
-điểm, địa chỉ và public key có nhãn là tên thiết bị, mỗi yêu cầu một dòng; tối đa 16, mỗi
-yêu cầu bị loại bỏ sau 10 phút),
+điểm, địa chỉ và public key có nhãn là tên thiết bị, mỗi yêu cầu một dòng, yêu cầu đã bị từ chối có tiền tố
+`denied`; tối đa 16, mỗi yêu cầu bị loại bỏ sau 10 phút),
 `pairing_tokens` (các token QR đang còn hiệu lực, kèm hạn của chúng), `ui-settings.txt`
 (bao gồm tên thiết bị), `recent-hosts.txt` (địa chỉ, thời điểm kết nối gần nhất và tên
 host), `portal-restore-token.txt` trên Linux (token của chính desktop cho những màn hình đã
@@ -451,6 +476,30 @@ không gây fail), các số liệu integration dưới tải từ bản build c
 coverage của core.
 
 ## 9. Những quyết định cần ghi nhớ
+
+- **Chỉ host mới có thể kết thúc sớm một handshake, nên client lắng nghe xem nó kết thúc
+  thế nào**: client từng chờ `AuthResult` tới 65 giây — di sản từ thời việc approve diễn ra
+  bên trong một connection được giữ — trong khi host đóng mọi connection chưa authenticate
+  sau 10 giây và đóng ngay những connection bị giới hạn tốc độ. Một người dùng có lần scan
+  QR bị giới hạn tốc độ thấy *timed out* một phút sau đó. Giờ client đọc application error
+  của lần đóng và chỉ chờ hạn chót của host cộng thêm một khoảng dư.
+
+- **Một RECONFIG được gửi ba lần**: nó đi dưới dạng một datagram không có acknowledgement,
+  và chất lượng bị hạ chủ yếu trên những link mất gói, đúng lúc một datagram đơn lẻ dễ bị
+  mất nhất. Viewer bỏ lỡ nó sẽ giữ kích thước và frame rate cũ cho tới Hello kế tiếp. Host
+  lặp lại nó cách nhau 100 ms (`kReconfigSends`), và viewer bỏ qua bản không thay đổi gì,
+  nên các bản sao không tốn một lần dựng lại decoder nào.
+
+- **Phần lẻ của một nấc cuộn được mang sang, không làm tròn lên**: cuộn mượt và touchpad
+  chính xác gửi delta nhỏ hơn 120 nhiều. Làm tròn mỗi delta lên thành một nấc trọn vẹn khiến
+  một lần vuốt cuộn hàng chục nấc trên host Linux và macOS. `TakeWheelNotches` giữ phần dư
+  theo từng host và bỏ nó khi hướng cuộn đổi.
+
+- **Scancode quyết định bên trái hay phải của một phím modifier**: raw input của Windows
+  báo Shift, Ctrl hoặc Alt chung chung và để scancode nói bên nào. Key map của Linux và
+  macOS từng quy một modifier chung chung về phím bên trái, nên AltGr tới nơi thành Left
+  Alt. `InputApplier` biến một modifier chung chung thành modifier có bên mà scancode Set 1
+  của nó chỉ ra, trước khi bất kỳ backend nào nhìn thấy nó.
 
 - **Host chỉ gửi dữ liệu ứng dụng sau khi cấp quyền**: `SessionTransport` từ chối gửi
   record và datagram cho tới khi kết nối đó xác thực bằng khóa xong. Bản tin challenge
@@ -1006,9 +1055,11 @@ coverage của core.
   trên iOS, broadcast extension nhận `AuthStart` trong khi app vẽ mã QR và danh sách yêu
   cầu; trong CLI, `share` chạy trong khi `access approve` được gõ ở terminal khác.
   `access_requests` và `pairing_tokens` nằm trong thư mục cấu hình dùng chung, dưới cùng
-  khoá và cơ chế thay thế atomic như `authorized_keys`, `AccessRequestsGeneration` cho các
-  poller một bộ đếm thay đổi rẻ, và một lần *Approve* chẳng là gì hơn một lần chuyển từ file
-  này sang file khác mà `AuthStart` tiếp theo đọc lại.
+  khoá và cơ chế thay thế atomic như `authorized_keys`, và một lần *Approve* chẳng là gì hơn
+  một lần chuyển từ file này sang file khác mà `AuthStart` tiếp theo đọc lại.
+  `AccessRequestsGeneration` cho các poller một giá trị thay đổi rẻ, trộn một bộ đếm trong
+  process với thời điểm ghi và kích thước của file: riêng bộ đếm chỉ sống trong một
+  process, nên app iOS không bao giờ thấy một yêu cầu do broadcast extension ghi.
 
 - **Một key cho mỗi máy, certificate trong bộ nhớ**: hai key cho mỗi máy nghĩa là hai
   fingerprint, một trang *My keys*, code import và passphrase, một certificate được lưu có

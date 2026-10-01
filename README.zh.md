@@ -49,6 +49,11 @@ brew install --cask manhpham90vn/tap/deskhub     # macOS · app
 brew install manhpham90vn/tap/deskhub-cli        # macOS · deskhub-cli
 ```
 
+> **winget 暂时无法使用。** Deskhub 的软件包仍在 winget-pkgs 中等待审核
+> （应用为 [#439628](https://github.com/microsoft/winget-pkgs/pull/439628)，CLI 为 [#439629](https://github.com/microsoft/winget-pkgs/pull/439629)），
+> 在合并之前两条 `winget install` 命令都会失败。在此之前，请从
+> [Releases](https://github.com/manhpham90vn/Deskhub/releases) 下载 Windows 安装程序。
+
 在 Ubuntu / Debian / Mint 上，桌面应用与 CLI 使用独立软件包。添加一次 apt repository，
 再按需安装其中一个或两个：
 

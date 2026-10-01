@@ -127,6 +127,16 @@ inline constexpr const char* kAuthNotPairedCliHint =
 inline constexpr const char* kAuthAwaitingApproval =
     "The owner of that machine did not approve this device in time. Ask them to press "
     "Approve under Connection requests on their Host page, then connect again.";
+inline constexpr const char* kAuthDeclined =
+    "The owner of that machine declined this device's request. Ask them to press Approve "
+    "the next time it appears under Connection requests; the device can ask again ten "
+    "minutes after it was declined.";
+inline constexpr const char* kAuthDeviceRemoved =
+    "The owner of that machine removed this device from Devices allowed to connect to this "
+    "machine, so the session ended. Ask them to allow it again, then connect again.";
+inline constexpr const char* kAuthRateLimited =
+    "That machine is pausing attempts from this device after several failed ones. Wait a "
+    "few seconds, then connect again.";
 inline constexpr const char* kAuthRefused =
     "That machine refused this connection. Ask its owner to check that this device's public "
     "key is still listed under Devices > Devices allowed to connect to this machine, then "
@@ -165,6 +175,7 @@ inline const char* AuthRefusalText(AuthResultCode code) {
         case AuthResultCode::UntrustedHost: return kAuthUntrustedHost;
         case AuthResultCode::LocalKeyUnavailable: return kAuthLocalKeyUnavailable;
         case AuthResultCode::AwaitingApproval: return kAuthAwaitingApproval;
+        case AuthResultCode::RateLimited: return kAuthRateLimited;
         case AuthResultCode::Accepted: return "Connected.";
         case AuthResultCode::NotPaired: break;
     }

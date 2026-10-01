@@ -247,7 +247,7 @@ Nếu bạn tiếp tục sử dụng Deskhub ở trạng thái hiện tại, nê
       còn nhận ra. Bỏ chọn *Viewers can control this machine* khi chỉ cần cho người khác xem.
 - [ ] Chỉ approve những yêu cầu kết nối bạn đang mong đợi, và kiểm tra fingerprint cùng
       địa chỉ trong hàng đó trước khi bấm. Deny hoặc bỏ qua phần còn lại — chúng tự hết
-      hạn.
+      hạn, và một thiết bị đã bị deny không thể xin lại trong mười phút.
 - [ ] Ẩn mã QR ngay khi thiết bị bạn cho xem đã kết nối, và không bao giờ hiển thị mã trên
       màn hình đang share hoặc đang trình chiếu.
 - [ ] Thoát Deskhub khi không sử dụng. App không chạy như một background service, nên

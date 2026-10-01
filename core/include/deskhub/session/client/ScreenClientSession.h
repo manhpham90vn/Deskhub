@@ -23,6 +23,8 @@ struct NegotiatedParams {
     uint16_t height = 0;
     uint8_t fps = 60;
     uint32_t bitrateBps = 0;
+
+    bool operator==(const NegotiatedParams&) const = default;
 };
 
 enum class ScreenSessionEnd : uint8_t { HostBye = 0,

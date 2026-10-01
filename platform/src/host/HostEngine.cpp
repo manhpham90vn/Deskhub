@@ -291,6 +291,21 @@ void HostEngine::RefuseFiles(const NetAddr& from, std::span<const uint8_t> messa
     sock_.SendRecordOn(from, kQuicFileStream, out);
 }
 
+void HostEngine::RefuseTerminal(const NetAddr& from, std::span<const uint8_t> message) {
+    const auto header = deskhub::ParseCommonHeader(message);
+    if (!header) return;
+    if (header->type != deskhub::MsgType::TermOpen && header->type != deskhub::MsgType::TermList)
+        return;
+
+    deskhub::TermOpenAck refusal;
+    refusal.reason = deskhub::TermReason::NotShared;
+
+    std::vector<uint8_t> out(deskhub::kMaxRecordSize);
+    out.resize(deskhub::BuildTermOpenAck(out, refusal));
+    if (out.empty()) return;
+    sock_.SendRecord(from, out);
+}
+
 void HostEngine::Stop() {
     if (pipes_.empty() && !recvThread_.joinable()) return;
 
@@ -440,7 +455,12 @@ void HostEngine::RecvLoop() {
         RefuseFiles(from, message);
     };
     loop.onTerminal = [this](const NetAddr& from, std::span<const uint8_t> message) {
-        if (TerminalHost* t = terminal()) t->HandleMessage(from, message);
+        TerminalHost* t = terminal();
+        if (t != nullptr && t->Running()) {
+            t->HandleMessage(from, message);
+            return;
+        }
+        RefuseTerminal(from, message);
     };
     loop.keepAlive = [this] {
         return opt_.terminal || opt_.files ||

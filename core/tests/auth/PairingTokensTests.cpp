@@ -63,6 +63,9 @@ void TestFileRoundTrip() {
     Check(!ParsePairingTokens("garbage\n", 0).has_value(), "a damaged line invalidates the file");
     Check(!ParsePairingTokens("AAAA 12\n", 0).has_value(), "a short token invalidates the file");
     Check(!ParsePairingTokens(text + text, 1000).has_value(), "a duplicate line invalidates the file");
+    const std::string token = text.substr(0, text.find(' ') + 1);
+    Check(!ParsePairingTokens(token + "9999999999999999999\n", 1000).has_value(),
+        "an expiry too large for 64 bits invalidates the file instead of overflowing");
     Check(!ParsePairingTokens(std::string(kMaxPairingTokensFileBytes + 1, 'x'), 0).has_value(),
         "an oversized file is refused");
 }

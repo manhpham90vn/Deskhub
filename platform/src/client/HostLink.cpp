@@ -205,6 +205,12 @@ void HostLink::Loop() {
         PumpReady();
         if (stop_.load(std::memory_order_acquire)) break;
 
+        if (sock_.PeerForgotThisDevice(config_.host)) {
+            LOGW("link: %s removed this device from its allowed devices",
+                config_.host.ToString().c_str());
+            Fail(HostLinkState::Refused, deskhub::ui::kAuthDeviceRemoved);
+            break;
+        }
         if (!config_.recoverLink) {
             Fail(HostLinkState::Failed, deskhub::ui::kTerminalUnreachable);
             break;
@@ -223,7 +229,11 @@ void HostLink::Loop() {
 bool HostLink::DialAndAdmit() {
     while (!stop_.load(std::memory_order_acquire)) {
         const bool recovering = linkLostAtUs_ != 0;
-        if (recovering) {
+        const bool awaitingApproval = State() == HostLinkState::AwaitingApproval;
+        if (awaitingApproval) {
+            sock_.Close();
+            if (!WaitBeforeRedial(approvalAttempts_++)) return false;
+        } else if (recovering) {
             if (!deskhub::ReconnectStillWorthTrying(NowUs() - linkLostAtUs_,
                     config_.recoverGraceUs)) {
                 LOGW("link: gave up reconnecting to %s after %u attempts",
@@ -233,11 +243,6 @@ bool HostLink::DialAndAdmit() {
             }
             if (!WaitBeforeRedial(redialAttempts_)) return false;
             ++redialAttempts_;
-        }
-        const bool awaitingApproval = State() == HostLinkState::AwaitingApproval;
-        if (awaitingApproval) {
-            sock_.Close();
-            if (!WaitBeforeRedial(approvalAttempts_++)) return false;
         }
 
         peerGone_.store(false, std::memory_order_release);
@@ -376,6 +381,11 @@ bool HostLink::RunAuth() {
         if (!awaitingApproval)
             SetState(HostLinkState::AwaitingApproval,
                 deskhub::ui::AwaitingApprovalLine(config_.hostLabel));
+        return false;
+    }
+    if (awaitingApproval && code == deskhub::AuthResultCode::NotPaired) {
+        LOGW("link: %s declined this device's request", config_.host.ToString().c_str());
+        Fail(HostLinkState::Refused, deskhub::ui::kAuthDeclined);
         return false;
     }
     Fail(HostLinkState::Refused, deskhub::ui::AuthRefusalText(code));

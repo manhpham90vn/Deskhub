@@ -248,7 +248,7 @@ If you want to keep using Deskhub as it is today, these are worth doing:
       remove keys you no longer recognize. Untick *Viewers can control this machine* when only viewing is needed.
 - [ ] Approve only the connection requests you were expecting, and check the fingerprint
       and address in the row before you do. Deny or ignore the rest — they expire on
-      their own.
+      their own, and a denied device cannot ask again for ten minutes.
 - [ ] Hide the QR code as soon as the device you showed it to is connected, and never
       show it on a screen you are sharing or presenting.
 - [ ] Quit Deskhub when you are not actively using it. It does not run as a background

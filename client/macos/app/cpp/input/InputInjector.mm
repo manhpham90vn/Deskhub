@@ -246,7 +246,7 @@ void InputInjector::SendButton(deskhub::MouseButton btn, bool down) {
 
 void InputInjector::SendWheel(int32_t delta) {
     if (!delta) return;
-    const int32_t lines = deskhub::WheelNotches(delta) * 3;
+    const int32_t lines = deskhub::TakeWheelNotches(delta, wheelCarry_) * 3;
     if (!lines) return;
     CGEventRef ev = CGEventCreateScrollWheelEvent((CGEventSourceRef)source_,
         kCGScrollEventUnitLine, 1, lines);

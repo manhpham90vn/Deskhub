@@ -107,7 +107,8 @@ bool ScreenHostSession::HandleFromViewer(const CommonHeader& header, std::span<c
             if (!m) return false;
             viewer.feedback = *m;
             viewer.haveFeedback = true;
-            if (cb_.onFeedback) cb_.onFeedback(WorstCaseFeedback(viewers_.slots()));
+            feedbackPending_ = true;
+            ReportFeedbackIfDue(nowUs);
             return true;
         }
         case MsgType::Nack: {
@@ -163,6 +164,16 @@ void ScreenHostSession::Tick(uint64_t nowUs) {
         if (!s.active) continue;
         if (nowUs - s.lastRecvUs > kSessionTimeoutUs) DropViewer(s);
     }
+    ReportFeedbackIfDue(nowUs);
+}
+
+void ScreenHostSession::ReportFeedbackIfDue(uint64_t nowUs) {
+    if (!feedbackPending_) return;
+    if (feedbackReported_ && nowUs - lastFeedbackReportUs_ < kFeedbackDecisionSpacingUs) return;
+    feedbackPending_ = false;
+    feedbackReported_ = true;
+    lastFeedbackReportUs_ = nowUs;
+    if (cb_.onFeedback) cb_.onFeedback(WorstCaseFeedback(viewers_.slots()));
 }
 
 bool ScreenHostSession::KickViewer(uint64_t addrPacked) {
@@ -234,6 +245,8 @@ void ScreenHostSession::Disconnect() {
     state_.store(State::Idle, std::memory_order_release);
     sessionId_.store(0, std::memory_order_relaxed);
     viewers_.Clear();
+    feedbackPending_ = false;
+    feedbackReported_ = false;
     HandOverControl(0);
     if (cb_.onDisconnect) cb_.onDisconnect();
 }

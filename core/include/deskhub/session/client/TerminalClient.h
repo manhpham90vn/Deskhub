@@ -33,7 +33,7 @@ public:
 
     void Open(TermSize size, std::string clientName);
     void Reattach();
-    void Resume(uint32_t termId);
+    void Resume(uint32_t termId, TermSize size);
     void RequestList();
     void HandleMessage(std::span<const uint8_t> message);
     void SendInput(std::span<const uint8_t> bytes);
@@ -66,6 +66,7 @@ private:
     TerminalClientState state_ = TerminalClientState::Idle;
     uint32_t termId_ = 0;
     TermSize size_{};
+    TermSize sentSize_{};
     std::string clientName_{};
     std::vector<uint8_t> buf_ = std::vector<uint8_t>(kMaxRecordSize);
     TermSessionList sessions_{};

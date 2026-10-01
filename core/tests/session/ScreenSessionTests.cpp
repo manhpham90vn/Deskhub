@@ -304,9 +304,12 @@ void TestReconfigFocusFeedback() {
     Check(reconfigured && rp.width == 1280 && rp.height == 720 && rp.bitrateBps == 8'000'000,
         "RECONFIG updates params and fires onReconfig");
     reconfigured = false;
-    n = BuildReconfig(buf, cli.sessionId(), Reconfig{0, 0, 0});
+    n = BuildReconfig(buf, cli.sessionId(), Reconfig{1280, 720, 8'000'000});
     cli.HandlePacket(std::span<const uint8_t>(buf, n), now);
-    Check(reconfigured && rp.width == 1280 && rp.height == 720,
+    Check(!reconfigured, "a repeated RECONFIG is not reported a second time");
+    n = BuildReconfig(buf, cli.sessionId(), Reconfig{0, 0, 0, 24});
+    cli.HandlePacket(std::span<const uint8_t>(buf, n), now);
+    Check(reconfigured && rp.width == 1280 && rp.height == 720 && rp.fps == 24,
         "RECONFIG with zero size keeps the previous dimensions");
 
     cli.SetFocused(true);

@@ -10,6 +10,7 @@ void TerminalClient::Emit(size_t written) {
 void TerminalClient::SendOpen() {
     TermOpen open;
     open.size = size_;
+    sentSize_ = size_;
     open.resumeId = termId_;
     open.clientName = clientName_;
     Emit(BuildTermOpen(buf_, open));
@@ -24,12 +25,13 @@ void TerminalClient::Open(TermSize size, std::string clientName) {
 }
 
 void TerminalClient::Reattach() {
-    Resume(termId_);
+    Resume(termId_, size_);
 }
 
-void TerminalClient::Resume(uint32_t termId) {
+void TerminalClient::Resume(uint32_t termId, TermSize size) {
     if (termId == 0 || state_ == TerminalClientState::Closed) return;
     if (state_ == TerminalClientState::Open) return;
+    size_ = ClampTermSize(size);
     termId_ = termId;
     state_ = TerminalClientState::Reattaching;
     SendOpen();
@@ -85,8 +87,10 @@ void TerminalClient::HandleMessage(std::span<const uint8_t> message) {
         case MsgType::TermOpenAck: {
             const std::optional<TermOpenAck> ack = ParseTermOpenAck(payload);
             if (!ack) return;
+            const bool hostSharesNoTerminal =
+                ack->reason == TermReason::NotShared && state_ == TerminalClientState::Idle;
             if (state_ != TerminalClientState::Opening &&
-                state_ != TerminalClientState::Reattaching)
+                state_ != TerminalClientState::Reattaching && !hostSharesNoTerminal)
                 return;
             if (ack->reason != TermReason::Accepted || ack->termId == 0) {
                 const bool hostMayNotHaveNoticedTheDropYet =
@@ -103,6 +107,7 @@ void TerminalClient::HandleMessage(std::span<const uint8_t> message) {
             }
             termId_ = ack->termId;
             state_ = TerminalClientState::Open;
+            if (size_ != sentSize_) Emit(BuildTermResize(buf_, termId_, size_));
             if (cb_.onOpened) cb_.onOpened(*ack);
             return;
         }

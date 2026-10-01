@@ -1,6 +1,7 @@
 #pragma once
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <string>
 #include <string_view>
 
@@ -18,7 +19,9 @@ inline bool ParseUnixTime(std::string_view s, int64_t& out) {
     int64_t v = 0;
     for (char c : s) {
         if (c < '0' || c > '9') return false;
-        v = v * 10 + (c - '0');
+        const int digit = c - '0';
+        if (v > (std::numeric_limits<int64_t>::max() - digit) / 10) return false;
+        v = v * 10 + digit;
     }
     out = v;
     return true;

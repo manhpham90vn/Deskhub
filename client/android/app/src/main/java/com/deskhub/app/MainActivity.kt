@@ -10,6 +10,7 @@ import android.content.pm.PackageManager
 import android.media.projection.MediaProjectionManager
 import android.os.Build
 import android.os.Bundle
+import android.os.SystemClock
 import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -223,6 +224,7 @@ private const val UNSEEN_GENERATION = -1L
 private const val QR_QUIET_ZONE_MODULES = 4
 private const val QR_CELL_OVERLAP_PX = 0.5f
 private const val QR_WIDTH_FRACTION = 0.7f
+private const val MILLIS_PER_SECOND = 1000L
 
 private const val OPAQUE_ALPHA = 0xFF000000.toInt()
 
@@ -784,6 +786,10 @@ private fun HostScreen(
     var requests by remember { mutableStateOf(emptyList<NativeClient.AccessRequest>()) }
     var requestsGeneration by remember { mutableStateOf(UNSEEN_GENERATION) }
     var qrInvite by remember { mutableStateOf<String?>(null) }
+    var qrExpiresAtMs by remember { mutableStateOf(0L) }
+    var qrExpired by remember { mutableStateOf(false) }
+    var qrUnavailable by remember { mutableStateOf(false) }
+    var nowMs by remember { mutableStateOf(SystemClock.elapsedRealtime()) }
     val context = LocalContext.current
     val refreshRequests = {
         requestsGeneration = NativeClient.accessRequestsGeneration()
@@ -791,8 +797,18 @@ private fun HostScreen(
         AccessRequestNotifier.announce(context, requests)
     }
     val hideQr = {
-        if (qrInvite != null) NativeClient.pairingRevoke()
+        if (qrInvite != null || qrExpired) NativeClient.pairingRevoke()
         qrInvite = null
+        qrExpired = false
+        qrUnavailable = false
+    }
+    val showQr = { bindIp: String ->
+        val invite = NativeClient.pairingInvite(port, bindIp)
+        nowMs = SystemClock.elapsedRealtime()
+        qrExpired = false
+        qrUnavailable = invite.isEmpty()
+        qrInvite = invite.ifEmpty { null }
+        qrExpiresAtMs = nowMs + NativeClient.pairingTokenTtlSeconds() * MILLIS_PER_SECOND
     }
 
     LaunchedEffect(Unit) {
@@ -803,6 +819,11 @@ private fun HostScreen(
             addresses = NativeHost.localAddresses()
             if (NativeClient.accessRequestsGeneration() != requestsGeneration) refreshRequests()
             if (state == NativeHost.ShareState.SHARING && !NativeHost.isRunning()) onStopSharing()
+            nowMs = SystemClock.elapsedRealtime()
+            if (qrInvite != null && nowMs >= qrExpiresAtMs) {
+                qrInvite = null
+                qrExpired = true
+            }
             delay(POLL_INTERVAL_MS)
         }
     }
@@ -924,21 +945,51 @@ private fun HostScreen(
         if (sharing) {
             OutlinedButton(
                 onClick = {
-                    if (qrInvite != null) {
+                    if (qrInvite != null || qrExpired) {
                         hideQr()
                     } else {
-                        qrInvite = NativeClient.pairingInvite(port, bindIp)
+                        showQr(bindIp)
                     }
                 },
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Text(
                     NativeClient.string(
-                        if (qrInvite != null) NativeClient.STR_HIDE_QR_ACTION else NativeClient.STR_SHOW_QR_ACTION,
+                        if (qrInvite != null || qrExpired) {
+                            NativeClient.STR_HIDE_QR_ACTION
+                        } else {
+                            NativeClient.STR_SHOW_QR_ACTION
+                        },
                     ),
                 )
             }
-            qrInvite?.let { QrInvitePanel(invite = it) }
+            if (qrUnavailable) {
+                Text(
+                    NativeClient.string(NativeClient.STR_QR_UNAVAILABLE),
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
+            if (qrExpired) {
+                Text(
+                    NativeClient.string(NativeClient.STR_QR_EXPIRED_NOTE),
+                    color = MaterialTheme.colorScheme.error,
+                )
+                Button(
+                    onClick = {
+                        NativeClient.pairingRevoke()
+                        showQr(bindIp)
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(NativeClient.string(NativeClient.STR_NEW_QR_ACTION))
+                }
+            }
+            qrInvite?.let {
+                QrInvitePanel(
+                    invite = it,
+                    secondsLeft = (qrExpiresAtMs - nowMs + MILLIS_PER_SECOND - 1) / MILLIS_PER_SECOND,
+                )
+            }
         }
 
         SectionLabel(NativeClient.string(NativeClient.STR_HOST_HEADING))
@@ -1030,7 +1081,10 @@ private fun HostScreen(
 }
 
 @Composable
-private fun QrInvitePanel(invite: String) {
+private fun QrInvitePanel(
+    invite: String,
+    secondsLeft: Long,
+) {
     val code = remember(invite) { NativeClient.qrEncode(invite) }
     if (code != null) {
         Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
@@ -1052,6 +1106,11 @@ private fun QrInvitePanel(invite: String) {
         }
         CopyTextButton(NativeClient.string(NativeClient.STR_COPY_BUTTON)) { invite }
     }
+    Text(
+        NativeClient.qrExpiryLine(secondsLeft),
+        style = MaterialTheme.typography.bodySmall,
+        color = MutedColor,
+    )
     Hint(NativeClient.string(NativeClient.STR_QR_HINT))
 }
 

@@ -7,6 +7,7 @@
 
 #include <cstdint>
 #include <functional>
+#include <optional>
 #include <span>
 #include <string>
 #include <vector>
@@ -16,6 +17,8 @@ namespace deskhub {
 inline constexpr uint64_t kIdrFlushIdleUs = 200'000;
 inline constexpr uint64_t kKeepaliveIdleUs = 500'000;
 inline constexpr uint64_t kKeepaliveIntervalUs = 500'000;
+inline constexpr uint32_t kReconfigSends = 3;
+inline constexpr uint64_t kReconfigResendIntervalUs = 100'000;
 
 SourcePipelineState* RouteDatagram(std::span<SourcePipelineState* const> live,
     const CommonHeader& header, std::span<const uint8_t> pkt);
@@ -36,6 +39,8 @@ struct OfferUpdate {
 };
 
 OfferUpdate RefreshOffer(SourcePipelineState& st, uint8_t fallbackFps);
+
+std::optional<Reconfig> TakeReconfigToSend(SourcePipelineState& st, uint64_t nowUs);
 
 StreamSize RetargetStream(SourcePipelineState& st, uint32_t maxDim);
 

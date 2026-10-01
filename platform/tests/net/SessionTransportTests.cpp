@@ -16,6 +16,7 @@ namespace {
 
 constexpr uint16_t kTestPort = 47793;
 constexpr int kMaxRounds = 600;
+constexpr uint64_t kAuthStartWaitUs = 5'000'000;
 
 struct SavedIdentity {
     std::string key{};
@@ -37,6 +38,15 @@ int PumpFor(deskhubp::SessionTransport& reader, deskhubp::SessionTransport& othe
         NetAddr ignored;
         uint8_t drain[deskhub::kMaxDatagram];
         other.RecvFrom(drain, sizeof(drain), ignored);
+    }
+    return 0;
+}
+
+int WaitForAuthStart(deskhubp::SessionTransport& host, uint8_t* buf, size_t cap, NetAddr& from) {
+    const uint64_t deadline = NowUs() + kAuthStartWaitUs;
+    while (NowUs() < deadline) {
+        const int got = host.RecvFrom(buf, cap, from);
+        if (got > 0) return got;
     }
     return 0;
 }
@@ -138,7 +148,7 @@ void TestClientRejectsAnOldAuthChallenge() {
     deskhub::AuthResultCode code = deskhub::AuthResultCode::NotPaired;
     bool admitted = false;
     std::thread auth([&] { admitted = viewer.RunClientAuth(target, config, 2000, code); });
-    const int got = PumpFor(host, host, buf, sizeof(buf), from);
+    const int got = WaitForAuthStart(host, buf, sizeof(buf), from);
     Check(got > 0, "the new client sends an auth start");
     if (got > 0) {
         deskhub::AuthChallenge challenge;
@@ -190,7 +200,7 @@ void TestClientRejectsAcceptedBeforeSigning() {
     deskhub::AuthResultCode code = deskhub::AuthResultCode::NotPaired;
     bool admitted = false;
     std::thread auth([&] { admitted = viewer.RunClientAuth(target, config, 2000, code); });
-    const int got = PumpFor(host, host, buf, sizeof(buf), from);
+    const int got = WaitForAuthStart(host, buf, sizeof(buf), from);
     Check(got > 0, "the client sent its auth start");
     if (got > 0) {
         deskhub::AuthResult result;

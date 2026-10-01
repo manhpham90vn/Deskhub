@@ -34,6 +34,7 @@ inline constexpr unsigned kBulkEveryNthPop = 8;
 inline constexpr size_t kMaxPendingAuth = 8;
 inline constexpr uint64_t kAuthResponseTimeoutUs = 10'000'000;
 inline constexpr uint64_t kRefusalLingerUs = 2'000'000;
+inline constexpr uint32_t kClientAuthTimeoutMs = uint32_t(kAuthResponseTimeoutUs / 1000) + 5'000;
 
 struct TransportMessage {
     NetAddr from{};
@@ -69,6 +70,7 @@ public:
     bool SendKeepalive(const NetAddr& peer);
     bool Authenticated(const NetAddr& peer) const;
     bool PeerAuth(const NetAddr& peer, deskhub::Fingerprint& fp, std::string& name) const;
+    bool PeerForgotThisDevice(const NetAddr& peer) const;
 
     bool SendRecord(const NetAddr& to, std::span<const uint8_t> message);
     bool SendRecordOn(const NetAddr& to, uint64_t streamId, std::span<const uint8_t> message);
@@ -111,6 +113,7 @@ private:
     void RevokeForgottenPeers();
     void ExpirePendingAuth(uint64_t nowUs);
     std::optional<TransportMessage> TakeAuthMessage();
+    std::optional<deskhub::AuthResultCode> ClosedDuringAuth(const NetAddr& server) const;
     void PollForAuth();
 
     QuicEndpoint endpoint_;

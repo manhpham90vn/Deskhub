@@ -123,6 +123,26 @@ void TestEmptyAndStaleInputAreIgnored() {
     Check(!receiver.TakeCompleted().has_value(), "and produces nothing");
 }
 
+void TestARestartedSenderIsHeardAgain() {
+    std::printf("[clip] a sender that starts counting again is heard once the session is new...\n");
+    ClipboardSync before, receiver;
+    for (const char* text : {"one", "two", "three"}) {
+        before.OfferLocal(text);
+        for (const auto& d : CollectDatagrams(before, 1'000)) receiver.Accept(*ChunkOf(d));
+        receiver.TakeCompleted();
+    }
+
+    ClipboardSync restarted;
+    restarted.OfferLocal("fresh");
+    const auto first = CollectDatagrams(restarted, 1'000);
+    Check(!receiver.Accept(*ChunkOf(first[0])),
+        "within one session a lower revision is still stale");
+    receiver.ForgetReceived();
+    Check(receiver.Accept(*ChunkOf(first[0])) &&
+              receiver.TakeCompleted().value_or("") == "fresh",
+        "after the receiver forgets, the restarted sender's first copy lands");
+}
+
 }
 
 void RunClipboardSyncTests() {
@@ -132,4 +152,5 @@ void RunClipboardSyncTests() {
     TestEchoIsSuppressed();
     TestOversizeIsCutOnUtf8Boundary();
     TestEmptyAndStaleInputAreIgnored();
+    TestARestartedSenderIsHeardAgain();
 }

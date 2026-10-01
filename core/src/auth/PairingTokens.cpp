@@ -3,6 +3,8 @@
 #include "deskhub/net/Base64.h"
 #include "deskhub/net/PairingInvite.h"
 
+#include "../net/RecordText.h"
+
 #include <algorithm>
 
 namespace deskhub {
@@ -17,16 +19,7 @@ uint8_t ConstantTimeDifference(std::span<const uint8_t> a, const PairingToken& b
     return difference;
 }
 
-bool ParseUnixTime(std::string_view text, int64_t& out) {
-    if (text.empty() || text.size() > 19) return false;
-    int64_t value = 0;
-    for (char c : text) {
-        if (c < '0' || c > '9') return false;
-        value = value * 10 + (c - '0');
-    }
-    out = value;
-    return true;
-}
+using detail::ParseUnixTime;
 
 }
 

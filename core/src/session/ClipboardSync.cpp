@@ -101,6 +101,10 @@ void ClipboardSync::Reset() {
     lastSendUs_ = 0;
     haveSentHash_ = false;
     haveAppliedHash_ = false;
+    ForgetReceived();
+}
+
+void ClipboardSync::ForgetReceived() {
     inRevision_ = 0;
     haveTakenRevision_ = false;
     inChunks_.clear();

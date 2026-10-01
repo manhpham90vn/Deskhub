@@ -48,7 +48,8 @@ void TestEveryLabelSaysSomething() {
         ui::kQrHint, ui::kQrUnavailable, ui::kUnnamedClient, ui::kAccessRequestNotificationTitle, ui::kAccessRequestsHeading, ui::kAccessRequestsEmpty, ui::kApproveAction,
         ui::kDenyAction, ui::kCameraDenied, ui::kInviteHostMismatch, ui::kInviteInvalid,
         ui::kAuthAwaitingApproval, ui::kTrustNewHostTitle, ui::kTrustNewHostAction,
-        ui::kCancelAction, ui::kDeviceNameHint, ui::kAuthNotPairedCliHint};
+        ui::kCancelAction, ui::kDeviceNameHint, ui::kAuthNotPairedCliHint,
+        ui::kAuthDeclined, ui::kAuthDeviceRemoved, ui::kAuthRateLimited};
     const std::string prompt = ui::TrustNewHostPrompt("192.168.1.10:47777", "SHA256:abc");
     Check(Contains(prompt, "192.168.1.10:47777") && Contains(prompt, "SHA256:abc"),
         "the first-connection prompt names the host and shows its whole fingerprint");
@@ -72,6 +73,12 @@ void TestEveryLabelSaysSomething() {
         "the notification names the device, or says it is unnamed");
     Check(ui::AuthRefusalText(AuthResultCode::AwaitingApproval) == ui::kAuthAwaitingApproval,
         "the waiting verdict has its own explanation");
+    Check(ui::AuthRefusalText(AuthResultCode::RateLimited) == ui::kAuthRateLimited,
+        "a host pausing attempts is explained as a pause, not a refusal");
+    Check(!IsWireAuthResultCode(uint8_t(AuthResultCode::RateLimited)),
+        "the pause is only ever read from the host's close code, never sent as a result");
+    Check(Contains(ui::kAuthDeviceRemoved, ui::kPairedHeading),
+        "the removal text names the Devices section by its real title");
     for (const char* s : labels) Check(s && *s, "every shared UI string is non-empty");
     Check(Contains(ui::kAuthNotPaired, ui::kPairedHeading) &&
               Contains(ui::kAuthRefused, ui::kPairedHeading),

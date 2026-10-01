@@ -204,6 +204,10 @@ final class ConnectModel {
             )
             return
         }
+        if outcome.failed(as: DHSourceQueryAwaitingApproval), !address.isEmpty {
+            self.address = DeskhubClient.addressHost(address)
+            port = DeskhubClient.addressPortText(address)
+        }
         if !outcome.failure.isEmpty {
             connectError = outcome.failure
             return
