@@ -5,21 +5,13 @@
 #include "deskhub/ui/Strings.h"
 #include "deskhub/ui/UiSettings.h"
 
+#include "../net/RecordText.h"
+
 namespace deskhub::ui {
 
 namespace {
 
-bool ParseUnixTime(std::string_view s, int64_t& out) {
-    if (s.empty()) return false;
-    int64_t v = 0;
-    for (char c : s) {
-        if (c < '0' || c > '9') return false;
-        if (v > (INT64_MAX - 9) / 10) return false;
-        v = v * 10 + (c - '0');
-    }
-    out = v;
-    return true;
-}
+using detail::ParseUnixTime;
 
 bool ParseLine(std::string_view line, RecentDevice& out) {
     const std::string trimmed = TrimAscii(line);

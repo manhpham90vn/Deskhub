@@ -22,6 +22,10 @@ std::string CleanAddress(std::string_view address) {
     return trimmed;
 }
 
+bool OutlivedItsTtl(int64_t requestedUnix, int64_t nowUnix) {
+    return requestedUnix <= nowUnix && nowUnix - requestedUnix >= kAccessRequestTtlSeconds;
+}
+
 bool ValidKey(const PublicKeyText& key) {
     return !FormatPublicKeyText(key).empty();
 }
@@ -105,7 +109,7 @@ std::optional<AccessRequest> AccessRequests::Find(const PublicKeyText& key) cons
 size_t AccessRequests::Expire(int64_t nowUnix) {
     const size_t before = requests_.size();
     std::erase_if(requests_, [&](const AccessRequest& request) {
-        return request.requestedUnix + kAccessRequestTtlSeconds <= nowUnix ||
+        return OutlivedItsTtl(request.requestedUnix, nowUnix) ||
                request.requestedUnix > nowUnix;
     });
     return before - requests_.size();
@@ -136,7 +140,7 @@ std::optional<AccessRequests> ParseAccessRequests(std::string_view text, int64_t
             ParsePublicKeyText(std::string_view(line).substr(s2 + 1));
         if (address.empty() || !key) return std::nullopt;
         if (requests.Find(*key)) return std::nullopt;
-        if (requestedUnix + kAccessRequestTtlSeconds <= nowUnix) continue;
+        if (OutlivedItsTtl(requestedUnix, nowUnix)) continue;
         AccessRequest request{*key, address, requestedUnix, denied};
         if (HoldsNewerFromSameSource(requests, request)) continue;
         if (!requests.Add(std::move(request), requestedUnix)) return std::nullopt;
