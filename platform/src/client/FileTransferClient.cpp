@@ -10,7 +10,6 @@ namespace deskhubp {
 
 namespace {
 
-constexpr uint32_t kAuthTimeoutMs = 65'000;
 constexpr uint64_t kOfferTimeoutUs = 10'000'000;
 constexpr uint32_t kIdleWaitMs = 20;
 constexpr uint32_t kPumpWaitMs = 5;
@@ -55,7 +54,6 @@ bool FileTransferClient::Start(const FileTransferClientConfig& config,
     linkConfig.hostLabel = config_.hostLabel;
     linkConfig.clientName = config_.clientName;
     linkConfig.acceptNewHostKey = config_.acceptNewHostKey;
-    linkConfig.authTimeoutMs = kAuthTimeoutMs;
 
     HostLinkCallbacks hooks;
     hooks.onState = [this](HostLinkState state, std::string_view message) {

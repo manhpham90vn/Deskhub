@@ -130,7 +130,20 @@ OfferUpdate RefreshOffer(SourcePipelineState& st, uint8_t fallbackFps) {
 
     out.sendReconfig = true;
     out.reconfig = Reconfig{st.offer.width, st.offer.height, st.offer.bitrateBps, st.offer.fps};
+    st.reconfigOut = out.reconfig;
+    st.reconfigSendsLeft = kReconfigSends;
+    st.lastReconfigSendUs = 0;
     return out;
+}
+
+std::optional<Reconfig> TakeReconfigToSend(SourcePipelineState& st, uint64_t nowUs) {
+    if (st.reconfigSendsLeft == 0) return std::nullopt;
+    const bool firstSend = st.reconfigSendsLeft == kReconfigSends;
+    if (!firstSend && nowUs - st.lastReconfigSendUs < kReconfigResendIntervalUs)
+        return std::nullopt;
+    --st.reconfigSendsLeft;
+    st.lastReconfigSendUs = nowUs;
+    return st.reconfigOut;
 }
 
 FlushReason DueForFlush(const SourcePipelineState& st, uint64_t nowUs) {

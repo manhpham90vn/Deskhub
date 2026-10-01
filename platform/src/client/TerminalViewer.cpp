@@ -187,7 +187,7 @@ void TerminalViewer::HandleLinkReady(bool resumed) {
         return;
     }
     if (config_.resumeId != 0) {
-        client_->Resume(config_.resumeId);
+        client_->Resume(config_.resumeId, config_.size);
         SetState(TerminalViewerState::Reattaching, deskhub::ui::kTerminalReattaching);
         return;
     }
@@ -241,7 +241,7 @@ void TerminalViewer::OpenNew() {
 void TerminalViewer::ResumeSession(uint32_t termId) {
     if (!Running() || termId == 0) return;
     Post([this, termId] {
-        if (client_) client_->Resume(termId);
+        if (client_) client_->Resume(termId, config_.size);
     });
     SetState(TerminalViewerState::Reattaching, deskhub::ui::kTerminalReattaching);
     if (channel_) channel_->Kick();

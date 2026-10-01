@@ -322,6 +322,14 @@ void TestRepeatedBadProofsAreLimited() {
               },
               kSettleMillis),
         "the host closes the repeated attempt before verifying another signature");
+    deskhubp::SessionTransport paused;
+    deskhub::AuthResultCode code = deskhub::AuthResultCode::Accepted;
+    const uint64_t began = NowUs();
+    Check(rig.Dial(paused) && !rig.SignInWithCode(paused, rig.machines.viewer, code) &&
+              code == deskhub::AuthResultCode::RateLimited,
+        "a client the host closes mid-handshake learns it is being paused");
+    Check(NowUs() - began < uint64_t(kAuthTimeoutMs) * 1000,
+        "as soon as the host closes, not when its own wait runs out");
     Check(rig.Peer().Pack() == 0, "none of the invalid proofs received admission");
 }
 

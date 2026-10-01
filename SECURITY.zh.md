@@ -209,7 +209,7 @@ host 优先的机制可在你*坐在*机器前时限制异常操作，但在你�
 - [ ] 在 host 上仅允许你需要的 client key，并在每个 client 首次连接时核对 host key 的
       fingerprint。定期检查 Devices 页并移除不再认可的 key。仅需观看时，取消勾选 *Viewers can control this machine*。
 - [ ] 只批准你预期中的 connection request，并在批准前核对该行中的 fingerprint 与地址。
-      其余的请 Deny 或置之不理 —— 它们会自行过期。
+      其余的请 Deny 或置之不理 —— 它们会自行过期，且被拒绝的设备在十分钟内无法再次请求。
 - [ ] 你展示 QR code 的那台设备一旦连接，就立即隐藏该码；绝不要在正在共享或演示的屏幕上
       展示它。
 - [ ] 不使用时退出 Deskhub。它不是 background service，退出即关闭了接入点。但

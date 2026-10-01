@@ -31,6 +31,7 @@ bool ScreenClientSession::HandlePacket(std::span<const uint8_t> pkt, uint64_t no
                 return false;
             }
             sessionId_ = m->sessionId;
+            clip_.ForgetReceived();
             params_.width = m->width;
             params_.height = m->height;
             params_.fps = m->fps;
@@ -58,12 +59,14 @@ bool ScreenClientSession::HandlePacket(std::span<const uint8_t> pkt, uint64_t no
             const auto m = ParseReconfig(payload);
             if (!m) return false;
             lastRecvUs_ = nowUs;
+            const NegotiatedParams before = params_;
             if (m->fps) params_.fps = m->fps;
             if (m->width && m->height) {
                 params_.width = m->width;
                 params_.height = m->height;
             }
             if (m->bitrateBps) params_.bitrateBps = m->bitrateBps;
+            if (params_ == before) return true;
             if (cb_.onReconfig) cb_.onReconfig(params_);
             return true;
         }

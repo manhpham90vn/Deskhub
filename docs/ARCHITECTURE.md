@@ -167,6 +167,15 @@ closes the connection itself about two seconds after its reply (`kRefusalLingerU
 application error 8), long enough for the reply to arrive; the client closes its end too.
 The host keeps nothing unauthenticated waiting for a click.
 
+The host also closes some connections mid-handshake without sending a result: after a
+rate-limit hit (application error 7), when the 10 s deadline passes (5), on a version it
+cannot parse (4) or on bad framing (1). The client does not wait them out. `QuicEndpoint`
+keeps the application error the peer closed with, and `RunClientAuth` ends as soon as the
+connection is gone, mapping that error to `RateLimited` (a client-only result, never on
+the wire), `TimedOut`, `VersionMismatch` or `Refused`. The client's own wait for the
+handshake is the host's deadline plus 5 s (`kClientAuthTimeoutMs`), one constant for
+every client surface.
+
 A signature is bound to that one connection, so a reconnect signs again; there is no
 0-RTT or session resumption. Every connection that has not authenticated gets 10
 seconds from the moment QUIC accepts it, whatever key it offers or whether it sends
@@ -177,8 +186,17 @@ announced. 3 failures from one key and source IP within a minute block that pair
 seconds (`AuthFailureLimiter`); `AwaitingApproval` and `ConfigError` are not failures. `access_requests` holds at most 16 requests, at most one per key and one per source
 address — a new request replaces any row with the same key or the same IP address,
 ports ignored, so a repeat refreshes the address and time — dropping the oldest when all
-16 are taken, each for 10 minutes; *Approve* moves the key into `authorized_keys` with the device's name,
-*Deny* deletes the row and tells the client nothing.
+16 are taken, each for 10 minutes; *Approve* moves the key into `authorized_keys` with the device's name.
+*Deny* keeps the row, marked denied, for the rest of its 10 minutes: it leaves the list the
+owner sees, another device asking from the same address does not replace it, and the
+denied key's next `AuthStart` is answered `NotPaired` instead of filing a fresh request.
+A client that was waiting for approval reads that `NotPaired` as the owner declining and
+stops redialling.
+
+A device removed from `authorized_keys` while it is connected is closed with application
+error 3 (`kCloseDeviceForgotten`). `HostLink` reads that error and ends the link as
+*Refused* instead of treating the close as a dropped link and reconnecting, which would
+only have filed a new connection request for the device just removed.
 
 Admission belongs to one QUIC connection, not to an address. It is dropped the moment
 that connection closes, so the next connection from the same address and port has to
@@ -236,7 +254,7 @@ HostEngine (one per app, owns SessionTransport)
  ├─ net-loop thread: RunHostNetLoop
  │    recv → source-list/pong replies (admitted only) | video-path ingest
  │         | Chan::Terminal → TerminalHost | Chan::File → FileHost
- │    per-source session Tick, clipboard flush, reconfig, stats
+ │    per-source session Tick, clipboard flush, reconfig (sent 3×), stats
  ├─ capture/encode: per-source, driven by the OS capture callbacks (client layer)
  │    frame → encoder (per-source mutex) → Packetizer → FEC → SendTo (datagrams)
  ├─ audio worker: capture callback → lock-free frame ring → Opus encode →
@@ -257,7 +275,9 @@ HostEngine (one per app, owns SessionTransport)
   negotiation, input arbitration), encoder, quality ladder and diagnostics. One
   encode feeds every viewer of that source.
 - The feedback loop: viewers send `Feedback` (loss, RTT, receive rate) once a second,
-  and the host adds one signal of its own — the age of a frame when it reaches the
+  and the host decides at most once a second on the worst of every viewer's latest
+  report (`kFeedbackDecisionSpacingUs`), so three viewers do not cut the bitrate three
+  times as fast. It adds one signal of its own — the age of a frame when it reaches the
   sender, the same quantity `enc_lat_ms` reports. `BitrateController` (AIMD) acts on two
   of those — loss and frame age — and `QualityLadder` follows the bitrate it picks down
   to resolution and fps; RTT and receive rate are only displayed. FEC is armed from the
@@ -274,7 +294,12 @@ HostEngine (one per app, owns SessionTransport)
   the kept shells (`TermList`/`TermListAck`), reattach a detached one by id, and end
   any of them: `TERM_CLOSE` is answered ahead of the per-peer guard the data and resize
   messages sit behind, and the machine that was in that shell is sent `TERM_EXIT`.
-  Every open/close/detach/reattach is audit-logged with address, name and key.
+  Every open/close/detach/reattach is audit-logged with address, name and key. A host
+  whose terminal is not running answers `TermOpen` and `TermList` itself with a
+  `TermOpenAck` refusal (`NotShared`), the way it answers a file offer with
+  `NotAccepting`, so a client is told instead of left waiting. A client resuming a shell
+  sends the size of the window it will draw in, and a resize made while the open was in
+  flight follows the acknowledgement.
 - One picker, five clients: `core/ui/ShellPicker` turns a `TermSessionList` into the
   rows every client draws — the id and size, whose shell it is, and whether this client
   may reattach or close it. Only a detached shell can be reattached, and a shell the
@@ -398,7 +423,8 @@ certificate, swept when hosting next starts if a crash left it behind; `host_cer
 ignored), `authorized_keys` (client keys this host admits), `known_hosts` (trusted hosts
 by fingerprint, with name and last address), `access_requests` (connection requests
 waiting for Approve or Deny — time, address and the public key labelled with the
-device's name, one line each; at most 16, each dropped after 10 minutes),
+device's name, one line each, a denied one prefixed `denied`; at most 16, each dropped
+after 10 minutes),
 `pairing_tokens` (the QR tokens currently live, with their expiry), `ui-settings.txt`
 (including the device name), `recent-hosts.txt` (address, last-connected time and host
 name), `portal-restore-token.txt` on Linux (the desktop's own token for the screens
@@ -456,6 +482,30 @@ under-load integration numbers from the pull-request build, and the core coverag
 line.
 
 ## 9. Decisions worth remembering
+
+- **Only the host can end a handshake early, so the client listens for how it ended**:
+  the client used to wait 65 s for an `AuthResult` — a leftover from when approval was
+  given inside one held connection — while the host closes every unauthenticated
+  connection after 10 s and closes rate-limited ones at once. A user whose QR scan was
+  rate limited saw *timed out* a minute later. The client now reads the close's
+  application error and waits only the host's deadline plus a margin.
+
+- **A RECONFIG is sent three times**: it travels as one datagram with no acknowledgement,
+  and the quality steps down mostly on lossy links, which is when a lone datagram is
+  most likely lost. A viewer that missed it kept the old size and frame rate until its
+  next Hello. The host repeats it 100 ms apart (`kReconfigSends`), and the viewer ignores
+  one that changes nothing, so the copies cost no decoder rebuild.
+
+- **Fractions of a wheel notch are carried, not rounded up**: smooth scrolling and
+  precision touchpads send deltas well under 120. Rounding each up to a whole notch made
+  one swipe scroll dozens of notches on Linux and macOS hosts. `TakeWheelNotches` keeps
+  the remainder per host and drops it when the direction turns.
+
+- **The scancode decides the side of a modifier**: Windows raw input reports a generic
+  Shift, Ctrl or Alt and leaves the side to the scancode. The Linux and macOS key maps
+  resolved a generic modifier to its left key, so AltGr arrived as Left Alt. `InputApplier`
+  turns a generic modifier into the sided one its Set 1 scancode names before any backend
+  sees it.
 
 - **Host application sends require admission**: `SessionTransport` rejects outgoing
   records and datagrams until that connection has completed key authentication.
@@ -1016,9 +1066,11 @@ line.
   broadcast extension receives `AuthStart` while the app draws the QR code and the
   request list; in the CLI, `share` runs while `access approve` is typed in another
   terminal. `access_requests` and `pairing_tokens` sit in the shared config folder under
-  the same lock and atomic replacement as `authorized_keys`, `AccessRequestsGeneration`
-  gives pollers a cheap change counter, and an *Approve* is nothing more than a move from
-  one file to another that the next `AuthStart` reads back.
+  the same lock and atomic replacement as `authorized_keys`, and an *Approve* is nothing
+  more than a move from one file to another that the next `AuthStart` reads back.
+  `AccessRequestsGeneration` gives pollers a cheap change value that mixes an in-process
+  counter with the file's write time and size: the counter alone lives in one process,
+  so the iOS app never saw a request the broadcast extension wrote.
 
 - **One key per machine, certificate in memory**: two keys per machine meant two
   fingerprints, a *My keys* page, import and passphrase code, a stored certificate that

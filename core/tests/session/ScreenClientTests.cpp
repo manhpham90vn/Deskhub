@@ -372,7 +372,7 @@ void TestOfferWithoutFpsFallsBackToDefault() {
     uint8_t msg[64];
     const size_t n = BuildReconfig(msg, host.sessionId(), Reconfig{0, 0, 0, 0});
     pump.OnDatagram(std::span<const uint8_t>(msg, n), now);
-    Check(r.reconfigCalls == 1, "an all-zero reconfig is delivered and changes nothing");
+    Check(r.reconfigCalls == 0, "an all-zero reconfig changes nothing, so nothing is rebuilt");
 }
 
 void TestFecRecoversALostPacket() {

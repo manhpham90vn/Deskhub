@@ -2413,6 +2413,7 @@ void MainFrame::OnSourcesReady(const std::string& addr, const deskhubp::ConnectO
         return;
     }
     if (!outcome.ok) {
+        if (outcome.failureKind == SourceQueryFailure::AwaitingApproval) ShowAddressInFields(address);
         wxMessageBox(ToWx(outcome.failure), "Deskhub", wxOK | wxICON_ERROR, this);
         return;
     }

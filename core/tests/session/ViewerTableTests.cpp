@@ -376,12 +376,34 @@ void TestFeedbackTakesTheWorstLink() {
 
     s->HandlePacket(FeedbackFor(s->sessionId(), Feedback{2, 30, 9000}), kT0, kAlice);
     s->HandlePacket(FeedbackFor(s->sessionId(), Feedback{25, 12, 4000}), kT0, kBob);
+    Check(rec.feedback.size() == 1, "two reports in one second make one decision, not two");
 
-    Check(rec.feedback.size() == 2, "both reports were taken");
+    s->Tick(kT0 + kFeedbackDecisionSpacingUs);
+    Check(rec.feedback.size() == 2, "the later report is decided on a second later");
     const Feedback& merged = rec.feedback.back();
     Check(merged.lossPct == 25, "the worst loss wins");
     Check(merged.rttMs == 30, "the worst RTT wins");
     Check(merged.recvBitrateKbps == 4000, "and the lowest received rate wins");
+    s->Tick(kT0 + 2 * kFeedbackDecisionSpacingUs);
+    Check(rec.feedback.size() == 2, "and with nothing new reported there is nothing to decide");
+}
+
+void TestManyViewersStillDecideOncePerSecond() {
+    std::printf("[viewers] more viewers do not speed up the bitrate controller...\n");
+    Recorder rec;
+    auto s = MakeSession(rec);
+    const uint64_t viewers[] = {kAlice, kBob, kAlice + 7};
+    uint32_t id = 1;
+    for (const uint64_t addr : viewers) JoinAndStart(*s, id++, addr);
+
+    for (uint64_t second = 0; second < 5; ++second) {
+        const uint64_t at = kT0 + second * kFeedbackDecisionSpacingUs;
+        for (size_t i = 0; i < std::size(viewers); ++i)
+            s->HandlePacket(FeedbackFor(s->sessionId(), Feedback{uint8_t(i == 0 ? 5 : 0), 10, 8000}),
+                at + i * 1000, viewers[i]);
+        s->Tick(at + 5000);
+    }
+    Check(rec.feedback.size() == 5, "five seconds of reports from three viewers are five decisions");
 }
 
 void TestWorstCaseFeedbackIgnoresSilentViewers() {
@@ -522,6 +544,7 @@ void RunViewerTableTests() {
     TestSessionEndsOnlyWhenTheLastViewerLeaves();
     TestTimeoutDropsOneViewerAtATime();
     TestFeedbackTakesTheWorstLink();
+    TestManyViewersStillDecideOncePerSecond();
     TestWorstCaseFeedbackIgnoresSilentViewers();
     TestViewerAddressCanMove();
     TestANewClientOnAnOldAddressTakesTheSlotOver();

@@ -12,6 +12,7 @@ final class SharingModel {
     var bindIp = DeskhubClient.buffered(64) { dh_bind_ip($0, $1) }
     let qr = PairingQrModel()
     let accessRequests = AccessRequestsModel()
+    private(set) var qrUnavailable = false
 
     var port: UInt16 { UInt16(dh_settings_load().port) }
 
@@ -57,14 +58,29 @@ final class SharingModel {
     }
 
     func toggleQr() {
-        qr.toggle(port: port, bindIp: bindIp)
+        if qr.open {
+            qr.hide()
+            qrUnavailable = false
+            return
+        }
+        qr.show(port: port, bindIp: bindIp)
+        qrUnavailable = !qr.shown
+    }
+
+    func renewQr() {
+        qr.renew(port: port, bindIp: bindIp)
+        qrUnavailable = !qr.shown
     }
 
     func poll() async {
         while !Task.isCancelled {
             status = BroadcastStatus.load()
             addresses = LocalAddress.all()
-            if !status.sharing { qr.hide() }
+            if !status.sharing {
+                qr.hide()
+                qrUnavailable = false
+            }
+            if qr.shown, qr.secondsLeft(at: Date()) <= 0 { qr.expire() }
             accessRequests.refresh()
             try? await Task.sleep(for: SharingModel.pollInterval)
         }

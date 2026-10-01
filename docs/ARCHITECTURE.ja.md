@@ -168,6 +168,15 @@ host は応答から約 2 秒後に自ら connection を閉じる（`kRefusalLin
 application error 8）。これは応答が届くのに十分な時間である。client も自分の側を閉じる。
 host はクリックを待つ未 authenticate の接続を保持しない。
 
+host は結果を送らずに handshake の途中で connection を閉じることもある。rate limit に
+かかった後（application error 7）、10 秒の期限が過ぎたとき（5）、解析できないバージョン
+のとき（4）、framing が不正なとき（1）である。client はこれらを待ち続けない。
+`QuicEndpoint` は相手が connection を閉じた際の application error を保持し、
+`RunClientAuth` は connection が失われた時点で終了して、その error を `RateLimited`
+（client 専用の結果で、wire には載らない）、`TimedOut`、`VersionMismatch`、または
+`Refused` に対応付ける。client 自身が handshake を待つ時間は host の期限に 5 秒を加えた
+もの（`kClientAuthTimeoutMs`）であり、すべての client の画面で共通の 1 つの定数である。
+
 署名は 1 本の connection に束縛されるため、再接続の際には改めて署名する。0-RTT や
 session resumption は存在しない。authenticate していない connection はすべて、どの key
 を提示したか、`AuthStart` を送ったかどうかに関係なく、QUIC が受け入れた時点から 10 秒の
@@ -180,7 +189,16 @@ session resumption は存在しない。authenticate していない connection 
 —— 新しい要求は key が同じ行と IP アドレスが同じ行（port は無視）をすべて置き換えるので、
 再要求はアドレスと時刻を更新する —— 16 件が埋まっていれば最も古いものを破棄して、それぞれ
 10 分間保持する。*Approve* は key をデバイスの名前とともに
-`authorized_keys` へ移し、*Deny* は行を削除して client には何も伝えない。
+`authorized_keys` へ移す。
+*Deny* は行を拒否済みとして、10 分の残りの間保持する。その行は所有者が見る一覧から外れ、
+同じアドレスから要求する別のデバイスもそれを置き換えず、拒否された key の次の
+`AuthStart` には新しい要求を記録する代わりに `NotPaired` で応答する。承認を待っていた
+client はその `NotPaired` を所有者の拒否として読み、再接続をやめる。
+
+接続中に `authorized_keys` から削除されたデバイスは application error 3
+（`kCloseDeviceForgotten`）で閉じられる。`HostLink` はその error を読み、close を
+切れた link として扱って再接続する代わりに、link を *Refused* として終える。再接続しても、
+削除したばかりのデバイスの接続要求が新たに記録されるだけだからである。
 
 受け入れは 1 本の QUIC connection に属するものであり、アドレスに属するものではない。その
 connection が閉じた時点で受け入れは取り消されるため、同じアドレスと port からの次の
@@ -239,7 +257,7 @@ HostEngine（app ごとに 1 インスタンス、SessionTransport を保持）
  ├─ net-loop thread: RunHostNetLoop
  │    recv → source 一覧/pong の応答（受け入れ済みのみ） | video データの取り込み
  │         | Chan::Terminal → TerminalHost | Chan::File → FileHost
- │    source ごとの session Tick、clipboard flush、reconfig、統計
+ │    source ごとの session Tick、clipboard flush、reconfig（3 回送信）、統計
  ├─ capture/encode: source ごと。OS の capture コールバックが駆動する（client 層）
  │    frame → encoder（source ごとの mutex）→ Packetizer → FEC → SendTo（datagram）
  ├─ audio worker: capture コールバック → lock-free な frame ring → Opus encode →
@@ -261,7 +279,9 @@ HostEngine（app ごとに 1 インスタンス、SessionTransport を保持）
   `ScreenHostSession`（viewer 表、negotiation、input の調停）、encoder、quality ladder、
   診断情報を持つ。1 回の encode がその source のすべての viewer に供給される。
 - フィードバックの経路: viewer は `Feedback`（loss、RTT、受信レート）を毎秒送信し、
-  host は自身の信号として、frame が送信段に到達した時点での経過時間を加える。これは
+  host はすべての viewer の最新レポートのうち最悪のものに基づいて最大でも毎秒 1 回判断する
+  （`kFeedbackDecisionSpacingUs`）。そのため viewer が 3 つあっても bitrate を 3 倍の速さで
+  下げることはない。host は自身の信号として、frame が送信段に到達した時点での経過時間を加える。これは
   `enc_lat_ms` が報告する量と同一である。`BitrateController`（AIMD）はそのうち 2 つ ——
   loss と frame の経過時間 —— に基づいて動作し、`QualityLadder` はそれが選んだ bitrate
   に従って解像度と fps を下げる。RTT と受信レートは表示に使うだけである。FEC は最初の frame から有効
@@ -280,7 +300,11 @@ HostEngine（app ごとに 1 インスタンス、SessionTransport を保持）
   reattach し、いずれの shell も終了させることができる。`TERM_CLOSE` は、data と resize
   の message が従う peer ごとの guard より前に処理され、その shell に入っていたマシンには
   `TERM_EXIT` が送られる。open、close、detach、reattach はいずれもアドレス、名前、key
-  とともに監査ログに記録する。
+  とともに監査ログに記録する。terminal が動作していない host は、`TermOpen` と `TermList`
+  に自ら `TermOpenAck` の拒否（`NotShared`）で応答する。ファイルの申し出に
+  `NotAccepting` で応答するのと同様であり、client は待たされたままにならず通知を受ける。
+  shell を再開する client は描画するウィンドウのサイズを送り、open の処理中に行われた
+  resize は確認応答の後に送られる。
 - picker は 1 つ、client は 5 つ: `core/ui/ShellPicker` は `TermSessionList` を、すべての
   client が描画する行 —— id とサイズ、その shell が誰のものか、この client が reattach
   または close してよいか —— に変換する。reattach できるのは detach された shell だけで
@@ -398,7 +422,7 @@ TLS certificate は起動ごとに構築され、ディスク上には quiche �
 場合は次に hosting を開始したときに一掃される。`host_cert.pem` はもう書き込まれず、残っていても無視される）、`authorized_keys`（この host が受け入れる client key）、
 `known_hosts`（fingerprint を key とする信頼済み host。名前と最後のアドレスを伴う）、
 `access_requests`（Approve または Deny を待つ接続要求 —— 時刻、アドレス、デバイス名を
-ラベルとした public key を 1 行ずつ。最大 16 件、それぞれ 10 分後に破棄）、`pairing_tokens`（現在有効な QR token と
+ラベルとした public key を 1 行ずつ。拒否済みのものには `denied` を前置する。最大 16 件、それぞれ 10 分後に破棄）、`pairing_tokens`（現在有効な QR token と
 その期限）、`ui-settings.txt`（デバイス名を含む）、`recent-hosts.txt`（アドレス、最終
 接続時刻、host の名前）、Linux では `portal-restore-token.txt`（選択した画面に対して
 デスクトップが発行した token）、および実行ごとの log（最新の 10 件だけを残す。`kKeptSessionLogs`）である。
@@ -455,6 +479,30 @@ scaling の 2 つの判定とともに実行する（共有 runner には時間�
 の数値、および core の coverage 行である。
 
 ## 9. 記録しておくべき設計判断
+
+- **handshake を早く終えられるのはホストだけなので、クライアントはその終わり方を聞き取る**:
+  クライアントは以前、`AuthResult` を 65 秒待っていた —— 承認が保持された一つの接続の中で
+  与えられていた頃の名残である —— 一方、ホストは認証していない接続をすべて 10 秒後に閉じ、
+  rate limit にかかった接続は即座に閉じる。QR スキャンが rate limit にかかった利用者は、
+  一分後に *timed out* を目にしていた。今ではクライアントは close の application error を
+  読み、ホストの期限に余裕を加えた時間だけ待つ。
+
+- **RECONFIG は三回送る**: RECONFIG は確認応答のない一つの datagram として送られ、品質が
+  下がるのは主に損失の多い回線であり、まさに単独の datagram が最も失われやすいときである。
+  それを取りこぼした viewer は、次の Hello まで古いサイズと frame rate のままだった。ホストは
+  それを 100 ms 間隔で繰り返し（`kReconfigSends`）、viewer は何も変えないものを無視するため、
+  複製によって decoder が作り直されることはない。
+
+- **ホイールの一ノッチ未満の端数は切り上げずに持ち越す**: スムーズスクロールや高精度の
+  タッチパッドは 120 を大きく下回る delta を送る。それぞれを一ノッチに切り上げていたため、
+  Linux と macOS のホストでは一回のスワイプで何十ノッチもスクロールしていた。
+  `TakeWheelNotches` はホストごとに余りを保持し、方向が変わるとそれを捨てる。
+
+- **修飾キーの左右は scancode が決める**: Windows の raw input は汎用の Shift、Ctrl、Alt を
+  報告し、左右は scancode に委ねる。Linux と macOS のキーマップは汎用の修飾キーを左側の
+  キーに解決していたため、AltGr が Left Alt として届いていた。`InputApplier` は、どの
+  backend に渡すよりも前に、汎用の修飾キーをその Set 1 scancode が示す左右付きのキーに
+  変換する。
 
 - **ホストがアプリケーションデータを送るには認証が必要**: `SessionTransport` は、
   その接続の鍵認証が完了するまで record と datagram の送信を拒否する。認証の
@@ -1021,9 +1069,11 @@ scaling の 2 つの判定とともに実行する（共有 runner には時間�
   broadcast extension が `AuthStart` を受け取る一方で、app が QR code と要求の一覧を描く。
   CLI では `share` が動作している間に、別の terminal で `access approve` が入力される。
   `access_requests` と `pairing_tokens` は共有の設定フォルダに、`authorized_keys` と同じ
-  lock と atomic な置換の下で置かれ、`AccessRequestsGeneration` が poll する側に安価な
-  変更カウンタを与え、*Approve* は一方のファイルから他方への移動にすぎず、次の
-  `AuthStart` がそれを読み戻す。
+  lock と atomic な置換の下で置かれ、*Approve* は一方のファイルから他方への移動にすぎず、
+  次の `AuthStart` がそれを読み戻す。`AccessRequestsGeneration` は poll する側に、
+  process 内のカウンタとファイルの書き込み時刻およびサイズを混ぜ合わせた安価な変更値を
+  与える。カウンタだけでは 1 つの process の中にしか存在しないため、iOS の app は
+  broadcast extension が書き込んだ要求を一度も目にしなかった。
 
 - **マシンごとに 1 つの key、certificate はメモリ上。** マシンごとに 2 つの key があると、
   fingerprint が 2 つ、*My keys* ページ、import と passphrase のコード、key と食い違い

@@ -181,6 +181,19 @@ void TestModifierClassification() {
         Check(ModifierKeyOf(vk) == ModifierKey::None, "an ordinary key is not a modifier");
 }
 
+void TestTheScancodeSaysWhichSideAModifierIsOn() {
+    std::printf("[set1] a generic modifier keeps its side when the scancode names it...\n");
+    Check(SidedModifier(kVkMenu, 0x38 | kScanExtended) == kVkRMenu,
+        "right Alt, which is AltGr on many layouts, stays right Alt");
+    Check(SidedModifier(kVkControl, 0x1D | kScanExtended) == kVkRControl, "right Ctrl stays right");
+    Check(SidedModifier(kVkShift, 0x36) == kVkRShift, "right Shift stays right");
+    Check(SidedModifier(kVkMenu, 0x38) == kVkLMenu && SidedModifier(kVkControl, 0x1D) == kVkLControl &&
+              SidedModifier(kVkShift, 0x2A) == kVkLShift,
+        "and the left-hand keys stay left");
+    Check(SidedModifier(kVkShift, 0) == kVkShift, "with no scancode the key stays generic");
+    Check(SidedModifier('A', 0x36) == 'A', "and an ordinary key is never turned into a modifier");
+}
+
 }
 
 void RunSet1ScancodeTests() {
@@ -194,4 +207,5 @@ void RunSet1ScancodeTests() {
     TestPauseIsNeverSentAsAOneByteScancode();
     TestUnmappedKeysAreRejectedNotGuessed();
     TestModifierClassification();
+    TestTheScancodeSaysWhichSideAModifierIsOn();
 }

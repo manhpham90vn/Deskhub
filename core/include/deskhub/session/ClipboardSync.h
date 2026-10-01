@@ -30,6 +30,7 @@ public:
     std::optional<std::string> TakeCompleted();
 
     void Reset();
+    void ForgetReceived();
 
 private:
     size_t SendAllChunks(const SendFn& send);

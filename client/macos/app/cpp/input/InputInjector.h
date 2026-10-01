@@ -42,4 +42,5 @@ private:
     double lastClickX_ = 0, lastClickY_ = 0;
     int64_t clickState_ = 1;
     deskhub::MouseButton lastClickBtn_ = deskhub::MouseButton::Left;
+    int32_t wheelCarry_ = 0;
 };

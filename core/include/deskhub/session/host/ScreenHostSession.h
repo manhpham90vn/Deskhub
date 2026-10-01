@@ -13,6 +13,7 @@
 namespace deskhub {
 
 inline constexpr uint64_t kSessionTimeoutUs = 5'000'000;
+inline constexpr uint64_t kFeedbackDecisionSpacingUs = 1'000'000;
 
 struct StreamParams {
     uint16_t width = 0;
@@ -107,6 +108,7 @@ private:
     void DropViewer(ViewerSlot& viewer);
     void RefreshState();
     void Disconnect();
+    void ReportFeedbackIfDue(uint64_t nowUs);
 
     ScreenHostCallbacks cb_;
     StreamParams offer_;
@@ -116,6 +118,9 @@ private:
     std::atomic<uint64_t> inputDenied_{0};
     uint64_t controllingAddr_ = 0;
     bool clipboardEnabled_ = false;
+    bool feedbackPending_ = false;
+    bool feedbackReported_ = false;
+    uint64_t lastFeedbackReportUs_ = 0;
     uint8_t buf_[kMaxDatagram] = {};
 };
 

@@ -9,6 +9,7 @@ namespace deskhub {
 namespace {
 
 constexpr size_t kMaxAccessRequestLineBytes = 2048;
+constexpr std::string_view kDeniedPrefix = "denied ";
 
 using detail::ParseUnixTime;
 using detail::Trim;
@@ -36,13 +37,15 @@ std::string_view HostOf(std::string_view address) {
     return address.substr(0, colon);
 }
 
-bool SameSource(const AccessRequest& a, const AccessRequest& b) {
-    return SameKey(a.key, b.key) || HostOf(a.address) == HostOf(b.address);
+bool Replaces(const AccessRequest& incoming, const AccessRequest& existing) {
+    if (SameKey(existing.key, incoming.key)) return true;
+    if (existing.denied || incoming.denied) return false;
+    return HostOf(existing.address) == HostOf(incoming.address);
 }
 
 bool HoldsNewerFromSameSource(const AccessRequests& requests, const AccessRequest& request) {
     return std::ranges::any_of(requests.Requests(), [&](const AccessRequest& existing) {
-        return SameSource(existing, request) && existing.requestedUnix > request.requestedUnix;
+        return Replaces(request, existing) && existing.requestedUnix > request.requestedUnix;
     });
 }
 
@@ -55,9 +58,10 @@ bool SameKey(const PublicKeyText& a, const PublicKeyText& b) {
 bool AccessRequests::Add(AccessRequest request, int64_t nowUnix) {
     request.address = CleanAddress(request.address);
     if (request.address.empty() || !ValidKey(request.key)) return false;
+    if (!request.denied && IsDenied(request.key)) return false;
     request.requestedUnix = nowUnix;
     std::erase_if(requests_,
-        [&](const AccessRequest& existing) { return SameSource(existing, request); });
+        [&](const AccessRequest& existing) { return Replaces(request, existing); });
     if (requests_.size() >= kMaxAccessRequests) {
         const auto oldest = std::min_element(requests_.begin(), requests_.end(),
             [](const AccessRequest& a, const AccessRequest& b) {
@@ -75,6 +79,21 @@ bool AccessRequests::Remove(const PublicKeyText& key) {
     if (at == requests_.end()) return false;
     requests_.erase(at, requests_.end());
     return true;
+}
+
+bool AccessRequests::Deny(const PublicKeyText& key, int64_t nowUnix) {
+    for (AccessRequest& request : requests_) {
+        if (!SameKey(request.key, key)) continue;
+        request.denied = true;
+        request.requestedUnix = nowUnix;
+        return true;
+    }
+    return false;
+}
+
+bool AccessRequests::IsDenied(const PublicKeyText& key) const {
+    const std::optional<AccessRequest> found = Find(key);
+    return found && found->denied;
 }
 
 std::optional<AccessRequest> AccessRequests::Find(const PublicKeyText& key) const {
@@ -99,9 +118,11 @@ std::optional<AccessRequests> ParseAccessRequests(std::string_view text, int64_t
     while (pos < text.size()) {
         size_t end = text.find('\n', pos);
         if (end == std::string_view::npos) end = text.size();
-        const std::string line = Trim(text.substr(pos, end - pos));
+        std::string line = Trim(text.substr(pos, end - pos));
         pos = end + 1;
         if (line.empty()) continue;
+        const bool denied = line.starts_with(kDeniedPrefix);
+        if (denied) line.erase(0, kDeniedPrefix.size());
         if (line.size() > kMaxAccessRequestLineBytes) return std::nullopt;
         const size_t s1 = line.find(' ');
         if (s1 == std::string::npos) return std::nullopt;
@@ -116,7 +137,7 @@ std::optional<AccessRequests> ParseAccessRequests(std::string_view text, int64_t
         if (address.empty() || !key) return std::nullopt;
         if (requests.Find(*key)) return std::nullopt;
         if (requestedUnix + kAccessRequestTtlSeconds <= nowUnix) continue;
-        AccessRequest request{*key, address, requestedUnix};
+        AccessRequest request{*key, address, requestedUnix, denied};
         if (HoldsNewerFromSameSource(requests, request)) continue;
         if (!requests.Add(std::move(request), requestedUnix)) return std::nullopt;
     }
@@ -129,6 +150,7 @@ std::string SerializeAccessRequests(const AccessRequests& requests) {
     for (const AccessRequest& request : requests.Requests()) {
         const std::string key = FormatPublicKeyText(request.key);
         if (key.empty() || request.address.empty()) continue;
+        if (request.denied) out += kDeniedPrefix;
         out += std::to_string(request.requestedUnix);
         out += ' ';
         out += request.address;

@@ -548,7 +548,7 @@ void TestDroppedShellWaitsForItsClient() {
               },
               kMaxRounds),
         "it sees the shell the first one left behind");
-    second.client->Resume(id);
+    second.client->Resume(id, deskhub::TermSize{80, 24});
     Check(second.PumpUntil([&second] { return second.opens == 1 && second.resumed; }, kMaxRounds),
         "and picks it back up instead of starting over");
     Check(second.PumpUntil(

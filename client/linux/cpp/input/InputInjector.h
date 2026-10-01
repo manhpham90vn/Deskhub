@@ -42,4 +42,5 @@ private:
     uint32_t srcW_ = 0, srcH_ = 0;
     int32_t deskX_ = 0, deskY_ = 0;
     uint32_t deskW_ = 0, deskH_ = 0;
+    int32_t wheelCarry_ = 0;
 };

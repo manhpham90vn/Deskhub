@@ -460,18 +460,31 @@ void TestClientListAndResume() {
               h->client.Sessions().sessions[0].state == TerminalState::Detached,
         "and can be read back");
 
-    h->client.Resume(6);
+    h->client.Resume(6, TermSize{120, 40});
     Check(h->client.State() == TerminalClientState::Reattaching, "resuming puts it in flight");
     const auto again = ParseTermOpen(PayloadOf(h->sent.back()));
     Check(again && again->resumeId == 6, "naming the session it wants back");
+    Check(again && again->size == TermSize{120, 40},
+        "at the size of the window it will be drawn in, not a default");
     h->client.HandleMessage(AckMessage(6, TermReason::Accepted, true));
     Check(h->client.State() == TerminalClientState::Open, "and the host hands it back");
     const size_t attached = h->sent.size();
-    h->client.Resume(7);
+    h->client.Resume(7, TermSize{80, 24});
     Check(h->sent.size() == attached, "naming another while attached sends nothing");
 
-    h->client.Resume(0);
+    h->client.Resume(0, TermSize{80, 24});
     Check(h->client.State() == TerminalClientState::Open, "resuming nothing changes nothing");
+
+    auto unshared = MakeClient();
+    unshared->client.RequestList();
+    unshared->client.HandleMessage(AckMessage(0, TermReason::NotShared, false));
+    Check(unshared->client.State() == TerminalClientState::Refused &&
+              unshared->refusals.size() == 1 && unshared->refusals[0] == TermReason::NotShared,
+        "a host that shares no terminal answers a listing with a refusal the client reports");
+    auto idle = MakeClient();
+    idle->client.HandleMessage(AckMessage(5, TermReason::Accepted, false));
+    Check(idle->client.State() == TerminalClientState::Idle && idle->opens == 0,
+        "while an acceptance nobody asked for is still ignored");
 
     auto shut = MakeClient();
     shut->client.Open(TermSize{80, 24}, "");
@@ -479,8 +492,27 @@ void TestClientListAndResume() {
     shut->client.Close();
     const size_t quiet = shut->sent.size();
     shut->client.RequestList();
-    shut->client.Resume(3);
+    shut->client.Resume(3, TermSize{80, 24});
     Check(shut->sent.size() == quiet, "a closed client sends nothing more");
+}
+
+void TestClientResizeWhileOpeningIsNotLost() {
+    std::printf("[term] a resize made while the shell is still opening reaches the host...\n");
+    auto h = MakeClient();
+    h->client.Open(TermSize{80, 24}, "");
+    h->client.Resize(TermSize{100, 30});
+    Check(h->sent.size() == 1, "nothing more goes out before the host answers");
+    h->client.HandleMessage(AckMessage(5, TermReason::Accepted, false));
+    const auto header = ParseCommonHeader(h->sent.back());
+    const auto resize = ParseTermResize(PayloadOf(h->sent.back()));
+    Check(h->sent.size() == 2 && header && header->type == MsgType::TermResize &&
+              header->sessionId == 5 && resize && *resize == TermSize{100, 30},
+        "the size it settled on follows the acknowledgement");
+
+    auto steady = MakeClient();
+    steady->client.Open(TermSize{80, 24}, "");
+    steady->client.HandleMessage(AckMessage(6, TermReason::Accepted, false));
+    Check(steady->sent.size() == 1, "an unchanged size sends nothing after the acknowledgement");
 }
 
 void TestClientClosesAShellItIsNotIn() {
@@ -560,6 +592,7 @@ void RunTerminalSessionTests() {
     TestClientLifecycle();
     TestClientReattachAndRefusal();
     TestClientListAndResume();
+    TestClientResizeWhileOpeningIsNotLost();
     TestClientClosesAShellItIsNotIn();
     TestClientIgnoresJunk();
 }

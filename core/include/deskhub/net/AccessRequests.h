@@ -19,6 +19,7 @@ struct AccessRequest {
     PublicKeyText key{};
     std::string address{};
     int64_t requestedUnix = 0;
+    bool denied = false;
 };
 
 bool SameKey(const PublicKeyText& a, const PublicKeyText& b);
@@ -27,6 +28,8 @@ class AccessRequests {
 public:
     bool Add(AccessRequest request, int64_t nowUnix);
     bool Remove(const PublicKeyText& key);
+    bool Deny(const PublicKeyText& key, int64_t nowUnix);
+    bool IsDenied(const PublicKeyText& key) const;
     std::optional<AccessRequest> Find(const PublicKeyText& key) const;
     size_t Expire(int64_t nowUnix);
     const std::vector<AccessRequest>& Requests() const {

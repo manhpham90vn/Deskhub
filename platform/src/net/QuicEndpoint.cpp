@@ -323,6 +323,7 @@ struct QuicEndpoint::Impl {
             quiche_conn_free(entry.conn);
         }
         connections_.clear();
+        peerCloseCodes_.clear();
         socket_.Close();
         if (config_ != nullptr) {
             quiche_config_free(config_);
@@ -372,6 +373,7 @@ struct QuicEndpoint::Impl {
         Connection entry;
         entry.conn = conn;
         entry.peer = server;
+        peerCloseCodes_.erase(server.Pack());
         connections_.emplace(server.Pack(), entry);
         Flush(connections_[server.Pack()]);
         return true;
@@ -656,6 +658,15 @@ struct QuicEndpoint::Impl {
         }
     }
 
+    void RememberPeerCloseCode(QuicConnId id, quiche_conn* conn) {
+        bool app = false;
+        uint64_t code = 0;
+        const uint8_t* reason = nullptr;
+        size_t reasonLen = 0;
+        if (quiche_conn_peer_error(conn, &app, &code, &reason, &reasonLen) && app)
+            peerCloseCodes_[id] = code;
+    }
+
     void ReportClose(const Connection& entry) {
         quiche_stats stats{};
         quiche_conn_stats(entry.conn, &stats);
@@ -740,6 +751,7 @@ struct QuicEndpoint::Impl {
             const NetAddr peer = at->second.peer;
             const bool announced = at->second.announced;
             if (announced) ReportClose(at->second);
+            if (!server_) RememberPeerCloseCode(id, at->second.conn);
             quiche_conn* conn = at->second.conn;
             connections_.erase(at);
             if (announced && cb_.onClosed)
@@ -801,6 +813,7 @@ struct QuicEndpoint::Impl {
     QuicSettings settings_{};
     QuicCallbacks cb_{};
     std::unordered_map<QuicConnId, Connection> connections_{};
+    std::unordered_map<QuicConnId, uint64_t> peerCloseCodes_{};
     std::atomic<uint16_t> localPort_{0};
     std::string localIp_{};
     std::atomic<bool> bindAddrInUse_{false};
@@ -918,6 +931,12 @@ std::optional<deskhub::AuthSessionId> QuicEndpoint::ExportAuthSessionId(QuicConn
 bool QuicEndpoint::Established(QuicConnId conn) const {
     const Impl::Connection* entry = impl_->Lookup(conn);
     return entry != nullptr && quiche_conn_is_established(entry->conn);
+}
+
+std::optional<uint64_t> QuicEndpoint::PeerCloseCode(QuicConnId conn) const {
+    const auto at = impl_->peerCloseCodes_.find(conn);
+    if (at == impl_->peerCloseCodes_.end()) return std::nullopt;
+    return at->second;
 }
 
 void QuicEndpoint::CloseConnection(QuicConnId conn, uint64_t errorCode, std::string_view reason) {

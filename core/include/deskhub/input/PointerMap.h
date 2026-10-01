@@ -49,11 +49,12 @@ constexpr int32_t AxisToAbsCoord(int64_t pixel, int64_t origin, int64_t pixels) 
     return scaled >= kAbsCoordMax ? kAbsCoordMax : int32_t(scaled);
 }
 
-constexpr int32_t WheelNotches(int32_t delta) {
-    if (const int32_t whole = delta / kWheelDeltaPerNotch) return whole;
-    if (delta > 0) return 1;
-    if (delta < 0) return -1;
-    return 0;
+constexpr int32_t TakeWheelNotches(int32_t delta, int32_t& carry) {
+    if ((delta > 0 && carry < 0) || (delta < 0 && carry > 0)) carry = 0;
+    carry += delta;
+    const int32_t whole = carry / kWheelDeltaPerNotch;
+    carry -= whole * kWheelDeltaPerNotch;
+    return whole;
 }
 
 constexpr int32_t ScrollNotchesFromLines(double lines) {

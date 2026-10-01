@@ -2071,6 +2071,7 @@ void MainWindow::OnSourcesReady(const std::string& addr, const deskhubp::Connect
         return;
     }
     if (!outcome.ok) {
+        if (outcome.failureKind == SourceQueryFailure::AwaitingApproval) FillAddressFields(answered);
         ShowError(GTK_WINDOW(window_), "Deskhub", outcome.failure);
         return;
     }

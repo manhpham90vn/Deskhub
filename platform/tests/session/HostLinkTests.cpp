@@ -258,6 +258,81 @@ void TestALinkWaitsForApprovalAndGetsIn() {
         "and explains that nobody approved in time");
     shortWait.Stop();
     Check(deskhubp::DenyAccessRequest(identity.fingerprint), "the owner can also deny the request");
+    deskhubp::RemoveAppDataFile(deskhubp::kAccessRequestsFileName);
+    Check(GrantClientKey(identity), "the client key is allowed again for the tests that follow");
+    host.Shutdown();
+}
+
+void TestADeniedLinkStopsWaiting() {
+    std::printf("[hostlink] a client that is denied stops asking and says so...\n");
+    const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity();
+    LinkHostRig host;
+    Check(host.Start(identity), "the host rig listens");
+    Check(deskhubp::ForgetAuthorizedClient(identity.fingerprint), "the client key is revoked");
+    deskhubp::RemoveAppDataFile(deskhubp::kAccessRequestsFileName);
+    const auto config = LinkConfig();
+    Check(deskhubp::RememberTrustedHost(identity.fingerprint, "link-test-host", config.hostLabel,
+              NowUnixSeconds()),
+        "the host key is pinned");
+
+    deskhubp::HostLink link;
+    Check(link.Start(config, deskhubp::HostLinkCallbacks{}), "the link starts");
+    Check(WaitUntil(
+              [] {
+                  const auto requests = deskhubp::ListAccessRequests();
+                  return requests && requests->size() == 1;
+              },
+              10000),
+        "the host recorded the request");
+    Check(deskhubp::DenyAccessRequest(identity.fingerprint), "the owner denies it");
+    Check(deskhubp::ListAccessRequests() && deskhubp::ListAccessRequests()->empty(),
+        "and the request leaves the list");
+    Check(WaitUntil([&link] { return link.Settled(); }, 15000),
+        "the waiting link settles on its next redial instead of filing the request again");
+    Check(link.State() == deskhubp::HostLinkState::Refused &&
+              link.Message() == deskhub::ui::kAuthDeclined,
+        "and tells the user the owner declined");
+    Check(deskhubp::ListAccessRequests() && deskhubp::ListAccessRequests()->empty(),
+        "no fresh request reappeared for the owner");
+    link.Stop();
+
+    deskhubp::RemoveAppDataFile(deskhubp::kAccessRequestsFileName);
+    Check(GrantClientKey(identity), "the client key is allowed again for the tests that follow");
+    host.Shutdown();
+}
+
+void TestAForgottenDeviceDoesNotRedial() {
+    std::printf("[hostlink] a device the host removes ends its session instead of asking again...\n");
+    const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity();
+    LinkHostRig host;
+    Check(host.Start(identity), "the host rig listens");
+    deskhubp::RemoveAppDataFile(deskhubp::kAccessRequestsFileName);
+    auto config = LinkConfig();
+    config.recoverLink = true;
+    config.recoverGraceUs = 60'000'000;
+    Check(deskhubp::RememberTrustedHost(identity.fingerprint, "link-test-host", config.hostLabel,
+              NowUnixSeconds()),
+        "the host key is pinned");
+
+    std::atomic<int> recoveringSeen{0};
+    deskhubp::HostLinkCallbacks hooks;
+    hooks.onState = [&recoveringSeen](deskhubp::HostLinkState state, std::string_view) {
+        if (state == deskhubp::HostLinkState::Recovering) recoveringSeen.fetch_add(1);
+    };
+    deskhubp::HostLink link;
+    Check(link.Start(config, std::move(hooks)), "the link starts");
+    Check(WaitUntil([&link] { return link.State() == deskhubp::HostLinkState::Ready; }, 10000),
+        "the allowed device is admitted");
+    Check(deskhubp::ForgetAuthorizedClient(identity.fingerprint), "the owner removes the device");
+    Check(WaitUntil([&link] { return link.Settled(); }, 10000), "the link settles");
+    Check(link.State() == deskhubp::HostLinkState::Refused &&
+              link.Message() == deskhub::ui::kAuthDeviceRemoved,
+        "and says the device was removed");
+    Check(recoveringSeen.load() == 0, "it never tried to reconnect");
+    Check(deskhubp::ListAccessRequests() && deskhubp::ListAccessRequests()->empty(),
+        "so no connection request appeared for the device just removed");
+    link.Stop();
+
     Check(GrantClientKey(identity), "the client key is allowed again for the tests that follow");
     host.Shutdown();
 }
@@ -522,6 +597,8 @@ void RunHostLinkTests() {
     TestAnImpostorOnTheKnownAddressIsAnotherMachine();
     TestANewHostKeyIsSavedOnlyWhenAsked();
     TestALinkWaitsForApprovalAndGetsIn();
+    TestADeniedLinkStopsWaiting();
+    TestAForgottenDeviceDoesNotRedial();
     TestAnInviteAdmitsWithoutADialog();
     TestALinkRecoversAndSaysItResumed();
     TestTheLinkPingsOnItsOwn();

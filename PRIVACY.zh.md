@@ -2,7 +2,7 @@
 
 # Deskhub 隐私政策
 
-_生效日期：2026 年 10 月 1 日 —— 版本 2.12_
+_生效日期：2026 年 10 月 1 日 —— 版本 2.13_
 
 > 本文件译自 [`PRIVACY.md`](PRIVACY.md)。如有出入，以英文版为准。
 
@@ -40,7 +40,7 @@ analytics、crash reporting、广告，也未嵌入收集数据的第三方 SDK�
 | 本设备的 key，即首次运行时创建的一把私钥 | 在两个方向上证明本设备的身份：共享时向连接进来的设备证明，connect 时向所连接的 host 证明；对用户呈现为一个 fingerprint（`SHA256:…`） | 写入 app 自身文件夹中的 `host_key.pem`。private key 从不发送给其他设备：共享时，向连接进来的设备出示的是由该 key 构建的 certificate；connect 时仅发送 public key 和签名。certificate 不会被保留 —— TLS 库只能从文件加载它，因此它会被短暂写入同一文件夹中的 `transport_cert.<random>.pem`，仅你可读，并在加载后删除；因 crash 而遗留的文件会在本设备下次开始共享时删除。它只包含公开的 certificate —— private key 从 `host_key.pem` 读取。在 iOS 上，该文件夹被排除在 iCloud 与电脑备份之外；在 Android 上，app 的备份已关闭；在 Windows、macOS 与 Linux 上，复制你主目录的备份工具会一并复制该 key 文件。*Copy public key* 会将 public key 放入你的 clipboard，并以本设备名称作为 label，供你交给 host 的所有者。早期版本的 `host_cert.pem` 与 `client_key*.pem` 文件不再被读取 | 保留至你删除该文件为止；不会被自动替换。删除后本设备将获得新的身份：此前允许旧身份的 host 需要重新允许它，此前信任它的设备会将其视为一个新的 host |
 | 受信任的 host（固定的 key fingerprint、名称、本设备首次与最后一次连上它的时间、它最后一次应答的地址与 port） | 识别本设备已信任的 host，无论它出现在哪个地址，并在曾属于受信任 host 的地址上出现另一把 key 应答时发出警告 | 写入同一文件夹中的 `known_hosts`；不会被传输 | 保留至你移除 host 或删除文件；地址与最后一次见到的时间在每次连接时更新 |
 | 允许 connect 到本 host 的 client public key，各带一个 label | 只允许能证明持有对应 private key 的 client 进入 | 写入同一文件夹中的 `authorized_keys`，每行一个 key 及其 label；不记录任何时间。不会被传输。key 会在你粘贴它、你批准该设备的 connection request，或该设备扫描本 host 的 QR code 时加入 —— 后两种情况下 label 为该设备发送的名称 | 保留至你移除这些 key 或删除文件；没有该文件时任何人都无法 connect |
-| Connection request —— 每台尚未获允许却尝试 connect 到本 host 的设备的名称、public key、地址与时间 | 让本 host 的所有者看到谁在请求，并以 *Approve* 或 *Deny* 作出决定 | 请求方设备通过 encrypt 连接发送其名称与 public key，并用对应的 private key 签名；只有在该签名验证通过之后，本 host 才将其连同所见地址与时间写入同一文件夹中的 `access_requests`。不会传输到这两台设备之外；仅显示在本 host 自己的屏幕上 | 最多 16 条。每条在 10 分钟后删除，或在你按下 *Approve*（将该 key 移入 `authorized_keys`）或 *Deny* 时立即删除 |
+| Connection request —— 每台尚未获允许却尝试 connect 到本 host 的设备的名称、public key、地址与时间 | 让本 host 的所有者看到谁在请求，并以 *Approve* 或 *Deny* 作出决定 | 请求方设备通过 encrypt 连接发送其名称与 public key，并用对应的 private key 签名；只有在该签名验证通过之后，本 host 才将其连同所见地址与时间写入同一文件夹中的 `access_requests`。不会传输到这两台设备之外；仅显示在本 host 自己的屏幕上 | 最多 16 条。每条在 10 分钟后删除，或在你按下 *Approve*（将该 key 移入 `authorized_keys`）时立即删除。*Deny* 会立即将其从列表中移除，但保留该行并标记为已拒绝，直到其 10 分钟期满，使该设备无法立即再次请求 |
 | QR pairing token —— 本 host 在展示其 QR code 期间签发的一次性随机码 | 让扫描该码的那台设备无需任何进一步步骤即可接入 | 写入同一文件夹中的 `pairing_tokens`，并附每个 token 的过期时间。token 随你展示的 QR code 与链接传播 —— 任何能看到该屏幕的人都能读到它 —— 并由扫描它的设备通过 encrypt 连接发送一次。QR code 中还包含本设备的 network 地址与 port、其 key fingerprint 及其设备名 | 在隐藏该码、停止共享、token 被使用时删除，或 5 分钟后删除 |
 | 你扫描 QR code 期间的摄像头画面（仅 Android 与 iOS） | 从 host 的屏幕上读取其 QR code | 仅在设备上处理，用于查找并解码该码；不保存、不传输，也不向任何人显示 | 从不保存；每一帧检查完毕即丢弃 |
 | 你输入的 IPv4 地址（以及你给出的 port）—— Deskhub 不解析 host 名称 | 连接到另一台机器 | 仅保留在你输入它的设备上 | 本地保留至你修改为止 |
@@ -218,6 +218,7 @@ https://github.com/manhpham90vn/Deskhub/blob/main/PRIVACY.md
 
 | 版本 | 日期 | 变更内容 |
 |---|---|---|
+| 2.13 | 2026-10-01 | **被拒绝的 connection request 会保留到过期。** 以前在 connection request 上按下 *Deny* 会立即从 `access_requests` 中删除该行。现在它会立即将该请求从列表中移除，但保留该行 —— 同样的名称、public key、地址与时间，并标记为已拒绝 —— 直到其 10 分钟期满，因此被拒绝设备之后的尝试会被拒绝，而不会提交新的请求。不会收集或传输任何新数据。 |
 | 2.12 | 2026-10-01 | **更正与更严格的本地数据处理。** Windows、macOS 与 Linux 上的诊断日志文件现在仅你可读，较旧的日志会被自动删除，只保留最新的十个；Windows app 不再把 viewer 按下的按键写入日志，无论是在 remote control 中还是在 terminal 中；本政策现已列出日志包含的内容，其中不包括 viewer 按下的按键。连接统计会记录在这些日志中，而本政策的早期版本未说明这一点。connection request 只有在请求设备用其 key 签名之后才会被记录，因此它出示的 key 已得到证明。由本设备 key 构建的 TLS certificate —— 仅公开部分 —— 会被短暂写入仅你可读的文件并立即删除，因 crash 而遗留的文件会在本设备下次开始共享时删除；早期版本称其从不保存。在 iOS 上，保存本设备 private key 的文件夹现已被排除在 iCloud 与电脑备份之外。旧的 `auth_salt` 文件现在会被删除，旧 `ui-settings.txt` 中遗留的 passcode 行会在加载该文件时立即移除。本版本还更正了早期的陈述：`known_hosts` 会记录首次与最后一次连上每个 host 的时间；设置文件还保存本设备是否操作其所观看的机器以及是否播放其声音；现已列出 *Start Deskhub when you log in* 创建的启动项；iOS 的 broadcast 状态文件保存已连接 viewer 的名称；使用 QR code 或链接连接的设备会在 TLS handshake 的第一个 packet 中以未 encrypt 的形式发送 host 的名称；你输入的地址是 IPv4 地址，从不解析 host 名称；permission 表现已涵盖 macOS、Windows 与 Linux；本软件包含开源库，但没有收集数据的 SDK；iOS app 通过 TestFlight 分发，TestFlight 与 Google Play Console 一样，可向开发者展示单台设备的 crash 报告。 |
 | 2.11 | 2026-09-30 | **每台设备一把 key、connection request 与 QR pairing。** 每台设备现在只有一把 key（`host_key.pem`），共享与 connect 时均以它为身份；单独的 client key（`client_key*.pem`）与保存的 certificate（`host_cert.pem`）不再存在 —— certificate 在内存中构建、从不保存，遗留文件被忽略而非转换。受信任的 host 按 key fingerprint 记忆，并附各自最后一次应答的地址，不再按地址记忆。app 文件夹中新增两个文件，均不会传输到相关两台设备之外：`access_requests` 保存每台尚未获允许却请求 connect 的设备的名称、public key、地址与时间（最多 16 条，每条在 10 分钟后或在 *Approve* / *Deny* 时删除）；`pairing_tokens` 保存 host 在共享期间可展示的 QR code 背后的一次性随机 token（在隐藏该码、被使用或 5 分钟后过期时删除）。QR code 本身包含 host 的地址、port、key fingerprint、设备名与 token，任何看到屏幕的人都能读取。设备名现在还会显示在它留下的 connection request 中，并在 host 批准它或通过 QR code 准入它时成为其 key 的 label。在 Android 与 iOS 上，摄像头仅在你扫描 QR code 期间使用，并在那一刻申请 permission；画面在设备上解码，从不保存或发送。新的 connection request 还会在本设备上触发一条系统通知，说明请求设备的名称与地址；该通知由本设备自己的通知中心显示，不会发往其他任何地方。 |
 | 2.10 | 2026-09-29 | host 现在会将其设备名发送给每个已用允许的 key 完成认证的 client —— 认证之前不发送任何内容 —— client 会将该名称保存在其最近列表中。最近列表改用新文件 `recent-hosts.txt`（地址、最近一次连接的时间、host 名称；最多 10 个）。旧的 `recent-devices.txt` 会被删除而非转换。 |

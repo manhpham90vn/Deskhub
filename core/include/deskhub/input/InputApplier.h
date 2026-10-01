@@ -1,5 +1,6 @@
 #pragma once
 #include "deskhub/input/PressedInputTracker.h"
+#include "deskhub/input/Set1Scancodes.h"
 #include "deskhub/protocol/Wire.h"
 
 #include <cstdint>
@@ -34,7 +35,7 @@ protected:
 
         switch (e.type) {
             case InputType::Key:
-                backend().SendKey(e.a, e.b, e.state != 0);
+                backend().SendKey(SidedModifier(e.a, e.b), e.b, e.state != 0);
                 break;
             case InputType::MouseMove:
                 if (e.absolute)
@@ -59,8 +60,9 @@ protected:
     bool ReleaseEvenWhileSuppressed(const InputEvent& e) {
         if (e.state != 0) return false;
         if (e.type == InputType::Key) {
-            if (held_.FindKey(e.a) == nullptr) return false;
-            backend().SendKey(e.a, e.b, false);
+            const int32_t vk = SidedModifier(e.a, e.b);
+            if (held_.FindKey(vk) == nullptr) return false;
+            backend().SendKey(vk, e.b, false);
             return true;
         }
         if (e.type == InputType::MouseButton) {

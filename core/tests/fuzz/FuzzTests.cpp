@@ -214,6 +214,7 @@ Datagram BuildRandomValidDatagram() {
         case 18: {
             AuthResponse m;
             m.proof = RandomJunk(kMaxAuthBlobBytes);
+            if (m.proof.empty()) m.proof.push_back(uint8_t(Rnd()));
             n = BuildAuthResponse(buf, m);
             break;
         }

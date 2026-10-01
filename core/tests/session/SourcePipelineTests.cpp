@@ -244,6 +244,18 @@ void TestReconfigReachesAStreamingPeer() {
         "the RECONFIG carries the new size");
     Check(u.reconfig.fps == 30 && u.reconfig.bitrateBps == 9'000'000,
         "and the ladder's rate");
+
+    const uint64_t t0 = 5'000'000;
+    const auto first = TakeReconfigToSend(*p, t0);
+    Check(first && first->width == 1600 && first->height == 900, "it goes out at once");
+    Check(!TakeReconfigToSend(*p, t0 + kReconfigResendIntervalUs - 1),
+        "and is not repeated straight away");
+    size_t copies = 1;
+    for (uint64_t at = t0 + kReconfigResendIntervalUs; at < t0 + 10 * kReconfigResendIntervalUs;
+        at += kReconfigResendIntervalUs)
+        if (TakeReconfigToSend(*p, at)) ++copies;
+    Check(copies == kReconfigSends,
+        "but is sent a fixed number of times, since one lost datagram must not strand the viewer");
 }
 
 void TestZeroSizedCaptureIsDropped() {

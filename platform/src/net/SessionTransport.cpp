@@ -53,6 +53,17 @@ bool ChargesAFailure(deskhub::AuthResultCode code) {
            code != deskhub::AuthResultCode::ConfigError;
 }
 
+deskhub::AuthResultCode AuthOutcomeOfClose(std::optional<uint64_t> code) {
+    if (!code) return deskhub::AuthResultCode::TimedOut;
+    switch (*code) {
+        case kCloseAuthRateLimited: return deskhub::AuthResultCode::RateLimited;
+        case kCloseAuthVersionMismatch: return deskhub::AuthResultCode::VersionMismatch;
+        case kCloseDeviceForgotten: return deskhub::AuthResultCode::NotPaired;
+        case kCloseAuthExpired: return deskhub::AuthResultCode::TimedOut;
+        default: return deskhub::AuthResultCode::Refused;
+    }
+}
+
 bool CarriesVideo(std::span<const uint8_t> message) {
     const std::optional<deskhub::CommonHeader> header = deskhub::ParseCommonHeader(message);
     return header.has_value() && header->chan == deskhub::Chan::Video;
@@ -538,6 +549,11 @@ bool SessionTransport::RunClientAuth(const NetAddr& server, ClientAuthConfig con
         std::optional<TransportMessage> next = TakeAuthMessage();
         if (!next) {
             PollForAuth();
+            if (const auto closed = ClosedDuringAuth(server)) {
+                outCode = *closed;
+                clientAuthOn_ = false;
+                return false;
+            }
             continue;
         }
 
@@ -635,6 +651,21 @@ bool SessionTransport::RunClientAuth(const NetAddr& server, ClientAuthConfig con
         endpoint_.CloseConnection(server.Pack(), kCloseBadFraming, "auth message out of order");
     }
     return false;
+}
+
+std::optional<deskhub::AuthResultCode> SessionTransport::ClosedDuringAuth(
+    const NetAddr& server) const {
+    const std::lock_guard<std::mutex> lock(sendMutex_);
+    if (!authInbox_.empty() || endpoint_.Established(server.Pack())) return std::nullopt;
+    const std::optional<uint64_t> code = endpoint_.PeerCloseCode(server.Pack());
+    LOGW("transport: %s closed the connection before answering (close code %lld)",
+        server.ToString().c_str(), code ? static_cast<long long>(*code) : -1LL);
+    return AuthOutcomeOfClose(code);
+}
+
+bool SessionTransport::PeerForgotThisDevice(const NetAddr& peer) const {
+    const std::lock_guard<std::mutex> lock(sendMutex_);
+    return endpoint_.PeerCloseCode(peer.Pack()) == kCloseDeviceForgotten;
 }
 
 std::optional<TransportMessage> SessionTransport::TakeAuthMessage() {

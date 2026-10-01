@@ -70,13 +70,22 @@ void TestX11ButtonMapping() {
 }
 
 void TestWheelNotches() {
-    std::printf("[pointer] a wheel delta becomes whole notches, never zero...\n");
-    Check(WheelNotches(0) == 0, "no movement is no notches");
-    Check(WheelNotches(kWheelDeltaPerNotch) == 1, "one detent is one notch");
-    Check(WheelNotches(-kWheelDeltaPerNotch) == -1, "and the other way round");
-    Check(WheelNotches(3 * kWheelDeltaPerNotch) == 3, "three detents are three notches");
-    Check(WheelNotches(40) == 1, "a partial detent still scrolls, rounded up in magnitude");
-    Check(WheelNotches(-40) == -1, "including downward");
+    std::printf("[pointer] a wheel delta becomes whole notches, carrying what is left...\n");
+    int32_t carry = 0;
+    Check(TakeWheelNotches(0, carry) == 0 && carry == 0, "no movement is no notches");
+    Check(TakeWheelNotches(kWheelDeltaPerNotch, carry) == 1, "one detent is one notch");
+    Check(TakeWheelNotches(-kWheelDeltaPerNotch, carry) == -1, "and the other way round");
+    Check(TakeWheelNotches(3 * kWheelDeltaPerNotch, carry) == 3, "three detents are three notches");
+
+    carry = 0;
+    int32_t scrolled = 0;
+    for (int i = 0; i < 12; ++i) scrolled += TakeWheelNotches(10, carry);
+    Check(scrolled == 1 && carry == 0,
+        "twelve smooth-scroll ticks of a twelfth add up to one notch, not twelve");
+    Check(TakeWheelNotches(40, carry) == 0 && carry == 40, "a partial detent waits for the rest");
+    Check(TakeWheelNotches(-30, carry) == 0 && carry == -30,
+        "turning back drops what was carried the other way");
+    Check(TakeWheelNotches(-90, carry) == -1 && carry == 0, "and scrolls once a whole notch is in");
 }
 
 void TestTouchScrollAccumulates() {

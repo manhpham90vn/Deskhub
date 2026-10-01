@@ -151,6 +151,7 @@ public:
 private:
     bool Fail(std::string message);
     void RefuseFiles(const NetAddr& from, std::span<const uint8_t> message);
+    void RefuseTerminal(const NetAddr& from, std::span<const uint8_t> message);
     void StartAudio();
     void AttachSession(HostSource& st);
     void ShutdownSource(HostSource& st);

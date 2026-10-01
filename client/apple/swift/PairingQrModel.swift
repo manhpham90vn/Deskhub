@@ -11,14 +11,6 @@ final class PairingQrModel {
     var shown: Bool { !invite.isEmpty }
     var open: Bool { shown || expired }
 
-    func toggle(port: UInt16, bindIp: String) {
-        if shown {
-            hide()
-        } else {
-            show(port: port, bindIp: bindIp)
-        }
-    }
-
     func hide() {
         guard open else { return }
         invite = ""

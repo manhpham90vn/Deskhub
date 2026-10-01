@@ -82,6 +82,7 @@ public:
     std::optional<deskhub::Fingerprint> PeerFingerprint(QuicConnId conn) const;
     std::optional<deskhub::AuthSessionId> ExportAuthSessionId(QuicConnId conn) const;
     bool Established(QuicConnId conn) const;
+    std::optional<uint64_t> PeerCloseCode(QuicConnId conn) const;
     void CloseConnection(QuicConnId conn, uint64_t errorCode = 0, std::string_view reason = {});
     void Close();
 

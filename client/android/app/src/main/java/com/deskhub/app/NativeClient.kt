@@ -143,6 +143,9 @@ object NativeClient {
     const val STR_HOST_LAST_ADDRESS_LABEL = 212
     const val STR_ACCESS_REQUEST_NOTIFICATION_TITLE = 213
     const val STR_UNNAMED_CLIENT = 214
+    const val STR_QR_EXPIRED_NOTE = 221
+    const val STR_NEW_QR_ACTION = 222
+    const val STR_QR_UNAVAILABLE = 223
 
     private const val HOST_PROFILE_OK = 0
     private const val HOST_PROFILE_STORE_UNREADABLE = 10
@@ -271,6 +274,10 @@ object NativeClient {
 
     private external fun nativePairingRevoke()
 
+    private external fun nativePairingTokenTtlSeconds(): Long
+
+    private external fun nativeQrExpiryLine(secondsLeft: Long): String
+
     private external fun nativeQrEncode(text: String): ByteArray
 
     private external fun nativePairingInviteAddress(invite: String): String
@@ -283,6 +290,10 @@ object NativeClient {
     ): String = nativePairingInvite(port, bindIp)
 
     fun pairingRevoke() = nativePairingRevoke()
+
+    fun pairingTokenTtlSeconds(): Long = nativePairingTokenTtlSeconds()
+
+    fun qrExpiryLine(secondsLeft: Long): String = nativeQrExpiryLine(secondsLeft)
 
     class QrCode(
         val size: Int,

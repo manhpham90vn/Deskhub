@@ -198,7 +198,7 @@ void InputInjector::SendMoveRelative(int32_t dx, int32_t dy) {
 }
 
 void InputInjector::SendWheel(int32_t delta) {
-    const int32_t v = deskhub::WheelNotches(delta);
+    const int32_t v = deskhub::TakeWheelNotches(delta, wheelCarry_);
     if (!v) return;
     Emit(mouseFd_, EV_REL, REL_WHEEL, v);
     Sync(mouseFd_);

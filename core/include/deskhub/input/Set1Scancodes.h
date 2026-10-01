@@ -103,6 +103,24 @@ constexpr int32_t VkToSet1Scancode(int32_t vk) {
     }
 }
 
+constexpr int32_t SidedModifier(int32_t vk, int32_t scan) {
+    switch (vk) {
+        case kVkShift:
+            if (scan == VkToSet1Scancode(kVkRShift)) return kVkRShift;
+            if (scan == VkToSet1Scancode(kVkLShift)) return kVkLShift;
+            return vk;
+        case kVkControl:
+            if (scan == VkToSet1Scancode(kVkRControl)) return kVkRControl;
+            if (scan == VkToSet1Scancode(kVkLControl)) return kVkLControl;
+            return vk;
+        case kVkMenu:
+            if (scan == VkToSet1Scancode(kVkRMenu)) return kVkRMenu;
+            if (scan == VkToSet1Scancode(kVkLMenu)) return kVkLMenu;
+            return vk;
+        default: return vk;
+    }
+}
+
 constexpr bool NeedsVirtualKeyInjection(int32_t vk) {
     return vk == kVkPause;
 }

@@ -99,7 +99,6 @@ public:
         linkConfig.clientName =
             cfg_.displayName.empty() ? SessionDeviceName() : cfg_.displayName;
         linkConfig.connectTimeoutMs = kHandshakeTimeoutMs;
-        linkConfig.authTimeoutMs = kAuthTimeoutMs;
         linkConfig.recvWaitMs = 10;
         linkConfig.recoverLink = true;
         linkConfig.recoverGraceUs = deskhub::kViewerReattachGraceUs;
@@ -649,7 +648,6 @@ private:
     }
 
     static constexpr uint32_t kHandshakeTimeoutMs = 5'000;
-    static constexpr uint32_t kAuthTimeoutMs = 65'000;
     static constexpr uint64_t kTrustPollUs = 20'000;
 
     ScreenViewerConfig cfg_{};
