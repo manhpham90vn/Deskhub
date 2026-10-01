@@ -277,9 +277,14 @@ make_macos_universal() {
     [ "$(uname -s)" = "Darwin" ] || return 0
     local arm="$PREFIX/aarch64-apple-darwin/libopus.a"
     local x64="$PREFIX/x86_64-apple-darwin/libopus.a"
+    local universal="$PREFIX/macos-universal/libopus.a"
     [ -f "$arm" ] && [ -f "$x64" ] || return 0
+    if [ "$universal" -nt "$arm" ] && [ "$universal" -nt "$x64" ]; then
+        echo "[ok]      opus $OPUS_VERSION (macos-universal) is newer than both slices"
+        return 0
+    fi
     mkdir -p "$PREFIX/macos-universal"
-    lipo -create "$arm" "$x64" -output "$PREFIX/macos-universal/libopus.a"
+    lipo -create "$arm" "$x64" -output "$universal"
     echo "[ok]      opus $OPUS_VERSION (macos-universal) = arm64 + x86_64"
 }
 

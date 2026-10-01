@@ -92,10 +92,12 @@ function Resolve-LocalClangTidy {
 }
 
 function Resolve-LocalSwiftformat {
-    $onPath = (Get-Command swiftformat -ErrorAction SilentlyContinue).Source
-    if ($onPath) { return $onPath }
-    $exe = Join-Path (Get-LocalToolsDir) 'swiftformat.exe'
-    if (Test-Path $exe) { return $exe }
+    $version = Get-PinnedToolVersion 'SWIFTFORMAT_VERSION'
+    $candidates = @((Get-Command swiftformat -ErrorAction SilentlyContinue).Source, (Join-Path (Get-LocalToolsDir) 'swiftformat.exe'))
+    foreach ($candidate in $candidates) {
+        if (-not $candidate -or -not (Test-Path $candidate)) { continue }
+        if (((& $candidate --version) -join ' ').Trim() -eq $version) { return $candidate }
+    }
     return $null
 }
 
@@ -123,18 +125,14 @@ function Ensure-LocalKtlint {
 
 function Ensure-LocalSwiftFormat {
     $version = Get-PinnedToolVersion 'SWIFTFORMAT_VERSION'
-    $onPath = (Get-Command swiftformat -ErrorAction SilentlyContinue).Source
-    if ($onPath) {
-        Write-Host "[ok]      swiftformat ($onPath)"
+    $found = Resolve-LocalSwiftformat
+    if ($found) {
+        Write-Host "[ok]      swiftformat $version ($found)"
         return
     }
     $toolsDir = Get-LocalToolsDir
     New-Item -ItemType Directory -Force -Path $toolsDir | Out-Null
     $exe = Join-Path $toolsDir 'swiftformat.exe'
-    if (Test-Path $exe) {
-        Write-Host "[ok]      swiftformat ($exe)"
-        return
-    }
     Write-Host "[install] SwiftFormat $version..."
     $sha = Get-PinnedToolVersion 'SWIFTFORMAT_MSI_SHA256'
     $msi = Join-Path $env:TEMP 'SwiftFormat.amd64.msi'
@@ -145,9 +143,12 @@ function Ensure-LocalSwiftFormat {
         throw "SwiftFormat download failed the checksum check."
     }
     Start-Process msiexec -ArgumentList "/a `"$msi`" /qn TARGETDIR=`"$ext`"" -Wait
-    Copy-Item (Join-Path $ext 'PFiles64\nicklockwood\SwiftFormat\swiftformat.exe') $exe
+    Copy-Item (Join-Path $ext 'PFiles64\nicklockwood\SwiftFormat\swiftformat.exe') $exe -Force
     Remove-Item $msi -Force
     Remove-Item $ext -Recurse -Force
+    if (-not (Resolve-LocalSwiftformat)) {
+        throw "SwiftFormat installed to $exe but does not report its pinned version $version."
+    }
     Write-Host "[ok]      SwiftFormat $version ($exe)"
 }
 

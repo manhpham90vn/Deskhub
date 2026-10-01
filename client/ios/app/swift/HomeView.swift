@@ -59,6 +59,7 @@ struct HomeView: View {
             return
         }
         page = 0
+        guard !model.connect.confirmsOutsideInvite(invite) else { return }
         model.beginConnect(invite: invite)
     }
 }

@@ -291,8 +291,8 @@ void TestHostSharesAShell() {
         stranger.BeginAuth(clientIdentity, identity.fingerprint);
         Check(stranger.PumpUntil([&stranger] { return stranger.authSettled; }, kMaxRounds),
             "an unlisted client key is settled by the host");
-        Check(stranger.authCode == deskhub::AuthResultCode::NotPaired,
-            "and rejected without approval");
+        Check(stranger.authCode == deskhub::AuthResultCode::AwaitingApproval,
+            "and only told to wait for the owner's approval");
         stranger.client->Open(deskhub::TermSize{80, 24}, "test-client");
         stranger.Pump(200);
         Check(host.SessionCount() == 0, "asking for a shell anyway starts nothing");

@@ -61,6 +61,7 @@ struct PendingHostTrust: Sendable, Equatable {
     let address: String
     let fingerprint: String
     let prompt: String
+    var invite = ""
 }
 
 struct TransferState: Sendable, Equatable {

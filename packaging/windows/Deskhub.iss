@@ -20,6 +20,15 @@ UninstallDisplayIcon={app}\Deskhub.exe
 
 [Files]
 Source: "..\..\out\build\x64-release\client\windows\win32\Deskhub.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\..\THIRD_PARTY_NOTICES.md"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\..\licenses\BSD-2-Clause-quiche.txt"; DestDir: "{app}\licenses"; Flags: ignoreversion
+Source: "..\..\licenses\BoringSSL.txt"; DestDir: "{app}\licenses"; Flags: ignoreversion
+Source: "..\..\licenses\Apache-2.0.txt"; DestDir: "{app}\licenses"; Flags: ignoreversion
+Source: "..\..\licenses\rust-crates.txt"; DestDir: "{app}\licenses"; Flags: ignoreversion
+Source: "..\..\licenses\BSD-3-Clause-opus.txt"; DestDir: "{app}\licenses"; Flags: ignoreversion
+Source: "..\..\licenses\wxWindows.txt"; DestDir: "{app}\licenses"; Flags: ignoreversion
+Source: "..\..\licenses\wxWidgets-bundled.txt"; DestDir: "{app}\licenses"; Flags: ignoreversion
+Source: "..\..\licenses\LGPL-2.1.txt"; DestDir: "{app}\licenses"; Flags: ignoreversion
 
 [Icons]
 Name: "{autoprograms}\DeskHub"; Filename: "{app}\Deskhub.exe"
@@ -29,4 +38,4 @@ Name: "{autodesktop}\DeskHub"; Filename: "{app}\Deskhub.exe"; Tasks: desktopicon
 Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Additional shortcuts:"
 
 [Run]
-Filename: "{app}\Deskhub.exe"; Description: "Launch DeskHub"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\Deskhub.exe"; Description: "Launch DeskHub"; Flags: nowait postinstall skipifsilent shellexec

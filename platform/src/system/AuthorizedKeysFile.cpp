@@ -16,7 +16,8 @@ namespace deskhubp {
 
 namespace {
 
-constexpr const char* kRetiredFileNames[] = {"paired_devices", "authorized_keys_active"};
+constexpr const char* kRetiredFileNames[] = {
+    "paired_devices", "authorized_keys_active", "auth_salt"};
 
 struct WritableKeys {
     deskhub::AuthorizedKeys keys{};

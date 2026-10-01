@@ -15,6 +15,10 @@ final class AppModel {
     var fileSend: FileSendModel?
 
     func beginConnect(to address: String) {
+        guard !DeskhubClient.isPairingInvite(address) else {
+            beginConnect(invite: address)
+            return
+        }
         connect.target(address)
         beginConnect()
     }

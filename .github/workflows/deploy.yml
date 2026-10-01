@@ -75,6 +75,7 @@ jobs:
           mv dist/deskhub-cli-linux-deb/deskhub-cli_*.deb "out/deskhub-cli-${GITHUB_REF_NAME}-amd64.deb"
           mv dist/deskhub-linux-rpm/deskhub-*.rpm "out/deskhub-${GITHUB_REF_NAME}-x86_64.rpm"
           mv dist/deskhub-cli-linux-rpm/deskhub-cli-*.rpm "out/deskhub-cli-${GITHUB_REF_NAME}-x86_64.rpm"
+          zip -q -r "out/deskhub-${GITHUB_REF_NAME}-licenses.zip" LICENSE THIRD_PARTY_NOTICES.md licenses
 
       - name: Write release notes
         run: |
@@ -109,6 +110,7 @@ jobs:
             out/deskhub-cli-${{ github.ref_name }}-windows-setup.exe
             out/deskhub-cli-${{ github.ref_name }}-linux-x86_64
             out/deskhub-cli-${{ github.ref_name }}-macos
+            out/deskhub-${{ github.ref_name }}-licenses.zip
           body_path: out/release-notes.md
 
   release-ios:

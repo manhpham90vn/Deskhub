@@ -17,3 +17,5 @@ function(deskhub_target_warnings target)
         endif()
     endif()
 endfunction()
+
+include(${CMAKE_CURRENT_LIST_DIR}/DeskhubHardening.cmake)

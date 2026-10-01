@@ -76,6 +76,9 @@ jobs:
           if (-not (Test-Path $installed) -or -not (Test-Path $shortcut) -or -not (Test-Path $desktopShortcut)) {
             throw 'Installer did not install the app and both shortcuts'
           }
+          foreach ($notice in 'THIRD_PARTY_NOTICES.md', 'licenses\wxWindows.txt', 'licenses\BSD-2-Clause-quiche.txt') {
+            if (-not (Test-Path (Join-Path (Split-Path $installed) $notice))) { throw "Installer did not install $notice" }
+          }
           $uninstall = Start-Process (Join-Path (Split-Path $installed) 'unins000.exe') -ArgumentList '/VERYSILENT', '/NORESTART' -Wait -PassThru
           if ($uninstall.ExitCode -ne 0) { throw "Uninstaller exited with $($uninstall.ExitCode)" }
           if ((Test-Path $shortcut) -or (Test-Path $desktopShortcut)) {

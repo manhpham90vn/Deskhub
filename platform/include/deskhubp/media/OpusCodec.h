@@ -56,6 +56,8 @@ public:
 
     size_t Conceal(std::span<int16_t> pcm);
 
+    size_t Recover(std::span<const uint8_t> nextPacket, std::span<int16_t> pcm);
+
     bool IsOpen() const {
         return dec_ != nullptr;
     }

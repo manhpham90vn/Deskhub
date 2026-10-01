@@ -37,10 +37,10 @@ define notarize
 endef
 
 quiche-macos:
-	-@$(QUICHE_FOR) $(MACOS_QUICHE_TARGETS)
+	@$(QUICHE_FOR) $(MACOS_QUICHE_TARGETS)
 
 opus-macos:
-	-@$(OPUS_FOR) $(MACOS_OPUS_TARGETS)
+	@$(OPUS_FOR) $(MACOS_OPUS_TARGETS)
 
 build-macos: quiche-macos opus-macos
 	xcodebuild -project $(MACOS_PROJ) -target app -configuration Debug SYMROOT=$(MACOS_OUT) $(MACOS_SIGN_FLAGS) $(MACOS_XCARGS) build

@@ -109,6 +109,17 @@ size_t OpusAudioDecoder::Decode(std::span<const uint8_t> packet, std::span<int16
     return size_t(samples);
 }
 
+size_t OpusAudioDecoder::Recover(std::span<const uint8_t> nextPacket, std::span<int16_t> pcm) {
+    if (dec_ == nullptr || nextPacket.empty() || !FormatFits(format_, pcm)) return 0;
+    const int samples = opus_decode(dec_, nextPacket.data(), opus_int32(nextPacket.size()),
+        pcm.data(), int(format_.samplesPerFrame), 1);
+    if (samples < 0) {
+        LOGW("[audio] evt=fec_recover_fail err=%s", opus_strerror(samples));
+        return 0;
+    }
+    return size_t(samples);
+}
+
 size_t OpusAudioDecoder::Conceal(std::span<int16_t> pcm) {
     if (dec_ == nullptr || !FormatFits(format_, pcm)) return 0;
     const int samples = opus_decode(dec_, nullptr, 0, pcm.data(), int(format_.samplesPerFrame), 0);

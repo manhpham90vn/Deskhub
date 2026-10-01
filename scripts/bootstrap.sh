@@ -82,6 +82,33 @@ install_android_packages() {
     }
 }
 
+CMAKE_MIN_VERSION=3.25
+
+cmake_is_recent_enough() {
+    local have
+    have=$(cmake --version 2>/dev/null | awk 'NR == 1 { print $3 }')
+    [ -n "$have" ] && [ "$(printf '%s\n%s\n' "$CMAKE_MIN_VERSION" "$have" | sort -V | head -1)" = "$CMAKE_MIN_VERSION" ]
+}
+
+ensure_recent_cmake() {
+    if cmake_is_recent_enough; then
+        echo "[ok]      cmake ($(cmake --version | awk 'NR == 1 { print $3 }'))"
+        return 0
+    fi
+    echo "[install] cmake >= $CMAKE_MIN_VERSION through pipx (this release's apt cmake is older)..."
+    pipx install --force "cmake>=$CMAKE_MIN_VERSION,<4"
+    pipx ensurepath >/dev/null
+    PATH="$HOME/.local/bin:$PATH"
+    export PATH
+    hash -r
+    cmake_is_recent_enough || {
+        echo "bootstrap: cmake is still older than $CMAKE_MIN_VERSION after the pipx install - the root" >&2
+        echo "           CMakeLists.txt refuses anything older. Put ~/.local/bin ahead of /usr/bin on PATH." >&2
+        exit 1
+    }
+    echo "[ok]      cmake ($(cmake --version | awk 'NR == 1 { print $3 }'), $(command -v cmake))"
+}
+
 sync_submodules
 
 case "$(uname -s)" in
@@ -94,7 +121,7 @@ Darwin)
 
     have brew || { echo "Homebrew not found - install from https://brew.sh first." >&2; exit 1; }
 
-    for pkg in cmake ninja swiftlint pipx; do
+    for pkg in cmake ninja pipx; do
         if have "$pkg"; then
             echo "[ok]      $pkg ($(command -v "$pkg"))"
         else
@@ -122,6 +149,7 @@ Darwin)
     scripts/build-opus.sh apple
 
     ensure_local_style_tools
+    ensure_local_swiftlint
     install_android_packages "$HOME/Library/Android/sdk"
 
     ANDROID_NDK_HOME="${ANDROID_NDK_HOME:-${ANDROID_HOME:-$HOME/Library/Android/sdk}/ndk/$ANDROID_NDK_VERSION}"
@@ -140,6 +168,7 @@ Linux)
     echo "[install] apt packages (build-essential clang llvm cmake ninja-build openjdk-17-jdk-headless pipx python3-venv unzip curl pkg-config rpm)..."
     scripts/apt-install.sh build-essential clang llvm cmake ninja-build \
         openjdk-17-jdk-headless pipx python3-venv unzip curl pkg-config rpm
+    ensure_recent_cmake
 
     echo "[install] apt packages for the Ubuntu app (PipeWire, VA-API, GTK3, tray, nasm)..."
     scripts/apt-install.sh \

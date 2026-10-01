@@ -105,6 +105,34 @@ void TestConcealmentFillsAFrame() {
         "concealment writes real samples over the buffer it was given");
 }
 
+void TestInBandFecRebuildsALostFrame() {
+    std::printf("[audio] a lost frame is rebuilt from the FEC in the packet after it...\n");
+    if (BuiltWithoutOpus()) return;
+    const AudioFormat format{};
+    OpusAudioEncoder enc;
+    OpusAudioDecoder dec;
+    Check(enc.Open(format, deskhub::media::kAudioBitrateBps) && dec.Open(format),
+        "the pair opens");
+
+    std::vector<std::vector<uint8_t>> packets;
+    for (int f = 0; f < 7; ++f) {
+        std::vector<uint8_t> packet(kMaxOpusPacketBytes);
+        packet.resize(enc.Encode(Tone(format, f), packet));
+        packets.push_back(std::move(packet));
+    }
+    std::vector<int16_t> out(format.interleavedSamples());
+    for (int f = 0; f < 5; ++f) dec.Decode(packets[size_t(f)], out);
+
+    std::vector<int16_t> rebuilt(format.interleavedSamples(), 0x7FFF);
+    Check(dec.Recover(packets[6], rebuilt) == format.samplesPerFrame,
+        "the lost frame comes back at full length from the next packet");
+    Check(Rms(rebuilt) < kToneAmplitude, "with real samples written over the buffer");
+    Check(dec.Decode(packets[6], out) == format.samplesPerFrame,
+        "and the next packet still decodes normally afterwards");
+    Check(dec.Recover(std::span<const uint8_t>(), rebuilt) == 0,
+        "there is nothing to recover from without a packet");
+}
+
 void TestBadInputIsRefused() {
     std::printf("[audio] the codec refuses formats and buffers it cannot honour...\n");
     if (BuiltWithoutOpus()) return;
@@ -241,6 +269,7 @@ void TestPlayerRunsTheWholeReceivingSide() {
 void RunOpusCodecTests() {
     TestRoundTrip();
     TestConcealmentFillsAFrame();
+    TestInBandFecRebuildsALostFrame();
     TestBadInputIsRefused();
     TestCloseIsRepeatable();
     TestSinkPlaysOrDeclines();

@@ -170,7 +170,7 @@ struct HelloAck {
 };
 
 inline constexpr size_t kAuthSessionIdBytes = 32;
-inline constexpr uint8_t kAuthVersion = 7;
+inline constexpr uint8_t kAuthVersion = 8;
 inline constexpr size_t kMaxAuthBlobBytes = 256;
 inline constexpr size_t kPairingTokenBytes = 32;
 using PairingToken = std::array<uint8_t, kPairingTokenBytes>;
@@ -194,6 +194,11 @@ enum class AuthResultCode : uint8_t {
     LocalKeyUnavailable = 8,
     AwaitingApproval = 9,
 };
+
+constexpr bool IsWireAuthResultCode(uint8_t code) {
+    return code <= uint8_t(AuthResultCode::ConfigError) ||
+           code == uint8_t(AuthResultCode::AwaitingApproval);
+}
 
 struct AuthStart {
     std::vector<uint8_t> publicKey{};

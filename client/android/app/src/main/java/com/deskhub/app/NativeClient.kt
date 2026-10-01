@@ -275,6 +275,8 @@ object NativeClient {
 
     private external fun nativePairingInviteAddress(invite: String): String
 
+    private external fun nativePairingInviteNewHostKey(invite: String): String
+
     fun pairingInvite(
         port: Int,
         bindIp: String,
@@ -300,6 +302,8 @@ object NativeClient {
     }
 
     fun pairingInviteAddress(invite: String): String = nativePairingInviteAddress(invite)
+
+    fun pairingInviteNewHostKey(invite: String): String = nativePairingInviteNewHostKey(invite)
 
     data class AccessRequest(
         val name: String,

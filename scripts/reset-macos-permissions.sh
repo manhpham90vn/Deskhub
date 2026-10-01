@@ -2,7 +2,8 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-BUNDLE_ID=${DESKHUB_BUNDLE_ID:-com.deskhub.macos}
+read -ra BUNDLE_IDS <<<"${DESKHUB_BUNDLE_ID:-com.deskhub.macos com.deskhub.macos.debug}"
+CHOSEN_BUNDLE_IDS=()
 LSREGISTER=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
 PURGE=0
 
@@ -13,7 +14,8 @@ usage: scripts/reset-macos-permissions.sh [--purge] [--bundle-id ID]
   --purge          also delete the local build output (out/build/macos,
                    out/dist/macos) so only one copy of the app is left.
                    Never touches /Applications.
-  --bundle-id ID   default: $BUNDLE_ID
+  --bundle-id ID   reset only this bundle id; repeat it for several.
+                   default: ${BUNDLE_IDS[*]} (the Release and Debug builds)
 
 After it runs, relaunch the ONE copy you want to use and grant the prompts again.
 EOF
@@ -24,7 +26,7 @@ while [ $# -gt 0 ]; do
     --purge) PURGE=1 ;;
     --bundle-id)
         shift
-        BUNDLE_ID=${1:?--bundle-id needs a value}
+        CHOSEN_BUNDLE_IDS+=("${1:?--bundle-id needs a value}")
         ;;
     -h | --help)
         usage
@@ -39,27 +41,40 @@ while [ $# -gt 0 ]; do
     shift
 done
 
+if [ ${#CHOSEN_BUNDLE_IDS[@]} -gt 0 ]; then
+    BUNDLE_IDS=("${CHOSEN_BUNDLE_IDS[@]}")
+fi
+
 if [ "$(uname)" != Darwin ]; then
     echo "reset-macos-permissions.sh: macOS only." >&2
     exit 1
 fi
 
-echo "==> quitting $BUNDLE_ID"
-osascript -e "quit app id \"$BUNDLE_ID\"" 2>/dev/null || true
+for bundle_id in "${BUNDLE_IDS[@]}"; do
+    echo "==> quitting $bundle_id"
+    osascript -e "quit app id \"$bundle_id\"" 2>/dev/null || true
+done
 pkill -f '/(app|Deskhub)\.app/Contents/MacOS/' 2>/dev/null || true
 
-echo "==> resetting privacy grants"
-for service in Accessibility ScreenCapture ListenEvent PostEvent Microphone Camera; do
-    if tccutil reset "$service" "$BUNDLE_ID" >/dev/null 2>&1; then
-        echo "    $service: cleared"
-    else
-        echo "    $service: nothing to clear"
-    fi
+for bundle_id in "${BUNDLE_IDS[@]}"; do
+    echo "==> resetting privacy grants for $bundle_id"
+    for service in Accessibility ScreenCapture ListenEvent PostEvent Microphone Camera; do
+        if tccutil reset "$service" "$bundle_id" >/dev/null 2>&1; then
+            echo "    $service: cleared"
+        else
+            echo "    $service: nothing to clear"
+        fi
+    done
+    tccutil reset All "$bundle_id" >/dev/null 2>&1 || true
 done
-tccutil reset All "$BUNDLE_ID" >/dev/null 2>&1 || true
 
 echo "==> installed copies known to Launch Services"
-COPIES=$(mdfind "kMDItemCFBundleIdentifier == '$BUNDLE_ID'" 2>/dev/null || true)
+COPIES=""
+for bundle_id in "${BUNDLE_IDS[@]}"; do
+    found=$(mdfind "kMDItemCFBundleIdentifier == '$bundle_id'" 2>/dev/null || true)
+    [ -n "$found" ] && COPIES+="$found"$'\n'
+done
+COPIES=${COPIES%$'\n'}
 if [ -z "$COPIES" ]; then
     echo "    none found - Spotlight may not have indexed out/, that is fine"
 else

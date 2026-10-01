@@ -113,7 +113,7 @@ size_t BuildAuthResponse(std::span<uint8_t> out, const AuthResponse& m) {
 }
 
 size_t BuildAuthResult(std::span<uint8_t> out, const AuthResult& m) {
-    if (uint8_t(m.code) > uint8_t(AuthResultCode::ConfigError)) return 0;
+    if (!IsWireAuthResultCode(uint8_t(m.code))) return 0;
     const size_t payload = 2;
     const size_t total = WriteCommon(out, MsgType::AuthResult, 0, Chan::Control, 0, payload);
     if (!total) return 0;
@@ -404,7 +404,7 @@ std::optional<AuthResponse> ParseAuthResponse(std::span<const uint8_t> payload) 
 std::optional<AuthResult> ParseAuthResult(std::span<const uint8_t> payload) {
     if (payload.size() != 2 || payload[0] != kAuthVersion) return std::nullopt;
     const uint8_t* p = payload.data();
-    if (p[1] > uint8_t(AuthResultCode::ConfigError)) return std::nullopt;
+    if (!IsWireAuthResultCode(p[1])) return std::nullopt;
     AuthResult m;
     m.code = AuthResultCode(p[1]);
     return m;

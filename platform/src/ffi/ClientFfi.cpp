@@ -18,6 +18,7 @@
 #include "deskhubp/diag/Log.h"
 #include "deskhubp/diag/LogFile.h"
 #include "deskhubp/ffi/FfiText.h"
+#include "deskhubp/system/AppDataFile.h"
 #include "deskhubp/system/RecentDevicesFile.h"
 #include "deskhubp/input/NativeKeyMap.h"
 #include "deskhubp/client/SourceQuery.h"
@@ -640,6 +641,10 @@ int dh_invalid_address_line(const char* address, char* out, int capacity) {
 
 void dh_use_shared_container(const char* container) {
     deskhubp::SetAppDataDirInside(container ? std::string(container) : std::string());
+}
+
+int dh_config_dir(char* out, int capacity) {
+    return deskhubp::FillText(out, capacity, deskhubp::ConfigDir());
 }
 
 void dh_viewer_opened() {

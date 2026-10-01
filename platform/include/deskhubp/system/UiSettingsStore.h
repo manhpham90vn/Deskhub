@@ -14,7 +14,10 @@ inline void SaveUiSettings(const deskhub::ui::UiSettings& settings) {
 }
 
 inline deskhub::ui::UiSettings LoadUiSettings() {
-    return deskhub::ui::ParseUiSettings(ReadAppDataFile(kUiSettingsFileName));
+    const std::string stored = ReadAppDataFile(kUiSettingsFileName);
+    const std::string kept = deskhub::ui::StripRetiredUiSettings(stored);
+    if (kept != stored) WriteAppDataFileAtomic(kUiSettingsFileName, kept);
+    return deskhub::ui::ParseUiSettings(kept);
 }
 
 inline std::string SessionDeviceName() {

@@ -83,12 +83,33 @@ void TestGapIsConcealed() {
     const auto lost = buf.Pop();
     Check(lost && lost->seq == 2 && lost->concealed && lost->payload.empty(),
         "the missing frame is reported as concealed so the decoder can run PLC");
+    Check(lost && !lost->recovery.empty() && lost->recovery.front() == 0xD3,
+        "and it carries the next packet, whose in-band FEC can rebuild it");
+    Check(buf.stats().framesRecoverable == 1, "the recoverable loss is counted");
 
     const auto after = buf.Pop();
     Check(after && after->seq == 3 && !after->concealed && MarkerOf(*after) == 0xD3,
         "play-out carries on past the hole");
     Check(buf.stats().framesConcealed == 1 && buf.stats().framesPlayed == 3,
         "one concealment, three real frames");
+}
+
+void TestLossWithoutANextPacketHasNoRecovery() {
+    std::printf("[audio] a loss with no next packet in hand falls back to plain PLC...\n");
+    AudioJitterBuffer buf;
+    Push(buf, 0, 0xF0);
+    Push(buf, 1, 0xF1);
+    Push(buf, 4, 0xF4);
+    Check(buf.Pop()->seq == 0 && buf.Pop()->seq == 1, "the first two frames play");
+    const auto first = buf.Pop();
+    Check(first && first->seq == 2 && first->concealed && first->recovery.empty(),
+        "two frames in a row are lost, so the first has no packet to recover from");
+    const auto second = buf.Pop();
+    Check(second && second->seq == 3 && second->concealed && MarkerOf(*second) == 0 &&
+              !second->recovery.empty() && second->recovery.front() == 0xF4,
+        "the second rebuilds from the packet right after it");
+    Check(buf.stats().framesConcealed == 2 && buf.stats().framesRecoverable == 1,
+        "two concealments, one of them recoverable");
 }
 
 void TestUnderrunRebuffers() {
@@ -165,6 +186,7 @@ void RunAudioJitterBufferTests() {
     TestReorderingIsUndone();
     TestDuplicatesAndLatecomers();
     TestGapIsConcealed();
+    TestLossWithoutANextPacketHasNoRecovery();
     TestUnderrunRebuffers();
     TestLatencyIsBounded();
     TestResyncOnSequenceJump();

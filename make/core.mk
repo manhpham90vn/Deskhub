@@ -27,10 +27,10 @@ PLAT_PERF_BASE := out/perf/platform-baseline.txt
 endif
 
 quiche:
-	-@$(QUICHE)
+	@$(QUICHE)
 
 opus:
-	-@$(OPUS)
+	@$(OPUS)
 
 debug: quiche opus
 	@$(DEVCMD) cmake --preset x64-debug && cmake --build --preset x64-debug
@@ -38,17 +38,17 @@ debug: quiche opus
 release: quiche opus
 	@$(DEVCMD) cmake --preset x64-release && cmake --build --preset x64-release
 
-test:
+test: quiche opus
 	@$(DEVCMD) cmake --preset x64-debug >$(NULDEV) && cmake --build --preset x64-debug --target core_tests
 	@echo ===== Running core_tests offline =====
 	$(CORE_TESTS)
 
-test-platform:
+test-platform: quiche opus
 	@$(DEVCMD) cmake --preset x64-debug >$(NULDEV) && cmake --build --preset x64-debug --target platform_tests
 	@echo ===== Running platform_tests locally =====
 	$(PLAT_TESTS)
 
-test-integration:
+test-integration: quiche opus
 	@$(DEVCMD) cmake --preset x64-debug >$(NULDEV) && cmake --build --preset x64-debug --target integration_tests
 	@echo ===== Running integration_tests locally =====
 	$(INTEG_TESTS)
@@ -92,11 +92,11 @@ ifeq ($(OS),Windows_NT)
 test-asan test-tsan fuzz fuzz-coverage:
 	@echo make $@: needs clang or gcc on Linux/macOS, not MSVC && exit /b 1
 else
-test-asan:
+test-asan: quiche opus
 	@cmake --preset asan >$(NULDEV) && cmake --build --preset asan --target core_tests platform_tests integration_tests
 	@ctest --test-dir out/build/asan --output-on-failure
 
-test-tsan:
+test-tsan: quiche opus
 	@cmake --preset tsan >$(NULDEV) && cmake --build --preset tsan --target core_tests platform_tests integration_tests
 	@ctest --test-dir out/build/tsan --output-on-failure
 
@@ -124,7 +124,7 @@ fuzz-coverage:
 	@echo "Report: out/fuzz-coverage/index.html"
 endif
 
-test-ctest:
+test-ctest: quiche opus
 	@$(DEVCMD) cmake --preset x64-debug >$(NULDEV) && cmake --build --preset x64-debug --target core_tests
 	@$(DEVCMD) cmake --build --preset x64-debug --target platform_tests
 	@$(DEVCMD) cmake --build --preset x64-debug --target integration_tests

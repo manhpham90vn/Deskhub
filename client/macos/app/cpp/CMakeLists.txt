@@ -17,3 +17,4 @@ target_link_libraries(deskhub_mac_core PUBLIC
 )
 target_compile_features(deskhub_mac_core PUBLIC cxx_std_20)
 deskhub_target_warnings(deskhub_mac_core)
+deskhub_target_hardening(deskhub_mac_core)

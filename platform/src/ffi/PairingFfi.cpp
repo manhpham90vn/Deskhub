@@ -2,6 +2,7 @@
 
 #include "deskhub/auth/PairingTokens.h"
 
+#include <optional>
 #include <string>
 
 #include "deskhub/net/PairingInvite.h"
@@ -9,6 +10,7 @@
 #include "deskhubp/ffi/FfiText.h"
 #include "deskhubp/host/PairingInvite.h"
 #include "deskhubp/system/PairingTokenFile.h"
+#include "deskhubp/system/TrustStoreFile.h"
 #include "deskhubp/system/UiSettingsStore.h"
 
 extern "C" {
@@ -43,5 +45,13 @@ int dh_pairing_invite_address(const char* invite, char* out, int capacity) {
     const auto parsed = deskhub::ParsePairingInvite(invite);
     if (!parsed || parsed->endpoints.empty()) return deskhubp::FillText(out, capacity, std::string());
     return deskhubp::FillText(out, capacity, deskhub::FormatPairingEndpoint(parsed->endpoints.front()));
+}
+
+int dh_pairing_invite_new_host_key(const char* invite, char* out, int capacity) {
+    const auto parsed = invite ? deskhub::ParsePairingInvite(invite) : std::nullopt;
+    if (!parsed || parsed->endpoints.empty() ||
+        deskhubp::CheckTrustedHost(parsed->hostKey) == deskhub::TrustVerdict::Trusted)
+        return deskhubp::FillText(out, capacity, std::string());
+    return deskhubp::FillText(out, capacity, deskhub::FormatFingerprint(parsed->hostKey));
 }
 }

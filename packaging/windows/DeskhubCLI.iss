@@ -19,6 +19,12 @@ UninstallDisplayIcon={app}\deskhub-cli.exe
 
 [Files]
 Source: "..\..\out\build\x64-release\client\cli\deskhub-cli.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\..\THIRD_PARTY_NOTICES.md"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\..\licenses\BSD-2-Clause-quiche.txt"; DestDir: "{app}\licenses"; Flags: ignoreversion
+Source: "..\..\licenses\BoringSSL.txt"; DestDir: "{app}\licenses"; Flags: ignoreversion
+Source: "..\..\licenses\Apache-2.0.txt"; DestDir: "{app}\licenses"; Flags: ignoreversion
+Source: "..\..\licenses\rust-crates.txt"; DestDir: "{app}\licenses"; Flags: ignoreversion
+Source: "..\..\licenses\BSD-3-Clause-opus.txt"; DestDir: "{app}\licenses"; Flags: ignoreversion
 
 [Code]
 const

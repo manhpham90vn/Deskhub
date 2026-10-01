@@ -1,4 +1,5 @@
 #pragma once
+#include "deskhub/auth/AuthDeadlines.h"
 #include "deskhub/auth/FailureLimiter.h"
 #include "deskhub/net/TrustStore.h"
 #include "deskhub/protocol/RecordStream.h"
@@ -32,6 +33,7 @@ inline constexpr size_t kMaxBulkQueued = 64;
 inline constexpr unsigned kBulkEveryNthPop = 8;
 inline constexpr size_t kMaxPendingAuth = 8;
 inline constexpr uint64_t kAuthResponseTimeoutUs = 10'000'000;
+inline constexpr uint64_t kRefusalLingerUs = 2'000'000;
 
 struct TransportMessage {
     NetAddr from{};
@@ -97,13 +99,19 @@ private:
     void ReportBrokenStreams();
     bool SendReliable(const NetAddr& to, uint64_t streamId,
         std::span<const uint8_t> message);
+    bool AdmitConnection(const NetAddr& peer);
     bool HandleHostAuth(const NetAddr& from, std::span<const uint8_t> message);
+    void HandleAuthStart(const NetAddr& from, std::span<const uint8_t> payload);
+    void HandleAuthResponse(const NetAddr& from, std::span<const uint8_t> payload);
+    void RefuseAfterReply(const NetAddr& peer);
     void SendAuth(const NetAddr& to, std::span<const uint8_t> message);
     void SettleHostAuth(const NetAddr& peer, HostAuth& auth, const deskhub::AuthResult& result);
     void ForgetPeerAuth(const NetAddr& peer);
     void DropQueuedFrom(const NetAddr& peer);
     void RevokeForgottenPeers();
     void ExpirePendingAuth(uint64_t nowUs);
+    std::optional<TransportMessage> TakeAuthMessage();
+    void PollForAuth();
 
     QuicEndpoint endpoint_;
     std::map<uint64_t, deskhub::RecordStream> framers_;
@@ -113,12 +121,13 @@ private:
     std::atomic<size_t> bulkDepth_{0};
     std::map<uint64_t, std::unique_ptr<HostAuth>> hostAuth_;
     deskhub::AuthFailureLimiter authFailures_{};
-    std::map<uint64_t, uint64_t> pendingAuthDeadlines_;
+    deskhub::AuthDeadlines pendingAuth_{kMaxPendingAuth};
+    uint64_t lastPendingCapLogUs_ = 0;
     std::map<uint64_t, bool> authenticated_;
     HostAuthConfig hostAuthConfig_{};
     TransportAuthCallbacks authCallbacks_{};
     bool hostAuthOn_ = false;
-    bool clientAuthOn_ = false;
+    std::atomic<bool> clientAuthOn_{false};
     uint64_t authorizedGenerationSeen_ = 0;
     uint64_t nextAuthorizedCheckUs_ = 0;
     std::function<void(const NetAddr&)> onPeerGone_;

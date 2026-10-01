@@ -1,9 +1,11 @@
 #include "Tests.h"
 #include "support/TestSupport.h"
 
+#include "deskhub/net/PairingInvite.h"
 #include "deskhubp/client/HostProfiles.h"
 #include "deskhubp/ffi/DevicesFfi.h"
 #include "deskhubp/ffi/HostProfileFfi.h"
+#include "deskhubp/ffi/PairingFfi.h"
 #include "deskhubp/system/AppDataFile.h"
 #include "deskhubp/system/AuthProof.h"
 #include "deskhubp/system/HostIdentity.h"
@@ -142,6 +144,32 @@ void TestFfiSavesTheSameHosts() {
     Check(dh_host_profile_remove("127-0-0-1-47020") == DHHostProfileOk, "and it can be removed");
 }
 
+void TestOutsideInviteNamesAnUntrustedKey() {
+    std::printf("[hostprofiles] an invite from outside the app names a key still to confirm...\n");
+    Check(deskhubp::ClearTrustedHosts(), "the test starts with no saved hosts");
+    deskhub::PairingInvite invite;
+    invite.endpoints.push_back(*deskhub::MakePairingEndpoint("127.0.0.1", 47030));
+    invite.hostKey = KeyFor(11);
+    invite.token.fill(0x5A);
+    invite.hostName = "office";
+    const std::string text = deskhub::FormatPairingInvite(invite);
+    const std::string key = deskhub::FormatFingerprint(KeyFor(11));
+    char out[DH_PAIRING_INVITE_CAP]{};
+    Check(dh_pairing_invite_new_host_key(text.c_str(), out, sizeof(out)) > 0 &&
+              std::string(out) == key,
+        "an unknown host key is handed back for the new-host confirmation");
+    Check(dh_host_trust_new("127.0.0.1:47030", key.c_str()) == DHHostProfileOk,
+        "the user confirms the host");
+    Check(dh_pairing_invite_new_host_key(text.c_str(), out, sizeof(out)) == 0 &&
+              std::string(out).empty(),
+        "a host already trusted needs no confirmation");
+    Check(dh_pairing_invite_new_host_key("deskhub://pair/garbage", out, sizeof(out)) == 0,
+        "a damaged invite names no key");
+    Check(dh_pairing_invite_new_host_key(nullptr, out, sizeof(out)) == 0,
+        "and neither does a missing one");
+    Check(deskhubp::ClearTrustedHosts(), "the saved host is cleared again");
+}
+
 }
 
 void RunHostProfilesTests() {
@@ -152,6 +180,7 @@ void RunHostProfilesTests() {
     TestHostKeyTextAcceptsBothForms();
     TestSavedHostsRoundTrip();
     TestFfiSavesTheSameHosts();
+    TestOutsideInviteNamesAnUntrustedKey();
     TestThisMachineHasOnePublicKey();
     TestUnreadableStoreIsNotOverwritten();
 }

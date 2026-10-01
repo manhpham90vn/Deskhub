@@ -48,8 +48,8 @@ inline constexpr const char* kClientHeading = "Connect to another machine";
 inline constexpr const char* kSettingsHint = "These apply the next time you start sharing.";
 inline constexpr const char* kClientSettingsHeading = "Connection settings";
 inline constexpr const char* kClientSettingsHint =
-    "The device scan looks for sharing machines on this UDP port. Match it to the port in the "
-    "host's Share settings.";
+    "This device shares its screen on the UDP port below. To reach a machine that shares on "
+    "another port, add that port after its address, separated by a colon.";
 inline constexpr const char* kNotSharing = "Not sharing.";
 inline constexpr const char* kStartingShare = "Starting share...";
 inline constexpr const char* kShareStateOn = "Sharing";
@@ -118,8 +118,8 @@ inline constexpr const char* kLanDevicesEmpty = "Saved devices appear here after
 inline constexpr const char* kAuthNotPaired =
     "That machine has not allowed this device yet. Connect again so its owner sees the "
     "request under Connection requests and presses Approve, scan the QR code it shows, or "
-    "send it this device's public key (Devices > Copy public key) to paste under Clients "
-    "allowed to connect.";
+    "send it this device's public key (Devices > Copy public key) to paste under Devices "
+    "allowed to connect to this machine.";
 inline constexpr const char* kAuthNotPairedCliHint =
     "From the command line: the host approves with `deskhub-cli access approve --fingerprint "
     "SHA256:...`, or run `deskhub-cli key public` here and pipe that line into "
@@ -129,7 +129,8 @@ inline constexpr const char* kAuthAwaitingApproval =
     "Approve under Connection requests on their Host page, then connect again.";
 inline constexpr const char* kAuthRefused =
     "That machine refused this connection. Ask its owner to check that this device's public "
-    "key is still listed under Devices > Clients allowed to connect, then connect again.";
+    "key is still listed under Devices > Devices allowed to connect to this machine, then "
+    "connect again.";
 inline constexpr const char* kAuthTimedOut =
     "The other machine did not finish signing in in time. Check that it is still sharing "
     "and reachable, then connect again.";

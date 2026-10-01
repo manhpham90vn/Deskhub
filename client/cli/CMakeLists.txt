@@ -34,6 +34,7 @@ elseif(APPLE)
 endif()
 target_compile_features(deskhub_cli PRIVATE cxx_std_20)
 deskhub_target_warnings(deskhub_cli)
+deskhub_target_hardening(deskhub_cli)
 
 find_package(Threads REQUIRED)
 target_link_libraries(deskhub_cli PRIVATE Threads::Threads)

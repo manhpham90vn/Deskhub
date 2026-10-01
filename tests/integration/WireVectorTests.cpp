@@ -259,7 +259,7 @@ std::vector<Vector> AllVectors() {
                      m.clientName = "Tablet 01";
                      return BuildAuthStart(out, m);
                  },
-        "0360000000000000000008a1a2a3a4a5a6a7a8095461626c65742030310007"});
+        "0360000000000000000008a1a2a3a4a5a6a7a8095461626c65742030310008"});
 
     v.push_back({"AUTH_START_TOKEN", [](std::span<uint8_t> out) {
                      AuthStart m;
@@ -269,28 +269,35 @@ std::vector<Vector> AllVectors() {
                      return BuildAuthStart(out, m);
                  },
         "0360000000000000000008a1a2a3a4a5a6a7a8095461626c6574203031"
-        "205a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a07"});
+        "205a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a08"});
 
     v.push_back({"AUTH_CHALLENGE", [](std::span<uint8_t> out) {
                      AuthChallenge m;
                      m.mode = AuthMode::Signature;
                      return BuildAuthChallenge(out, m);
                  },
-        "03610000000000000701"});
+        "03610000000000000801"});
 
     v.push_back({"AUTH_RESPONSE", [](std::span<uint8_t> out) {
                      AuthResponse m;
                      m.proof = {0xD1, 0xD2, 0xD3, 0xD4, 0xD5};
                      return BuildAuthResponse(out, m);
                  },
-        "0362000000000000070005d1d2d3d4d5"});
+        "0362000000000000080005d1d2d3d4d5"});
 
     v.push_back({"AUTH_RESULT", [](std::span<uint8_t> out) {
                      AuthResult m;
                      m.code = AuthResultCode::NotPaired;
                      return BuildAuthResult(out, m);
                  },
-        "03630000000000000701"});
+        "03630000000000000801"});
+
+    v.push_back({"AUTH_RESULT_WAIT", [](std::span<uint8_t> out) {
+                     AuthResult m;
+                     m.code = AuthResultCode::AwaitingApproval;
+                     return BuildAuthResult(out, m);
+                 },
+        "03630000000000000809"});
 
     v.push_back({"RECORD", [](std::span<uint8_t> out) {
                      uint8_t inner[kMaxDatagram];

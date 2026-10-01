@@ -8,10 +8,10 @@ IOS_QUICHE_TARGETS := aarch64-apple-ios-sim aarch64-apple-ios
 IOS_OPUS_TARGETS := aarch64-apple-ios-sim aarch64-apple-ios
 
 quiche-ios:
-	-@$(QUICHE_FOR) $(IOS_QUICHE_TARGETS)
+	@$(QUICHE_FOR) $(IOS_QUICHE_TARGETS)
 
 opus-ios:
-	-@$(OPUS_FOR) $(IOS_OPUS_TARGETS)
+	@$(OPUS_FOR) $(IOS_OPUS_TARGETS)
 
 build-ios: quiche-ios opus-ios
 	xcodebuild -project $(IOS_PROJ) -target app -configuration Debug -sdk iphonesimulator SYMROOT=$(IOS_OUT) build

@@ -40,5 +40,6 @@ std::string TruncateSettingsPath(std::string_view path);
 
 UiSettings ParseUiSettings(std::string_view text);
 std::string SerializeUiSettings(const UiSettings& settings);
+std::string StripRetiredUiSettings(std::string_view text);
 
 }

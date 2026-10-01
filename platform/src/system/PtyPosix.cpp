@@ -102,13 +102,24 @@ struct Pty::Impl {
         CloseMaster();
         ReapOrKill();
     }
+
+    void KillNow() noexcept {
+        CloseMaster();
+        if (child <= 0) return;
+        kill(child, SIGKILL);
+        Reap(true);
+    }
 };
 
 Pty::Pty() : impl_(std::make_unique<Impl>()) {
 }
 
 Pty::~Pty() {
-    impl_->Shutdown();
+    try {
+        impl_->Shutdown();
+    } catch (...) {
+        impl_->KillNow();
+    }
 }
 
 std::string DefaultShell() {

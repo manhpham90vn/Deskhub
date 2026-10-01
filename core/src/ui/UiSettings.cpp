@@ -20,6 +20,17 @@ std::optional<uint32_t> ParseUint(std::string_view s) {
     return uint32_t(v);
 }
 
+constexpr std::string_view kRetiredSettingsKeys[] = {"passcode"};
+
+bool IsRetiredSettingsLine(std::string_view line) {
+    const size_t eq = line.find('=');
+    if (eq == std::string_view::npos) return false;
+    const std::string key = TrimAscii(line.substr(0, eq));
+    for (std::string_view retired : kRetiredSettingsKeys)
+        if (key == retired) return true;
+    return false;
+}
+
 void ApplyKeyValue(UiSettings& out, std::string_view key, std::string_view value) {
     if (key == "name") {
         out.deviceName = TruncateDeviceName(value);
@@ -93,6 +104,20 @@ UiSettings ParseUiSettings(std::string_view text) {
         pos = end + 1;
     }
     return out;
+}
+
+std::string StripRetiredUiSettings(std::string_view text) {
+    std::string kept;
+    kept.reserve(text.size());
+    size_t pos = 0;
+    while (pos < text.size()) {
+        size_t end = text.find('\n', pos);
+        end = end == std::string_view::npos ? text.size() : end + 1;
+        const std::string_view line = text.substr(pos, end - pos);
+        if (!IsRetiredSettingsLine(line)) kept += line;
+        pos = end;
+    }
+    return kept;
 }
 
 std::string SerializeUiSettings(const UiSettings& settings) {

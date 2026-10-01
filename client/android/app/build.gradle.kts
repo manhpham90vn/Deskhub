@@ -6,7 +6,9 @@ plugins {
 android {
     namespace = "com.deskhub.app"
     compileSdk = 37
-    ndkVersion = "26.1.10909125"
+    ndkVersion = (project.findProperty("androidNdkVersion") as String?)
+        ?: System.getenv("ANDROID_NDK_VERSION")
+        ?: "26.1.10909125"
 
     defaultConfig {
         applicationId = (project.findProperty("applicationId") as String?) ?: "com.manhpham.deskhub"
@@ -62,6 +64,42 @@ android {
 
     buildFeatures {
         compose = true
+    }
+}
+
+abstract class BundleThirdPartyNotices : DefaultTask() {
+    @get:InputFiles
+    @get:PathSensitive(PathSensitivity.NAME_ONLY)
+    abstract val notices: ConfigurableFileCollection
+
+    @get:InputFiles
+    @get:PathSensitive(PathSensitivity.NAME_ONLY)
+    abstract val licenses: ConfigurableFileCollection
+
+    @get:OutputDirectory
+    abstract val outputDir: DirectoryProperty
+
+    @TaskAction
+    fun bundle() {
+        val out = outputDir.get().asFile
+        out.deleteRecursively()
+        val licenseDir = File(out, "licenses").apply { mkdirs() }
+        notices.forEach { it.copyTo(File(out, it.name), overwrite = true) }
+        licenses.forEach { it.copyTo(File(licenseDir, it.name), overwrite = true) }
+    }
+}
+
+val deskhubRoot = rootProject.layout.projectDirectory.dir("../..")
+val licensesShippedOnAndroid = listOf("BSD-2-Clause-quiche", "BoringSSL", "Apache-2.0", "rust-crates", "BSD-3-Clause-opus")
+
+val bundleThirdPartyNotices = tasks.register<BundleThirdPartyNotices>("bundleThirdPartyNotices") {
+    notices.from(deskhubRoot.file("THIRD_PARTY_NOTICES.md"))
+    licenses.from(licensesShippedOnAndroid.map { deskhubRoot.file("licenses/$it.txt") })
+}
+
+androidComponents {
+    onVariants { variant ->
+        variant.sources.assets?.addGeneratedSourceDirectory(bundleThirdPartyNotices, BundleThirdPartyNotices::outputDir)
     }
 }
 dependencies {

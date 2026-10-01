@@ -15,7 +15,6 @@
 #include "deskhub/terminal/ScrollAnchor.h"
 #include "deskhub/ui/ShellPicker.h"
 #include "deskhub/ui/Strings.h"
-#include "deskhubp/diag/Log.h"
 #include "deskhubp/net/UdpSocket.h"
 #include "deskhubp/client/TerminalFeed.h"
 #include "deskhubp/host/TerminalHost.h"
@@ -208,7 +207,6 @@ private:
             return;
         }
         if (event.ControlDown()) return;
-        LOGI("[TermKey] char cp=%d", code);
         term::TermKeyEvent key;
         key.key = term::TermKey::Char;
         key.codepoint = char32_t(code);

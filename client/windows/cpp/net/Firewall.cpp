@@ -7,7 +7,6 @@
 
 #include <cstdio>
 #include <string>
-#include <vector>
 
 #include "deskhubp/diag/Log.h"
 #include "WinPaths.h"
@@ -87,46 +86,6 @@ void RemoveOwnRule(INetFwRules* rules) {
     }
 }
 
-void RemoveConflictingBlockRules(INetFwRules* rules, const std::wstring& exe) {
-    IUnknown* unk = nullptr;
-    if (FAILED(rules->get__NewEnum(&unk)) || !unk) return;
-    IEnumVARIANT* en = nullptr;
-    if (SUCCEEDED(unk->QueryInterface(__uuidof(IEnumVARIANT), (void**)&en)) && en) {
-        std::vector<std::wstring> victims;
-        VARIANT v;
-        VariantInit(&v);
-        ULONG got = 0;
-        while (en->Next(1, &v, &got) == S_OK && got) {
-            if (v.vt == VT_DISPATCH && v.pdispVal) {
-                INetFwRule* r = nullptr;
-                if (SUCCEEDED(v.pdispVal->QueryInterface(__uuidof(INetFwRule), (void**)&r)) && r) {
-                    NET_FW_RULE_DIRECTION dir = NET_FW_RULE_DIR_IN;
-                    NET_FW_ACTION act = NET_FW_ACTION_ALLOW;
-                    BSTR app = nullptr, nm = nullptr;
-                    r->get_Direction(&dir);
-                    r->get_Action(&act);
-                    r->get_ApplicationName(&app);
-                    r->get_Name(&nm);
-                    if (dir == NET_FW_RULE_DIR_IN && act == NET_FW_ACTION_BLOCK &&
-                        PathEq(app, exe) && nm)
-                        victims.emplace_back(nm);
-                    if (app) SysFreeString(app);
-                    if (nm) SysFreeString(nm);
-                    r->Release();
-                }
-            }
-            VariantClear(&v);
-        }
-        en->Release();
-        for (const auto& n : victims)
-            if (BSTR b = SysAllocString(n.c_str())) {
-                rules->Remove(b);
-                SysFreeString(b);
-            }
-    }
-    unk->Release();
-}
-
 bool AddOwnRule(INetFwRules* rules, const std::wstring& exe) {
     INetFwRule* rule = nullptr;
     if (FAILED(CoCreateInstance(__uuidof(NetFwRule), nullptr, CLSCTX_INPROC_SERVER,
@@ -183,7 +142,6 @@ bool EnsureHostFirewallRule() {
     }
 
     RemoveOwnRule(rules);
-    RemoveConflictingBlockRules(rules, exe);
     AddOwnRule(rules, exe);
 
     const bool ok = InspectOwnRule(rules, exe) == 2;

@@ -1,4 +1,5 @@
 #pragma once
+void RunAuthDeadlinesTests();
 void RunAuthFailureLimiterTests();
 void RunAuthTranscriptTests();
 void RunWireTests();
@@ -42,6 +43,7 @@ void RunClockOffsetTests();
 void RunVideoPacerTests();
 void RunQualityLadderTests();
 void RunDiagTests();
+void RunLogRetentionTests();
 void RunMediaContractTests();
 void RunBitWriterTests();
 void RunH264SpsTests();

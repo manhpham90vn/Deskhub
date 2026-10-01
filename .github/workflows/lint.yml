@@ -109,10 +109,11 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Install SwiftLint 0.65.0 (pinned)
+      - name: Install the pinned SwiftLint
         run: |
-          curl -fsSL --retry 5 --retry-all-errors -o /tmp/portable_swiftlint.zip https://github.com/realm/SwiftLint/releases/download/0.65.0/portable_swiftlint.zip
-          echo "d6cb0aa7a2f5f1ef306fc9e37bcb54dc9a26facc8f7784ac0c3dd3eccf5c6ba6  /tmp/portable_swiftlint.zip" | shasum -a 256 -c -
+          source scripts/pinned-versions.txt
+          curl -fsSL --retry 5 --retry-all-errors -o /tmp/portable_swiftlint.zip https://github.com/realm/SwiftLint/releases/download/$SWIFTLINT_VERSION/portable_swiftlint.zip
+          echo "$SWIFTLINT_SHA256  /tmp/portable_swiftlint.zip" | shasum -a 256 -c -
           unzip -o -q -d /tmp/swiftlint /tmp/portable_swiftlint.zip swiftlint
           chmod +x /tmp/swiftlint/swiftlint
           echo "/tmp/swiftlint" >> "$GITHUB_PATH"

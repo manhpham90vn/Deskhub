@@ -5,9 +5,12 @@
 # means adding make/<name>.mk plus one include line below, without touching the
 # shared part.
 #
-#   make/toolchain.mk   HOST-dependent vars: SHELL, DEVCMD (VsDevCmd), LLVM/LLVMPATH,
-#                       BOOTSTRAP, RMRF, HELPCAT, NULDEV (include FIRST)
-#   make/core.mk        shared CMake tree: debug/release/test*/test-ctest/coverage
+#   make/toolchain.mk   HOST-dependent vars (include FIRST): SHELL, UNAME, DEVCMD (VsDevCmd),
+#                       LLVM/LLVMPATH, BOOTSTRAP, GIT_BASH, RUNSH, QUICHE/QUICHE_FOR,
+#                       OPUS/OPUS_FOR, PYTHON, NULDEV, RMRF, HELPCAT
+#   make/core.mk        shared CMake tree: quiche, opus, debug, release, test, test-platform,
+#                       test-integration, test-all, test-ctest, test-asan, test-tsan,
+#                       perf-build, test-perf, perf-baseline, fuzz, fuzz-coverage, coverage
 #   make/windows.mk     Windows app — CMake (Win32 app, ONE Deskhub.exe)
 #   make/macos.mk       macOS app   — xcodebuild
 #   make/linux.mk       Ubuntu app  — CMake (GTK3 + native, ONE `deskhub`)
@@ -31,21 +34,33 @@
 #   make build-android   / release-android   / run-android   debug APK / release APK (unsigned)
 #   make build-ios       / release-ios       / run-ios       iOS app for the Simulator (needs macOS + Xcode)
 #
+# run-windows and run-linux pass $(ARGS) to the binary. Every build-*/release-* target
+# builds its own quiche and opus first (see below).
+#
+# macOS knobs: MACOS_SIGN=adhoc|developerid (default: adhoc when no Apple Development
+# identity is in the keychain), MACOS_TEAM=<team id>, MACOS_XCARGS="<extra xcodebuild
+# arguments>". iOS: IOS_DEVICE=<simulator udid> picks the Simulator run-ios boots.
+#
 # The desktop apps parse no command-line flags at all — everything is chosen on their
 # four pages. To drive Deskhub from a script or over SSH, build the command-line client
 # instead. It runs on Linux, Windows and macOS and shares one binary name:
 #   make build-cli       / release-cli       / run-cli       one deskhub-cli, no GUI toolkit
 #   make cli-smoke       host + viewer + a remote shell over loopback, headless, no GPU
 #
-# run-cli takes ARGS="scan" and the like. run-android installs and opens on the
-# connected device/emulator via adb; run-ios does the same on the Simulator.
+# run-cli takes ARGS="host list" and the like. build-cli, release-cli, run-cli and
+# cli-smoke build quiche and opus first, and ffmpeg-min too on Linux. run-android
+# installs and opens on the connected device/emulator via adb; run-ios does the same
+# on the Simulator.
 #
-# Ubuntu only — build the static minimal FFmpeg the app links (build-linux and
-# release-linux run it automatically, it is a no-op once built):
+# Ubuntu only — build the static minimal FFmpeg the app and the CLI link (build-linux,
+# release-linux, build-cli, release-cli, run-cli and cli-smoke run it automatically, it is
+# a no-op once built):
 #   make ffmpeg-min
 #
 # Distribution:
-#   make dist-macos     macOS dmg signed with Developer ID + notarized + stapled
+#   make dist-macos     macOS dmg signed with Developer ID + notarized + stapled. Needs
+#                       ASC_KEY_P8=<path to the .p8>, ASC_KEY_ID, ASC_ISSUER_ID and a
+#                       "Developer ID Application" identity in the keychain
 #   make verify-macos   check that Gatekeeper accepts the build that was just produced
 #   make dist-linux     Separate app and CLI .deb (Ubuntu/Debian) + .rpm (Fedora/openSUSE).
 #                       Each installs its own uinput udev rule from its post-install step,
@@ -55,12 +70,14 @@
 #   make debug          configure + build the debug preset
 #   make release        configure + build the release preset
 #   make quiche         build the QUIC library into third_party/quiche (scripts/build-quiche.sh)
-#                       for the host target. debug and release run it first — it is a no-op once
-#                       built. Windows drives the script through Git Bash: override with
-#                       GIT_BASH=<path to bash.exe> if Git is installed elsewhere
+#                       for the host target. debug, release, every build-*/release-* and CLI
+#                       target, test, every test-* and lint-tidy run it first — it is a no-op
+#                       once built, and a failed library build stops make there. Windows drives
+#                       the script through Git Bash: override with GIT_BASH=<path to bash.exe>
+#                       if Git is installed elsewhere
 #   make opus           build the Opus audio codec into third_party/opus (scripts/build-opus.sh)
-#                       for the host target, the same way: debug and release run it first and it
-#                       is a no-op once built
+#                       for the host target, the same way and before the same targets: a no-op
+#                       once built, and a failed build stops make
 #
 # quiche and opus are per-ABI, so every cross-compiled app builds its own before the app
 # itself — without them CMake stops with an error instead of producing a binary that
@@ -80,10 +97,13 @@
 # macOS, when a locally built app and a downloaded/CI build fight over the same
 # bundle id and the Screen Recording / Accessibility grants stop working:
 #   make reset-macos-permissions    drop every TCC grant for com.deskhub.macos and
+#                                   com.deskhub.macos.debug (the local Debug build), and
 #                                   list the app copies with how each one is signed.
 #                                   ARGS="--purge" also deletes out/build/macos +
 #                                   out/dist/macos so only one copy is left
 #
+#   test and every test-* target build quiche and opus first, like debug and release —
+#   the presets stop without them. Once built they are no-ops.
 #   make test              build core_tests and run it (offline, no client/GPU needed)
 #   make test-platform     build platform_tests and run it (local only: loopback sockets)
 #   make test-integration  host + viewer over loopback, fake codecs + golden wire bytes
@@ -91,6 +111,8 @@
 #   make test-ctest        run through CTest (--output-on-failure) — matches how CI runs it
 #   make test-asan         all three suites under ASan + UBSan (clang/gcc only, not MSVC)
 #   make test-tsan         all three suites under ThreadSanitizer (clang/gcc only, not MSVC)
+#   make perf-build        build core_perf + platform_perf with the release preset, without
+#                          running them (test-perf and perf-baseline run it first)
 #   make test-perf         build core_perf + platform_perf with the release preset and
 #                          measure the hot paths - packetize/reassemble/FEC, 1080p
 #                          downscale, CRC + file batches, the VT parser and screen, wire
@@ -105,9 +127,11 @@
 #                          current tree on an idle machine - they describe this machine,
 #                          so they stay out of git and have to be re-recorded after a
 #                          deliberate speed change
-#   make fuzz              libFuzzer + ASan over the wire/media/ui parsers and the session
-#                          state machines (clang only, Linux/macOS; FUZZ_SECONDS=N per
-#                          target, corpus in out/fuzz/corpus). Each target first replays
+#   make fuzz              libFuzzer + ASan over the wire/media/ui parsers, the session
+#                          state machines, the key / access-list / invite text formats
+#                          (fuzz_keys) and the QR encoder (fuzz_qr) (clang only,
+#                          Linux/macOS; FUZZ_SECONDS=N per target, corpus in
+#                          out/fuzz/corpus). Each target first replays
 #                          core/fuzz/regressions/<target> (inputs from fixed crashes, so
 #                          they cannot come back), then fuzzes seeded by the committed
 #                          corpus in core/fuzz/seeds/<target> and guided by the protocol
@@ -134,7 +158,8 @@
 #   make lint-dead-swift  Periphery over both Apple apps (macOS + Xcode; builds them first)
 #   make lint-tidy      clang-tidy over core/src + platform/src, the same gate CI runs.
 #                       Configures the debug preset first for the compile database, so it
-#                       needs quiche; `make bootstrap` installs the pinned clang-tidy
+#                       needs quiche and opus and builds them itself; `make bootstrap`
+#                       installs the pinned clang-tidy
 #
 # One-off developer tools:
 #   make icons          regenerate every client icon from assets/icon_1024.png

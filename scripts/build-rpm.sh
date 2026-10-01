@@ -19,6 +19,10 @@ RPM="$DIST/deskhub-${VERSION}-1.${ARCH}.rpm"
 rm -rf "$PKGROOT" "$TOP" "$RPM"
 scripts/stage-linux-pkgroot.sh "$PKGROOT"
 
+license_files_of() {
+    (cd "$1" && find "usr/share/doc/$2/licenses" -type f | sort | sed 's|^|%license /|')
+}
+
 mkdir -p "$TOP/SPECS"
 cat > "$TOP/SPECS/deskhub.spec" <<EOF
 %global debug_package %{nil}
@@ -65,7 +69,7 @@ fi
 /usr/lib/modules-load.d/deskhub.conf
 %doc /usr/share/doc/deskhub/copyright
 %doc /usr/share/doc/deskhub/THIRD_PARTY_NOTICES.md
-%license /usr/share/doc/deskhub/LGPL-2.1.txt
+$(license_files_of "$PKGROOT" deskhub)
 EOF
 
 rpmbuild -bb "$TOP/SPECS/deskhub.spec" \

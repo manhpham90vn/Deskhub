@@ -109,6 +109,18 @@ void TestLegacySettingsAreDiscarded() {
     Check(legacy.deviceName == "Older host", "other settings remain available");
 }
 
+void TestRetiredSecretsAreStrippedFromTheFile() {
+    std::printf("[settings] a stored passcode is cut out of an old settings file...\n");
+    Check(ui::StripRetiredUiSettings("name=Older host\n passcode = 0417\nport=4200") ==
+              "name=Older host\nport=4200",
+        "only the passcode line goes, every other line stays as written");
+    Check(ui::StripRetiredUiSettings("future_key=1\nnote\npasscode=9") == "future_key=1\nnote\n",
+        "unknown keys and stray lines are left alone, a last line without newline too");
+    const std::string current = ui::SerializeUiSettings(ui::UiSettings{});
+    Check(ui::StripRetiredUiSettings(current) == current, "a current file is left unchanged");
+    Check(ui::StripRetiredUiSettings("").empty(), "an empty file stays empty");
+}
+
 void TestDefaultsMatchShareDefaults() {
     std::printf("[settings] a missing or empty file yields the share defaults...\n");
     const ui::UiSettings defaults;
@@ -204,6 +216,7 @@ void RunUiSettingsTests() {
     TestBehaviorTogglesPersist();
     TestDeviceNamePersistence();
     TestLegacySettingsAreDiscarded();
+    TestRetiredSecretsAreStrippedFromTheFile();
     TestDefaultsMatchShareDefaults();
     TestNativeQualityIsPreserved();
     TestGarbageFallsBackPerKey();

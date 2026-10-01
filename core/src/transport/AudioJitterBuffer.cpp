@@ -71,6 +71,11 @@ std::optional<AudioJitterBuffer::Frame> AudioJitterBuffer::Pop() {
         concealed.concealed = true;
         ++nextSeq_;
         ++stats_.framesConcealed;
+        const auto following = held_.find(nextSeq_);
+        if (following != held_.end()) {
+            concealed.recovery = following->second.payload;
+            ++stats_.framesRecoverable;
+        }
         return concealed;
     }
 

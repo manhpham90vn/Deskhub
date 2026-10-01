@@ -5,6 +5,5 @@ entries: ScancodeTableTests walk every entry to prove each one survives a native
 fecEnabled: ControlTests, ScreenClientTests and SourcePipelineStateTests check the FEC hysteresis of BitrateController and the switch on Packetizer between decisions, where no decision is returned to read it from
 pending: DiagTests check the keyframe request log marks and clears a pending request, and InputTests check a reset empties InputSender's queue; both states are internal until the next send
 rung: QualityLadderTests follow the ladder one rung at a time to prove it steps down on a thin link and climbs back exactly one rung per dwell
-CheckTrustedHost: HostIdentityTests and HostLinkTests verify the legacy endpoint pin lookup contract independently of network setup while production uses TryLoadTrustStore to distinguish unreadable configuration
 taken: ViewerTableTests prove the per-host viewer budget is spent by each viewer and handed back when one leaves or a source goes away
 targetDelayMs: AudioJitterBufferTests prove a requested play-out delay is clamped to something playable, from one frame up to half a second

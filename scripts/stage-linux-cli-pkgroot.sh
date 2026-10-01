@@ -29,5 +29,4 @@ mkdir -p "$DEST/usr/share/doc/deskhub-cli"
     echo
     cat LICENSE
 } > "$DEST/usr/share/doc/deskhub-cli/copyright"
-install -Dm644 THIRD_PARTY_NOTICES.md "$DEST/usr/share/doc/deskhub-cli/THIRD_PARTY_NOTICES.md"
-install -Dm644 licenses/LGPL-2.1.txt "$DEST/usr/share/doc/deskhub-cli/LGPL-2.1.txt"
+scripts/stage-licenses.sh linux "$DEST/usr/share/doc/deskhub-cli"

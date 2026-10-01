@@ -46,7 +46,7 @@ lint-dead-swift:
 	@echo "make $@: needs macOS + Xcode (it builds both Apple apps to index them)"; exit 1
 endif
 
-lint-tidy:
+lint-tidy: quiche opus
 	@$(DEVCMD) cmake --preset x64-debug -DDESKHUB_LINUX_APP=OFF >$(NULDEV)
 	@$(RUNSH) scripts/clang-tidy.sh
 

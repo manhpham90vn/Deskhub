@@ -75,6 +75,15 @@ Java_com_deskhub_app_NativeClient_nativePairingInviteAddress(JNIEnv* env, jobjec
     return NewString(env, address);
 }
 
+JNIEXPORT jstring JNICALL
+Java_com_deskhub_app_NativeClient_nativePairingInviteNewHostKey(JNIEnv* env, jobject,
+    jstring inviteStr) {
+    const std::string invite = FromJString(env, inviteStr);
+    char fingerprint[DH_PAIRING_INVITE_CAP] = {};
+    dh_pairing_invite_new_host_key(invite.c_str(), fingerprint, int(sizeof(fingerprint)));
+    return NewString(env, fingerprint);
+}
+
 JNIEXPORT jobjectArray JNICALL
 Java_com_deskhub_app_NativeClient_nativeAccessRequests(JNIEnv* env, jobject) {
     jclass cls = env->FindClass(kAccessRequestClass);

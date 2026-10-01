@@ -96,9 +96,23 @@ final class ConnectModel {
         DeskhubClient.cancelSourceQuery()
     }
 
+    func confirmsOutsideInvite(_ invite: String) -> Bool {
+        let newHostKey = DeskhubClient.pairingInviteNewHostKey(invite)
+        guard !newHostKey.isEmpty else { return false }
+        let address = DeskhubClient.pairingInviteAddress(invite)
+        pendingTrust = PendingHostTrust(
+            address: address,
+            fingerprint: newHostKey,
+            prompt: DeskhubClient.trustNewHostPrompt(address, fingerprint: newHostKey),
+            invite: invite
+        )
+        return true
+    }
+
     func trustPendingHost() -> String? {
         guard let pending = pendingTrust else { return nil }
         pendingTrust = nil
+        guard pending.invite.isEmpty else { return pending.invite }
         let result = dh_host_trust_new(pending.address, pending.fingerprint)
         guard result == DHHostProfileOk else {
             connectError = String(cString: dh_host_profile_error_text(result))

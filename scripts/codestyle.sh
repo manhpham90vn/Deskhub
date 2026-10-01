@@ -102,9 +102,13 @@ if [ "$ONLY" = all ] || [ "$ONLY" = swift ]; then
         fail=1
     fi
 
-    SWIFTLINT=$(command -v swiftlint 2>/dev/null || true)
+    SWIFTLINT=$(resolve_local_swiftlint || true)
+    if [ -z "$SWIFTLINT" ] && [ "$(uname -s)" = Darwin ]; then
+        ensure_local_swiftlint
+        SWIFTLINT=$(resolve_local_swiftlint || true)
+    fi
     if [ -z "$SWIFTLINT" ]; then
-        echo "[swiftlint] skipped (swiftlint not found)"
+        echo "[swiftlint] skipped (no SwiftLint $(deskhub_pinned_value SWIFTLINT_VERSION) found - make bootstrap installs it on macOS)"
     else
         SL_DIRS="client/apple/swift client/ios/app/swift client/ios/broadcast/swift client/ios/shared client/macos/app/swift"
         echo "[swiftlint] $SL_DIRS ($SWIFTLINT)"

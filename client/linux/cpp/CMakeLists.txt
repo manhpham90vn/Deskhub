@@ -68,3 +68,4 @@ endif()
 
 target_compile_features(deskhub_linux_core PUBLIC cxx_std_20)
 deskhub_target_warnings(deskhub_linux_core)
+deskhub_target_hardening(deskhub_linux_core)

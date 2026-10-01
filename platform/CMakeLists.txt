@@ -297,9 +297,9 @@ if(APPLE)
 endif()
 
 deskhub_target_warnings(platform)
+deskhub_target_hardening(platform)
 if(WIN32)
     target_link_libraries(platform PUBLIC ws2_32 psapi ole32 shell32 crypt32 advapi32)
-    target_compile_options(platform PRIVATE /sdl)
 endif()
 
 if(DESKHUB_PORTAL_FOUND)

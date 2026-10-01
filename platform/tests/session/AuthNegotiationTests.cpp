@@ -66,7 +66,7 @@ struct Machines {
 };
 
 void TestUnknownKeyWaitsForApproval() {
-    std::printf("[authneg] an unknown key is asked to wait and leaves a request behind...\n");
+    std::printf("[authneg] an unknown key proves itself, then waits and leaves a request behind...\n");
     const CleanSlate guard;
     Machines machines;
     if (!machines.Make()) return;
@@ -78,11 +78,17 @@ void TestUnknownKeyWaitsForApproval() {
     Check(!start.publicKey.empty(), "the client offers its public key");
     Check(start.pairingToken.empty(), "and no token, since it was not invited");
     const auto challenge = host.Begin(start);
-    Check(challenge && challenge->mode == deskhub::AuthMode::AwaitingApproval,
-        "an unlisted key is told to wait for approval");
+    Check(challenge && challenge->mode == deskhub::AuthMode::Signature,
+        "an unlisted key is first asked to prove it holds the private key");
+    const auto early = deskhubp::ListAccessRequests();
+    Check(early && early->empty(), "and nothing is written before that proof");
+    const auto response = challenge ? client.Answer(*challenge) : std::nullopt;
+    Check(response.has_value(), "the client signs the challenge");
+    if (!response) return;
+    Check(host.Respond(*response).code == deskhub::AuthResultCode::AwaitingApproval,
+        "the proven key is told to wait for approval");
     Check(host.State() == deskhubp::HostAuthState::Settled,
         "the handshake itself is over; the client has to come back");
-    Check(challenge && !client.Answer(*challenge), "the client cannot sign a waiting challenge");
     Check(!deskhubp::IsClientKeyAuthorized(machines.client.publicKey),
         "the unlisted key is never added automatically");
     const auto requests = deskhubp::ListAccessRequests();
@@ -96,11 +102,52 @@ void TestUnknownKeyWaitsForApproval() {
     deskhubp::HostAuth again;
     again.Configure(machines.HostConfig());
     const auto approved = again.Begin(client.Begin());
-    Check(approved && approved->mode == deskhub::AuthMode::Signature,
-        "the next attempt from that key gets a signature challenge");
+    const auto proof = approved ? client.Answer(*approved) : std::nullopt;
+    Check(proof && again.Respond(*proof).code == deskhub::AuthResultCode::Accepted,
+        "the next attempt from that key is admitted");
     const auto allowed = deskhubp::ListAuthorizedClients();
     Check(allowed && allowed->size() == 1 && allowed->front().label == "client",
         "and the key is listed under the name the device gave");
+}
+
+void TestAnUnsignedClaimLeavesNothingBehind() {
+    std::printf("[authneg] a public key without its private key cannot ask for access...\n");
+    const CleanSlate guard;
+    Machines machines;
+    if (!machines.Make()) return;
+    const auto token = deskhubp::IssuePairingToken(deskhub::kPairingTokenTtlSeconds);
+    Check(token.has_value(), "the host issued a token for its QR code");
+    if (!token) return;
+
+    deskhubp::HostIdentity forged = machines.other;
+    forged.publicKey = machines.client.publicKey;
+    auto config = machines.ClientConfig();
+    config.identity = forged;
+    config.clientName = "impostor";
+    config.pairingToken.assign(token->begin(), token->end());
+    deskhubp::ClientAuth impostor;
+    impostor.Configure(config);
+    deskhubp::HostAuth host;
+    host.Configure(machines.HostConfig());
+    const auto challenge = host.Begin(impostor.Begin());
+    const auto response = challenge ? impostor.Answer(*challenge) : std::nullopt;
+    Check(response && host.Respond(*response).code == deskhub::AuthResultCode::BadSignature,
+        "a claim signed with the wrong private key is refused");
+    const auto requests = deskhubp::ListAccessRequests();
+    Check(requests && requests->empty(), "and no request carries the claimed key or name");
+    Check(!deskhubp::IsClientKeyAuthorized(machines.client.publicKey),
+        "the claimed key is not added to the allowed list");
+
+    deskhubp::HostAuth genuine;
+    deskhubp::ClientAuth client;
+    genuine.Configure(machines.HostConfig());
+    auto genuineConfig = machines.ClientConfig();
+    genuineConfig.pairingToken.assign(token->begin(), token->end());
+    client.Configure(genuineConfig);
+    const auto genuineChallenge = genuine.Begin(client.Begin());
+    const auto proof = genuineChallenge ? client.Answer(*genuineChallenge) : std::nullopt;
+    Check(proof && genuine.Respond(*proof).code == deskhub::AuthResultCode::Accepted,
+        "the token was not spent, so the real device still pairs with it");
 }
 
 void TestAPairingTokenAdmitsWithoutApproval() {
@@ -122,13 +169,15 @@ void TestAPairingTokenAdmitsWithoutApproval() {
     Check(start.pairingToken.size() == deskhub::kPairingTokenBytes, "the client sends the token");
     const auto challenge = host.Begin(start);
     Check(challenge && challenge->mode == deskhub::AuthMode::Signature,
-        "the token earns a signature challenge at once");
-    Check(!host.PairingTokenRejected(), "and is not counted as a guess");
-    Check(deskhubp::IsClientKeyAuthorized(machines.client.publicKey),
-        "the key is now on the allowed list");
+        "the token holder is asked for a signature");
+    Check(!deskhubp::IsClientKeyAuthorized(machines.client.publicKey),
+        "the key is not saved before the signature arrives");
     const auto response = challenge ? client.Answer(*challenge) : std::nullopt;
     Check(response && host.Respond(*response).code == deskhub::AuthResultCode::Accepted,
-        "and the signature admits the client as usual");
+        "and the signature admits the client at once");
+    Check(!host.PairingTokenRejected(), "the token is not counted as a guess");
+    Check(deskhubp::IsClientKeyAuthorized(machines.client.publicKey),
+        "the key is now on the allowed list");
     Check(deskhubp::ListAccessRequests() && deskhubp::ListAccessRequests()->empty(),
         "no request is left for the owner to click");
 
@@ -140,7 +189,9 @@ void TestAPairingTokenAdmitsWithoutApproval() {
     deskhubp::ClientAuth other;
     other.Configure(otherConfig);
     const auto replayed = replay.Begin(other.Begin());
-    Check(replayed && replayed->mode == deskhub::AuthMode::AwaitingApproval,
+    const auto replayProof = replayed ? other.Answer(*replayed) : std::nullopt;
+    Check(replayProof &&
+              replay.Respond(*replayProof).code == deskhub::AuthResultCode::AwaitingApproval,
         "a second machine replaying the same token is only asked to wait");
     Check(replay.PairingTokenRejected(), "and the replay counts as a failed guess");
     Check(!deskhubp::IsClientKeyAuthorized(machines.other.publicKey),
@@ -380,6 +431,7 @@ void TestAnAnswerBeforeAChallengeIsRefused() {
 void RunAuthNegotiationTests() {
     if (!deskhubp::QuicAvailable()) return;
     TestUnknownKeyWaitsForApproval();
+    TestAnUnsignedClaimLeavesNothingBehind();
     TestAPairingTokenAdmitsWithoutApproval();
     TestAuthorizedKeyMustSignForThisHost();
     TestRevocationDuringHandshakeIsEnforced();

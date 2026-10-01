@@ -73,6 +73,11 @@ void TestEveryLabelSaysSomething() {
     Check(ui::AuthRefusalText(AuthResultCode::AwaitingApproval) == ui::kAuthAwaitingApproval,
         "the waiting verdict has its own explanation");
     for (const char* s : labels) Check(s && *s, "every shared UI string is non-empty");
+    Check(Contains(ui::kAuthNotPaired, ui::kPairedHeading) &&
+              Contains(ui::kAuthRefused, ui::kPairedHeading),
+        "the refusal texts name the Devices section by its real title");
+    Check(!Contains(ui::kClientSettingsHint, "scan"),
+        "the settings hint does not promise a device scan the app does not do");
 }
 
 void TestBindFallbackNamesTheMissingNetwork() {

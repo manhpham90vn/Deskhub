@@ -1,0 +1,16 @@
+set(deskhub_optimised_configs Release,RelWithDebInfo,MinSizeRel)
+
+function(deskhub_target_hardening target)
+    if(MSVC)
+        target_compile_options(${target} PRIVATE /sdl)
+        return()
+    endif()
+    target_compile_options(${target} PRIVATE -fstack-protector-strong)
+    if(NOT ANDROID)
+        target_compile_options(${target} PRIVATE
+            "$<$<CONFIG:${deskhub_optimised_configs}>:-U_FORTIFY_SOURCE;-D_FORTIFY_SOURCE=3>")
+    endif()
+    if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        target_link_options(${target} PUBLIC LINKER:-z,relro,-z,now)
+    endif()
+endfunction()

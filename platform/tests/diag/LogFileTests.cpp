@@ -4,7 +4,10 @@
 #include "deskhubp/diag/LogFile.h"
 
 #include <cstdio>
+#include <filesystem>
+#include <fstream>
 #include <string>
+#include <system_error>
 
 using deskhubp::LocalTimeHms;
 using deskhubp::LogFileName;
@@ -76,6 +79,34 @@ void TestTheNameIsStableWithinASecond() {
         "the prefix does not drift between calls");
 }
 
+void TestOldSessionLogsArePruned() {
+    std::printf("[log] only the newest session logs stay in the folder...\n");
+    const auto dir = UniqueTempDir("deskhub-logs-");
+    if (dir.empty() || !std::filesystem::create_directory(dir)) {
+        Check(false, "the log pruning test has a folder of its own");
+        return;
+    }
+    const size_t extra = 3;
+    for (size_t i = 0; i < deskhub::kKeptSessionLogs + extra; ++i) {
+        char name[64];
+        std::snprintf(name, sizeof(name), "deskhub-20260101-0000%02zu-1.log", i);
+        std::ofstream(dir / name) << "line\n";
+    }
+    std::ofstream(dir / "host_key.pem") << "key\n";
+    deskhubp::PruneOldSessionLogs(dir);
+
+    size_t logs = 0;
+    for (const auto& entry : std::filesystem::directory_iterator(dir))
+        if (deskhub::IsSessionLogName(entry.path().filename().string())) ++logs;
+    Check(logs == deskhub::kKeptSessionLogs, "the folder keeps exactly the configured number");
+    Check(!std::filesystem::exists(dir / "deskhub-20260101-000000-1.log") &&
+              std::filesystem::exists(dir / "deskhub-20260101-000012-1.log"),
+        "the oldest logs are the ones removed");
+    Check(std::filesystem::exists(dir / "host_key.pem"), "other files are never touched");
+    std::error_code error;
+    std::filesystem::remove_all(dir, error);
+}
+
 }
 
 void RunLogFileTests() {
@@ -83,4 +114,5 @@ void RunLogFileTests() {
     TestTheLogFileNameSortsByTime();
     TestTwoProcessesDoNotShareALogFile();
     TestTheNameIsStableWithinASecond();
+    TestOldSessionLogsArePruned();
 }

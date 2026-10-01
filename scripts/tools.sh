@@ -103,15 +103,12 @@ ensure_local_swiftformat() {
     local tools version bin asset inner sha
     tools="$(deskhub_tools_dir)"
     version="$(deskhub_pinned_value SWIFTFORMAT_VERSION)"
-    if command -v swiftformat >/dev/null 2>&1; then
-        echo "[ok]      swiftformat ($(command -v swiftformat))"
-        return 0
-    fi
-    bin="$tools/swiftformat"
-    if [ -x "$bin" ] && [ "$("$bin" --version 2>/dev/null || true)" = "$version" ]; then
+    bin="$(resolve_local_swiftformat || true)"
+    if [ -n "$bin" ]; then
         echo "[ok]      swiftformat $version ($bin)"
         return 0
     fi
+    bin="$tools/swiftformat"
     echo "[install] SwiftFormat $version..."
     ensure_local_tools_dir
     case "$(uname -s)" in
@@ -212,18 +209,65 @@ resolve_local_clang_tidy() {
     return 1
 }
 
+deskhub_reports_version() {
+    [ -x "$1" ] && [ "$("$1" "$2" 2>/dev/null || true)" = "$3" ]
+}
+
 resolve_local_swiftformat() {
-    local bin
-    if command -v swiftformat >/dev/null 2>&1; then
-        command -v swiftformat
-        return 0
-    fi
-    bin="$(deskhub_tools_dir)/swiftformat"
-    if [ -x "$bin" ]; then
-        printf '%s' "$bin"
-        return 0
-    fi
+    local version candidate
+    version="$(deskhub_pinned_value SWIFTFORMAT_VERSION)"
+    for candidate in "$(command -v swiftformat 2>/dev/null || true)" "$(deskhub_tools_dir)/swiftformat"; do
+        if deskhub_reports_version "$candidate" --version "$version"; then
+            printf '%s' "$candidate"
+            return 0
+        fi
+    done
     return 1
+}
+
+resolve_local_swiftlint() {
+    local version candidate
+    version="$(deskhub_pinned_value SWIFTLINT_VERSION)"
+    for candidate in "$(command -v swiftlint 2>/dev/null || true)" "$(deskhub_tools_dir)/swiftlint/swiftlint"; do
+        if deskhub_reports_version "$candidate" version "$version"; then
+            printf '%s' "$candidate"
+            return 0
+        fi
+    done
+    return 1
+}
+
+ensure_local_swiftlint() {
+    local tools version sha dir found
+    version="$(deskhub_pinned_value SWIFTLINT_VERSION)"
+    found="$(resolve_local_swiftlint || true)"
+    if [ -n "$found" ]; then
+        echo "[ok]      swiftlint $version ($found)"
+        return 0
+    fi
+    echo "[install] SwiftLint $version..."
+    tools="$(deskhub_tools_dir)"
+    sha="$(deskhub_pinned_value SWIFTLINT_SHA256)"
+    dir="$tools/swiftlint"
+    ensure_local_tools_dir
+    curl -fsSL --retry 5 --retry-all-errors -o "$tools/portable_swiftlint.zip" \
+        "https://github.com/realm/SwiftLint/releases/download/$version/portable_swiftlint.zip"
+    deskhub_verify_sha256 "$tools/portable_swiftlint.zip" "$sha" || {
+        echo "tools.sh: SwiftLint download failed the checksum check." >&2
+        rm -f "$tools/portable_swiftlint.zip"
+        return 1
+    }
+    rm -rf "$dir"
+    mkdir -p "$dir"
+    unzip -o -q -d "$dir" "$tools/portable_swiftlint.zip" swiftlint
+    chmod +x "$dir/swiftlint"
+    rm -f "$tools/portable_swiftlint.zip"
+    found="$(resolve_local_swiftlint || true)"
+    [ -n "$found" ] || {
+        echo "tools.sh: SwiftLint installed but does not report its pinned version $version." >&2
+        return 1
+    }
+    echo "[ok]      SwiftLint $version ($found)"
 }
 
 deskhub_is_windows() {

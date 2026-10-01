@@ -825,8 +825,8 @@ void TestAuthWire() {
     Check(gotChallenge && gotChallenge->mode == AuthMode::AwaitingApproval,
         "a host waiting for its owner to approve says so in the challenge");
     AuthResult local;
-    local.code = AuthResultCode::AwaitingApproval;
-    Check(BuildAuthResult(buf, local) == 0, "the waiting verdict is a client-side code, never sent");
+    local.code = AuthResultCode::LocalKeyUnavailable;
+    Check(BuildAuthResult(buf, local) == 0, "a client-side verdict is never sent");
     challenge.mode = AuthMode::Signature;
     n = BuildAuthChallenge(buf, challenge);
     buf[kCommonHeaderSize] = uint8_t(AuthMode::Signature);
@@ -861,6 +861,17 @@ void TestAuthWire() {
     gotResult = ParseAuthResult(PayloadOf(std::span<const uint8_t>(buf, n)));
     Check(gotResult && gotResult->code == AuthResultCode::BadSignature,
         "an invalid signature has a stable wire result");
+    result.code = AuthResultCode::AwaitingApproval;
+    n = BuildAuthResult(buf, result);
+    gotResult = ParseAuthResult(PayloadOf(std::span<const uint8_t>(buf, n)));
+    Check(gotResult && gotResult->code == AuthResultCode::AwaitingApproval,
+        "a proven key waiting for approval hears so in the verdict");
+    result.code = AuthResultCode::UntrustedHost;
+    Check(BuildAuthResult(buf, result) == 0, "a client-side outcome is never sent");
+    const uint8_t clientOnlyCode[2] = {kAuthVersion, uint8_t(AuthResultCode::LocalKeyUnavailable)};
+    Check(!ParseAuthResult(clientOnlyCode).has_value(), "nor accepted from the wire");
+    result.code = AuthResultCode::BadSignature;
+    n = BuildAuthResult(buf, result);
 
     for (size_t cut = 0; cut < n; ++cut)
         Check(!ParseAuthResult(std::span<const uint8_t>(buf, cut)).has_value(),

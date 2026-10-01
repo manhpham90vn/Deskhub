@@ -378,6 +378,8 @@ int dh_invalid_address_line(const char* address, char* out, int capacity);
 
 void dh_use_shared_container(const char* container);
 
+int dh_config_dir(char* out, int capacity);
+
 void dh_viewer_opened(void);
 
 bool dh_viewer_closed(void);

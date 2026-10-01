@@ -18,12 +18,14 @@ public:
         uint64_t timestampUs = 0;
         bool concealed = false;
         std::vector<uint8_t> payload;
+        std::vector<uint8_t> recovery;
     };
 
     struct Stats {
         uint64_t framesReceived = 0;
         uint64_t framesPlayed = 0;
         uint64_t framesConcealed = 0;
+        uint64_t framesRecoverable = 0;
         uint64_t framesLate = 0;
         uint64_t framesDuplicate = 0;
         uint64_t framesDropped = 0;

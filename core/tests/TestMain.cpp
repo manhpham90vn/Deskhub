@@ -13,6 +13,7 @@ int main() {
     RunWireTests();
 
     std::printf("--- authentication transcript ---\n");
+    RunAuthDeadlinesTests();
     RunAuthFailureLimiterTests();
     RunAuthTranscriptTests();
 
@@ -128,6 +129,9 @@ int main() {
 
     std::printf("--- diag: window counters + log line formatting ---\n");
     RunDiagTests();
+
+    std::printf("--- diag: session log retention ---\n");
+    RunLogRetentionTests();
 
     std::printf("--- media: encoder/decoder signature contract ---\n");
     RunMediaContractTests();

@@ -38,3 +38,4 @@ target_link_libraries(deskhub
 target_link_options(deskhub PRIVATE -Wl,-z,max-page-size=16384)
 
 deskhub_target_warnings(deskhub)
+deskhub_target_hardening(deskhub)

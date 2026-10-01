@@ -2,6 +2,7 @@
 #include "support/TestSupport.h"
 
 #include "deskhubp/diag/LogFile.h"
+#include "deskhubp/ffi/ClientFfi.h"
 #include "deskhubp/system/AppDataFile.h"
 #include "deskhubp/system/AuthorizedKeysFile.h"
 #include "deskhubp/system/Clock.h"
@@ -109,6 +110,10 @@ void TestSharedContainerGetsItsOwnPrivateFolder() {
     Check(deskhubp::WriteAppDataFile(kTestFile, "inside") &&
               deskhubp::AppDataFilePath(kTestFile).parent_path() == expected,
         "config files land in the private folder, not the container root");
+    char reported[1024]{};
+    Check(dh_config_dir(reported, int(sizeof(reported))) > 0 &&
+              std::filesystem::path(reported) == expected,
+        "the app is told the same folder, to keep it out of device backups");
     deskhubp::SetAppDataDirInside("");
     Check(deskhubp::AppDataDirRef().empty(), "no container falls back to the default folder");
 
@@ -132,8 +137,13 @@ void TestUnknownSettingsKeysAreIgnored() {
     const auto loaded = deskhubp::LoadUiSettings();
     Check(loaded.deviceName == "workstation" && loaded.port == 4200,
         "the keys this version knows are still read");
-    Check(deskhubp::ReadAppDataFile(deskhubp::kUiSettingsFileName) == old,
-        "reading settings never rewrites the file");
+    Check(deskhubp::ReadAppDataFile(deskhubp::kUiSettingsFileName) ==
+              "name=workstation\nport=4200\nallow_new_pairings=1\n",
+        "loading cuts the stored passcode out of the file and leaves every other line");
+    const std::string stripped = deskhubp::ReadAppDataFile(deskhubp::kUiSettingsFileName);
+    deskhubp::LoadUiSettings();
+    Check(deskhubp::ReadAppDataFile(deskhubp::kUiSettingsFileName) == stripped,
+        "a file with nothing retired is read without being rewritten");
     deskhubp::SaveUiSettings(loaded);
     const std::string saved = deskhubp::ReadAppDataFile(deskhubp::kUiSettingsFileName);
     Check(saved == deskhub::ui::SerializeUiSettings(loaded) &&
@@ -237,13 +247,16 @@ void TestAuthorizedClientsAreListedAndForgotten() {
 
     const std::string retiredList = "paired_devices";
     const std::string retiredMarker = "authorized_keys_active";
+    const std::string retiredSalt = "auth_salt";
     Check(deskhubp::WriteAppDataFile(retiredList,
               deskhub::FormatFingerprint(laptop.fingerprint) + " 1 1 laptop\n") &&
-              deskhubp::WriteAppDataFile(retiredMarker, "v1\n"),
+              deskhubp::WriteAppDataFile(retiredMarker, "v1\n") &&
+              deskhubp::WriteAppDataFile(retiredSalt, "0011223344556677\n"),
         "files from an older version are present");
     Check(!IsAuthorized(laptop), "a fingerprint in the retired list admits nobody");
     Check(!std::filesystem::exists(deskhubp::AppDataFilePath(retiredList)) &&
-              !std::filesystem::exists(deskhubp::AppDataFilePath(retiredMarker)),
+              !std::filesystem::exists(deskhubp::AppDataFilePath(retiredMarker)) &&
+              !std::filesystem::exists(deskhubp::AppDataFilePath(retiredSalt)),
         "and the retired files are deleted on first load");
 
     const auto empty = deskhubp::ListAuthorizedClients();

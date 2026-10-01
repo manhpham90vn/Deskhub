@@ -45,8 +45,10 @@ struct QuicSettings {
 };
 
 struct QuicCallbacks {
+    std::function<bool(QuicConnId, const NetAddr&)> admitConnection;
     std::function<void(QuicConnId, const NetAddr&)> onConnected;
     std::function<void(QuicConnId, const NetAddr&)> onClosed;
+    std::function<void(QuicConnId, const NetAddr&)> onAbandoned;
     std::function<void(QuicConnId, uint64_t streamId, std::span<const uint8_t> bytes, bool fin)>
         onStream;
     std::function<void(QuicConnId, std::span<const uint8_t> bytes)> onDatagram;

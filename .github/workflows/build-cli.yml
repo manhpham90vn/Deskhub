@@ -74,6 +74,9 @@ jobs:
             $install = Start-Process $setup -ArgumentList '/VERYSILENT', '/NORESTART' -Wait -PassThru
             if ($install.ExitCode -ne 0) { throw "Installer exited with $($install.ExitCode)" }
             if (-not (Test-Path $installed)) { throw 'CLI executable was not installed' }
+            foreach ($notice in 'THIRD_PARTY_NOTICES.md', 'licenses\BSD-2-Clause-quiche.txt') {
+              if (-not (Test-Path (Join-Path $directory $notice))) { throw "CLI installer did not install $notice" }
+            }
             $path = Get-ItemPropertyValue 'HKCU:\Environment' 'Path'
             if (@($path -split ';' | Where-Object { $_ -eq $directory }).Count -ne 1) {
               throw 'CLI directory must appear exactly once in the user PATH'

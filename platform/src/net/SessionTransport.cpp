@@ -18,9 +18,10 @@ constexpr uint64_t kCloseAuthRestarted = 2;
 constexpr uint64_t kCloseDeviceForgotten = 3;
 constexpr uint64_t kCloseAuthVersionMismatch = 4;
 constexpr uint64_t kCloseAuthExpired = 5;
-constexpr uint64_t kCloseAuthCapacity = 6;
 constexpr uint64_t kCloseAuthRateLimited = 7;
+constexpr uint64_t kCloseAuthRefused = 8;
 constexpr uint64_t kAuthorizedCheckIntervalUs = 100'000;
+constexpr uint64_t kPendingCapLogIntervalUs = 1'000'000;
 
 constexpr deskhub::Fingerprint PairingGuessKey() {
     deskhub::Fingerprint key;
@@ -44,6 +45,12 @@ bool IsAuthMessage(std::span<const uint8_t> message) {
         case deskhub::MsgType::AuthResult: return true;
         default: return false;
     }
+}
+
+bool ChargesAFailure(deskhub::AuthResultCode code) {
+    return code != deskhub::AuthResultCode::Accepted &&
+           code != deskhub::AuthResultCode::AwaitingApproval &&
+           code != deskhub::AuthResultCode::ConfigError;
 }
 
 bool CarriesVideo(std::span<const uint8_t> message) {
@@ -77,6 +84,10 @@ SessionTransport::~SessionTransport() {
 
 QuicCallbacks SessionTransport::MakeCallbacks() {
     QuicCallbacks hooks;
+    hooks.admitConnection = [this](QuicConnId, const NetAddr& peer) {
+        return AdmitConnection(peer);
+    };
+    hooks.onAbandoned = [this](QuicConnId, const NetAddr& peer) { ForgetPeerAuth(peer); };
     hooks.onStream = [this](QuicConnId conn, uint64_t stream, std::span<const uint8_t> bytes,
                          bool) { OnStream(conn, stream, bytes); };
     hooks.onDatagram = [this](QuicConnId conn, std::span<const uint8_t> bytes) {
@@ -136,7 +147,7 @@ void SessionTransport::Close() {
     brokenStreams_.clear();
     hostAuth_.clear();
     authFailures_.Clear();
-    pendingAuthDeadlines_.clear();
+    pendingAuth_.Clear();
     authenticated_.clear();
     nextAuthorizedCheckUs_ = 0;
 }
@@ -239,151 +250,174 @@ std::deque<TransportMessage>* SessionTransport::NextLane() {
     return &inbox_[size_t(Lane::Bulk)];
 }
 
+bool SessionTransport::AdmitConnection(const NetAddr& peer) {
+    if (!hostAuthOn_) return true;
+    const uint64_t nowUs = NowUs();
+    if (pendingAuth_.Admit(peer.Pack(), nowUs + kAuthResponseTimeoutUs)) return true;
+    if (nowUs - lastPendingCapLogUs_ >= kPendingCapLogIntervalUs) {
+        lastPendingCapLogUs_ = nowUs;
+        LOGW(
+            "transport: turned %s away because %zu connections are already waiting to "
+            "authenticate",
+            peer.ToString().c_str(), kMaxPendingAuth);
+    }
+    return false;
+}
+
 bool SessionTransport::HandleHostAuth(const NetAddr& from, std::span<const uint8_t> message) {
-    const uint64_t key = from.Pack();
     const std::optional<deskhub::CommonHeader> header = deskhub::ParseCommonHeader(message);
     if (!header) return false;
     const std::span<const uint8_t> payload = deskhub::PayloadOf(message);
 
     if (header->type == deskhub::MsgType::AuthStart) {
-        if (hostAuth_.contains(key)) {
-            LOGW(
-                "transport: %s restarted authentication on a connection that already began "
-                "it, closing the connection: one connection gets one handshake, so a settled "
-                "identity cannot be swapped and a refused challenge cannot be retried in place",
-                from.ToString().c_str());
-            ForgetPeerAuth(from);
-            endpoint_.CloseConnection(key, kCloseAuthRestarted, "auth restarted");
-            return false;
-        }
-        const std::optional<deskhub::AuthStart> start = deskhub::ParseAuthStart(payload);
-        if (!start) {
-            deskhub::AuthResult mismatch;
-            mismatch.code = deskhub::AuthResultCode::VersionMismatch;
-            std::vector<uint8_t> out(deskhub::kMaxRecordSize);
-            out.resize(deskhub::BuildAuthResult(out, mismatch));
-            SendAuth(from, out);
-            endpoint_.CloseConnection(key, kCloseAuthVersionMismatch, "auth version mismatch");
-            return false;
-        }
-
-        const auto sessionId = endpoint_.ExportAuthSessionId(key);
-        if (!sessionId) {
-            endpoint_.CloseConnection(key, kCloseBadFraming, "auth session unavailable");
-            return false;
-        }
-        if (!start->pairingToken.empty() &&
-            !authFailures_.Allow(kPairingGuessKey, from.ip, NowUs())) {
-            endpoint_.CloseConnection(key, kCloseAuthRateLimited, "pairing token guesses rate limited");
-            return false;
-        }
-        auto auth = std::make_unique<HostAuth>();
-        HostAuthConfig config = hostAuthConfig_;
-        config.sessionId = *sessionId;
-        config.peerAddress = from.ToString();
-        auth->Configure(std::move(config));
-        const std::optional<deskhub::AuthChallenge> challenge = auth->Begin(*start);
-        if (!challenge) {
-            endpoint_.CloseConnection(key, kCloseBadFraming, "unsupported client key");
-            return false;
-        }
-        if (auth->PairingTokenRejected()) {
-            LOGW("transport: %s presented a pairing token that did not match", from.ToString().c_str());
-            authFailures_.RecordFailure(kPairingGuessKey, from.ip, NowUs());
-        }
-        if (challenge->mode == deskhub::AuthMode::Signature &&
-            !authFailures_.Allow(auth->PeerFingerprint(), from.ip, NowUs())) {
-            endpoint_.CloseConnection(key, kCloseAuthRateLimited, "auth attempts rate limited");
-            return false;
-        }
-        if (challenge->mode == deskhub::AuthMode::Signature &&
-            pendingAuthDeadlines_.size() >= kMaxPendingAuth) {
-            endpoint_.CloseConnection(key, kCloseAuthCapacity, "too many pending auth requests");
-            return false;
-        }
-
-        std::vector<uint8_t> out(deskhub::kMaxRecordSize);
-        out.resize(deskhub::BuildAuthChallenge(out, *challenge));
-        SendAuth(from, out);
-
-        if (challenge->mode == deskhub::AuthMode::Denied && authCallbacks_.onRefused)
-            authCallbacks_.onRefused(from, deskhub::AuthResultCode::NotPaired);
-        if (challenge->mode == deskhub::AuthMode::AwaitingApproval && authCallbacks_.onRefused)
-            authCallbacks_.onRefused(from, deskhub::AuthResultCode::AwaitingApproval);
-        if (challenge->mode == deskhub::AuthMode::ConfigError && authCallbacks_.onRefused)
-            authCallbacks_.onRefused(from, deskhub::AuthResultCode::ConfigError);
-        if (challenge->mode == deskhub::AuthMode::Signature)
-            pendingAuthDeadlines_[key] = NowUs() + kAuthResponseTimeoutUs;
-
-        hostAuth_[key] = std::move(auth);
+        HandleAuthStart(from, payload);
         return false;
     }
-
     if (header->type == deskhub::MsgType::AuthResponse) {
-        const auto at = hostAuth_.find(key);
-        if (at == hostAuth_.end()) return false;
-        if (!authFailures_.Allow(at->second->PeerFingerprint(), from.ip, NowUs())) {
-            ForgetPeerAuth(from);
-            endpoint_.CloseConnection(key, kCloseAuthRateLimited, "auth attempts rate limited");
-            return false;
-        }
-        const auto deadline = pendingAuthDeadlines_.find(key);
-        if (deadline != pendingAuthDeadlines_.end() && NowUs() >= deadline->second) {
-            ForgetPeerAuth(from);
-            endpoint_.CloseConnection(key, kCloseAuthExpired, "auth response expired");
-            return false;
-        }
-        const std::optional<deskhub::AuthResponse> response = deskhub::ParseAuthResponse(payload);
-        if (!response) {
-            endpoint_.CloseConnection(key, kCloseBadFraming, "invalid auth response");
-            return false;
-        }
-        const deskhub::AuthResult result = at->second->Respond(*response);
-        SettleHostAuth(from, *at->second, result);
+        HandleAuthResponse(from, payload);
         return false;
     }
 
-    const auto settled = authenticated_.find(key);
+    const auto settled = authenticated_.find(from.Pack());
     return settled != authenticated_.end() && settled->second;
+}
+
+void SessionTransport::HandleAuthStart(const NetAddr& from, std::span<const uint8_t> payload) {
+    const uint64_t key = from.Pack();
+    if (hostAuth_.contains(key)) {
+        LOGW(
+            "transport: %s restarted authentication on a connection that already began "
+            "it, closing the connection: one connection gets one handshake, so a settled "
+            "identity cannot be swapped and a refused challenge cannot be retried in place",
+            from.ToString().c_str());
+        ForgetPeerAuth(from);
+        endpoint_.CloseConnection(key, kCloseAuthRestarted, "auth restarted");
+        return;
+    }
+    const std::optional<deskhub::AuthStart> start = deskhub::ParseAuthStart(payload);
+    if (!start) {
+        deskhub::AuthResult mismatch;
+        mismatch.code = deskhub::AuthResultCode::VersionMismatch;
+        std::vector<uint8_t> out(deskhub::kMaxRecordSize);
+        out.resize(deskhub::BuildAuthResult(out, mismatch));
+        SendAuth(from, out);
+        endpoint_.CloseConnection(key, kCloseAuthVersionMismatch, "auth version mismatch");
+        return;
+    }
+
+    const auto sessionId = endpoint_.ExportAuthSessionId(key);
+    if (!sessionId) {
+        endpoint_.CloseConnection(key, kCloseBadFraming, "auth session unavailable");
+        return;
+    }
+    if (!start->pairingToken.empty() &&
+        !authFailures_.Allow(kPairingGuessKey, from.ip, NowUs())) {
+        endpoint_.CloseConnection(key, kCloseAuthRateLimited, "pairing token guesses rate limited");
+        return;
+    }
+    auto auth = std::make_unique<HostAuth>();
+    HostAuthConfig config = hostAuthConfig_;
+    config.sessionId = *sessionId;
+    config.peerAddress = from.ToString();
+    auth->Configure(std::move(config));
+    const std::optional<deskhub::AuthChallenge> challenge = auth->Begin(*start);
+    if (!challenge) {
+        endpoint_.CloseConnection(key, kCloseBadFraming, "unsupported client key");
+        return;
+    }
+    if (challenge->mode == deskhub::AuthMode::Signature &&
+        !authFailures_.Allow(auth->PeerFingerprint(), from.ip, NowUs())) {
+        endpoint_.CloseConnection(key, kCloseAuthRateLimited, "auth attempts rate limited");
+        return;
+    }
+
+    std::vector<uint8_t> out(deskhub::kMaxRecordSize);
+    out.resize(deskhub::BuildAuthChallenge(out, *challenge));
+    SendAuth(from, out);
+    hostAuth_[key] = std::move(auth);
+    if (challenge->mode == deskhub::AuthMode::Signature) return;
+
+    LOGW("transport: %s cannot be checked because this host's key list is unreadable",
+        from.ToString().c_str());
+    if (authCallbacks_.onRefused)
+        authCallbacks_.onRefused(from, deskhub::AuthResultCode::ConfigError);
+    RefuseAfterReply(from);
+}
+
+void SessionTransport::HandleAuthResponse(const NetAddr& from, std::span<const uint8_t> payload) {
+    const uint64_t key = from.Pack();
+    const auto at = hostAuth_.find(key);
+    if (at == hostAuth_.end()) return;
+    if (!authFailures_.Allow(at->second->PeerFingerprint(), from.ip, NowUs())) {
+        ForgetPeerAuth(from);
+        endpoint_.CloseConnection(key, kCloseAuthRateLimited, "auth attempts rate limited");
+        return;
+    }
+    if (pendingAuth_.Due(key, NowUs())) {
+        ForgetPeerAuth(from);
+        endpoint_.CloseConnection(key, kCloseAuthExpired, "auth response expired");
+        return;
+    }
+    const std::optional<deskhub::AuthResponse> response = deskhub::ParseAuthResponse(payload);
+    if (!response) {
+        endpoint_.CloseConnection(key, kCloseBadFraming, "invalid auth response");
+        return;
+    }
+    HostAuth& auth = *at->second;
+    const deskhub::AuthResult result = auth.Respond(*response);
+    if (auth.PairingTokenRejected()) {
+        LOGW("transport: %s presented a pairing token that did not match",
+            from.ToString().c_str());
+        authFailures_.RecordFailure(kPairingGuessKey, from.ip, NowUs());
+    }
+    SettleHostAuth(from, auth, result);
+}
+
+void SessionTransport::RefuseAfterReply(const NetAddr& peer) {
+    pendingAuth_.Hasten(peer.Pack(), NowUs() + kRefusalLingerUs);
 }
 
 void SessionTransport::SettleHostAuth(const NetAddr& peer, HostAuth& auth,
     const deskhub::AuthResult& result) {
-    pendingAuthDeadlines_.erase(peer.Pack());
     std::vector<uint8_t> out(deskhub::kMaxRecordSize);
     out.resize(deskhub::BuildAuthResult(out, result));
     SendAuth(peer, out);
 
     const bool accepted = result.code == deskhub::AuthResultCode::Accepted;
-    if (accepted)
-        authFailures_.RecordSuccess(auth.PeerFingerprint(), peer.ip);
-    else
-        authFailures_.RecordFailure(auth.PeerFingerprint(), peer.ip, NowUs());
     authenticated_[peer.Pack()] = accepted;
     if (accepted) {
+        pendingAuth_.Forget(peer.Pack());
+        authFailures_.RecordSuccess(auth.PeerFingerprint(), peer.ip);
         LOGI("transport: %s is allowed in (%s)", peer.ToString().c_str(),
             deskhub::ShortFingerprint(auth.PeerFingerprint()).c_str());
         if (authCallbacks_.onPaired)
             authCallbacks_.onPaired(peer, auth.PeerFingerprint(), auth.PeerName());
         return;
     }
-    LOGW("transport: %s was turned away", peer.ToString().c_str());
+    RefuseAfterReply(peer);
+    if (ChargesAFailure(result.code))
+        authFailures_.RecordFailure(auth.PeerFingerprint(), peer.ip, NowUs());
+    LOGW("transport: %s was turned away (%s)", peer.ToString().c_str(),
+        deskhub::ShortFingerprint(auth.PeerFingerprint()).c_str());
     if (authCallbacks_.onRefused) authCallbacks_.onRefused(peer, result.code);
 }
 
 void SessionTransport::ForgetPeerAuth(const NetAddr& peer) {
     hostAuth_.erase(peer.Pack());
-    pendingAuthDeadlines_.erase(peer.Pack());
+    pendingAuth_.Forget(peer.Pack());
     authenticated_.erase(peer.Pack());
 }
 
 void SessionTransport::ExpirePendingAuth(uint64_t nowUs) {
-    std::vector<uint64_t> expired;
-    for (const auto& [key, deadline] : pendingAuthDeadlines_)
-        if (nowUs >= deadline) expired.push_back(key);
-    for (const uint64_t key : expired) {
+    for (const uint64_t key : pendingAuth_.TakeDue(nowUs)) {
+        const auto at = hostAuth_.find(key);
+        const bool refused =
+            at != hostAuth_.end() && at->second->State() == HostAuthState::Settled;
         ForgetPeerAuth(NetAddr::Unpack(key));
-        endpoint_.CloseConnection(key, kCloseAuthExpired, "auth response expired");
+        if (refused)
+            endpoint_.CloseConnection(key, kCloseAuthRefused, "auth refused");
+        else
+            endpoint_.CloseConnection(key, kCloseAuthExpired, "auth deadline passed");
     }
 }
 
@@ -425,6 +459,7 @@ void SessionTransport::SendAuth(const NetAddr& to, std::span<const uint8_t> mess
 }
 
 void SessionTransport::SetHostAuth(HostAuthConfig config, TransportAuthCallbacks callbacks) {
+    const std::lock_guard<std::mutex> lock(sendMutex_);
     hostAuthConfig_ = std::move(config);
     authCallbacks_ = std::move(callbacks);
     hostAuthOn_ = true;
@@ -472,10 +507,10 @@ bool SessionTransport::RunClientAuth(const NetAddr& server, ClientAuthConfig con
     uint32_t timeoutMs, deskhub::AuthResultCode& outCode,
     const std::atomic<bool>* cancel) {
     outCode = deskhub::AuthResultCode::NotPaired;
-    authInbox_.clear();
 
     {
         const std::lock_guard<std::mutex> lock(sendMutex_);
+        authInbox_.clear();
         const auto sessionId = endpoint_.ExportAuthSessionId(server.Pack());
         if (!sessionId) {
             outCode = deskhub::AuthResultCode::Refused;
@@ -500,14 +535,13 @@ bool SessionTransport::RunClientAuth(const NetAddr& server, ClientAuthConfig con
     bool answered = false;
     while (NowUs() < deadline) {
         if (cancel != nullptr && cancel->load(std::memory_order_acquire)) break;
-        if (authInbox_.empty()) {
-            const std::lock_guard<std::mutex> lock(sendMutex_);
-            endpoint_.Poll(NowUs(), kAuthPollMs);
+        std::optional<TransportMessage> next = TakeAuthMessage();
+        if (!next) {
+            PollForAuth();
             continue;
         }
 
-        const TransportMessage message = std::move(authInbox_.front());
-        authInbox_.pop_front();
+        const TransportMessage message = std::move(*next);
         if (message.from != server) continue;
         const std::optional<deskhub::CommonHeader> header =
             deskhub::ParseCommonHeader(message.bytes);
@@ -601,6 +635,20 @@ bool SessionTransport::RunClientAuth(const NetAddr& server, ClientAuthConfig con
         endpoint_.CloseConnection(server.Pack(), kCloseBadFraming, "auth message out of order");
     }
     return false;
+}
+
+std::optional<TransportMessage> SessionTransport::TakeAuthMessage() {
+    const std::lock_guard<std::mutex> lock(sendMutex_);
+    if (authInbox_.empty()) return std::nullopt;
+    TransportMessage message = std::move(authInbox_.front());
+    authInbox_.pop_front();
+    return message;
+}
+
+void SessionTransport::PollForAuth() {
+    endpoint_.WaitReadable(kAuthPollMs);
+    const std::lock_guard<std::mutex> lock(sendMutex_);
+    endpoint_.Poll(NowUs(), 0);
 }
 
 bool SessionTransport::SendReliable(const NetAddr& to, uint64_t streamId,

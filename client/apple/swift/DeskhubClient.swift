@@ -185,6 +185,10 @@ nonisolated enum DeskhubClient {
         buffered(answeredAddressCapacity) { dh_pairing_invite_address(invite, $0, $1) }
     }
 
+    static func pairingInviteNewHostKey(_ invite: String) -> String {
+        buffered(hostKeyCapacity) { dh_pairing_invite_new_host_key(invite, $0, $1) }
+    }
+
     static func pairingInvite(port: UInt16, bindIp: String) -> String {
         buffered(pairingInviteCapacity) { dh_pairing_invite(port, bindIp, $0, $1) }
     }

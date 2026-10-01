@@ -1,8 +1,14 @@
 #pragma once
+#include "deskhub/diag/LogRetention.h"
+
 #include <cstddef>
 #include <cstdio>
 #include <ctime>
+#include <filesystem>
 #include <string>
+#include <system_error>
+#include <utility>
+#include <vector>
 
 #ifdef _WIN32
 #ifndef WIN32_LEAN_AND_MEAN
@@ -20,6 +26,7 @@
 #include <cerrno>
 #include <cstdarg>
 #include <cstdlib>
+#include <fcntl.h>
 #include <pwd.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -65,6 +72,21 @@ inline std::string LogFileName() {
     std::snprintf(name, sizeof(name), "deskhub-%04d%02d%02d-%02d%02d%02d-%lu.log",
         tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec, pid);
     return std::string(name);
+}
+
+inline void PruneOldSessionLogs(const std::filesystem::path& dir) {
+    std::vector<std::string> names;
+    std::error_code error;
+    for (std::filesystem::directory_iterator it(dir, error), end; !error && it != end;
+        it.increment(error)) {
+        const std::u8string name = it->path().filename().u8string();
+        names.emplace_back(name.begin(), name.end());
+    }
+    for (const std::string& name :
+        deskhub::SessionLogsToPrune(std::move(names), deskhub::kKeptSessionLogs)) {
+        std::error_code ignored;
+        std::filesystem::remove(dir / std::filesystem::path(name), ignored);
+    }
 }
 
 inline std::string LocalTimeHms() {
@@ -148,6 +170,7 @@ inline bool StartProcessLog(std::wstring* outPath = nullptr) {
     std::FILE* redirected = _wfreopen(full.c_str(), L"w", stdout);
     if (!redirected) return false;
     std::setvbuf(stdout, buffer, _IOFBF, sizeof(buffer));
+    PruneOldSessionLogs(std::filesystem::path(dir));
 
     _dup2(_fileno(stdout), _fileno(stderr));
     std::setvbuf(stderr, nullptr, _IONBF, 0);
@@ -216,28 +239,43 @@ inline bool TryPointLatestSymlinkAt(const std::string& dir, const std::string& t
     return ::symlink(target.c_str(), latest.c_str()) == 0;
 }
 
+inline std::FILE* OpenSessionLog() {
+    const std::string dir = LogDir();
+    if (dir.empty()) return nullptr;
+
+    const std::string path = dir + "/" + LogFileName();
+    const int fd =
+        ::open(path.c_str(), O_WRONLY | O_CREAT | O_TRUNC | O_NOFOLLOW | O_CLOEXEC, 0600);
+    if (fd < 0) return nullptr;
+    std::FILE* f = ::fdopen(fd, "w");
+    if (!f) {
+        ::close(fd);
+        return nullptr;
+    }
+    LogPathRef() = path;
+    PruneOldSessionLogs(std::filesystem::path(dir));
+
+    std::setvbuf(f, nullptr, _IOFBF, std::size_t{256} * 1024);
+
+    TryPointLatestSymlinkAt(dir, path);
+
+    std::thread([f] {
+        for (;;) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(500));
+            std::fflush(f);
+        }
+    }).detach();
+
+    return f;
+}
+
 inline std::FILE* LogHandle() {
     static std::FILE* file = []() -> std::FILE* {
-        const std::string dir = LogDir();
-        if (dir.empty()) return nullptr;
-
-        const std::string path = dir + "/" + LogFileName();
-        std::FILE* f = std::fopen(path.c_str(), "w");
-        if (!f) return nullptr;
-        LogPathRef() = path;
-
-        std::setvbuf(f, nullptr, _IOFBF, std::size_t{256} * 1024);
-
-        TryPointLatestSymlinkAt(dir, path);
-
-        std::thread([f] {
-            for (;;) {
-                std::this_thread::sleep_for(std::chrono::milliseconds(500));
-                std::fflush(f);
-            }
-        }).detach();
-
-        return f;
+        try {
+            return OpenSessionLog();
+        } catch (...) {
+            return nullptr;
+        }
     }();
     return file;
 }

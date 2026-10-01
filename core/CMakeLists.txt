@@ -12,6 +12,7 @@ if(NOT COMMAND deskhub_target_warnings)
 endif()
 
 add_library(core STATIC
+    src/auth/AuthDeadlines.cpp
     src/auth/FailureLimiter.cpp
     src/auth/Transcript.cpp
     src/protocol/Wire.cpp
@@ -63,6 +64,7 @@ add_library(core STATIC
 
     src/diag/ScreenClientDiag.cpp
     src/diag/ShareDiag.cpp
+    src/diag/LogRetention.cpp
 
     src/session/host/SourceListResponder.cpp
 
@@ -102,9 +104,7 @@ target_include_directories(core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 target_compile_definitions(core PUBLIC DESKHUB_VERSION="${PROJECT_VERSION}")
 
 deskhub_target_warnings(core)
-if(MSVC)
-    target_compile_options(core PRIVATE /sdl)
-endif()
+deskhub_target_hardening(core)
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Android" OR CMAKE_SYSTEM_NAME STREQUAL "iOS")
     set(deskhub_tests_default OFF)
@@ -117,6 +117,7 @@ if(DESKHUB_CORE_TESTS)
     add_executable(core_tests
         tests/TestMain.cpp
         tests/support/TestSupport.cpp
+        tests/auth/AuthDeadlinesTests.cpp
         tests/auth/FailureLimiterTests.cpp
         tests/auth/TranscriptTests.cpp
         tests/qr/QrCodeTests.cpp
@@ -167,6 +168,7 @@ if(DESKHUB_CORE_TESTS)
         tests/control/QualityLadderTests.cpp
 
         tests/diag/DiagTests.cpp
+        tests/diag/LogRetentionTests.cpp
 
         tests/media/ContractTests.cpp
         tests/media/BitWriterTests.cpp

@@ -7,20 +7,26 @@ Deskhub - no platform is built by default, name the one you want:
     make build-ios       release-ios       run-ios         needs macOS + Xcode, Simulator
     make build-android   release-android   run-android     needs the Android SDK/NDK, adb
 
-    The desktop apps take no flags - everything is chosen on their four pages.
+    The desktop apps take no flags - everything is chosen on their four pages;
+    run-windows and run-linux still pass ARGS="..." through.
+    macOS: MACOS_SIGN=adhoc|developerid, MACOS_TEAM=..., MACOS_XCARGS="..."
+    iOS:   IOS_DEVICE=<simulator udid> for run-ios
 
   Command line client - Linux, Windows and macOS, no GUI toolkit:
     make build-cli       release-cli       run-cli         one deskhub-cli binary
-                         run-cli takes ARGS="scan", ARGS="sources 192.168.1.10", ...
+                         run-cli takes ARGS="host list", ARGS="sources 192.168.1.10", ...
+                         on Linux they build ffmpeg-min first
     make cli-smoke       host + viewer + a remote shell over loopback, headless
 
   Shared CMake tree - core + platform + the current OS client:
     make debug           configure + build the debug preset
     make release         configure + build the release preset
-    make quiche          build the QUIC library (third_party/quiche) for the host target -
-                         debug/release run it first; without it nothing can share or connect
-    make opus            build the Opus audio codec (third_party/opus) for the host target -
-                         debug/release run it first; without it a share carries no sound
+    make quiche          build the QUIC library (third_party/quiche) for the host target;
+                         without it nothing can share or connect
+    make opus            build the Opus audio codec (third_party/opus) for the host target;
+                         without it a share carries no sound
+                         debug, release, every build-*/release-*/CLI target, test, every
+                         test-* and lint-tidy build both first; a failed build stops make
 
   QUIC library and Opus for the cross-compiled apps - each build-* target runs its own first:
     make quiche-android  arm64-v8a + x86_64 (needs the NDK; cargo-ndk outside Windows)
@@ -38,9 +44,11 @@ Deskhub - no platform is built by default, name the one you want:
     make test-ctest        the same tests through CTest, as CI runs them
     make test-asan         all three suites under ASan + UBSan (Linux/macOS)
     make test-tsan         all three suites under ThreadSanitizer (Linux/macOS)
+    make perf-build        build core_perf + platform_perf (release preset) without running them
     make test-perf         measure the hot core + QUIC paths in a release build (cost, allocations, scaling)
     make perf-baseline     record out/perf/*.txt baselines so test-perf can report drift per row
-    make fuzz              libFuzzer + ASan over the parsers + sessions (clang, Linux/macOS, FUZZ_SECONDS=N)
+    make fuzz              libFuzzer + ASan over the parsers, sessions, key/access-list/invite
+                           text and the QR encoder (clang, Linux/macOS, FUZZ_SECONDS=N)
     make fuzz-coverage     which core lines the fuzz corpus reaches (clang + llvm-cov, Linux/macOS)
     make coverage          core coverage report via clang + llvm-cov
 
@@ -51,9 +59,11 @@ Deskhub - no platform is built by default, name the one you want:
     make lint-dead       unused C++ functions, FFI functions, string ids, Kotlin code
     make lint-dead-swift unused Swift code via Periphery (macOS + Xcode)
     make lint-tidy       clang-tidy over core/src + platform/src, the same gate CI runs
+                         (builds quiche + opus first)
 
   Distribution:
     make dist-macos      dmg signed with Developer ID + notarized + stapled
+                         (ASC_KEY_P8, ASC_KEY_ID, ASC_ISSUER_ID + a Developer ID identity)
     make verify-macos    check that Gatekeeper accepts the build just produced
     make dist-linux      Separate app and CLI Linux .deb + .rpm packages; each ships the uinput udev rule
 
@@ -68,9 +78,11 @@ Deskhub - no platform is built by default, name the one you want:
   Setup:
     make bootstrap                  install every dev dependency for this OS
     make setup-linux-permissions    Ubuntu host role: udev rule + 'input' group
-    make reset-macos-permissions    macOS: clear the TCC grants when the local build and
-                                    a downloaded build conflict (ARGS="--purge")
-    make ffmpeg-min                 Ubuntu: build the static minimal FFmpeg (auto-run by build-linux)
+    make reset-macos-permissions    macOS: clear the TCC grants of com.deskhub.macos and
+                                    com.deskhub.macos.debug when the local build and a
+                                    downloaded build conflict (ARGS="--purge")
+    make ffmpeg-min                 Ubuntu: build the static minimal FFmpeg (auto-run by
+                                    build-linux, release-linux and the CLI targets)
     make clean                      remove out/
 
   Every target is documented in full at the top of the Makefile.

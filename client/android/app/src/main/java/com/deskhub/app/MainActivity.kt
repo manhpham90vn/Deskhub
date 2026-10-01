@@ -443,12 +443,22 @@ private fun MainScreen(
         startQuery(trimmed) { NativeClient.queryHost(trimmed) }
     }
 
+    val confirmOutsideInvite: (String) -> Unit = { text ->
+        val trimmed = text.trim()
+        val newHostKey = NativeClient.pairingInviteNewHostKey(trimmed)
+        if (newHostKey.isEmpty()) {
+            connect(trimmed)
+        } else {
+            pendingTrust = TrustRequest(NativeClient.pairingInviteAddress(trimmed), newHostKey, trimmed)
+        }
+    }
+
     LaunchedEffect(invite) {
         if (invite == null) return@LaunchedEffect
         onInviteConsumed()
         scanning = false
         section = Section.CLIENT
-        connect(invite)
+        confirmOutsideInvite(invite)
     }
 
     LaunchedEffect(requestedSection) {
@@ -494,8 +504,12 @@ private fun MainScreen(
         TrustNewHostDialog(
             request = trust,
             onCancel = { pendingTrust = null },
-            onTrust = {
+            onTrust = trustLambda@{
                 pendingTrust = null
+                if (trust.invite != null) {
+                    connectByInvite(trust.invite)
+                    return@trustLambda
+                }
                 val failure = NativeClient.trustNewHost(trust.address, trust.fingerprint)
                 if (failure != null) {
                     connectError = failure
@@ -595,6 +609,7 @@ private fun MainScreen(
 private data class TrustRequest(
     val address: String,
     val fingerprint: String,
+    val invite: String? = null,
 )
 
 @Composable

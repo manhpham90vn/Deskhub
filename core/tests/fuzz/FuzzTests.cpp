@@ -78,7 +78,7 @@ bool ExerciseWireParsers(std::span<const uint8_t> d) {
     if (const auto authResponse = ParseAuthResponse(pl))
         ok = ok && authResponse->proof.size() <= kMaxAuthBlobBytes;
     if (const auto authResult = ParseAuthResult(pl))
-        ok = ok && uint8_t(authResult->code) <= uint8_t(AuthResultCode::ConfigError);
+        ok = ok && IsWireAuthResultCode(uint8_t(authResult->code));
 
     if (h) {
         if (const auto v = ParseVideoPacket(*h, pl)) {
@@ -219,7 +219,8 @@ Datagram BuildRandomValidDatagram() {
         }
         case 19: {
             AuthResult m;
-            m.code = AuthResultCode(Rnd() % (uint8_t(AuthResultCode::ConfigError) + 1));
+            m.code = AuthResultCode(Rnd() % (uint8_t(AuthResultCode::AwaitingApproval) + 1));
+            if (!IsWireAuthResultCode(uint8_t(m.code))) m.code = AuthResultCode::AwaitingApproval;
             n = BuildAuthResult(buf, m);
             break;
         }

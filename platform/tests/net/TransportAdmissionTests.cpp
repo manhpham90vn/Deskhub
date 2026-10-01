@@ -335,50 +335,39 @@ void TestPendingAuthHasACapAndDeadline() {
     Check(BeginWithoutAnswer(rig.viewer, rig.target, rig.machines.viewer),
         "the first authorized key receives a challenge");
 
+    deskhubp::SessionTransport silent;
+    Check(rig.Dial(silent), "a second client establishes QUIC and then says nothing");
+
     std::vector<std::unique_ptr<deskhubp::SessionTransport>> waiting;
-    for (size_t i = 1; i < deskhubp::kMaxPendingAuth; ++i) {
+    for (size_t i = 2; i < deskhubp::kMaxPendingAuth; ++i) {
         auto viewer = std::make_unique<deskhubp::SessionTransport>();
-        viewer->SetRecvTimeout(1);
-        if (!viewer->Connect(deskhubp::QuicSettings{}, rig.target, "admission-host") ||
-            !viewer->WaitEstablished(rig.target, kAuthTimeoutMs) ||
-            !BeginWithoutAnswer(*viewer, rig.target, rig.machines.viewer)) {
+        if (!rig.Dial(*viewer) || !BeginWithoutAnswer(*viewer, rig.target, rig.machines.viewer)) {
             Check(false, "each remaining pending slot accepts one challenge");
             return;
         }
         waiting.push_back(std::move(viewer));
     }
-    Check(waiting.size() + 1 == deskhubp::kMaxPendingAuth,
-        "the configured number of auth requests are waiting");
+    Check(waiting.size() + 2 == deskhubp::kMaxPendingAuth,
+        "the configured number of unauthenticated connections are waiting");
 
     deskhubp::SessionTransport excess;
     excess.SetRecvTimeout(1);
+    constexpr uint32_t kExcessWaitMs = 1000;
     Check(excess.Connect(deskhubp::QuicSettings{}, rig.target, "admission-host") &&
-              excess.WaitEstablished(rig.target, kAuthTimeoutMs),
-        "an extra client establishes QUIC");
-    deskhub::AuthStart start;
-    start.publicKey = rig.machines.viewer.publicKey;
-    start.clientName = "excess-auth-test";
-    std::vector<uint8_t> message(deskhub::kMaxRecordSize);
-    message.resize(deskhub::BuildAuthStart(message, start));
-    Check(!message.empty() && excess.SendRecord(rig.target, message),
-        "the extra client requests authentication");
-    Check(WaitUntil(
-              [&] {
-                  uint8_t buf[deskhub::kMaxRecordSize];
-                  NetAddr from;
-                  excess.RecvFrom(buf, sizeof(buf), from);
-                  return !excess.Established(rig.target);
-              },
-              kSettleMillis),
-        "the host closes the request beyond the pending limit");
+              !excess.WaitEstablished(rig.target, kExcessWaitMs),
+        "a connection beyond the pending limit is not accepted at all");
+    excess.Close();
 
     Check(WaitUntil(
               [&] {
                   rig.PumpViewer();
-                  return !rig.viewer.Established(rig.target);
+                  uint8_t buf[deskhub::kMaxRecordSize];
+                  NetAddr from;
+                  silent.RecvFrom(buf, sizeof(buf), from);
+                  return !rig.viewer.Established(rig.target) && !silent.Established(rig.target);
               },
               int(deskhubp::kAuthResponseTimeoutUs / 1000) + kSettleMillis),
-        "a client that never signs is disconnected at the auth deadline");
+        "a client that never signs, or never even starts, is disconnected at the deadline");
     Check(rig.Peer().Pack() == 0, "no pending client is admitted");
 
     deskhubp::SessionTransport replacement;
@@ -758,6 +747,13 @@ void TestAnUnknownKeyWaitsForApprovalAndGetsInWhenApproved() {
               !requests->front().address.empty(),
         "the host recorded who asked, under its name and address");
     Check(!rig.host.Authenticated(LoopbackPeer(rig.viewer)), "and admitted nothing");
+    Check(WaitUntil(
+              [&] {
+                  rig.PumpViewer();
+                  return !rig.viewer.Established(rig.target);
+              },
+              int(deskhubp::kRefusalLingerUs / 1000) + kSettleMillis),
+        "the host closes the waiting connection itself once its reply has had time to land");
 
     Check(deskhubp::ApproveAccessRequest(rig.machines.impostor.fingerprint),
         "the owner approves the request");
@@ -790,6 +786,17 @@ void TestAPairingTokenAdmitsAnUnknownKeyOnce() {
         "a wrong token earns no admission, only a request to approve");
     Check(!deskhubp::IsClientKeyAuthorized(rig.machines.impostor.publicKey),
         "and the key is not allowed in");
+
+    deskhubp::SessionTransport forger;
+    deskhubp::HostIdentity forged = rig.machines.viewer;
+    forged.publicKey = rig.machines.impostor.publicKey;
+    Check(rig.Dial(forger) &&
+              !rig.SignInWithCode(forger, forged, code,
+                  std::vector<uint8_t>(token->begin(), token->end())) &&
+              code == deskhub::AuthResultCode::BadSignature,
+        "the right token under a key the sender cannot sign for is refused");
+    Check(!deskhubp::IsClientKeyAuthorized(rig.machines.impostor.publicKey),
+        "and it spends nothing and saves no key");
 
     deskhubp::SessionTransport invited;
     Check(rig.Dial(invited) &&

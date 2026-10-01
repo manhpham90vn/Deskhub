@@ -100,7 +100,8 @@ if ((Test-Path $cppcheckExe) -and (((& $cppcheckExe --version) -join ' ') -eq "C
     if ($LASTEXITCODE -ne 0) { throw "winget failed installing cppcheck $cppcheckVersion (exit $LASTEXITCODE)" }
 }
 
-$sdkPackages = @('platform-tools', 'platforms;android-37.0', 'ndk;26.1.10909125', 'cmake;3.22.1')
+$ndkVersion = if ($env:ANDROID_NDK_VERSION) { $env:ANDROID_NDK_VERSION } else { '26.1.10909125' }
+$sdkPackages = @('platform-tools', 'platforms;android-37.0', "ndk;$ndkVersion", 'cmake;3.22.1')
 
 function Find-CmdlineTool([string]$SdkRoot, [string]$Name) {
     Get-ChildItem -Path (Join-Path $SdkRoot "cmdline-tools\*\bin\$Name") -ErrorAction SilentlyContinue |

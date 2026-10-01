@@ -20,6 +20,7 @@ concept AudioDecoderLike = requires {
     static_cast<bool (D::*)(const AudioFormat&)>(&D::Open);
     static_cast<size_t (D::*)(std::span<const uint8_t>, std::span<int16_t>)>(&D::Decode);
     static_cast<size_t (D::*)(std::span<int16_t>)>(&D::Conceal);
+    static_cast<size_t (D::*)(std::span<const uint8_t>, std::span<int16_t>)>(&D::Recover);
     static_cast<void (D::*)()>(&D::Close);
     static_cast<bool (D::*)() const>(&D::IsOpen);
 };

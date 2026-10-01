@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <chrono>
 #include <cstddef>
 #include <cstring>
 #include <filesystem>
@@ -77,27 +78,63 @@ sockaddr_in ToSockAddr(const NetAddr& addr) {
 
 void FillRandomConnId(uint8_t* out, size_t len);
 
+constexpr std::string_view kTransientCertificatePrefix = "transport_cert.";
+constexpr auto kStaleTransientCertificateAge = std::chrono::minutes(1);
+
+bool IsStaleTransientCertificate(const std::filesystem::directory_entry& entry,
+    std::filesystem::file_time_type now) {
+    std::error_code error;
+    if (!entry.is_regular_file(error) || error) return false;
+    const std::u8string name = entry.path().filename().u8string();
+    if (!std::string_view(reinterpret_cast<const char*>(name.data()), name.size())
+            .starts_with(kTransientCertificatePrefix))
+        return false;
+    const std::filesystem::file_time_type written = entry.last_write_time(error);
+    return !error && now - written >= kStaleTransientCertificateAge;
+}
+
+void SweepStaleTransientCertificates() {
+    const std::string dir = ConfigDir();
+    if (dir.empty()) return;
+    std::error_code error;
+    std::filesystem::directory_iterator it(std::filesystem::path(std::u8string(dir.begin(), dir.end())), error);
+    if (error) return;
+    const std::filesystem::file_time_type now = std::filesystem::file_time_type::clock::now();
+    std::vector<std::filesystem::path> stale;
+    for (; it != std::filesystem::directory_iterator(); it.increment(error)) {
+        if (error) break;
+        if (IsStaleTransientCertificate(*it, now)) stale.push_back(it->path());
+    }
+    for (const std::filesystem::path& path : stale) {
+        std::error_code ignored;
+        if (std::filesystem::remove(path, ignored))
+            LOGI("quic: removed a certificate file an earlier run left behind");
+    }
+}
+
 class TransientCertificateFile {
 public:
     explicit TransientCertificateFile(const std::string& certPem) {
         if (certPem.empty()) return;
+        SweepStaleTransientCertificates();
         std::array<uint8_t, 8> random{};
         FillRandomConnId(random.data(), random.size());
         constexpr std::string_view hex = "0123456789abcdef";
-        std::string name = "transport_cert.";
+        std::string name(kTransientCertificatePrefix);
         for (uint8_t byte : random) {
             name += hex[byte >> 4];
             name += hex[byte & 15];
         }
         name += ".pem";
         if (!WriteAppDataFileAtomic(name, certPem)) return;
-        path_ = AppDataFilePath(name).string();
+        file_ = AppDataFilePath(name);
+        path_ = file_.string();
     }
 
     ~TransientCertificateFile() noexcept {
-        if (path_.empty()) return;
+        if (file_.empty()) return;
         std::error_code ignored;
-        std::filesystem::remove(std::filesystem::path(path_), ignored);
+        std::filesystem::remove(file_, ignored);
     }
 
     TransientCertificateFile(const TransientCertificateFile&) = delete;
@@ -108,6 +145,7 @@ public:
     }
 
 private:
+    std::filesystem::path file_{};
     std::string path_{};
 };
 
@@ -290,7 +328,7 @@ struct QuicEndpoint::Impl {
             quiche_config_free(config_);
             config_ = nullptr;
         }
-        open_ = false;
+        open_.store(false, std::memory_order_release);
     }
 
     bool Start(const QuicSettings& settings, const std::string& bindIp, uint16_t port,
@@ -302,17 +340,18 @@ struct QuicEndpoint::Impl {
         config_ = MakeConfig(settings_, server);
         if (config_ == nullptr) return false;
         if (!socket_.Open(port, bindIp)) {
-            bindAddrInUse_ = socket_.lastBindAddrInUse();
+            const bool inUse = socket_.lastBindAddrInUse();
+            bindAddrInUse_.store(inUse, std::memory_order_relaxed);
             LOGE("quic: could not bind UDP port %u%s", unsigned(port),
-                bindAddrInUse_ ? " - something else is already listening on it" : "");
+                inUse ? " - something else is already listening on it" : "");
             quiche_config_free(config_);
             config_ = nullptr;
             return false;
         }
         socket_.SetRecvTimeout(1);
-        localPort_ = socket_.LocalPort();
+        localPort_.store(socket_.LocalPort(), std::memory_order_relaxed);
         localIp_ = bindIp;
-        open_ = true;
+        open_.store(true, std::memory_order_release);
         return true;
     }
 
@@ -339,9 +378,10 @@ struct QuicEndpoint::Impl {
     }
 
     sockaddr_in LocalSockAddr() const {
-        NetAddr local{0, localPort_};
+        const uint16_t localPort = localPort_.load(std::memory_order_relaxed);
+        NetAddr local{0, localPort};
         if (!localIp_.empty()) ParseNetAddr(localIp_ + ":0", local);
-        local.port = localPort_;
+        local.port = localPort;
         return ToSockAddr(local);
     }
 
@@ -438,7 +478,7 @@ struct QuicEndpoint::Impl {
     }
 
     void SayGoodbye(Connection& entry) {
-        if (!open_ || quiche_conn_is_closed(entry.conn)) return;
+        if (!open_.load(std::memory_order_acquire) || quiche_conn_is_closed(entry.conn)) return;
         constexpr std::string_view kReason = "bye";
         quiche_conn_close(entry.conn, true, 0,
             reinterpret_cast<const uint8_t*>(kReason.data()), kReason.size());
@@ -467,6 +507,10 @@ struct QuicEndpoint::Impl {
             reinterpret_cast<const sockaddr*>(&peer), sizeof(peer), config_);
         if (conn == nullptr) return;
 
+        if (cb_.admitConnection && !cb_.admitConnection(from.Pack(), from)) {
+            quiche_conn_free(conn);
+            return;
+        }
         Connection entry;
         entry.conn = conn;
         entry.peer = from;
@@ -700,6 +744,7 @@ struct QuicEndpoint::Impl {
             connections_.erase(at);
             if (announced && cb_.onClosed)
                 RunWatched("the onClosed callback", id, [&] { cb_.onClosed(id, peer); });
+            if (!announced && cb_.onAbandoned) cb_.onAbandoned(id, peer);
             quiche_conn_free(conn);
         }
     }
@@ -721,7 +766,7 @@ struct QuicEndpoint::Impl {
     }
 
     bool WaitReadable(uint32_t waitMs) {
-        if (!open_) return false;
+        if (!open_.load(std::memory_order_acquire)) return false;
         return socket_.WaitReadable(Backlogged() ? 0 : waitMs);
     }
 
@@ -739,7 +784,7 @@ struct QuicEndpoint::Impl {
     }
 
     void Poll(uint32_t waitMs) {
-        if (!open_) return;
+        if (!open_.load(std::memory_order_acquire)) return;
         ReportPollGap();
         DrainSocket(Backlogged() ? kBacklogPollMs : waitMs);
         for (auto& [id, entry] : connections_) {
@@ -756,11 +801,11 @@ struct QuicEndpoint::Impl {
     QuicSettings settings_{};
     QuicCallbacks cb_{};
     std::unordered_map<QuicConnId, Connection> connections_{};
-    uint16_t localPort_ = 0;
+    std::atomic<uint16_t> localPort_{0};
     std::string localIp_{};
-    bool bindAddrInUse_ = false;
+    std::atomic<bool> bindAddrInUse_{false};
     bool server_ = false;
-    bool open_ = false;
+    std::atomic<bool> open_{false};
     uint64_t drops_ = 0;
     uint64_t lastDropLogUs_ = 0;
     uint64_t sendFails_ = 0;
@@ -888,15 +933,15 @@ void QuicEndpoint::Close() {
 }
 
 bool QuicEndpoint::IsOpen() const {
-    return impl_->open_;
+    return impl_->open_.load(std::memory_order_acquire);
 }
 
 bool QuicEndpoint::LastBindAddrInUse() const {
-    return impl_->bindAddrInUse_;
+    return impl_->bindAddrInUse_.load(std::memory_order_relaxed);
 }
 
 uint16_t QuicEndpoint::LocalPort() const {
-    return impl_->localPort_;
+    return impl_->localPort_.load(std::memory_order_relaxed);
 }
 
 }

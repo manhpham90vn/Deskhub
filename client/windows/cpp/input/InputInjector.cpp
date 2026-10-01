@@ -52,7 +52,6 @@ void InputInjector::OnLocalUserIdle() {
 
 void InputInjector::SendKey(int32_t vk, int32_t scan, bool down) {
     held_.SetKey(vk, scan, down);
-    LOGI("[InjectKey] vk=%d down=%d held=%zu", vk, down ? 1 : 0, held_.heldKeyCount());
 
     INPUT in{};
     in.type = INPUT_KEYBOARD;

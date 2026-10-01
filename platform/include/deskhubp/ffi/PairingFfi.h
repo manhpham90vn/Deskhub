@@ -20,6 +20,8 @@ int dh_qr_encode(const char* text, uint8_t* modules, int capacity);
 
 int dh_pairing_invite_address(const char* invite, char* out, int capacity);
 
+int dh_pairing_invite_new_host_key(const char* invite, char* out, int capacity);
+
 #ifdef __cplusplus
 }
 #endif

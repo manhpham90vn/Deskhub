@@ -83,18 +83,23 @@ void AudioPlayer::Run() {
 
 size_t AudioPlayer::Fill(const deskhub::AudioJitterBuffer::Frame& frame,
     std::span<int16_t> pcm) {
-    if (frame.concealed) return decoder_.Conceal(pcm);
-    return decoder_.Decode(frame.payload, pcm);
+    if (!frame.concealed) return decoder_.Decode(frame.payload, pcm);
+    if (!frame.recovery.empty()) {
+        const size_t recovered = decoder_.Recover(frame.recovery, pcm);
+        if (recovered == format_.samplesPerFrame) return recovered;
+    }
+    return decoder_.Conceal(pcm);
 }
 
 void AudioPlayer::Report() const {
     const Stats s = stats();
     LOGI(
-        "[DIAG][audio] evt=play recv=%llu played=%llu concealed=%llu late=%llu dup=%llu "
+        "[DIAG][audio] evt=play recv=%llu played=%llu concealed=%llu fec_try=%llu late=%llu dup=%llu "
         "dropped=%llu underrun=%llu resync=%llu dec_fail=%llu sink_drop=%llu sink_starve=%llu "
         "held=%zu",
         (unsigned long long)s.jitter.framesReceived, (unsigned long long)s.jitter.framesPlayed,
-        (unsigned long long)s.jitter.framesConcealed, (unsigned long long)s.jitter.framesLate,
+        (unsigned long long)s.jitter.framesConcealed,
+        (unsigned long long)s.jitter.framesRecoverable, (unsigned long long)s.jitter.framesLate,
         (unsigned long long)s.jitter.framesDuplicate,
         (unsigned long long)s.jitter.framesDropped, (unsigned long long)s.jitter.underruns,
         (unsigned long long)s.jitter.resyncs, (unsigned long long)s.decodeFailures,
