@@ -30,14 +30,21 @@ anything load-bearing into the documentation above and delete it.
 ### 2. Prefer `core/` and `platform/` — reuse before you add
 
 The whole point of this layout is that logic is written once and shared by all five
-clients. Before writing anything in `client/*`, check whether it belongs in a lower
-layer.
+apps and the command-line client. Before writing anything in `client/*`, check whether it
+belongs in a lower layer.
 
 ```
 core/       platform-agnostic logic, pure C++20, no OS headers, unit-tested
 platform/   thin OS abstractions with one shared API (depends on core)
 client/     per-OS apps: android, ios, linux, macos, windows (depend on platform + core)
+client/cli/    the command-line client, one deskhub-cli for Linux, Windows and macOS
 client/apple/  Swift shared by the macOS and iOS apps — not an app of its own
+client/ios/shared/  Swift shared by the iOS app and its broadcast extension
+tests/integration/  host + viewer over loopback with fake capture/encode
+cmake/      shared CMake modules (warnings, quiche, opus)
+patches/    patches applied to third-party sources before they are built
+licenses/   third-party licence texts shipped in the packages
+packaging/  Windows installers, Homebrew templates, release notes, apt and Pages sites
 ```
 
 Decision order when adding code:
@@ -47,11 +54,13 @@ Decision order when adding code:
 2. **Is it platform-agnostic?** Protocol, packetization, FEC, session state, input
    mapping, bitrate control, diagnostics → `core/`. Add tests in `core/tests/`.
 3. **Does it need the OS, but with the same API everywhere?** Sockets, clock, logging,
-   randomness, source enumeration → `platform/`, behind one header in
-   `platform/include/deskhubp/`, with per-OS `.cpp` files selected in
+   randomness, source enumeration, audio capture and playback, local-input watching, key
+   maps, and media code that more than one app uses (VideoToolbox encode/decode for macOS
+   and iOS, the PipeWire screen-cast portal, Opus) → `platform/`, behind one header in
+   `platform/include/deskhubp/`, with per-OS `.cpp`/`.mm` files selected in
    `platform/CMakeLists.txt` (see `UdpSocketPosix.cpp` / `UdpSocketWin.cpp`).
-4. **Only genuinely OS-specific?** Capture, encode, decode, render, windowing, UI →
-   `client/<os>/`. These conform to the contracts in
+4. **Only genuinely OS-specific?** The rest of capture, encode, decode, render, input
+   injection, windowing, UI → `client/<os>/`. These conform to the contracts in
    `core/include/deskhub/media/VideoContract.h`.
 
 Never duplicate logic across `client/*`. If you find yourself writing the same thing for
@@ -66,7 +75,11 @@ Hard constraints:
 - `core/` must not include any OS or third-party header, and must not depend on
   `platform/`. It stays unit-testable offline with no network and no GPU.
 - `platform/` may include OS headers, but its public headers must expose one identical
-  API on every OS.
+  API on every OS. OS conditionals in a header may only pick private members or an inline
+  body. The one exception is `ProtectWindowsConfigDir` in
+  `deskhubp/system/AppDataFile.h`, declared only under `_WIN32` as the Windows half of
+  `EnsurePrivateConfigDir`; call `EnsurePrivateConfigDir`, never it, and add no second
+  one.
 - Use the shared helpers rather than raw OS calls: `LOGI`/`LOGW`/`LOGE` from
   `deskhubp/diag/Log.h`, plus `deskhubp/system/Clock.h`, `deskhubp/system/Random.h`,
   `deskhubp/net/UdpSocket.h`, `deskhubp/client/SourceQuery.h`.
@@ -76,7 +89,10 @@ Hard constraints:
   `TerminalHost`, `FileHost`). Core session machines mirror it:
   `deskhub/session/client` and `deskhub/session/host`, with shared types beside
   them in `deskhub/session`. Put new code on the right side, or beside them if
-  both sides genuinely share it.
+  both sides genuinely share it. The rest of `deskhubp` is split by subject:
+  `ffi` (the C surface the Swift and Kotlin apps call), `media` (display enumeration,
+  VideoToolbox, the screen-cast portal, Opus), `audio`, `input`, `net`, `system`
+  (config files, keys, PTY, clock, randomness) and `diag` (logging).
 
 ## Commands
 
@@ -96,7 +112,9 @@ make lint-tidy       # clang-tidy over core/src + platform/src, the same gate CI
 ```
 
 Per-platform: `make build-<os>`, `run-<os>`, `release-<os>` where `<os>` is one of
-`linux`, `windows`, `macos`, `ios`, `android`. No platform is the default — a bare
+`linux`, `windows`, `macos`, `ios`, `android`. The command-line client has
+`make build-cli`, `release-cli`, `run-cli ARGS="..."` and `cli-smoke` (the CLI against
+itself over loopback, headless). No platform is the default — a bare
 `make` prints `make/help.txt` instead of building anything, so always name the platform
 explicitly.
 
@@ -106,15 +124,19 @@ CI gates a good deal more than those two:
 
 - clang-tidy over `core/src` + `platform/src` (`scripts/clang-tidy.sh`) — run it
   locally with `make lint-tidy`
-- SwiftLint `--strict` (runs in `make lint` only where swiftlint is installed) and
-  Android Lint
+- SwiftLint `--strict` over every Swift folder of both Apple apps, the same set
+  `make lint` checks (locally on macOS only — `make lint` installs the pinned SwiftLint
+  into `tools/swiftlint` itself when it is missing — and skipped elsewhere), and Android
+  Lint
 - actionlint + shellcheck on the workflows and `scripts/*.sh`
 - dead code (`scripts/dead-code.sh` + Periphery): a function only tests call is dead too;
   keep one only with a `name: reason` line in `scripts/dead-code-allow.txt`
 - core coverage ≥ 90% lines / 80% branches (`scripts/check-coverage.sh`, checked
   after `make coverage`)
-- all three suites under ASan/UBSan and TSan, and cross-built for arm64 Linux, an
-  Android emulator and the iOS Simulator
+- all three suites natively on Linux x64 and arm64, macOS and Windows; under ASan/UBSan
+  and TSan on Linux, ASan/UBSan on macOS and MSVC ASan (platform + integration) on
+  Windows; and cross-built for Android (run on an x86_64 emulator) and the iOS Simulator
+- `scripts/cli-smoke.sh` against the CLI on all three desktops
 - the whole integration suite three more times on Windows, hunting an intermittent stack
   corruption that shows up in about one run in three
 - the libFuzzer targets for 30 s each on every PR, 15 min each nightly
@@ -164,13 +186,14 @@ Rules for these files:
 - `PRIVACY.md` is a published legal document: any behaviour change that touches what is
   stored or transmitted needs a new version number, a new effective date, and a changelog
   row — in all four languages.
-- `CLAUDE.md` and store listings under `fastlane/metadata/*/vi/` are outside this scheme.
+- `CLAUDE.md` and the store listings under `client/android/fastlane/metadata/android/vi/`
+  and `client/ios/fastlane/metadata/vi/` are outside this scheme.
 
 When you change behaviour, check whether these documents still describe it. Passcode
 handling, what is persisted on disk, and per-platform capability tables go stale fastest.
 
 ## License
 
-MIT (`LICENSE`). The Linux app statically links LGPL-2.1 FFmpeg — if you change how
-FFmpeg is built or linked, update `THIRD_PARTY_NOTICES.md` (and its translations)
-accordingly.
+MIT (`LICENSE`). The Linux app and the Linux CLI statically link LGPL-2.1 FFmpeg — if you
+change how FFmpeg is built or linked, update `THIRD_PARTY_NOTICES.md` (and its
+translations) accordingly.

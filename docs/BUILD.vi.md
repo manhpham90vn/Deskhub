@@ -29,19 +29,31 @@ còn lại. Cần cài sẵn các mục sau trước khi chạy lệnh này:
 
 | OS đang dùng | Cài trước | Bootstrap sẽ cài tiếp |
 | --- | --- | --- |
-| **Ubuntu / Debian** | không cần gì ngoài apt; [Rust](https://rustup.rs) | build-essential, clang, llvm, cmake, ninja, JDK 17, các package `-dev` của GTK3 / PipeWire / VA-API / tray, VA-API driver, GNOME portal, bản FFmpeg tối giản link tĩnh, quiche, opus |
-| **macOS** | [Homebrew](https://brew.sh), Xcode và command line tools, [Rust](https://rustup.rs) | cmake, ninja, swiftlint, pipx, LLVM của Homebrew (Apple clang không kèm runtime libFuzzer), Temurin JDK 17, quiche và opus cho Apple và Android |
-| **Windows** | winget (App Installer), Visual Studio kèm C++ toolchain và component *C++ Clang tools*, [Rust](https://rustup.rs) | phần còn lại qua winget, do `scripts/bootstrap.ps1` thực hiện |
+| **Ubuntu / Debian** | không cần gì ngoài apt; [Rust](https://rustup.rs) | build-essential, clang, llvm, CMake (`pipx install "cmake>=3.25,<4"` khi bản của apt cũ hơn 3.25), ninja, JDK 17, pipx, python3-venv, rpm, nasm, các package `-dev` của GTK3 / PipeWire / VA-API / tray, VA-API driver, GNOME portal, bản FFmpeg tối giản link tĩnh, cargo-ndk, quiche, opus |
+| **macOS** | [Homebrew](https://brew.sh), Xcode và command line tools, [Rust](https://rustup.rs) | cmake, ninja, pipx, LLVM của Homebrew (Apple clang không kèm runtime libFuzzer), Temurin JDK 17, cargo-ndk, quiche và opus cho Apple |
+| **Windows** | winget (App Installer), [Git for Windows](https://git-scm.com/download/win) (các build script chạy trong Git Bash của nó), Python 3 | Visual Studio Build Tools kèm C++ workload và *C++ Clang tools*, Rust, NASM, GNU make, Temurin JDK 17 và Android Studio qua winget, do `scripts/bootstrap.ps1` thực hiện |
 
-Trên mọi OS, bootstrap cũng pin các công cụ style và phân tích: clang-format, clang-tidy,
-ktlint, SwiftFormat, cppcheck và detekt, mỗi công cụ ở một phiên bản cố định kèm kiểm tra
-checksum. Không nên cài thủ công các công cụ này, vì CI đối chiếu đúng những phiên bản đó.
-Periphery, công cụ tìm code Swift thừa, được tải theo cùng cách vào lần đầu chạy
+Cây CMake dùng chung cần CMake 3.25 trở lên. Trên Windows, lần chạy đầu tiên chưa có
+`make`: hãy chạy trực tiếp `powershell -ExecutionPolicy Bypass -File scripts\bootstrap.ps1`,
+rồi mở một terminal mới.
+
+Trên mọi OS, bootstrap cũng pin các công cụ style và phân tích mà CI dùng — clang-format,
+clang-tidy, ktlint, SwiftFormat, cppcheck và detekt, thêm SwiftLint trên macOS — mỗi công
+cụ ở một phiên bản cố định. Những công cụ được tải về (ktlint, detekt, SwiftFormat, SwiftLint
+và mã nguồn cppcheck) được kiểm tra checksum; SwiftLint (0.65.0) được cài vào
+`tools/swiftlint`, không qua Homebrew, và `make lint` tự cài nó vào đó trên macOS khi còn
+thiếu; clang-format và clang-tidy được cài từ PyPI
+đúng phiên bản đã pin vào `tools/venv`, còn trên Windows cppcheck lấy từ winget đúng phiên
+bản đã pin. Không nên cài thủ công các công cụ này, vì CI đối chiếu đúng những phiên bản đó.
+Periphery, công cụ tìm code Swift thừa, được tải kèm kiểm tra checksum vào lần đầu chạy
 `make lint-dead-swift`.
 
 Các target mobile có yêu cầu bổ sung: `build-android` cần Android SDK kèm NDK (bootstrap
-sẽ cài các package SDK khi `ANDROID_HOME` trỏ tới thư mục cài cmdline-tools), còn
-`build-ios` cần Xcode kèm Simulator runtime.
+sẽ cài các package SDK — platform-tools, platform, NDK và CMake — khi `ANDROID_HOME` trỏ
+tới thư mục cài cmdline-tools, rồi build quiche và opus cho Android), còn `build-ios` cần
+Xcode kèm Simulator runtime. Phiên bản NDK lấy từ `-PandroidNdkVersion=<v>` trên dòng lệnh
+Gradle, nếu không có thì từ biến môi trường `ANDROID_NDK_VERSION`, nếu không nữa thì là
+`26.1.10909125`; bootstrap cài đúng phiên bản đó.
 
 Chỉ header `nvenc` là git submodule. Dùng `--recurse-submodules` khi clone, hoặc
 `git submodule update --init` sau đó. `make bootstrap` cũng sync submodule này.
@@ -52,13 +64,21 @@ Chỉ header `nvenc` là git submodule. Dùng `--recurse-submodules` khi clone, 
 core/       C++20 không phụ thuộc nền tảng — protocol, packetization, FEC, session state,
             input mapping, bitrate control, VT emulator. Không OS header. Có unit test.
 platform/   lớp abstraction mỏng cho OS, chung một API — socket, clock, logging,
-            random, liệt kê source. Phụ thuộc core.
+            random, liệt kê source, cùng phần media, audio và input mà nhiều app dùng
+            chung. Phụ thuộc core.
 client/     năm app: android, ios, linux, macos, windows.
             client/apple/ là phần Swift dùng chung giữa app macOS và iOS, không phải một app.
             client/cli/ là command line client, một binary cho cả ba nền tảng desktop.
+tests/integration/  host và viewer qua loopback, với capture và encode giả lập
+cmake/      các module CMake dùng chung: warning, quiche, opus
 third_party/  quiche (QUIC), opus (audio), header nvenc, bản FFmpeg tối giản
+patches/    patch áp vào quiche trước khi build
+licenses/   văn bản giấy phép bên thứ ba đi kèm các gói
+packaging/  bộ cài Windows, template Homebrew, release notes, site apt và Pages
+assets/     icon gốc để sinh mọi icon của client
 make/       mỗi nền tảng một file .mk, được Makefile gốc include
 scripts/    bootstrap, đóng gói, coverage, style và các tiện ích cho CI
+tools/      các công cụ style đã pin do bootstrap cài (bị git bỏ qua)
 .github/    workflow, và actions/ — các composite step dùng chung
 ```
 
@@ -72,11 +92,11 @@ buộc tuân thủ.
 
 ```bash
 make test      # core suite, offline, không cần GPU và network — vài giây
-make lint      # kiểm tra format C++, Kotlin và Swift, không ghi lại file
+make lint      # kiểm tra format C++, Kotlin và Swift, rồi kiểm tra code thừa
 ```
 
 Hãy chạy cả hai trước khi hoàn tất một thay đổi. Khi cần áp dụng format, dùng `make format`;
-`make lint` chỉ kiểm tra. Repo dùng các phiên bản formatter cố định giống CI.
+`make lint` chỉ kiểm tra, không bao giờ ghi lại file. Repo dùng các phiên bản formatter cố định giống CI.
 
 Logic mới trong `core/` cần có test trong thư mục con tương ứng ở `core/tests/`.
 
@@ -91,9 +111,15 @@ Logic mới trong `core/` cần có test trong thư mục con tương ứng ở 
 | `make build-android` | một APK debug | Android SDK, NDK, `adb` |
 
 Mỗi target có hai target đi kèm: `release-<os>` (bản tối ưu) và `run-<os>` (build rồi
-chạy). Các app desktop không nhận cờ command line nào; mọi lựa chọn nằm trên bốn trang
-giao diện. `run-android` cài và mở app trên thiết bị hoặc emulator đang kết nối qua adb;
-`run-ios` thực hiện tương tự trên Simulator.
+chạy); `release-ios` vẫn build cho Simulator, còn `release-android` tạo một APK release chưa
+ký. Các app desktop không nhận cờ command line nào; mọi lựa chọn nằm trên bốn trang giao
+diện. `run-android` cài và mở app trên thiết bị hoặc emulator đang kết nối qua adb;
+`run-ios` thực hiện tương tự trên Simulator đang boot, hoặc trên simulator iPhone đầu tiên
+có sẵn; `IOS_DEVICE=<udid>` chọn một simulator cụ thể.
+
+Các target macOS ký ad hoc khi keychain không có identity Apple Development nào.
+`MACOS_SIGN=adhoc` hoặc `MACOS_SIGN=developerid` ép một chế độ, `MACOS_TEAM` đặt team dùng
+khi ký Developer ID, và `MACOS_XCARGS` truyền thêm build setting cho `xcodebuild`.
 
 Bản Debug không đụng tới bản release đã cài. Trên mọi hệ điều hành desktop, bản Debug của
 app và CLI lưu key, client được phép, host đã trust, settings và log trong
@@ -113,12 +139,18 @@ và Linux; bản macOS chưa hỗ trợ lệnh đó.
 make build-cli                       # bản debug cho OS hiện tại
 make release-cli                     # bản tối ưu
 make run-cli ARGS="host list"        # build, sau đó chạy với các tham số đã cho
+make cli-smoke                       # build, sau đó chạy nó với chính nó qua loopback
 ```
 
 Target này nằm sau `-DDESKHUB_CLI=ON` (mặc định tắt), nên app cùng các preset sanitizer,
 coverage và fuzz không bị ảnh hưởng. Khi bật, các thư viện media theo từng OS chuyển từ
 tùy chọn sang bắt buộc, vì một client không capture và không decode được thì không còn là
-client.
+client. Trên Linux điều đó bao gồm bản FFmpeg tối giản link tĩnh, nên các target CLI build
+`ffmpeg-min` trước, giống như `build-linux`.
+
+`make cli-smoke` chạy CLI vừa build ở chế độ headless với chính nó qua loopback: trao đổi
+khóa, một người lạ chờ approve, một lời mời QR, một remote shell và file gửi tới host. Trên
+Windows nó bỏ qua các bước cần POSIX signal. CI chạy nó trên cả ba nền tảng desktop.
 
 | Lệnh | Chức năng |
 | --- | --- |
@@ -129,6 +161,7 @@ client.
 | `displays`, `sources ADDRESS` | màn hình cục bộ và những gì một host đã xác thực đang share |
 | `key public`, `access`, `host`, `host-key public` | public key của máy này, client được phép và yêu cầu kết nối, host đã lưu và khóa host này |
 | `devices`, `trust`, `settings` | các lệnh cũ dùng cùng file cấu hình |
+| `help [COMMAND]`, `version` | cách dùng, và phiên bản mà bản build này báo |
 
 Mỗi máy có một khóa. Xem nửa public của nó bằng `key public`; trên host, chuyển dòng đó
 vào `access add --stdin` để cho phép bằng tay. Client kết nối khi chưa được cho phép sẽ để
@@ -149,8 +182,9 @@ chỉ vẫn được trust. Không có scan network và không có cờ passcode
 `--config-dir PATH` chọn chung thư mục cấu hình cho mọi lệnh, đặt trước hoặc sau lệnh.
 
 `deskhub-cli help COMMAND` in ra các cờ. Các lệnh liệt kê hỗ trợ `--json`, và exit code cho biết
-nguyên nhân lỗi: `2` sai cờ, `3` không có phản hồi, `4` bị từ chối hoặc không được approve
-kịp thời, `9` bản build này không hỗ trợ.
+nguyên nhân lỗi: `1` lỗi khác, `2` sai cờ, `3` không có phản hồi, `4` bị từ chối hoặc
+không được approve kịp thời, `6` không có gì để share hoặc để xem, `8` host không thể bắt
+đầu lắng nghe, `9` bản build này không hỗ trợ, `130` bị ngắt bằng Ctrl-C.
 
 Linux hỗ trợ mọi lệnh trong bảng. Trên Windows, `connect` dùng lại mã cửa sổ của app
 desktop. Trên macOS, bạn có thể share và mở remote shell; lệnh `connect` sẽ báo rằng bản
@@ -166,11 +200,19 @@ make release      # …preset release
 **quiche và opus được build theo từng ABI.** QUIC transport là một thư viện tĩnh viết bằng
 Rust, build trong `third_party/quiche`; thiếu nó thì không share và không connect được.
 Opus audio codec là một thư viện tĩnh viết bằng C, build trong `third_party/opus`; thiếu
-nó thì bản share không có âm thanh. `debug`, `release` và mọi target `build-*` đều build
-trước ABI tương ứng, và không làm lại nếu đã build. Các target `make quiche`,
-`quiche-android`, `quiche-ios`, `quiche-macos` cùng `opus`, `opus-android`, `opus-ios`,
-`opus-macos` chạy riêng các bước này. Việc CMake dừng lại khi thiếu quiche là có chủ đích: nó từ chối tạo ra
-một binary không thể connect.
+nó thì bản share không có âm thanh. `debug`, `release`, mọi target `build-*`, `release-*`
+và CLI, cùng `test`, mọi target `test-*` và `lint-tidy` đều build trước ABI tương ứng, và
+không làm lại nếu đã build (`coverage`, `fuzz` và `fuzz-coverage` không build thư viện nào:
+chúng chỉ đo `core/`) — nên `make bootstrap && make test` chạy được trên một bản clone
+mới ở mọi OS. Các target `make quiche`, `quiche-android`, `quiche-ios`, `quiche-macos` cùng
+`opus`, `opus-android`, `opus-ios`, `opus-macos` chạy riêng các bước này; nếu một trong hai
+thư viện build lỗi thì `make` dừng ngay tại đó. Việc CMake dừng lại khi thiếu quiche là có
+chủ đích: nó từ chối tạo ra một binary không thể connect.
+
+**Hardening.** `cmake/DeskhubHardening.cmake` cho các bản build GCC và Clang
+`-fstack-protector-strong` và, ở bản build tối ưu, `-D_FORTIFY_SOURCE=3` — trừ Android, nơi
+giữ mức mặc định 2 của NDK; full RELRO (`-Wl,-z,relro,-z,now`) chỉ được thêm trên Linux.
+Bản build MSVC dùng `/sdl`.
 
 ## 5. Test
 
@@ -183,7 +225,9 @@ một binary không thể connect.
 | `make test-ctest` | cùng các test đó nhưng qua CTest | đúng cách CI gọi chúng |
 | `make test-asan` | cả ba suite dưới ASan và UBSan | chỉ clang/gcc, không hỗ trợ MSVC |
 | `make test-tsan` | cả ba suite dưới ThreadSanitizer | chỉ clang/gcc, không hỗ trợ MSVC |
-| `make test-perf` | bản release, offline và loopback | đo thực tế các hot path: `core_perf` bao phủ packetize/reassemble/FEC, downscale 1080p, CRC và batch file, VT parser và screen, encode/decode wire, audio jitter buffer; `platform_perf` bao phủ QUIC thật qua loopback |
+| `make test-perf` | bản release, offline và loopback | đo thực tế các hot path: `core_perf` bao phủ packetize/reassemble/FEC, downscale 1080p, CRC và batch file, VT parser và screen, encode/decode wire, audio jitter buffer và PCM ring, đường đi của input, framing của record stream; `platform_perf` bao phủ QUIC thật qua loopback |
+| `make perf-build` | bản build release, không chạy gì | build `core_perf` và `platform_perf` mà không chạy |
+| `make cli-smoke` | loopback, headless | command line client chạy với chính nó (xem ở trên) |
 
 Không test nào trong các suite cần peer từ xa, GPU hay network.
 
@@ -192,8 +236,8 @@ Không test nào trong các suite cần peer từ xa, GPU hay network.
 branch**.
 
 **Fuzzing.** `make fuzz` chạy các libFuzzer target nhắm vào parser của wire, H.264,
-reassembly, byte stream terminal và chuỗi UI, cùng các session state machine phía host và
-phía viewer (clang, Linux/macOS; `FUZZ_SECONDS=N` cho mỗi target). Mỗi target trước hết
+reassembly, byte stream terminal và chuỗi UI, các định dạng văn bản của khóa, danh sách
+truy cập và lời mời, bộ encode QR, cùng các session state machine phía host và phía viewer (clang, Linux/macOS; `FUZZ_SECONDS=N` cho mỗi target). Mỗi target trước hết
 phát lại `core/fuzz/regressions/<target>` để các crash đã sửa không tái xuất hiện, sau đó
 fuzz từ seed và dictionary đã commit. `make fuzz-coverage` cho biết corpus thực sự chạm
 tới những dòng nào trong core. Mọi crash phát hiện được đều trở thành một input
@@ -211,12 +255,17 @@ không tiêu chí nào là một ngưỡng mili-giây được chọn tùy tiệ
   input gấp 4 lần và fail khi thời gian tăng nhanh hơn input rất nhiều — dấu hiệu của một
   thuật toán O(n²) vô tình được đưa vào.
 - **Độ lệch so với baseline đã ghi**: `make perf-baseline` ghi `out/perf/baseline.txt`
-  trên một máy đang rảnh; các lần chạy sau báo mức chênh lệch theo từng dòng và fail khi
-  vượt 25 %. File này mô tả riêng một máy nên không được đưa vào git.
+  và `out/perf/platform-baseline.txt` trên một máy đang rảnh; các lần chạy sau báo mức
+  chênh lệch theo từng dòng và fail khi vượt 25 %. Các file này mô tả riêng một máy nên
+  không được đưa vào git.
 
 `DESKHUB_PERF_TOLERANCE`, `DESKHUB_PERF_REPEATS`, `DESKHUB_PERF_BASELINE` và
-`DESKHUB_PERF_WRITE` điều chỉnh phần đo thời gian. Cả `make test` lẫn CI đều không chạy
-phần này: bản debug, ASan và coverage không phản ánh tốc độ của bản production.
+`DESKHUB_PERF_WRITE` điều chỉnh phần đo thời gian. `make test` không chạy phần nào trong
+số này: bản debug, ASan và coverage không phản ánh tốc độ của bản production. CI chạy cả
+hai binary trên các job release Linux và macOS, nơi chỉ tiêu chí allocate và scaling có thể
+làm fail, vì baseline thời gian chỉ mô tả một máy. Trên pull request, CI còn build commit
+gốc và thay đổi trên cùng một runner rồi đăng độ lệch giữa hai bên thành một comment — chỉ
+ở mức cảnh báo, vì runner dùng chung quá nhiễu để fail theo thời gian.
 
 ## 6. Style và phân tích tĩnh
 
@@ -238,12 +287,13 @@ test gọi cũng là code thừa. Lời gọi từ Swift, Kotlin và Objective-C
 Cùng script đó báo lỗi với hàm FFI không app nào gọi, mã chuỗi `DHStr*` không app nào hiển
 thị, và hằng Kotlin không ai đọc; detekt báo lỗi với code Kotlin private, import và tham số
 không dùng. Khi một test thực sự không có cách nào khác để quan sát một hành vi, hãy giữ
-accessor đó và thêm dòng `tên: test nào cần nó và nó chứng minh điều gì` vào
+accessor đó và thêm dòng `name: test nào cần nó và nó chứng minh điều gì` vào
 `scripts/dead-code-allow.txt`; dòng thiếu lý do, hoặc dòng có hàm mà production đã bắt đầu
 gọi, cũng làm kiểm tra thất bại. `make lint-dead-swift` build cả hai app Apple để lập index
 rồi chạy Periphery trên kết quả. Ngoài ra, các bản build bằng clang cảnh báo về member
-function, template và tham số exception không dùng, và `-Werror` trong CI biến chúng thành
-lỗi.
+function, template và tham số exception không dùng, và `-Werror` biến chúng thành lỗi:
+mọi preset CMake trừ `asan-msvc` đều đặt `DESKHUB_WERROR=ON`, nên `make test` tại máy
+cũng fail vì một cảnh báo giống như CI.
 
 Quy ước của dự án, bản rút gọn; bản đầy đủ nằm trong `CLAUDE.md`:
 
@@ -265,14 +315,33 @@ Quy ước của dự án, bản rút gọn; bản đầy đủ nằm trong `CLA
 | `make verify-macos` | kiểm tra Gatekeeper trên bản vừa build |
 | `make dist-linux` | gói `.deb` và `.rpm` riêng cho app và CLI, mỗi gói cài udev rule cho uinput |
 
-Workflow release cũng tạo bộ cài Windows cho app và CLI từ `packaging/windows/`. Các bản
-Windows portable và app Linux vẫn là file đơn lẻ.
+`dist-macos` cần một identity *Developer ID Application* trong keychain và một App Store
+Connect API key để notarize: `ASC_KEY_P8` (đường dẫn tới file `.p8`), `ASC_KEY_ID` và
+`ASC_ISSUER_ID`. Nó dừng trước khi build nếu thiếu bất kỳ biến nào trong ba biến đó.
+
+Workflow release cũng tạo bộ cài Inno Setup cho app và CLI trên Windows từ
+`packaging/windows/`. Các bản Windows portable và app Linux vẫn là file đơn lẻ.
+
+Mọi gói đều kèm `THIRD_PARTY_NOTICES.md` và các văn bản giấy phép trong `licenses/` áp dụng
+cho nó: `.deb` và `.rpm` của app và CLI (dưới `/usr/share/doc/<package>/`, các văn bản —
+kể cả LGPL — nằm trong thư mục `licenses/` của nó), cả hai bộ cài Windows, `Resources` của
+app macOS, bundle của app iOS và assets của APK Android. `scripts/stage-licenses.sh` chuẩn bị
+bộ cho Linux và Apple, `packaging/windows/*.iss` liệt kê bộ cho Windows, còn bản build
+Android tự copy bộ của nó. Các binary portable không mang theo gì, nên bản release thêm
+`deskhub-<tag>-licenses.zip` chứa `LICENSE`, file notices và toàn bộ thư mục `licenses/`.
+`licenses/rust-crates.txt` được sinh ra:
+`scripts/rust-crate-notices.py <quiche source dir> > licenses/rust-crates.txt` ghi lại nó
+khi pin của quiche thay đổi. APK còn mang theo `licenses/android-libraries.txt` — các thư
+viện Java và Kotlin mà Gradle đóng gói vào nó, kèm notice của từng thư viện — và file này
+cũng được sinh ra: `scripts/android-library-notices.py > licenses/android-libraries.txt` đọc
+release runtime classpath của `client/android` (cần đặt `JAVA_HOME`, sau một lần build
+Android để Gradle đã cache các artifact) và ghi lại nó mỗi khi một phụ thuộc Android thay đổi.
 
 ## 8. Release
 
 1. Tăng [`VERSION`](../VERSION). `scripts/check-version.sh` làm fail bước deploy nếu tag
    và file không khớp.
-2. Cập nhật các tài liệu chịu ảnh hưởng của thay đổi này, ở tất cả các ngôn ngữ, trong
+2. Cập nhật các tài liệu chịu ảnh hưởng của thay đổi này, ở cả bốn ngôn ngữ, trong
    cùng một commit.
 3. Viết release notes (xem bên dưới) và commit.
 4. Tạo tag `vX.Y.Z` và push. `.github/workflows/deploy.yml` build mọi nền tảng, tạo GitHub
@@ -332,8 +401,11 @@ request, CI thực hiện:
 - actionlint và shellcheck trên các workflow cùng `scripts/*.sh`
 - code thừa: `scripts/dead-code.sh` (cppcheck, các kiểm tra FFI / mã chuỗi / hằng Kotlin
   và detekt) cùng Periphery trên cả hai app Apple
-- cả ba suite dưới ASan/UBSan và TSan, cùng cross-build cho Linux arm64, Android
-  emulator và iOS Simulator
+- cả ba suite trên Linux x64 và arm64 (cả hai đều build native), macOS và Windows; dưới
+  ASan/UBSan và TSan trên Linux, ASan/UBSan trên macOS; suite platform và integration dưới
+  ASan của MSVC trên Windows; cùng cross-build cho Android — chạy trên emulator x86_64, chỉ
+  build cho arm64-v8a — và cho iOS Simulator
+- script của `make cli-smoke` chạy với CLI trên cả ba nền tảng desktop
 - chạy lại toàn bộ integration suite thêm ba lần trên Windows để tìm một lỗi memory
   corruption không thường xuyên, xuất hiện khoảng một lần trong ba lần chạy nên dễ bị bỏ
   sót nếu chỉ chạy một lượt. Frame xảy ra crash là hệ quả của lỗi corruption chứ không
@@ -357,9 +429,9 @@ request, CI thực hiện:
 | `make opus-smoke` | một vòng encode/decode độc lập trên thư viện tĩnh opus — báo bitrate thực tế, packet lớn nhất và việc DTX có được kích hoạt hay không |
 | `make screenshots` | macOS: chụp lại bộ ảnh cho store trên simulator iPhone/iPad, emulator Android và app macOS, sau đó cập nhật `docs/imgs` (`ARGS="ios android macos readme"` cho một phần) |
 | `make setup-linux-permissions` | udev rule cho `/dev/uinput` và group `input`, để host được từ một bản build từ source |
-| `make reset-macos-permissions` | xoá các grant TCC khi một bản build tại máy và một bản tải về cùng dùng một bundle id (`ARGS="--purge"` xoá luôn các bản đã build) |
-| `make ffmpeg-min` | Ubuntu: bản FFmpeg tối giản link tĩnh mà app sử dụng (`build-linux` tự chạy) |
-| `make opus` | Opus audio codec cho target host (`debug`, `release` và `build-linux` tự chạy) |
+| `make reset-macos-permissions` | xoá các grant TCC của cả bundle id bản release (`com.deskhub.macos`) lẫn bản Debug tại máy (`com.deskhub.macos.debug`), và liệt kê mọi bản sao của app cùng cách mỗi bản được ký — dùng khi Screen Recording hoặc Accessibility ngừng hoạt động sau các lần build lại (`ARGS="--purge"` xoá luôn các bản đã build) |
+| `make ffmpeg-min` | Ubuntu: bản FFmpeg tối giản link tĩnh mà app và CLI sử dụng (`build-linux`, `release-linux` và các target CLI tự chạy) |
+| `make opus` | Opus audio codec cho target host (`debug`, `release`, các target Linux, CLI và test tự chạy) |
 | `make clean` | xoá `out/` |
 
 ## 11. Xử lý sự cố khi build
@@ -372,7 +444,8 @@ request, CI thực hiện:
   phiên bản công cụ mà CI sử dụng, rồi chạy `make format`.
 - **Các target Android không tìm thấy SDK** — đặt `ANDROID_HOME`, sau đó chạy lại
   `make bootstrap`. `ANDROID_NDK_VERSION=<v>` chọn một NDK khác.
-- **Permission trên macOS hoạt động không đúng sau khi chuyển qua lại giữa bản build tại
-  máy và bản tải về** — chạy `make reset-macos-permissions`.
+- **Permission trên macOS hoạt động không đúng sau khi build lại, hoặc sau khi chuyển qua
+  lại giữa bản build tại máy và bản tải về** — chạy `make reset-macos-permissions`, rồi cấp
+  lại quyền cho đúng một bản sao mà bạn giữ lại.
 
 Báo lỗi và đặt câu hỏi: [issues](https://github.com/manhpham90vn/Deskhub/issues).

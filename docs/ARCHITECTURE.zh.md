@@ -27,21 +27,29 @@ client/     各 OS 的 app: windows、linux、macos、ios、android（依赖 pla
 | Layer | 内容 |
 | --- | --- |
 | `core/protocol` | Wire format（`Wire.h`）、stream 的 record framing（`RecordStream.h`）、区分 QUIC 与其他任何内容的 packet classifier |
-| `core/transport` | 面向 video 的 Packetizer/Reassembler、FEC、retransmit 缓存、send pacer |
-| `core/session` | session state machine，按角色划分：`session/host`（按 viewer 的 session、viewer 表、`SourceListResponder`、file receiver、auth throttle）、`session/client`（screen client、file sender、terminal client、connect 流程），以及置于其旁的共享组件（transfer 类型、terminal session 表、clipboard sync、link recovery） |
-| `core/control` | Bitrate controller、quality ladder、stream 尺寸计算、clock offset |
-| `core/terminal` | 所有 client 共享的 VT emulator: `VtParser`、`Screen`、`KeyEncoder`、`Palette` |
-| `core/net` | 按 fingerprint 索引的 trust store（client 侧）、authorized keys（host 侧）、等待中的 connection request（`AccessRequests`）、`deskhub://pair/` invite 记录（`PairingInvite`）、OpenSSH public key 文本、供所有调用方共用的唯一 `Base64`、bind 地址选择 |
-| `core/auth` | 带签名的 auth transcript（`Transcript`）、按 key 与地址计数的失败限制器，以及一次性 QR token（`PairingTokens`） |
+| `core/transport` | 面向 video 的 Packetizer/Reassembler、FEC、retransmit 缓存、send pacer、audio jitter buffer（`AudioJitterBuffer`） |
+| `core/session` | session state machine，按角色划分：`session/host`（按 viewer 的 session、viewer 表、viewer feedback、source pipeline 状态、share 流程、`SourceListResponder`、file receiver）、`session/client`（screen client、file sender、terminal client、connect 流程、已打开的 viewer），以及置于其旁的共享组件（transfer 类型、terminal session 表、clipboard sync、link pulse 与 link recovery） |
+| `core/control` | Bitrate controller、quality ladder、stream 尺寸计算、clock offset、fps gate（`FrameGate`）、link 统计（`LinkStats`）、显示 pacer（`VideoPacer`） |
+| `core/media` | 所有 capture、encoder 与 decoder 都遵循的 media contract（`VideoContract`、`CaptureContract`、`AudioContract`）、H.264 Annex B 与 SPS 解析、rate 规划、RGB downscaler、latest-wins 的 `FrameMailbox`、PCM ring、view fitting 与 share 类型 |
+| `core/input` | 两端的 input：client 的 input 队列与 sender、host 的 receiver 与 applier、key 与 pointer 映射、scancode 表、hotkey、pointer lock 与 trackpad cursor |
+| `core/terminal` | 所有 client 共享的 VT emulator: `VtParser`、`Screen`、`KeyEncoder`、`Palette`，以及 repaint、snapshot 与 scroll anchoring |
+| `core/transfer` | 文件传输的基础组件：`Crc32` 与 `SafeFileName` |
+| `core/diag` | host 与 viewer status 行背后的诊断文本（`ShareDiag`、`ScreenClientDiag`、`WindowStat`） |
+| `core/net` | 按 fingerprint 索引的 trust store（client 侧）、authorized keys（host 侧）、等待中的 connection request（`AccessRequests`）、`deskhub://pair/` invite 记录（`PairingInvite`）、OpenSSH public key 文本、供所有调用方共用的唯一 `Base64`、IPv4 解析、bind 地址选择 |
+| `core/auth` | 带签名的 auth transcript（`Transcript`）、按 key 与地址计数的失败限制器（`AuthFailureLimiter`），以及一次性 QR token（`PairingTokens`） |
 | `core/qr` | `QrCode` —— 所有 client 与 CLI 绘制 pairing code 所用的 QR encoder |
-| `core/ui` | 全部面向用户的字符串、settings 解析、表格行构造器、最近设备以及 host profile（`HostProfiles`），使五个 client 呈现一致的内容 |
-| `platform/net` | `UdpSocket`（按 OS 实现）、`QuicEndpoint`（quiche 置于 pimpl 之后）、`SessionTransport` |
-| `platform/auth` | `AuthNegotiation` —— 双方共用的唯一基于 key 签名的 handshake，及其 host 侧的四种结果（第 3 节） |
-| `platform/client` | `HostLink`（dial、trust、auth、等待批准、channel，由所有界面共用）、`ScreenViewer`、`TerminalViewer`、`FileTransferClient`、`SourceQuery`、`HostProfiles`（按 fingerprint 索引的受信任 host，附名称与最后地址） |
-| `platform/host` | `HostEngine`、`HostNetLoop`、`SharingHost`、`TerminalHost`、`FileHost`、`ViewerBroadcast`、`PairingInvite`（签发 token 并构造本 host 展示的 invite） |
-| `platform/system` | Clock、random、PTY（ConPTY / forkpty）、机器 key（`HostIdentity`）、`authorized_keys` 与 `known_hosts` 文件、等待中的 request（`AccessRequestsFile`）与有效的 QR token（`PairingTokenFile`）、最近列表（`RecentDevicesFile`）、设备名称、autostart、keep-awake |
-| `platform/ffi` | Swift 与 Kotlin app 调用的 C 接口：`SettingsFfi`（settings、设备名称）、`DevicesFfi`（最近设备、允许的 client、connection request、本机的 fingerprint 与 public key）、`HostProfileFfi`（受信任的 host）、`PairingFfi`（invite、QR module、撤销），以及 share、screen、terminal 和 send 各接口 |
+| `core/ui` | 全部面向用户的字符串、settings 解析与布局、配色 theme、host 表格的行、shell picker、transfer 视图、autostart 与自动 share 规则、最近设备以及 host profile（`HostProfiles`），使五个 client 呈现一致的内容 |
 | `core/cli` | command line 语法及其 JSON writer：输入纯文本，输出经校验的 command |
+| `platform/net` | `UdpSocket`（按 OS 实现）、`QuicEndpoint`（quiche 置于 pimpl 之后）、`SessionTransport`、`NetInfo`（本机自身的地址） |
+| `platform/auth` | `AuthNegotiation` —— 双方共用的唯一基于 key 签名的 handshake，及其 host 侧的各种结果（第 3 节） |
+| `platform/client` | `HostLink`（dial、trust、auth、等待批准、channel，由所有界面共用）、`ScreenViewer` 及其循环、`TerminalViewer` 与 `TerminalFeed`、`FileTransferClient` 与 `FileUpload`、`SourceQuery`（阻塞与异步两种形式）、`HostProfiles`（按 fingerprint 索引的受信任 host，附名称与最后地址） |
+| `platform/host` | `HostEngine`、`HostNetLoop`、`SharingHost`、`ShareController`、`ShareDriver`、`TerminalHost`、`FileHost`、`ViewerBroadcast`、`PairingInvite`（签发 token 并构造本 host 展示的 invite） |
+| `platform/audio` | audio capture（PipeWire、WASAPI）与 sink（PipeWire、WASAPI、Core Audio、AAudio），host 侧的 `AudioBroadcaster` 与 viewer 侧的 `AudioPlayer` |
+| `platform/media` | Opus codec、显示器枚举、Linux 上的 xdg portal ScreenCast session，以及两个 Apple app 共用的 VideoToolbox encoder、decoder 与 source pipeline |
+| `platform/input` | 为 "host 优先" 监测本地 input（`LocalInputMonitor`），以及各 OS 的 native key code 映射 |
+| `platform/diag` | `LOGI`/`LOGW`/`LOGE` 与每次运行的 log 文件 |
+| `platform/system` | Clock、random、PTY（ConPTY / forkpty）、机器 key（`HostIdentity`）及其生成的签名（`AuthProof`）、`authorized_keys` 与 `known_hosts` 文件、等待中的 request（`AccessRequestsFile`）与有效的 QR token（`PairingTokenFile`）、最近列表（`RecentDevicesFile`）、settings 存储、config 文件夹及其文件锁、接收文件的存储（`FileStore`）、设备名称、autostart、keep-awake、console、环境变量与内存占用 |
+| `platform/ffi` | Swift 与 Kotlin app 调用的 C 接口：`ClientFfi`（字符串、theme 颜色、key 映射、地址解析、source 查询、自动 share 的步骤）、`SettingsFfi`（settings、设备名称）、`DevicesFfi`（最近设备、允许的 client、connection request、本机的 fingerprint 与 public key）、`HostProfileFfi`（受信任的 host）、`PairingFfi`（invite、QR module、撤销），以及 share、screen、terminal 和 send 各接口 |
 | `client/<os>` | Capture、encode、decode、render、windowing、对话框；不包含任何 protocol 相关内容 |
 | `client/cli` | 从 flag 到 session：一个 binary 即可完成 host、connect 与打开 shell，无需 GUI toolkit。它 link 桌面 app 所用的同一套各 OS media 库 |
 
@@ -73,24 +81,29 @@ host 提供的全部功能都运行在**一个 UDP port**（默认 47777）之�
 ```
 
 - **Stream**（可靠、有序）：control、input、clipboard、terminal、file。每条 connection
-  使用一条由 client 打开的 bidirectional stream。某条 connection 上阻塞的 stream 不会
-  影响其他 connection。进入的 stream 数据按每轮 service 64 KiB 的预算处理：消费数据的
+  使用两条 bidirectional stream，均由 client 打开：stream 0（`kQuicControlStream`）以
+  interactive urgency 承载 control、auth、input、clipboard 与 terminal 的 record，
+  stream 8（`kQuicFileStream`）以 bulk urgency 承载文件传输，因此上传永远不会排在按键
+  之前。某条 connection 上阻塞的 stream 不会影响其他 connection。进入的 stream 数据按每轮 service 64 KiB 的预算处理：消费数据的
   组件，主要是 terminal 的 VT emulation，会在各分片之间将控制权交还给 ACK、keepalive
   与 timeout 处理，因此 terminal 的大量输出不再导致 connection 因 idle timeout 被关闭。
 - **Datagram**（不可靠、无序，但仍经 encrypt）：video 与 audio 的 packet。QUIC 不重传
-  丢失的 packet；video 由 app 自身的 FEC/NACK 机制处理丢失，audio 则没有相应机制 ——
-  见第 9 节。
+  丢失的 packet；video 由 app 自身的 FEC/NACK 机制处理丢失，audio 则由 Opus 的
+  in-band FEC 与 concealment 处理 —— 见第 9 节。
 - **裸 UDP** 从不被应答。不存在 discovery：任何非 QUIC 的入站 packet 在到达任何 session
   代码之前即被丢弃，`SourceListResponder` 仅对已 authenticate 的 connection 应答
-  `LIST_SOURCES` 与 session 0 的 `PING`。
+  `LIST_SOURCES` 与 session 0 的 `PING`。唯一的明文 UDP 路径是出站的后备路径：当到某
+  地址尚未建立 QUIC connection 时，`SessionTransport::SendTo` 把 message 交给
+  `QuicEndpoint::SendRaw`。host 从不走这条路径 —— 它不向未 authenticate 的 peer 发送
+  任何内容。
 
 `QuicEndpoint` 完全隐藏 quiche（pimpl；`QuicEndpointNone.cpp` 提供 stub，但仅在 build
 显式使用 `-DDESKHUB_QUIC=OFF` 时生效。缺少 quiche 会导致 configure 失败，因为 stub
 binary 既无法 share 也无法 connect）。connection 以 peer 地址标识，不支持 connection
 migration。按约定，quiche 的 connection 是 single-threaded 的，因此对 endpoint 的所有
 操作都在 transport 的 send mutex 之下进行。transport 不会在阻塞的 socket 等待期间持有
-该 mutex：先在未加锁状态执行 `WaitReadable`，随后加锁执行一次短暂的 `Poll`。若在等待
-期间持有该 mutex，将阻塞所有发送方。
+该 mutex：先在未加锁状态执行 `WaitReadable`，随后加锁执行一次短暂的 `Poll`，client
+在 `RunClientAuth` 中等待 auth 时也是如此。若在等待期间持有该 mutex，将阻塞所有发送方。
 
 ## 3. 准入：key，与 SSH 相同
 
@@ -99,39 +112,57 @@ migration。按约定，quiche 的 connection 是 single-threaded 的，因此�
 其 DER SubjectPublicKeyInfo 的 SHA-256 hash 即为用户在 Devices 页、QR code、connection
 request 列表、`authorized_keys` 与 `known_hosts` 中所见的那一个 fingerprint。TLS 需要
 X.509 certificate，因此每次打开 port 时 `HostIdentity` 都会**在内存中**围绕该 key 构建一
-份自签 certificate 交给 quiche；不写入任何内容。由于 fingerprint 对 SPKI 而非 certificate
+份自签 certificate。quiche 只能从文件加载 certificate，因此 endpoint 会短暂地把它写为
+`transport_cert.<random>.pem`（仅含公开的 certificate，`0600`，位于 `0700` 的 config
+文件夹内；quiche 从 `host_key.pem` 读取 private key），把路径交给 quiche 后立即删除。
+开始 hosting 时，任何超过一分钟的 `transport_cert.*` 文件（包括写到一半的 `.tmp-` 文件）
+—— 只有 crash 才会留下 —— 都会被清除。由于 fingerprint 对 SPKI 而非 certificate
 求 hash，每次启动生成新 certificate 不会改变任何人固定下来的内容，旧版本保存的
 `host_cert.pem` 既不被读取也不再需要。host 仅接受列于其 `authorized_keys`
 （`AuthorizedKeys`，最多 128 行 `ecdsa-sha2-nistp256 AAAA… label` —— 为手动粘贴的 key
 仍解析 Ed25519 行）中的 public key；label 只是显示名称，从不代表权限。
 
-在 TLS 之上，应用层 handshake（`AuthNegotiation`，auth version 7）按 connection 决定
+在 TLS 之上，应用层 handshake（`AuthNegotiation`，auth version 8）按 connection 决定
 准入。transport 负责执行该 handshake，且 host 不会向 auth 尚未完成的 connection 发送
 任何应用层内容：
 
 1. QUIC/TLS 完成。client 在**发送任何内容之前**，先确定对 host key 的信任
    （`HostLink::SettleTrust`，见下文）。
-2. client 发送 `AuthStart`：`00 | u16 keyLen | key | u8 nameLen | name |
-   u8 tokenLen | token | 07` —— 其 public key、其设备名称、来自 QR code 时的 32 字节
+2. client 发送 `AuthStart`：
+   `00 | u16 keyLen | key | u8 nameLen | name | u8 tokenLen | token | 08` —— 其 public key、其设备名称、来自 QR code 时的 32 字节
    pairing token（`tokenLen` 为 0 或 32），最后是 auth version。
-3. `HostAuth::Begin` 以四种 `AuthChallenge` 之一应答：
-   - key 在 `authorized_keys` 中 → `Signature`；
-   - key 未知，且 token 与 `pairing_tokens` 中某条有效条目匹配 → 以 client 的名称为
-     label 将该 key 追加到 `authorized_keys`，消耗该 token，应答 `Signature`；
-   - key 未知，发送了 token 但不正确 → 在现有限制器中为 source 地址计一次失败（每分钟
-     3 次，随后封锁 10 秒），随后把该请求当作未携带 token 处理；
-   - key 未知且没有可用的 token → 把一条 connection request（名称、key、fingerprint、
-     地址、时间）写入 `access_requests`，应答 `AwaitingApproval`。connection 像现在的
-     拒绝一样被关闭；host 不会保留任何未 authenticate 的连接等待点击。
-4. 收到 `Signature` 时，client 对一份 transcript 签名 —— 包括 domain label、auth
-   version、角色、从这条 QUIC/TLS connection 导出的 session 值、其 public key 以及
-   host 的 TLS fingerprint（`core/auth/Transcript`）—— host 使用该 key 验证签名。
+3. `HostAuth::Begin` 以一个 `AuthChallenge` 应答：对每一把 key —— 已允许的、未知的或
+   携带 token 的 —— 都是 `Signature`，仅当 `authorized_keys` 无法读取时为 `ConfigError`。
+   在未知 key 的签名验证通过之前，不写入任何与它相关的内容（第 4 步）。若携带 token 的
+   `AuthStart` 来自限制器正在封锁的 source 地址，则在任何 challenge 之前立即关闭。
+4. client 对一份 transcript 签名 —— 包括 domain label、auth version、角色、从这条
+   QUIC/TLS connection 导出的 session 值、其 public key 以及 host 的 TLS fingerprint
+   （`core/auth/Transcript`）—— host 使用该 key 验证签名。签名验证失败时结果为
+   `BadSignature`。验证通过后，`AuthResult` 按以下顺序决定：
+   - key 在 `authorized_keys` 中 → `Accepted`；
+   - token 与 `pairing_tokens` 中某条有效条目匹配 → 消耗该 token，以 client 的名称为
+     label 将该 key 追加到 `authorized_keys`，connection 为 `Accepted`；
+   - 否则把一条 connection request —— 时间、source 地址，以及以 client 名称为 label 的
+     public key —— 写入 `access_requests`，结果为 `AwaitingApproval`（无法记录该 request
+     时为 `NotPaired`）。
+
+   发送了 token 却没有匹配任何条目时，直到此刻签名已验证通过，才为该 source 地址计一次
+   失败（每分钟 3 次，随后封锁 10 秒），随后把该请求当作未携带 token 处理。
+   `AwaitingApproval` 是真正的 wire 结果（code 9），而不是 client 侧的判断。
+
+在 `NotPaired`、`AwaitingApproval`、`BadSignature` 或 `ConfigError` challenge 之后，host
+在应答约两秒后自行关闭该 connection（`kRefusalLingerUs`，QUIC application error 8），
+足以让应答送达；client 也关闭自己一端。host 不会保留任何未 authenticate 的连接等待点击。
 
 签名绑定到这一条 connection，因此重新连接时需再次签名；不支持 0-RTT 或 session
-resumption。host 同时最多保留 8 个等待 authenticate 的 connection，并在 10 秒后断开
-每一个；同一 key 与 source IP 在一分钟内出现 3 次无效签名，该组合将被封锁 10 秒
-（`AuthThrottle`）。`access_requests` 最多保存 16 条 request，每把 key 一条（重复请求
-刷新地址与时间），每条保留 10 分钟；*Approve* 把该 key 连同设备名称移入
+resumption。每条尚未 authenticate 的 connection 从 QUIC 接受它的那一刻起有 10 秒时间，
+无论它出示哪把 key、是否发送了 `AuthStart`，host 同时最多保留 8 条这样的 connection ——
+`core/auth/AuthDeadlines` 保存这些期限，`QuicCallbacks::admitConnection` 在第九条
+connection 被接受之前将其拒之门外，`onAbandoned` 释放在被通告之前就已断开的 connection
+所占的位置。同一 key 与 source IP 在一分钟内出现 3 次失败，该组合将被封锁 10 秒
+（`AuthFailureLimiter`）；`AwaitingApproval` 与 `ConfigError` 不算失败。`access_requests` 最多保存 16 条 request，每把 key 最多一条、每个来源地址最多一条
+—— 新 request 会取代 key 相同或 IP 地址相同（忽略 port）的任何一行，因此重复请求会刷新
+地址与时间 —— 16 条全部占满时丢弃最旧的一条，每条保留 10 分钟；*Approve* 把该 key 连同设备名称移入
 `authorized_keys`，*Deny* 删除该行且不告知 client 任何内容。
 
 接入资格属于单条 QUIC connection，而非某个地址。该 connection 一旦关闭，资格即被撤销，因此来自同
@@ -146,21 +177,24 @@ TLS 建立后，`HostLink::SettleTrust` 针对对端出示的 key 的 fingerprin
 
 - 由 QR invite 拨出：fingerprint 必须等于 invite 中的那一个。相等意味着应答的机器持有
   制作该码的机器的 private key，因此静默固定该 host，并在 `AuthStart` 中发送 token。
-  不等意味着该地址上应答的是别的东西：link 以 `InviteMismatch` 失败，token 永不离开
-  client。
+  不等意味着该地址上应答的是别的东西：link 以 invite 不匹配的文案失败
+  （`kInviteHostMismatch`，source 查询将其报告为 `SourceQueryFailure::InviteMismatch`），
+  token 永不离开 client。从 app 外部打开的 `deskhub://` 链接（只匹配 `deskhub://pair`
+  的 Android intent，或 iOS `openURL`）不会被静默固定：当其中的 host key 尚未受信任时，
+  app 先显示带 fingerprint 的 *New host* 确认，用户选择 *Trust and connect* 后才 dial；
+  已受信任的 host 则直接 dial。在 app 内扫描的码仍直接固定。
 - 已在 `known_hosts` 中：刷新该条目的最后地址（`TouchTrustedHost`），link 继续 ——
   无论从哪个地址到达 host，因为不再有任何内容按地址索引。
 - 否则 link 以 *not trusted yet* 失败并附带 fingerprint；app 在 *New host* 对话框中显示
   它，待用户选择 *Trust and connect* 后带 `acceptNewHostKey` 重新 dial，CLI 仅在使用
-  `--accept-new-host-key` 时才这样做。若 `FindByEndpoint` 表明该地址曾以另一个受信任
-  host 的身份应答，`PreviousOwnerWarningFor` 会把那个 host 的名称与 fingerprint 加入
-  提示。不存在 *changed key* 这一判定：旧地址上的新 key 就是一个新 host。
+  `--accept-new-host-key` 时才这样做。`SettleTrust` 本身不计算任何警告：在绘制对话框
+  之前，app 通过 `PreviousOwnerWarningFor`（基于 `FindByEndpoint`）查询该地址是否曾以
+  另一个受信任 host 的身份应答，若是，则把那个 host 的名称与 fingerprint 加入提示。不存在 *changed key* 这一判定：旧地址上的新 key 就是一个新 host。
 
-当 challenge 为 `AwaitingApproval` 时，`HostLink` 停在同名状态，显示
+当应答为 `AwaitingApproval` 时，`HostLink` 停在同名状态，显示
 `AwaitingApprovalLine`，并以恢复中的 link 已在使用的 backoff 重新 dial，最长持续
 `kDefaultApprovalWaitUs`（120 秒）或直到调用方取消；每次重新 dial 都是一条完整的
-connection 与一份新的 `AuthStart`，因此所有者 *Approve* 之后的第一次即得到 `Signature`
-并完成。超过期限后 link 以 `AuthResultCode::AwaitingApproval` 失败，其文案提示用户请
+connection 与一份新的 `AuthStart`，因此所有者 *Approve* 之后的第一次即获得准入。超过期限后 link 以 `AuthResultCode::AwaitingApproval` 失败，其文案提示用户请
 对方 *Approve* 后再次 connect。
 
 线上传输的是 public key 本身，而非单独的 fingerprint：host 对收到的内容自行计算 hash，
@@ -173,26 +207,32 @@ connection 与一份新的 `AuthStart`，因此所有者 *Approve* 之后的第�
 ```
 HostEngine（每个 app 一个实例，持有 SessionTransport）
  ├─ net-loop thread: RunHostNetLoop
- │    recv → source 列表/pong 应答（仅限已准入） | video 数据摄入 | Chan::Terminal → TerminalHost
+ │    recv → source 列表/pong 应答（仅限已准入） | video 数据摄入
+ │         | Chan::Terminal → TerminalHost | Chan::File → FileHost
  │    按 source 的 session Tick、clipboard flush、reconfig、统计
  ├─ capture/encode: 按 source，由 OS 的 capture 回调驱动（client 层）
  │    frame → encoder（按 source 的 mutex）→ Packetizer → FEC → SendTo（datagram）
  ├─ audio worker: capture 回调 → 无锁 frame ring → Opus encode →
  │    按 viewer 的 datagram（AudioBroadcaster）
- └─ TerminalHost（仅在 terminal 被共享时存在）
-      ├─ 在 net-loop thread 上 HandleMessage: TERM_OPEN/DATA/RESIZE/CLOSE/EXIT/LIST → PTY
-      └─ pump thread: PTY 输出 → host 侧 Screen mirror 与 TERM_DATA record、
-           peer 丢失时分离、kicks
+ ├─ TerminalHost（仅在 terminal 被共享时存在）
+ │    ├─ 在 net-loop thread 上 HandleMessage: TERM_OPEN/DATA/RESIZE/CLOSE/LIST → PTY
+ │    └─ pump thread: PTY 输出 → host 侧 Screen mirror 与 TERM_DATA record、
+ │         peer 丢失时分离、kicks
+ └─ FileHost（仅在接受文件时存在）
+      └─ 在 net-loop thread 上 HandleMessage: FileReceiver → FileStore，应答先排队，
+           在释放自身的锁之后通过 stream 8 发送
 ```
 
-- 只要有内容被共享，engine 即处于运行状态。当没有 screen source 而仅勾选 terminal 时，
-  engine 以无 source 的方式运行；只要 terminal 存在，循环即继续。
+- 只要有内容被共享，engine 即处于运行状态。没有 screen source 时，只要开启了 terminal
+  或文件共享，engine 就以无 source 的方式运行；只要其中之一仍被要求，或其 `TerminalHost`
+  或 `FileHost` 仍在运行，循环即继续。
 - 每个 screen source 对应一个 `SourcePipelineState`，拥有各自的 `ScreenHostSession`
   （viewer 表、negotiation、input 仲裁）、encoder、quality ladder 与诊断数据。一次
   encode 服务该 source 的全部 viewer。
-- 反馈环：viewer 每秒发送一次 `Feedback`（loss 与 RTT），host 另外提供一个自身的信号，
-  即 frame 到达发送环节时的时延，也就是 `enc_lat_ms` 报告的量。`BitrateController`
-  （AIMD）与 `QualityLadder` 依据这三个信号调整 encoder 的 bitrate、分辨率与 fps。FEC
+- 反馈环：viewer 每秒发送一次 `Feedback`（loss、RTT、接收速率），host 另外提供一个自身
+  的信号，即 frame 到达发送环节时的时延，也就是 `enc_lat_ms` 报告的量。
+  `BitrateController`（AIMD）只依据其中两项 —— loss 与 frame 时延 —— 行动，
+  `QualityLadder` 跟随它选定的 bitrate 调整分辨率与 fps；RTT 与接收速率仅用于显示。FEC
   自第一个 frame 起即启用，仅在长时间无丢失后才关闭，因为它所防范的丢失会在第一份报告
   之前出现；积压状态不会启用 FEC，因为 parity 只会加深队列。quiche 的 CUBIC congestion
   control 位于 datagram 通道之下，两者串联工作：quiche 限制离开本机的数据量，app 依据
@@ -200,16 +240,18 @@ HostEngine（每个 app 一个实例，持有 SessionTransport）
 - Input：host 优先。当机器前的用户操作自己的 mouse 时，`LocalInputMonitor` 暂停 remote
   input；同一时刻只有一个 viewer 进行操作。
 - Shell：每个 shell 对应一个 PTY（Windows 为 `ConPTY`，其他平台为 `forkpty`），最多 8
-  个。连接中断时 shell 被分离，PTY 一直保留到 shell 进程退出或 shell 被关闭，不设时间限制。任何已准入的 client 均可列出被保留的 shell（`TermList`/`TermListAck`）并按 id reattach 其中之一。每次 open、close、detach 与 reattach 均连同地址、名称与 key 记入审计日志。
-- 每个 shell 的输出自启动起也同时写入 host 侧的 `core/terminal` Screen。*Stop & attach*
-  断开远端 client，并在 host 的 terminal 窗口中打开该 mirror，scrollback 保持完整。以此
-  方式接管的 shell 归属于 host，不会过期，并在 host 的窗口关闭时结束。
-- `TERM_CLOSE` 在 data 与 resize message 所受的 per-peer guard 之前被处理，因此任何已准入
-  的 client 都可以按 id 结束任意一个 shell，而当时身处该 shell 的机器会收到 `TERM_EXIT`。
+  个。连接中断时 shell 被分离，PTY 一直保留到 shell 进程退出或 shell 被关闭，不设时间
+  限制。任何已准入的 client 均可列出被保留的 shell（`TermList`/`TermListAck`）、按 id
+  reattach 一个已分离的 shell，并结束其中任意一个：`TERM_CLOSE` 在 data 与 resize
+  message 所受的 per-peer guard 之前被处理，而当时身处该 shell 的机器会收到
+  `TERM_EXIT`。每次 open、close、detach 与 reattach 均连同地址、名称与 key 记入审计日志。
 - 一个 picker，五个 client：`core/ui/ShellPicker` 把 `TermSessionList` 变成每个 client 都
   绘制的那些行 —— id 与尺寸、shell 属于谁，以及本 client 是否可以 reattach 或关闭它。只有
   已 detach 的 shell 才能 reattach，被 host 接管的 shell 两者皆不可。Apple 与 Android 的
   app 通过 `DHTermSessionInfo` 读取同样的行，因此没有任何 client 自行格式化 shell 行。
+- 每个 shell 的输出自启动起也同时写入 host 侧的 `core/terminal` Screen。*Stop & attach*
+  断开远端 client，并在 host 的 terminal 窗口中打开该 mirror，scrollback 保持完整。以此
+  方式接管的 shell 归属于 host，不会过期，并在 host 的窗口关闭时结束。
 
 ## 5. Client 侧
 
@@ -235,7 +277,7 @@ HostLink（每个打开的界面一个实例）
 ```
 
 准入完成后，link 自行监测自身状态（`core/session/LinkPulse`）：每秒发送一个 session id
-为 0 的 `Ping` datagram，host 的 `SourceListResponder` 在同一条已 authenticate 的
+为 0 的 `Ping`，作为 control stream 上的 record（而非 datagram），host 的 `SourceListResponder` 在同一条已 authenticate 的
 connection 上应答且无需 session。由于 ping 是 ack-eliciting 的，它同时充当 keepalive；
 普通的 keepalive 定时器仅在 link 获得准入之前仍有意义。在恢复中的 link 上，该
 pulse 同时用作 liveness 检查：连续五秒未收到 pong（且仅在首个 pong 已确认 host 会应答
@@ -251,9 +293,9 @@ reattach 提示），而不是直接结束。当 session 先发现问题时，`H
 仍未恢复，窗口按常规流程连同原因关闭。
 
 source 查询（`QuerySources`）以一次性、阻塞的形式使用同一条 link。UI 仍将各项请求（按
-键、resize）送入 command 队列。未知的 host key 会使 link 失败并附带其 fingerprint ——
-以及该地址曾以另一个受信任 host 应答时的先前所有者警告 —— 供 UI 在 *New host* 对话框中
-显示；尚未允许该 key 的 host 则使 link 停在 `AwaitingApproval`，UI 轮询其 status 行，
+键、resize）送入 command 队列。未知的 host key 会使 link 失败并附带其 fingerprint，供
+UI 在 *New host* 对话框中显示；当该地址曾以另一个受信任 host 应答时，UI 会自行查出先前
+所有者警告并一同显示；尚未允许该 key 的 host 则使 link 停在 `AwaitingApproval`，UI 轮询其 status 行，
 用户随时可取消。terminal 窗口不解析 escape sequence：
 `core/terminal` 将 byte stream 转换为字符网格，窗口仅负责绘制单元格并转发按键事件。目
 前每个窗口仍各自持有一条 link；让指向同一 host 的所有窗口共享一条已准入的 link 是既定
@@ -266,7 +308,8 @@ handshake。
 输入的地址、最近使用的 host、受信任的 host（`HostProfiles`），或 QR invite 中的地址。
 `SourceListResponder` 仅在已准入的 connection 上应答
 `LIST_SOURCES`；该应答通过 `SOURCE_LIST` 的 header flag 说明 host 的能力 —— 是否接受
-input、是否共享 terminal —— 因此 client 在打开任何窗口之前即可得知手机只能被观看。
+input、是否共享 terminal、是否共享声音、是否接受文件（`kHostAcceptsInput`、
+`kHostSharesTerminal`、`kHostSharesAudio`、`kHostAcceptsFiles`）—— 因此 client 在打开任何窗口之前即可得知手机只能被观看。
 source 记录之后，payload 还携带 host 的设备名称（一个长度字节加最多 64 字节 UTF-8；可为
 空），因此该名称只会到达已完成 authenticate 的 client。client 用
 `ParseSourceListHostName` 解析它，该函数会把任何控制字节替换为空格。
@@ -277,7 +320,8 @@ source 记录之后，payload 还携带 host 的设备名称（一个长度字�
 `dh_recent_touch` 已移除。旧的 `recent-devices.txt` 会被删除，而不是转换。
 
 QR code 是唯一的带外通道，并且始终留在带外：host 从不传输它，由所有者展示，再由他人从
-屏幕上读取或粘贴链接。`deskhubp::BuildPairingInvite(port, bindIp, hostName)` 签发一个
+屏幕上读取或粘贴链接。从 app 外部到达手机的链接（点击一个 `deskhub://pair` URL）会在
+app dial 之前经由 *New host* 对话框确认，除非该 host 已受信任（第 3 节）。`deskhubp::BuildPairingInvite(port, bindIp, hostName)` 签发一个
 随机的 32 字节 token（保存在 `pairing_tokens` 中，有效 5 分钟，同时最多 4 个有效，面板
 隐藏或停止共享时由 `RevokePairingTokens` 全部撤销），并格式化 `core/net/PairingInvite`：
 文本为 `deskhub://pair/` 加上一段二进制记录的 base64url —— 一个版本字节、endpoint 数量
@@ -285,7 +329,8 @@ QR code 是唯一的带外通道，并且始终留在带外：host 从不传输�
 以及带长度前缀、最多 32 字节的 host 名称。该记录上限为 180 个字符，使其在纠错级别 M 下
 能放进 version 10 或更小的 QR code，手机在一臂距离外即可从笔记本屏幕上读取。
 `core/qr/QrCode`（`EncodeQr`，加上供 CLI `share --qr` 使用的 `RenderQrText`）是唯一的
-encoder；所有 client 都绘制它返回的 module 网格，Android 通过 `dh_qr_encode`。client
+encoder；所有 client 都绘制它返回的 module 网格，Android 与两个 Apple app 通过
+`dh_qr_encode`。client
 侧的 `ParsePairingInvite` 为 `HostLink` 提供 endpoint、要求的 fingerprint 与要发送的
 token；`dh_pairing_invite_address` 为各 app 提供显示在地址框中的第一个 `ip:port`。扫描
 是唯一按平台实现的部分 —— Android 用 CameraX + ZXing，iOS 用 AVFoundation —— 两者都只
@@ -296,16 +341,21 @@ token；`dh_pairing_invite_address` 为各 app 提供显示在地址框中的第
 全部数据位于用户的 Deskhub 文件夹（`~/.deskhub`、`%USERPROFILE%\.deskhub`、iOS 上
 App Group container 内的 `.deskhub` 文件夹、Android 上的内部存储；`DESKHUB_CONFIG_DIR` 或 CLI 的
 `--config-dir` 可覆盖该位置）：`host_key.pem`（唯一的机器 key —— TLS certificate 在每次
-启动时于内存中构建，因此不再写入 `host_cert.pem`，遗留的会被忽略）、`authorized_keys`
+启动时构建，仅在 quiche 加载它的那一刻以只含公开 certificate 的
+`transport_cert.<random>.pem` 存在于磁盘上，若 crash 遗留则在下次开始 hosting 时清除；不再写入 `host_cert.pem`，遗留的会被忽略）、`authorized_keys`
 （本 host 接受的 client key）、`known_hosts`（按 fingerprint 索引的受信任 host，附名称
-与最后地址）、`access_requests`（等待 Approve 或 Deny 的 connection request —— 名称、
-public key、地址、时间；最多 16 条，每条 10 分钟后丢弃）、`pairing_tokens`（当前有效的
+与最后地址）、`access_requests`（等待 Approve 或 Deny 的 connection request —— 每条一
+行，包括时间、地址，以及以设备名称为 label 的 public key；最多 16 条，每条 10 分钟后丢
+弃）、`pairing_tokens`（当前有效的
 QR token 及其过期时间）、`ui-settings.txt`（包括设备名称）、`recent-hosts.txt`（地址、
 上次连接时间与 host 名称）、Linux 上的 `portal-restore-token.txt`（桌面针对所选屏幕签发
-的 token），以及每次运行的 log。任何地方都不保存 passcode，也没有 `client_key*.pem`：
-旧版本保留的这些文件会被忽略，而不是迁移。POSIX 上目录为 `0700`、文件为 `0600`，以原子
-方式写入；Windows 上的 ACL 仅允许该用户、SYSTEM 与 Administrators 访问。iOS 上 app 与
-broadcast extension 共用该文件夹，extension 记录的 request 由此到达 app 的列表，app 中的
+的 token），以及每次运行的 log（只保留最新的十份，`kKeptSessionLogs`）。任何地方都不保存 passcode —— 旧版
+`ui-settings.txt` 中的 `passcode=` 行会在加载时被移除，已停用的 `paired_devices`、其激活
+标记以及 `auth_salt` 会被删除 —— 也没有 `client_key*.pem`：旧版本保留的这些文件会被忽
+略，而不是迁移。POSIX 上目录为 `0700`、文件为 `0600`（log 也不例外，以 `O_NOFOLLOW`
+打开），config 文件以原子方式写入；Windows 上该文件夹的 ACL 仅允许该用户、SYSTEM 与
+Administrators 访问，其中的每个文件（包括 log）都继承该 ACL，而不单独设置权限。iOS 上该文件夹
+被排除在 iCloud 与 Finder 备份之外，app 与 broadcast extension 共用该文件夹，extension 记录的 request 由此到达 app 的列表，app 中的
 *Approve* 也由此到达 extension。文件
 I/O 位于 `platform/`；解析逻辑与数据结构位于 `core/`，并具备 unit test。
 
@@ -323,7 +373,7 @@ viewer 发送的文件保存在其他位置：由 host 选定的文件夹（`ui-
 | `make test` | 离线，不使用 socket | 整个 `core/`: wire（包括 `AuthStart` 的 token 字段）、framing、FEC、session、VT emulator、settings、文案、确定性的 structured fuzzing，以及 pairing 相关部分 —— `Base64`、`PairingInvite` 的往返与上限、`PairingTokens` 的签发/消耗/过期、`AccessRequests` 的容量与过期、`QrCode` 与已知编码的比对 |
 | `make test-platform` | loopback socket | 真实的 QUIC handshake、端到端的 key 签名 authenticate、按 fingerprint 索引的 host 固定、`AccessRequestsFile`（记录、批准与拒绝一条 request）与 `PairingTokenFile`（签发一个 token、兑换一次并撤销）、经由真实 `HostAuth` 的批准准入与 token 准入、经由网络的 terminal host 与 viewer、面向真实 shell 的 PTY、无效签名导致的 lockout |
 | `make test-integration` | loopback，capture/encode 为模拟实现 | 完整的 host↔client session: negotiation、经网络传输的视频、input、基于 authorized key 的准入、与其他 golden message 并列的 `AUTH_START_TOKEN` wire vector、对无效数据的容错，以及交叉负载下的时延 —— 文件传输、大量输出的 terminal 与按键操作与运行中的 stream 并行，各自按观测到的最大停顿设定阈值 |
-| fuzz target | 每个 PR 上每个 target 30 秒，nightly 每个 15 分钟 | wire、H.264、reassembly、terminal 字节与 UI 文本的 parser，以及 host 与 viewer 两侧的 session state machine |
+| fuzz target | 每个 PR 上每个 target 30 秒，nightly 每个 15 分钟 | 共九个 target: wire、H.264（Annex B 与 SPS）、reassembly、terminal 字节与 UI 文本的 parser，host 与 viewer 两侧的 session state machine，key 与 trust 文件的 parser（`FuzzKeys`: public key 文本、`authorized_keys`、`known_hosts`、access request、pairing token 与 invite），以及 QR encoder（`FuzzQr`） |
 | `make test-perf` | release build，离线与 loopback | 对 hot path 进行实测: `core_perf` 覆盖纯 C++ 的路径，`platform_perf` 覆盖 loopback 上的真实 QUIC；两者均按每单位的 allocation 次数、4 倍输入下的开销，以及相对本机 baseline 的偏移进行判定 |
 
 CI 另外强制执行 clang-format 与 clang-tidy（两者均固定版本）、SwiftLint `--strict`、
@@ -380,18 +430,22 @@ runner 上与 base commit 的 A/B 结果（偏移仅作为警告，不导致失�
   编码为带长度前缀的字段。对 quiche 0.29.3 的小型补丁通过 C API 提供 TLS exporter。
   双方为当前连接导出相同的值；导出失败时认证失败。主机每个连接只接受一次签名响应，
   防止在其他会话中重放。
-  主机最多保留八个等待签名的认证请求；十秒内没有响应就关闭该连接。
+  每个尚未完成认证的连接都会在 QUIC 接受它十秒后关闭，同时最多保留八个 —— 从不发送
+  `AuthStart` 的连接与从不签名的连接同样计入，第九个连接根本不会被接受。
   同一密钥和来源 IP 在一分钟内有三次签名验证失败时，该组合会被暂停十秒。
   内存表最多保存 64 个组合；验证成功后清除其失败计数。
 
 - **认证在协议版本 3 内有独立版本**：`AuthStart` 在公钥前保留一个值为 0 的兼容字节，
-  并把认证版本放在最后 —— 现在是 7，位于版本 6 所没有的 pairing token 字段之后：
-  `00 | u16 keyLen | key | u8 nameLen | name | u8 tokenLen | token | 07`。旧主机能够读取
-  请求并发送旧版 challenge；新客户端据此识别不兼容版本并关闭连接。新主机拒绝末尾字节
-  不为 7 的请求，发送 `VersionMismatch` 后关闭连接 —— 这正是 7.0.x 设备与 8.0 设备报告
-  版本不匹配、而非半工作状态的原因。`AuthMode` 新增 `AwaitingApproval`，而
-  `AuthResultCode::AwaitingApproval` 仅存在于客户端一侧，用于命名等待超时的结果。
-  challenge、response 和 result 只携带带版本的数据。
+  并把认证版本放在最后 —— 现在是 8，它保留版本 7 的 pairing token 字段，但把批准的
+  决定移到签名之后、放进 result 中：
+  `00 | u16 keyLen | key | u8 nameLen | name | u8 tokenLen | token | 08`。主机拒绝末尾
+  字节不是自身版本的请求，发送 `VersionMismatch` 后关闭连接；客户端收到其他版本的
+  challenge 或 result 时也关闭连接 —— 因此认证版本 7 与 8 的构建会报告版本不匹配，
+  而非半工作状态。主机的 challenge 为 `Signature`，或在密钥列表无法读取时为
+  `ConfigError`；`Denied` 与 `AwaitingApproval` 仍保留在 `AuthMode` 中，但版本 8 的
+  主机从不发送它们。`AuthResultCode::AwaitingApproval`（9）与 `Accepted` 或
+  `NotPaired` 一样在 `AuthResult` 中传输；主机的 transport 也通过 `onRefused` 报告它，
+  客户端在等待超时时以它作为失败结果。challenge、response 和 result 只携带带版本的数据。
 
 - **首次使用时信任，变更时给出警告**：未知的主机密钥会像 SSH 一样向用户展示一次，
   仅在用户接受后才被固定（CLI 中为 `--accept-new-host-key`）。与同一地址上以前应答的
@@ -418,8 +472,9 @@ runner 上与 base commit 的 A/B 结果（偏移仅作为警告，不导致失�
 - **桌面界面显示什么，由 `core/ui` 中的数据决定，而不是各个应用各写一份代码**：配色
   （`Theme.h`，每种颜色有浅色和深色两个值）、主机实时表格的列与尺寸（`HostRows.h`），以及
   Settings 页面的区域、分节与顺序（`SettingsLayout.h`）都只定义一次。Windows 直接读取，
-  macOS 通过 `dh_theme_color`、`dh_host_columns` 和 `dh_settings_layout` 读取，Android 通过
-  `dh_theme_color` 读取。应用只决定用哪个控件绘制某个 `SettingField`。此前每个应用各自保存
+  Linux 直接读取主机表格的列并使用 GTK 自身的主题绘制，macOS 通过 `dh_theme_color`、
+  `dh_host_columns` 和 `dh_settings_layout` 读取，iOS 与 Android 通过 `dh_theme_color`
+  读取。应用只决定用哪个控件绘制某个 `SettingField`。此前每个应用各自保存
   同一批颜色值和页面顺序的副本，久而久之彼此偏离：Windows 上的红色按钮在 macOS 上是灰色，
   两个桌面上都有的设置在第三个桌面上缺失。布局测试会检查每个已保存的设置恰好出现一次，
   因此应用再也无法悄悄漏掉某个设置。
@@ -436,9 +491,9 @@ runner 上与 base commit 的 A/B 结果（偏移仅作为警告，不导致失�
   优先尝试在线的 `codecapi` 路径。当按设备而异的 capability 控制着某一路控制输入时，
   回退必须是强制的：降级为更低性能是一种选择，静默降级为完全不生效则不是。
 
-- **跟不上的发送方与无丢失的链路表现完全相同。** `BitrateController` 的所有输入 ——
-  loss、RTT、接收速率 —— 均来自 viewer，因此控制环中没有任何组件能够判断落后的是发送方
-  自身。在一台为两个 viewer 提供 host 的 Pixel 4 上实测：frame 离开 encoder 时已滞后
+- **跟不上的发送方与无丢失的链路表现完全相同。** `BitrateController` 获得的一切都来自
+  viewer 的 `Feedback` —— 而其中它只依据 loss 行动，RTT 与接收速率仅用于显示 —— 因此
+  控制环中没有任何组件能够判断落后的是发送方自身。在一台为两个 viewer 提供 host 的 Pixel 4 上实测：frame 离开 encoder 时已滞后
   15 秒，而 viewer 报告 0 % 丢包与 15 ms RTT，控制器将其视为余量并把 bitrate 重新提升至
   20 Mbps 上限。这是发送方内部的 bufferbloat：链路看起来越好，推送的数据量越大。现在
   host 在发送环节测量 frame 的时延，并将其与 viewer 的数据一同输入：超过 `kBacklogMs`
@@ -491,7 +546,8 @@ runner 上与 base commit 的 A/B 结果（偏移仅作为警告，不导致失�
   判定为丢失前仅等待两个帧间隔（60 fps 下为 33 ms），而同一链路上实测的 RTT 为
   24-49 ms。NACK 发出后，应答到达时该帧已被丢弃，表现为 `late_ms_avg=24`，且每秒有 87
   个 packet 属于已不存在的 frame。现在 `StallTimeoutUs` 取「按 pacing 计算的等待时间」
-  与「1.5 倍往返时延」中的较大者，并仍受硬性 timeout 的上限约束，因此仅在确有需要的链路
+  与「1.5 倍往返时延加上 NACK 保留时间（`kNackHoldUs`，2 ms）」中的较大者，并仍受硬性
+  timeout 的上限约束，因此仅在确有需要的链路
   上才请求重传。
 
 - **performance suite 依据 allocation 与开销的增长形态判定，而非毫秒数。** 三个 test
@@ -499,8 +555,8 @@ runner 上与 base commit 的 A/B 结果（偏移仅作为警告，不导致失�
   设定的预算衡量的是 sanitizer 而非代码本身。因此 `core_perf`（release preset，
   `make test-perf`）依据两项与硬件无关的指标判定失败：通过替换全局 `operator new` 计数
   的每 packet、每 frame 或每 KB 的 allocation 次数；以及某一行 `-scaling` 的耗时增长远
-  快于输入。计时部分保留为与 `out/perf/baseline.txt` 的对比，该文件由 `make
-  perf-baseline` 按机器生成，不纳入版本控制。这种划分使该 suite 能在笔记本、CI runner
+  快于输入。计时部分保留为与 `out/perf/baseline.txt` 的对比，该文件由
+  `make perf-baseline` 按机器生成，不纳入版本控制。这种划分使该 suite 能在笔记本、CI runner
   与手机上同样地判定出「reassembler 现在将每个分片复制两次」这类回退，同时仍为数值本身
   具有意义的路径输出每单位的 ns 与 MB/s。CI 在 Linux 与 macOS 的 release job 上执行这两
   项与硬件无关的判定；Windows 仅构建 binary，因为对于大于 16 字节的元素，MSVC 的 deque
@@ -548,9 +604,9 @@ runner 上与 base commit 的 A/B 结果（偏移仅作为警告，不导致失�
   `HostEngine::Start` 会跳过该检查。
 
 - **只有 shell 而没有屏幕的 host 仍保持运行。** net 循环在没有任何 source 处于活动状态
-  时结束 session，而仅共享 terminal 的场景按定义没有 source。`keepAlive` 依据调用方的
-  意图（`ShareOptions::terminal`）确定，而不是依据在循环启动之后才挂接的 `TerminalHost`
-  指针。
+  时结束 session，而仅共享 terminal 或仅共享文件的场景按定义没有 source。`keepAlive`
+  依据调用方的意图（`ShareOptions::terminal`、`ShareOptions::files`）以及 `TerminalHost`
+  或 `FileHost` 是否仍在运行来确定，而绝不单凭在循环启动之后才挂接的 tenant 指针。
 
 - **frame gate 按目标时刻计数，而不是从上一个保留的 frame 开始计数。** 当 compositor
   以 40 fps 向 30 fps 的目标提供画面时，大多数 33 ms 边界上并没有 frame，因此仅判断「与
@@ -603,8 +659,9 @@ runner 上与 base commit 的 A/B 结果（偏移仅作为警告，不导致失�
 - **音频为每个 datagram 一帧，丢失的 packet 不予重传。** 64 kbps 下 20 ms 的 Opus frame
   约为 160 字节，最大 209 字节，而一个 datagram 可容纳 1180 字节。因此音频通道没有
   packetizer、FEC、reassembler 与 NACK，而这几乎是 video 通道的全部组成。丢失在代价最低
-  处处理：Opus 在下一帧中携带 in-band FEC，接收端让 decoder 遮盖 jitter buffer 报告的
-  缺口。重传没有意义，因为延迟 200 ms 到达的帧既无法播放，又会延后其后的十帧。
+  处处理：Opus 在下一帧中携带 in-band FEC，因此当 jitter buffer 报告单个帧丢失时，接收端
+  以 `decode_fec=1` 解码下一个 packet 来重建它，只有在 FEC 无法恢复时才让 decoder 遮盖
+  该缺口（PLC）。重传没有意义，因为延迟 200 ms 到达的帧既无法播放，又会延后其后的十帧。
   `make opus-smoke` 可在任何能够构建该库的机器上测得上述数据。
 - **jitter buffer 中不含定时器。** `AudioJitterBuffer` 仅为状态机，目标延迟即为开始播放
   前需要缓存的帧数，60 ms 对应三帧。这使整个组件可以离线测试而无需等待实际时间，也使各
@@ -630,19 +687,26 @@ runner 上与 base commit 的 A/B 结果（偏移仅作为警告，不导致失�
   QUIC connection，因此 video 通道的 keepalive 都不会到达它。在提示符处无操作时该
   connection 没有流量，会因 QUIC 的 30 秒 idle timeout 被关闭，随后 viewer 在
   `Reattaching` 状态下停止 thread 而不重连，而 shell 仍被 host 保留完整的 2 分钟。现在
-  `TerminalViewer` 按定时器发送 ack-eliciting 的 packet 并以 backoff 方式重连，复用
-  `TerminalClient::Reattach()`（该函数早已在 core 中实现并测试，只是从未被调用），从而
-  使同一个 shell 连同 scrollback 一起恢复。相关时间常量位于 core 的
-  `deskhub::KeepaliveIntervalUs` 与 `ReconnectDelayUs`：keepalive 不超过 idle timeout
-  的一半，以便承受一次 packet 丢失；重试恰好在 `kTerminalReattachGraceUs` 处停止：超过该时刻窗口报告连接丢失，但 shell 本体无时间限制地留在 host 上，可供后续显式 resume，而不是被释放。
+  keepalive 与重连位于 `HostLink`，服务所有请求 recovery 的界面：link 按定时器发送
+  ack-eliciting 的 packet 并以 backoff 方式重连，`TerminalViewer` 以
+  `kTerminalReattachGraceUs` 作为其宽限期加入，并复用 `TerminalClient::Reattach()`（该
+  函数早已在 core 中实现并测试，只是从未被调用），从而使同一个 shell 连同 scrollback
+  一起恢复。相关时间常量位于 core 的 `deskhub::KeepaliveIntervalUs` 与
+  `ReconnectDelayUs`：keepalive 在每个 idle timeout 内发送三次（最多每秒一次，至少每半个
+  timeout 一次），以便承受一次 packet 丢失；重试恰好在 `kTerminalReattachGraceUs` 处停
+  止：超过该时刻窗口报告连接丢失，但 shell 本体无时间限制地留在 host 上，可供后续显式
+  resume，而不是被释放。
 - **record 要么完整写入 stream，要么不写入；落后的 client 通过重绘同步，而非逐字节
   补发。** 所有可靠数据 —— control、auth、terminal 输出 —— 都是共用一条 QUIC stream 的
   带 length prefix 的 record，因此线上出现半条 record 会永久破坏对端的 framing；
   `RecordStream` 没有重新同步的手段，peer 只能关闭 connection。`QuicEndpoint::SendStream`
   此前写入能容纳的部分并丢弃其余，该做法在诸如 `make test` 的命令产生的输出超过链路
   能力时失效：1 MiB 的 stream 窗口被占满，一条 `TermData` record 的尾部被丢弃，viewer
-  的 framer 失败，shell 在打开一分钟后断开。现在它会拒绝 stream 无法容纳的 record，并在
-  仍然发生部分写入时关闭 connection，因为已错位的 stream 无法原地修复。在其之上，
+  的 framer 失败，shell 在打开一分钟后断开。现在它把每条 record 完整地放入按 stream 划分
+  的 outbox —— 最多 4 MiB，file stream 上为 256 KiB —— 随窗口打开逐步写出，并拒绝 outbox
+  无法容纳的 record。若 quiche 仍报告写入错误，`BreakStream` 会重置这一条 stream 并通过
+  `onStreamBroken` 报告；connection 及其另一条 stream 保持可用，因为已错位的 stream 无法
+  原地修复，但不必连累其余部分。在其之上，
   `TerminalHost` 将未发送的输出保存在按 shell 划分的队列中，并在每个 tick 重试，因此
   短时间超过链路能力的输出突发（例如一次构建的输出）仍可完整到达 client。超过
   `kMaxPendingBytes` 时队列被丢弃而非继续增长：所有字节都已进入 host 侧的 `Screen`
@@ -673,11 +737,12 @@ runner 上与 base commit 的 A/B 结果（偏移仅作为警告，不导致失�
   `third_party/quiche/` 下为每个 rust target 生成一个目录，另有共享的 `include/`，其中
   包含 quiche.h 与 boring-sys 附带的 BoringSSL 头文件。这些头文件被单独取出，因为
   Deskhub 为实现 host identity 直接调用 BoringSSL，并且需要单一的 include 路径与单一的
-  TLS 库。`DeskhubQuiche.cmake` 将其转换为 `deskhub::quiche`；缺少该库会导致 configure
-  失败。
+  TLS 库。`DeskhubQuiche.cmake` 将其转换为 `deskhub::quiche`，缺少该库时由
+  `platform/CMakeLists.txt` 使 configure 失败（除非构建以 `-DDESKHUB_QUIC=OFF` 显式放弃）；
+  opus 经由 `DeskhubOpus.cmake` 与 `-DDESKHUB_AUDIO=OFF` 获得相同处理。
 - **Apple 平台 link `libplatform_bundled.a`。** Xcode 的 app 在 CMake 之外使用 platform
   的 archive，而在该场景下，对 quiche 的 PRIVATE link 不会出现在其 link 行中。因此通过
-  一步 `libtool` 将 platform 与 quiche 合并为 `.pbxproj` 所 link 的单个 archive。
+  一步 `libtool` 将 platform、quiche 与 opus 合并为 `.pbxproj` 所 link 的单个 archive。
 - **Windows toolchain 的既有问题已解决，应保持现状。** quiche 通过
   `CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_RUSTFLAGS` 使 Rust 目标文件链接静态 CRT，并通过
   `CFLAGS_x86_64_pc_windows_msvc` 中的 `/MT` 约束 BoringSSL 的目标文件（msvc 的默认值为
@@ -735,38 +800,48 @@ runner 上与 base commit 的 A/B 结果（偏移仅作为警告，不导致失�
   路径（Developer ID、notarization、dmg），产出用户可以实际打开的版本。因此当
   `for_release` 被设置时，可复用的 workflow 会跳过其 macOS job，否则一个 tag 将额外占用
   一台 macOS runner，用于生成不会发布的 bundle。`build-mobile` 仅包含 iOS 与 Android，
-  原因与划分方式相同。
+  且没有 `for_release` 输入：`deploy` 从不调用它，因为其 `release-ios` 与
+  `release-android` job 自行通过 fastlane 构建。
 - **所有 workflow 从同一个 action 获取 quiche 与 opus，且 cache key 即为完整的约定。**
-  `.github/actions/third-party` 为 job 指定的任意 target 构建这两个库，因此原先十九份
-  相同的「先 cache 再构建」代码块缩减为每个 job 一行。其 `cache-key` 输入是防止两个 job
+  `.github/actions/third-party` 为 job 指定的任意 target 构建这两个库，因此需要它们的
+  二十五个 job 各自只需一行，而不必各带一份相同的「先 cache 再构建」代码块。其 `cache-key` 输入是防止两个 job
   相互恢复对方库的唯一手段。两组不同的 target 属于不同情形，两个构建同一 triple 的
   runner 镜像同样属于不同情形：在 ubuntu-latest 上编译、在 ubuntu-22.04 上恢复的
   `libquiche.a`，会 link 到该 release 本应避免的 glibc 版本。任何改变构建产物的因素都
   应纳入该 key。
 - **Windows 上所有 configuration 均使用同一种静态 release CRT。** cargo 以静态 release
-  CRT 构建 quiche（msvc 的默认值；不应通过 `RUSTFLAGS` 强制指定，该设置会波及
-  proc-macro 并导致 cargo 失败），整棵 CMake 树固定 `MultiThreaded` 以保持一致，这也是
+  CRT 构建 quiche —— 如上一条所述，通过按 target 的
+  `CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_RUSTFLAGS` 与 `/MT` 强制指定，绝不通过通用的
+  `RUSTFLAGS`，后者会波及 proc-macro 并导致 cargo 失败 ——整棵 CMake 树固定 `MultiThreaded` 以保持一致，这也是
   app 得以保持为不依赖 VC++ Redistributable 的单个 exe 的原因。Rust 不提供 debug CRT 的
   构建，因此 Debug 配置同样对齐：`_ITERATOR_DEBUG_LEVEL=0`、`/U_DEBUG`、移除 `/RTC1`，
   因为 release CRT 不含 `_CrtDbgReport`，也不支持 run-time check。任何不一致都会导致
   大量 LNK2038 错误。
 - **passcode 与 LAN scan 保持移除。** 4 位数字码是开放 port 上的短密钥，而明文的
-  discovery 应答会让 network 上的任何人得知 host 的存在。8.0 中没有任何东西把二者带回
-  —— QR code 是从屏幕上读取的，request 只在 TLS handshake 完成之后才写入。
+  discovery 应答会让 network 上的任何人得知 host 的存在。此后没有任何东西把二者带回
+  —— QR code 是从屏幕上读取的，request 只在 TLS handshake 完成且签名验证通过之后才写入。
 
 - **批准经由已 authenticate 的通道进行，展示的是身份而非秘密。** 2026-09-28 对批准提示
   的反对理由是，它可能被错误的人为错误的机器点击 —— passcode 提示展示的是任何人都可能
   输入的一个码。connection request 不展示任何输入的内容：设备的名称、它实际持有的 key
-  的 fingerprint（host 对通过 TLS 收到的 key 求了 hash）以及它的来源地址，而 *Approve*
+  的 fingerprint（request 只在 client 用该 key 对本 connection 的 transcript 签名之后才
+  写入，因此没有人能以另一台机器的名义提交 request）以及它的来源地址，而 *Approve*
   作用于该 fingerprint，从不作用于行的位置。没有任何东西以明文传输，也没有任何东西可以
   猜测；所有者唯一可能犯的错误是批准了一台并非预期的机器，而那一行正是为了让他们核对。
-  host 在等待期间也不保持任何 connection 打开 —— request 是文件中的一条记录，由 client
-  重新 dial —— 因此一波 request 洪水的代价是 16 行，而不是 16 个 socket。
+  host 在等待期间也不保持任何 connection 打开 —— 应答 `AwaitingApproval` 两秒后即关闭
+  connection，request 是文件中的一条记录，由 client 重新 dial —— 因此一波 request 洪水的
+  代价是 16 行，而不是 16 个 socket。每一行都需要发送方用自己的 key 签名一次，而新 key
+  的成本很低，所以限制洪水的不能是 key，而是来源地址。`AccessRequests::Add` 每个 IP 地址
+  （忽略 port）只保留一行，来自该地址的新 request 无论携带哪把 key 都会取代该行。QUIC 在
+  读取 `AuthStart` 之前已验证过 peer 地址，因此发送方无法冒用自己收不到 packet 的地址；
+  要挤掉一条真实的 request 需要 16 个地址，剩余的代价落在共用同一地址（同一 NAT）的设备
+  上，它们只能看到各自最新的那条 request。没有再额外加上按地址的速率限制：每个地址本就
+  只占一行，速率限制并不会改变该表可能丢失的内容。
 
 - **QR code 携带 host fingerprint 与一次性 token，在 `AuthStart` 之前先固定。** token
   是一个在五分钟内值得窃取的秘密，因此 client 只把它花在一台已经通过 TLS handshake
   证明自己持有码中所印 fingerprint 对应 private key 的机器上。位于码中地址处的中间人
-  无法出示该 key，于是 client 停在 `InviteMismatch`，token 永不过线。在 host 上，token
+  无法出示该 key，于是 client 以 invite 不匹配失败而停止，token 永不过线。在 host 上，token
   以常量时间比较，首次使用即消耗，5 分钟后过期，随展示它的面板一同失效，而错误的猜测
   会按 source 地址计入统计无效签名的同一限制器 —— 每分钟 3 次，随后封锁 10 秒 —— 因此
   2^256 种可能永远无法被高速尝试。
@@ -782,7 +857,8 @@ runner 上与 base commit 的 A/B 结果（偏移仅作为警告，不导致失�
   一个 *My keys* 页、导入与 passphrase 代码、一份可能与其 key 不一致的已保存 certificate，
   以及一个必须记住在哪里用哪把 client key 的 `known_hosts`。`host_key.pem` 中的一把
   ECDSA P-256 key 在 host 侧服务 TLS，在 client 侧服务 transcript 签名；TLS 坚持要求的
-  X.509 在每次启动时围绕它构建，从不写入。fingerprint 一直是 SPKI 的 SHA-256，而非
+  X.509 在每次启动时围绕它构建，从不保留 —— 只在 quiche 加载它的那一刻触及磁盘，且该
+  文件只含公开的 certificate；private key 从不离开 `host_key.pem`。fingerprint 一直是 SPKI 的 SHA-256，而非
   certificate 的，因此升级后的 host 保留了每个 client 固定下来的 fingerprint；client 的
   身份确实变了 —— 从 Ed25519 变为机器 key —— 这正是每个 client 需要重新放行一次的原因，
   用一次 Approve 或一次扫描而非粘贴。
@@ -840,6 +916,9 @@ runner 上与 base commit 的 A/B 结果（偏移仅作为警告，不导致失�
   方形；Windows、Linux 以及 API 26 之前的 Android launcher 直接显示所提供的图形，因此
   其图标已内置圆角与透明部分，否则该 app 会在一组圆角图标中显示为实心方块。
   `scripts/make-icons.py` 刻意仅使用标准库，因为 bootstrap 不安装任何图像处理工具。
+  Linux 的窗口图标来自已安装的 hicolor 主题，而从构建目录直接运行的构建没有它，因此每个
+  Linux 构建都会把 `deskhub-256.png` 复制到二进制文件旁边，当主题中没有 `deskhub` 图标时，
+  `gtk/main.cpp` 回退到该文件。
 - **桌面 client 可同时持有多个 host，手机端仅持有一个。** Windows、Linux 与 macOS 上的
   connect 页不保存任何连接状态。每个应答的 host 会获得一个连接窗口 ——
   `client/windows/win32/MainFrame.cpp` 中的 `ConnectionFrame`、

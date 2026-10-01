@@ -12,7 +12,7 @@
 [![Release](https://img.shields.io/github/v/release/manhpham90vn/Deskhub?label=release&color=2563eb)](https://github.com/manhpham90vn/Deskhub/releases)
 [![License: MIT](https://img.shields.io/github/license/manhpham90vn/Deskhub?color=2563eb)](LICENSE)
 [![C++20](https://img.shields.io/badge/C%2B%2B-20-2563eb)](CMakeLists.txt)
-[![Platforms](https://img.shields.io/badge/runs%20on-Windows%20·%20macOS%20·%20Linux%20·%20Android%20·%20iOS-2563eb)](#-対応プラットフォーム)
+[![Platforms](https://img.shields.io/badge/runs%20on-Windows%20·%20macOS%20·%20Linux%20·%20Android%20·%20iOS-2563eb)](#platforms)
 
 [![ci](https://github.com/manhpham90vn/Deskhub/actions/workflows/ci.yml/badge.svg)](https://github.com/manhpham90vn/Deskhub/actions/workflows/ci.yml)
 [![lint](https://github.com/manhpham90vn/Deskhub/actions/workflows/lint.yml/badge.svg)](https://github.com/manhpham90vn/Deskhub/actions/workflows/lint.yml)
@@ -62,19 +62,24 @@ sudo apt install deskhub       # デスクトップ app
 sudo apt install deskhub-cli   # CLI。単独でもインストール可能
 ```
 
-デスクトップパッケージはアプリケーションメニューに DeskHub を追加し、`deskhub` を
+デスクトップパッケージはアプリケーションメニューに Deskhub を追加し、`deskhub` を
 `/usr/bin` にインストールする。CLI パッケージは `deskhub-cli` を `/usr/bin` に
 インストールする。Windows の app インストーラーはスタートメニューとデスクトップに
 ショートカットを作成し、別の CLI インストーラーはユーザーの `PATH` にコマンドを
-追加する。macOS の CLI は Homebrew により `PATH` に配置される。
+追加する。winget は CLI を portable 版 exe としてインストールし、`PATH` に配置する。
+macOS の CLI は Homebrew により `PATH` に配置される。
 
 その他のプラットフォームは [Releases](https://github.com/manhpham90vn/Deskhub/releases) から：
 
 - **Windows 直接ダウンロード** —— app 用 `deskhub-v*-windows-setup.exe` と CLI 用
   `deskhub-cli-v*-windows-setup.exe`。portable 版 exe も利用可能
+- **macOS 直接ダウンロード** —— app は `deskhub-v*-macos.dmg`、CLI は `deskhub-cli-v*-macos`
+- **repository を使わない Ubuntu / Debian / Mint** —— `deskhub-v*-amd64.deb` と
+  `deskhub-cli-v*-amd64.deb`
 - **Fedora / openSUSE** —— app と CLI は別の RPM。`deskhub-v*-x86_64.rpm` と
   `deskhub-cli-v*-x86_64.rpm` を必要に応じて `dnf` または `zypper` でインストール
-- **Arch、その他の Linux** —— portable 版 `deskhub-v*-linux-x86_64` を `chmod +x` して実行
+- **Arch、その他の Linux** —— portable 版 `deskhub-v*-linux-x86_64` と
+  `deskhub-cli-v*-linux-x86_64` を `chmod +x` して実行
 - **Android** —— `deskhub-v*-android.apk`、または [Play の beta](https://play.google.com/apps/testing/com.manhpham.deskhub)
 - **iOS** —— [TestFlight](https://testflight.apple.com/join/7qY7wgpd)
 
@@ -136,7 +141,7 @@ sudo apt install deskhub-cli   # CLI。単独でもインストール可能
 
 | ⚡ 速い | 📦 簡単インストール | 🎛️ シンプル |
 | ------ | ---------- | --------- |
-| 対応するハードウェアでは 60 fps で stream できる。video 処理には、利用できる場合に GPU メモリを使う。 | package manager からインストールするか、release をダウンロードできる。アカウントも background service も不要。 | display を **Share** するか、IP アドレスへ **Connect** する。デスクトップでは **shell** の共有と**ファイル**の受信も可能。スマートフォンは view-only で画面を共有できる。 |
+| 既定は 60 fps で、対応するハードウェアでは最大 240 fps で stream できる。video 処理には、利用できる場合に GPU メモリを使う。 | package manager からインストールするか、release をダウンロードできる。アカウントも background service も不要。 | display を **Share** するか、IP アドレスへ **Connect** する。デスクトップでは **shell** も共有でき、スマートフォンを含むすべての host が**ファイル**を受信できる。スマートフォンは view-only で画面を共有する。 |
 
 Session は **QUIC/TLS** 上で end-to-end に encrypt され、アクセスは SSH と同じ仕組みで
 行われる。すべてのマシンは key を 1 つ持ち、client が受け入れられるのは、host の所有者が
@@ -153,7 +158,7 @@ threat model は [`SECURITY.ja.md`](SECURITY.ja.md) を参照。
 
 - 💻 **作業** —— 性能の低いノート PC や iPad から、自宅 PC の Claude Code、VS Code、build を実行する。
 - 🌐 **デスクトップアプリ** —— 別の端末から、パソコン上の Chrome、Office などを使う。
-- 🎮 **ゲーム** —— 60 fps、relative mouse と DirectInput scancode、`F9` による pointer lock。
+- 🎮 **ゲーム** —— 最大 240 fps、relative mouse と DirectInput scancode、`F9` による pointer lock。
 - 🖥️ **マルチ display** —— display を 1 つまたは複数共有し、それぞれが独立した session となる。
 
 <a id="platforms"></a>
@@ -166,19 +171,20 @@ threat model は [`SECURITY.ja.md`](SECURITY.ja.md) を参照。
 | **macOS** | ✅ | ✅ | 両方の役割が動作（ScreenCaptureKit + VideoToolbox + CGEvent） |
 | **Android** | ✅ | ✅ | Client: video と input（trackpad、keyboard）。Host: view-only の画面共有（MediaProjection + MediaCodec）、Android 10+ —— Google Play でテスト中 |
 | **iOS** | ✅ | ✅ | Client: video と input（trackpad、keyboard）。Host: Broadcast Upload Extension による view-only の画面共有（ReplayKit + VideoToolbox）—— TestFlight でテスト中 |
-| **Linux** | ✅ | ✅ | 両方の役割が動作（PipeWire + VA-API + uinput + GTK3）—— Ubuntu、Debian、Mint、Fedora、openSUSE、Arch に deb / rpm / portable binary で提供。2 台間の LAN で検証済み |
+| **Linux** | ✅ | ✅ | 両方の役割が動作（PipeWire + VA-API/NVENC + uinput + GTK3）—— Ubuntu、Debian、Mint、Fedora、openSUSE、Arch に deb / rpm / portable binary で提供。2 台間の LAN で検証済み |
 
 <a id="features"></a>
 
 ## ✨ 中身
 
-- **GPU を使う video 処理** —— 対応する環境では capture、encode、decode、render に各プラットフォームのハードウェアを使う。Windows の NVENC 経路では frame を CPU 経由でコピーしない。
-- **QUIC 上の専用 protocol** —— 無限 GOP と必要時の IDR、XOR FEC、adaptive bitrate を、encrypt 済みの connection 1 本に multiplex する。
-- **画面に音声が伴う** —— マシン自身の audio mix を Opus 64 kbps で送る。1 datagram につき 20 ms の frame を 1 つ。packet を 1 つ失っても損失は数十ミリ秒にとどまり、映像には影響しない。microphone は capture しない。
-- **実際の input** —— relative mouse（Raw Input）と、DirectInput ゲーム向けの scancode。host 自身の mouse と keyboard が常に優先される。
+- **GPU を使う video 処理** —— 対応する環境では capture、encode、decode、render に各プラットフォームのハードウェアを使う。Windows の NVENC 経路では frame を CPU 経由でコピーしない。Linux の host は VA-API で、NVIDIA GPU では NVENC で encode する。
+- **QUIC 上の専用 protocol** —— 無限 GOP と必要時の IDR、XOR FEC と失われた packet の再送、adaptive bitrate を、encrypt 済みの connection 1 本に multiplex する。
+- **画面に音声が伴う** —— マシン自身の audio mix を Opus 64 kbps で送る。1 datagram につき 20 ms の frame を 1 つ。失われた packet が 1 つなら通常は Opus の in-band FEC で次の packet から復元され、それより長い欠落も 1 秒に満たない音声の損失にとどまり、いずれも映像には影響しない。microphone は capture しない。
+- **画面だけではない** —— remote shell、任意の host へのファイル送信、プレーンテキストの clipboard 双方向同期、session 中のスリープ防止。
+- **実際の input** —— relative mouse（Raw Input）と、DirectInput ゲーム向けの scancode。host 自身の mouse と keyboard が常に優先される（Linux ではユーザーが `input` グループに入っている場合 —— [Install](docs/INSTALL.ja.md#host-wins) を参照）。
 - **共有された core** —— protocol、FEC、bitrate control は `core/` にあり、すべての client にコンパイルされる。
-- **command line ツール** —— `deskhub-cli` で画面を共有したり、remote shell を開いたり、スクリプトや SSH から操作したりできる。Windows と Linux ではリモート画面のウィンドウも開ける。[Build](docs/BUILD.ja.md#command-line-client) を参照。
-- **core を継続的にテスト** —— オフラインの unit test に加え、CI で ASan、UBSan、TSan を実行する。7 つの libFuzzer target が wire format、H.264 の parse、reassembly、terminal の byte stream、UI の文字列、session state machine を毎晩検査し、見つかった crash は regression test に加える。
+- **command line ツール** —— `deskhub-cli` で画面の共有、remote shell、ファイル送信、key・許可済みデバイス・信頼済み host・settings の管理を、スクリプトや SSH から行える。一覧系のコマンドは `--json` に対応する。Windows と Linux ではリモート画面のウィンドウも開ける。[Build](docs/BUILD.ja.md#command-line-client) を参照。
+- **core を継続的にテスト** —— オフラインの unit test に加え、CI で ASan、UBSan、TSan を実行する。9 つの libFuzzer target —— pull request ごとに各 30 秒、毎晩各 15 分 —— が wire format、H.264 の parse、reassembly、terminal の byte stream、UI の文字列、key と招待リンクの parse、QR の encode、session state machine を検査し、見つかった crash は regression test に加える。
 
 <a id="docs"></a>
 
@@ -205,5 +211,5 @@ threat model は [`SECURITY.ja.md`](SECURITY.ja.md) を参照。
 ## 📄 ライセンス
 
 MIT —— [`LICENSE`](LICENSE) を参照。サードパーティ製コンポーネントとその表示（Linux
-app に静的 link されている LGPL ビルドの FFmpeg を含む）は
+の app と CLI に静的 link されている LGPL ビルドの FFmpeg を含む）は
 [`THIRD_PARTY_NOTICES.ja.md`](THIRD_PARTY_NOTICES.ja.md) に一覧がある。

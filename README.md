@@ -12,7 +12,7 @@ runs natively across five platforms, and is built for responsive work and play.*
 [![Release](https://img.shields.io/github/v/release/manhpham90vn/Deskhub?label=release&color=2563eb)](https://github.com/manhpham90vn/Deskhub/releases)
 [![License: MIT](https://img.shields.io/github/license/manhpham90vn/Deskhub?color=2563eb)](LICENSE)
 [![C++20](https://img.shields.io/badge/C%2B%2B-20-2563eb)](CMakeLists.txt)
-[![Platforms](https://img.shields.io/badge/runs%20on-Windows%20·%20macOS%20·%20Linux%20·%20Android%20·%20iOS-2563eb)](#-platforms)
+[![Platforms](https://img.shields.io/badge/runs%20on-Windows%20·%20macOS%20·%20Linux%20·%20Android%20·%20iOS-2563eb)](#platforms)
 
 [![ci](https://github.com/manhpham90vn/Deskhub/actions/workflows/ci.yml/badge.svg)](https://github.com/manhpham90vn/Deskhub/actions/workflows/ci.yml)
 [![lint](https://github.com/manhpham90vn/Deskhub/actions/workflows/lint.yml/badge.svg)](https://github.com/manhpham90vn/Deskhub/actions/workflows/lint.yml)
@@ -62,18 +62,23 @@ sudo apt install deskhub       # desktop app
 sudo apt install deskhub-cli   # CLI; also works on its own
 ```
 
-The desktop package adds DeskHub to the application menu and installs `deskhub` in
+The desktop package adds Deskhub to the application menu and installs `deskhub` in
 `/usr/bin`; the CLI package installs `deskhub-cli` in `/usr/bin`. Windows setup adds
 Start Menu and Desktop shortcuts; the separate CLI setup adds its command to the user
-`PATH`. Homebrew places the macOS CLI on `PATH`.
+`PATH`, and winget installs the CLI as a portable exe on `PATH`. Homebrew places the macOS
+CLI on `PATH`.
 
 Everything else is on [Releases](https://github.com/manhpham90vn/Deskhub/releases):
 
 - **Windows downloads** — app setup `deskhub-v*-windows-setup.exe` and CLI setup
   `deskhub-cli-v*-windows-setup.exe`; portable exe files are also available
+- **macOS downloads** — the app as `deskhub-v*-macos.dmg`, the CLI as `deskhub-cli-v*-macos`
+- **Ubuntu / Debian / Mint without the repository** — `deskhub-v*-amd64.deb` and
+  `deskhub-cli-v*-amd64.deb`
 - **Fedora / openSUSE** — separate app and CLI RPMs: install
   `deskhub-v*-x86_64.rpm` or `deskhub-cli-v*-x86_64.rpm` with `dnf` or `zypper`
-- **Arch, other Linux** — portable `deskhub-v*-linux-x86_64`, just `chmod +x` and run
+- **Arch, other Linux** — portable `deskhub-v*-linux-x86_64` and
+  `deskhub-cli-v*-linux-x86_64`, just `chmod +x` and run
 - **Android** — `deskhub-v*-android.apk`, or the [Play beta](https://play.google.com/apps/testing/com.manhpham.deskhub)
 - **iOS** — [TestFlight](https://testflight.apple.com/join/7qY7wgpd)
 
@@ -135,7 +140,7 @@ so the controls stay familiar as you move between a Mac, PC, phone or tablet. A 
 
 | ⚡ Fast | 📦 Easy install | 🎛️ Simple |
 | ------ | ---------- | --------- |
-| Streams at 60 fps on supported hardware. The video path uses GPU memory where available. | Install with a package manager or download a release. No account or background service is required. | **Share** a display or **Connect** to an IP. Desktops can also share a **shell** and receive **files**. Phones can share their screens in view-only mode. |
+| Streams at 60 fps by default, up to 240 fps on supported hardware. The video path uses GPU memory where available. | Install with a package manager or download a release. No account or background service is required. | **Share** a display or **Connect** to an IP. Desktops can also share a **shell**, and every host — phones included — can receive **files**. Phones share their screens in view-only mode. |
 
 Sessions are encrypted end to end over **QUIC/TLS**, and access works like SSH: every
 machine has one key, and a client gets in only if the host's owner has let that key in —
@@ -151,7 +156,7 @@ no discovery, no switch that lets strangers in. Use a network you trust or a VPN
 
 - 💻 **Work** — run Claude Code, VS Code, or builds on your home PC from a weak laptop or an iPad at a café.
 - 🌐 **Desktop apps** — use Chrome, Office, or software that only runs on your computer from another device.
-- 🎮 **Games** — 60 fps, relative mouse + DirectInput scancodes, `F9` pointer lock.
+- 🎮 **Games** — up to 240 fps, relative mouse + DirectInput scancodes, `F9` pointer lock.
 - 🖥️ **Multi-monitor** — share one or several displays, each as its own session.
 
 <a id="platforms"></a>
@@ -164,19 +169,20 @@ no discovery, no switch that lets strangers in. Use a network you trust or a VPN
 | **macOS** | ✅ | ✅ | Both roles working (ScreenCaptureKit + VideoToolbox + CGEvent) |
 | **Android** | ✅ | ✅ | Client: video + input (trackpad, keyboard). Host: view-only screen share (MediaProjection + MediaCodec), Android 10+ — testing on Google Play |
 | **iOS** | ✅ | ✅ | Client: video + input (trackpad, keyboard). Host: view-only screen share via a Broadcast Upload Extension (ReplayKit + VideoToolbox) — testing via TestFlight |
-| **Linux** | ✅ | ✅ | Both roles working (PipeWire + VA-API + uinput + GTK3) — Ubuntu, Debian, Mint, Fedora, openSUSE, Arch via deb / rpm / portable binary; verified between two machines over LAN |
+| **Linux** | ✅ | ✅ | Both roles working (PipeWire + VA-API/NVENC + uinput + GTK3) — Ubuntu, Debian, Mint, Fedora, openSUSE, Arch via deb / rpm / portable binary; verified between two machines over LAN |
 
 <a id="features"></a>
 
 ## ✨ What's inside
 
-- **GPU video path** — capture, encode, decode and render use platform hardware where available; the Windows NVENC path avoids copying frames through the CPU.
-- **Purpose-built protocol over QUIC** — infinite GOP + on-demand IDR, XOR FEC, adaptive bitrate, all multiplexed on one encrypted connection.
-- **Sound comes with the screen** — the machine's own audio mix, Opus at 64 kbps, one 20 ms frame per datagram; a lost packet costs a fraction of a second and never disturbs the picture. Never a microphone.
-- **Real input** — relative mouse (Raw Input) + scancodes for DirectInput games; host's own mouse/keyboard always wins.
+- **GPU video path** — capture, encode, decode and render use platform hardware where available; the Windows NVENC path avoids copying frames through the CPU, and a Linux host encodes through VA-API or, on NVIDIA GPUs, NVENC.
+- **Purpose-built protocol over QUIC** — infinite GOP + on-demand IDR, XOR FEC plus retransmission of lost packets, adaptive bitrate, all multiplexed on one encrypted connection.
+- **Sound comes with the screen** — the machine's own audio mix, Opus at 64 kbps, one 20 ms frame per datagram; a single lost packet is usually rebuilt from the next one through Opus's in-band FEC, a longer gap costs a fraction of a second, and neither ever disturbs the picture. Never a microphone.
+- **More than a screen** — a remote shell, files sent to any host, plain-text clipboard sync in both directions, and keep-awake while a session is open.
+- **Real input** — relative mouse (Raw Input) + scancodes for DirectInput games; host's own mouse/keyboard always wins (on Linux, once the user is in the `input` group — see [Install](docs/INSTALL.md#host-wins)).
 - **One shared core** — protocol, FEC, and bitrate control live in `core/`, compiled into every client.
-- **Command-line tools** — `deskhub-cli` can share a screen, open a remote shell and run from a script or over SSH. On Windows and Linux, it can also open a remote-screen window. See [Build](docs/BUILD.md#the-command-line-client).
-- **Tested across the core** — offline unit tests, sanitizer runs in CI and seven nightly libFuzzer targets cover the wire format, H.264 parsing, reassembly, terminal bytes, UI text and session state machines. Crashes found by fuzzing become regression tests.
+- **Command-line tools** — `deskhub-cli` can share a screen, open a remote shell, send files, and manage keys, allowed devices, trusted hosts and settings, from a script or over SSH; listings take `--json`. On Windows and Linux, it can also open a remote-screen window. See [Build](docs/BUILD.md#the-command-line-client).
+- **Tested across the core** — offline unit tests, sanitizer runs in CI and nine libFuzzer targets — 30 seconds each on every pull request, 15 minutes each nightly — cover the wire format, H.264 parsing, reassembly, terminal bytes, UI text, key and invite parsing, QR encoding and session state machines. Crashes found by fuzzing become regression tests.
 
 <a id="docs"></a>
 
@@ -204,5 +210,5 @@ device model.
 ## 📄 License
 
 MIT — see [`LICENSE`](LICENSE). Third-party components and their notices (including the
-statically linked LGPL build of FFmpeg in the Linux app) are listed in
+statically linked LGPL build of FFmpeg in the Linux app and CLI) are listed in
 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).

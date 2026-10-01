@@ -12,7 +12,7 @@
 [![Release](https://img.shields.io/github/v/release/manhpham90vn/Deskhub?label=release&color=2563eb)](https://github.com/manhpham90vn/Deskhub/releases)
 [![License: MIT](https://img.shields.io/github/license/manhpham90vn/Deskhub?color=2563eb)](LICENSE)
 [![C++20](https://img.shields.io/badge/C%2B%2B-20-2563eb)](CMakeLists.txt)
-[![Platforms](https://img.shields.io/badge/runs%20on-Windows%20·%20macOS%20·%20Linux%20·%20Android%20·%20iOS-2563eb)](#-平台)
+[![Platforms](https://img.shields.io/badge/runs%20on-Windows%20·%20macOS%20·%20Linux%20·%20Android%20·%20iOS-2563eb)](#platforms)
 
 [![ci](https://github.com/manhpham90vn/Deskhub/actions/workflows/ci.yml/badge.svg)](https://github.com/manhpham90vn/Deskhub/actions/workflows/ci.yml)
 [![lint](https://github.com/manhpham90vn/Deskhub/actions/workflows/lint.yml/badge.svg)](https://github.com/manhpham90vn/Deskhub/actions/workflows/lint.yml)
@@ -62,17 +62,22 @@ sudo apt install deskhub       # 桌面应用
 sudo apt install deskhub-cli   # CLI；也可以单独安装
 ```
 
-桌面软件包会在应用菜单添加 DeskHub，并将 `deskhub` 安装到 `/usr/bin`；CLI 软件包将
+桌面软件包会在应用菜单添加 Deskhub，并将 `deskhub` 安装到 `/usr/bin`；CLI 软件包将
 `deskhub-cli` 安装到 `/usr/bin`。Windows 的应用安装程序创建开始菜单和桌面快捷方式；
-独立的 CLI 安装程序将命令加入用户 `PATH`。Homebrew 会将 macOS CLI 加入 `PATH`。
+独立的 CLI 安装程序将命令加入用户 `PATH`，而 winget 以便携版 exe 的形式安装 CLI 并放入
+`PATH`。Homebrew 会将 macOS CLI 加入 `PATH`。
 
 其余平台请从 [Releases](https://github.com/manhpham90vn/Deskhub/releases) 获取：
 
 - **Windows 下载版** —— 应用安装程序 `deskhub-v*-windows-setup.exe` 与 CLI 安装程序
   `deskhub-cli-v*-windows-setup.exe`；也提供便携版 exe
+- **macOS 下载版** —— 应用为 `deskhub-v*-macos.dmg`，CLI 为 `deskhub-cli-v*-macos`
+- **不使用 repository 的 Ubuntu / Debian / Mint** —— `deskhub-v*-amd64.deb` 与
+  `deskhub-cli-v*-amd64.deb`
 - **Fedora / openSUSE** —— 应用与 CLI 使用独立 RPM：按需使用 `dnf` 或 `zypper`
   安装 `deskhub-v*-x86_64.rpm`、`deskhub-cli-v*-x86_64.rpm`
-- **Arch 及其他 Linux** —— 免安装的 `deskhub-v*-linux-x86_64`，`chmod +x` 后运行
+- **Arch 及其他 Linux** —— 免安装的 `deskhub-v*-linux-x86_64` 与
+  `deskhub-cli-v*-linux-x86_64`，`chmod +x` 后运行
 - **Android** —— `deskhub-v*-android.apk`，或 [Play beta](https://play.google.com/apps/testing/com.manhpham.deskhub)
 - **iOS** —— [TestFlight](https://testflight.apple.com/join/7qY7wgpd)
 
@@ -133,7 +138,7 @@ sudo apt install deskhub-cli   # CLI；也可以单独安装
 
 | ⚡ 快 | 📦 安装方便 | 🎛️ 简单 |
 | ------ | ---------- | --------- |
-| 在适用的硬件上可按 60 fps stream。video 处理会在可用时使用 GPU 内存。 | 可通过 package manager 安装，也可下载 release。无需账号或 background service。 | **Share** 一块 display，或 **Connect** 到一个 IP。桌面端还可共享 **shell** 并接收**文件**；手机可用 view-only 模式共享屏幕。 |
+| 默认以 60 fps stream，在适用的硬件上最高可达 240 fps。video 处理会在可用时使用 GPU 内存。 | 可通过 package manager 安装，也可下载 release。无需账号或 background service。 | **Share** 一块 display，或 **Connect** 到一个 IP。桌面端还可共享 **shell**，并且每个 host —— 包括手机 —— 都能接收**文件**；手机以 view-only 模式共享屏幕。 |
 
 Session 在 **QUIC/TLS** 上以 end-to-end 方式 encrypt，访问方式与 SSH 相同：每台机器只有
 一把 key，client 只有在 host 的所有者放行了这把 key 之后才能接入——批准它的 connection
@@ -149,7 +154,7 @@ passcode，没有 discovery，也没有任何放陌生人进来的开关。请�
 
 - 💻 **工作** —— 用配置较低的笔记本或 iPad，运行家中 PC 上的 Claude Code、VS Code 或 build。
 - 🌐 **桌面应用** —— 从另一台设备使用电脑上的 Chrome、Office 或其他桌面软件。
-- 🎮 **游戏** —— 60 fps，relative mouse 与 DirectInput scancode，`F9` 触发 pointer lock。
+- 🎮 **游戏** —— 最高 240 fps，relative mouse 与 DirectInput scancode，`F9` 触发 pointer lock。
 - 🖥️ **多 display** —— 共享一块或多块 display，每块各自构成一个 session。
 
 <a id="platforms"></a>
@@ -162,19 +167,20 @@ passcode，没有 discovery，也没有任何放陌生人进来的开关。请�
 | **macOS** | ✅ | ✅ | 两个角色均可运行（ScreenCaptureKit + VideoToolbox + CGEvent） |
 | **Android** | ✅ | ✅ | Client：video 与 input（trackpad、keyboard）。Host：view-only 屏幕共享（MediaProjection + MediaCodec），Android 10+ —— 正在 Google Play 上测试 |
 | **iOS** | ✅ | ✅ | Client：video 与 input（trackpad、keyboard）。Host：通过 Broadcast Upload Extension 实现 view-only 屏幕共享（ReplayKit + VideoToolbox）—— 正在 TestFlight 上测试 |
-| **Linux** | ✅ | ✅ | 两个角色均可运行（PipeWire + VA-API + uinput + GTK3）—— 支持 Ubuntu、Debian、Mint、Fedora、openSUSE、Arch，通过 deb / rpm / 免安装 binary 提供；已在两台机器间通过 LAN 验证 |
+| **Linux** | ✅ | ✅ | 两个角色均可运行（PipeWire + VA-API/NVENC + uinput + GTK3）—— 支持 Ubuntu、Debian、Mint、Fedora、openSUSE、Arch，通过 deb / rpm / 免安装 binary 提供；已在两台机器间通过 LAN 验证 |
 
 <a id="features"></a>
 
 ## ✨ 里面有什么
 
-- **GPU video 路径** —— capture、encode、decode 和 render 会在可用时使用平台硬件；Windows 的 NVENC 路径避免让 frame 经由 CPU 复制。
-- **基于 QUIC 的专用 protocol** —— 无限 GOP 配合按需 IDR、XOR FEC、adaptive bitrate，全部 multiplex 在一条已 encrypt 的 connection 上。
-- **画面附带声音** —— 机器自身的 audio mix，Opus 64 kbps，每个 datagram 承载一个 20 ms frame。丢失一个 packet 仅损失零点几秒，且不影响画面。不会 capture microphone。
-- **真实 input** —— relative mouse（Raw Input）以及面向 DirectInput 游戏的 scancode。host 本机的 mouse 和 keyboard 始终优先。
+- **GPU video 路径** —— capture、encode、decode 和 render 会在可用时使用平台硬件；Windows 的 NVENC 路径避免让 frame 经由 CPU 复制，Linux host 则通过 VA-API 编码，在 NVIDIA GPU 上改用 NVENC。
+- **基于 QUIC 的专用 protocol** —— 无限 GOP 配合按需 IDR、XOR FEC 加丢失 packet 的重传、adaptive bitrate，全部 multiplex 在一条已 encrypt 的 connection 上。
+- **画面附带声音** —— 机器自身的 audio mix，Opus 64 kbps，每个 datagram 承载一个 20 ms frame。单个丢失的 packet 通常可通过 Opus 的 in-band FEC 由下一个 packet 恢复，更长的中断损失零点几秒，两者都不影响画面。不会 capture microphone。
+- **不止是屏幕** —— remote shell、向任意 host 发送文件、双向同步纯文本 clipboard，以及在 session 期间保持唤醒。
+- **真实 input** —— relative mouse（Raw Input）以及面向 DirectInput 游戏的 scancode。host 本机的 mouse 和 keyboard 始终优先（在 Linux 上需要用户加入 `input` 组 —— 见 [Install](docs/INSTALL.zh.md#host-wins)）。
 - **共享的 core** —— protocol、FEC 和 bitrate control 位于 `core/`，编译进每一个 client。
-- **command line 工具** —— `deskhub-cli` 可共享屏幕、打开 remote shell，也可从脚本或 SSH 使用。在 Windows 和 Linux 上，它还能打开远程屏幕窗口。见 [Build](docs/BUILD.zh.md#command-line-client)。
-- **覆盖核心功能的测试** —— core 有离线 unit test，CI 运行 ASan、UBSan 和 TSan。七个 libFuzzer target 每晚检查 wire format、H.264 parse、reassembly、terminal 的 byte stream、UI 文案和 session state machine。发现的 crash 会加入 regression test。
+- **command line 工具** —— `deskhub-cli` 可共享屏幕、打开 remote shell、发送文件，并管理 key、允许的设备、受信任的 host 和 settings，可从脚本或 SSH 使用；列表类命令支持 `--json`。在 Windows 和 Linux 上，它还能打开远程屏幕窗口。见 [Build](docs/BUILD.zh.md#command-line-client)。
+- **覆盖核心功能的测试** —— core 有离线 unit test，CI 运行 ASan、UBSan 和 TSan。九个 libFuzzer target —— 每个 pull request 上各运行 30 秒，每晚各运行 15 分钟 —— 检查 wire format、H.264 parse、reassembly、terminal 的 byte stream、UI 文案、key 与邀请链接的 parse、QR 编码和 session state machine。发现的 crash 会加入 regression test。
 
 <a id="docs"></a>
 
@@ -199,6 +205,6 @@ passcode，没有 discovery，也没有任何放陌生人进来的开关。请�
 
 ## 📄 许可证
 
-MIT —— 见 [`LICENSE`](LICENSE)。第三方组件及其声明（包括 Linux app 中静态 link 的 LGPL
-版 FFmpeg）列于
+MIT —— 见 [`LICENSE`](LICENSE)。第三方组件及其声明（包括 Linux app 与 CLI 中静态 link 的
+LGPL 版 FFmpeg）列于
 [`THIRD_PARTY_NOTICES.zh.md`](THIRD_PARTY_NOTICES.zh.md)。

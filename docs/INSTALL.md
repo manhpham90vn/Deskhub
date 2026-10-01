@@ -15,13 +15,14 @@ mobile beta through TestFlight or Google Play.
 | 🍎 macOS | `deskhub-v*-macos.dmg` | Open the dmg and drag Deskhub into Applications |
 | 🐧 Ubuntu, Kubuntu, Debian, Mint | `deskhub-v*-amd64.deb` | `sudo apt install ./deskhub-v*-amd64.deb` |
 | 🐧 Fedora (Workstation & KDE spin) | `deskhub-v*-x86_64.rpm` | `sudo dnf install ./deskhub-v*-x86_64.rpm` |
-| 🐧 openSUSE | `deskhub-v*-x86_64.rpm` | `sudo zypper install ./deskhub-v*-x86_64.rpm` |
+| 🐧 openSUSE Tumbleweed | `deskhub-v*-x86_64.rpm` | `sudo zypper install ./deskhub-v*-x86_64.rpm` |
 | 🐧 Arch and other Linux distributions | `deskhub-v*-linux-x86_64` | `chmod +x deskhub-v*-linux-x86_64 && ./deskhub-v*-linux-x86_64` |
 | 🤖 Android | `deskhub-v*-android.apk` | Install the apk, or join the Play beta |
 | 📱 iOS | — | [TestFlight](https://testflight.apple.com/join/7qY7wgpd) |
 
 There is also `deskhub-cli` for terminal commands and scripts. On Windows and Linux it
-can open a window to display a remote screen. See [Command line](#-command-line).
+can open a window to display a remote screen (on Linux an X11 window, so a Wayland desktop
+needs XWayland). See [Command line](#-command-line).
 
 You can also install through `winget` on Windows, Homebrew on macOS, or the
 [apt repository](#-linux) on Ubuntu, Kubuntu, Debian and Mint. Use the package manager's
@@ -47,17 +48,22 @@ If you installed the earlier portable winget package, run
 `winget uninstall ManhPham.Deskhub` once, then install it again. Your settings and keys
 in `%USERPROFILE%\.deskhub` are kept.
 
-Two things happen the first time you use it:
+Two things to expect:
 
-- **Administrator, once at startup.** Injecting mouse and keyboard into elevated windows
-  is not possible without it.
+- **Administrator, every time it starts.** Windows shows a UAC prompt on each launch,
+  because injecting mouse and keyboard into elevated windows is not possible without it.
+  With *Start Deskhub when you log in* turned on, it starts at sign-in as an elevated
+  logon task, without the prompt.
 - **A Windows Firewall rule**, added by the app itself the first time you share.
 
 Uninstall DeskHub from Windows Settings or with `winget uninstall ManhPham.Deskhub`.
 For the portable version, delete its exe. Settings and keys remain in
-`%USERPROFILE%\.deskhub` until you remove that folder too.
+`%USERPROFILE%\.deskhub` until you remove that folder too, and files other machines sent
+you stay in `%USERPROFILE%\Deskhub` (or the folder you picked) until you delete them.
 
 ## 🍎 macOS
+
+Deskhub needs macOS 14 Sonoma or later.
 
 Download `deskhub-v*-macos.dmg`, open it, drag the app into *Applications*. The dmg is
 signed with a Developer ID and notarized by Apple, so it opens without a Gatekeeper
@@ -78,7 +84,13 @@ System Settings pane:
 | **Screen Recording** | Capturing this Mac's display |
 | **Accessibility** | Letting a viewer move this Mac's mouse and keyboard |
 
-Viewing another machine needs neither.
+Viewing another machine needs neither. After you turn Screen Recording on in System
+Settings, quit and reopen Deskhub — macOS applies it only to a fresh launch, and the
+Settings page reminds you.
+
+Two more prompts come from macOS itself: **Local Network** access, which Deskhub needs to
+reach the other machine whether it is sharing or connecting, and permission to show
+**notifications**, asked the first time there is a connection request to announce.
 
 ## 🐧 Linux
 
@@ -88,14 +100,16 @@ provide the desktop libraries the app uses, including GTK3, PipeWire and libva.
 
 The deb and the rpm carry identical content — pick the one your package manager
 understands. Both ship the `/dev/uinput` udev rule described in requirement 3 below, so
-remote input works right after install, with no group change and no re-login. The
-portable binary runs on any x86_64 distro with glibc 2.35+ (Ubuntu 22.04, Fedora 36,
-openSUSE 15.5, any current Arch).
+remote input works right after install, with no group change and no re-login. Every Linux
+build — deb, rpm and portable — needs x86_64 with glibc 2.35+ (Ubuntu 22.04, Debian 12,
+Fedora 36, openSUSE Tumbleweed, any current Arch). openSUSE Leap 15.5 ships glibc 2.31 and
+cannot run it.
 
 The CLI has separate deb and rpm packages. Install `deskhub-cli` only if you need the
-terminal commands; it can be installed alongside the desktop app or on its own. Both
-packages place their commands in `/usr/bin`, and the desktop app adds a launcher to the
-application menu.
+terminal commands; it can be installed on its own, or alongside a desktop app of the same
+version or newer — upgrade both together, since the package manager will not keep an
+older `deskhub` next to a newer `deskhub-cli`. Both packages place their commands in
+`/usr/bin`, and the desktop app adds a launcher to the application menu.
 
 On Ubuntu, Kubuntu, Debian and Mint, the Deskhub apt repository installs the same deb and
 lets `sudo apt upgrade` bring every later release. It serves Ubuntu 22.04 and newer, and
@@ -118,8 +132,9 @@ older `deskhub` package that included the CLI, install `deskhub-cli` to keep tha
 
 Deskhub always captures through `xdg-desktop-portal` — it is what shows the "which screen
 to share?" dialog. Your choice there is remembered, so the dialog appears only the first
-time you share; *Choose screens again* on the Host page brings it back when you want a
-different screen.
+time you share. When you tick a screen on the Host page that the remembered choice does
+not cover, Deskhub forgets it and the dialog comes back on its own. To drop the choice by
+hand, run `deskhub-cli displays --forget`.
 
 GNOME and KDE ship their portal backend out of the box on every major distro — **nothing
 to do** on Ubuntu, Kubuntu, Fedora Workstation, Fedora KDE, openSUSE or Arch with
@@ -136,28 +151,36 @@ GNOME/KDE they ship no portal backend of their own, and `-wlr` is the backend th
 implements screen capture for all of them. Hyprland has its own
 `xdg-desktop-portal-hyprland`.
 
-### 2. A VA-API driver
+### 2. A hardware H.264 encoder
 
-H.264 is encoded on the GPU; there is no software fallback.
+H.264 is encoded on the GPU; there is no software fallback. Which encoder a host uses
+depends on the GPU that draws the desktop:
+
+- **NVIDIA with the proprietary driver** — NVENC, through the driver's own libraries, as
+  long as the driver supports NVENC API 13.0 or newer. There is nothing more to install,
+  and `vainfo` may list no H.264 encoder on such a machine without stopping it from
+  hosting. `nvidia-vaapi-driver` and `libva-nvidia-driver` only decode: they speed up
+  viewing, not sharing.
+- **AMD, Intel and everything else** — VA-API, which needs a driver with an H.264 encoder:
 
 ```bash
 # Ubuntu / Debian / Mint
-sudo apt install va-driver-all vainfo        # NVIDIA also needs: nvidia-vaapi-driver
+sudo apt install va-driver-all vainfo        # NVIDIA, decoding only: nvidia-vaapi-driver
 
 # Fedora — stock Mesa has H.264 disabled; the working drivers live in RPM Fusion:
 sudo dnf install libva-utils
 sudo dnf install mesa-va-drivers-freeworld   # AMD (RPM Fusion)
 sudo dnf install intel-media-driver          # Intel (RPM Fusion)
-sudo dnf install nvidia-vaapi-driver         # NVIDIA (RPM Fusion)
+sudo dnf install nvidia-vaapi-driver         # NVIDIA, decoding only (RPM Fusion)
 
 # openSUSE
 sudo zypper install libva-utils              # plus your GPU vendor's VA-API driver
 
 # Arch
 sudo pacman -S libva-utils
-sudo pacman -S libva-mesa-driver             # AMD · Intel: intel-media-driver · NVIDIA: libva-nvidia-driver
+sudo pacman -S libva-mesa-driver             # AMD · Intel: intel-media-driver · NVIDIA, decoding only: libva-nvidia-driver
 
-# then on every distro:
+# then, on AMD or Intel:
 vainfo | grep -E 'H264.*Enc'                 # must print ≥1 line, or this machine cannot host
 ```
 
@@ -173,10 +196,30 @@ curl -fsSL https://raw.githubusercontent.com/manhpham90vn/Deskhub/main/scripts/s
 
 Prefer reading before piping to sudo? Download
 [`scripts/setup-uinput.sh`](../scripts/setup-uinput.sh) first — it is a dozen lines. From
-a source checkout the same thing is `make setup-linux-permissions`.
+a source checkout the same thing is `make setup-linux-permissions`. Besides the rule, the
+script adds the user who ran it with sudo to the `input` group, which takes effect at the
+next login: an SSH or headless session needs it to reach `/dev/uinput`, and it also turns
+on host wins (below).
 
 Without the uinput grant the app still runs and can still view — it just cannot inject
 mouse or keyboard into this machine.
+
+<a id="host-wins"></a>
+
+### Letting the person at the machine win
+
+While you use this machine's own mouse or keyboard, Deskhub pauses remote input ("host
+wins"). To notice you, it reads `/dev/input/event*`, which only members of the `input`
+group can do — and the deb and the rpm do not add anyone to it. Without it, sharing and
+remote input still work, but a viewer's input is not paused while you type. To turn it
+on:
+
+```bash
+sudo usermod -aG input "$USER"               # then log out and back in
+```
+
+Membership in `input` lets every program you run read every keyboard and mouse on the
+machine, not only Deskhub, so leave it off where that matters more than host wins.
 
 ### Firewall
 
@@ -190,21 +233,30 @@ sudo firewall-cmd --add-port=47777/udp --permanent        # Fedora / openSUSE
 ### Uninstall
 
 ```bash
-sudo apt remove deskhub      # or: sudo dnf remove deskhub / sudo zypper remove deskhub
+sudo apt remove deskhub deskhub-cli   # whichever you installed; or dnf remove / zypper remove
 rm -rf ~/.deskhub            # settings, keys, allowed clients and trusted hosts
 sudo rm -f /etc/apt/sources.list.d/deskhub.list /etc/apt/keyrings/deskhub.gpg   # the apt repository, if you added it
 ```
 
-The portable binary is a single file — delete it.
+Files other machines sent you stay in `~/Deskhub` (or the folder you picked) until you
+delete them. The portable binary is a single file — delete it. `setup-uinput.sh` leaves
+its udev rule, its module-load file and your `input` group membership behind; remove them
+by hand if nothing else needs them:
+
+```bash
+sudo rm -f /etc/udev/rules.d/60-deskhub-uinput.rules /etc/modules-load.d/deskhub.conf
+sudo gpasswd -d "$USER" input
+```
 
 ## 🤖 Android
 
-Hosting is a view-only screen share and needs **Android 10+**. Viewing works on older
-releases.
+Deskhub needs **Android 8.0** or later. Hosting is a view-only screen share and needs
+**Android 10+**.
 
 **Direct apk** — download `deskhub-v*-android.apk` from
-[Releases](https://github.com/manhpham90vn/Deskhub/releases) and install it. It is signed
-with the same key as the Google Play build.
+[Releases](https://github.com/manhpham90vn/Deskhub/releases) and install it. If Android
+refuses to install it over a copy from Google Play, or the other way round, uninstall the
+other copy first — that removes its key, so hosts have to let the device in again.
 
 **Play beta** — three steps, all with the **same Google account** as your phone's Play
 Store:
@@ -214,11 +266,13 @@ Store:
 3. Install (give Play a few minutes to sync): [play.google.com/store/apps/details?id=com.manhpham.deskhub](https://play.google.com/store/apps/details?id=com.manhpham.deskhub)
 
 Please keep the beta installed **14+ days** — Google requires that before the app can go
-public.
+public. The Play beta can trail the apk on Releases: each release reaches Google Play's
+internal track first and the beta only when it is promoted.
 
 ## 📱 iOS
 
-An ipa cannot be sideloaded, so the beta runs through TestFlight:
+Deskhub needs iOS or iPadOS 17 or later. An ipa cannot be sideloaded, so the beta runs
+through TestFlight:
 
 1. Install [TestFlight](https://apps.apple.com/app/testflight/id899247664).
 2. Join the beta: **[testflight.apple.com/join/7qY7wgpd](https://testflight.apple.com/join/7qY7wgpd)**
@@ -232,7 +286,8 @@ into the device it runs on.
 
 `deskhub-cli` provides commands for sharing a screen, opening a remote shell and
 connecting from a script or over SSH. On Windows and Linux, `connect` opens a window for
-the remote screen; on macOS, use the desktop app to watch a screen. Run `deskhub-cli help`
+the remote screen — an X11 window on Linux, which a Wayland desktop shows through
+XWayland; on macOS, use the desktop app to watch a screen. Run `deskhub-cli help`
 for the command list. The CLI and app use the same settings, machine key, allowed clients,
 connection requests and trusted hosts.
 
@@ -254,9 +309,13 @@ signed or notarized like the dmg, so its first run may need
 
 The Windows setup package adds the CLI to your user `PATH` without requiring an administrator.
 The separate `deskhub-cli-v*-windows.exe` remains available for portable use.
+Every installer and package carries `THIRD_PARTY_NOTICES.md` and the licence texts of the
+libraries inside it; the portable binaries cannot, so each release also offers
+`deskhub-v*-licenses.zip` with `LICENSE`, `THIRD_PARTY_NOTICES.md` and every licence text.
 Package managers also put the command on `PATH`:
-`winget install ManhPham.DeskhubCLI` on Windows, `brew install manhpham90vn/tap/deskhub-cli`
-on macOS — Homebrew installs it without the quarantine flag. On Ubuntu or Debian, run
+`winget install ManhPham.DeskhubCLI` on Windows (winget installs the portable exe, not the
+setup package), `brew install manhpham90vn/tap/deskhub-cli` on macOS — Homebrew installs it
+without the quarantine flag. On Ubuntu or Debian, run
 `sudo apt install deskhub-cli` after adding the DeskHub apt repository above.
 
 On Windows, open a new PowerShell window after the winget install and run
@@ -292,9 +351,9 @@ list, and you only need one of them:
 
 Connecting by address the first time shows a **New host** dialog with the host's key
 fingerprint: compare it with the one under **This machine** on the host's Devices page, then
-press *Trust and connect*. A QR code skips that dialog, because it carries the
-fingerprint. From then on the host is under **Trusted hosts**, and stays trusted even when
-its address changes.
+press *Trust and connect*. Scanning a QR code in the app skips that dialog, because the
+code carries the fingerprint. From then on the host is under **Trusted hosts**, and stays
+trusted even when its address changes.
 
 [Keys and access](#-keys-and-access) walks through each way in the app and the CLI,
 along with scripts and revoking.
@@ -349,7 +408,10 @@ one-time token that lasts five minutes.
 - On a phone or tablet, open the Client page and press **Scan QR code**. The first time,
   the system asks for camera permission; Deskhub uses the camera only here, decodes the
   frames on the device and stores nothing. Opening a `deskhub://pair/…` link with the
-  system camera or from a message does the same.
+  system camera or from a message works too, but because such a link can come from
+  anywhere, the app first shows the **New host** dialog with the fingerprint from the
+  link when that host is not trusted yet, and connects only once you compare it and press
+  *Trust and connect*; a host you already trust connects straight away.
 - On any device, including a desktop, copy the link shown under the code and paste it
   into the address field, then press *Connect* (CLI: `deskhub-cli connect 'deskhub://pair/…'`;
   `sources`, `shell` and `send` take the link too).
@@ -476,7 +538,12 @@ there. Trust it only if you know why. The old host stays under **Trusted hosts**
 
 ### Coming from an older Deskhub
 
-**From 7.0.x.** Both machines need 8.0 — a 7.0.x Deskhub on either side cannot connect and
+**From 8.0.0.** 9.0 speaks a newer authentication version than 8.0.0, so an
+8.0.0 Deskhub on either side cannot connect and is refused with "That machine uses an
+incompatible authentication version". Update both machines; nothing else changes — keys,
+allowed devices and trusted hosts all carry over.
+
+**From 7.0.x.** Both machines need 9.0 — a 7.0.x Deskhub on either side cannot connect and
 is refused with "That machine uses an incompatible authentication version". Each machine
 keeps the key and fingerprint it already had, so hosts you trusted stay trusted. What
 changes is the key a device signs in *with*: it is now that same machine key, so every
@@ -506,8 +573,12 @@ not carried over: let each device in and trust each host again, as described abo
   that address; see [Revoking a device](#revoking-a-device).
 - **"That machine uses an incompatible authentication version"** — one side runs an older
   Deskhub; update both machines. See [Coming from an older Deskhub](#coming-from-an-older-deskhub).
-- **Linux: sharing fails immediately** — run `vainfo | grep -E 'H264.*Enc'`; an empty
-  result means this machine has no usable H.264 encoder and cannot host.
+- **Linux: sharing fails immediately** — on AMD or Intel, run
+  `vainfo | grep -E 'H264.*Enc'`; an empty result means this machine has no usable H.264
+  encoder and cannot host. On NVIDIA, the log in `~/.deskhub` says whether the driver's
+  NVENC is too old.
+- **Linux: a viewer keeps control while you type** — your user is not in the `input`
+  group; see [Letting the person at the machine win](#host-wins).
 - **Linux: the pointer doesn't move** — the `/dev/uinput` rule from requirement 3 is
   missing.
 - **macOS: a black screen or dead input** — check Screen Recording and Accessibility on

@@ -28,21 +28,29 @@ client/     OS ごとの app: windows、linux、macos、ios、android（platform
 | Layer | 内容 |
 | --- | --- |
 | `core/protocol` | Wire format（`Wire.h`）、stream の record framing（`RecordStream.h`）、QUIC とそれ以外を判別する packet classifier |
-| `core/transport` | video 向けの Packetizer/Reassembler、FEC、retransmit キャッシュ、send pacer |
-| `core/session` | session state machine を役割ごとに分割: `session/host`（viewer ごとの session、viewer 表、`SourceListResponder`、file receiver、auth throttle）、`session/client`（screen client、file sender、terminal client、connect の流れ）、およびそれらの隣に置いた共有部品（transfer の型、terminal session 表、clipboard sync、link recovery） |
-| `core/control` | Bitrate controller、quality ladder、stream のサイズ決定、clock offset |
-| `core/terminal` | すべての client が共有する VT emulator: `VtParser`、`Screen`、`KeyEncoder`、`Palette` |
-| `core/net` | fingerprint を key とする trust store（client 側）、authorized keys（host 側）、待機中の接続要求（`AccessRequests`）、`deskhub://pair/` の招待レコード（`PairingInvite`）、OpenSSH public key のテキスト、すべての呼び出し元が使う唯一の `Base64`、bind アドレスの選択 |
-| `core/auth` | 署名対象の auth transcript（`Transcript`）、key とアドレスごとの失敗の limiter、1 回限りの QR token（`PairingTokens`） |
+| `core/transport` | video 向けの Packetizer/Reassembler、FEC、retransmit キャッシュ、send pacer、audio の jitter buffer（`AudioJitterBuffer`） |
+| `core/session` | session state machine を役割ごとに分割: `session/host`（viewer ごとの session、viewer 表、viewer feedback、source pipeline の状態、share の流れ、`SourceListResponder`、file receiver）、`session/client`（screen client、file sender、terminal client、connect の流れ、開いている viewer）、およびそれらの隣に置いた共有部品（transfer の型、terminal session 表、clipboard sync、link pulse と link recovery） |
+| `core/control` | Bitrate controller、quality ladder、stream のサイズ決定、clock offset、fps の gate（`FrameGate`）、link の統計（`LinkStats`）、表示の pacer（`VideoPacer`） |
+| `core/media` | すべての capture、encoder、decoder が従う media の契約（`VideoContract`、`CaptureContract`、`AudioContract`）、H.264 の Annex B と SPS の解析、rate の計画、RGB の downscaler、最新優先の `FrameMailbox`、PCM ring、表示の fit と share の型 |
+| `core/input` | 両端の input: client の input キューと sender、host の receiver と applier、key と pointer の mapping、scancode 表、hotkey、pointer lock、trackpad の cursor |
+| `core/terminal` | すべての client が共有する VT emulator: `VtParser`、`Screen`、`KeyEncoder`、`Palette`、および repaint、snapshot、scroll の anchor |
+| `core/transfer` | ファイル転送の基本部品: `Crc32` と `SafeFileName` |
+| `core/diag` | host と viewer の status 行の背後にある診断テキスト（`ShareDiag`、`ScreenClientDiag`、`WindowStat`） |
+| `core/net` | fingerprint を key とする trust store（client 側）、authorized keys（host 側）、待機中の接続要求（`AccessRequests`）、`deskhub://pair/` の招待レコード（`PairingInvite`）、OpenSSH public key のテキスト、すべての呼び出し元が使う唯一の `Base64`、IPv4 の解析、bind アドレスの選択 |
+| `core/auth` | 署名対象の auth transcript（`Transcript`）、key とアドレスごとの失敗の limiter（`AuthFailureLimiter`）、1 回限りの QR token（`PairingTokens`） |
 | `core/qr` | `QrCode` —— すべての client と CLI が pairing code を描くのに用いる QR encoder |
-| `core/ui` | 利用者に表示されるすべての文字列、settings の解析、表の行の構築、最近のデバイスと host profile（`HostProfiles`）。5 つの client が同一の内容を表示するためのもの |
-| `platform/net` | `UdpSocket`（OS ごとの実装）、`QuicEndpoint`（quiche を pimpl の背後に配置）、`SessionTransport` |
-| `platform/auth` | `AuthNegotiation` —— 双方が用いる唯一の key 署名 handshake。host 側の 4 つの結果を持つ（3 節） |
-| `platform/client` | `HostLink`（dial、trust、auth、承認待ち、channel。すべての画面が共有）、`ScreenViewer`、`TerminalViewer`、`FileTransferClient`、`SourceQuery`、`HostProfiles`（fingerprint を key とする信頼済み host。名前と最後のアドレスを伴う） |
-| `platform/host` | `HostEngine`、`HostNetLoop`、`SharingHost`、`TerminalHost`、`FileHost`、`ViewerBroadcast`、`PairingInvite`（token を発行し、この host が表示する招待を構築する） |
-| `platform/system` | Clock、random、PTY（ConPTY / forkpty）、machine key（`HostIdentity`）、`authorized_keys` と `known_hosts` のファイル、待機中の要求（`AccessRequestsFile`）と有効な QR token（`PairingTokenFile`）、最近の一覧（`RecentDevicesFile`）、デバイス名、autostart、keep-awake |
-| `platform/ffi` | Swift と Kotlin の app が呼び出す C の surface: `SettingsFfi`（settings、デバイス名）、`DevicesFfi`（最近のデバイス、許可済み client、接続要求、本マシンの fingerprint と public key）、`HostProfileFfi`（信頼済み host）、`PairingFfi`（招待、QR モジュール、無効化）、および share、screen、terminal、send の各 surface |
+| `core/ui` | 利用者に表示されるすべての文字列、settings の解析と layout、配色 theme、host 表の行、shell picker、transfer の表示、autostart と自動共有の規則、最近のデバイスと host profile（`HostProfiles`）。5 つの client が同一の内容を表示するためのもの |
 | `core/cli` | command line の文法とその JSON writer。入力は平文、出力は検証済みの command |
+| `platform/net` | `UdpSocket`（OS ごとの実装）、`QuicEndpoint`（quiche を pimpl の背後に配置）、`SessionTransport`、`NetInfo`（本マシン自身のアドレス） |
+| `platform/auth` | `AuthNegotiation` —— 双方が用いる唯一の key 署名 handshake。host 側の結果を持つ（3 節） |
+| `platform/client` | `HostLink`（dial、trust、auth、承認待ち、channel。すべての画面が共有）、`ScreenViewer` とその loop、`TerminalViewer` と `TerminalFeed`、`FileTransferClient` と `FileUpload`、`SourceQuery`（ブロッキング版と非同期版）、`HostProfiles`（fingerprint を key とする信頼済み host。名前と最後のアドレスを伴う） |
+| `platform/host` | `HostEngine`、`HostNetLoop`、`SharingHost`、`ShareController`、`ShareDriver`、`TerminalHost`、`FileHost`、`ViewerBroadcast`、`PairingInvite`（token を発行し、この host が表示する招待を構築する） |
+| `platform/audio` | audio の capture（PipeWire、WASAPI）と sink（PipeWire、WASAPI、Core Audio、AAudio）、host 側の `AudioBroadcaster` と viewer 側の `AudioPlayer` |
+| `platform/media` | Opus codec、ディスプレイの列挙、Linux の xdg portal ScreenCast session、両 Apple app が使う VideoToolbox の encoder、decoder、source pipeline |
+| `platform/input` | 「host 優先」のためのローカル input の監視（`LocalInputMonitor`）と OS ごとのネイティブ key code の mapping |
+| `platform/diag` | `LOGI`/`LOGW`/`LOGE` と実行ごとの log ファイル |
+| `platform/system` | Clock、random、PTY（ConPTY / forkpty）、machine key（`HostIdentity`）とそれによる署名（`AuthProof`）、`authorized_keys` と `known_hosts` のファイル、待機中の要求（`AccessRequestsFile`）と有効な QR token（`PairingTokenFile`）、最近の一覧（`RecentDevicesFile`）、settings の保存、config フォルダとそのファイルロック、受信ファイルの保存（`FileStore`）、デバイス名、autostart、keep-awake、console、環境変数、メモリ使用量 |
+| `platform/ffi` | Swift と Kotlin の app が呼び出す C の surface: `ClientFfi`（文字列、theme の色、key の mapping、アドレスの解析、source の問い合わせ、自動共有の step）、`SettingsFfi`（settings、デバイス名）、`DevicesFfi`（最近のデバイス、許可済み client、接続要求、本マシンの fingerprint と public key）、`HostProfileFfi`（信頼済み host）、`PairingFfi`（招待、QR モジュール、無効化）、および share、screen、terminal、send の各 surface |
 | `client/<os>` | Capture、encode、decode、render、windowing、ダイアログ。protocol に関する要素は含まない |
 | `client/cli` | flag から session まで: GUI toolkit なしで host、connect、shell の起動を行う binary 1 つ。デスクトップ app と同じ OS ごとの media ライブラリを link する |
 
@@ -74,7 +82,10 @@ host が提供するすべての機能は、単一の `QuicEndpoint` を包む `
 ```
 
 - **Stream**（信頼性あり、順序保証あり）: control、input、clipboard、terminal、file。
-  connection ごとに、client が開く bidirectional stream を 1 本使用する。ある
+  connection ごとに bidirectional stream を 2 本使用し、どちらも client が開く。stream 0
+  （`kQuicControlStream`）は control、auth、input、clipboard、terminal の record を
+  interactive の urgency で運び、stream 8（`kQuicFileStream`）はファイル転送を bulk の
+  urgency で運ぶ。したがって upload がキー入力より先に並ぶことはない。ある
   connection で滞留した stream が別の connection を妨げることはない。受信した stream の
   データは service 1 巡あたり 64 KiB の予算で処理する。データを消費する側、主に
   terminal の VT emulation は、分割処理の合間に制御を ACK、keepalive、timeout 処理へ
@@ -82,10 +93,15 @@ host が提供するすべての機能は、単一の `QuicEndpoint` を包む `
   なくなった。
 - **Datagram**（信頼性なし、順序保証なし、ただし encrypt 済み）: video と audio の
   packet。QUIC は失われた packet を再送しない。video については app 自身の FEC/NACK の
-  機構が損失を扱い、audio については該当する機構はない —— 9 節を参照。
+  機構が損失を扱い、audio については Opus の in-band FEC と concealment が扱う —— 9 節を
+  参照。
 - **生の UDP** には一切応答しない。discovery は存在しない。QUIC でない受信 packet は
   session のコードに届く前に破棄され、`SourceListResponder` は authenticate 済みの
-  connection に対してのみ `LIST_SOURCES` と session-0 の `PING` に応答する。
+  connection に対してのみ `LIST_SOURCES` と session-0 の `PING` に応答する。平文の UDP
+  を使う唯一の経路は送信側の fallback である。そのアドレスへの QUIC connection が確立
+  していないとき、`SessionTransport::SendTo` は message を `QuicEndpoint::SendRaw` に
+  渡す。host がこの経路を通ることはない。authenticate していない peer には何も送らない
+  ためである。
 
 `QuicEndpoint` は quiche を完全に隠蔽する（pimpl。`QuicEndpointNone.cpp` が stub を
 提供するが、これは build が明示的に `-DDESKHUB_QUIC=OFF` を指定した場合に限られる。
@@ -94,8 +110,8 @@ quiche がない場合は configure が失敗する。stub の binary では sha
 行わない。規約上、quiche の connection は single-threaded であるため、endpoint への
 操作はすべて transport の send mutex の下で行う。transport は、ブロックする socket の
 待機をまたいでこの mutex を保持しない。まずロックせずに `WaitReadable` を実行し、その
-後にロックして短い `Poll` を行う。待機中に mutex を保持すると、すべての送信側が停止
-する。
+後にロックして短い `Poll` を行う。client の auth 待ちである `RunClientAuth` も例外では
+ない。待機中に mutex を保持すると、すべての送信側が停止する。
 
 ## 3. 受け入れの判定: SSH と同様の key
 
@@ -105,43 +121,65 @@ quiche がない場合は configure が失敗する。stub の binary では sha
 DER SubjectPublicKeyInfo の SHA-256 ハッシュが、Devices ページ、QR code、接続要求の一覧、
 `authorized_keys`、`known_hosts` のいずれでも利用者に表示される唯一の fingerprint である。
 TLS には X.509 certificate が必要なため、port を開くたびに `HostIdentity` がこの key を
-中心に自己署名 certificate を**メモリ上で**構築して quiche に渡す。何も書き込まれない。
-fingerprint は certificate ではなく SPKI をハッシュしたものなので、起動ごとに新しい
+中心に自己署名 certificate を**メモリ上で**構築する。quiche は certificate をファイル
+からしか読み込まないため、endpoint はそれを `transport_cert.<random>.pem` として一瞬
+だけ書き出し（中身は公開 certificate のみで、`0700` の config フォルダ内に `0600` で
+作成。private key は quiche が `host_key.pem` から読む）、quiche にパスを渡した直後に
+削除する。hosting の開始時に、1 分より古い `transport_cert.*` ファイル（書きかけの
+`.tmp-` ファイルを含む）—— crash だけが残すもの —— は一掃される。fingerprint は certificate ではなく SPKI をハッシュしたものなので、起動ごとに新しい
 certificate になっても誰かが固定した内容は何も変わらず、旧バージョンが保存していた
 `host_cert.pem` は読み取られることも必要とされることもない。host は `authorized_keys`
 （`AuthorizedKeys`。`ecdsa-sha2-nistp256 AAAA… label` の行を最大 128 行 —— 手で貼り
 付けた key のために Ed25519 の行も引き続き解析する）に記載された public key のみを
 受け入れる。label は表示名であり、権限を意味することはない。
 
-TLS の上位では、アプリケーション層の handshake（`AuthNegotiation`、auth version 7）が
+TLS の上位では、アプリケーション層の handshake（`AuthNegotiation`、auth version 8）が
 connection ごとに受け入れの可否を決定する。transport がこれを実行し、auth が完了して
 いない connection に対して host はアプリケーション層のデータを一切送信しない。
 
 1. QUIC/TLS が完了する。client は**何かを送信する前に**、host の key に対する trust を
    確定する（`HostLink::SettleTrust`。後述）。
-2. client は `AuthStart` を送信する。`00 | u16 keyLen | key | u8 nameLen | name |
-   u8 tokenLen | token | 07` —— 自身の public key、デバイス名、QR code 経由で来た場合は
+2. client は `AuthStart` を送信する。
+   `00 | u16 keyLen | key | u8 nameLen | name | u8 tokenLen | token | 08` —— 自身の public key、デバイス名、QR code 経由で来た場合は
    32 バイトの pairing token（`tokenLen` は 0 または 32）、最後に auth version。
-3. `HostAuth::Begin` は 4 つのうち 1 つの `AuthChallenge` を返す。
-   - key が `authorized_keys` にある → `Signature`。
-   - key が未知で、token が `pairing_tokens` の有効なエントリに一致する → key を client
-     の名前をラベルとして `authorized_keys` に追記し、token を消費し、応答は `Signature`。
-   - key が未知で、token が送られたが誤っている → 既存の limiter で送信元アドレスに失敗
-     1 回を課し（1 分に 3 回で 10 秒間ブロック）、以降は token を伴わない要求として扱う。
-   - key が未知で、使える token がない → 接続要求（名前、key、fingerprint、アドレス、
-     時刻）を `access_requests` に書き込み、応答は `AwaitingApproval`。connection は
-     現状の拒否と同様に閉じられる。host はクリックを待つ未 authenticate の接続を保持
-     しない。
-4. `Signature` に対して、client は transcript —— ドメインのラベル、auth version、役割、
-   この QUIC/TLS connection から export した session の値、自身の public key、host の
-   TLS fingerprint（`core/auth/Transcript`）—— に署名し、host はそれを当該 key で検証する。
+3. `HostAuth::Begin` は `AuthChallenge` で応答する。これは許可済み、未知、token 付きの
+   いずれの key に対しても `Signature` であり、`authorized_keys` を読み取れない場合に
+   限り `ConfigError` となる。未知の key については、その署名が検証されるまで何も書き
+   込まない（手順 4）。limiter が既にブロックしている送信元アドレスから token 付きの
+   `AuthStart` が来た場合は、challenge を返す前に直ちに閉じる。
+4. client は transcript —— ドメインのラベル、auth version、役割、この QUIC/TLS
+   connection から export した session の値、自身の public key、host の TLS fingerprint
+   （`core/auth/Transcript`）—— に署名し、host はそれを当該 key で検証する。検証に失敗
+   した署名は `BadSignature` で終わる。検証に成功すると、`AuthResult` は次の順で決まる。
+   - key が `authorized_keys` にある → `Accepted`。
+   - `pairing_tokens` の有効なエントリに一致する token がある → token を消費し、key を
+     client の名前をラベルとして `authorized_keys` に追記し、connection は `Accepted`。
+   - それ以外 → 接続要求 —— 時刻、送信元アドレス、client の名前をラベルとした public
+     key —— を `access_requests` に書き込み、結果は `AwaitingApproval`（要求を記録
+     できない場合は `NotPaired`）。
+
+   送られたがどれにも一致しなかった token は、署名が検証された今になって初めて、送信元
+   アドレスへの失敗 1 回として課され（1 分に 3 回で 10 秒間ブロック）、以降は token を
+   伴わない要求として扱われる。`AwaitingApproval` は client 側の判定ではなく、実際の
+   wire 上の結果（code 9）である。
+
+`NotPaired`、`AwaitingApproval`、`BadSignature`、または `ConfigError` の challenge の後、
+host は応答から約 2 秒後に自ら connection を閉じる（`kRefusalLingerUs`、QUIC
+application error 8）。これは応答が届くのに十分な時間である。client も自分の側を閉じる。
+host はクリックを待つ未 authenticate の接続を保持しない。
 
 署名は 1 本の connection に束縛されるため、再接続の際には改めて署名する。0-RTT や
-session resumption は存在しない。host が保持する authenticate 待ちの connection は最大
-8 で、それぞれ 10 秒後に切断される。1 つの key と送信元 IP から 1 分以内に 3 回不正な
-署名があると、その組み合わせは 10 秒間ブロックされる（`AuthThrottle`）。
-`access_requests` は最大 16 件の要求を key ごとに 1 件（再要求はアドレスと時刻を更新
-する）、それぞれ 10 分間保持する。*Approve* は key をデバイスの名前とともに
+session resumption は存在しない。authenticate していない connection はすべて、どの key
+を提示したか、`AuthStart` を送ったかどうかに関係なく、QUIC が受け入れた時点から 10 秒の
+猶予を与えられ、host が同時に保持するのは最大 8 本である —— `core/auth/AuthDeadlines`
+が期限を保持し、`QuicCallbacks::admitConnection` は 9 本目の connection を受け入れる前に
+断り、`onAbandoned` は announce される前に終わった connection の枠を解放する。1 つの key と
+送信元 IP から 1 分以内に 3 回失敗すると、その組み合わせは 10 秒間ブロックされる
+（`AuthFailureLimiter`）。`AwaitingApproval` と `ConfigError` は失敗に数えない。
+`access_requests` は最大 16 件の要求を、key ごとに 1 件、送信元アドレスごとに 1 件まで
+—— 新しい要求は key が同じ行と IP アドレスが同じ行（port は無視）をすべて置き換えるので、
+再要求はアドレスと時刻を更新する —— 16 件が埋まっていれば最も古いものを破棄して、それぞれ
+10 分間保持する。*Approve* は key をデバイスの名前とともに
 `authorized_keys` へ移し、*Deny* は行を削除して client には何も伝えない。
 
 受け入れは 1 本の QUIC connection に属するものであり、アドレスに属するものではない。その
@@ -160,23 +198,31 @@ fingerprint に対して一度実行される。
 - QR 招待から dial した場合: fingerprint は招待内のものと一致しなければならない。
   一致は、応答したマシンが code を作ったマシンの private key を保持していることを意味
   するため、host は黙って固定され、token が `AuthStart` で送られる。不一致は、その
-  アドレスで別の何かが応答していることを意味する。link は `InviteMismatch` で失敗し、
-  token は client から出ない。
+  アドレスで別の何かが応答していることを意味する。link は招待不一致の文言
+  （`kInviteHostMismatch`。source の問い合わせでは `SourceQueryFailure::InviteMismatch`
+  として報告される）で失敗し、token は client から出ない。app の外から開かれた
+  `deskhub://` リンク（`deskhub://pair` のみに一致する Android の intent、または iOS の
+  `openURL`）は黙って固定されない。リンク内の host key がまだ信頼されていない場合、app は
+  まず fingerprint を示した *New host* の確認を表示し、*Trust and connect* の後にのみ
+  dial する。既に信頼済みの host にはそのまま dial する。app 内でスキャンした code は
+  従来どおり直接固定される。
 - 既に `known_hosts` にある場合: エントリの最後のアドレスを更新し（`TouchTrustedHost`）、
   link は先へ進む —— host にどのアドレスで到達しても構わない。アドレスを key とする
   ものはもう存在しないためである。
 - それ以外の場合: link は fingerprint を添えて *not trusted yet* として失敗する。app は
   *New host* ダイアログを表示し、*Trust and connect* の後に `acceptNewHostKey` を付けて
   再接続する。CLI は `--accept-new-host-key` を指定した場合に限り同じ動作をする。
-  `FindByEndpoint` がそのアドレスは以前別の信頼済み host として応答していたと告げる
-  場合、`PreviousOwnerWarningFor` がその host の名前と fingerprint をプロンプトに加える。
+  `SettleTrust` 自体は警告を計算しない。ダイアログを描く前に app が
+  `PreviousOwnerWarningFor`（`FindByEndpoint` を利用）に、そのアドレスが以前別の信頼済み
+  host として応答していたかを問い合わせ、そうであればその host の名前と fingerprint を
+  プロンプトに加える。
   *changed key* という判定は存在しない。古いアドレスの新しい key は新しい host である。
 
-challenge が `AwaitingApproval` の場合、`HostLink` は同名の状態で待機し、
+応答が `AwaitingApproval` の場合、`HostLink` は同名の状態で待機し、
 `AwaitingApprovalLine` を表示し、recovery 中の link が既に用いている backoff で、最長
 `kDefaultApprovalWaitUs`（120 秒）または呼び出し元がキャンセルするまで再接続する。各
 再接続は完全な connection と新しい `AuthStart` であるため、所有者の *Approve* の後の
-最初の 1 回が `Signature` を受け取って完了する。期限を過ぎると link は
+最初の 1 回が受け入れられる。期限を過ぎると link は
 `AuthResultCode::AwaitingApproval` で失敗し、その文言は利用者に *Approve* を求めて再度
 接続するよう伝える。
 
@@ -191,28 +237,34 @@ challenge が `AwaitingApproval` の場合、`HostLink` は同名の状態で待
 ```
 HostEngine（app ごとに 1 インスタンス、SessionTransport を保持）
  ├─ net-loop thread: RunHostNetLoop
- │    recv → source 一覧/pong の応答（受け入れ済みのみ） | video データの取り込み | Chan::Terminal → TerminalHost
+ │    recv → source 一覧/pong の応答（受け入れ済みのみ） | video データの取り込み
+ │         | Chan::Terminal → TerminalHost | Chan::File → FileHost
  │    source ごとの session Tick、clipboard flush、reconfig、統計
  ├─ capture/encode: source ごと。OS の capture コールバックが駆動する（client 層）
  │    frame → encoder（source ごとの mutex）→ Packetizer → FEC → SendTo（datagram）
  ├─ audio worker: capture コールバック → lock-free な frame ring → Opus encode →
  │    viewer ごとの datagram（AudioBroadcaster）
- └─ TerminalHost（terminal が共有されている場合にのみ存在）
-      ├─ net-loop thread 上で HandleMessage: TERM_OPEN/DATA/RESIZE/CLOSE/EXIT/LIST → PTY
-      └─ pump thread: PTY 出力 → host 側の Screen mirror と TERM_DATA record、
-           peer 喪失時の切り離し、kicks
+ ├─ TerminalHost（terminal が共有されている場合にのみ存在）
+ │    ├─ net-loop thread 上で HandleMessage: TERM_OPEN/DATA/RESIZE/CLOSE/LIST → PTY
+ │    └─ pump thread: PTY 出力 → host 側の Screen mirror と TERM_DATA record、
+ │         peer 喪失時の切り離し、kicks
+ └─ FileHost（ファイルを受け付けている場合にのみ存在）
+      └─ net-loop thread 上で HandleMessage: FileReceiver → FileStore。応答はキューに
+           入れ、自身のロックを解放した後に stream 8 で送る
 ```
 
-- 何らかの内容が共有されている限り、engine は動作する。screen source がなく terminal
-  のみが選択されている場合、engine は source を持たない状態で動作し、terminal が存続
-  する限りループも継続する。
+- 何らかの内容が共有されている限り、engine は動作する。screen source がない場合でも、
+  terminal またはファイル共有が有効であれば engine は source を持たない状態で動作する。
+  どちらかが要求されているか、その `TerminalHost` または `FileHost` がまだ動作している
+  限り、ループも継続する。
 - 各 screen source は `SourcePipelineState` に対応し、それぞれ独自の
   `ScreenHostSession`（viewer 表、negotiation、input の調停）、encoder、quality ladder、
   診断情報を持つ。1 回の encode がその source のすべての viewer に供給される。
-- フィードバックの経路: viewer は `Feedback`（loss と RTT）を毎秒送信し、host は自身の
-  信号として、frame が送信段に到達した時点での経過時間を加える。これは `enc_lat_ms` が
-  報告する量と同一である。`BitrateController`（AIMD）と `QualityLadder` はこの 3 つの
-  信号に基づき encoder の bitrate、解像度、fps を調整する。FEC は最初の frame から有効
+- フィードバックの経路: viewer は `Feedback`（loss、RTT、受信レート）を毎秒送信し、
+  host は自身の信号として、frame が送信段に到達した時点での経過時間を加える。これは
+  `enc_lat_ms` が報告する量と同一である。`BitrateController`（AIMD）はそのうち 2 つ ——
+  loss と frame の経過時間 —— に基づいて動作し、`QualityLadder` はそれが選んだ bitrate
+  に従って解像度と fps を下げる。RTT と受信レートは表示に使うだけである。FEC は最初の frame から有効
   であり、損失のない状態が長く続いた場合にのみ無効化する。FEC が対処する損失は最初の
   レポートより前に現れるためである。滞留状態では FEC を有効化しない。parity は待ち行列
   をさらに深くするだけだからだ。quiche の CUBIC congestion control は datagram の経路の
@@ -222,19 +274,22 @@ HostEngine（app ごとに 1 インスタンス、SessionTransport を保持）
   `LocalInputMonitor` は remote input を停止する。同時に操作できる viewer は 1 つで
   ある。
 - Shell: shell ごとに PTY を 1 つ割り当てる（Windows は `ConPTY`、他は `forkpty`）。
-  上限は 8 である。接続が切れた場合は shell を切り離し、shell プロセスが終了するか shell が閉じられるまで PTY を保持する。時間制限はない。許可された client はいずれも、保持されている shell を一覧（`TermList`/`TermListAck`）して id で reattach できる。open、close、detach、reattach はいずれもアドレス、名前、key とともに監査ログに記録する。
-- 各 shell の出力は、開始時点から host 側の `core/terminal` Screen にも書き込まれる。
-  *Stop & attach* はリモートの client を切断し、その mirror を scrollback を保ったまま
-  host の terminal ウィンドウで開く。この方法で引き継いだ shell は host に帰属し、
-  期限切れせず、host のウィンドウを閉じた時点で終了する。
-- `TERM_CLOSE` は、data と resize の message が従う peer ごとの guard より前に処理される。
-  したがって許可された client はいずれも、任意の shell を id で終了させることができ、その
-  shell に入っていたマシンには `TERM_EXIT` が送られる。
+  上限は 8 である。接続が切れた場合は shell を切り離し、shell プロセスが終了するか
+  shell が閉じられるまで PTY を保持する。時間制限はない。許可された client はいずれも、
+  保持されている shell を一覧（`TermList`/`TermListAck`）し、切り離された shell を id で
+  reattach し、いずれの shell も終了させることができる。`TERM_CLOSE` は、data と resize
+  の message が従う peer ごとの guard より前に処理され、その shell に入っていたマシンには
+  `TERM_EXIT` が送られる。open、close、detach、reattach はいずれもアドレス、名前、key
+  とともに監査ログに記録する。
 - picker は 1 つ、client は 5 つ: `core/ui/ShellPicker` は `TermSessionList` を、すべての
   client が描画する行 —— id とサイズ、その shell が誰のものか、この client が reattach
   または close してよいか —— に変換する。reattach できるのは detach された shell だけで
   あり、host が引き取った shell はそのどちらでもない。Apple と Android の app は
   `DHTermSessionInfo` を通じて同じ行を読むため、shell の行を独自に整形する client はない。
+- 各 shell の出力は、開始時点から host 側の `core/terminal` Screen にも書き込まれる。
+  *Stop & attach* はリモートの client を切断し、その mirror を scrollback を保ったまま
+  host の terminal ウィンドウで開く。この方法で引き継いだ shell は host に帰属し、
+  期限切れせず、host のウィンドウを閉じた時点で終了する。
 
 ## 5. Client 側
 
@@ -261,7 +316,7 @@ HostLink（開いている画面ごとに 1 インスタンス）
 ```
 
 受け入れが完了すると、link は自身の状態を監視する（`core/session/LinkPulse`）。session
-id が 0 の `Ping` datagram を毎秒送信し、host の `SourceListResponder` が、authenticate
+id が 0 の `Ping` を、datagram ではなく control stream 上の record として毎秒送信し、host の `SourceListResponder` が、authenticate
 済みの同一 connection 上で session を必要とせずに応答する。ping は ack-eliciting である
 ため keepalive も兼ねており、通常の keepalive タイマーは link が受け入れられる前にのみ
 意味を持つ。復旧中の link では、この pulse が
@@ -283,11 +338,11 @@ session が先に問題を検出した場合は `HostLink::RequestRedial` が再
 
 source の問い合わせ（`QuerySources`）は、同じ link を一度限りのブロッキング形式で使用
 する。UI は各種の要求（キー入力、resize）を command キューへ送る。未知の host key は
-fingerprint を添えて —— そのアドレスが以前別の信頼済み host として応答していた場合は
-以前の所有者の警告も添えて —— link を失敗させ、UI がそれを *New host* ダイアログに
-表示する。この key を許可していない host は link を `AwaitingApproval` で待機させ、利用者
-がキャンセルできる間、UI はその status 行を poll する。terminal のウィンドウは escape sequence を解析しない。`core/terminal` が
-byte stream をセルのグリッドに変換し、ウィンドウはセルの描画とキーイベントの転送のみを
+fingerprint を添えて link を失敗させ、UI がそれを *New host* ダイアログに表示する。その
+アドレスが以前別の信頼済み host として応答していた場合、以前の所有者の警告は UI が自ら
+調べて添える。この key を許可していない host は link を `AwaitingApproval` で待機させ、
+利用者がキャンセルできる間、UI はその status 行を poll する。terminal のウィンドウは
+escape sequence を解析しない。`core/terminal` が byte stream をセルのグリッドに変換し、ウィンドウはセルの描画とキーイベントの転送のみを
 行う。現時点では各ウィンドウが個別に link を保持している。同一の host に向けたすべての
 ウィンドウで受け入れ済みの link を共有することは想定済みの次の段階であり、`HostLink`
 において registry と observer の fan-out として実装する。handshake を追加するもので
@@ -297,9 +352,11 @@ byte stream をセルのグリッドに変換し、ウィンドウはセルの�
 
 discovery は存在しない。network を scan するものはなく、host は平文の packet に一切
 応答しない。client が接続する先は、利用者が入力したアドレス、最近の host、信頼済み
-host（`HostProfiles`）、または QR 招待内のアドレスである。`SourceListResponder` は受け入れ済みの connection 上でのみ
-`LIST_SOURCES` に応答する。この応答は `SOURCE_LIST` のヘッダフラグによって host の能力
-（input を受け取るか、terminal を共有するか）も示すため、client はウィンドウを開く前に、
+host（`HostProfiles`）、または QR 招待内のアドレスである。`SourceListResponder` は
+受け入れ済みの connection 上でのみ `LIST_SOURCES` に応答する。この応答は
+`SOURCE_LIST` のヘッダフラグによって host の能力 —— input を受け取るか、terminal を
+共有するか、音声を共有するか、ファイルを受け付けるか（`kHostAcceptsInput`、
+`kHostSharesTerminal`、`kHostSharesAudio`、`kHostAcceptsFiles`）—— も示すため、client はウィンドウを開く前に、
 スマートフォンは閲覧のみであることを把握できる。source のレコードの後に、payload は host
 のデバイス名（長さ 1 バイトと最大 64 バイトの UTF-8。空でもよい）を載せるため、この名前が
 届くのは authenticate 済みの client だけである。client は `ParseSourceListHostName` で
@@ -312,7 +369,9 @@ FFI の `dh_list_sources` は host が応答したときにのみそこへ記録
 変換されずに削除される。
 
 QR code は唯一の out-of-band の経路であり、out-of-band のままである。host がそれを送信
-することはなく、所有者が見せ、誰かが画面から読み取るかリンクを貼り付ける。
+することはなく、所有者が見せ、誰かが画面から読み取るかリンクを貼り付ける。app の外から
+スマートフォンに届いたリンク —— `deskhub://pair` URL のタップ —— は、その host が既に
+信頼済みでない限り、app が dial する前に *New host* ダイアログで確認される（3 節）。
 `deskhubp::BuildPairingInvite(port, bindIp, hostName)` はランダムな 32 バイトの token を
 発行し（`pairing_tokens` に 5 分の期限で保持。同時に有効なのは最大 4 つで、パネルを隠す
 か共有を停止すると `RevokePairingTokens` がすべて無効化する）、`core/net/PairingInvite`
@@ -323,7 +382,7 @@ version バイト、endpoint 数 `n`、host のアドレス最大 4 つ分の `n
 code に収まる。これはスマートフォンが腕の長さの距離からノート PC の画面を読み取れる
 大きさである。`core/qr/QrCode`（`EncodeQr`、および CLI の `share --qr` 向けの
 `RenderQrText`）が唯一の encoder であり、すべての client はそれが返すモジュールグリッド
-を描く。Android は `dh_qr_encode` を通じて描く。client 側の `ParsePairingInvite` が
+を描く。Android と両 Apple app は `dh_qr_encode` を通じて描く。client 側の `ParsePairingInvite` が
 `HostLink` に endpoint、要求すべき fingerprint、送るべき token を与え、
 `dh_pairing_invite_address` は app にアドレス欄へ表示する最初の `ip:port` を与える。
 スキャンだけがプラットフォームごとの部分 —— Android は CameraX + ZXing、iOS は
@@ -334,18 +393,23 @@ AVFoundation —— であり、どちらも decode したテキスト以外は�
 すべてのデータは利用者の Deskhub フォルダ（`~/.deskhub`、`%USERPROFILE%\.deskhub`、
 iOS では App Group のコンテナ内の `.deskhub` フォルダ、Android では内部ストレージ。`DESKHUB_CONFIG_DIR` または
 CLI の `--config-dir` で変更できる）に置かれる。`host_key.pem`（唯一の machine key。
-TLS certificate は起動ごとにメモリ上で構築されるため、`host_cert.pem` はもう書き込まれ
-ず、残っていても無視される）、`authorized_keys`（この host が受け入れる client key）、
+TLS certificate は起動ごとに構築され、ディスク上には quiche が読み込む一瞬だけ
+公開 certificate のみを含む `transport_cert.<random>.pem` として存在し、crash で残った
+場合は次に hosting を開始したときに一掃される。`host_cert.pem` はもう書き込まれず、残っていても無視される）、`authorized_keys`（この host が受け入れる client key）、
 `known_hosts`（fingerprint を key とする信頼済み host。名前と最後のアドレスを伴う）、
-`access_requests`（Approve または Deny を待つ接続要求 —— 名前、public key、アドレス、
-時刻。最大 16 件、それぞれ 10 分後に破棄）、`pairing_tokens`（現在有効な QR token と
+`access_requests`（Approve または Deny を待つ接続要求 —— 時刻、アドレス、デバイス名を
+ラベルとした public key を 1 行ずつ。最大 16 件、それぞれ 10 分後に破棄）、`pairing_tokens`（現在有効な QR token と
 その期限）、`ui-settings.txt`（デバイス名を含む）、`recent-hosts.txt`（アドレス、最終
 接続時刻、host の名前）、Linux では `portal-restore-token.txt`（選択した画面に対して
-デスクトップが発行した token）、および実行ごとの log である。passcode はどこにも保存
-されず、`client_key*.pem` も存在しない。旧バージョンが保持していたファイルは無視され、
-移行されない。POSIX ではディレクトリは `0700`、ファイルは `0600` で、atomic に書き込ま
-れる。Windows では ACL が利用者本人、SYSTEM、Administrators のみを許可する。iOS では
-app と broadcast extension がこのフォルダを共有しており、それによって extension の要求が
+デスクトップが発行した token）、および実行ごとの log（最新の 10 件だけを残す。`kKeptSessionLogs`）である。
+passcode はどこにも保存されない —— 古い `ui-settings.txt` にあった `passcode=` 行は
+読み込み時に取り除かれ、廃止された `paired_devices`、その有効化マーカー、`auth_salt` は
+削除される。`client_key*.pem` も存在しない。旧バージョンが保持していたファイルは無視
+され、移行されない。POSIX ではディレクトリは `0700`、ファイルは log も含めて `0600`
+（log は `O_NOFOLLOW` で開く）で、設定ファイルは atomic に書き込まれる。Windows では
+フォルダの ACL が利用者本人、SYSTEM、Administrators のみを許可し、その中のファイルは
+log も含めて独自の mode を持たず、その ACL を継承する。iOS ではこのフォルダは iCloud と Finder のバックアップ
+から除外され、app と broadcast extension がこれを共有しており、それによって extension の要求が
 app の一覧に届き、app の *Approve* が extension に届く。ファイル I/O は `platform/` に
 置き、解析処理とデータ構造は `core/` に置いて unit test を備える。
 
@@ -365,7 +429,7 @@ Windows が受け付けない文字、予約デバイス名が除去される。
 | `make test` | オフライン、socket なし | `core/` の全体: wire（`AuthStart` の token フィールドを含む）、framing、FEC、session、VT emulator、settings、文字列、決定的な structured fuzzing、および pairing の各部品 —— `Base64`、`PairingInvite` の往復と制限、`PairingTokens` の発行・消費・失効、`AccessRequests` の容量と失効、既知の encoding に対する `QrCode` |
 | `make test-platform` | loopback socket | 実際の QUIC handshake、end-to-end の key 署名による認証、fingerprint を key とする host の固定、`AccessRequestsFile`（要求の記録、承認、拒否）と `PairingTokenFile`（token の発行、1 回限りの引き換え、無効化）、実際の `HostAuth` を通じた承認と token による受け入れ、ネットワーク越しの terminal host と viewer、実 shell に対する PTY、不正な署名による lockout |
 | `make test-integration` | loopback、capture/encode は模擬実装 | host↔client の session 一式: negotiation、ネットワーク越しの video、input、許可済み key による受け入れ、他の golden message と並ぶ `AUTH_START_TOKEN` の wire vector、不正データへの耐性、および交差負荷下の遅延 —— 動作中の stream と並行してファイル転送、大量出力の terminal、キー入力を実行し、それぞれ観測された最大の停止時間で判定する |
-| fuzz target | PR ごとに各 target 30 秒、nightly は各 15 分 | wire、H.264、reassembly、terminal のバイト列、UI テキストの parser、および host 側と viewer 側の session state machine |
+| fuzz target | PR ごとに各 target 30 秒、nightly は各 15 分 | 9 つの target: wire、H.264（Annex B と SPS）、reassembly、terminal のバイト列、UI テキストの parser、host 側と viewer 側の session state machine、key と trust ファイルの parser（`FuzzKeys`: public key のテキスト、`authorized_keys`、`known_hosts`、接続要求、pairing token、招待）、QR encoder（`FuzzQr`） |
 | `make test-perf` | release build、オフラインと loopback | hot path を実測する: `core_perf` は純 C++ の経路、`platform_perf` は loopback 上の実際の QUIC を対象とする。いずれも単位あたりの allocation 回数、入力 4 倍時のコスト、当該マシンで記録した baseline からの乖離によって判定する |
 
 CI はさらに clang-format と clang-tidy（いずれもバージョン固定）、SwiftLint
@@ -434,20 +498,26 @@ scaling の 2 つの判定とともに実行する（共有 runner には時間�
   quiche 0.29.3 への小さなパッチで C API から TLS exporter を使えるようにした。
   両端は接続ごとに同じ値を導出し、導出できない場合は認証に失敗する。ホストは
   接続ごとに署名済み応答を一度だけ受け付け、別のセッションでの再利用を防ぐ。
-  署名待ちの認証要求は最大八件とし、十秒以内に応答がなければ接続を閉じる。
+  認証を終えていない接続はすべて QUIC が受け入れてから十秒で閉じ、同時に保持するのは
+  最大八件とする —— `AuthStart` を送らない接続も、署名しない接続と同じく数に入り、九件目
+  はそもそも受け入れない。
   同じ鍵と送信元 IP から一分以内に署名検証が三回失敗すると、その組を十秒間拒否する。
   メモリ上の表は最大 64 組を保持し、認証成功時に失敗回数を消去する。
 
 - **認証はプロトコルバージョン 3 の中で独立したバージョンを持つ**：`AuthStart` は公開鍵の
-  前に互換性のための 0 バイトを残し、認証バージョンを最後に置く —— バージョン 6 には
-  なかった pairing token のフィールドの後で、今は 7 である: `00 | u16 keyLen | key |
-  u8 nameLen | name | u8 tokenLen | token | 07`。旧ホストは開始メッセージを読んで旧
-  challenge を返せるため、新クライアントは非互換を検出して接続を閉じる。新ホストは
-  末尾のバイトが 7 でない開始メッセージを拒否し、`VersionMismatch` を送って接続を閉じる。
-  7.0.x のデバイスと 8.0 のデバイスが中途半端に動くのではなくバージョン不一致を報告する
-  のはこのためである。`AuthMode` に `AwaitingApproval` が加わり、
-  `AuthResultCode::AwaitingApproval` はクライアント側にのみ存在し、時間切れになった待機の
-  結果を表す。challenge、response、result はバージョン付きのデータだけを運ぶ。
+  前に互換性のための 0 バイトを残し、認証バージョンを最後に置く —— 今は 8 であり、
+  バージョン 7 の pairing token のフィールドを保ったまま、承認の判断を署名の後ろへ、
+  そして result の中へ移した:
+  `00 | u16 keyLen | key | u8 nameLen | name | u8 tokenLen | token | 08`。ホストは末尾の
+  バイトが自分のバージョンでない開始メッセージを拒否し、`VersionMismatch` を送って接続を
+  閉じる。クライアントは別バージョンの challenge や result を受け取ると接続を閉じる ——
+  認証バージョン 7 と 8 のビルドが中途半端に動くのではなくバージョン不一致を報告するのは
+  このためである。ホストの challenge は `Signature`、または鍵の一覧を読めない場合の
+  `ConfigError` である。`Denied` と `AwaitingApproval` は `AuthMode` に残っているが、
+  バージョン 8 のホストがそれらを送ることはない。`AuthResultCode::AwaitingApproval`（9）は
+  `Accepted` や `NotPaired` と同じく `AuthResult` で運ばれる。ホストの transport はそれを
+  `onRefused` でも報告し、クライアントは時間切れになった待機をそれで失敗させる。
+  challenge、response、result はバージョン付きのデータだけを運ぶ。
 
 - **初回接続時は信頼、変更時は警告**：未知のホスト鍵は SSH と同様に一度だけ利用者に
   示し、利用者が受け入れた場合にのみ固定する（CLI では `--accept-new-host-key`）。同じ
@@ -478,8 +548,9 @@ scaling の 2 つの判定とともに実行する（共有 runner には時間�
 - **デスクトップ画面に何を表示するかは各アプリのコードではなく `core/ui` のデータで決まる**：
   配色（`Theme.h`。各色にライトとダークの値を持つ）、ホストのライブ表の列とサイズ
   （`HostRows.h`）、Settings ページの枠・セクション・並び順（`SettingsLayout.h`）は一度だけ
-  定義する。Windows は直接読み、macOS は `dh_theme_color`・`dh_host_columns`・
-  `dh_settings_layout` 経由で、Android は `dh_theme_color` 経由で読む。アプリが決めるのは、
+  定義する。Windows は直接読み、Linux はホスト表の列を直接読んで GTK 自身のテーマで
+  描き、macOS は `dh_theme_color`・`dh_host_columns`・`dh_settings_layout` 経由で、
+  iOS と Android は `dh_theme_color` 経由で読む。アプリが決めるのは、
   ある `SettingField` をどのコントロールで描くかだけである。以前は各アプリが同じ色の値と
   ページ順を個別に持っていたため、次第にずれていった。Windows で赤いボタンが macOS では
   灰色になり、二つのデスクトップにある設定が三つ目では欠けていた。レイアウトのテストは保存
@@ -503,8 +574,9 @@ scaling の 2 つの判定とともに実行する（共有 runner には時間�
   選択肢であるが、通知なく機能が完全に無効になることは選択肢ではない。
 
 - **追随できない送信側は、損失のないリンクとまったく同じ挙動を示す。**
-  `BitrateController` の入力（loss、RTT、受信レート）はすべて viewer から得られるため、
-  制御ループのどの構成要素も、遅れているのが送信側自身であることを判断できなかった。
+  `BitrateController` に与えられていたものはすべて viewer の `Feedback` から得られ、
+  そのうち実際に使うのは loss だけである（RTT と受信レートは表示用）。そのため制御ループ
+  のどの構成要素も、遅れているのが送信側自身であることを判断できなかった。
   2 つの viewer に対して host を務める Pixel 4 での実測では、frame が encoder を出る
   時点で 15 秒遅延していた一方、viewer は損失 0 %、RTT 15 ms を報告しており、制御側は
   これを余裕と解釈して bitrate を上限の 20 Mbps まで戻した。これは送信側内部の
@@ -571,8 +643,8 @@ scaling の 2 つの判定とともに実行する（共有 runner には時間�
   2 つ分（60 fps で 33 ms）しかなく、同一リンクで実測された RTT は 24-49 ms であった。
   NACK は送出されるものの、応答が到着した時点で当該 frame は既に破棄されており、
   `late_ms_avg=24` および毎秒 87 個の packet が存在しない frame に属する状態として現れて
-  いた。現在の `StallTimeoutUs` は、pacing に基づく待機時間と往復時間の 1.5 倍のうち
-  大きいほうを採用し、ハードな timeout による上限は維持する。これにより、再送を要求する
+  いた。現在の `StallTimeoutUs` は、pacing に基づく待機時間と、往復時間の 1.5 倍に NACK
+  の保留時間（`kNackHoldUs`、2 ms）を加えた値のうち大きいほうを採用し、ハードな timeout による上限は維持する。これにより、再送を要求する
   のは実際にそれを必要とするリンクに限られる。
 
 - **performance suite は allocation とコストの増加形態で判定し、ミリ秒では判定しない。**
@@ -640,9 +712,11 @@ scaling の 2 つの判定とともに実行する（共有 runner には時間�
   は source 一覧が空の場合、`HostEngine::Start` がこの確認を省略する。
 
 - **shell のみで画面を持たない host も動作を継続する。** net ループは動作中の source が
-  なくなった時点で session を終了するが、terminal のみの共有には定義上 source が存在
-  しない。`keepAlive` は呼び出し側の意図（`ShareOptions::terminal`）から決定する。
-  ループの開始後にのみ設定される `TerminalHost` のポインタからは決定しない。
+  なくなった時点で session を終了するが、terminal のみ、またはファイルのみの共有には
+  定義上 source が存在しない。`keepAlive` は呼び出し側の意図（`ShareOptions::terminal`、
+  `ShareOptions::files`）と、`TerminalHost` または `FileHost` がまだ動作しているかどうか
+  から決定する。ループの開始後にのみ設定される tenant のポインタだけから決定することは
+  ない。
 
 - **frame gate は目標時刻に向けて計数し、直前に通した frame からは計数しない。** 30 fps
   を目標とする状況で compositor が 40 fps を供給する場合、33 ms の境界の多くに frame が
@@ -709,8 +783,9 @@ scaling の 2 つの判定とともに実行する（共有 runner には時間�
   における 20 ms の Opus frame はおよそ 160 バイト、最大でも 209 バイトであり、datagram
   には 1180 バイトの余地がある。したがって音声の経路には packetizer、FEC、reassembler、
   NACK のいずれもない。これらは video の経路のほぼすべてに相当する。損失はコストの最も
-  低い箇所で処理する。Opus は次の frame に in-band FEC を含み、受信側は jitter buffer が
-  報告した欠落を decoder に補完させる。再送には意味がない。200 ms 遅れて到着した frame
+  低い箇所で処理する。Opus は次の frame に in-band FEC を含むため、jitter buffer が
+  1 つの frame の欠落を報告すると、受信側は次の packet を `decode_fec=1` で decode して
+  それを復元し、FEC で復元できない場合にのみ decoder に欠落を補完（PLC）させる。再送には意味がない。200 ms 遅れて到着した frame
   は再生できないうえ、後続の 10 枚を遅延させるからである。`make opus-smoke` により、
   このライブラリを build できる任意のマシンで上記の数値を測定できる。
 - **jitter buffer にタイマーは含まれない。** `AudioJitterBuffer` は状態のみで構成され、
@@ -743,14 +818,17 @@ scaling の 2 つの判定とともに実行する（共有 runner には時間�
   session とは別に独自の QUIC connection を保持するため、video 側の keepalive はいずれ
   も届かない。プロンプトで操作がない状態ではトラフィックが発生せず、QUIC の 30 秒の
   idle timeout により切断され、viewer は `Reattaching` 状態で thread を停止したまま再接続
-  を行わなかった。その間、shell は host 側で 2 分間保持されたままであった。現在
-  `TerminalViewer` はタイマーにより ack-eliciting な packet を送信し、backoff を伴って
-  再接続する。その際 `TerminalClient::Reattach()`（core に実装され test もされていたが、
-  呼び出されていなかった）を再利用するため、同一の shell が scrollback とともに復帰
-  する。タイミングの定数は core の `deskhub::KeepaliveIntervalUs` と
-  `ReconnectDelayUs` が保持する。keepalive は idle timeout の半分以下とし、packet が
-  1 つ失われても維持できるようにしている。再試行は `kTerminalReattachGraceUs` で正確に
-  停止する。それを過ぎるとウィンドウは喪失を報告するが、shell 自体は時間制限なく host 上に残り、破棄される代わりに後の明示的な resume を待つ。
+  を行わなかった。その間、shell は host 側で 2 分間保持されたままであった。現在は
+  keepalive と再接続が `HostLink` にあり、recovery を求めるすべての画面が利用する。
+  link はタイマーにより ack-eliciting な packet を送信し、backoff を伴って再接続する。
+  `TerminalViewer` は `kTerminalReattachGraceUs` を猶予としてこれを利用し、
+  `TerminalClient::Reattach()`（core に実装され test もされていたが、呼び出されて
+  いなかった）を再利用するため、同一の shell が scrollback とともに復帰する。タイミング
+  の定数は core の `deskhub::KeepaliveIntervalUs` と `ReconnectDelayUs` が保持する。
+  keepalive は idle timeout あたり 3 回送り（最短でも 1 秒間隔、最長でも timeout の半分
+  の間隔）、packet が 1 つ失われても維持できるようにしている。再試行は `kTerminalReattachGraceUs` で正確に
+  停止する。それを過ぎるとウィンドウは喪失を報告するが、shell 自体は時間制限なく
+  host 上に残り、破棄される代わりに後の明示的な resume を待つ。
 - **record は stream へ完全な形で書き込むか、まったく書き込まないかのいずれかであり、
   遅れた client は再描画によって同期させる。** 信頼性を要するデータ、すなわち control、
   auth、terminal の出力は、いずれも 1 本の QUIC stream を共有する length prefix 付きの
@@ -759,9 +837,12 @@ scaling の 2 つの判定とともに実行する（共有 runner には時間�
   `QuicEndpoint::SendStream` は以前、収まる分だけ書き込み残りを破棄していた。この方式は
   `make test` のようなコマンドの出力がリンクの能力を上回るまでは機能していた。1 MiB の
   stream window が埋まり、`TermData` record の末尾が破棄され、viewer の framer が失敗し、
-  shell は開いてから 1 分後に切断された。現在は stream に収まらない record を拒否し、
-  それでも部分的な書き込みが発生した場合は connection を閉じる。ずれた stream をその場で
-  修復することはできないためである。その上位では `TerminalHost` が未送信の出力を shell
+  shell は開いてから 1 分後に切断された。現在は各 record を完全な形で stream ごとの
+  outbox（最大 4 MiB、file stream では 256 KiB）に入れ、window が開くにつれて排出し、
+  outbox に収まらない record は拒否する。それでも quiche が書き込みエラーを報告した場合、
+  `BreakStream` がその stream だけを reset し、`onStreamBroken` で報告する。connection
+  ともう一方の stream は維持される。ずれた stream をその場で修復することはできないが、
+  それ以外を道連れにする必要はないためである。その上位では `TerminalHost` が未送信の出力を shell
   ごとのキューに保持し、tick ごとに再試行するため、一時的にリンクの能力を上回る出力の
   バースト（たとえば build の出力）も client に完全な形で届く。`kMaxPendingBytes` を
   超えた場合、キューは増大させずに破棄する。すべてのバイトは既に host 側の `Screen`
@@ -800,11 +881,13 @@ scaling の 2 つの判定とともに実行する（共有 runner には時間�
   同梱する BoringSSL のヘッダが含まれる。これらを取り出しているのは、Deskhub が host
   identity のために BoringSSL を直接呼び出しており、include パスと TLS ライブラリを
   それぞれ 1 つに保つ必要があるためである。`DeskhubQuiche.cmake` がこれを
-  `deskhub::quiche` として提供し、ライブラリがない場合は configure が失敗する。
+  `deskhub::quiche` として提供し、ライブラリがない場合は `platform/CMakeLists.txt` が
+  configure を失敗させる（build が `-DDESKHUB_QUIC=OFF` で明示的に外した場合を除く）。
+  opus も `DeskhubOpus.cmake` と `-DDESKHUB_AUDIO=OFF` で同じ扱いを受ける。
 - **Apple では `libplatform_bundled.a` を link する。** Xcode の app は platform の
   archive を CMake の外から利用するが、その場合 quiche への PRIVATE な link はその link
-  行に現れない。そのため `libtool` の工程で platform と quiche を、`.pbxproj` が link
-  する 1 つの archive に統合している。
+  行に現れない。そのため `libtool` の工程で platform と quiche と opus を、`.pbxproj` が
+  link する 1 つの archive に統合している。
 - **Windows の toolchain における既知の問題は解消済みであり、この状態を維持する。**
   quiche は Rust のオブジェクトについて
   `CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_RUSTFLAGS` により静的 CRT を使用し、BoringSSL の
@@ -877,19 +960,22 @@ scaling の 2 つの判定とともに実行する（共有 runner には時間�
   通じて同じ app を扱い、利用者が実際に開ける成果物を生成する。したがって再利用可能な
   workflow は `for_release` が設定されている場合に macOS の job を省略する。そうしなけ
   れば、tag ごとに 2 台目の macOS runner を消費して、配布しない bundle を生成すること
-  になる。`build-mobile` が iOS と Android のみを扱うのも同じ理由と同じ分割による。
+  になる。`build-mobile` は iOS と Android のみを扱い、`for_release` を受け取らない。
+  `deploy` はこれを呼び出さず、その `release-ios` と `release-android` の job が自ら
+  fastlane で build する。
 - **すべての workflow は quiche と opus を同一の action から取得し、cache key が取り決め
   のすべてを表す。** `.github/actions/third-party` は job が指定した任意の target に
   ついて両ライブラリを build する。これにより、同一の「キャッシュしてから build する」
-  ブロックが 19 箇所あったものが job ごとに 1 行に集約された。その `cache-key` 入力は、
+  ブロックを各 job が複製する代わりに、それを必要とする 25 の job がそれぞれ 1 行で済む。その `cache-key` 入力は、
   2 つの job が互いのライブラリを復元することを防ぐ唯一の手段である。target の組み合わせ
   が異なれば別のものであり、同じ triple を build する 2 つの runner イメージも別のもので
   ある。ubuntu-latest でコンパイルし ubuntu-22.04 で復元した `libquiche.a` は、この
   release が回避しようとしている glibc に link することになる。build の成果物を変える
   要素はすべてその key に含める。
 - **Windows ではすべての configuration で同一の静的 release CRT を使用する。** cargo は
-  静的 release CRT で quiche を build する（msvc の既定値であり、`RUSTFLAGS` で強制して
-  はならない。proc-macro に波及して cargo が失敗する）。CMake ツリー全体も
+  静的 release CRT で quiche を build する。これは前項のとおり target ごとの
+  `CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_RUSTFLAGS` と `/MT` で強制するものであり、包括的
+  な `RUSTFLAGS` で強制してはならない。proc-macro に波及して cargo が失敗する。CMake ツリー全体も
   `MultiThreaded` を固定して整合させており、これが app を VC++ Redistributable 不要の
   単一の exe に保つ要因でもある。Rust には debug CRT の build がないため、Debug 構成も
   同様に揃える。`_ITERATOR_DEBUG_LEVEL=0`、`/U_DEBUG`、`/RTC1` の除去である。release の
@@ -897,25 +983,36 @@ scaling の 2 つの判定とともに実行する（共有 runner には時間�
   があれば多数の LNK2038 で終わる。
 - **passcode と LAN scan は削除したままである。** 4 桁のコードは開いた port 上の短い
   秘密であり、平文の discovery への応答は network 上の誰に対しても host の存在を知らせて
-  しまう。8.0 はどちらも復活させない —— QR code は画面から読み取るものであり、要求は
-  TLS handshake の完了後にのみ書き込まれる。
+  しまう。それ以降、どちらも復活していない —— QR code は画面から読み取るものであり、要求は
+  TLS handshake の完了と署名の検証の後にのみ書き込まれる。
 
 - **承認は authenticate 済みの経路に乗り、秘密ではなく identity を示す。** 2026-09-28 に
   承認プロンプトへ向けられた反対は、誤った人物が誤ったマシンのためにクリックしうると
   いうものだった —— passcode のプロンプトは誰でも入力しえたコードを表示していた。接続
   要求は入力されたものを何も示さない。デバイスの名前、実際に保持している key の
-  fingerprint（host が TLS 上で受け取った key をハッシュしたもの）、送信元アドレスで
+  fingerprint（要求は client がその key でこの connection の transcript に署名した後に
+  のみ書き込まれるため、他のマシンの名義で要求を出すことは誰にもできない）、送信元
+  アドレスで
   あり、*Approve* は行の位置ではなくその fingerprint に対して作用する。平文で流れるもの
   はなく、推測できるものもない。所有者が誤りうるのは想定していないマシンを承認すること
   だけであり、それを確認できるようにするために行が存在する。host は待機中も connection
-  を開いたままにしない —— 要求はファイルのエントリであり、client が再接続する —— ため、
-  要求の flood は 16 個の socket ではなく 16 行を費やすだけである。
+  を開いたままにしない —— `AwaitingApproval` を返して 2 秒後に connection を閉じ、要求は
+  ファイルのエントリであり、client が再接続する —— ため、要求の flood は 16 個の socket
+  ではなく 16 行を費やすだけである。各行は送信側に自前の key による署名 1 回を課すが、
+  新しい key は安価なので、flood を抑えるのは key ではなく送信元アドレスである。
+  `AccessRequests::Add` は IP アドレス（port は無視）ごとに 1 行を保ち、そのアドレスからの
+  新しい要求は、どの key を持っていてもその行を置き換える。QUIC は `AuthStart` を読む前に
+  peer のアドレスを検証しているので、送信者は自分が受信できないアドレスを名乗れない。
+  正規の要求を押し出すには 16 のアドレスが要り、残るコストはアドレスを共有するデバイス
+  （同じ NAT）にかかり、それらには自分たちの最新の要求しか残らない。アドレスごとの
+  レート制限は加えていない。1 つのアドレスはもともと 1 行しか持てないので、レート制限を
+  加えても表が失いうるものは変わらない。
 
 - **QR code は host の fingerprint と 1 回限りの token を運び、`AuthStart` の前に固定
   する。** token は 5 分間盗む価値のある秘密であるため、client は、code に印字された
   fingerprint の private key を保持していることを TLS handshake で既に証明したマシンに
   対してのみそれを使う。code 内のアドレスにいる中間者はその key を提示できないため、
-  client は `InviteMismatch` で停止し、token はネットワークを渡らない。host 側では token
+  client は招待不一致の失敗で停止し、token はネットワークを渡らない。host 側では token
   を定数時間で比較し、初回使用で消費し、5 分で失効させ、それを表示したパネルとともに
   消し、誤った推測は不正な署名を数えるのと同じ limiter で送信元アドレスに課す —— 1 分に
   3 回、その後 10 秒間ブロック —— ため、2^256 の可能性が高速に試されることはない。
@@ -933,7 +1030,10 @@ scaling の 2 つの判定とともに実行する（共有 runner には時間�
   うる保存済み certificate、そしてどこでどの client key を使うかを記憶しなければならない
   `known_hosts` を意味した。`host_key.pem` の 1 つの ECDSA P-256 key が host 側の TLS と
   client 側の transcript 署名を担い、TLS が要求する X.509 は起動ごとにその周りに構築
-  され、決して書き込まれない。fingerprint は常に certificate ではなく SPKI の SHA-256
+  され、保持されることはない —— ディスクに触れるのは quiche が読み込む一瞬だけであり、
+  そのファイルが含むのは公開 certificate のみで、private key は `host_key.pem` から出る
+  ことがない。
+  fingerprint は常に certificate ではなく SPKI の SHA-256
   だったため、アップグレードした host はすべての client が固定していた fingerprint を
   保った。client の identity は変わった —— Ed25519 から machine key へ —— ため、すべての
   client は貼り付けではなく Approve かスキャンで、改めて一度許可される。
@@ -1009,7 +1109,10 @@ scaling の 2 つの判定とともに実行する（共有 runner には時間�
   まま描画するため、これらのアイコンには角の丸めと透明部分をあらかじめ含める。そうしな
   ければ、この app は丸いアイコンが並ぶ中で角の立った四角として表示される。
   `scripts/make-icons.py` が標準ライブラリのみを使用しているのは意図的であり、bootstrap
-  が画像処理ツールを導入しないためである。
+  が画像処理ツールを導入しないためである。Linux のウィンドウアイコンはインストール済みの
+  hicolor テーマから取るが、build フォルダから実行するビルドにはそれがないため、すべての
+  Linux ビルドは `deskhub-256.png` をバイナリの隣にコピーし、テーマに `deskhub` アイコンが
+  ない場合 `gtk/main.cpp` はそのファイルにフォールバックする。
 - **デスクトップの client は複数の host を同時に保持し、スマートフォンは 1 つのみ保持
   する。** Windows、Linux、macOS の connect ページは接続状態を保持しない。応答した host
   ごとに接続ウィンドウが割り当てられる。`client/windows/win32/MainFrame.cpp` の
@@ -1083,9 +1186,9 @@ scaling の 2 つの判定とともに実行する（共有 runner には時間�
   `t=07:47:00` のログ行がいずれも 07:47:01 に出力され、4 つの QUIC endpoint がその時点で
   それぞれ数秒の poll 間隔を報告し、`HostLink` は正常な link を失われたと判定した。その
   後の再接続により client は新しい送信元 port に移り、host 側の従来の connection は 30
-  秒の idle timeout で閉じられ、送信中の batch も中断された（`transfer aborted ...
-  link-lost`）。その結果 `TestInputStaysLiveDuringABigTransfer` は 120 秒の期限を消費
-  した。現在 `LinkPulse::Tick` は `PumpReady` の 1 巡ごとに実行され、1 巡が
+  秒の idle timeout で閉じられ、送信中の batch も中断された
+  （`transfer aborted ... link-lost`）。その結果
+  `TestInputStaysLiveDuringABigTransfer` は 120 秒の期限を消費した。現在 `LinkPulse::Tick` は `PumpReady` の 1 巡ごとに実行され、1 巡が
   `kLinkWatchStepUs` を超えた分をすべて差し引く。無音時間は、こちらが実際に監視できて
   いた間のみ計上する。ローカルの時計で遠隔の相手を計測する watchdog は、自身が観測して
   いなかった時間を差し引かなければならない。そうしなければ、最初に検出するのは自機の

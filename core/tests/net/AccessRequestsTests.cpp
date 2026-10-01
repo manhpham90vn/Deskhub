@@ -47,7 +47,7 @@ void TestCapEvictsOldest() {
     std::printf("[requests] the list is capped so a flood cannot fill the disk...\n");
     AccessRequests requests;
     for (uint8_t i = 0; i < kMaxAccessRequests; ++i)
-        requests.Add(AccessRequest{KeyFor(i, "d"), "10.0.0.1:1", 0}, 1000 + i);
+        requests.Add(AccessRequest{KeyFor(i, "d"), "10.0.1." + std::to_string(i) + ":1", 0}, 1000 + i);
     Check(requests.Requests().size() == kMaxAccessRequests, "the list fills to the cap");
     requests.Add(AccessRequest{KeyFor(99, "late"), "10.0.0.9:1", 0}, 5000);
     Check(requests.Requests().size() == kMaxAccessRequests, "and never grows past it");
@@ -55,6 +55,68 @@ void TestCapEvictsOldest() {
     Check(requests.Find(KeyFor(99, "")).has_value(), "for the newest");
     Check(requests.Remove(KeyFor(99, "")), "a request can be removed when it is approved or denied");
     Check(!requests.Remove(KeyFor(99, "")), "removing it again reports nothing happened");
+}
+
+void TestOneRequestPerAddress() {
+    std::printf("[requests] each address holds at most one pending request...\n");
+    AccessRequests requests;
+    Check(requests.Add(AccessRequest{KeyFor(1, "real"), "10.0.0.7:5000", 0}, 100),
+        "a request from one address is recorded");
+    Check(requests.Add(AccessRequest{KeyFor(2, "other"), "10.0.0.70:5000", 0}, 110),
+        "a request from a different address is recorded");
+    for (uint8_t i = 0; i < 100; ++i)
+        requests.Add(AccessRequest{KeyFor(uint8_t(100 + i), "flood"), "10.0.0.66:" + std::to_string(4000 + i), 0},
+            200 + i);
+    Check(requests.Requests().size() == 3, "a flood of fresh keys from one address is one row");
+    Check(requests.Find(KeyFor(199, "")).has_value(), "holding only its newest key");
+    Check(requests.Find(KeyFor(1, "")) && requests.Find(KeyFor(2, "")),
+        "and every other address keeps its request");
+
+    Check(requests.Add(AccessRequest{KeyFor(3, "same host"), "10.0.0.7:6000", 0}, 400),
+        "another key from the same address on another port is accepted");
+    Check(!requests.Find(KeyFor(1, "")).has_value() && requests.Find(KeyFor(3, "")).has_value(),
+        "and replaces that address's earlier request");
+
+    Check(requests.Add(AccessRequest{KeyFor(2, "moved"), "10.0.0.7:7000", 0}, 500),
+        "a known key arriving from an address another key holds is accepted");
+    Check(requests.Requests().size() == 2 && !requests.Find(KeyFor(3, "")).has_value(),
+        "and leaves one row for the key and none behind for either source");
+    const auto moved = requests.Find(KeyFor(2, ""));
+    Check(moved && moved->address == "10.0.0.7:7000", "the row carries the new address");
+}
+
+void TestAddressHostForms() {
+    std::printf("[requests] the address comparison ignores only the port...\n");
+    AccessRequests requests;
+    requests.Add(AccessRequest{KeyFor(1, ""), "10.0.0.5", 0}, 100);
+    requests.Add(AccessRequest{KeyFor(2, ""), "10.0.0.5:9", 0}, 110);
+    Check(requests.Requests().size() == 1, "an address with and without a port is one source");
+    requests.Add(AccessRequest{KeyFor(3, ""), "[fe80::1]:5", 0}, 120);
+    requests.Add(AccessRequest{KeyFor(4, ""), "[fe80::1]:6", 0}, 130);
+    Check(requests.Requests().size() == 2 && requests.Find(KeyFor(4, "")),
+        "a bracketed address drops its port");
+    requests.Add(AccessRequest{KeyFor(5, ""), "fe80::2", 0}, 140);
+    requests.Add(AccessRequest{KeyFor(6, ""), "fe80::3", 0}, 150);
+    Check(requests.Requests().size() == 4, "bare addresses with several colons compare whole");
+    requests.Add(AccessRequest{KeyFor(7, ""), "[fe80::4", 0}, 160);
+    requests.Add(AccessRequest{KeyFor(8, ""), "[fe80::4", 0}, 170);
+    Check(requests.Requests().size() == 5 && requests.Find(KeyFor(8, "")),
+        "an unclosed bracket compares whole");
+}
+
+void TestFileKeepsNewestPerAddress() {
+    std::printf("[requests] a file holding two requests from one address keeps the newer...\n");
+    AccessRequests older;
+    older.Add(AccessRequest{KeyFor(1, ""), "10.0.0.8:1", 0}, 1000);
+    AccessRequests newer;
+    newer.Add(AccessRequest{KeyFor(2, ""), "10.0.0.8:2", 0}, 1100);
+    const std::string olderLine = SerializeAccessRequests(older);
+    const std::string newerLine = SerializeAccessRequests(newer);
+    for (const std::string& text : {olderLine + newerLine, newerLine + olderLine}) {
+        const auto back = ParseAccessRequests(text, 1200);
+        Check(back && back->Requests().size() == 1 && back->Find(KeyFor(2, "")),
+            "whichever line comes first, the newer request survives");
+    }
 }
 
 void TestFileRoundTrip() {
@@ -87,5 +149,8 @@ void TestFileRoundTrip() {
 void RunAccessRequestsTests() {
     TestAddDedupesAndExpires();
     TestCapEvictsOldest();
+    TestOneRequestPerAddress();
+    TestAddressHostForms();
+    TestFileKeepsNewestPerAddress();
     TestFileRoundTrip();
 }

@@ -17,13 +17,14 @@ checkout する必要はない。自分でコンパイルする場合は [`BUILD
 | 🍎 macOS | `deskhub-v*-macos.dmg` | dmg を開き、Deskhub を Applications にドラッグ |
 | 🐧 Ubuntu、Kubuntu、Debian、Mint | `deskhub-v*-amd64.deb` | `sudo apt install ./deskhub-v*-amd64.deb` |
 | 🐧 Fedora（Workstation と KDE spin） | `deskhub-v*-x86_64.rpm` | `sudo dnf install ./deskhub-v*-x86_64.rpm` |
-| 🐧 openSUSE | `deskhub-v*-x86_64.rpm` | `sudo zypper install ./deskhub-v*-x86_64.rpm` |
+| 🐧 openSUSE Tumbleweed | `deskhub-v*-x86_64.rpm` | `sudo zypper install ./deskhub-v*-x86_64.rpm` |
 | 🐧 Arch およびその他のディストリビューション | `deskhub-v*-linux-x86_64` | `chmod +x deskhub-v*-linux-x86_64 && ./deskhub-v*-linux-x86_64` |
 | 🤖 Android | `deskhub-v*-android.apk` | apk をインストール、または Play の beta に参加 |
 | 📱 iOS | — | [TestFlight](https://testflight.apple.com/join/7qY7wgpd) |
 
 terminal からの操作やスクリプトには `deskhub-cli` も使える。Windows と Linux では、
-CLI からリモート画面のウィンドウも開ける。[Command line](#-command-line) を参照。
+CLI からリモート画面のウィンドウも開ける（Linux では X11 のウィンドウなので、Wayland の
+デスクトップでは XWayland が必要）。[Command line](#-command-line) を参照。
 
 Windows では `winget`、macOS では Homebrew、Ubuntu・Kubuntu・Debian・Mint では
 [apt repository](#-linux) からもインストールできる。新しい release が必要になったら、
@@ -48,17 +49,22 @@ winget install ManhPham.Deskhub
 `winget uninstall ManhPham.Deskhub` を一度実行してから再インストールする。
 `%USERPROFILE%\.deskhub` の設定と鍵は保持される。
 
-初回の使用時には次の 2 点が発生する。
+次の 2 点に注意する。
 
-- **起動時に一度 Administrator を要求する。** これがないと、昇格したウィンドウへ mouse
-  と keyboard を inject できない。
+- **起動のたびに Administrator を要求する。** 起動するごとに Windows が UAC の確認を表示
+  する。これがないと、昇格したウィンドウへ mouse と keyboard を inject できないためである。
+  *Start Deskhub when you log in* をオンにすると、サインイン時に昇格したログオンタスクと
+  して起動し、確認は表示されない。
 - **Windows Firewall のルールを 1 本追加する。** 初回の share 時に app 自身が追加する。
 
 DeskHub は Windows の設定または `winget uninstall ManhPham.Deskhub` でアンインストールできる。
 ポータブル版は exe を削除する。Settings と key は、フォルダを削除するまで
-`%USERPROFILE%\.deskhub` に残る。
+`%USERPROFILE%\.deskhub` に残る。他のマシンから届いたファイルも、削除するまで
+`%USERPROFILE%\Deskhub`（または選んだフォルダ）に残る。
 
 ## 🍎 macOS
+
+Deskhub には macOS 14 Sonoma 以降が必要である。
 
 `deskhub-v*-macos.dmg` をダウンロードして開き、app を *Applications* にドラッグする。
 この dmg は Developer ID で sign され、Apple の notarize も通っているため、Gatekeeper
@@ -79,7 +85,13 @@ brew install --cask manhpham90vn/tap/deskhub
 | **Screen Recording** | この Mac の display を capture する |
 | **Accessibility** | viewer がこの Mac の mouse と keyboard を操作できるようにする |
 
-他のマシンを観るだけであれば、どちらも不要である。
+他のマシンを観るだけであれば、どちらも不要である。System Settings で Screen Recording
+をオンにした後は、Deskhub を終了して開き直す。macOS はこの許可を新しく起動したプロセスに
+しか適用せず、Settings ページにもその旨が表示される。
+
+このほか macOS 自身が 2 つの確認を出す。**Local Network**（ローカルネットワーク）への
+アクセスは、共有でも connect でも相手のマシンに届くために必要である。**通知**の許可は、
+connection request を知らせる必要が初めて生じたときに求められる。
 
 ## 🐧 Linux
 
@@ -89,11 +101,14 @@ PipeWire、libva など、app が使うデスクトップ向けライブラリ�
 
 deb と rpm の内容は同一であり、利用中の package manager が扱えるほうを選べばよい。
 どちらにも下記の要件 3 で説明する `/dev/uinput` の udev rule が含まれるため、インストール
-直後から remote input が動作する。group の変更も再ログインも不要である。portable
-binary は glibc 2.35 以上の x86_64 ディストリビューションで動作する（Ubuntu 22.04、
-Fedora 36、openSUSE 15.5、現行の Arch）。
+直後から remote input が動作する。group の変更も再ログインも不要である。deb、rpm、
+portable を問わず、すべての Linux 版は glibc 2.35 以上の x86_64 を必要とする（Ubuntu
+22.04、Debian 12、Fedora 36、openSUSE Tumbleweed、現行の Arch）。openSUSE Leap 15.5 の
+glibc は 2.31 のため動作しない。
 
-CLI には別の deb と rpm があり、デスクトップ app と独立して、または一緒にインストールできる。
+CLI には別の deb と rpm があり、単独で、または同じかより新しいバージョンのデスクトップ
+app と一緒にインストールできる。package manager は古い `deskhub` を新しい `deskhub-cli`
+と並べて残さないため、両方をまとめて更新する。
 両方ともコマンドを `/usr/bin` に配置し、デスクトップ app はアプリケーションメニューに
 ランチャーも追加する。
 
@@ -118,8 +133,9 @@ CLI は `sudo apt install deskhub-cli` で別途インストールする。以�
 
 Deskhub の capture は常に `xdg-desktop-portal` を経由する。共有する画面を選ぶダイアログ
 を出しているのがこれである。選択結果は記憶されるため、ダイアログが表示されるのは初回の
-share 時のみである。別の画面に変更する場合は、Host ページの *Choose screens again* を
-使用する。
+share 時のみである。記憶済みの選択に含まれない画面を Host ページでチェックすると、
+Deskhub はその選択を忘れ、ダイアログが自動的に再び表示される。手動で選択を消すには
+`deskhub-cli displays --forget` を実行する。
 
 GNOME と KDE は主要なディストリビューションで portal backend を標準搭載しているため、
 Ubuntu、Kubuntu、Fedora Workstation、Fedora KDE、openSUSE、および GNOME/KDE 上の Arch
@@ -136,28 +152,36 @@ compositor である。GNOME/KDE と異なり自前の portal backend を持た�
 3 つに screen capture を提供する backend にあたる。Hyprland には専用の
 `xdg-desktop-portal-hyprland` がある。
 
-### 2. VA-API driver
+### 2. ハードウェア H.264 encoder
 
-H.264 の encode は GPU 上で行う。software fallback はない。
+H.264 の encode は GPU 上で行う。software fallback はない。host が使う encoder は、
+デスクトップを描画している GPU によって決まる。
+
+- **プロプライエタリ driver の NVIDIA** —— NVENC。driver 自身のライブラリを使い、driver
+  が NVENC API 13.0 以降に対応していればよい。追加のインストールは不要で、こうしたマシン
+  では `vainfo` が H.264 encoder を 1 つも示さなくても host になれる。
+  `nvidia-vaapi-driver` と `libva-nvidia-driver` は decode 専用であり、観る側を速くするが
+  共有には役立たない。
+- **AMD、Intel、その他すべての GPU** —— VA-API。H.264 encoder を持つ driver が必要である。
 
 ```bash
 # Ubuntu / Debian / Mint
-sudo apt install va-driver-all vainfo        # NVIDIA では追加で: nvidia-vaapi-driver
+sudo apt install va-driver-all vainfo        # NVIDIA（decode 専用）: nvidia-vaapi-driver
 
 # Fedora —— 標準の Mesa では H.264 が無効。使用可能な driver は RPM Fusion にある:
 sudo dnf install libva-utils
 sudo dnf install mesa-va-drivers-freeworld   # AMD (RPM Fusion)
 sudo dnf install intel-media-driver          # Intel (RPM Fusion)
-sudo dnf install nvidia-vaapi-driver         # NVIDIA (RPM Fusion)
+sudo dnf install nvidia-vaapi-driver         # NVIDIA、decode 専用 (RPM Fusion)
 
 # openSUSE
 sudo zypper install libva-utils              # 加えて GPU ベンダーの VA-API driver
 
 # Arch
 sudo pacman -S libva-utils
-sudo pacman -S libva-mesa-driver             # AMD · Intel: intel-media-driver · NVIDIA: libva-nvidia-driver
+sudo pacman -S libva-mesa-driver             # AMD · Intel: intel-media-driver · NVIDIA（decode 専用）: libva-nvidia-driver
 
-# 以上のうえで、すべてのディストリビューションで:
+# 以上のうえで、AMD または Intel では:
 vainfo | grep -E 'H264.*Enc'                 # 1 行以上出力されること。出なければ host にはできない
 ```
 
@@ -174,10 +198,30 @@ curl -fsSL https://raw.githubusercontent.com/manhpham90vn/Deskhub/main/scripts/s
 sudo に渡す前に内容を確認したい場合は、先に
 [`scripts/setup-uinput.sh`](../scripts/setup-uinput.sh) をダウンロードするとよい。
 十数行の短いスクリプトである。source を checkout 済みであれば、同等の操作は
-`make setup-linux-permissions` である。
+`make setup-linux-permissions` である。このスクリプトは rule に加えて、sudo で実行した
+ユーザーを `input` グループに追加する。これは次回のログインから有効になり、SSH や
+headless の session が `/dev/uinput` に届くために必要で、host wins（後述）も有効にする。
 
 uinput の権限がなくても app は動作し、観ることもできる。このマシンへ mouse や
 keyboard を inject できないだけである。
+
+<a id="host-wins"></a>
+
+### マシンの前にいる人を優先させる
+
+このマシン自身の mouse や keyboard を使っている間、Deskhub は remote input を一時停止す
+る（"host wins"）。それを検知するために `/dev/input/event*` を読むが、これができるのは
+`input` グループのメンバーだけであり、deb も rpm も誰もこのグループに追加しない。グループ
+がなくても共有と remote input は動作するが、入力中に viewer の input は止まらない。有効に
+するには次を実行する。
+
+```bash
+sudo usermod -aG input "$USER"               # その後ログアウトして再ログイン
+```
+
+`input` グループに入ると、Deskhub に限らず実行するすべてのプログラムが、このマシンの
+すべての keyboard と mouse を読めるようになる。host wins よりそちらが重要な環境では
+有効にしないこと。
 
 ### Firewall
 
@@ -191,21 +235,30 @@ sudo firewall-cmd --add-port=47777/udp --permanent        # Fedora / openSUSE
 ### アンインストール
 
 ```bash
-sudo apt remove deskhub      # または: sudo dnf remove deskhub / sudo zypper remove deskhub
+sudo apt remove deskhub deskhub-cli   # インストールしたもの。または dnf remove / zypper remove
 rm -rf ~/.deskhub            # settings、key、許可済み client、信頼済み host
 sudo rm -f /etc/apt/sources.list.d/deskhub.list /etc/apt/keyrings/deskhub.gpg   # apt repository を追加した場合
 ```
 
-portable binary はファイル 1 つであり、削除すればよい。
+他のマシンから届いたファイルは、削除するまで `~/Deskhub`（または選んだフォルダ）に残る。
+portable binary はファイル 1 つであり、削除すればよい。`setup-uinput.sh` は udev rule、
+module-load ファイル、`input` グループへの所属を残すので、ほかに必要なければ手動で削除
+する。
+
+```bash
+sudo rm -f /etc/udev/rules.d/60-deskhub-uinput.rules /etc/modules-load.d/deskhub.conf
+sudo gpasswd -d "$USER" input
+```
 
 ## 🤖 Android
 
-host としては view-only の画面共有のみを行い、**Android 10+** を必要とする。観るだけで
-あれば、より古いバージョンでも動作する。
+Deskhub には **Android 8.0** 以降が必要である。host としては view-only の画面共有のみを
+行い、**Android 10+** を必要とする。
 
 **apk を直接インストール** —— [Releases](https://github.com/manhpham90vn/Deskhub/releases)
-から `deskhub-v*-android.apk` をダウンロードしてインストールする。Google Play 版と同じ
-key で sign されている。
+から `deskhub-v*-android.apk` をダウンロードしてインストールする。Google Play 版の上に
+（またはその逆に）インストールできないと Android に拒否された場合は、先にもう一方を
+アンインストールする。その key も削除されるため、各 host で改めて許可してもらう必要がある。
 
 **Play の beta** —— 3 段階で、いずれも端末の Play Store と**同じ Google アカウント**を
 使用する。
@@ -215,11 +268,13 @@ key で sign されている。
 3. インストールする（Play の同期に数分かかる）: [play.google.com/store/apps/details?id=com.manhpham.deskhub](https://play.google.com/store/apps/details?id=com.manhpham.deskhub)
 
 beta は **14 日以上**端末に残しておいてほしい。app を一般公開するために Google が求めて
-いる条件である。
+いる条件である。Play の beta は Releases の apk より遅れることがある。各 release はまず
+Google Play の internal track に入り、promote されて初めて beta に届く。
 
 ## 📱 iOS
 
-ipa は sideload できないため、beta は TestFlight で配布している。
+Deskhub には iOS または iPadOS 17 以降が必要である。ipa は sideload できないため、beta
+は TestFlight で配布している。
 
 1. [TestFlight](https://apps.apple.com/app/testflight/id899247664) をインストールする。
 2. beta に参加する: **[testflight.apple.com/join/7qY7wgpd](https://testflight.apple.com/join/7qY7wgpd)**
@@ -233,6 +288,7 @@ Android と同様に、iPhone と iPad の host は view-only に限られる。
 
 `deskhub-cli` では画面の共有や remote shell の起動をコマンドで行える。スクリプトや
 SSH からも利用可能。Windows と Linux の `connect` はリモート画面のウィンドウを開く。
+Linux では X11 のウィンドウであり、Wayland のデスクトップでは XWayland 経由で表示される。
 macOS で画面を見る場合はデスクトップ app を使う。コマンド一覧は `deskhub-cli help`
 で確認できる。settings、マシンの key、許可済み client、接続要求、信頼済み host は app と
 共通である。
@@ -255,9 +311,14 @@ dmg のように署名や notarize をしていないため、初回の実行時
 Privacy & Security の *Open Anyway* が必要である。
 
 Windows のインストーラーは管理者権限なしで CLI をユーザーの `PATH` に追加する。
-ポータブル版 `deskhub-cli-v*-windows.exe` も利用できる。package manager 経由でも
+ポータブル版 `deskhub-cli-v*-windows.exe` も利用できる。
+すべてのインストーラーとパッケージは `THIRD_PARTY_NOTICES.md` と、中に含まれる
+ライブラリのライセンス本文を同梱する。ポータブル版のバイナリにはそれができないため、
+各リリースは `LICENSE`、`THIRD_PARTY_NOTICES.md` とすべてのライセンス本文を収めた
+`deskhub-v*-licenses.zip` も提供する。package manager 経由でも
 `PATH` に配置される。Windows では
-`winget install ManhPham.DeskhubCLI`、macOS では `brew install manhpham90vn/tap/deskhub-cli`
+`winget install ManhPham.DeskhubCLI`（winget はインストーラーではなくポータブル版 exe を
+入れる）、macOS では `brew install manhpham90vn/tap/deskhub-cli`
 を使う。Homebrew は quarantine フラグを付けずにインストールする。Ubuntu や Debian では
 上記の apt repository を追加した後、`sudo apt install deskhub-cli` を実行する。
 
@@ -280,21 +341,21 @@ session が運ぶ内容 —— video、キー入力、mouse、clipboard、termin
 リストにある key を持つデバイスだけを通し、すべてのデバイスは key を 1 つ持つ。デバイスを
 そのリストに載せる方法は 3 つあり、どれか 1 つで足りる。
 
-- **QR code をスキャンする。** host が共有している間に、アドレス一覧の横の **Show QR
-  code** を押す。スマートフォンでは Client ページの **Scan QR code** を押して画面に向ける。
+- **QR code をスキャンする。** host が共有している間に、アドレス一覧の横の
+  **Show QR code** を押す。スマートフォンでは Client ページの **Scan QR code** を押して画面に向ける。
   それ以外のデバイスでは、code の下のリンクをコピーしてアドレス欄に貼り付ける。デバイスは
   一度の手順で信頼・許可・接続される。
-- **要求を承認する。** デバイスで host のアドレスを入力し *Connect* を押す。host は *Connection
-  request* の通知を表示し、Host ページと Devices ページの **Connection requests** に、名前、
+- **要求を承認する。** デバイスで host のアドレスを入力し *Connect* を押す。host は
+  *Connection request* の通知を表示し、Host ページと Devices ページの **Connection requests** に、名前、
   key の fingerprint、アドレスとともに一覧する。**Approve** を押せば、デバイスは次の試行で接続される —— デバイスは 2 分間、
   自動的に再試行を続ける。
 - **key を貼り付ける。** デバイスで **Devices** → **Copy public key**。host で **Devices**
   → **Devices allowed to connect to this machine** → *Allow*、貼り付けて完了。
 
 アドレスで初めて Connect すると、**New host** ダイアログが host の key の fingerprint を
-表示する。host の Devices ページの **This machine** にある fingerprint と照合したうえで、*Trust
-and connect* を押す。QR code は fingerprint を含むため、このダイアログを省く。以後、その
-host は **Trusted hosts** に表示され、アドレスが変わっても信頼されたままである。
+表示する。host の Devices ページの **This machine** にある fingerprint と照合したうえで、
+*Trust and connect* を押す。app で QR code をスキャンした場合は、code が fingerprint を含む
+ため、このダイアログを省く。以後、その host は **Trusted hosts** に表示され、アドレスが変わっても信頼されたままである。
 
 各方法を app と CLI の両方で説明し、スクリプトと取り消しも扱う
 [Key とアクセス](#-key-とアクセス) を参照。
@@ -303,8 +364,8 @@ passcode も、未知のマシンを受け入れるスイッチも存在しな�
 見せた QR code、または自分が貼り付けた key なしに接続できる者はいない。Deskhub が
 network を scan することもない。
 
-Deskhub は**信頼できる network** または **VPN** 上で使い、**UDP 47777 を
-port-forward しないこと**。Encrypt は session の内容を守るが、host への初回の
+Deskhub は**信頼できる network** または **VPN** 上で使い、UDP 47777 を
+port-forward しないこと。Encrypt は session の内容を守るが、host への初回の
 Connect では、fingerprint を照合しない限り、提示された key がそのまま信頼される。遠隔から
 アクセスする場合は、両方のマシンに [Tailscale](https://tailscale.com) を導入し、
 `100.x.y.z` のアドレスへ Connect できる。
@@ -349,7 +410,10 @@ port、key の fingerprint、名前、そして 5 分間有効なランダムな
 - スマートフォンやタブレットでは、Client ページを開いて **Scan QR code** を押す。初回は
   system がカメラの permission を求める。Deskhub がカメラを使うのはここだけで、frame は
   端末上で decode し、何も保存しない。system のカメラやメッセージから
-  `deskhub://pair/…` リンクを開いても同じ結果になる。
+  `deskhub://pair/…` リンクを開くこともできるが、そうしたリンクはどこからでも届きうるため、
+  その host がまだ信頼されていなければ、app はまずリンク内の fingerprint を示す
+  **New host** ダイアログを表示し、照合して *Trust and connect* を押したときにだけ接続
+  する。既に信頼している host にはそのまま接続する。
 - デスクトップを含むどのデバイスでも、code の下に表示されるリンクをコピーしてアドレス欄に
   貼り付け、*Connect* を押す（CLI: `deskhub-cli connect 'deskhub://pair/…'`。`sources`、
   `shell`、`send` もこのリンクを受け取る）。
@@ -475,7 +539,12 @@ Deskhub は拒否しない。そのマシンを一度も会ったことのない
 
 ### 以前の Deskhub から移行する
 
-**7.0.x から。** 両方のマシンに 8.0 が必要である。どちらか一方でも 7.0.x の Deskhub だと
+**8.0.0 から。** 9.0 は 8.0.0 より新しい認証バージョンを使うため、どちらか一方でも
+8.0.0 の Deskhub だと connect できず、"That machine uses an incompatible authentication
+version" として拒否される。両方のマシンを更新すること。それ以外は何も変わらない ——
+key、許可したデバイス、信頼した host はすべて引き継がれる。
+
+**7.0.x から。** 両方のマシンに 9.0 が必要である。どちらか一方でも 7.0.x の Deskhub だと
 connect できず、"That machine uses an incompatible authentication version" として拒否
 される。各マシンはすでに持っていた key と fingerprint をそのまま保つので、信頼していた
 host は信頼されたままである。変わるのはデバイスがサインイン*する*key で、これが同じ
@@ -506,8 +575,12 @@ host は信頼されたままである。変わるのはデバイスがサイン
 - **"That machine uses an incompatible authentication version"** —— どちらかが以前の
   Deskhub を使っている。両方のマシンを更新する。[以前の Deskhub から移行する](#以前の-deskhub-から移行する)
   を参照。
-- **Linux: share が直ちに失敗する** —— `vainfo | grep -E 'H264.*Enc'` を実行する。結果
-  が空であれば、そのマシンに使用可能な H.264 encoder がなく、host にはできない。
+- **Linux: share が直ちに失敗する** —— AMD または Intel では
+  `vainfo | grep -E 'H264.*Enc'` を実行する。結果が空であれば、そのマシンに使用可能な
+  H.264 encoder がなく、host にはできない。NVIDIA では、`~/.deskhub` の log に driver の
+  NVENC が古すぎるかどうかが記録される。
+- **Linux: 入力中も viewer が操作を続ける** —— ユーザーが `input` グループに入っていない。
+  [マシンの前にいる人を優先させる](#host-wins) を参照。
 - **Linux: ポインタが動かない** —— 要件 3 の `/dev/uinput` rule が導入されていない。
 - **macOS: 画面が黒い、または input が効かない** —— Settings ページで Screen Recording
   と Accessibility を確認する。

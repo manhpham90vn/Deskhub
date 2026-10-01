@@ -2,7 +2,7 @@
 
 # Deskhub 隐私政策
 
-_生效日期：2026 年 9 月 30 日 —— 版本 2.11_
+_生效日期：2026 年 10 月 1 日 —— 版本 2.12_
 
 > 本文件译自 [`PRIVACY.md`](PRIVACY.md)。如有出入，以英文版为准。
 
@@ -25,7 +25,7 @@ Deskhub 是一款 remote desktop 应用：它将你某台电脑的屏幕 stream 
 
 **开发者不会通过 Deskhub 接收或存储你的 session 内容与使用数据。** app 仍会在你的
 设备上处理和保存部分信息，详情见下文。Deskhub 没有用户账号、开发者运营的服务器、
-analytics、crash reporting、广告，也未嵌入第三方 SDK。
+analytics、crash reporting、广告，也未嵌入收集数据的第三方 SDK。
 
 ## 3. 本软件处理的信息
 
@@ -36,24 +36,26 @@ analytics、crash reporting、广告，也未嵌入第三方 SDK。
 |---|---|---|---|
 | 被共享电脑的屏幕内容（video frame） | 在你的另一台设备上显示该屏幕 | 在你的两台设备之间直接发送，传输中 encrypt（QUIC/TLS） | 不存储；仅在 session 期间存在于内存中 |
 | 被共享电脑正在播放的声音（仅当该电脑共享声音且 viewer 提出请求时） | 使观看者能够听到该电脑的声音 | 在你的两台设备之间直接发送，传输中 encrypt（QUIC/TLS），以压缩音频形式传输 | 不存储；仅在 session 期间存在于内存中 |
-| Mouse、keyboard 与触摸 input | 从你的另一台设备操作被共享的电脑 | 由观看设备直接发送至被共享的电脑，传输中 encrypt（QUIC/TLS） | 不存储；inject 之后即丢弃 |
-| 本设备的 key，即首次运行时创建的一把私钥 | 在两个方向上证明本设备的身份：共享时向连接进来的设备证明，connect 时向所连接的 host 证明；对用户呈现为一个 fingerprint（`SHA256:…`） | 写入 app 自身文件夹中的 `host_key.pem`。private key 永远不会离开设备：共享时，向连接进来的设备出示的是在内存中由该 key 构建的 certificate —— 从不保存；connect 时仅发送 public key 和签名。*Copy public key* 会将 public key 放入你的 clipboard，并以本设备名称作为 label，供你交给 host 的所有者。早期版本的 `host_cert.pem` 与 `client_key*.pem` 文件不再被读取 | 保留至你删除该文件为止；不会被自动替换。删除后本设备将获得新的身份：此前允许旧身份的 host 需要重新允许它，此前信任它的设备会将其视为一个新的 host |
-| 受信任的 host（固定的 key fingerprint、名称、它最后一次应答的地址与 port） | 识别本设备已信任的 host，无论它出现在哪个地址，并在曾属于受信任 host 的地址上出现另一把 key 应答时发出警告 | 写入同一文件夹中的 `known_hosts`；不会被传输 | 保留至你移除 host 或删除文件；地址在每次连接时更新 |
+| Mouse、keyboard 与触摸 input | 从你的另一台设备操作被共享的电脑 | 由观看设备直接发送至被共享的电脑，传输中 encrypt（QUIC/TLS） | 不存储，也从不写入日志；inject 之后即丢弃 |
+| 本设备的 key，即首次运行时创建的一把私钥 | 在两个方向上证明本设备的身份：共享时向连接进来的设备证明，connect 时向所连接的 host 证明；对用户呈现为一个 fingerprint（`SHA256:…`） | 写入 app 自身文件夹中的 `host_key.pem`。private key 从不发送给其他设备：共享时，向连接进来的设备出示的是由该 key 构建的 certificate；connect 时仅发送 public key 和签名。certificate 不会被保留 —— TLS 库只能从文件加载它，因此它会被短暂写入同一文件夹中的 `transport_cert.<random>.pem`，仅你可读，并在加载后删除；因 crash 而遗留的文件会在本设备下次开始共享时删除。它只包含公开的 certificate —— private key 从 `host_key.pem` 读取。在 iOS 上，该文件夹被排除在 iCloud 与电脑备份之外；在 Android 上，app 的备份已关闭；在 Windows、macOS 与 Linux 上，复制你主目录的备份工具会一并复制该 key 文件。*Copy public key* 会将 public key 放入你的 clipboard，并以本设备名称作为 label，供你交给 host 的所有者。早期版本的 `host_cert.pem` 与 `client_key*.pem` 文件不再被读取 | 保留至你删除该文件为止；不会被自动替换。删除后本设备将获得新的身份：此前允许旧身份的 host 需要重新允许它，此前信任它的设备会将其视为一个新的 host |
+| 受信任的 host（固定的 key fingerprint、名称、本设备首次与最后一次连上它的时间、它最后一次应答的地址与 port） | 识别本设备已信任的 host，无论它出现在哪个地址，并在曾属于受信任 host 的地址上出现另一把 key 应答时发出警告 | 写入同一文件夹中的 `known_hosts`；不会被传输 | 保留至你移除 host 或删除文件；地址与最后一次见到的时间在每次连接时更新 |
 | 允许 connect 到本 host 的 client public key，各带一个 label | 只允许能证明持有对应 private key 的 client 进入 | 写入同一文件夹中的 `authorized_keys`，每行一个 key 及其 label；不记录任何时间。不会被传输。key 会在你粘贴它、你批准该设备的 connection request，或该设备扫描本 host 的 QR code 时加入 —— 后两种情况下 label 为该设备发送的名称 | 保留至你移除这些 key 或删除文件；没有该文件时任何人都无法 connect |
-| Connection request —— 每台尚未获允许却尝试 connect 到本 host 的设备的名称、public key、地址与时间 | 让本 host 的所有者看到谁在请求，并以 *Approve* 或 *Deny* 作出决定 | 请求方设备通过 encrypt 连接发送其名称与 public key；本 host 将其连同所见地址与时间写入同一文件夹中的 `access_requests`。不会传输到这两台设备之外；仅显示在本 host 自己的屏幕上 | 最多 16 条。每条在 10 分钟后删除，或在你按下 *Approve*（将该 key 移入 `authorized_keys`）或 *Deny* 时立即删除 |
+| Connection request —— 每台尚未获允许却尝试 connect 到本 host 的设备的名称、public key、地址与时间 | 让本 host 的所有者看到谁在请求，并以 *Approve* 或 *Deny* 作出决定 | 请求方设备通过 encrypt 连接发送其名称与 public key，并用对应的 private key 签名；只有在该签名验证通过之后，本 host 才将其连同所见地址与时间写入同一文件夹中的 `access_requests`。不会传输到这两台设备之外；仅显示在本 host 自己的屏幕上 | 最多 16 条。每条在 10 分钟后删除，或在你按下 *Approve*（将该 key 移入 `authorized_keys`）或 *Deny* 时立即删除 |
 | QR pairing token —— 本 host 在展示其 QR code 期间签发的一次性随机码 | 让扫描该码的那台设备无需任何进一步步骤即可接入 | 写入同一文件夹中的 `pairing_tokens`，并附每个 token 的过期时间。token 随你展示的 QR code 与链接传播 —— 任何能看到该屏幕的人都能读到它 —— 并由扫描它的设备通过 encrypt 连接发送一次。QR code 中还包含本设备的 network 地址与 port、其 key fingerprint 及其设备名 | 在隐藏该码、停止共享、token 被使用时删除，或 5 分钟后删除 |
 | 你扫描 QR code 期间的摄像头画面（仅 Android 与 iOS） | 从 host 的屏幕上读取其 QR code | 仅在设备上处理，用于查找并解码该码；不保存、不传输，也不向任何人显示 | 从不保存；每一帧检查完毕即丢弃 |
-| 你输入的地址（IP 或 hostname） | 连接到另一台机器 | 仅保留在你输入它的设备上 | 本地保留至你修改为止 |
+| 你输入的 IPv4 地址（以及你给出的 port）—— Deskhub 不解析 host 名称 | 连接到另一台机器 | 仅保留在你输入它的设备上 | 本地保留至你修改为止 |
 | 最近连接的 10 个 host —— 地址、最近一次连接的时间以及 host 自报的名称 | 填充 *Recent devices* 列表 | 写入你设备上 app 自身文件夹中的 `recent-hosts.txt`，每个 host 一行：Windows 为 `%USERPROFILE%\.deskhub`，macOS 与 Linux 为 `~/.deskhub`，iOS 与 Android 为 app 沙箱；从不传输。早期版本的 `recent-devices.txt` 文件会被删除，而非转换 | 保留至你连接了 10 个更新的 host，或删除该文件为止 |
-| 你的共享设置（frame rate、bitrate、分辨率上限、port、network 地址、viewer 操作权限，以及 clipboard sync、声音、keep awake、随 OS 启动、自动共享与后台模式等开关） | 在下次打开 app 时恢复你的 settings | 写入同一文件夹中的 `ui-settings.txt`；在 iOS 上位于 app 与 broadcast extension 共享的 app group 容器中 | 保留至你修改或删除该文件为止 |
+| 你的共享设置（frame rate、bitrate、分辨率上限、port、network 地址、viewer 操作权限、本设备是否操作它所观看的机器，以及 clipboard sync、共享声音、播放所观看机器的声音、keep awake、随 OS 启动、自动共享与后台模式等开关） | 在下次打开 app 时恢复你的 settings | 写入同一文件夹中的 `ui-settings.txt`；在 iOS 上位于 app 与 broadcast extension 共享的 app group 容器中 | 保留至你修改或删除该文件为止 |
+| *Start Deskhub when you log in* 创建的启动项（仅桌面端） | 在你登录时启动 Deskhub | 由操作系统自身的机制创建，位于 app 文件夹之外：Windows 上为名为 *Deskhub* 的 scheduled task（在登录时以最高权限运行），Linux 上为 `~/.config/autostart/deskhub.desktop`，macOS 上为一个登录项。它只包含 app 的路径；不会传输任何内容 | 在你关闭该设置时移除 |
 | 你在 Linux 桌面的屏幕共享对话框中选定 display 后，桌面签发的屏幕 permission token（仅 Linux） | 使后续共享复用该选择，从而对话框仅在首次出现 | 写入同一文件夹中的 `portal-restore-token.txt`；该 token 仅对本机上你自己的桌面 session 有意义，不会被传输 | 每次共享后被替换；在你选择 *Choose screens again* 或删除该文件时移除 |
 | Clipboard 文本（仅当 clipboard sync 开关开启且存在运行中的 session 时） | 使在一台设备上复制的文本可在其他设备上粘贴 | 在你的设备之间直接发送，传输中 encrypt（QUIC/TLS），每次复制上限 32 KiB；仅限纯文本，不包含图片或文件 | Deskhub 不存储；仅存在于各设备自身的系统 clipboard 中 |
-| 当前是否有 broadcast 在运行、已连接的 viewer 数量、broadcast extension 自身的内存占用（MB），以及最近一次启动错误的文本（仅 iOS） | 使 app 的共享界面能够显示 broadcast extension 的状态。iOS 将其作为独立 process 运行，并在内存占用过高时终止它 | 写入同一 app group 容器中的 `broadcast-status.txt` | 在 broadcast 结束时删除 |
-| Settings → General → *Device name* 中的设备名。留空时使用本电脑或设备自身的名称（Windows 与 Linux 为 hostname，macOS 为电脑名称，iOS 为设备名称，Android 为机型） | 为本设备命名：共享时显示给 viewer，显示给 connect 到本设备的已允许 client，在你所连接的 host 上显示于该设备地址旁，显示在 host 为本设备记录的 connection request 中，并用作你所复制 public key 的 label | 保存在同一文件夹的 `ui-settings.txt` 中，并在 connect 时发送给 host。该数据在传输中 encrypt，但会显示在 host 的屏幕上并写入其日志，因此除非你自行设置名称，默认名称将被发送。尚未允许本设备的 host 会在其 connection request 列表中显示该名称，并保留最多 10 分钟。本设备共享时，还会将该名称发送给每个已用允许的 key 完成认证的 client —— 认证之前绝不发送 —— 该 client 会将其保存在自己的最近列表中，该名称也会写入本设备展示的 QR code 中。它还会嵌入你复制的 public key 中，并且是 host 在批准本设备或通过 QR code 准入本设备时保存到其 `authorized_keys` 中的 label | 保留至你修改或删除该文件为止。清空该字段是回退到默认值，而非移除名称 |
+| 当前是否有 broadcast 在运行、已连接的 viewer 数量及其设备名、broadcast extension 自身的内存占用（MB），以及最近一次启动错误的文本（仅 iOS） | 使 app 的共享界面能够显示 broadcast extension 的状态。iOS 将其作为独立 process 运行，并在内存占用过高时终止它 | 写入同一 app group 容器中的 `broadcast-status.txt` | 在 broadcast 结束时删除 |
+| Settings → General → *Device name* 中的设备名。留空时使用本电脑或设备自身的名称（Windows 与 Linux 为 hostname，macOS 为电脑名称，iOS 为设备名称，Android 为机型） | 为本设备命名：共享时显示给 viewer，显示给 connect 到本设备的已允许 client，在你所连接的 host 上显示于该设备地址旁，显示在 host 为本设备记录的 connection request 中，并用作你所复制 public key 的 label | 保存在同一文件夹的 `ui-settings.txt` 中，并在 connect 时发送给 host。该数据在传输中 encrypt，但会显示在 host 的屏幕上并写入其日志，因此除非你自行设置名称，默认名称将被发送。尚未允许本设备的 host 会在其 connection request 列表中显示该名称，并保留最多 10 分钟。本设备共享时，还会将该名称发送给每个已用允许的 key 完成认证的 client —— 认证之前绝不发送 —— 该 client 会将其保存在自己的最近列表中，该名称也会写入本设备展示的 QR code 中。使用该 QR code 或链接连接的设备，会把该名称作为 server name 放入 TLS handshake 的第一个 packet 中，而该 packet 未经 encrypt —— 此时任何监视 network 的人都能读到它。它还会嵌入你复制的 public key 中，并且是 host 在批准本设备或通过 QR code 准入本设备时保存到其 `authorized_keys` 中的 label | 保留至你修改或删除该文件为止。清空该字段是回退到默认值，而非移除名称 |
 | 你选择发送给已连接电脑的文件（仅在你亲自选定文件并按下 Send 时） | 将文件从你的一台设备传送到另一台 | 在你的两台设备之间直接发送，传输中 encrypt（QUIC/TLS）；在手机或平板上，发送前会在 app 自身的 cache 中准备一份副本以供读取 | 文件的存放位置取决于接收方。电脑会将其写入为此选定的文件夹，未另行选择时为该用户主目录下的 `Deskhub`，并保留至该用户删除为止。手机与平板没有对应的文件夹：照片和视频会加入该设备的相册（Android 上为 `Pictures/Deskhub` 与 `Movies/Deskhub`），其他文件放置在系统文件浏览器可见的位置，即 iOS 上 app 的 Documents 文件夹与 Android 上的 `Download/Deskhub`，并保留至你删除为止。在 iOS 上，相册不接受的照片改存至 Documents。经由媒体库的存放方式需要 Android 10：在 Android 9 及更早版本上，到达的文件保留在设备上 Deskhub 自身的文件夹中，不会出现在相册或 Downloads 中。发送端手机或平板上的临时副本会在发送窗口关闭时删除 |
 | 每个被提出文件的名称、大小与 checksum，以及发送设备的名称、地址和 key fingerprint | 使接收电脑能够显示正在到达的内容、拒收无法存储的内容，并使其所有者了解发送来源 | 在你的两台设备之间发送，传输中 encrypt；接收电脑将该提出、其判定与结果写入自身的 session log | 保留在该电脑的 log 文件中，直至你删除 |
 | 电脑用于存放接收文件的文件夹 | 在下次打开 app 时恢复该选择 | 写入 app 自身文件夹中的 `ui-settings.txt`；不会被传输 | 保留至你修改或删除该文件为止 |
-| 连接统计（bitrate、丢包、latency） | 调整 stream 的 quality，并显示在状态栏 | 仅在你的两台设备之间交换 | 不存储；session 结束时丢弃 |
+| 连接统计（bitrate、丢包、latency） | 调整 stream 的 quality，并显示在状态栏 | 仅在你的两台设备之间交换。在 Windows、macOS 与 Linux 上，它们还会以定期的 `[DIAG]` 摘要写入下文所述的本地诊断日志 | session 结束时丢弃，日志中保存的部分除外 |
+| 诊断日志（Windows、macOS 与 Linux）—— 连接统计、peer 的地址与 port、peer 发送的设备名、key fingerprint、每个发送或接收的文件的名称、大小、结果及其存放的文件夹，以及错误信息。从不包含屏幕内容、按下的按键、指针移动、clipboard 文本或 terminal 输出 | 让你或你选择发送给的人找出问题所在 | 以纯文本写入 app 自身文件夹中，每次运行一个文件 `deskhub-<date>-<time>-<pid>.log`，仅你可读（在 Windows 上通过该文件继承的文件夹权限实现）；从不传输。在 Android 与 iOS 上，同样的内容只写入系统日志（logcat、Xcode console），不写入文件 | 较旧的日志会被自动删除，只保留最新的十个；你可以随时删除该文件夹或这些文件 |
 
 ### 3.1 设计上的 peer-to-peer 架构
 
@@ -112,6 +114,14 @@ view-only，到达的 input 将被丢弃而非 inject。在允许操作期间，
 | macOS | 通知 | 在首次有设备请求连接本机时申请，用于显示附该设备名称与地址的 *Connection request* 通知。不通知其他任何内容。 |
 | Android | `CAMERA` | 仅在你于 Client 页点按 *Scan QR code* 时申请，用于从 host 的屏幕上读取其 QR code。画面在设备上解码，从不保存或发送。若被拒绝，你可以改为将 host 的链接粘贴到地址栏中。 |
 | iOS | 摄像头 | 仅在你于 Client 页点按 *Scan QR code* 时申请，用途与限制同 Android。若被拒绝，你可以改为粘贴 host 的链接。 |
+| macOS | 屏幕录制（Screen Recording） | 本 Mac 共享时用于 capture 屏幕（及其播放的声音）。在 System Settings → Privacy & Security 中授予一次即可。 |
+| macOS | 辅助功能（Accessibility） | 本 Mac 在允许操作的情况下共享时，用于 inject viewer 的 mouse 与 keyboard input，并察觉 Mac 前的用户何时操作了它（host 优先）。 |
+| macOS | Local Network | Deskhub 首次访问你 network 上的另一台设备时由 macOS 询问。仅用于 session。 |
+| Windows | 管理员权限（UAC） | app 以提权方式运行，以便向提权窗口 inject input。每次启动时 UAC 都会询问，唯一的例外是 *Start Deskhub when you log in* 通过其 scheduled task 启动它。 |
+| Windows | Windows Firewall | 共享时，提权运行的 app 会为自己添加或刷新一条名为 *Deskhub (host)* 的入站 UDP 规则，覆盖所有 network profile。它不修改其他任何规则；你为 Deskhub 创建的 block 规则会保持不变，并使它继续无法被访问。 |
+| Linux | 屏幕共享同意（桌面 portal） | 桌面自身的对话框会在首次共享时询问要共享哪些屏幕；该回答通过第 3 节所述的 token 被记住。 |
+| Linux | 虚拟 input 设备（`/dev/uinput`） | 用于 inject viewer 的 input。`.deb` 与 `.rpm` 会安装一条 udev 规则，将其开放给 `input` 组以及在座席上登录的用户。 |
+| Linux | 读取 `/dev/input/event*` | 仅用于 host 优先，即察觉机器前的用户正在输入或移动 mouse。需由你自行将用户加入 `input` 组；安装包不会这样做，缺少该权限时 Deskhub 仍可工作，但永远不会暂停 remote input。Deskhub 只读取是否发生了 input，且不记录其中任何内容。 |
 
 在桌面端，共享声音不需要单独的 permission：本软件 capture 的是电脑自身正在播放的内容，
 而非 microphone。Android 是例外，且仅在名称层面如此：其 playback-capture API 位于
@@ -119,21 +129,28 @@ view-only，到达的 input 将被丢弃而非 inject。在允许操作期间，
 的 permission。Deskhub 不将该 permission 用于其他用途，不录制 microphone，不提供双向
 音频，也不在其他任何平台申请 microphone permission。
 
-App 不申请其他任何 permission。若将来的版本需要新的 permission，该 permission 将在相应
-场景中申请，本政策也会随之更新。
+App 不申请上表所列之外的任何 permission。若将来的版本需要新的 permission，该 permission
+将在相应场景中申请，本政策也会随之更新。
 
 ## 5. Analytics、广告与第三方
 
 - **Analytics 与 telemetry：** 无。
-- **Crash reporting：** 无。诊断日志（`[DIAG]`）仅存在于你自己的机器上，位于 app 的
+- **Crash reporting：** 本软件未内置。诊断日志仅存在于你自己的机器上，位于 app 的
   控制台输出中；在 Windows、macOS 与 Linux 上，还位于 `~/.deskhub/`（Windows 上为
-  `%USERPROFILE%\.deskhub`）下的纯文本文件中。这些日志不会被上传；只有在你自行复制并
-  发送时才会离开你的设备，而且你可以随时删除该文件夹。
+  `%USERPROFILE%\.deskhub`）下的纯文本文件中，仅你可读，较旧的日志会被自动删除。其内容见
+  第 3 节。这些日志不会被上传；只有在你自行复制并发送时才会离开你的设备，而且你可以随时
+  删除该文件夹。
 - **广告：** 无。
-- **第三方 SDK：** 无。本软件仅由其自身源码（在项目页面公开）与操作系统框架构建而成。
-- **应用商店：** 这些 app 通过 Apple App Store 与 Google Play 分发。Apple 与 Google 可
-  能依据各自的隐私政策收集安装与使用统计；该收集行为不在我们的掌控范围内，我们仅获得
-  这些平台向所有开发者提供的聚合、匿名统计。
+- **第三方 SDK：** 没有收集数据的 SDK。除自身源码（在项目页面公开）与操作系统框架外，
+  本软件还使用了若干开源库构建，它们完全在你的设备上运行，不会自行向任何地方发送数据：
+  quiche 与 BoringSSL（encrypt 与传输）、Opus（声音）、FFmpeg（Linux 上的 video），以及
+  Android 上的 AndroidX、CameraX 与 ZXing（界面、摄像头与 QR 解码）。它们连同各自的许可证
+  列于 [`THIRD_PARTY_NOTICES.zh.md`](THIRD_PARTY_NOTICES.zh.md)。
+- **App 分发：** iOS app 通过 Apple 的 TestFlight 分发，Android app 通过 Google Play 分发。
+  Apple 与 Google 可能依据各自的隐私政策收集安装、使用与 crash 数据；该收集行为不在我们的
+  掌控范围内。通过 TestFlight 与 Google Play Console，它们可能向开发者展示来自单台设备的
+  crash 报告（需设备所有者同意共享）—— 附设备型号、操作系统版本与 app 版本 —— 在
+  TestFlight 上还包括测试者自愿发送的反馈，以及聚合统计。其中不包含你的 session 内容。
 - **Tailscale 及其他 VPN：** 若你选择通过 VPN 连接，相关数据将依据该服务商的隐私政策
   处理。Deskhub 既不要求也不捆绑任何 VPN。
 
@@ -152,8 +169,9 @@ App 不申请其他任何 permission。若将来的版本需要新的 permission
   请勿将 Deskhub 直接暴露到 Internet。完整的 threat model，包括保护范围、不受保护的
   范围以及漏洞报告方式，见
   [`SECURITY.zh.md`](https://github.com/manhpham90vn/Deskhub/blob/main/SECURITY.zh.md)。
-- 早期版本遗留的数据 —— passcode、旧的 `paired_devices` 列表以及旧的启用标记 —— 不会被
-  转换：遗留文件会被删除。无法读取的 `authorized_keys` 或 `known_hosts` 文件在其无法读取
+- 早期版本遗留的数据不会被转换：旧的 `paired_devices` 列表、旧的启用标记以及旧的
+  `auth_salt` 文件会被删除，旧 `ui-settings.txt` 中的 passcode 行会在首次加载该文件时被
+  移除。无法读取的 `authorized_keys` 或 `known_hosts` 文件在其无法读取
   期间拒绝访问，并在下一次更改时重新写入。
 - 由于我们不持有关于你的任何数据，不存在可能被攻破的开发者侧数据库。
 
@@ -164,7 +182,9 @@ App 不申请其他任何 permission。若将来的版本需要新的 permission
 settings、key、允许的 client、受信任的 host、等待中的 connection request 以及仍有效的 QR
 token 可通过删除 app 的文件夹移除（Windows 上为
 `%USERPROFILE%\.deskhub`，macOS 与 Linux 上为 `~/.deskhub`），app 会在下次启动时重新
-创建空的文件夹；在 iOS 与 Android 上，卸载 app 即可移除这些数据。
+创建空的文件夹；诊断日志也位于同一文件夹中，会随之删除。在 iOS 与 Android 上，卸载 app
+即可移除这些数据。*Start Deskhub when you log in* 创建的启动项位于该文件夹之外：请在删除
+该文件夹或卸载之前关闭该设置，或手动移除该启动项。
 
 其他设备发送给你的文件属于你，而不属于 app。送达之后，这些文件位于该电脑选定的文件夹
 中，或位于手机与平板的相册、Documents 或 Downloads 中。卸载 Deskhub 不会影响这些文件，
@@ -198,6 +218,7 @@ https://github.com/manhpham90vn/Deskhub/blob/main/PRIVACY.md
 
 | 版本 | 日期 | 变更内容 |
 |---|---|---|
+| 2.12 | 2026-10-01 | **更正与更严格的本地数据处理。** Windows、macOS 与 Linux 上的诊断日志文件现在仅你可读，较旧的日志会被自动删除，只保留最新的十个；Windows app 不再把 viewer 按下的按键写入日志，无论是在 remote control 中还是在 terminal 中；本政策现已列出日志包含的内容，其中不包括 viewer 按下的按键。连接统计会记录在这些日志中，而本政策的早期版本未说明这一点。connection request 只有在请求设备用其 key 签名之后才会被记录，因此它出示的 key 已得到证明。由本设备 key 构建的 TLS certificate —— 仅公开部分 —— 会被短暂写入仅你可读的文件并立即删除，因 crash 而遗留的文件会在本设备下次开始共享时删除；早期版本称其从不保存。在 iOS 上，保存本设备 private key 的文件夹现已被排除在 iCloud 与电脑备份之外。旧的 `auth_salt` 文件现在会被删除，旧 `ui-settings.txt` 中遗留的 passcode 行会在加载该文件时立即移除。本版本还更正了早期的陈述：`known_hosts` 会记录首次与最后一次连上每个 host 的时间；设置文件还保存本设备是否操作其所观看的机器以及是否播放其声音；现已列出 *Start Deskhub when you log in* 创建的启动项；iOS 的 broadcast 状态文件保存已连接 viewer 的名称；使用 QR code 或链接连接的设备会在 TLS handshake 的第一个 packet 中以未 encrypt 的形式发送 host 的名称；你输入的地址是 IPv4 地址，从不解析 host 名称；permission 表现已涵盖 macOS、Windows 与 Linux；本软件包含开源库，但没有收集数据的 SDK；iOS app 通过 TestFlight 分发，TestFlight 与 Google Play Console 一样，可向开发者展示单台设备的 crash 报告。 |
 | 2.11 | 2026-09-30 | **每台设备一把 key、connection request 与 QR pairing。** 每台设备现在只有一把 key（`host_key.pem`），共享与 connect 时均以它为身份；单独的 client key（`client_key*.pem`）与保存的 certificate（`host_cert.pem`）不再存在 —— certificate 在内存中构建、从不保存，遗留文件被忽略而非转换。受信任的 host 按 key fingerprint 记忆，并附各自最后一次应答的地址，不再按地址记忆。app 文件夹中新增两个文件，均不会传输到相关两台设备之外：`access_requests` 保存每台尚未获允许却请求 connect 的设备的名称、public key、地址与时间（最多 16 条，每条在 10 分钟后或在 *Approve* / *Deny* 时删除）；`pairing_tokens` 保存 host 在共享期间可展示的 QR code 背后的一次性随机 token（在隐藏该码、被使用或 5 分钟后过期时删除）。QR code 本身包含 host 的地址、port、key fingerprint、设备名与 token，任何看到屏幕的人都能读取。设备名现在还会显示在它留下的 connection request 中，并在 host 批准它或通过 QR code 准入它时成为其 key 的 label。在 Android 与 iOS 上，摄像头仅在你扫描 QR code 期间使用，并在那一刻申请 permission；画面在设备上解码，从不保存或发送。新的 connection request 还会在本设备上触发一条系统通知，说明请求设备的名称与地址；该通知由本设备自己的通知中心显示，不会发往其他任何地方。 |
 | 2.10 | 2026-09-29 | host 现在会将其设备名发送给每个已用允许的 key 完成认证的 client —— 认证之前不发送任何内容 —— client 会将该名称保存在其最近列表中。最近列表改用新文件 `recent-hosts.txt`（地址、最近一次连接的时间、host 名称；最多 10 个）。旧的 `recent-devices.txt` 会被删除而非转换。 |
 | 2.9 | 2026-09-29 | **passcode 已被移除，访问方式与 SSH 相同。** 任何地方都不再保存或传输 passcode。LAN discovery 已被移除：Deskhub 从不 scan 你的 network，host 也不应答任何明文 discovery 请求。host 将其允许的 client public key 保存在 `authorized_keys` 中，各带一个 label；client 将其信任的 host 保存在 `known_hosts` 中，包括固定的 host key fingerprint、地址、名称以及所使用的 client key。在 Settings 中设置的唯一设备名会发送给你所连接的 host，并嵌入你复制的 public key 中。不为允许的 client 记录任何时间。早期版本的数据文件 —— passcode、旧的 `paired_devices` 列表、旧的启用标记 —— 会被删除而非转换。 |

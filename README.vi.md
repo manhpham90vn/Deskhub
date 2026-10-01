@@ -12,7 +12,7 @@ chạy native trên năm nền tảng và hướng tới trải nghiệm mượt
 [![Release](https://img.shields.io/github/v/release/manhpham90vn/Deskhub?label=release&color=2563eb)](https://github.com/manhpham90vn/Deskhub/releases)
 [![License: MIT](https://img.shields.io/github/license/manhpham90vn/Deskhub?color=2563eb)](LICENSE)
 [![C++20](https://img.shields.io/badge/C%2B%2B-20-2563eb)](CMakeLists.txt)
-[![Platforms](https://img.shields.io/badge/ch%E1%BA%A1y%20tr%C3%AAn-Windows%20·%20macOS%20·%20Linux%20·%20Android%20·%20iOS-2563eb)](#-nền-tảng)
+[![Platforms](https://img.shields.io/badge/ch%E1%BA%A1y%20tr%C3%AAn-Windows%20·%20macOS%20·%20Linux%20·%20Android%20·%20iOS-2563eb)](#platforms)
 
 [![ci](https://github.com/manhpham90vn/Deskhub/actions/workflows/ci.yml/badge.svg)](https://github.com/manhpham90vn/Deskhub/actions/workflows/ci.yml)
 [![lint](https://github.com/manhpham90vn/Deskhub/actions/workflows/lint.yml/badge.svg)](https://github.com/manhpham90vn/Deskhub/actions/workflows/lint.yml)
@@ -62,18 +62,22 @@ sudo apt install deskhub       # app desktop
 sudo apt install deskhub-cli   # CLI; cũng cài riêng được
 ```
 
-Gói desktop thêm DeskHub vào menu ứng dụng và cài lệnh `deskhub` trong `/usr/bin`; gói
+Gói desktop thêm Deskhub vào menu ứng dụng và cài lệnh `deskhub` trong `/usr/bin`; gói
 CLI cài `deskhub-cli` trong `/usr/bin`. Bộ cài Windows tạo shortcut trong Start Menu và
-Desktop; bộ cài CLI riêng thêm lệnh vào `PATH` của người dùng. Homebrew đưa CLI trên
-macOS vào `PATH`.
+Desktop; bộ cài CLI riêng thêm lệnh vào `PATH` của người dùng, còn winget cài CLI dưới
+dạng exe portable nằm trên `PATH`. Homebrew đưa CLI trên macOS vào `PATH`.
 
 Các nền tảng còn lại lấy trên [Releases](https://github.com/manhpham90vn/Deskhub/releases):
 
 - **Bản tải cho Windows** — bộ cài app `deskhub-v*-windows-setup.exe` và bộ cài CLI
   `deskhub-cli-v*-windows-setup.exe`; vẫn có các file exe portable
+- **Bản tải cho macOS** — app là `deskhub-v*-macos.dmg`, CLI là `deskhub-cli-v*-macos`
+- **Ubuntu / Debian / Mint không dùng repository** — `deskhub-v*-amd64.deb` và
+  `deskhub-cli-v*-amd64.deb`
 - **Fedora / openSUSE** — RPM riêng cho app `deskhub-v*-x86_64.rpm` và CLI
   `deskhub-cli-v*-x86_64.rpm`; cài gói cần dùng bằng `dnf` hoặc `zypper`
-- **Arch, Linux khác** — bản portable `deskhub-v*-linux-x86_64`, `chmod +x` rồi chạy
+- **Arch, Linux khác** — bản portable `deskhub-v*-linux-x86_64` và
+  `deskhub-cli-v*-linux-x86_64`, `chmod +x` rồi chạy
 - **Android** — `deskhub-v*-android.apk`, hoặc [bản beta trên Play](https://play.google.com/apps/testing/com.manhpham.deskhub)
 - **iOS** — [TestFlight](https://testflight.apple.com/join/7qY7wgpd)
 
@@ -135,7 +139,7 @@ chung xử lý protocol cho cả năm nền tảng.
 
 | ⚡ Nhanh | 📦 Dễ cài đặt | 🎛️ Đơn giản |
 | ------ | ---------- | --------- |
-| Stream ở 60 fps trên phần cứng phù hợp. Đường xử lý video dùng bộ nhớ GPU khi có thể. | Cài qua package manager hoặc tải bản release. Không cần tài khoản hay background service. | **Share** một display hoặc **Connect** tới một IP. Máy desktop còn share được **shell** và nhận **file**; điện thoại share màn hình ở chế độ view-only. |
+| Mặc định stream ở 60 fps, tối đa 240 fps trên phần cứng phù hợp. Đường xử lý video dùng bộ nhớ GPU khi có thể. | Cài qua package manager hoặc tải bản release. Không cần tài khoản hay background service. | **Share** một display hoặc **Connect** tới một IP. Máy desktop còn share được **shell**, và mọi host — kể cả điện thoại — đều nhận được **file**; điện thoại share màn hình ở chế độ view-only. |
 
 Session được encrypt end-to-end trên **QUIC/TLS**, và quyền truy cập hoạt động như SSH: mỗi
 máy có một key, và client chỉ được vào khi chủ host đã cho key đó vào — bằng cách approve
@@ -151,7 +155,7 @@ Threat model đầy đủ nằm trong [`SECURITY.vi.md`](SECURITY.vi.md).
 
 - 💻 **Công việc** — chạy Claude Code, VS Code hoặc build trên PC ở nhà, từ một laptop cấu hình thấp hoặc từ iPad.
 - 🌐 **Ứng dụng desktop** — dùng Chrome, Office hoặc phần mềm chỉ có trên máy tính từ một thiết bị khác.
-- 🎮 **Game** — 60 fps, relative mouse và scancode DirectInput, pointer lock bằng `F9`.
+- 🎮 **Game** — tối đa 240 fps, relative mouse và scancode DirectInput, pointer lock bằng `F9`.
 - 🖥️ **Nhiều display** — share một hoặc nhiều display, mỗi display là một session riêng.
 
 <a id="platforms"></a>
@@ -164,19 +168,20 @@ Threat model đầy đủ nằm trong [`SECURITY.vi.md`](SECURITY.vi.md).
 | **macOS** | ✅ | ✅ | Cả hai vai trò đều hoạt động (ScreenCaptureKit + VideoToolbox + CGEvent) |
 | **Android** | ✅ | ✅ | Client: video và input (trackpad, keyboard). Host: share màn hình view-only (MediaProjection + MediaCodec), Android 10+ — đang thử nghiệm trên Google Play |
 | **iOS** | ✅ | ✅ | Client: video và input (trackpad, keyboard). Host: share màn hình view-only qua Broadcast Upload Extension (ReplayKit + VideoToolbox) — đang thử nghiệm qua TestFlight |
-| **Linux** | ✅ | ✅ | Cả hai vai trò đều hoạt động (PipeWire + VA-API + uinput + GTK3) — Ubuntu, Debian, Mint, Fedora, openSUSE, Arch qua deb / rpm / binary chạy trực tiếp; đã kiểm chứng giữa hai máy trong LAN |
+| **Linux** | ✅ | ✅ | Cả hai vai trò đều hoạt động (PipeWire + VA-API/NVENC + uinput + GTK3) — Ubuntu, Debian, Mint, Fedora, openSUSE, Arch qua deb / rpm / binary chạy trực tiếp; đã kiểm chứng giữa hai máy trong LAN |
 
 <a id="features"></a>
 
 ## ✨ Bên trong có gì
 
-- **Đường xử lý video trên GPU** — capture, encode, decode và render dùng phần cứng của từng nền tảng khi có thể; đường NVENC trên Windows tránh sao chép frame qua CPU.
-- **Protocol riêng chạy trên QUIC** — GOP vô hạn kết hợp IDR theo yêu cầu, XOR FEC, adaptive bitrate, tất cả được multiplex trên một connection đã encrypt.
-- **Âm thanh đi kèm hình ảnh** — audio mix của chính máy đó, Opus 64 kbps, mỗi datagram chứa một frame 20 ms. Mất một packet chỉ mất một phần nhỏ của giây và không ảnh hưởng tới hình ảnh. Không bao giờ capture microphone.
-- **Input thật** — relative mouse (Raw Input) và scancode cho game DirectInput. Mouse và keyboard tại máy host luôn được ưu tiên.
+- **Đường xử lý video trên GPU** — capture, encode, decode và render dùng phần cứng của từng nền tảng khi có thể; đường NVENC trên Windows tránh sao chép frame qua CPU, còn host Linux encode qua VA-API hoặc, trên GPU NVIDIA, qua NVENC.
+- **Protocol riêng chạy trên QUIC** — GOP vô hạn kết hợp IDR theo yêu cầu, XOR FEC kèm gửi lại packet bị mất, adaptive bitrate, tất cả được multiplex trên một connection đã encrypt.
+- **Âm thanh đi kèm hình ảnh** — audio mix của chính máy đó, Opus 64 kbps, mỗi datagram chứa một frame 20 ms. Mất một packet đơn lẻ thường được dựng lại từ packet kế tiếp nhờ FEC in-band của Opus, một khoảng mất dài hơn chỉ tốn một phần nhỏ của giây, và cả hai đều không ảnh hưởng tới hình ảnh. Không bao giờ capture microphone.
+- **Không chỉ có màn hình** — remote shell, gửi file tới mọi host, sync clipboard dạng text thuần theo cả hai chiều, và giữ máy không sleep khi đang có session.
+- **Input thật** — relative mouse (Raw Input) và scancode cho game DirectInput. Mouse và keyboard tại máy host luôn được ưu tiên (trên Linux, khi user đã ở trong nhóm `input` — xem [Install](docs/INSTALL.vi.md#host-wins)).
 - **Core dùng chung** — protocol, FEC và bitrate control nằm trong `core/`, được compile vào mọi client.
-- **Công cụ command line** — `deskhub-cli` share màn hình, mở remote shell và chạy từ script hoặc qua SSH. Trên Windows và Linux, lệnh này còn mở được cửa sổ xem màn hình từ xa. Xem [Build](docs/BUILD.vi.md#command-line-client).
-- **Được kiểm thử kỹ** — core có unit test chạy offline; CI chạy thêm ASan, UBSan và TSan. Mỗi đêm, bảy libFuzzer target kiểm tra wire format, phần parse H.264, reassembly, byte stream của terminal, chuỗi UI và các session state machine. Crash được phát hiện sẽ thành regression test.
+- **Công cụ command line** — `deskhub-cli` share màn hình, mở remote shell, gửi file, quản lý key, thiết bị được phép, host đã trust và settings, chạy từ script hoặc qua SSH; các lệnh liệt kê có `--json`. Trên Windows và Linux, lệnh này còn mở được cửa sổ xem màn hình từ xa. Xem [Build](docs/BUILD.vi.md#command-line-client).
+- **Được kiểm thử kỹ** — core có unit test chạy offline; CI chạy thêm ASan, UBSan và TSan. Chín libFuzzer target — 30 giây mỗi target trên mọi pull request, 15 phút mỗi target mỗi đêm — kiểm tra wire format, phần parse H.264, reassembly, byte stream của terminal, chuỗi UI, phần parse key và link mời, encode QR và các session state machine. Crash được phát hiện sẽ thành regression test.
 
 <a id="docs"></a>
 
@@ -203,5 +208,5 @@ kèm model thiết bị.
 ## 📄 License
 
 MIT — xem [`LICENSE`](LICENSE). Các thành phần bên thứ ba cùng thông báo license của chúng
-(bao gồm bản FFmpeg LGPL được link tĩnh trong app Linux) được liệt kê trong
+(bao gồm bản FFmpeg LGPL được link tĩnh trong app và CLI Linux) được liệt kê trong
 [`THIRD_PARTY_NOTICES.vi.md`](THIRD_PARTY_NOTICES.vi.md).

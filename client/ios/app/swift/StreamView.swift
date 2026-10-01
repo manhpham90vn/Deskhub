@@ -9,8 +9,6 @@ struct StreamView: View {
     @State private var layer: AVSampleBufferDisplayLayer?
     @State private var keyboardOn = false
 
-    @State private var controlsOpen = false
-
     @State private var controlsRect: CGRect = .zero
 
     @State private var closeRect: CGRect = .zero
@@ -173,7 +171,6 @@ struct StreamView: View {
                 session: session,
                 model: model,
                 streaming: streaming,
-                isOpen: $controlsOpen,
                 keyboardOn: $keyboardOn,
                 displayPickerOpen: $displayPickerOpen
             )

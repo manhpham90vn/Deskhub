@@ -90,7 +90,15 @@ abstract class BundleThirdPartyNotices : DefaultTask() {
 }
 
 val deskhubRoot = rootProject.layout.projectDirectory.dir("../..")
-val licensesShippedOnAndroid = listOf("BSD-2-Clause-quiche", "BoringSSL", "Apache-2.0", "rust-crates", "BSD-3-Clause-opus")
+val licensesShippedOnAndroid =
+    listOf(
+        "BSD-2-Clause-quiche",
+        "BoringSSL",
+        "Apache-2.0",
+        "rust-crates",
+        "BSD-3-Clause-opus",
+        "android-libraries",
+    )
 
 val bundleThirdPartyNotices = tasks.register<BundleThirdPartyNotices>("bundleThirdPartyNotices") {
     notices.from(deskhubRoot.file("THIRD_PARTY_NOTICES.md"))

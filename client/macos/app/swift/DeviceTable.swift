@@ -25,6 +25,12 @@ struct DeviceTable: View {
             onPick(row)
         }
         .frame(height: height)
+        .onChange(of: rows) { _, current in dropSelection(missingFrom: current) }
+    }
+
+    private func dropSelection(missingFrom current: [DeviceListRow]) {
+        guard let selected = selection, !current.contains(where: { $0.id == selected }) else { return }
+        selection = nil
     }
 
     private var height: CGFloat {

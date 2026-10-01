@@ -25,6 +25,27 @@ bool ValidKey(const PublicKeyText& key) {
     return !FormatPublicKeyText(key).empty();
 }
 
+std::string_view HostOf(std::string_view address) {
+    if (address.starts_with('[')) {
+        const size_t close = address.find(']');
+        return close == std::string_view::npos ? address : address.substr(0, close + 1);
+    }
+    const size_t colon = address.find(':');
+    if (colon == std::string_view::npos || address.find(':', colon + 1) != std::string_view::npos)
+        return address;
+    return address.substr(0, colon);
+}
+
+bool SameSource(const AccessRequest& a, const AccessRequest& b) {
+    return SameKey(a.key, b.key) || HostOf(a.address) == HostOf(b.address);
+}
+
+bool HoldsNewerFromSameSource(const AccessRequests& requests, const AccessRequest& request) {
+    return std::ranges::any_of(requests.Requests(), [&](const AccessRequest& existing) {
+        return SameSource(existing, request) && existing.requestedUnix > request.requestedUnix;
+    });
+}
+
 }
 
 bool SameKey(const PublicKeyText& a, const PublicKeyText& b) {
@@ -35,11 +56,8 @@ bool AccessRequests::Add(AccessRequest request, int64_t nowUnix) {
     request.address = CleanAddress(request.address);
     if (request.address.empty() || !ValidKey(request.key)) return false;
     request.requestedUnix = nowUnix;
-    for (AccessRequest& existing : requests_) {
-        if (!SameKey(existing.key, request.key)) continue;
-        existing = std::move(request);
-        return true;
-    }
+    std::erase_if(requests_,
+        [&](const AccessRequest& existing) { return SameSource(existing, request); });
     if (requests_.size() >= kMaxAccessRequests) {
         const auto oldest = std::min_element(requests_.begin(), requests_.end(),
             [](const AccessRequest& a, const AccessRequest& b) {
@@ -99,6 +117,7 @@ std::optional<AccessRequests> ParseAccessRequests(std::string_view text, int64_t
         if (requests.Find(*key)) return std::nullopt;
         if (requestedUnix + kAccessRequestTtlSeconds <= nowUnix) continue;
         AccessRequest request{*key, address, requestedUnix};
+        if (HoldsNewerFromSameSource(requests, request)) continue;
         if (!requests.Add(std::move(request), requestedUnix)) return std::nullopt;
     }
     requests.Expire(nowUnix);

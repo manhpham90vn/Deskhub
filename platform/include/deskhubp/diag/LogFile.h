@@ -74,18 +74,24 @@ inline std::string LogFileName() {
     return std::string(name);
 }
 
-inline void PruneOldSessionLogs(const std::filesystem::path& dir) {
-    std::vector<std::string> names;
-    std::error_code error;
-    for (std::filesystem::directory_iterator it(dir, error), end; !error && it != end;
-        it.increment(error)) {
-        const std::u8string name = it->path().filename().u8string();
-        names.emplace_back(name.begin(), name.end());
-    }
-    for (const std::string& name :
-        deskhub::SessionLogsToPrune(std::move(names), deskhub::kKeptSessionLogs)) {
-        std::error_code ignored;
-        std::filesystem::remove(dir / std::filesystem::path(name), ignored);
+inline bool PruneOldSessionLogs(const std::filesystem::path& dir) noexcept {
+    try {
+        std::vector<std::string> names;
+        std::error_code error;
+        for (std::filesystem::directory_iterator it(dir, error), end; !error && it != end;
+            it.increment(error)) {
+            const std::u8string name = it->path().filename().u8string();
+            names.emplace_back(name.begin(), name.end());
+        }
+        for (const std::string& name :
+            deskhub::SessionLogsToPrune(std::move(names), deskhub::kKeptSessionLogs)) {
+            const std::u8string nameU8(name.begin(), name.end());
+            std::error_code ignored;
+            std::filesystem::remove(dir / std::filesystem::path(nameU8), ignored);
+        }
+        return true;
+    } catch (...) {
+        return false;
     }
 }
 

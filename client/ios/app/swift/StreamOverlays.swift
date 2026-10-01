@@ -76,9 +76,9 @@ struct StreamControlPanel: View {
     let session: AppModel
     let model: StreamModel
     let streaming: Bool
-    @Binding var isOpen: Bool
     @Binding var keyboardOn: Bool
     @Binding var displayPickerOpen: Bool
+    @State private var isOpen = false
 
     var body: some View {
         if isOpen {

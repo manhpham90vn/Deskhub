@@ -26,21 +26,29 @@ client/     per-OS apps: windows, linux, macos, ios, android (depend on platform
 | Layer | Contents |
 | --- | --- |
 | `core/protocol` | Wire format (`Wire.h`), record framing for streams (`RecordStream.h`), packet classifier that tells QUIC from anything else |
-| `core/transport` | Packetizer/Reassembler for video, FEC, retransmit cache, send pacer |
-| `core/session` | Session state machines, split by role: `session/host` (per-viewer sessions, viewer table, `SourceListResponder`, file receiver, auth throttle), `session/client` (screen client, file sender, terminal client, connect flow), and shared pieces beside them (transfer types, terminal session table, clipboard sync, link recovery) |
-| `core/control` | Bitrate controller, quality ladder, stream sizing, clock offset |
-| `core/terminal` | The VT emulator every client shares: `VtParser`, `Screen`, `KeyEncoder`, `Palette` |
-| `core/net` | Trust store keyed by fingerprint (client side), authorized keys (host side), pending connection requests (`AccessRequests`), the `deskhub://pair/` invite record (`PairingInvite`), OpenSSH public-key text, one `Base64` for every caller, bind-address selection |
-| `core/auth` | The signed auth transcript (`Transcript`), the per-key-and-address failure limiter, and the one-time QR tokens (`PairingTokens`) |
+| `core/transport` | Packetizer/Reassembler for video, FEC, retransmit cache, send pacer, the audio jitter buffer (`AudioJitterBuffer`) |
+| `core/session` | Session state machines, split by role: `session/host` (per-viewer sessions, viewer table, viewer feedback, source pipeline state, share flow, `SourceListResponder`, file receiver), `session/client` (screen client, file sender, terminal client, connect flow, open viewers), and shared pieces beside them (transfer types, terminal session table, clipboard sync, link pulse and link recovery) |
+| `core/control` | Bitrate controller, quality ladder, stream sizing, clock offset, the fps gate (`FrameGate`), link statistics (`LinkStats`), the display pacer (`VideoPacer`) |
+| `core/media` | The media contracts every capture, encoder and decoder conforms to (`VideoContract`, `CaptureContract`, `AudioContract`), H.264 Annex B and SPS parsing, rate planning, the RGB downscaler, the latest-wins `FrameMailbox`, the PCM ring, view fitting and share types |
+| `core/input` | Input on both ends: the client's input queue and sender, the host's receiver and applier, key and pointer mapping, scancode tables, hotkeys, pointer lock and the trackpad cursor |
+| `core/terminal` | The VT emulator every client shares: `VtParser`, `Screen`, `KeyEncoder`, `Palette`, plus repaint, snapshot and scroll anchoring |
+| `core/transfer` | File-transfer primitives: `Crc32` and `SafeFileName` |
+| `core/diag` | The diagnostics text behind the host and viewer status lines (`ShareDiag`, `ScreenClientDiag`, `WindowStat`) |
+| `core/net` | Trust store keyed by fingerprint (client side), authorized keys (host side), pending connection requests (`AccessRequests`), the `deskhub://pair/` invite record (`PairingInvite`), OpenSSH public-key text, one `Base64` for every caller, IPv4 parsing, bind-address selection |
+| `core/auth` | The signed auth transcript (`Transcript`), the per-key-and-address failure limiter (`AuthFailureLimiter`), and the one-time QR tokens (`PairingTokens`) |
 | `core/qr` | `QrCode` — the QR encoder every client and the CLI draw the pairing code with |
-| `core/ui` | Every user-visible string, settings parsing, table-row builders, recent devices and host profiles (`HostProfiles`) — so all five clients say the same things |
-| `platform/net` | `UdpSocket` (per-OS), `QuicEndpoint` (quiche behind a pimpl), `SessionTransport` |
-| `platform/auth` | `AuthNegotiation` — the one key-signature handshake both sides speak, with its four host-side outcomes (section 3) |
-| `platform/client` | `HostLink` (dial + trust + auth + approval wait + channels, shared by every surface), `ScreenViewer`, `TerminalViewer`, `FileTransferClient`, `SourceQuery`, `HostProfiles` (trusted hosts by fingerprint, with name and last address) |
-| `platform/host` | `HostEngine`, `HostNetLoop`, `SharingHost`, `TerminalHost`, `FileHost`, `ViewerBroadcast`, `PairingInvite` (issues a token and builds the invite this host shows) |
-| `platform/system` | Clock, random, PTY (ConPTY / forkpty), the machine key (`HostIdentity`), `authorized_keys` and `known_hosts` files, pending requests (`AccessRequestsFile`) and live QR tokens (`PairingTokenFile`), the recent list (`RecentDevicesFile`), device name, autostart, keep-awake |
-| `platform/ffi` | The C surface the Swift and Kotlin apps call: `SettingsFfi` (settings, device name), `DevicesFfi` (recent devices, allowed clients, connection requests, this machine's fingerprint and public key), `HostProfileFfi` (trusted hosts), `PairingFfi` (invite, QR modules, revoke), plus the share, screen, terminal and send surfaces |
+| `core/ui` | Every user-visible string, settings parsing and layout, the colour theme, the host table's rows, the shell picker, transfer views, autostart and auto-share rules, recent devices and host profiles (`HostProfiles`) — so all five clients say the same things |
 | `core/cli` | The command-line grammar and its JSON writer — pure text in, validated command out |
+| `platform/net` | `UdpSocket` (per-OS), `QuicEndpoint` (quiche behind a pimpl), `SessionTransport`, `NetInfo` (the machine's own addresses) |
+| `platform/auth` | `AuthNegotiation` — the one key-signature handshake both sides speak, with its host-side outcomes (section 3) |
+| `platform/client` | `HostLink` (dial + trust + auth + approval wait + channels, shared by every surface), `ScreenViewer` and its loop, `TerminalViewer` and `TerminalFeed`, `FileTransferClient` and `FileUpload`, `SourceQuery` (blocking and async), `HostProfiles` (trusted hosts by fingerprint, with name and last address) |
+| `platform/host` | `HostEngine`, `HostNetLoop`, `SharingHost`, `ShareController`, `ShareDriver`, `TerminalHost`, `FileHost`, `ViewerBroadcast`, `PairingInvite` (issues a token and builds the invite this host shows) |
+| `platform/audio` | Audio capture (PipeWire, WASAPI) and sinks (PipeWire, WASAPI, Core Audio, AAudio), `AudioBroadcaster` on the host and `AudioPlayer` on the viewer |
+| `platform/media` | The Opus codec, display enumeration, the xdg portal ScreenCast session on Linux, and the VideoToolbox encoder, decoder and source pipeline both Apple apps use |
+| `platform/input` | Local input watching for "host wins" (`LocalInputMonitor`) and native key-code mapping per OS |
+| `platform/diag` | `LOGI`/`LOGW`/`LOGE` and the per-run log file |
+| `platform/system` | Clock, random, PTY (ConPTY / forkpty), the machine key (`HostIdentity`) and the signature it makes (`AuthProof`), `authorized_keys` and `known_hosts` files, pending requests (`AccessRequestsFile`) and live QR tokens (`PairingTokenFile`), the recent list (`RecentDevicesFile`), the settings store, the config folder and its file lock, received-file storage (`FileStore`), device name, autostart, keep-awake, console, environment and memory footprint |
+| `platform/ffi` | The C surface the Swift and Kotlin apps call: `ClientFfi` (strings, theme colours, key mapping, address parsing, the source query, auto-share steps), `SettingsFfi` (settings, device name), `DevicesFfi` (recent devices, allowed clients, connection requests, this machine's fingerprint and public key), `HostProfileFfi` (trusted hosts), `PairingFfi` (invite, QR modules, revoke), plus the share, screen, terminal and send surfaces |
 | `client/<os>` | Capture, encode, decode, render, windowing, dialogs — nothing protocol-shaped |
 | `client/cli` | Flags to sessions: one binary that hosts, connects and opens shells with no GUI toolkit. It links the same per-OS media library the desktop app does |
 
@@ -61,7 +69,7 @@ Everything a host offers rides **one UDP port** (default 47777) through one
             QUIC packets          anything else
                  |                        |
    +-------------+------------+        dropped: nothing is
-   |             |            |        answered in the plain
+   |             |            |        answered in plain text
  streams     datagrams     (TLS)
    |             |
  control      video
@@ -72,7 +80,10 @@ Everything a host offers rides **one UDP port** (default 47777) through one
 ```
 
 - **Streams** (reliable, ordered): control, input, clipboard, terminal, files — each
-  connection uses one bidirectional stream, opened by the client. A stuck stream on
+  connection uses two bidirectional streams, both opened by the client: stream 0
+  (`kQuicControlStream`) carries control, auth, input, clipboard and terminal records
+  at interactive urgency, and stream 8 (`kQuicFileStream`) carries file transfer at
+  bulk urgency, so an upload never queues ahead of a keystroke. A stuck stream on
   one connection cannot stall another connection. Inbound stream data is drained
   under a 64 KiB budget per service pass: whatever consumes it (the terminal's VT
   emulation above all) hands the loop back to ACKs, keepalives and timeout
@@ -80,18 +91,24 @@ Everything a host offers rides **one UDP port** (default 47777) through one
   into its own idle timeout.
 - **Datagrams** (unreliable, unordered, still encrypted): video and audio packets.
   Lost ones are never retransmitted by QUIC; for video the app's own FEC/NACK
-  machinery handles loss, and for audio nothing does — see section 9.
+  machinery handles loss, and for audio Opus's in-band FEC and concealment do — see
+  section 9.
 - **Raw UDP** is never answered. There is no discovery: an inbound packet that is not
   QUIC is discarded before it reaches any session code, and `SourceListResponder`
   answers `LIST_SOURCES` and session-0 `PING` only for an authenticated connection.
+  The one plain-UDP path is outbound and a fallback: `SessionTransport::SendTo` hands a
+  message to `QuicEndpoint::SendRaw` when no QUIC connection to that address is
+  established. A host never takes it — it sends nothing to a peer that has not
+  authenticated.
 
-`QuicEndpoint` hides quiche completely (pimpl; `QuicEndpointNone.cpp` stubs it out,
-but only when a build opts out with `-DDESKHUB_QUIC=OFF` — a missing quiche fails the
-configure, because a stub binary cannot share or connect). Connections are identified by peer address; there is no
-connection migration. A quiche connection is single-threaded by contract, so every
-touch of the endpoint happens under the transport's send mutex — and the transport
-never holds that mutex across a blocking socket wait (`WaitReadable` first, unlocked;
-then a brief locked `Poll`). Holding it across the wait starves every sender.
+`QuicEndpoint` hides quiche completely (pimpl; `QuicEndpointNone.cpp` stubs it out, but
+only when a build opts out with `-DDESKHUB_QUIC=OFF` — a missing quiche fails the
+configure, because a stub binary cannot share or connect). Connections are identified by
+peer address; there is no connection migration. A quiche connection is single-threaded
+by contract, so every touch of the endpoint happens under the transport's send mutex —
+and the transport never holds that mutex across a blocking socket wait (`WaitReadable`
+first, unlocked; then a brief locked `Poll`), the client's auth wait in `RunClientAuth`
+included. Holding it across the wait starves every sender.
 
 ## 3. Admission: keys, like SSH
 
@@ -101,45 +118,66 @@ presents it through TLS, and a client signs in with it. Its SHA-256 hash of the 
 SubjectPublicKeyInfo is the one fingerprint people see, in the Devices page, the QR code,
 the connection-request list, `authorized_keys` and `known_hosts` alike. TLS needs an
 X.509 certificate, so each time the port opens `HostIdentity` builds a self-signed one
-around the key **in memory** and hands it to quiche; nothing is written. Because the
-fingerprint hashes the SPKI and not the certificate, a fresh certificate per start changes
-nothing anyone pinned, and the `host_cert.pem` older versions stored is neither read nor
-needed. The host admits only public keys listed in its `authorized_keys`
+around the key **in memory**. quiche loads a certificate only from a file, so the
+endpoint writes it for a moment as `transport_cert.<random>.pem` — the public
+certificate only, `0600`, inside the `0700` config folder; quiche takes the private key
+from `host_key.pem` — hands quiche the path and deletes it at once. When hosting starts,
+any `transport_cert.*` file (a half-written `.tmp-` one included) older than a minute,
+which only a crash leaves behind, is swept. Because the fingerprint hashes the SPKI and not the
+certificate, a fresh certificate per start changes nothing anyone pinned, and the
+`host_cert.pem` older versions stored is neither read nor needed. The host admits only public keys listed in its `authorized_keys`
 (`AuthorizedKeys`, at most 128 lines of `ecdsa-sha2-nistp256 AAAA… label` — Ed25519
 lines are still parsed for hand-pasted keys); the label is a display name, never a
 permission.
 
-On top of TLS, an application-level handshake (`AuthNegotiation`, auth version 7)
+On top of TLS, an application-level handshake (`AuthNegotiation`, auth version 8)
 decides admission per connection. The transport runs it, and the host sends nothing
 application-level to a connection whose auth has not settled:
 
 1. QUIC/TLS completes. The client settles trust in the host's key **before sending
    anything** (`HostLink::SettleTrust`, see below).
-2. The client sends `AuthStart`: `00 | u16 keyLen | key | u8 nameLen | name |
-   u8 tokenLen | token | 07` — its public key, its device name, the 32-byte pairing
+2. The client sends `AuthStart`:
+   `00 | u16 keyLen | key | u8 nameLen | name | u8 tokenLen | token | 08` — its public key, its device name, the 32-byte pairing
    token when it came from a QR code (`tokenLen` is 0 or 32), and the auth version last.
-3. `HostAuth::Begin` answers one `AuthChallenge` out of four:
-   - the key is in `authorized_keys` → `Signature`;
-   - the key is unknown and the token matches a live entry in `pairing_tokens` → the key
-     is appended to `authorized_keys` labelled with the client's name, the token is
-     consumed, and the answer is `Signature`;
-   - the key is unknown and a token was sent but is wrong → one failure is charged to the
-     source address in the existing limiter (3 per minute, then a 10 s block), and the
-     offer is then treated as if it carried no token;
-   - the key is unknown and no usable token → a connection request (name, key,
-     fingerprint, address, time) is written to `access_requests` and the answer is
-     `AwaitingApproval`. The connection is closed as a refusal is today; the host keeps
-     nothing unauthenticated waiting for a click.
-4. On `Signature`, the client signs a transcript — domain label, auth version, role, the
-   session value exported from this QUIC/TLS connection, its public key and the host's
-   TLS fingerprint (`core/auth/Transcript`) — and the host verifies it against the key.
+3. `HostAuth::Begin` answers with an `AuthChallenge`, which is `Signature` for every
+   key — allowed, unknown or carrying a token alike — and `ConfigError` only when
+   `authorized_keys` cannot be read. Nothing about an unknown key is written before its
+   signature verifies (step 4). An `AuthStart` that carries a token from a source address
+   the limiter is already blocking is closed at once, before any challenge.
+4. The client signs a transcript — domain label, auth version, role, the session value
+   exported from this QUIC/TLS connection, its public key and the host's TLS
+   fingerprint (`core/auth/Transcript`) — and the host verifies it against the key.
+   A signature that does not verify ends in `BadSignature`. Once it verifies, the
+   `AuthResult` is decided in this order:
+   - the key is in `authorized_keys` → `Accepted`;
+   - a token that matches a live entry in `pairing_tokens` → the token is consumed, the
+     key is appended to `authorized_keys` labelled with the client's name, and the
+     connection is `Accepted`;
+   - otherwise a connection request — the time, the source address and the public key
+     labelled with the client's name — is written to `access_requests`, and the result
+     is `AwaitingApproval` (`NotPaired` when the request cannot be recorded).
+
+   A token that was sent but matched nothing is charged, only now that the signature has
+   verified, as one failure to the source address (3 per minute, then a 10 s block), and
+   the offer is then treated as if it carried no token. `AwaitingApproval` is a real wire
+   result (code 9), not a client-side verdict.
+
+After `NotPaired`, `AwaitingApproval`, `BadSignature` or a `ConfigError` challenge the host
+closes the connection itself about two seconds after its reply (`kRefusalLingerUs`, QUIC
+application error 8), long enough for the reply to arrive; the client closes its end too.
+The host keeps nothing unauthenticated waiting for a click.
 
 A signature is bound to that one connection, so a reconnect signs again; there is no
-0-RTT or session resumption. The host keeps at most 8 connections waiting to
-authenticate and drops each after 10 seconds; 3 bad signatures from one key and source
-IP within a minute block that pair for 10 seconds (`AuthThrottle`). `access_requests`
-holds at most 16 requests, one per key (a repeat refreshes the address and time), each
-for 10 minutes; *Approve* moves the key into `authorized_keys` with the device's name,
+0-RTT or session resumption. Every connection that has not authenticated gets 10
+seconds from the moment QUIC accepts it, whatever key it offers or whether it sends
+`AuthStart` at all, and the host keeps at most 8 of them at once — `core/auth/AuthDeadlines`
+holds the deadlines, `QuicCallbacks::admitConnection` turns a ninth connection away
+before it is accepted, and `onAbandoned` frees the slot of one that dies before it is
+announced. 3 failures from one key and source IP within a minute block that pair for 10
+seconds (`AuthFailureLimiter`); `AwaitingApproval` and `ConfigError` are not failures. `access_requests` holds at most 16 requests, at most one per key and one per source
+address — a new request replaces any row with the same key or the same IP address,
+ports ignored, so a repeat refreshes the address and time — dropping the oldest when all
+16 are taken, each for 10 minutes; *Approve* moves the key into `authorized_keys` with the device's name,
 *Deny* deletes the row and tells the client nothing.
 
 Admission belongs to one QUIC connection, not to an address. It is dropped the moment
@@ -158,23 +196,30 @@ of the key the far end presented:
 - Dialled from a QR invite: the fingerprint must equal the one inside the invite. Equal
   means the machine answering holds the private key of the machine that made the code,
   so the host is pinned silently and the token is sent in `AuthStart`. Different means
-  something else answers at that address: the link fails with `InviteMismatch` and the
-  token never leaves the client.
+  something else answers at that address: the link fails with the invite-mismatch text
+  (`kInviteHostMismatch`, which a source query reports as
+  `SourceQueryFailure::InviteMismatch`) and the token never leaves the client. A
+  `deskhub://` link opened from outside the app (an Android intent, which matches only
+  `deskhub://pair`, or an iOS `openURL`) is not pinned silently: when the host key in it
+  is not trusted yet, the app first shows the *New host* confirmation with the
+  fingerprint and dials only after *Trust and connect*; a host already trusted is dialled
+  straight away. A code scanned inside the app still pins directly.
 - Already in `known_hosts`: the entry's last address is refreshed (`TouchTrustedHost`)
   and the link goes on — at whatever address the host is reached, since nothing is
   keyed by address any more.
 - Otherwise the link fails as *not trusted yet* with the fingerprint attached; the app
   shows its *New host* dialog and redials with `acceptNewHostKey` after *Trust and
-  connect*, the CLI does the same only with `--accept-new-host-key`. If
-  `FindByEndpoint` says the address used to answer as some other trusted host,
-  `PreviousOwnerWarningFor` adds that host's name and fingerprint to the prompt. There
-  is no *changed key* verdict: a new key at an old address is a new host.
+  connect*, the CLI does the same only with `--accept-new-host-key`. `SettleTrust`
+  itself computes no warning: before drawing the dialog the app asks
+  `PreviousOwnerWarningFor` (over `FindByEndpoint`) whether the address used to answer
+  as some other trusted host, and if so adds that host's name and fingerprint to the
+  prompt. There is no *changed key* verdict: a new key at an old address is a new host.
 
-When the challenge is `AwaitingApproval`, `HostLink` parks in the state of the same
+When the answer is `AwaitingApproval`, `HostLink` parks in the state of the same
 name, shows `AwaitingApprovalLine`, and redials with the backoff the recovering links
 already use, for up to `kDefaultApprovalWaitUs` (120 s) or until the caller cancels;
 each redial is a full connection and a fresh `AuthStart`, so the first one after the
-owner's *Approve* gets `Signature` and completes. Past the deadline the link fails with
+owner's *Approve* is admitted. Past the deadline the link fails with
 `AuthResultCode::AwaitingApproval`, whose text tells the user to ask for *Approve* and
 connect again.
 
@@ -189,32 +234,38 @@ as authenticated.
 ```
 HostEngine (one per app, owns SessionTransport)
  ├─ net-loop thread: RunHostNetLoop
- │    recv → source-list/pong replies (admitted only) | video-path ingest | Chan::Terminal → TerminalHost
+ │    recv → source-list/pong replies (admitted only) | video-path ingest
+ │         | Chan::Terminal → TerminalHost | Chan::File → FileHost
  │    per-source session Tick, clipboard flush, reconfig, stats
  ├─ capture/encode: per-source, driven by the OS capture callbacks (client layer)
  │    frame → encoder (per-source mutex) → Packetizer → FEC → SendTo (datagrams)
  ├─ audio worker: capture callback → lock-free frame ring → Opus encode →
  │    per-viewer datagrams (AudioBroadcaster)
- └─ TerminalHost (tenant, when the terminal is shared)
-      ├─ HandleMessage on the net-loop thread: TERM_OPEN/DATA/RESIZE/CLOSE/EXIT/LIST → PTY
-      └─ pump thread: PTY output → host-side Screen mirror + TERM_DATA records,
-           detach on peer loss, kicks
+ ├─ TerminalHost (tenant, when the terminal is shared)
+ │    ├─ HandleMessage on the net-loop thread: TERM_OPEN/DATA/RESIZE/CLOSE/LIST → PTY
+ │    └─ pump thread: PTY output → host-side Screen mirror + TERM_DATA records,
+ │         detach on peer loss, kicks
+ └─ FileHost (tenant, when files are accepted)
+      └─ HandleMessage on the net-loop thread: FileReceiver → FileStore, replies
+           queued and sent on stream 8 after its own lock is released
 ```
 
-- The engine runs whenever anything is shared. With zero screen sources and the
-  terminal ticked it runs source-less; the loop stays alive while the terminal does.
+- The engine runs whenever anything is shared. With zero screen sources it runs
+  source-less while the terminal or file sharing is on; the loop stays alive as long as
+  either is asked for or its `TerminalHost` or `FileHost` is still running.
 - Each screen source is a `SourcePipelineState`: its own `ScreenHostSession` (viewer table,
   negotiation, input arbitration), encoder, quality ladder and diagnostics. One
   encode feeds every viewer of that source.
-- The feedback loop: viewers send `Feedback` (loss/RTT) once a second, and the host adds
-  one signal of its own — the age of a frame when it reaches the sender, the same
-  quantity `enc_lat_ms` reports. `BitrateController` (AIMD) and `QualityLadder` adjust
-  encoder bitrate, resolution and fps from all three; FEC is armed from the first frame
-  and only stood down after a long clean run, because the loss it protects against shows
-  up before the first report does — a backlog never arms it, since parity would only
-  deepen the queue. quiche's CUBIC congestion control sits underneath the
-  datagram path; the two act in series — quiche bounds what leaves the machine, the
-  app adapts the encoder to the loss that results.
+- The feedback loop: viewers send `Feedback` (loss, RTT, receive rate) once a second,
+  and the host adds one signal of its own — the age of a frame when it reaches the
+  sender, the same quantity `enc_lat_ms` reports. `BitrateController` (AIMD) acts on two
+  of those — loss and frame age — and `QualityLadder` follows the bitrate it picks down
+  to resolution and fps; RTT and receive rate are only displayed. FEC is armed from the
+  first frame and only stood down after a long clean run, because the loss it protects
+  against shows up before the first report does — a backlog never arms it, since parity
+  would only deepen the queue. quiche's CUBIC congestion control sits underneath the
+  datagram path; the two act in series — quiche bounds what leaves the machine, the app
+  adapts the encoder to the loss that results.
 - Input: "host wins" — `LocalInputMonitor` pauses remote input while the person at
   the machine moves their own mouse; one viewer drives at a time.
 - Shells: one PTY per shell (`ConPTY` on Windows, `forkpty` elsewhere), at most 8; a
@@ -259,7 +310,8 @@ HostLink (one per open surface)
 ```
 
 Once admitted, the link takes its own pulse (`core/session/LinkPulse`): a
-`Ping` datagram with session id 0 goes out once a second, and the host's
+`Ping` with session id 0 goes out once a second as a record on the control stream (not
+a datagram), and the host's
 `SourceListResponder` answers it over the same, already authenticated connection with no
 session required. Because a ping is ack-eliciting it
 doubles as the keepalive; the plain keepalive timer only still matters before the link
@@ -282,28 +334,31 @@ streaming resumes off the fresh keyframe. After sixty seconds
 (`kViewerReattachGraceUs`) without getting back in, the window ends with the usual
 reason.
 
-The source query (`QuerySources`) rides the same link in a one-shot, blocking form.
-The UI still posts intents (keys, resize) into command queues. An unknown host key
-fails the link with its fingerprint attached — and the previous-owner warning when the
-address used to answer as another trusted host — for the UI to show in its *New host*
-dialog; a host that has not allowed this key parks the link in `AwaitingApproval`, whose
-status line the UI polls while the user can cancel. The terminal window never parses escape sequences — `core/terminal` turns the
-byte stream into a cell grid, and the window only draws cells and forwards key
-events. Today each window still holds its own link; sharing one admitted link across
-every window aimed at the same host is the intended next step, and it slots in at
-`HostLink` — a registry and observer fan-out — not as another handshake.
+The source query (`QuerySources`) rides the same link in a one-shot, blocking form. The
+UI still posts intents (keys, resize) into command queues. An unknown host key fails the
+link with its fingerprint attached for the UI to show in its *New host* dialog, beside
+the previous-owner warning the UI looks up itself when the address used to answer as
+another trusted host; a host that has not allowed this key parks the link in
+`AwaitingApproval`, whose status line the UI polls while the user can cancel. The
+terminal window never parses escape sequences — `core/terminal` turns the byte stream
+into a cell grid, and the window only draws cells and forwards key events. Today each
+window still holds its own link; sharing one admitted link across every window aimed at
+the same host is the intended next step, and it slots in at `HostLink` — a registry and
+observer fan-out — not as another handshake.
 
 ## 6. Finding hosts
 
 There is no discovery: nothing scans the network and the host answers no plaintext
 packet. A client dials an address the user typed, a recent host, a trusted host
-(`HostProfiles`) or the addresses inside a QR invite. `SourceListResponder` answers `LIST_SOURCES` only over an admitted
-connection; the answer carries what the host can do — whether it takes input, whether
-it shares a terminal — in the `SOURCE_LIST` header flags, so a client knows before it
-opens any window that a phone can only be watched. After the source records the payload
-carries the host's device name (a length byte and at most 64 bytes of UTF-8; empty is
-allowed), so the name reaches only a client that has already authenticated. The client
-parses it with `ParseSourceListHostName`, which turns any control byte into a space.
+(`HostProfiles`) or the addresses inside a QR invite. `SourceListResponder` answers
+`LIST_SOURCES` only over an admitted connection; the answer carries what the host can do
+— whether it takes input, shares a terminal, shares sound or accepts files
+(`kHostAcceptsInput`, `kHostSharesTerminal`, `kHostSharesAudio`, `kHostAcceptsFiles`) —
+in the `SOURCE_LIST` header flags, so a client knows before it opens any window that a
+phone can only be watched. After the source records the payload carries the host's
+device name (a length byte and at most 64 bytes of UTF-8; empty is allowed), so the name
+reaches only a client that has already authenticated. The client parses it with
+`ParseSourceListHostName`, which turns any control byte into a space.
 
 The recent list lives in `platform/system/RecentDevicesFile` (`recent-hosts.txt`), over
 the parsing in `core/ui/RecentDevices`: address, last-connected time and the host name,
@@ -313,44 +368,51 @@ apps no longer touch the list themselves and `dh_recent_touch` is gone. The old
 
 The QR code is the one out-of-band channel, and it stays out of band: the host never
 transmits it, the owner shows it and someone reads it off the screen or pastes the link.
+A link that reaches a phone from outside the app — a tap on a `deskhub://pair` URL — is
+confirmed through the *New host* dialog before the app dials, unless that host is
+already trusted (section 3).
 `deskhubp::BuildPairingInvite(port, bindIp, hostName)` issues a random 32-byte token
 (kept in `pairing_tokens` with a 5-minute expiry, at most 4 live at once, all revoked by
 `RevokePairingTokens` when the panel is hidden or sharing stops) and formats
 `core/net/PairingInvite`: the text is `deskhub://pair/` followed by the base64url of a
-binary record — a version byte, the endpoint count `n`, then `n × (IPv4, port)` for up to
-4 of the host's addresses, the 32-byte fingerprint, the 32-byte token and a
+binary record — a version byte, the endpoint count `n`, then `n × (IPv4, port)` for up
+to 4 of the host's addresses, the 32-byte fingerprint, the 32-byte token and a
 length-prefixed host name of at most 32 bytes. The record is capped at 180 characters so
 that at error-correction level M it fits a QR code of version 10 or smaller, which a
 phone reads off a laptop screen at arm's length. `core/qr/QrCode` (`EncodeQr`, plus
 `RenderQrText` for the CLI's `share --qr`) is the only encoder; every client draws the
-module grid it returns, Android through `dh_qr_encode`. `ParsePairingInvite` on the
-client side gives `HostLink` its endpoints, the fingerprint to demand and the token to
-send; `dh_pairing_invite_address` gives the apps the first `ip:port` to show in the
-address field. Scanning is the one per-platform piece — CameraX + ZXing on Android,
-AVFoundation on iOS — and both hand back nothing but the decoded text.
+module grid it returns, Android and both Apple apps through `dh_qr_encode`.
+`ParsePairingInvite` on the client side gives `HostLink` its endpoints, the fingerprint
+to demand and the token to send; `dh_pairing_invite_address` gives the apps the first
+`ip:port` to show in the address field. Scanning is the one per-platform piece — CameraX +
+ZXing on Android, AVFoundation on iOS — and both hand back nothing but the decoded text.
 
 ## 7. Data on disk
 
-Everything lives in the user's Deskhub folder (`~/.deskhub`,
-`%USERPROFILE%\.deskhub`, a `.deskhub` folder inside the App Group container on iOS,
-internal storage on Android;
+Everything lives in the user's Deskhub folder (`~/.deskhub`, `%USERPROFILE%\.deskhub`, a
+`.deskhub` folder inside the App Group container on iOS, internal storage on Android;
 `DESKHUB_CONFIG_DIR` or the CLI's `--config-dir` override it): `host_key.pem` (the one
-machine key — the TLS certificate is built in memory at every start, so `host_cert.pem`
-is no longer written and a leftover one is ignored), `authorized_keys` (client keys this
-host admits), `known_hosts` (trusted hosts by fingerprint, with name and last address),
-`access_requests` (connection requests waiting for Approve or Deny — name, public key,
-address, time; at most 16, each dropped after 10 minutes), `pairing_tokens` (the QR
-tokens currently live, with their expiry), `ui-settings.txt` (including the device
-name), `recent-hosts.txt` (address, last-connected time and host name),
-`portal-restore-token.txt` on Linux (the desktop's own token for the screens picked in
-its screen-sharing dialog), and per-run logs. No passcode is stored anywhere, and
-no `client_key*.pem`: the files older versions kept are ignored, not migrated. POSIX
-directories are `0700` and files `0600`, written atomically; on Windows the ACL admits
-the user, SYSTEM and Administrators. On iOS the app and the broadcast extension share
-the folder, which is how the extension's request reaches the app's list and the app's
-*Approve* reaches the extension. File I/O
-stays in `platform/`; the parsing and the data structures live in `core/` and are
-unit-tested.
+machine key — the TLS certificate is built at every start and exists on disk only for
+the moment quiche loads it, as `transport_cert.<random>.pem` holding only the public
+certificate, swept when hosting next starts if a crash left it behind; `host_cert.pem` is no longer written and a leftover one is
+ignored), `authorized_keys` (client keys this host admits), `known_hosts` (trusted hosts
+by fingerprint, with name and last address), `access_requests` (connection requests
+waiting for Approve or Deny — time, address and the public key labelled with the
+device's name, one line each; at most 16, each dropped after 10 minutes),
+`pairing_tokens` (the QR tokens currently live, with their expiry), `ui-settings.txt`
+(including the device name), `recent-hosts.txt` (address, last-connected time and host
+name), `portal-restore-token.txt` on Linux (the desktop's own token for the screens
+picked in its screen-sharing dialog), and per-run logs (only the newest ten are kept, `kKeptSessionLogs`).
+No passcode is stored anywhere — a `passcode=` line an older `ui-settings.txt` carried
+is dropped when the file loads, and the retired `paired_devices`, its activation marker
+and `auth_salt` are deleted — and no `client_key*.pem`: the files older versions kept
+are ignored, not migrated. POSIX directories are `0700` and files `0600`, logs included
+(opened with `O_NOFOLLOW`), and config files are written atomically; on Windows the
+folder's ACL admits the user, SYSTEM and Administrators, and every file in it, logs
+included, inherits that ACL rather than getting a mode of its own. On iOS the folder is excluded from iCloud and Finder backup, and the app
+and the broadcast extension share it, which is how the extension's request reaches the
+app's list and the app's *Approve* reaches the extension. File I/O stays in `platform/`;
+the parsing and the data structures live in `core/` and are unit-tested.
 
 Files a viewer sends land somewhere else entirely: a folder the host picks
 (`ui-settings.txt`'s `transfer_dir`, defaulting to `Deskhub` in the user's home
@@ -368,7 +430,7 @@ control bytes, characters Windows rejects and reserved device names all go — b
 | `make test` | offline, no sockets | all of `core/`: wire (including the `AuthStart` token field), framing, FEC, sessions, VT emulator, settings, strings, deterministic structured fuzzing, and the pairing pieces — `Base64`, `PairingInvite` round trips and limits, `PairingTokens` issue/consume/expire, `AccessRequests` capacity and expiry, `QrCode` against known encodings |
 | `make test-platform` | loopback sockets | real QUIC handshakes, key-signature authentication end-to-end, fingerprint-keyed host pinning, `AccessRequestsFile` (a request is recorded, approved and denied) and `PairingTokenFile` (a token is issued, redeemed once and revoked), admission by approval and by token through the real `HostAuth`, terminal host + viewer over the wire, PTY against a real shell, bad-signature lockout |
 | `make test-integration` | loopback, fake capture/encode | full host↔client sessions: negotiation, video across the wire, input, authorized-key admission, the `AUTH_START_TOKEN` wire vector beside the other golden messages, junk resistance, and lag under cross-load — a file transfer, a flooded terminal and keystrokes beside a live stream, each gated on its worst observed stall |
-| fuzz targets | 30 s per target on every PR, 15 min per target nightly | parsers for wire, H.264, reassembly, terminal bytes and UI text, plus the host and viewer session state machines |
+| fuzz targets | 30 s per target on every PR, 15 min per target nightly | nine targets: parsers for wire, H.264 (Annex B and SPS), reassembly, terminal bytes and UI text, the host and viewer session state machines, the key and trust-file parsers (`FuzzKeys`: public-key text, `authorized_keys`, `known_hosts`, access requests, pairing tokens and invites) and the QR encoder (`FuzzQr`) |
 | `make test-perf` | release build, offline + loopback | the hot paths measured rather than only exercised: `core_perf` covers the pure-C++ paths, `platform_perf` covers real QUIC over loopback; both fail on allocations per unit, on the cost at 4× the input, and on drift against a baseline recorded on that machine |
 
 CI additionally enforces clang-format and clang-tidy (both pinned), SwiftLint
@@ -433,28 +495,32 @@ line.
   and cannot be compared directly with Deskhub's SPKI fingerprint. Importing the
   text key converts it to SPKI before calculating the Deskhub fingerprint.
 
-- **The signature covers one unambiguous auth transcript**: `core/auth/Transcript` encodes
-  a Deskhub domain, auth version, signer role, the 32-byte QUIC/TLS exporter value,
-  full client public key, and TLS host key fingerprint as length-prefixed fields.
-  A small patch to quiche 0.29.3 exposes the TLS exporter through its C API. Both
-  peers derive the same value for this connection; auth fails if export fails. The
-  host accepts one signed response per connection, preventing replay on another session.
-  It keeps at most eight auth requests waiting for a signature and closes each one after
-  ten seconds without a response. Three failed proofs from the same key and source IP
-  within one minute pause that pair for ten seconds. The in-memory table holds at most
-  64 pairs; a successful proof clears its failure count.
+- **The signature covers one unambiguous auth transcript**: `core/auth/Transcript`
+  encodes a Deskhub domain, auth version, signer role, the 32-byte QUIC/TLS exporter
+  value, full client public key, and TLS host key fingerprint as length-prefixed fields.
+  A small patch to quiche 0.29.3 exposes the TLS exporter through its C API. Both peers
+  derive the same value for this connection; auth fails if export fails. The host
+  accepts one signed response per connection, preventing replay on another session.
+  Every connection that has not authenticated is closed ten seconds after QUIC accepted
+  it, and at most eight of them are kept at once — a connection that never sends
+  `AuthStart` counts as much as one that never signs, and a ninth is not accepted at all. Three failed proofs from the same
+  key and source IP within one minute pause that pair for ten seconds. The in-memory
+  table holds at most 64 pairs; a successful proof clears its failure count.
 
 - **Auth has its own version inside protocol version 3**: `AuthStart` keeps a zero byte
-  before the key as a compatibility prefix and puts the auth version last — now 7, after
-  the pairing-token field that version 6 did not have: `00 | u16 keyLen | key |
-  u8 nameLen | name | u8 tokenLen | token | 07`. An older host can read the offer and
-  send its old challenge; the new client then detects the incompatible challenge and
-  closes. A new host rejects an offer whose trailing byte is not 7, sends
-  `VersionMismatch`, and closes — which is why a 7.0.x device and an 8.0 device report
-  that their versions do not match rather than half-working. `AuthMode` gained
-  `AwaitingApproval`, and `AuthResultCode::AwaitingApproval` exists only on the client
-  side, to name the outcome of a wait that ran out. Challenge, response, and result
-  carry only versioned data.
+  before the key as a compatibility prefix and puts the auth version last — now 8, which
+  keeps version 7's pairing-token field but moves the approval decision behind the
+  signature and into the result:
+  `00 | u16 keyLen | key | u8 nameLen | name | u8 tokenLen | token | 08`. A host rejects
+  an offer whose trailing byte is not its own version, sends `VersionMismatch`, and
+  closes, and a client closes on a challenge or result of another version — so builds on
+  auth version 7 and 8 report that their versions do not match rather than half-working.
+  The host's challenge is `Signature`, or `ConfigError` when its key list is unreadable;
+  `Denied` and `AwaitingApproval` remain in `AuthMode` but a version-8 host never sends
+  them. `AuthResultCode::AwaitingApproval` (9) travels in `AuthResult` like `Accepted`
+  or `NotPaired`; the host's transport also reports it through `onRefused`, and the
+  client fails a wait that ran out with it. Challenge, response, and result carry only
+  versioned data.
 
 - **Trust on first use, a warning on change**: an unknown host key is shown to the
   user once, as SSH does, and pinned only when they accept it (`--accept-new-host-key`
@@ -485,9 +551,10 @@ line.
 - **What a desktop screen shows is data in `core/ui`, not code in each app**: the colour
   theme (`Theme.h`, a light and a dark value per colour), the live host table's columns
   and sizes (`HostRows.h`) and the Settings page's boxes, sections and order
-  (`SettingsLayout.h`) are defined once. Windows reads them directly, macOS through
-  `dh_theme_color`, `dh_host_columns` and `dh_settings_layout`, Android through
-  `dh_theme_color`. An app only decides which control draws a given `SettingField`.
+  (`SettingsLayout.h`) are defined once. Windows reads them directly, Linux reads the
+  host table's columns directly and draws in GTK's own theme, macOS goes through
+  `dh_theme_color`, `dh_host_columns` and `dh_settings_layout`, and iOS and Android
+  through `dh_theme_color`. An app only decides which control draws a given `SettingField`.
   Before this, every app kept its own copy of the same hex values and page order, and
   they drifted: a button red on Windows was grey on macOS, and a setting present on two
   desktops was missing from the third. The layout tests check that every stored setting
@@ -496,8 +563,8 @@ line.
 - **A capability probe that returns false can switch off a whole control loop**: the
   Media Foundation encoder answered `SetBitrate` with `false` whenever the MFT did not
   expose `CODECAPI_AVEncCommonMeanBitRate`, and `ApplyFeedback` correctly treats a refusal
-  as "nothing committed". On an Intel Quick Sync MFT that reports `MeanBitRate: NOT
-  SUPPORTED`, the result was a host that never changed bitrate at all: measured on this
+  as "nothing committed". On an Intel Quick Sync MFT that reports
+  `MeanBitRate: NOT SUPPORTED`, the result was a host that never changed bitrate at all: measured on this
   hardware, 30 s of sustained 29-40 % loss produced zero `Bitrate` decisions, so the
   quality ladder never moved either. The startup log said `NOT SUPPORTED` the whole time
   and nobody read it as "adaptation is dead". `SetFps` and `RequestKeyFrame` in the same
@@ -508,9 +575,10 @@ line.
   control input, make the fallback mandatory: degrading to "slower" is a choice, silently
   degrading to "never" is not.
 
-- **A sender that cannot keep up looks exactly like a clean link**: every input
-  `BitrateController` had — loss, RTT, receive rate — comes from the viewer, so nothing
-  in the loop could say "I am the one falling behind". Measured on a Pixel 4 hosting for
+- **A sender that cannot keep up looks exactly like a clean link**: everything
+  `BitrateController` was fed came from the viewer's `Feedback` — and of that it acts
+  only on loss; RTT and receive rate are there to be displayed — so nothing in the loop
+  could say "I am the one falling behind". Measured on a Pixel 4 hosting for
   two viewers: frames left the encoder 15 s stale while the viewers reported 0 % loss and
   15 ms RTT, and the controller read that as headroom and walked the bitrate back up to
   its 20 Mbps ceiling — bufferbloat inside the sender, where the cleaner the link looks
@@ -574,9 +642,10 @@ line.
   to be given two frame intervals (33 ms at 60 fps) before it was declared lost, while
   the measured RTT on the same link was 24-49 ms. The NACK went out and its answer
   arrived after the frame had already been binned — visible as `late_ms_avg=24` with 87
-  packets per second landing on frames that no longer existed. `StallTimeoutUs` now takes
-  the larger of the paced window and one-and-a-half round trips, still capped by the hard
-  timeout, so retransmission is worth asking for on exactly the links that need it.
+  packets per second landing on frames that no longer existed. `StallTimeoutUs` now
+  takes the larger of the paced window and one-and-a-half round trips plus the NACK hold
+  (`kNackHoldUs`, 2 ms), still capped by the hard timeout, so retransmission is worth
+  asking for on exactly the links that need it.
 
 - **The performance suite gates on allocations and shape, not on milliseconds**: the
   three test suites build debug, and CI runs them again under ASan, TSan and coverage,
@@ -639,9 +708,11 @@ line.
   permission is gone". `HostEngine::Start` now skips it when the source list is empty.
 
 - **A host with a shell and no screen stays alive**: the net loop ends a session once no
-  source is alive, and a terminal-only share has none by definition. `keepAlive` answers
-  from the caller's intent (`ShareOptions::terminal`), not from a `TerminalHost` pointer
-  that is only attached after the loop is already running.
+  source is alive, and a terminal-only or files-only share has none by definition.
+  `keepAlive` answers from the caller's intent (`ShareOptions::terminal`,
+  `ShareOptions::files`) and from whether the `TerminalHost` or `FileHost` is still
+  running — never from a tenant pointer alone, which is only attached after the loop is
+  already running.
 
 - **The frame gate counts to a deadline, not from the last frame it kept**: a compositor
   that hands over 40 fps against a 30 fps target has no frame at all on most of the
@@ -706,8 +777,10 @@ line.
   frame at 64 kbps measures about 160 bytes, 209 at its widest, against the 1180 bytes
   a datagram has room for — so the audio path has no packetizer, no FEC, no
   reassembler and no NACK, which is most of what the video path is. Loss is absorbed
-  where it costs least: Opus carries in-band FEC in the following frame, and the
-  receiver asks its decoder to conceal a hole the jitter buffer reports. Retransmitting
+  where it costs least: Opus carries in-band FEC in the following frame, so when the
+  jitter buffer reports a single lost frame, the receiver decodes the next packet with
+  `decode_fec=1` to rebuild it, and asks its decoder to conceal the hole (PLC) only
+  when FEC cannot recover it. Retransmitting
   would be worse than useless, because a frame that arrives 200 ms late is unplayable
   yet still delays the ten behind it. `make opus-smoke` measures those numbers on any
   machine that builds the library.
@@ -738,40 +811,44 @@ line.
   peer is dropped rather than half understood. A wire change bumps the version; it never
   adds a compatibility branch.
 
-- **The terminal link keeps itself alive and dials itself back**: a terminal viewer
-  owns a QUIC connection of its own, separate from the video session, so none of the
-  video path's keepalives reach it. Left alone at a prompt it carried no traffic at
-  all and died on the 30 s QUIC idle timeout, and the viewer then stopped its thread
-  in `Reattaching` without ever redialling — the shell was still waiting on the host
-  for the full 2 minutes, and nothing went back for it. `TerminalViewer` now sends an
-  ack-eliciting packet on a timer and redials with backoff, reusing
-  `TerminalClient::Reattach()` (which was already written and tested in core, and
-  simply never called) so the same shell comes back with its scrollback.
-  `deskhub::KeepaliveIntervalUs` / `ReconnectDelayUs` hold the timings in core: the
-  keepalive is at most half the idle timeout so one lost packet is survivable, and
-  retrying stops exactly at `kTerminalReattachGraceUs`: past that the window reports
-  the loss, but the shell itself stays on the host with no time limit, ready for an
-  explicit resume instead of being dropped.
-- **A record goes onto the stream whole or not at all, and a client that falls behind
-  is repainted rather than fed every byte**: everything reliable — control, auth,
-  terminal output — is length-prefixed records sharing one QUIC stream, so half a
-  record on the wire desynchronises the framing on the far side permanently;
-  `RecordStream` has no way to resynchronise and the peer closes the connection.
-  `QuicEndpoint::SendStream` used to write whatever fit and drop the rest, which held
-  until a command like `make test` outran the link: the 1 MiB stream window filled,
-  the tail of a `TermData` record was dropped, the viewer's framer failed and the
-  shell "disconnected" a minute after it opened. It now refuses a record the stream
-  has no room for, and closes the connection if a partial write ever happens anyway,
-  because a torn stream cannot be repaired in place. Above it `TerminalHost` holds
-  unsent output in a per-shell queue and retries it on every tick, so a burst that
-  merely outruns the link for a moment — a build's output, say — still reaches the
-  client byte for byte. Past `kMaxPendingBytes` the queue is dropped instead of grown: every
-  byte has already reached the host-side mirror `Screen`, so the client is caught up
-  with `deskhub::term::RenderScreen` — one repaint of the current grid, at most every
-  `kRepaintIntervalUs`. Output nobody could have read is skipped rather than buffered,
-  which lets a flooding command run at its own speed and still leaves the right screen
-  behind. A reattaching client gets that same repaint, since its position in the byte
-  stream means nothing after a gap.
+- **The terminal link keeps itself alive and dials itself back**: a terminal viewer owns
+  a QUIC connection of its own, separate from the video session, so none of the video
+  path's keepalives reach it. Left alone at a prompt it carried no traffic at all and
+  died on the 30 s QUIC idle timeout, and the viewer then stopped its thread in
+  `Reattaching` without ever redialling — the shell was still waiting on the host for
+  the full 2 minutes, and nothing went back for it. The keepalive and the redial now
+  live in `HostLink`, for every surface that asks for recovery: the link sends an
+  ack-eliciting packet on a timer and redials with backoff, and `TerminalViewer` opts in
+  with `kTerminalReattachGraceUs` as its grace and reuses `TerminalClient::Reattach()`
+  (which was already written and tested in core, and simply never called) so the same
+  shell comes back with its scrollback. `deskhub::KeepaliveIntervalUs` /
+  `ReconnectDelayUs` hold the timings in core: the keepalive goes out three times per
+  idle timeout (at most once a second, at least once per half timeout) so one lost
+  packet is survivable, and retrying stops exactly at `kTerminalReattachGraceUs`: past
+  that the window reports the loss, but the shell itself stays on the host with no time
+  limit, ready for an explicit resume instead of being dropped.
+- **A record goes onto the stream whole or not at all, and a client that falls behind is
+  repainted rather than fed every byte**: everything reliable — control, auth, terminal
+  output — is length-prefixed records sharing one QUIC stream, so half a record on the
+  wire desynchronises the framing on the far side permanently; `RecordStream` has no way
+  to resynchronise and the peer closes the connection. `QuicEndpoint::SendStream` used
+  to write whatever fit and drop the rest, which held until a command like `make test`
+  outran the link: the 1 MiB stream window filled, the tail of a `TermData` record was
+  dropped, the viewer's framer failed and the shell "disconnected" a minute after it
+  opened. It now queues each record whole in a per-stream outbox — up to 4 MiB, 256 KiB
+  on the file stream — that drains as the window opens, and refuses a record the outbox
+  has no room for. If quiche ever reports a write error anyway, `BreakStream` resets
+  that one stream and reports it through `onStreamBroken`; the connection and its other
+  stream stay up, because a torn stream cannot be repaired in place but need not take
+  the rest with it. Above it `TerminalHost` holds unsent output in a per-shell queue and
+  retries it on every tick, so a burst that merely outruns the link for a moment — a
+  build's output, say — still reaches the client byte for byte. Past `kMaxPendingBytes`
+  the queue is dropped instead of grown: every byte has already reached the host-side
+  mirror `Screen`, so the client is caught up with `deskhub::term::RenderScreen` — one
+  repaint of the current grid, at most every `kRepaintIntervalUs`. Output nobody could
+  have read is skipped rather than buffered, which lets a flooding command run at its
+  own speed and still leaves the right screen behind. A reattaching client gets that
+  same repaint, since its position in the byte stream means nothing after a gap.
 - **An automatic share waits for the desktop instead of enumerating it once**:
   Windows registers autostart as a `ONLOGON` scheduled task, which fires before the
   session has a monitor to enumerate, so a single `ListDisplays()` at construction
@@ -801,12 +878,14 @@ line.
   directory per rust target under `third_party/quiche/` plus a shared `include/` —
   quiche.h and the BoringSSL headers boring-sys vendors, copied out because Deskhub
   calls BoringSSL directly for the host identity and wants one include path and no
-  second TLS library. `DeskhubQuiche.cmake` turns that into `deskhub::quiche`; a
-  missing library fails the configure.
+  second TLS library. `DeskhubQuiche.cmake` turns that into `deskhub::quiche`, and
+  `platform/CMakeLists.txt` fails the configure when the library is missing (unless
+  the build opts out with `-DDESKHUB_QUIC=OFF`); opus gets the same treatment through
+  `DeskhubOpus.cmake` and `-DDESKHUB_AUDIO=OFF`.
 - **Apple links `libplatform_bundled.a`**: the Xcode apps consume the platform
   archive from outside CMake, where a PRIVATE link to quiche never reaches their
-  link line — so a `libtool` step fuses platform + quiche into the one archive the
-  `.pbxproj` links.
+  link line — so a `libtool` step fuses platform + quiche + opus into the one archive
+  the `.pbxproj` links.
 - **The Windows toolchain traps are already cleared — keep them cleared**: quiche
   builds against the static CRT via `CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_RUSTFLAGS`
   for the Rust objects plus `/MT` in `CFLAGS_x86_64_pc_windows_msvc` for the
@@ -873,19 +952,23 @@ line.
   `release-macos`, the fastlane path — Developer ID, notarization, dmg — that produces
   something a user can actually open. The reusable workflow therefore skips its macOS
   job when `for_release` is set, or a tag would pay for a second macOS runner to make a
-  bundle nobody ships. `build-mobile` carries iOS and Android only, for the same reason
-  and with the same split.
+  bundle nobody ships. `build-mobile` carries iOS and Android only and takes no
+  `for_release`: `deploy` never calls it, since its `release-ios` and `release-android`
+  jobs build through fastlane themselves.
 - **Every workflow gets quiche and opus from one action, and the cache key is the whole
   contract**: `.github/actions/third-party` builds both libraries for whatever targets a
-  job names, which is why nineteen copies of the same cache-then-build block are down to
-  one line per job. Its `cache-key` input is not decoration — it is the only thing
-  keeping two jobs from restoring each other's libraries. Two target sets differ,
-  and so do two runner images building the same triple: a `libquiche.a` compiled on
-  ubuntu-latest and restored on ubuntu-22.04 links a glibc the release exists to avoid.
-  Anything that changes what the build produces belongs in that key.
+  job names, which is why each of the twenty-five jobs that need them carries one line
+  instead of its own copy of the same cache-then-build block. Its `cache-key` input is
+  not decoration — it is the only thing keeping two jobs from restoring each other's
+  libraries. Two target sets differ, and so do two runner images building the same
+  triple: a `libquiche.a` compiled on ubuntu-latest and restored on ubuntu-22.04 links a
+  glibc the release exists to avoid. Anything that changes what the build produces
+  belongs in that key.
 - **One static release CRT on Windows, every configuration**: cargo builds quiche
-  against the static release CRT (the msvc default — never force it through
-  `RUSTFLAGS`, that leaks into proc-macros and kills cargo), and the whole CMake
+  against the static release CRT — forced per target through
+  `CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_RUSTFLAGS` and `/MT`, as the entry above
+  describes, never through a blanket `RUSTFLAGS`, which leaks into proc-macros and
+  kills cargo — and the whole CMake
   tree pins `MultiThreaded` to match, which is also what keeps the app a single
   exe with no VC++ Redistributable. Rust offers no debug-CRT build, so Debug
   matches too: `_ITERATOR_DEBUG_LEVEL=0`, `/U_DEBUG`, `/RTC1` stripped — the
@@ -893,26 +976,37 @@ line.
   ends in a wall of LNK2038.
 - **Passcode and LAN scan stay removed**: a 4-digit code is a short secret on an open
   port, and a plaintext discovery answer tells anyone on the network that a host is
-  there. Nothing in 8.0 brings either back — the QR code is read off a screen, and a
-  request is written only after a completed TLS handshake.
+  there. Nothing since has brought either back — the QR code is read off a screen, and a
+  request is written only after a completed TLS handshake and a verified signature.
 
 - **Approval rides the authenticated channel and shows identity, not a secret**: the
   objection of 2026-09-28 to an approval prompt was that it could be clicked by the wrong
   person for the wrong machine — a passcode prompt showed a code anyone could have typed.
   A connection request shows nothing typed: the device's name, the fingerprint of the key
-  it actually holds (the host hashed the key it received over TLS) and the address it
-  came from, and *Approve* acts on that fingerprint, never on a row position. Nothing
+  it actually holds (the request is written only after the client has signed this
+  connection's transcript with that key, so nobody can file one in another machine's
+  name) and the address it came from, and *Approve* acts on that fingerprint, never on
+  a row position. Nothing
   travels in plaintext and nothing is guessable; the only thing the owner can get wrong
   is approving a machine they did not expect, which the row is there to let them check.
-  The host also keeps no connection open while it waits — the request is a file entry,
-  the client redials — so a flood of requests costs 16 rows, not 16 sockets.
+  The host also keeps no connection open while it waits — it closes the connection
+  two seconds after answering `AwaitingApproval`, the request is a file entry, the client
+  redials — so a flood of requests costs 16 rows, not 16 sockets. Each row costs the
+  sender a signature with a key of its own, and a fresh key is cheap, so keys cannot be
+  what limits a flood: the source address is. `AccessRequests::Add` keeps one row per IP
+  address, port ignored, and a new request from that address replaces its row whatever
+  key it carries. QUIC has validated the peer address before `AuthStart` is read, so a
+  sender cannot claim addresses it cannot receive at; pushing out a genuine request takes
+  16 addresses, and the residual cost falls on devices that share an address (one NAT),
+  which see only the latest of their requests. No per-address rate is added on top: one
+  address already holds one row, so a rate would not change what the table can lose.
 
 - **A QR code carries the host fingerprint and a one-shot token, pinned before
   `AuthStart`**: the token is a secret worth stealing for five minutes, so the client
   spends it only on a machine that has already proved, through the TLS handshake, that it
   holds the private key whose fingerprint is printed in the code. A man-in-the-middle at
-  the address in the code cannot present that key, so the client stops at
-  `InviteMismatch` and the token never crosses the wire. On the host the token is
+  the address in the code cannot present that key, so the client stops with the
+  invite-mismatch failure and the token never crosses the wire. On the host the token is
   compared in constant time, consumed on first use, expires after 5 minutes, dies with
   the panel that showed it, and a wrong guess is charged to the source address in the
   same limiter that counts bad signatures — 3 per minute, then a 10 s block — so 2^256
@@ -931,7 +1025,9 @@ line.
   could disagree with its key, and a `known_hosts` that had to remember which client key
   to use where. One ECDSA P-256 key in `host_key.pem` serves TLS on the host side and the
   transcript signature on the client side; the X.509 that TLS insists on is built around
-  it at every start and never written. The fingerprint was always SHA-256 of the SPKI,
+  it at every start and never kept — it touches disk only for the moment quiche loads
+  it, and that file holds the public certificate alone; the private key never leaves
+  `host_key.pem`. The fingerprint was always SHA-256 of the SPKI,
   never of the certificate, so a host that upgraded kept the fingerprint every client had
   pinned; a client's identity did change — from Ed25519 to the machine key — which is why
   every client is allowed once more, with an Approve or a scan rather than a paste.
@@ -1005,7 +1101,10 @@ line.
   Android launchers draw whatever they are given, so their icons carry the rounded
   corners and the transparency baked in — otherwise the app shows up as a hard blue
   square next to every other rounded icon. `scripts/make-icons.py` is pure standard
-  library on purpose: bootstrap installs no image tooling.
+  library on purpose: bootstrap installs no image tooling. The Linux window icon comes
+  from the installed hicolor theme, which a build run from its build folder does not
+  have, so every Linux build copies `deskhub-256.png` beside the binary and
+  `gtk/main.cpp` falls back to that file when the theme has no `deskhub` icon.
 - **A desktop client holds many hosts at once; a phone holds one**: the connect page on
   Windows, Linux and macOS keeps no connected state of its own. A host that answers gets
   a connection window — `ConnectionFrame` in `client/windows/win32/MainFrame.cpp`,
@@ -1074,9 +1173,9 @@ line.
   `t=07:47:00` both came out at 07:47:01, and four QUIC endpoints each reported their own
   multi-second poll gap at that instant — and `HostLink` declared a perfectly healthy link
   lost. The redial then moved the client to a new source port, the host's old connection
-  died on its 30 s idle timeout and took the in-flight batch with it (`transfer aborted
-  ... link-lost`), and `TestInputStaysLiveDuringABigTransfer` sat out its whole 120 s
-  deadline. `LinkPulse::Tick` now runs once per turn of `PumpReady` and credits back
+  died on its 30 s idle timeout and took the in-flight batch with it
+  (`transfer aborted ... link-lost`), and `TestInputStaysLiveDuringABigTransfer` sat out
+  its whole 120 s deadline. `LinkPulse::Tick` now runs once per turn of `PumpReady` and credits back
   everything a turn spent past `kLinkWatchStepUs`: silence counts only while we were in a
   position to hear. Any watchdog that times a remote party from a local clock has to
   subtract the time it was not looking, or the first thing it detects is its own machine.
@@ -1111,10 +1210,11 @@ line.
   terminal until output nobody has read is drained, so with the master still open even
   the killed child never finished exiting, the final `waitpid` never returned, and every
   macOS test job ran into its timeout.
-- **The Windows app talks to the clipboard through Win32, not `wxClipboard`**: `capture::InitRuntime`
-  puts the UI thread into a multi-threaded COM apartment because Windows.Graphics.Capture and the
-  encoder threads rely on the implicit MTA, so wxWidgets' `OleInitialize` fails at start-up and every
-  OLE clipboard call answers `CO_E_NOTINITIALIZED` ("Failed to put data on the clipboard … CoInitialize
-  has not been called"). `OpenClipboard`/`SetClipboardData` need no apartment, so the Copy buttons and
-  the clipboard sync use them; moving the UI thread to an STA instead would strand every worker thread
-  that never calls `CoInitialize`.
+- **The Windows app talks to the clipboard through Win32, not `wxClipboard`**:
+  `capture::InitRuntime` puts the UI thread into a multi-threaded COM apartment because
+  Windows.Graphics.Capture and the encoder threads rely on the implicit MTA, so
+  wxWidgets' `OleInitialize` fails at start-up and every OLE clipboard call answers
+  `CO_E_NOTINITIALIZED` ("Failed to put data on the clipboard … CoInitialize has not
+  been called"). `OpenClipboard`/`SetClipboardData` need no apartment, so the Copy
+  buttons and the clipboard sync use them; moving the UI thread to an STA instead would
+  strand every worker thread that never calls `CoInitialize`.

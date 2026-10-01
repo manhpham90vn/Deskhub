@@ -2,7 +2,7 @@
 
 # Deskhub セキュリティポリシー
 
-_最終更新: 2026 年 9 月 30 日_
+_最終更新: 2026 年 10 月 1 日_
 
 本書は [`SECURITY.md`](SECURITY.md) の翻訳。食い違いがある場合は英語版が正文。
 
@@ -31,7 +31,10 @@ flooding への防御機構もない。
 
 遠隔からアクセスするときは VPN を使う。本プロジェクトは
 [Tailscale](https://tailscale.com) で検証しており、host の `100.x.y.z` アドレスへ
-Connect できる。画面や terminal を共有する前に、以下の制限も確認してほしい。
+Connect できる。
+
+host は信頼できる network 上に置き、画面や terminal を共有する前に、以下の制限を確認
+してほしい。
 
 ## Threat model
 
@@ -39,17 +42,17 @@ Connect できる。画面や terminal を共有する前に、以下の制限�
 
 | | |
 |---|---|
-| 開発者へのデータの流出 | 該当するデータは存在しない。サーバ、アカウント、telemetry、サードパーティ SDK のいずれもない。[`PRIVACY.ja.md`](PRIVACY.ja.md) を参照。 |
+| 開発者へのデータの流出 | 該当するデータは存在しない。サーバ、アカウント、telemetry、データを収集するサードパーティ SDK のいずれもない。[`PRIVACY.ja.md`](PRIVACY.ja.md) を参照。 |
 | トラフィックの盗聴 | すべての session は QUIC/TLS の内部で動作する。video の frame、キー入力、clipboard のテキスト、terminal のバイト列は 2 台の間で encrypt される。パケットキャプチャから得られるのは通信量と時刻であり、内容ではない。port に到達する未 encrypt の packet は破棄され、client が authenticate するまで host は application レベルで何も —— 共有内容さえも —— 送信しない。 |
-| リモートの viewer との操作の競合 | host を優先する。実際の mouse または keyboard を操作した時点で remote input は停止する。これは Windows、macOS、Linux の host に共通である。 |
+| リモートの viewer との操作の競合 | host を優先する。実際の mouse または keyboard を操作した時点で remote input は停止する。Windows と macOS の host は初期状態でこれを行う。Linux の host がこれを行うのは、Deskhub を実行する利用者が `/dev/input/event*` を読み取れる場合 —— 実際には `input` グループへの所属で、パッケージはこれを付与しない —— に限られる。所属がなければ log にその旨が一度記録され、remote input は一切停止しない。 |
 | キーの押下状態の残留 | リモート側が押している状態のキーは、session の終了時、または viewer が切り替わった時点で自動的に解放される。 |
-| 許可のない第三者の接続 | 受け入れられるのは、public key が host の `authorized_keys` に含まれる client のみであり、その client は対応する private key で当該 connection 自体の transcript に署名しなければならない。key がその一覧に載る方法は 3 つだけで、いずれも所有者の手に委ねられる。所有者がデバイスの接続要求 —— デバイスの名前、実際に提示した key の fingerprint、アドレスを示す行 —— に対して **Approve** を押す。デバイスが、所有者が共有中に見せる QR code をスキャンする（そのランダムな 32 バイトの token は 1 回限り、5 分間有効で、code を隠すか共有を停止すると無効になる）。または所有者がデバイスの public key を貼り付ける。接続してきた第三者は受け入れられない。host は所有者が無視できる要求を記録し、connection は閉じられる。passcode は存在せず、`authorized_keys` ファイルがなければ誰も受け入れられず、client が所有者を言葉で説き伏せて通り抜ける手段もない。host が保持する authenticate 待ちの接続は最大 8 で、それぞれ 10 秒後に切断される。保持する要求は最大 16 で、それぞれ 10 分間である。1 つの key とアドレスから 1 分以内に 3 回不正な署名があると、その組み合わせは 10 秒間ブロックされ、誤った QR token も送信元アドレスに対して同じ制限に数えられる。host の Devices ページで key を削除すると、そのデバイスの実行中の session も直ちに閉じられる。受け入れは、それを得た connection が続く間だけ有効である。 |
+| 許可のない第三者の接続 | 受け入れられるのは、public key が host の `authorized_keys` に含まれる client のみであり、その client は対応する private key で当該 connection 自体の transcript に署名しなければならない。key がその一覧に載る方法は 3 つだけで、いずれも所有者の手に委ねられる。所有者がデバイスの接続要求 —— デバイスの名前、保持を証明した key の fingerprint、アドレスを示す行 —— に対して **Approve** を押す。デバイスが、所有者が共有中に見せる QR code をスキャンする（そのランダムな 32 バイトの token は 1 回限り、5 分間有効で、code を隠すか共有を停止すると無効になる）。または所有者がデバイスの public key を貼り付ける。接続してきた第三者は受け入れられない。提示した key で署名を済ませた後にのみ、host は所有者が無視できる要求を記録し、応答から約 2 秒後に host 自身が connection を閉じる。拒否するすべての connection と同じ扱いである。passcode は存在せず、`authorized_keys` ファイルがなければ誰も受け入れられず、client が所有者を言葉で説き伏せて通り抜ける手段もない。host が保持する authenticate 待ちの接続は最大 8 で —— どの key を提示したかにかかわらず、authenticate を終えていない接続はすべて数えられ、9 本目は受け入れられない —— それぞれ受け入れから 10 秒以内に authenticate を終えなければ切断される。保持する要求は最大 16 で、送信元アドレスごとに最大 1 つ —— 要求を持つアドレスからの新しい要求はそれを置き換える —— それぞれ 10 分間である。1 つの key とアドレスから 1 分以内に 3 回不正な署名があると、その組み合わせは 10 秒間ブロックされ、署名を済ませたデバイスからの誤った QR token も送信元アドレスに対して同じ制限に数えられる。承認待ちは失敗として数えない。host の Devices ページで key を削除すると、そのデバイスの実行中の session も直ちに閉じられる。受け入れは、それを得た connection が続く間だけ有効である。 |
 | 中間者攻撃 | すべてのマシンは key を 1 つ持つ。client は host の key を —— 初回接続時に利用者が fingerprint を照合した後、または fingerprint を含む QR code から —— 固定し、以降の接続では何かを送る前に毎回照合する。信頼は key に従うため、新しいアドレスにいる host も同じ host である。一方、client が知っているアドレスに現れた*別の* key は信頼済みとしては拒否され、以前そこで応答していたマシンの名前を添えた警告とともに **New host** として表示される。「変更」として受け入れることはできず、fingerprint を示した上で改めて信頼するしかない。QR code をスキャンした client は、応答したマシンが code に印字された key を保持していることを TLS handshake で証明した後にのみ token を送る。そのアドレスにいる他のものには何も渡らない。client の署名は、TLS session から export した session 識別子と client が受け取った host key の fingerprint を対象とするため、別の host に relay された署名や、別の connection で replay された署名は検証を通らない。 |
 | viewer 同士による mouse の競合 | 1 つの host を最大 5 viewer が閲覧できるが、input を操作できるのは 1 つのみである。先に参加した viewer が優先され、後から参加した viewer の input は、先行する viewer が 1 秒間無操作になるまで破棄される。6 番目の viewer は `Busy` として拒否される。 |
 | 閲覧のみを許可したい viewer | view-only の共有はすべての host で利用でき、何らかの操作が inject される前に host 側で input の packet を破棄する。client の自主的な遵守には依存しない。Android と iOS の host は常に view-only である。 |
 | 共有したまま放置されたスマートフォン | 最終的な防護は Deskhub ではなく OS が担う。Android は常駐通知を表示し、共有のたびに録画の同意を求める。iOS は broadcast のインジケータを表示し続ける。いずれも app を開かずに共有を停止できる。 |
 | 許可済み client による自機へのファイル書き込み | ファイルを送信できるのは受け入れ済みのマシンのみであり、かつ受信側が file transfer を有効にしている場合に限られる。到達したデータは受信側が選択したフォルダの外に出られない。ネットワーク上のファイル名は、いずれかのファイルが開かれる前に、パスの最後の要素へ切り詰められ、区切り文字、制御バイト、filesystem が受け付けない文字、予約デバイス名が除去される。各ファイルは `.deskhub-part` の接尾辞付きで書き込まれ、全体が到着し CRC-32 が一致した時点でのみ改名される。既存の同名ファイルは上書きされず、番号が付加される。1 batch は 32 ファイル、1 ファイル 8 GiB、合計 32 GiB に制限される。同じ名称処理は、スマートフォンやタブレットでも写真ライブラリや Downloads フォルダに到達する前に実行される。 |
-| 不正な packet | すべてのフィールドは読み取り前に境界検査を行う。parser は unit test を備え、CI では AddressSanitizer、UndefinedBehaviorSanitizer、ThreadSanitizer の下で実行され、libFuzzer により毎晩 fuzz される。target は 7 つで、wire format、H.264 の解析、packet の reassembly、terminal の byte stream、UI テキスト、および host 側と viewer 側の session state machine を対象とする。fuzzing で検出された crash は regression test として repo に保存し、新たな coverage は seed corpus に取り込む。 |
+| 不正な packet | すべてのフィールドは読み取り前に境界検査を行う。parser は unit test を備え、CI では AddressSanitizer、UndefinedBehaviorSanitizer、ThreadSanitizer の下で実行され、libFuzzer により fuzz される —— すべての pull request で target ごとに 30 秒、毎晩 target ごとに 15 分。target は 9 つで、wire format、H.264 の解析（Annex B と SPS）、packet の reassembly、host 側と viewer 側の session state machine、UI テキスト、terminal の byte stream、保存される key と信頼のファイルおよび pairing link、QR code の encoder を対象とする。fuzzing で検出された crash は regression test として repo に保存し、新たな coverage は seed corpus に取り込む。 |
 
 ### Deskhub が防**がない**もの
 
@@ -72,20 +75,47 @@ Connect できる。画面や terminal を共有する前に、以下の制限�
   できる。
 - **誤った要求を承認するのは所有者の過ちであり、Deskhub はそれを検出できない。**
   接続要求には、デバイスが自ら選んだ名前、保持する key の fingerprint、送信元アドレスが
-  表示される。名前は何も証明しない。*Approve* を押す前に、fingerprint をそのデバイス
-  自身の Devices ページと、アドレスを想定している場所と照合すること。network 上の誰でも
-  要求を残せるが、それをアクセスに変えられるのは自分だけである。
+  表示される。デバイスはその key の保持を証明している —— 要求は有効な署名の後にのみ記録
+  される —— が、名前は何も証明せず、key はいくらでも無償で作れる。*Approve* を押す前
+  に、fingerprint をそのデバイス自身の Devices ページと、アドレスを想定している場所と
+  照合すること。network 上の誰でも要求を残せるが、それをアクセスに変えられるのは自分
+  だけである。
+- **要求は押し出されうるが、1 つのアドレスからはできない。** host が保持する要求は送信元
+  アドレスごとに最大 1 つで、要求を持つアドレスからの新しい要求はそれを置き換える。全体
+  では最大 16 で、空きを作るため最も古いものを破棄する。したがって 1 台のマシンが新しい
+  key を作り続けても、上書きされるのはそのマシン自身の行だけであり、正規の要求を一覧から
+  押し出すには 16 の異なるアドレスが要る。他者とアドレスを共有するデバイス —— たとえば
+  同じ NAT の内側 —— は、その相手の要求に自分の要求を置き換えられうる。待っている要求が
+  見当たらなければ、デバイスにもう一度接続してもらうこと。
 - **QR code は、画面を見られる者すべてにとって 5 分間有効な秘密である。** host 側で
   何もクリックせずに 1 台のデバイスを受け入れる。それを撮影した者 —— 肩越しに、
   スクリーンショットから、共有中の画面から —— は、期限切れ、使用済み、または非表示に
   なるまで自分に代わって使用できる。受け入れるつもりの相手にだけ見せ、接続が済んだら
   直ちに隠すこと。受け入れられたデバイスは *Devices allowed to connect to this machine* に現れるので、
   想定していたものでなければそこで削除できる。
+- **`deskhub://` link の信頼性は、それを送った者の信頼性と同じでしかない。** host が QR
+  code の横に表示する link は、スマートフォンやタブレット上のあらゆる Web ページ、
+  メッセージ、app から開ける（Android では `deskhub://pair` の link だけが app に届く）。
+  そのように開かれた場合、Deskhub は黙って信頼することはせず、link が示す host が既に
+  信頼済みでない限り、初回接続と同じ *New host* の確認を link が示す fingerprint とともに
+  表示し、承認した後にのみ接続する。しかしその fingerprint は link 自体から来たものである。他人が
+  作った link を、fingerprint を host の Devices ページと照合せずに承認すると、その相手
+  のマシンを信頼することになりうる。そのマシンは本物の host 宛ての pairing token を受け
+  取り、好きな画面を見せ、その session で入力・送信したものを受け取る。app 内のスキャナ
+  で QR code をスキャンした場合は、host 自身の画面にカメラを向けているため、確認なしに
+  code を信頼する。
+- **Linux では、パッケージが input を inject できる範囲を広げる。** 遠隔操作には
+  `/dev/uinput` が必要なため、`.deb` と `.rpm` は、それを `input` グループと seat に
+  ログインしている利用者に与える udev ルール（`MODE="0660", GROUP="input", TAG+="uaccess"`）
+  をインストールする。その結果、Deskhub に限らず、その利用者として動作するあらゆる
+  プログラムが仮想の keyboard や mouse を作成できる。また、host を優先する挙動に必要な
+  `input` グループは、マシン上のすべての keyboard も読み取れる —— そのメンバーとして動作
+  するものはキー入力を記録できる。それを受け入れる場合にのみ利用者を追加すること。
 - **トラフィック解析は依然として可能である。** encrypt が隠すのは内容であって存在では
   ない。観察者は session が動作していること、video の通信量、入力の時刻を把握できる。
 - **rate limiting はなく、DoS 耐性もない。** port に大量のデータを送り込めば session は
-  中断する。authenticate 待ちの接続数と不正な署名に対する制限は推測を防ぐものであり、
-  flooding を防ぐものではない。
+  中断する。authenticate 待ちの接続数、待機中の要求数、不正な署名に対する制限は推測を
+  防ぐものであり、flooding を防ぐものではない。
 - **QUIC handshake には依然として応答する。** host は平文の packet には一切応答しなく
   なったが、port への QUIC/TLS handshake は client が何かを証明する前に完了する。その
   ため、アドレスを知っている第三者は、何かが待ち受けていることを把握でき、host の
@@ -111,6 +141,36 @@ Connect できる。画面や terminal を共有する前に、以下の制限�
   同様に encrypt されるが、受け入れたすべての viewer がその全体を閲覧できる。モバイルの
   host は常に view-only であり、これは遠隔操作の危険を除くが、情報が公開される危険は
   低減しない。
+
+## 暗号
+
+設計を確認したい人のために、各要素の構成を示す。
+
+- **デバイスの key。** デバイスごとに NIST P-256 曲線の ECDSA key を 1 つ持ち、初回起動
+  時に BoringSSL が生成して `host_key.pem` に保存する。同じ key が host としてのデバイスを
+  識別し、client としてのデバイスの署名にも使われる。fingerprint は、key の DER 形式の
+  SubjectPublicKeyInfo の SHA-256 で、`SHA256:` に続けて padding なしの base64 で表記する。
+- **Certificate。** host はその key に対する自己署名の X.509 v3 certificate を提示する。
+  subject と issuer は `CN=deskhub`、ランダムな 63 ビットの serial number、port を開いた
+  時点から 20 年間有効で、ECDSA-SHA256 で署名される。毎回新たに作られ、名前もアドレスも
+  含まない。
+- **Transport。** Cloudflare の quiche による QUIC で、その TLS 1.3 は BoringSSL による。
+  ALPN は `deskhub`。どちらの側も certificate chain を検証しない —— certificate authority
+  が存在しないため peer の検証は無効になっている —— 代わりに client は、何かを送る前に
+  certificate の public key の SHA-256 を固定済みの fingerprint と比較する。
+- **Client の authentication。** 両端は TLS exporter（label `EXPORTER-Deskhub-Auth-v5`）
+  で 32 バイトの session 識別子を導出する。client は、固定の domain 文字列
+  （`Deskhub/auth/signature`）、protocol のバージョン、自身の役割、その session 識別子、
+  自身の public key、host の key の fingerprint からなる transcript に署名し、host はそれを
+  `authorized_keys` に照らして検証する。Deskhub 自身の key は ECDSA P-256 と SHA-256 で
+  署名する。host は貼り付けられた `ssh-ed25519` の public key も受け付け、それによる
+  Ed25519 署名を検証する。TLS がデバイスの key に P-256 を必要とするため、Deskhub 自身が
+  Ed25519 の key を作ることはない。
+- **Pairing token。** OS の乱数生成器（Windows では `BCryptGenRandom`、Apple の
+  プラットフォームでは `arc4random_buf`、Linux と Android では `getrandom`、失敗時は
+  `/dev/urandom`）から得た 32 バイトで、constant time で比較され、1 回限り、5 分間有効
+  である。host が同時に保持するのは最大 4 つで、新しいものの空きを作るため、期限が最も
+  近いものを破棄する。
 
 ## Deskhub を使う環境
 
@@ -140,11 +200,15 @@ Connect できる。画面や terminal を共有する前に、以下の制限�
 （ケーブルの抜去、DHCP による新しいアドレスの割り当て）、Deskhub はすべての
 インターフェースにフォールバックし、その旨を共有 status に表示する。この設定に依存する
 場合はその表示を確認すること。第二に、単一のインターフェースにバインドすると、同一
-マシン上の loopback（`127.0.0.1`）経由の viewer も遮断される。Windows では、app は起動
-時点から昇格して動作し（昇格したウィンドウへ input を inject するために一度だけ権限を
-要求する）、共有時に firewall のルールを自動的に開く。このルールは app 全体とすべての
+マシン上の loopback（`127.0.0.1`）経由の viewer も遮断される。Windows では、昇格した
+ウィンドウへ input を inject するため、app は起動時点から昇格して動作する。UAC は起動の
+たびに確認を求めるが、*Start Deskhub when you log in* が scheduled task を通じて起動する
+場合は、ログオン時に確認なしで昇格して起動する。また共有時には、*Deskhub (host)* という
+名前の受信 UDP ルールで firewall を自動的に開く。このルールは app 全体とすべての
 profile を対象とするため、バインドを限定しても firewall は限定されない。この利便性も、
-上記の原則が重要である理由の一つである。
+上記の原則が重要である理由の一つである。Deskhub が置き換えるのは自身のこのルールだけで
+ある。利用者が app に対して自ら作成した block ルールはそのまま残され、Windows では
+block ルールが allow ルールに優先するため、それを削除するまで host には到達できない。
 
 ## 同一 network 上の攻撃者にできること
 
@@ -157,8 +221,9 @@ profile を対象とするため、バインドを限定しても firewall は�
 2. 接続を試みる。そのためには、public 側が `authorized_keys` にある private key が必要で
    あり、そこに key を載せられるのは所有者の *Approve*、有効な QR token、または貼り付け
    だけである。第三者に*できる*のは、所有者が Host ページで目にする接続要求を、好きな
-   名前で残すことである。要求は 10 分で失効し、*Approve* だけがそれをアクセスに変える。
-   QR token を推測することもできるが、誤った token は不正な署名と同様にそのアドレスに
+   名前と作ったばかりの key で残すことである。要求は 10 分で失効し、各アドレスが同時に持てる要求は 1 つだけなので、1 台のマシンからの新しい key は自分の行を上書きするにすぎない。*Approve* だけが
+   それをアクセスに変える。
+   推測ごとに自前の key で署名して QR token を推測することもできるが、誤った token は不正な署名と同様にそのアドレスに
    対して数えられ —— 1 分以内に 3 回で 10 秒間ブロック —— token はランダムな 32 バイト
    で、5 分間有効、1 回限りである。それ以外には、せいぜい client が host に*初めて*
    接続する際に中間に入り込むことを試みる程度であり、これは fingerprint の照合 ——
@@ -187,7 +252,18 @@ Deskhub を現状のまま使い続ける場合、次の項目を実施するこ
 - [ ] 見せた相手のデバイスが接続したら直ちに QR code を隠し、共有中や発表中の画面には
       決して表示しない。
 - [ ] 使用していないときは Deskhub を終了する。background service ではないため、終了
-      すれば受け入れ口も閉じる。
+      すれば受け入れ口も閉じる。ただし *Launch & background* の 3 つの設定がこれを
+      変える。*Start Deskhub when you log in* はログオンのたびに起動し（Windows では
+      UAC の確認なしに昇格して実行する scheduled task による）、
+      *Start sharing when Deskhub opens* はすぐに共有を始め、
+      *Keep running in the background (tray icon) when the window is closed* は
+      ウィンドウを閉じても終了しなくなる。これらを
+      組み合わせると、ログインした時点から画面にウィンドウのないまま host が待ち受ける。
+      それを意図しない限りオフのままにし、tray アイコンが表示されている場合はそこから
+      終了すること。
+- [ ] Linux では、host を優先する挙動のために自分を `input` グループに加える前によく
+      考える。それにより、自分が実行するすべてのプログラムがすべての keyboard を読み
+      取れるようになる。
 - [ ] Linux で `ufw` を使用している場合は、全面的に開放せず範囲を限定する。
       `sudo ufw allow 47777/udp` ではなく
       `sudo ufw allow from 100.64.0.0/10 to any port 47777 proto udp` とする。
@@ -201,37 +277,65 @@ Deskhub を現状のまま使い続ける場合、次の項目を実施するこ
 
 ## ローカルに保存されるデータ
 
-診断の log は、Windows、macOS、Linux において `~/.deskhub/`（Windows は
-`%USERPROFILE%\.deskhub`）の下に平文で書き込まれる。内容は接続の統計と peer のアドレス
-であり、画面の内容やキー入力は含まない。
+デスクトップの app は、診断の log を `~/.deskhub/`（Windows は `%USERPROFILE%\.deskhub`）
+の下に平文で書き込む。実行ごとに 1 ファイルで、名前は `deskhub-<date>-<time>-<pid>.log`
+である。macOS と Linux では `deskhub-latest.log` という symlink が最新のものを指す。各
+macOS と Linux では各 log は本人のみが読み取れる状態（`0600`）で作成され、symlink を
+たどって書き込まれることはない。Windows では置かれたフォルダの制限された権限を引き継ぐ。
+古い log は削除されて最新の 10 件だけが残る。内容は、接続の統計（`[DIAG]` 行: bitrate、loss、latency、frame のタイミング）、
+peer のアドレスと port、peer が送ったデバイス名、key の fingerprint、送受信した各ファイル
+の名前・サイズ・結果と保存先のフォルダ、およびエラーである。画面の内容、viewer が押した
+キー（remote control の session でも terminal でも）や pointer の動き、clipboard のテキスト、terminal のバイト列は含まない。Android と
+iOS は同じ行をシステムの log（logcat、Xcode のコンソール）にのみ書き込み、ファイルには
+書き込まない。
 
-デスクトップの app と `deskhub-cli` はこれらのファイルを共有する。`DESKHUB_CONFIG_DIR`
-または CLI の `--config-dir` で、両者を別のフォルダに向けることができる。同じフォルダには
-次も保存される。`ui-settings.txt`（fps、bitrate、解像度の上限、port、view-only の
+デスクトップの app と `deskhub-cli` は、このフォルダの残りの内容を共有する。
+`DESKHUB_CONFIG_DIR` または CLI の `--config-dir` で、両者がこれらのファイルに使う
+フォルダを別の場所に向けることができる。保存されるのは次のとおりである。
+`ui-settings.txt`（fps、bitrate、解像度の上限、port、view-only の
 スイッチ、デバイス名、bind アドレス、その他のトグル）、`recent-hosts.txt`（直近 10 件
 の接続先 host —— アドレス、その時刻、各 host が名乗った名前）、`host_key.pem`（本マシン
 唯一の秘密鍵。両方の役割における fingerprint の背後にある identity であり、入手した者は
 host として本マシンになりすませる*上に*、本マシンが許可されているあらゆる場所に sign in
-できる。certificate は保存されず、TLS certificate は port を開くたびにメモリ上で構築
-される）、`authorized_keys`（この host に受け入れられる client public key とそれぞれの
-ラベル）、`known_hosts`（本マシンが信頼する host。固定した fingerprint、名前、各 host が
-最後に応答したアドレス）、`access_requests`（*Approve* を待つデバイス —— 名前、public
-key、アドレス、時刻。最大 16 件、それぞれ 10 分後に破棄される）、`pairing_tokens`（現在
-有効な QR token とそれぞれの期限。このファイルのコピーは、期限が切れるまで画面上の
-code と同等の効力を持つ）、および Linux では `portal-restore-token.txt`（選択した画面に
-対してデスクトップが発行した token。自身のデスクトップ session にのみ意味を持ち、送信
-されることはない）。passcode はどこにも保存されない。POSIX システムではフォルダは
-`0700`、各ファイルは `0600` で作成され、atomic に書き込まれる。Windows では利用者本人、
-SYSTEM、Administrators のみに制限される。モバイルの app は同じファイルを自身のサンド
-ボックス内に保持し、iOS では app と broadcast extension が共有する app group のコンテナ
-内の `.deskhub` フォルダ、Android では app の内部ストレージに置く。このフォルダは、自分
-の権限で動作するあらゆるプログラムから読み取り可能なものとして扱うこと。
+できる）、`authorized_keys`（この host に受け入れられる client public key とそれぞれの
+ラベル）、`known_hosts`（本マシンが信頼する host。固定した fingerprint、最初と最後に
+確認した時刻、最後に応答したアドレスと port、名前）、`access_requests`（*Approve* を待つ
+デバイス —— 名前、public key、アドレス、時刻。最大 16 件、それぞれ 10 分後に破棄
+される）、`pairing_tokens`（現在有効な QR token とそれぞれの期限。このファイルのコピー
+は、期限が切れるまで画面上の code と同等の効力を持つ）、および Linux では
+`portal-restore-token.txt`（選択した画面に対してデスクトップが発行した token。自身の
+デスクトップ session にのみ意味を持ち、送信されることはない）。これらの横には、
+`authorized_keys`、`known_hosts`、`access_requests`、`pairing_tokens` それぞれの `.lock`
+ファイル（app と CLI が交互に書き込むためのもの）や、atomic な書き込みの途中で一時的に
+現れる `.tmp-…` ファイルが見えることもある。
+
+certificate は保持されない。TLS certificate は port を開くたびに `host_key.pem` から
+メモリ上で構築されるが、TLS ライブラリは certificate をファイルからしか読み込めないため、
+同じフォルダの `transport_cert.<random>.pem` に `0600` で一瞬だけ書き込まれ、読み込まれ
+次第削除される。そのようなファイルのうち 1 分より古いもの —— crash だけが残す —— は、
+このマシンが次に hosting を開始したときに削除される。含まれるのは公開 certificate のみ
+であり、TLS ライブラリは private key を `host_key.pem` から読む。
+
+passcode はどこにも保存されない。POSIX システムではフォルダは `0700`、フォルダ内の
+すべてのファイルは `0600` で作成され、atomic に書き込まれる。Windows ではフォルダが
+利用者本人、SYSTEM、Administrators のみに制限され、その中のファイルはその制限を継承する。ホームフォルダが使えない場合、POSIX 版は
+`$TMPDIR/.deskhub`、次いで現在のディレクトリの `.deskhub` にフォールバックする。debug
+build は `.deskhub` の代わりに `.deskhub-dev` を使うため、release build の key に触れる
+ことはない。モバイルの app は同じファイルを自身のサンドボックス内に保持する。iOS では
+app と broadcast extension が共有する app group のコンテナ内の `.deskhub` フォルダに
+置かれ、iCloud とコンピュータへのバックアップから除外される。Android では app の内部
+ストレージに置かれ、app 全体のバックアップが無効になっている。デスクトップのフォルダには
+そのような除外はなく、ホームフォルダをコピーするバックアップツールは `host_key.pem` も
+一緒にコピーする。このフォルダは、自分の権限で動作するあらゆるプログラムから読み取り
+可能なものとして扱うこと。
 
 読み取れない `authorized_keys` や `known_hosts` の内容を推測で補うことはない。読み取れ
 ない間、host は誰も受け入れず、client はすべての host を拒否し、次の変更時にファイルが
-新たに書き込まれる。旧バージョンのデータ —— passcode、以前の pair 済みマシン一覧 —— は
-変換されず、残ったファイルは削除される。7.0.x が書き込んだ `client_key*.pem` と
-`host_cert.pem` は無視され、読み取られることはない。不要なら削除してよい。
+新たに書き込まれる。旧バージョンのデータは変換されない。以前の pair 済みマシン一覧、
+以前の有効化マーカー、以前の `auth_salt` ファイルは削除され、古い `ui-settings.txt` に
+ある `passcode=` の行は、そのファイルが最初に読み込まれた時点で除去される。7.0.x が
+書き込んだ `client_key*.pem` と `host_cert.pem` は無視され、読み取られることはない。
+不要なら削除してよい。
 
 他のマシンが送信したファイルはこのフォルダの外、受信側が選択したディレクトリに保存
 される（別途選択していない場合は利用者のホームディレクトリ直下の `Deskhub`。
@@ -240,6 +344,29 @@ SYSTEM、Administrators のみに制限される。モバイルの app は同じ
 に届いたものはすべて、許可済み client が自分の端末に置いたファイルとして扱うこと。
 
 これらがアップロードされることはない。フォルダはいつでも削除できる。
+
+## build と release の堅牢化
+
+- **コンパイラとリンカ。** C と C++ のコードの GCC および Clang による build は
+  `-fstack-protector-strong` を使い、最適化 build では `-D_FORTIFY_SOURCE=3` も使う ——
+  ただし Android は NDK 自身のレベル 2 のままである。Linux の binary だけが full RELRO
+  （`-z relro -z now`）でリンクされる。MSVC の build は `/sdl` を使う。これらのフラグは
+  `cmake/DeskhubHardening.cmake` にある。
+- **macOS。** app は hardened runtime で署名されているが、**App Sandbox の外で**動作する
+  （`com.apple.security.app-sandbox` は `false`）。sandbox 化された app は、他の app へ
+  keyboard や mouse のイベントを送れず、それこそが遠隔操作だからである。そのため、他の
+  sandbox 化されていない app と同様に、利用者のアカウントが到達できるすべてにアクセス
+  できる状態で動作する。
+- **Windows。** app は起動のたびに管理者権限を求める（前述）。そのため app の欠陥は、
+  昇格したプロセスの欠陥となる。
+- **継続的インテグレーション。** すべての pull request で、3 つの test suite を
+  AddressSanitizer、UndefinedBehaviorSanitizer、ThreadSanitizer の下で実行し、
+  clang-tidy、前述の fuzzer、C++・Kotlin・Swift のコードに対する CodeQL、Git の全履歴に
+  対してコミットされた秘密情報を探す gitleaks のスキャンを実行する。CodeQL と gitleaks
+  は `main` への push ごと、および毎週も実行される。既知の high 以上の脆弱性を持つ依存
+  関係を追加する pull request は dependency review で失敗する。サードパーティの GitHub
+  Actions は commit hash に固定され、workflow がダウンロードする linter や scanner は
+  固定された SHA-256 と照合される。
 
 ## 予定している緩和策
 
@@ -255,7 +382,13 @@ SYSTEM、Administrators のみに制限される。モバイルの app は同じ
 アドレスではなく host の key に従う信頼（key が変化した際の即時拒否は、以前の所有者の
 名前を示す *New host* ダイアログになった）、authenticate 済みの経路を通じて所有者が
 fingerprint で承認する接続要求、そして code が名指しする fingerprint を持つマシンにだけ
-client が送る 1 回限りの token による QR pairing。
+client が送る 1 回限りの token による QR pairing。さらに 9.0 では、要求者が署名した後に
+のみ、送信元アドレスごとに 1 つまで記録される接続要求、拒否した connection を host 自身が閉じること、authenticate を
+終えていないすべての connection への期限、app の外から開かれた link を信頼する前の
+*New host* の確認、iOS のバックアップから除外されたデバイスの key、remote control でも
+terminal でも Windows の log に key code を残さないこと、所有者のみが読み取れ最新の 10 件
+に自動的に整理される log ファイル、利用者が作成した block ルールを削除しなくなった
+firewall のルール、堅牢化されたコンパイラとリンカのフラグ。
 
 本一覧は方針の表明であり、スケジュールではない。Deskhub は 1 名が余暇に保守している。
 計画ではなく現状に基づいて判断していただきたい。

@@ -17,13 +17,14 @@ Deskhub，请参阅 [`BUILD.zh.md`](BUILD.zh.md)。
 | 🍎 macOS | `deskhub-v*-macos.dmg` | 打开 dmg，将 Deskhub 拖入 Applications |
 | 🐧 Ubuntu、Kubuntu、Debian、Mint | `deskhub-v*-amd64.deb` | `sudo apt install ./deskhub-v*-amd64.deb` |
 | 🐧 Fedora（Workstation 与 KDE spin） | `deskhub-v*-x86_64.rpm` | `sudo dnf install ./deskhub-v*-x86_64.rpm` |
-| 🐧 openSUSE | `deskhub-v*-x86_64.rpm` | `sudo zypper install ./deskhub-v*-x86_64.rpm` |
+| 🐧 openSUSE Tumbleweed | `deskhub-v*-x86_64.rpm` | `sudo zypper install ./deskhub-v*-x86_64.rpm` |
 | 🐧 Arch 及其他发行版 | `deskhub-v*-linux-x86_64` | `chmod +x deskhub-v*-linux-x86_64 && ./deskhub-v*-linux-x86_64` |
 | 🤖 Android | `deskhub-v*-android.apk` | 安装 apk，或加入 Play 的 beta |
 | 📱 iOS | —— | [TestFlight](https://testflight.apple.com/join/7qY7wgpd) |
 
 还可以用 `deskhub-cli` 执行 terminal 命令或脚本。在 Windows 和 Linux 上，CLI 也能
-打开远程屏幕窗口。见 [Command line](#-command-line)。
+打开远程屏幕窗口（在 Linux 上是 X11 窗口，因此 Wayland 桌面需要 XWayland）。见
+[Command line](#-command-line)。
 
 Windows 可通过 `winget`、macOS 可通过 Homebrew，Ubuntu、Kubuntu、Debian 和 Mint 可通过
 [apt repository](#-linux) 安装。需要新版本时，使用相应 package manager 的升级命令。
@@ -46,15 +47,20 @@ winget install ManhPham.Deskhub
 如果之前安装过 winget 便携版，请先运行一次 `winget uninstall ManhPham.Deskhub`，
 然后重新安装。`%USERPROFILE%\.deskhub` 中的设置和密钥会保留。
 
-首次使用时会发生两件事：
+需要注意两件事：
 
-- **启动时申请一次 Administrator。** 否则无法将 mouse 和 keyboard inject 进提权窗口。
+- **每次启动都申请 Administrator。** 每次运行时 Windows 都会弹出 UAC 提示，否则无法将
+  mouse 和 keyboard inject 进提权窗口。开启 *Start Deskhub when you log in* 后，它会在
+  登录时作为提权的登录任务启动，不再弹出提示。
 - **添加一条 Windows Firewall 规则**，由 app 在首次 share 时自行添加。
 
 可在 Windows 设置中卸载 DeskHub，或运行 `winget uninstall ManhPham.Deskhub`。
-便携版只需删除 exe。Settings 和 key 会保留在 `%USERPROFILE%\.deskhub`，直到删除该文件夹。
+便携版只需删除 exe。Settings 和 key 会保留在 `%USERPROFILE%\.deskhub`，直到删除该文件夹；
+其他机器发来的文件保留在 `%USERPROFILE%\Deskhub`（或你选择的文件夹）中，直到你删除它们。
 
 ## 🍎 macOS
+
+Deskhub 需要 macOS 14 Sonoma 或更高版本。
 
 下载 `deskhub-v*-macos.dmg`，打开后将 app 拖入 *Applications*。该 dmg 已使用 Developer
 ID 进行 sign 并通过 Apple 的 notarize，因此打开时不会出现 Gatekeeper 警告。
@@ -73,7 +79,12 @@ Host 一块屏幕需要两个 macOS permission。两者均可从 app 的 **Setti
 | **Screen Recording** | capture 本机 Mac 的 display |
 | **Accessibility** | 允许 viewer 操作本机 Mac 的 mouse 和 keyboard |
 
-若仅用于观看其他机器，则两者均不需要。
+若仅用于观看其他机器，则两者均不需要。在 System Settings 中开启 Screen Recording 后，
+请退出并重新打开 Deskhub —— macOS 只对新启动的进程生效，Settings 页也会提醒这一点。
+
+macOS 还会自行弹出两项请求：**Local Network**（本地网络）访问权限，无论共享还是 connect，
+Deskhub 都需要它才能连到另一台机器；以及显示**通知**的权限，在首次有 connection request
+需要提醒时申请。
 
 ## 🐧 Linux
 
@@ -82,10 +93,12 @@ Host 一块屏幕需要两个 macOS permission。两者均可从 app 的 **Setti
 
 deb 与 rpm 内容一致，选择系统 package manager 支持的一种即可。两者都会安装下文第 3 条
 所述的 `/dev/uinput` udev rule，因此安装后 remote input 立即可用，无需修改 group，也无需
-重新登录。免安装 binary 可在任何具备 glibc 2.35 及以上的 x86_64 发行版上运行（Ubuntu
-22.04、Fedora 36、openSUSE 15.5、当前版本的 Arch）。
+重新登录。所有 Linux 版本 —— deb、rpm 和免安装 binary —— 都需要 x86_64 且 glibc 2.35
+及以上（Ubuntu 22.04、Debian 12、Fedora 36、openSUSE Tumbleweed、当前版本的 Arch）。
+openSUSE Leap 15.5 的 glibc 为 2.31，无法运行。
 
-CLI 有单独的 deb 和 rpm 包，可独立安装或与桌面 app 同时安装。
+CLI 有单独的 deb 和 rpm 包，可独立安装，或与相同或更新版本的桌面 app 同时安装 —— 请将
+两者一起升级，因为 package manager 不会让旧版 `deskhub` 与新版 `deskhub-cli` 并存。
 两个包都将命令放在 `/usr/bin`，桌面 app 还会在应用菜单中创建启动器。
 
 在 Ubuntu、Kubuntu、Debian 和 Mint 上，Deskhub 的 apt repository 安装的是同一个 deb，
@@ -108,8 +121,9 @@ CLI 可单独运行 `sudo apt install deskhub-cli` 安装。从旧版包含 CLI 
 ### 1. screen-capture portal
 
 Deskhub 的 capture 一律经由 `xdg-desktop-portal`。选择共享哪块屏幕的对话框即由它弹出。
-所做选择会被记住，因此该对话框仅在首次 share 时出现。如需更换屏幕，使用 Host 页上的
-*Choose screens again*。
+所做选择会被记住，因此该对话框仅在首次 share 时出现。当你在 Host 页勾选了已记住的选择
+未涵盖的屏幕时，Deskhub 会自动忘记该选择，对话框随之再次出现。如需手动清除该选择，运行
+`deskhub-cli displays --forget`。
 
 GNOME 与 KDE 在所有主流发行版上均自带 portal backend，因此在 Ubuntu、Kubuntu、Fedora
 Workstation、Fedora KDE、openSUSE 以及运行 GNOME/KDE 的 Arch 上**无需任何操作**。独立的
@@ -125,28 +139,35 @@ sway、river 和 Wayfire 均为基于 **wlroots** 库构建的 Wayland composito
 不同，它们不附带自己的 portal backend，而 `-wlr` 正是为这三者提供 screen capture 的
 backend。Hyprland 另有 `xdg-desktop-portal-hyprland`。
 
-### 2. VA-API driver
+### 2. 硬件 H.264 encoder
 
-H.264 在 GPU 上 encode，没有 software fallback。
+H.264 在 GPU 上 encode，没有 software fallback。host 使用哪种 encoder 取决于绘制桌面的
+GPU：
+
+- **使用专有 driver 的 NVIDIA** —— NVENC，经由 driver 自带的库，只要 driver 支持 NVENC
+  API 13.0 或更高版本即可。无需再安装任何东西；在这类机器上 `vainfo` 可能列不出任何
+  H.264 encoder，但并不妨碍其作为 host。`nvidia-vaapi-driver` 与 `libva-nvidia-driver`
+  只负责 decode：它们能加速观看，而非共享。
+- **AMD、Intel 及其他所有 GPU** —— VA-API，需要带 H.264 encoder 的 driver：
 
 ```bash
 # Ubuntu / Debian / Mint
-sudo apt install va-driver-all vainfo        # NVIDIA 另需: nvidia-vaapi-driver
+sudo apt install va-driver-all vainfo        # NVIDIA（仅 decode）: nvidia-vaapi-driver
 
 # Fedora —— 原装 Mesa 已禁用 H.264；可用的 driver 位于 RPM Fusion:
 sudo dnf install libva-utils
 sudo dnf install mesa-va-drivers-freeworld   # AMD (RPM Fusion)
 sudo dnf install intel-media-driver          # Intel (RPM Fusion)
-sudo dnf install nvidia-vaapi-driver         # NVIDIA (RPM Fusion)
+sudo dnf install nvidia-vaapi-driver         # NVIDIA，仅 decode (RPM Fusion)
 
 # openSUSE
 sudo zypper install libva-utils              # 另需对应 GPU 厂商的 VA-API driver
 
 # Arch
 sudo pacman -S libva-utils
-sudo pacman -S libva-mesa-driver             # AMD · Intel: intel-media-driver · NVIDIA: libva-nvidia-driver
+sudo pacman -S libva-mesa-driver             # AMD · Intel: intel-media-driver · NVIDIA（仅 decode）: libva-nvidia-driver
 
-# 随后，在所有发行版上:
+# 随后，在 AMD 或 Intel 上:
 vainfo | grep -E 'H264.*Enc'                 # 必须至少输出一行，否则本机无法作为 host
 ```
 
@@ -161,9 +182,27 @@ curl -fsSL https://raw.githubusercontent.com/manhpham90vn/Deskhub/main/scripts/s
 
 若希望在交给 sudo 之前先查看脚本内容，可先下载
 [`scripts/setup-uinput.sh`](../scripts/setup-uinput.sh)，该脚本仅十余行。若已 checkout
-source，等效命令为 `make setup-linux-permissions`。
+source，等效命令为 `make setup-linux-permissions`。除 rule 之外，该脚本还会把用 sudo
+运行它的用户加入 `input` 组，下次登录后生效：SSH 或 headless session 需要它才能访问
+`/dev/uinput`，它同时也启用 host wins（见下文）。
 
 未授予 uinput 权限时 app 仍可运行并观看，只是无法将 mouse 或 keyboard inject 进本机。
+
+<a id="host-wins"></a>
+
+### 让坐在机器前的人优先
+
+当你使用本机自己的 mouse 或 keyboard 时，Deskhub 会暂停 remote input（"host wins"）。为
+察觉到你，它需要读取 `/dev/input/event*`，而只有 `input` 组的成员才能读取 —— deb 与 rpm
+都不会把任何人加入该组。没有该组时，共享与 remote input 仍可正常工作，但你打字时 viewer
+的 input 不会被暂停。开启方法：
+
+```bash
+sudo usermod -aG input "$USER"               # 然后注销并重新登录
+```
+
+加入 `input` 组后，你运行的每个程序（不只是 Deskhub）都能读取本机所有 keyboard 和
+mouse；若这一点比 host wins 更重要，请不要开启。
 
 ### Firewall
 
@@ -177,21 +216,29 @@ sudo firewall-cmd --add-port=47777/udp --permanent        # Fedora / openSUSE
 ### 卸载
 
 ```bash
-sudo apt remove deskhub      # 或: sudo dnf remove deskhub / sudo zypper remove deskhub
+sudo apt remove deskhub deskhub-cli   # 装了哪个就卸哪个；或 dnf remove / zypper remove
 rm -rf ~/.deskhub            # settings、key、允许的 client 与受信任的 host
 sudo rm -f /etc/apt/sources.list.d/deskhub.list /etc/apt/keyrings/deskhub.gpg   # apt repository（若已添加）
 ```
 
-免安装 binary 只是一个文件，删除即可。
+其他机器发来的文件保留在 `~/Deskhub`（或你选择的文件夹）中，直到你删除它们。免安装
+binary 只是一个文件，删除即可。`setup-uinput.sh` 会留下它的 udev rule、module-load 文件
+以及你在 `input` 组中的成员身份；若没有其他用途，请手动移除：
+
+```bash
+sudo rm -f /etc/udev/rules.d/60-deskhub-uinput.rules /etc/modules-load.d/deskhub.conf
+sudo gpasswd -d "$USER" input
+```
 
 ## 🤖 Android
 
-作为 host 时仅支持 view-only 的屏幕共享，并且需要 **Android 10+**。仅用于观看时，更早
-的版本亦可。
+Deskhub 需要 **Android 8.0** 或更高版本。作为 host 时仅支持 view-only 的屏幕共享，并且
+需要 **Android 10+**。
 
 **直接安装 apk** —— 从
 [Releases](https://github.com/manhpham90vn/Deskhub/releases) 下载
-`deskhub-v*-android.apk` 并安装。该文件与 Google Play 版本使用同一个 key 进行 sign。
+`deskhub-v*-android.apk` 并安装。如果 Android 拒绝用它覆盖从 Google Play 安装的版本（或
+反过来），请先卸载另一个版本 —— 这会删除该版本的 key，因此各 host 需要重新放行这台设备。
 
 **Play beta** —— 三个步骤，全部使用与设备 Play Store **相同的 Google 账号**：
 
@@ -199,11 +246,14 @@ sudo rm -f /etc/apt/sources.list.d/deskhub.list /etc/apt/keyrings/deskhub.gpg   
 2. 成为测试者：[play.google.com/apps/testing/com.manhpham.deskhub](https://play.google.com/apps/testing/com.manhpham.deskhub)
 3. 安装（Play 同步需要数分钟）：[play.google.com/store/apps/details?id=com.manhpham.deskhub](https://play.google.com/store/apps/details?id=com.manhpham.deskhub)
 
-请将 beta 保留在设备上 **14 天以上**；这是 Google 对 app 正式上架的前置要求。
+请将 beta 保留在设备上 **14 天以上**；这是 Google 对 app 正式上架的前置要求。Play beta
+可能落后于 Releases 上的 apk：每个 release 先进入 Google Play 的 internal track，只有在被
+promote 后才会到达 beta。
 
 ## 📱 iOS
 
-ipa 无法 sideload，因此 beta 通过 TestFlight 分发：
+Deskhub 需要 iOS 或 iPadOS 17 或更高版本。ipa 无法 sideload，因此 beta 通过 TestFlight
+分发：
 
 1. 安装 [TestFlight](https://apps.apple.com/app/testflight/id899247664)。
 2. 加入 beta：**[testflight.apple.com/join/7qY7wgpd](https://testflight.apple.com/join/7qY7wgpd)**
@@ -216,8 +266,8 @@ ipa 无法 sideload，因此 beta 通过 TestFlight 分发：
 ## 💻 Command line
 
 `deskhub-cli` 提供共享屏幕、打开 remote shell 等命令，也可从脚本或 SSH 使用。
-在 Windows 和 Linux 上，`connect` 会打开远程屏幕窗口；在 macOS 上，请用桌面 app
-观看屏幕。运行 `deskhub-cli help` 可查看命令列表。CLI 与 app 共用 settings、机器 key、允许的
+在 Windows 和 Linux 上，`connect` 会打开远程屏幕窗口 —— 在 Linux 上是 X11 窗口，Wayland
+桌面通过 XWayland 显示它；在 macOS 上，请用桌面 app 观看屏幕。运行 `deskhub-cli help` 可查看命令列表。CLI 与 app 共用 settings、机器 key、允许的
 client、connection request 及受信任的 host。
 
 | 平台 | 文件 |
@@ -237,8 +287,12 @@ macOS 与 Linux 的便携版 binary 下载后可能需要执行一次 `chmod +x`
 Security 中选择 *Open Anyway*。
 
 Windows 安装程序无需管理员权限即可将 CLI 加入用户的 `PATH`。
-便携版 `deskhub-cli-v*-windows.exe` 仍可下载。通过 package manager 安装也会把命令加入 `PATH`：Windows 上用
-`winget install ManhPham.DeskhubCLI`，macOS 上用 `brew install manhpham90vn/tap/deskhub-cli`
+便携版 `deskhub-cli-v*-windows.exe` 仍可下载。
+每个安装程序和安装包都附带 `THIRD_PARTY_NOTICES.md` 以及其中所含库的许可证文本；便携版
+二进制文件无法附带，因此每个 release 还提供 `deskhub-v*-licenses.zip`，其中包含
+`LICENSE`、`THIRD_PARTY_NOTICES.md` 以及全部许可证文本。
+通过 package manager 安装也会把命令加入 `PATH`：Windows 上用
+`winget install ManhPham.DeskhubCLI`（winget 安装的是便携版 exe，而非安装程序），macOS 上用 `brew install manhpham90vn/tap/deskhub-cli`
 —— Homebrew 安装时不会附加 quarantine 标记。在 Ubuntu 或 Debian 上添加上述 apt
 repository 后，运行 `sudo apt install deskhub-cli`。
 
@@ -271,7 +325,7 @@ window layer，程序会明确报告这一点。此类用途请使用 app。
 
 首次按地址 connect 时会显示 **New host** 对话框，其中有 host 的 key fingerprint：将其与
 host 的 Devices 页上 **This machine** 下的 fingerprint 核对，然后点击 *Trust and connect*。
-QR code 会跳过该对话框，因为码中携带了 fingerprint。此后该 host 会列在 **Trusted hosts**
+在 app 中扫描 QR code 会跳过该对话框，因为码中携带了 fingerprint。此后该 host 会列在 **Trusted hosts**
 下，即使更换地址也依然受信任。
 
 [Key 与访问权限](#-key-与访问权限)一节逐步介绍 app 与 CLI 中的每一种方式，以及脚本与撤销。
@@ -279,8 +333,8 @@ QR code 会跳过该对话框，因为码中携带了 fingerprint。此后该 ho
 没有 passcode，也没有任何放未知机器进来的开关：没有你的 *Approve*、你展示的 QR code 或
 你粘贴的 key，任何人都无法 connect。Deskhub 从不 scan network。
 
-请在**可信的 network** 或 **VPN** 中使用 Deskhub，**不要对 UDP 47777 做
-port-forward**。Encrypt 能保护 session 内容，但除非你核对 fingerprint，否则首次
+请在**可信的 network** 或 **VPN** 中使用 Deskhub，不要对 UDP 47777 做
+port-forward。Encrypt 能保护 session 内容，但除非你核对 fingerprint，否则首次
 connect 某个 host 时会信任其出示的 key。远程访问时，可在两台机器上安装
 [Tailscale](https://tailscale.com)，再 Connect 到 `100.x.y.z` 地址。
 
@@ -319,7 +373,9 @@ request 都不方便时，这一行就是你交给 host 所有者的内容 —�
 
 - 在手机或平板上，打开 Client 页并点击 **Scan QR code**。首次使用时，系统会申请摄像头
   permission；Deskhub 只在此处使用摄像头，在设备上解码画面，不保存任何内容。用系统相机
-  或从消息中打开 `deskhub://pair/…` 链接效果相同。
+  或从消息中打开 `deskhub://pair/…` 链接也可以，但由于这类链接可能来自任何地方，当该
+  host 尚未受信任时，app 会先显示带有链接中 fingerprint 的 **New host** 对话框，只有在你
+  核对并点击 *Trust and connect* 后才会 connect；你已信任的 host 则直接 connect。
 - 在任何设备上，包括桌面电脑，复制码下方显示的链接并粘贴到地址栏，然后点击 *Connect*
   （CLI：`deskhub-cli connect 'deskhub://pair/…'`；`sources`、`shell` 与 `send` 也接受
   该链接）。
@@ -431,7 +487,11 @@ deskhub-cli host add office --address 192.168.1.10 --host-key-stdin
 
 ### 从旧版 Deskhub 升级
 
-**从 7.0.x 升级。** 两台机器都需要 8.0 —— 任何一方运行 7.0.x 的 Deskhub 都无法 connect，
+**从 8.0.0 升级。** 9.0 使用的认证版本比 8.0.0 更新，因此任何一方运行 8.0.0 的 Deskhub
+都无法 connect，并会被拒绝，提示 "That machine uses an incompatible authentication
+version"。请更新两台机器；其他一切不变 —— key、允许的设备与受信任的 host 全部保留。
+
+**从 7.0.x 升级。** 两台机器都需要 9.0 —— 任何一方运行 7.0.x 的 Deskhub 都无法 connect，
 并会被拒绝，提示 "That machine uses an incompatible authentication version"。每台机器保留
 其原有的 key 与 fingerprint，因此你信任过的 host 依然受信任。变化的是设备*用来*登录的
 key：现在就是那把机器 key，因此每台设备都需要重新放行一次 —— 一次 *Approve*、一次扫描
@@ -457,8 +517,11 @@ QR code，或一次粘贴其 key。7.0.x 写入的 `client_key*.pem` 与 `host_c
   [撤销某台设备](#撤销某台设备)。
 - **"That machine uses an incompatible authentication version"** —— 有一方运行的是旧版
   Deskhub；请更新两台机器。见[从旧版 Deskhub 升级](#从旧版-deskhub-升级)。
-- **Linux：share 立即失败** —— 运行 `vainfo | grep -E 'H264.*Enc'`。结果为空说明本机没
-  有可用的 H.264 encoder，无法作为 host。
+- **Linux：share 立即失败** —— 在 AMD 或 Intel 上，运行 `vainfo | grep -E 'H264.*Enc'`；
+  结果为空说明本机没有可用的 H.264 encoder，无法作为 host。在 NVIDIA 上，`~/.deskhub` 中
+  的 log 会说明 driver 的 NVENC 是否过旧。
+- **Linux：你打字时 viewer 仍在控制** —— 你的用户不在 `input` 组中；见
+  [让坐在机器前的人优先](#host-wins)。
 - **Linux：指针不移动** —— 缺少第 3 条中的 `/dev/uinput` rule。
 - **macOS：黑屏或 input 无响应** —— 在 Settings 页检查 Screen Recording 与
   Accessibility。

@@ -18,13 +18,14 @@ bản chuẩn.
 | 🍎 macOS | `deskhub-v*-macos.dmg` | Mở dmg rồi kéo Deskhub vào Applications |
 | 🐧 Ubuntu, Kubuntu, Debian, Mint | `deskhub-v*-amd64.deb` | `sudo apt install ./deskhub-v*-amd64.deb` |
 | 🐧 Fedora (Workstation và KDE spin) | `deskhub-v*-x86_64.rpm` | `sudo dnf install ./deskhub-v*-x86_64.rpm` |
-| 🐧 openSUSE | `deskhub-v*-x86_64.rpm` | `sudo zypper install ./deskhub-v*-x86_64.rpm` |
+| 🐧 openSUSE Tumbleweed | `deskhub-v*-x86_64.rpm` | `sudo zypper install ./deskhub-v*-x86_64.rpm` |
 | 🐧 Arch và các distro khác | `deskhub-v*-linux-x86_64` | `chmod +x deskhub-v*-linux-x86_64 && ./deskhub-v*-linux-x86_64` |
 | 🤖 Android | `deskhub-v*-android.apk` | Cài apk, hoặc tham gia bản beta trên Play |
 | 📱 iOS | — | [TestFlight](https://testflight.apple.com/join/7qY7wgpd) |
 
 Bạn cũng có thể dùng `deskhub-cli` cho các lệnh terminal và script. Trên Windows và
-Linux, CLI vẫn có thể mở cửa sổ xem màn hình từ xa. Xem [Command line](#-command-line).
+Linux, CLI vẫn có thể mở cửa sổ xem màn hình từ xa (trên Linux là cửa sổ X11, nên desktop
+Wayland cần XWayland). Xem [Command line](#-command-line).
 
 Bạn có thể cài qua `winget` trên Windows, Homebrew trên macOS hoặc
 [apt repository](#-linux) trên Ubuntu, Kubuntu, Debian và Mint. Khi muốn lên bản mới,
@@ -48,17 +49,22 @@ winget install ManhPham.Deskhub
 Nếu đã cài bản winget portable trước đây, chạy `winget uninstall ManhPham.Deskhub` một
 lần rồi cài lại. Settings và key trong `%USERPROFILE%\.deskhub` vẫn được giữ.
 
-Lần sử dụng đầu tiên có hai điểm cần lưu ý:
+Có hai điểm cần lưu ý:
 
-- **Quyền Administrator, xin một lần khi khởi động.** Không có quyền này thì không thể
-  inject mouse và keyboard vào các cửa sổ chạy ở quyền cao.
+- **Quyền Administrator, mỗi lần khởi động.** Windows hiện hộp thoại UAC ở mỗi lần chạy,
+  vì không có quyền này thì không thể inject mouse và keyboard vào các cửa sổ chạy ở quyền
+  cao. Khi bật *Start Deskhub when you log in*, app khởi động lúc đăng nhập dưới dạng một
+  logon task chạy quyền cao, không hiện hộp thoại.
 - **Rule Windows Firewall** do app tự thêm trong lần share đầu tiên.
 
 Gỡ DeskHub trong Windows Settings hoặc chạy `winget uninstall ManhPham.Deskhub`. Với bản
 portable, chỉ cần xoá file exe. Settings và key vẫn nằm trong `%USERPROFILE%\.deskhub`
-cho đến khi bạn xoá thư mục đó.
+cho đến khi bạn xoá thư mục đó, còn file máy khác gửi tới vẫn nằm trong
+`%USERPROFILE%\Deskhub` (hoặc thư mục bạn đã chọn) cho đến khi bạn xoá.
 
 ## 🍎 macOS
+
+Deskhub cần macOS 14 Sonoma trở lên.
 
 Tải `deskhub-v*-macos.dmg`, mở và kéo app vào *Applications*. File dmg được sign bằng
 Developer ID và do Apple notarize, nên mở lên không bị Gatekeeper cảnh báo.
@@ -78,7 +84,13 @@ thẳng mục tương ứng trong System Settings.
 | **Screen Recording** | Capture display của máy Mac này |
 | **Accessibility** | Cho phép viewer điều khiển mouse và keyboard của máy Mac này |
 
-Nếu chỉ xem máy khác thì không cần permission nào.
+Nếu chỉ xem máy khác thì không cần permission nào. Sau khi bật Screen Recording trong
+System Settings, hãy thoát rồi mở lại Deskhub — macOS chỉ áp dụng quyền này cho lần chạy
+mới, và trang Settings sẽ nhắc bạn.
+
+macOS còn tự hỏi thêm hai quyền: **Local Network**, cần để Deskhub tới được máy kia dù đang
+share hay đang connect, và quyền hiện **thông báo**, được hỏi ở lần đầu có yêu cầu kết nối
+cần báo.
 
 ## 🐧 Linux
 
@@ -88,13 +100,15 @@ app sử dụng, gồm GTK3, PipeWire và libva.
 
 Bản deb và rpm có nội dung giống nhau; chọn bản mà package manager của hệ thống hỗ trợ.
 Cả hai đều cài udev rule cho `/dev/uinput` mô tả ở mục 3 bên dưới, nên remote input hoạt
-động ngay sau khi cài, không cần đổi group và không cần đăng nhập lại. Bản portable chạy
-được trên mọi distro x86_64 có glibc 2.35 trở lên (Ubuntu 22.04, Fedora 36,
-openSUSE 15.5, Arch bản hiện tại).
+động ngay sau khi cài, không cần đổi group và không cần đăng nhập lại. Mọi bản Linux —
+deb, rpm và portable — đều cần x86_64 với glibc 2.35 trở lên (Ubuntu 22.04, Debian 12,
+Fedora 36, openSUSE Tumbleweed, Arch bản hiện tại). openSUSE Leap 15.5 dùng glibc 2.31
+nên không chạy được.
 
 CLI có gói deb và rpm riêng. Chỉ cài `deskhub-cli` khi cần lệnh terminal; gói này chạy
-độc lập hoặc song song với app. Cả hai đặt lệnh trong `/usr/bin`, còn app desktop thêm
-launcher vào menu ứng dụng.
+độc lập, hoặc song song với app desktop cùng phiên bản hay mới hơn — hãy nâng cấp cả hai
+cùng lúc, vì package manager không giữ một bản `deskhub` cũ hơn bên cạnh `deskhub-cli` mới
+hơn. Cả hai đặt lệnh trong `/usr/bin`, còn app desktop thêm launcher vào menu ứng dụng.
 
 Trên Ubuntu, Kubuntu, Debian và Mint, apt repository của Deskhub cài đúng bản deb đó và
 để `sudo apt upgrade` mang về mọi bản release sau này. Repository hỗ trợ Ubuntu 22.04 trở
@@ -117,7 +131,9 @@ chứa CLI, hãy cài thêm `deskhub-cli` để giữ lệnh đó.
 
 Deskhub luôn capture thông qua `xdg-desktop-portal`. Đây là thành phần hiển thị hộp thoại
 chọn màn hình cần share. Lựa chọn được lưu lại, nên hộp thoại chỉ xuất hiện ở lần share
-đầu tiên. Để chọn màn hình khác, dùng *Choose screens again* trên trang Host.
+đầu tiên. Khi bạn tick một màn hình trên trang Host mà lựa chọn đã lưu không bao gồm,
+Deskhub tự quên lựa chọn đó và hộp thoại hiện lại. Để tự xoá lựa chọn, chạy
+`deskhub-cli displays --forget`.
 
 GNOME và KDE đã có sẵn portal backend trên mọi distro lớn, nên **không cần làm gì** trên
 Ubuntu, Kubuntu, Fedora Workstation, Fedora KDE, openSUSE hay Arch chạy GNOME/KDE. Các
@@ -133,28 +149,35 @@ sway, river và Wayfire là các Wayland compositor dựng trên thư viện **w
 GNOME/KDE, chúng không đi kèm portal backend, và `-wlr` là backend cung cấp screen capture
 cho cả ba. Hyprland có `xdg-desktop-portal-hyprland` riêng.
 
-### 2. VA-API driver
+### 2. H.264 encoder phần cứng
 
-H.264 được encode trên GPU; không có software fallback.
+H.264 được encode trên GPU; không có software fallback. Host dùng encoder nào tuỳ vào GPU
+đang vẽ desktop:
+
+- **NVIDIA với driver độc quyền** — NVENC, qua chính thư viện của driver, miễn là driver hỗ
+  trợ NVENC API 13.0 trở lên. Không cần cài thêm gì, và trên máy như vậy `vainfo` có thể
+  không liệt kê H.264 encoder nào mà máy vẫn host được. `nvidia-vaapi-driver` và
+  `libva-nvidia-driver` chỉ decode: chúng giúp xem nhanh hơn, không giúp share.
+- **AMD, Intel và mọi GPU khác** — VA-API, cần driver có H.264 encoder:
 
 ```bash
 # Ubuntu / Debian / Mint
-sudo apt install va-driver-all vainfo        # NVIDIA cần thêm: nvidia-vaapi-driver
+sudo apt install va-driver-all vainfo        # NVIDIA, chỉ decode: nvidia-vaapi-driver
 
 # Fedora — Mesa mặc định tắt H.264; driver dùng được nằm trong RPM Fusion:
 sudo dnf install libva-utils
 sudo dnf install mesa-va-drivers-freeworld   # AMD (RPM Fusion)
 sudo dnf install intel-media-driver          # Intel (RPM Fusion)
-sudo dnf install nvidia-vaapi-driver         # NVIDIA (RPM Fusion)
+sudo dnf install nvidia-vaapi-driver         # NVIDIA, chỉ decode (RPM Fusion)
 
 # openSUSE
 sudo zypper install libva-utils              # kèm VA-API driver của hãng GPU tương ứng
 
 # Arch
 sudo pacman -S libva-utils
-sudo pacman -S libva-mesa-driver             # AMD · Intel: intel-media-driver · NVIDIA: libva-nvidia-driver
+sudo pacman -S libva-mesa-driver             # AMD · Intel: intel-media-driver · NVIDIA, chỉ decode: libva-nvidia-driver
 
-# sau đó, trên mọi distro:
+# sau đó, trên AMD hoặc Intel:
 vainfo | grep -E 'H264.*Enc'                 # phải in ra ít nhất một dòng, nếu không máy này không host được
 ```
 
@@ -171,10 +194,28 @@ curl -fsSL https://raw.githubusercontent.com/manhpham90vn/Deskhub/main/scripts/s
 Nếu muốn xem nội dung script trước khi chạy bằng sudo, tải
 [`scripts/setup-uinput.sh`](../scripts/setup-uinput.sh) về trước; script này chỉ dài hơn
 mười dòng. Nếu đã checkout source, lệnh tương đương là
-`make setup-linux-permissions`.
+`make setup-linux-permissions`. Ngoài rule, script còn thêm user đã chạy nó bằng sudo vào
+nhóm `input`, có hiệu lực từ lần đăng nhập tiếp theo: session SSH hoặc headless cần nhóm
+này để truy cập `/dev/uinput`, và nó cũng bật host wins (bên dưới).
 
 Không có quyền uinput thì app vẫn chạy và vẫn xem được, chỉ không inject được mouse hay
 keyboard vào máy này.
+
+<a id="host-wins"></a>
+
+### Để người ngồi tại máy được ưu tiên
+
+Khi bạn dùng mouse hoặc keyboard của chính máy này, Deskhub tạm dừng remote input ("host
+wins"). Để nhận ra bạn, nó đọc `/dev/input/event*`, việc chỉ thành viên nhóm `input` làm
+được — và bản deb lẫn rpm không thêm ai vào nhóm đó. Thiếu nhóm này, share và remote input
+vẫn chạy, nhưng input của viewer không bị tạm dừng khi bạn gõ. Để bật:
+
+```bash
+sudo usermod -aG input "$USER"               # rồi đăng xuất và đăng nhập lại
+```
+
+Là thành viên nhóm `input` thì mọi chương trình bạn chạy, không riêng Deskhub, đều đọc được
+mọi keyboard và mouse của máy, nên hãy bỏ qua bước này nếu điều đó quan trọng hơn host wins.
 
 ### Firewall
 
@@ -188,21 +229,30 @@ sudo firewall-cmd --add-port=47777/udp --permanent        # Fedora / openSUSE
 ### Gỡ cài đặt
 
 ```bash
-sudo apt remove deskhub      # hoặc: sudo dnf remove deskhub / sudo zypper remove deskhub
+sudo apt remove deskhub deskhub-cli   # gói nào đã cài; hoặc dnf remove / zypper remove
 rm -rf ~/.deskhub            # settings, key, client được phép và host đã trust
 sudo rm -f /etc/apt/sources.list.d/deskhub.list /etc/apt/keyrings/deskhub.gpg   # apt repository, nếu đã thêm
 ```
 
-Bản portable chỉ gồm một file; xoá file đó là gỡ xong.
+File máy khác gửi tới vẫn nằm trong `~/Deskhub` (hoặc thư mục bạn đã chọn) cho đến khi bạn
+xoá. Bản portable chỉ gồm một file; xoá file đó là gỡ xong. `setup-uinput.sh` để lại udev
+rule, file module-load và việc bạn là thành viên nhóm `input`; hãy tự gỡ nếu không còn gì
+cần đến chúng:
+
+```bash
+sudo rm -f /etc/udev/rules.d/60-deskhub-uinput.rules /etc/modules-load.d/deskhub.conf
+sudo gpasswd -d "$USER" input
+```
 
 ## 🤖 Android
 
-Khi làm host, Deskhub chỉ share màn hình ở chế độ view-only và yêu cầu **Android 10+**.
-Chức năng xem máy khác vẫn chạy trên các bản Android cũ hơn.
+Deskhub cần **Android 8.0** trở lên. Khi làm host, Deskhub chỉ share màn hình ở chế độ
+view-only và yêu cầu **Android 10+**.
 
 **Cài apk trực tiếp** — tải `deskhub-v*-android.apk` từ
-[Releases](https://github.com/manhpham90vn/Deskhub/releases) và cài. File này được sign
-bằng cùng key với bản trên Google Play.
+[Releases](https://github.com/manhpham90vn/Deskhub/releases) và cài. Nếu Android từ chối
+cài đè lên bản từ Google Play, hoặc ngược lại, hãy gỡ bản kia trước — việc này xoá key của
+bản đó, nên các host phải cho thiết bị vào lại.
 
 **Beta trên Play** — ba bước, đều dùng **cùng tài khoản Google** với Play Store trên thiết
 bị:
@@ -212,11 +262,14 @@ bị:
 3. Cài đặt (Play cần vài phút để sync): [play.google.com/store/apps/details?id=com.manhpham.deskhub](https://play.google.com/store/apps/details?id=com.manhpham.deskhub)
 
 Vui lòng giữ bản beta trên thiết bị **từ 14 ngày trở lên**; đây là điều kiện Google yêu
-cầu trước khi app được phát hành công khai.
+cầu trước khi app được phát hành công khai. Bản beta trên Play có thể chậm hơn apk trên
+Releases: mỗi bản release vào track internal của Google Play trước, và chỉ tới bản beta khi
+được promote.
 
 ## 📱 iOS
 
-ipa không sideload được, nên bản beta phát hành qua TestFlight:
+Deskhub cần iOS hoặc iPadOS 17 trở lên. ipa không sideload được, nên bản beta phát hành
+qua TestFlight:
 
 1. Cài [TestFlight](https://apps.apple.com/app/testflight/id899247664).
 2. Tham gia bản beta: **[testflight.apple.com/join/7qY7wgpd](https://testflight.apple.com/join/7qY7wgpd)**
@@ -229,8 +282,9 @@ cho phép app inject input vào chính thiết bị đang chạy nó.
 ## 💻 Command line
 
 `deskhub-cli` cung cấp lệnh để share màn hình, mở remote shell và chạy từ script hoặc qua
-SSH. Trên Windows và Linux, `connect` mở cửa sổ xem màn hình từ xa; trên macOS, hãy dùng
-app desktop để xem màn hình. Chạy `deskhub-cli help` để xem danh sách lệnh. CLI và app dùng
+SSH. Trên Windows và Linux, `connect` mở cửa sổ xem màn hình từ xa — trên Linux là cửa sổ
+X11, mà desktop Wayland hiển thị qua XWayland; trên macOS, hãy dùng app desktop để xem màn
+hình. Chạy `deskhub-cli help` để xem danh sách lệnh. CLI và app dùng
 chung settings, key của máy, client được phép, yêu cầu kết nối và các host đã trust.
 
 | Nền tảng | File |
@@ -250,10 +304,15 @@ như file dmg, nên lần chạy đầu tiên có thể cần
 Settings → Privacy & Security.
 
 Bộ cài Windows thêm CLI vào `PATH` của người dùng mà không cần quyền Administrator.
-File `deskhub-cli-v*-windows.exe` vẫn có cho ai muốn chạy portable. Cài qua package
+File `deskhub-cli-v*-windows.exe` vẫn có cho ai muốn chạy portable.
+Mọi bộ cài và gói cài đặt đều mang theo `THIRD_PARTY_NOTICES.md` và văn bản giấy phép của
+các thư viện bên trong; các binary portable thì không thể, nên mỗi bản release còn có
+`deskhub-v*-licenses.zip` chứa `LICENSE`, `THIRD_PARTY_NOTICES.md` và mọi văn bản giấy phép.
+Cài qua package
 manager cũng đưa lệnh vào `PATH`:
-`winget install ManhPham.DeskhubCLI` trên Windows, `brew install manhpham90vn/tap/deskhub-cli`
-trên macOS — Homebrew cài mà không gắn cờ quarantine. Trên Ubuntu hoặc Debian, sau khi thêm
+`winget install ManhPham.DeskhubCLI` trên Windows (winget cài file exe portable, không phải
+bộ cài), `brew install manhpham90vn/tap/deskhub-cli` trên macOS — Homebrew cài mà không gắn
+cờ quarantine. Trên Ubuntu hoặc Debian, sau khi thêm
 apt repository ở trên, chạy `sudo apt install deskhub-cli`.
 
 Trên Windows, sau khi cài bằng winget hãy mở cửa sổ PowerShell mới và chạy
@@ -287,7 +346,7 @@ thiết bị vào danh sách đó, và bạn chỉ cần một trong ba:
 
 Connect theo địa chỉ lần đầu tiên hiển thị hộp thoại **New host** với fingerprint key của
 host: đối chiếu nó với fingerprint dưới **This machine** trên trang Devices của host, rồi bấm
-*Trust and connect*. Mã QR bỏ qua hộp thoại đó, vì mã mang sẵn fingerprint. Từ đó trở đi,
+*Trust and connect*. Scan mã QR trong app thì bỏ qua hộp thoại đó, vì mã mang sẵn fingerprint. Từ đó trở đi,
 host nằm trong **Trusted hosts**, và vẫn được trust ngay cả khi đổi địa chỉ.
 
 [Key và quyền truy cập](#-key-và-quyền-truy-cập) hướng dẫn từng cách trên app và CLI,
@@ -297,8 +356,8 @@ Không có passcode và không có công tắc nào cho máy lạ vào: không a
 *Approve* của bạn, mã QR bạn đã cho xem, hoặc key bạn đã dán. Deskhub không bao giờ scan
 network.
 
-Hãy dùng Deskhub trên **network tin cậy** hoặc qua **VPN**. **Không port-forward UDP
-47777.** Encrypt giúp bảo vệ nội dung session, nhưng lần connect đầu tiên tới một host sẽ
+Hãy dùng Deskhub trên **network tin cậy** hoặc qua **VPN**. Không port-forward UDP
+47777. Encrypt giúp bảo vệ nội dung session, nhưng lần connect đầu tiên tới một host sẽ
 trust key được hiển thị, trừ khi bạn đối chiếu fingerprint. Để truy cập từ xa, bạn có
 thể cài [Tailscale](https://tailscale.com) trên cả hai máy và connect tới địa chỉ `100.x.y.z`.
 
@@ -340,7 +399,9 @@ có hiệu lực năm phút.
 - Trên điện thoại hoặc tablet, mở trang Client và bấm **Scan QR code**. Lần đầu, hệ thống
   xin permission camera; Deskhub chỉ dùng camera ở đây, giải mã khung hình trên thiết bị và
   không lưu gì. Mở một link `deskhub://pair/…` bằng camera hệ thống hoặc từ một tin nhắn
-  cũng cho kết quả tương tự.
+  cũng được, nhưng vì link như vậy có thể đến từ bất cứ đâu, khi host đó chưa được trust app
+  sẽ hiện hộp thoại **New host** với fingerprint trong link trước, và chỉ connect khi bạn đã
+  đối chiếu và bấm *Trust and connect*; host bạn đã trust thì connect ngay.
 - Trên bất kỳ thiết bị nào, kể cả desktop, copy link hiển thị dưới mã và dán vào trường địa
   chỉ, rồi bấm *Connect* (CLI: `deskhub-cli connect 'deskhub://pair/…'`; `sources`, `shell`
   và `send` cũng nhận link đó).
@@ -462,7 +523,12 @@ CLI, `host update ALIAS --host-key-stdin` pin lại một alias sang key mới t
 
 ### Chuyển từ Deskhub cũ
 
-**Từ 7.0.x.** Cả hai máy đều cần 8.0 — Deskhub 7.0.x ở bất kỳ bên nào cũng không connect
+**Từ 8.0.0.** 9.0 dùng authentication version mới hơn 8.0.0, nên Deskhub 8.0.0
+ở bất kỳ bên nào cũng không connect được và bị từ chối với thông báo "That machine uses an
+incompatible authentication version". Hãy cập nhật cả hai máy; ngoài ra không có gì thay
+đổi — key, các thiết bị được cho phép và các host đã trust đều được giữ nguyên.
+
+**Từ 7.0.x.** Cả hai máy đều cần 9.0 — Deskhub 7.0.x ở bất kỳ bên nào cũng không connect
 được và bị từ chối với thông báo "That machine uses an incompatible authentication
 version". Mỗi máy giữ nguyên key và fingerprint nó đã có, nên các host bạn đã trust vẫn được
 trust. Điều thay đổi là key mà thiết bị dùng *để đăng nhập*: giờ đó chính là key của máy,
@@ -492,8 +558,12 @@ không được giữ lại: hãy cho từng thiết bị vào và trust lại t
   đó; xem [Thu hồi một thiết bị](#thu-hồi-một-thiết-bị).
 - **"That machine uses an incompatible authentication version"** — một bên đang chạy
   Deskhub cũ; hãy cập nhật cả hai máy. Xem [Chuyển từ Deskhub cũ](#chuyển-từ-deskhub-cũ).
-- **Linux: share thất bại ngay lập tức** — chạy `vainfo | grep -E 'H264.*Enc'`. Kết quả
-  rỗng nghĩa là máy này không có H.264 encoder dùng được và không thể host.
+- **Linux: share thất bại ngay lập tức** — trên AMD hoặc Intel, chạy
+  `vainfo | grep -E 'H264.*Enc'`; kết quả rỗng nghĩa là máy này không có H.264 encoder dùng
+  được và không thể host. Trên NVIDIA, log trong `~/.deskhub` cho biết NVENC của driver có
+  quá cũ hay không.
+- **Linux: viewer vẫn điều khiển trong khi bạn gõ** — user của bạn chưa ở trong nhóm
+  `input`; xem [Để người ngồi tại máy được ưu tiên](#host-wins).
 - **Linux: con trỏ không di chuyển** — thiếu rule `/dev/uinput` ở mục 3.
 - **macOS: màn hình đen hoặc input không hoạt động** — kiểm tra Screen Recording và
   Accessibility trên trang Settings.
