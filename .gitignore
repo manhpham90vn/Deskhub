@@ -11,6 +11,7 @@ compile_commands.json
 .cache/
 *.user
 *.xcuserstate
+xcuserdata/
 
 *.obj
 *.o

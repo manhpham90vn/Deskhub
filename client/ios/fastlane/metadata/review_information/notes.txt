@@ -1,14 +1,25 @@
-Deskhub is a remote desktop client. It connects DIRECTLY (peer-to-peer over UDP/QUIC) to a free companion app running on the user's own computer — Windows, macOS or Linux. There is NO login and NO account — the demo user/password fields do not apply.
+Deskhub is a remote desktop client (App Store Review Guideline 4.2.7). It connects DIRECTLY, peer to peer over UDP/QUIC, to the free Deskhub app running on the user's own Windows, macOS or Linux computer. There is NO login and NO account, so the demo user/password fields do not apply. Nothing runs on our side: there are no Deskhub servers, and the shell and every program you see execute on that computer, never on the iPhone.
 
-HOW TO TEST:
-1. On a Windows 10/11 x64 PC (or a Mac running macOS 14+) connected to the same Wi-Fi/network as the iPhone, download the free Deskhub app from https://github.com/manhpham90vn/Deskhub/releases — a single executable, no installation required.
-2. Run it. On Windows it asks for administrator once and adds its own firewall rule; on macOS, grant Screen Recording and Accessibility when prompted.
-3. Open the Host section. Tick a display, and optionally also tick "Terminal" and "File transfer" to test those. Press Share. The app then lists this machine's IP addresses and the port.
-4. Admission is key-based and there is no approval prompt: in the iOS app open Devices and copy this device's public key, then paste it into the allowed keys on the computer's Devices page. On the first connection the iPhone shows the computer's host-key fingerprint; compare it with the computer's Devices page and tap Trust and connect. Afterwards the iPhone refuses to connect if that computer's host key ever changes.
-5. In the iOS app, type the computer's IP address and press Connect. Connecting only authenticates — the page then offers three buttons, each enabled only if the computer is sharing that:
-   • Remote desktop — the remote screen appears: drag anywhere to move the mouse, tap to left-click, double-tap to right-click, hold then drag to select. Pinch to zoom, drag with two fingers to scroll. Tap "Keys" to type; the bottom bar sends Esc/Tab/Enter/arrows/Del/Ctrl+C/Ctrl+V. If the computer is playing sound, you hear it here.
-   • Terminal — a real shell on that computer opens in its own window, with a key row for Esc, Tab, Ctrl, Alt and the arrows.
+HOW TO TEST
+1. On a Windows 10/11 x64 PC or a Mac running macOS 14+, on the same Wi-Fi/network as the iPhone, download Deskhub 9 or newer from https://github.com/manhpham90vn/Deskhub/releases (a single executable on Windows, a dmg on macOS).
+2. Run it. On Windows it asks for administrator once to add its own firewall rule; on macOS, grant Screen Recording and Accessibility when prompted.
+3. Open the Host section, tick a display and optionally also Terminal and File transfer, then press Share. The app lists this machine's IP addresses and the port, and offers Show QR code.
+4. Let the iPhone in, either way:
+   a. QR code (quickest): press Show QR code on the computer, then in the iOS app open Client and tap Scan QR code. iOS asks for camera permission at this point only; the frames are decoded on the device and never leave it. The computer is trusted and the iPhone is admitted at once.
+   b. Address: in the iOS app type the computer's IP address and press Connect. A "New host" dialog shows the computer's key fingerprint; compare it with the computer's Devices page and tap Trust and connect. The iPhone then waits for approval and keeps retrying for two minutes; on the computer, press Approve under Connection requests on the Host page. From then on the iPhone refuses to connect if that computer's host key ever changes.
+5. Once in, the page offers three buttons, each enabled only if the computer is sharing that:
+   • Remote desktop — drag anywhere to move the mouse, tap to left-click, double-tap to right-click, hold then drag to select. Pinch to zoom, drag with two fingers to scroll. Tap Keys to type; the bottom bar sends Esc/Tab/Enter/arrows/Del/Ctrl+C/Ctrl+V. If the computer is playing sound, you hear it here.
+   • Terminal — a shell on that computer opens in its own window, with a key row for Esc, Tab, Ctrl, Alt and the arrows.
    • File transfer — pick files from the system photo picker or file browser and send them to the computer.
-6. Receiving files (this is what the Photos permission is for): the iPhone takes files from the moment the app is open, with no switch to find. Send a photo FROM the computer TO the iPhone (Client > connect to the phone's address > File transfer). iOS asks for add-only Photos access the first time a photo arrives — Deskhub can only add to the photo library, never read or change it. Anything that is not a photo or video goes to the app's Documents folder, visible in the Files app. If the Photos permission is declined, photos go to Documents too.
+6. Receiving files (this is what the add-only Photos permission is for): the iPhone takes files whenever the app is open. Send a photo FROM the computer TO the iPhone (Client > connect to the phone's address > File transfer). iOS asks for add-only Photos access the first time a photo arrives; Deskhub can only add to the photo library, never read or change it. Anything that is not a photo or video goes to the app's Documents folder, visible in the Files app. If Photos access is declined, photos go to Documents too.
+7. Sharing the iPhone's own screen: on the Host page tap Start sharing, which opens the system broadcast sheet. The broadcast runs in a separate extension process with the microphone button disabled; only the sound apps play is shared, view-only.
 
-NOTE FOR REVIEW: by design there are no Deskhub servers — the app only talks to the reviewer's/user's own computer (see privacy policy), so a computer running the companion app is required to see the streaming, terminal and file-transfer features. If none is available during review, contact us at manhpv151090@gmail.com and we will provide a temporary demo host reachable over Tailscale, including step-by-step instructions.
+PERMISSIONS
+• Local Network — to reach the computer on the same network.
+• Camera — only while scanning a pairing QR code (step 4a); frames never leave the device.
+• Photos, add only — only to save photos and videos another device sends (step 6).
+• Notifications — to say that a device asked to connect, or that a file arrived.
+We collect no data: the app talks only to the user's own computer, encrypted end to end (see the privacy policy).
+
+IF NO COMPUTER IS AVAILABLE DURING REVIEW
+Contact us at manhpv151090@gmail.com and we will provide a demo host reachable over Tailscale within a few hours, with step-by-step instructions.

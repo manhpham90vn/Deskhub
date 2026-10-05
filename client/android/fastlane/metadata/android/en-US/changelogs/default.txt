@@ -1,4 +1,6 @@
-• Connect by QR code: press Show QR code on the sharing computer, then Scan QR code here. Camera is used only for that, on the device
-• Or type the address and have the owner press Approve under Connection requests; this device retries for two minutes
-• A notification tells you when a device asks to connect here; approve it on the redone Devices page
-• One key per device, My keys is gone; every device must be let in once more. 8.0 cannot connect to 7.x, update every device
+First release on Google Play.
+• Stream your Windows, macOS or Linux computer to your phone with low latency, sound included
+• Virtual trackpad, full keyboard, a remote shell and file transfer both ways
+• Connect in seconds: scan the QR code the computer shows, or type its address and have its owner press Approve
+• Encrypted end to end between your own devices — no accounts, no servers
+• The computer needs Deskhub 9 or newer, free from the project page

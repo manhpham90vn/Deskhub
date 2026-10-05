@@ -9,7 +9,7 @@ Deskhub streams the screen of your Windows, macOS or Linux computer to your phon
 • Open a real shell on the remote computer in its own window, with a key row for Esc, Tab, Ctrl, Alt and the arrows
 • Send files to the computer — and take the files it sends back: photos land in Pictures/Deskhub, videos in Movies/Deskhub, everything else in Download/Deskhub, and a notification names what arrived
 • Connect once, then choose what to open: its screen, a shell, or file transfer
-• Finds the computers that are sharing on your network, and remembers the ones you connect to, with their ping
+• Remembers the computers you connect to, with their name and when you last connected, so the next connection is one tap
 • Choose which display to watch when the computer is sharing more than one
 • Adaptive bitrate and forward error correction keep the stream smooth on shaky Wi-Fi
 • A session that loses the network reattaches by itself instead of ending
@@ -17,13 +17,13 @@ Deskhub streams the screen of your Windows, macOS or Linux computer to your phon
 • Share this phone's screen the other way round, view-only, so a computer can watch it — with its sound on Android 10 and later
 
 <b>How it works</b>
-Install the free Deskhub app on the computer you want to reach (download from the project page) and start sharing there. Open Deskhub on your phone, copy this phone's public key from Devices and add it to the computer's list of allowed keys, then type the computer's address and connect. The first time, compare the fingerprint Deskhub shows with the one on the computer's Devices page and trust it. Once it answers, pick what to open: its screen, a shell, or file transfer. Works on your local network out of the box; for access over the Internet, pair it with Tailscale and connect via your Tailscale IP.
+Install the free Deskhub app on the computer you want to reach (download from the project page) and press Share there. The quickest way in: press Show QR code on the computer, then Scan QR code in Deskhub on your phone — the computer is trusted and lets this phone in at once. Or type the computer's address and connect: compare the fingerprint Deskhub shows with the one on the computer's Devices page, trust it, and have the computer's owner press Approve under Connection requests — this phone keeps trying for two minutes. Once it is in, pick what to open: its screen, a shell, or file transfer. Works on your local network out of the box; for access over the Internet, pair it with Tailscale and connect via your Tailscale IP.
 
 <b>Good to know</b>
-Every session is encrypted end to end over QUIC/TLS — video, sound, keystrokes, files, clipboard and everything else. Access is key-based: the computer only lets in a phone whose public key its owner has added, and your phone remembers each computer's host key after you confirm it the first time — if that key ever changes, Deskhub refuses to connect. Nothing is approved over the network, and a key can be revoked from the computer at any time. There are no accounts and no servers of ours: your phone talks only to your own computer.
+Every session is encrypted end to end over QUIC/TLS — video, sound, keystrokes, files, clipboard and everything else. Access works like SSH: the computer only lets in a phone its owner has let in on purpose — by pressing Approve, by showing it the QR code, or by pasting its public key — and your phone remembers each computer's host key after you confirm it the first time; if that key ever changes, Deskhub refuses to connect. A phone can be removed from the computer at any time. There are no accounts and no servers of ours: your phone talks only to your own computer.
 
 Sharing this phone's sound needs the permission Android labels <i>Microphone</i>, because that is what its playback-capture API is gated behind. Deskhub never records a microphone.
 
 <b>Requirements</b>
-• A computer running Windows 10 or later (x64), macOS 14 or later, or a current Linux desktop (glibc 2.35+), with the free Deskhub app
+• A computer running Windows 10 or later (x64), macOS 14 or later, or a current Linux desktop (glibc 2.35+), with Deskhub 9 or newer installed — free from the project page
 • Both devices on the same network, or connected through Tailscale

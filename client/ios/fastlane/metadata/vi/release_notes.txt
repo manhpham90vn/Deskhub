@@ -1,5 +1,7 @@
-• Kết nối bằng mã QR: trên máy tính bấm Show QR code khi đang chia sẻ, rồi bấm Scan QR code ở đây. Camera chỉ được hỏi lúc đó và khung hình không rời khỏi thiết bị
-• Hoặc nhập địa chỉ và nhờ chủ máy tính bấm Approve dưới Connection requests; thiết bị này tự thử lại trong hai phút
-• Khi thiết bị khác xin kết nối tới máy này, một thông báo sẽ báo cho bạn; duyệt hoặc từ chối trên trang Devices, nay gồm bốn mục đơn giản
-• Mỗi thiết bị giờ chỉ có một khoá dùng cho cả hai vai, nên My keys không còn. Fingerprint không đổi, nhưng mỗi thiết bị cần được cho vào lại một lần — một lần Approve hoặc một lần quét
-• Host đã tin cậy vẫn được tin cậy khi đổi địa chỉ. 8.0 không kết nối được với 7.x, hãy cập nhật mọi thiết bị
+Bản đầu tiên của Deskhub trên App Store.
+
+• Stream màn hình máy tính Windows, macOS hoặc Linux sang iPhone hoặc iPad với độ trễ thấp, nghe được âm thanh khớp với hình
+• Điều khiển bằng trackpad ảo và bàn phím đầy đủ, mở shell trên máy tính, gửi và nhận file
+• Kết nối trong vài giây: quét mã QR máy tính hiển thị, hoặc nhập địa chỉ rồi nhờ chủ máy bấm Approve
+• Mọi thứ được mã hoá đầu-cuối giữa các thiết bị của chính bạn — không tài khoản, không máy chủ
+• Máy tính cần Deskhub 9 trở lên, miễn phí từ trang dự án

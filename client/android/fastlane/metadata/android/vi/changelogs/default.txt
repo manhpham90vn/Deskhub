@@ -1,4 +1,6 @@
-• Kết nối bằng mã QR: bấm Show QR code trên máy tính đang chia sẻ, rồi Scan QR code ở đây. Camera chỉ dùng cho việc đó, ngay trên thiết bị
-• Hoặc nhập địa chỉ và nhờ chủ máy bấm Approve dưới Connection requests; thiết bị này tự thử lại trong hai phút
-• Có thông báo khi thiết bị khác xin kết nối tới đây; duyệt trên trang Devices đã làm lại
-• Mỗi thiết bị một khoá, My keys không còn; mỗi thiết bị cần được cho vào lại một lần. 8.0 không kết nối được với 7.x, hãy cập nhật mọi thiết bị
+Bản đầu tiên trên Google Play.
+• Stream máy tính Windows, macOS hoặc Linux sang điện thoại với độ trễ thấp, kèm âm thanh
+• Trackpad ảo, bàn phím đầy đủ, shell từ xa và truyền file hai chiều
+• Kết nối trong vài giây: quét mã QR máy tính hiển thị, hoặc nhập địa chỉ rồi nhờ chủ máy bấm Approve
+• Mã hoá đầu-cuối giữa các thiết bị của chính bạn — không tài khoản, không máy chủ
+• Máy tính cần Deskhub 9 trở lên, miễn phí từ trang dự án

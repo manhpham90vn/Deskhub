@@ -9,7 +9,7 @@ Deskhub stream màn hình máy tính Windows, macOS hoặc Linux của bạn san
 • Mở hẳn một shell trên máy tính từ xa trong cửa sổ riêng, kèm hàng phím Esc, Tab, Ctrl, Alt và các phím mũi tên
 • Gửi file sang máy tính — và nhận file máy tính gửi lại: ảnh vào Pictures/Deskhub, video vào Movies/Deskhub, mọi thứ khác vào Download/Deskhub, kèm thông báo cho biết vừa nhận được gì
 • Kết nối một lần, rồi chọn thứ muốn mở: màn hình, shell, hay truyền file
-• Tự tìm những máy đang chia sẻ trong mạng, và nhớ lại các máy bạn từng kết nối kèm độ trễ ping
+• Nhớ các máy tính bạn từng kết nối, kèm tên và thời điểm kết nối gần nhất, để lần sau chỉ cần một chạm
 • Chọn màn hình muốn xem khi máy tính chia sẻ nhiều màn hình
 • Bitrate thích ứng + sửa lỗi FEC giữ hình mượt khi Wi-Fi chập chờn
 • Phiên bị rớt mạng tự nối lại thay vì kết thúc
@@ -17,13 +17,13 @@ Deskhub stream màn hình máy tính Windows, macOS hoặc Linux của bạn san
 • Chia sẻ ngược màn hình điện thoại ở chế độ chỉ xem, để máy tính xem được — kèm âm thanh trên Android 10 trở lên
 
 <b>Cách dùng</b>
-Cài app Deskhub miễn phí lên máy tính bạn muốn điều khiển — tải từ trang dự án — rồi bấm chia sẻ ở đó. Mở Deskhub trên điện thoại, sao chép public key của điện thoại trong mục Devices và thêm vào danh sách khóa được phép trên máy tính, rồi nhập địa chỉ của máy tính và kết nối. Lần đầu tiên, so fingerprint Deskhub hiển thị với fingerprint trên trang Devices của máy tính rồi xác nhận tin cậy. Khi máy đã trả lời, chọn thứ muốn mở: màn hình, shell, hay truyền file. Chạy ngay trong mạng LAN; muốn dùng qua Internet thì bật Tailscale trên cả hai máy và kết nối bằng IP Tailscale.
+Cài app Deskhub miễn phí lên máy tính bạn muốn điều khiển — tải từ trang dự án — rồi bấm Share ở đó. Cách nhanh nhất: bấm Show QR code trên máy tính, rồi bấm Scan QR code trong Deskhub trên điện thoại — máy tính được tin cậy và cho điện thoại này vào ngay. Hoặc nhập địa chỉ máy tính và kết nối: so fingerprint Deskhub hiển thị với fingerprint trên trang Devices của máy tính, xác nhận tin cậy, rồi nhờ chủ máy bấm Approve dưới Connection requests — điện thoại này tự thử lại trong hai phút. Vào được rồi thì chọn thứ muốn mở: màn hình, shell, hay truyền file. Chạy ngay trong mạng LAN; muốn dùng qua Internet thì bật Tailscale trên cả hai máy và kết nối bằng IP Tailscale.
 
 <b>Cần biết</b>
-Mọi phiên đều được mã hoá đầu-cuối trên QUIC/TLS — video, âm thanh, thao tác bàn phím, file, clipboard và mọi thứ khác. Quyền truy cập dựa trên khóa: máy tính chỉ cho vào điện thoại có public key đã được chủ máy thêm, và điện thoại ghi nhớ khóa host của từng máy tính sau khi bạn xác nhận ở lần đầu — nếu khóa đó thay đổi, Deskhub từ chối kết nối. Không có bước duyệt qua mạng, và khóa có thể bị thu hồi từ máy tính bất cứ lúc nào. Không có tài khoản và không có máy chủ nào của chúng tôi: điện thoại chỉ nói chuyện với chính máy tính của bạn.
+Mọi phiên đều được mã hoá đầu-cuối trên QUIC/TLS — video, âm thanh, thao tác bàn phím, file, clipboard và mọi thứ khác. Quyền truy cập hoạt động như SSH: máy tính chỉ cho vào điện thoại mà chủ máy đã chủ động cho phép — bấm Approve, cho quét mã QR, hoặc dán public key của điện thoại — và điện thoại ghi nhớ khóa host của từng máy tính sau khi bạn xác nhận ở lần đầu; nếu khóa đó thay đổi, Deskhub từ chối kết nối. Có thể gỡ một điện thoại khỏi máy tính bất cứ lúc nào. Không có tài khoản và không có máy chủ nào của chúng tôi: điện thoại chỉ nói chuyện với chính máy tính của bạn.
 
 Chia sẻ âm thanh của điện thoại cần quyền mà Android gọi là <i>Micro</i>, vì API playback-capture của Android nằm sau quyền đó. Deskhub không bao giờ thu âm từ micro.
 
 <b>Yêu cầu</b>
-• Một máy tính chạy Windows 10 trở lên (x64), macOS 14 trở lên, hoặc bản Linux desktop hiện hành (glibc 2.35+), có cài app Deskhub miễn phí
+• Một máy tính chạy Windows 10 trở lên (x64), macOS 14 trở lên, hoặc bản Linux desktop hiện hành (glibc 2.35+), đã cài Deskhub 9 trở lên — miễn phí, tải từ trang dự án
 • Hai thiết bị cùng mạng, hoặc nối qua Tailscale

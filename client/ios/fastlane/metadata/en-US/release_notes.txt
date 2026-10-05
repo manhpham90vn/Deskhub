@@ -1,5 +1,7 @@
-• Connect by QR code: on the computer press Show QR code while sharing, then Scan QR code here. The camera is asked for only then, and frames never leave the device
-• Or type the address and ask the computer's owner to press Approve under Connection requests; this device keeps trying for two minutes
-• When another device asks to connect to this one, a notification tells you; approve or deny it on the Devices page, which is now four plain sections
-• One key per device now serves both roles, so My keys is gone. Fingerprints are unchanged, but every device has to be let in once more — one Approve or one scan
-• Trusted hosts stay trusted when their address changes. 8.0 cannot connect to 7.x, so update every device
+Deskhub's first release on the App Store.
+
+• Stream the screen of your Windows, macOS or Linux computer to your iPhone or iPad with low latency, and hear its sound in step with the picture
+• Control it with a virtual trackpad and a full keyboard, open a shell on it, and send files both ways
+• Connect in seconds: scan the QR code the computer shows, or type its address and have its owner press Approve
+• Everything travels encrypted end to end between your own devices — no accounts, no servers
+• The computer needs Deskhub 9 or newer, free from the project page
