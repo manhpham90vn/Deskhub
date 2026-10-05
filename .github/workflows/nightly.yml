@@ -15,7 +15,7 @@ concurrency:
 jobs:
   fuzz:
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 180
     permissions:
       actions: write
       contents: write
@@ -70,7 +70,7 @@ jobs:
           done
 
       - name: Upload crash reproducers
-        if: failure() && steps.fuzz.outcome == 'failure'
+        if: always() && steps.fuzz.outcome != 'success'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: nightly-fuzz-crashes
@@ -82,22 +82,25 @@ jobs:
           if-no-files-found: ignore
 
       - name: File (or bump) the crash issue
-        if: failure() && steps.fuzz.outcome == 'failure'
+        if: always() && steps.fuzz.outcome != 'success'
         env:
           GH_TOKEN: ${{ github.token }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          FUZZ_OUTCOME: ${{ steps.fuzz.outcome }}
         run: |
           gh label create fuzz-crash --color B60205 \
-            --description "Crash found by the nightly fuzz run" --force
+            --description "Crash or unfinished run reported by the nightly fuzz job" --force
           existing=$(gh issue list --label fuzz-crash --state open \
             --json number --jq '.[0].number // empty')
           if [ -n "$existing" ]; then
             gh issue comment "$existing" \
-              --body "The nightly fuzz run crashed again: $RUN_URL"
+              --body "The nightly fuzz run did not finish cleanly again (step outcome: $FUZZ_OUTCOME): $RUN_URL"
             exit 0
           fi
           {
-            echo "A libFuzzer target crashed during the scheduled fuzz run."
+            echo "The scheduled fuzz run did not finish cleanly (step outcome: $FUZZ_OUTCOME)."
+            echo "A failure means a libFuzzer target crashed. A cancellation usually means"
+            echo "the job hit its timeout before every target got its full 15 minutes."
             echo
             echo "Run: $RUN_URL"
             echo
@@ -108,7 +111,7 @@ jobs:
             echo
             echo '    out/build/fuzz/core/<target> <crash-file>'
           } > /tmp/fuzz-issue-body.md
-          gh issue create --title "Nightly fuzz run found a crash" \
+          gh issue create --title "Nightly fuzz run did not finish cleanly" \
             --label fuzz-crash --body-file /tmp/fuzz-issue-body.md
 
   quiche-checks-windows:
