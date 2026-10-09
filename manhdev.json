@@ -1,0 +1,68 @@
+{
+  "$schema": "https://manhdev.click/manhdev.schema.json",
+  "tagline": "Open-source remote desktop for every platform you own.",
+  "description": "View and control your computer from another device over your own network or VPN. A single C++20 core runs natively on Windows, macOS, Linux, Android and iOS, built for responsive work and play.",
+  "overview": [
+    "Deskhub turns any computer you own into a host you can reach from another device. Open the app on the machine you want to control, start sharing, and pair the client by scanning a QR code. Everything travels over your own network or VPN inside a QUIC/TLS session, so there is no relay server and no account in the middle.",
+    "The same C++20 core powers every build, which is why the Windows, macOS, Linux, Android and iOS clients behave the same way. Video is encoded on the GPU with NVENC, VideoToolbox or MediaCodec and can reach 240 fps, relative mouse and DirectInput keep games playable, and 64 kbps Opus carries the audio. Beyond the screen, Deskhub can run shell commands and transfer files, and a bundled CLI lets you script sessions the way you would with SSH."
+  ],
+  "features": [
+    { "title": "GPU-accelerated streaming", "body": "Up to 240 fps with NVENC, VideoToolbox and MediaCodec." },
+    { "title": "End-to-end encrypted", "body": "Sessions over QUIC/TLS, paired with a QR code." },
+    { "title": "More than pixels", "body": "Share the display, run shell commands and transfer files." },
+    { "title": "Built for games", "body": "Relative mouse, keyboard, DirectInput and 64 kbps Opus audio." },
+    { "title": "CLI included", "body": "Script sessions or use it like SSH from any terminal." }
+  ],
+  "screenshot": {
+    "src": "docs/imgs/macos_1.png",
+    "alt": "Deskhub host page on macOS showing network addresses and a Start sharing button",
+    "width": 2080,
+    "height": 1400,
+    "chrome": false
+  },
+  "gallery": [
+    {
+      "src": "docs/imgs/macos_2.png",
+      "alt": "Deskhub Client page on macOS: host address and UDP port fields, tickboxes to pick remote desktop, control and terminal, a Connect button, and a list of recent addresses",
+      "width": 2080,
+      "height": 1400,
+      "chrome": false,
+      "caption": "Client: type an address, paste a host's QR link, or pick a recent or trusted host."
+    },
+    {
+      "src": "docs/imgs/macos_3.png",
+      "alt": "Deskhub Devices page on macOS: this machine's key fingerprint, the client keys allowed to connect and the trusted hosts",
+      "width": 2080,
+      "height": 1400,
+      "chrome": false,
+      "caption": "Devices: the keys allowed in as a host, and the hosts you trust as a client."
+    },
+    {
+      "src": "docs/imgs/macos_4.png",
+      "alt": "Deskhub Settings page on macOS: device name, fps, bitrate and quality, UDP port, control, clipboard and stay-awake toggles, and the macOS permission state",
+      "width": 2080,
+      "height": 1400,
+      "chrome": false,
+      "caption": "Settings: fps, bitrate, quality, port, and the live state of the macOS permissions."
+    }
+  ],
+  "downloads": [
+    { "platform": "windows", "label": "Windows", "sub": "Installer · .exe", "asset": "^deskhub-v.*-windows-setup\\.exe$", "file": "deskhub-{tag}-windows-setup.exe" },
+    { "platform": "macos", "label": "macOS", "sub": "Disk image · .dmg", "asset": "^deskhub-v.*-macos\\.dmg$", "file": "deskhub-{tag}-macos.dmg" },
+    { "platform": "linux", "label": "Linux", "sub": "Ubuntu / Debian · .deb", "asset": "^deskhub-v.*-amd64\\.deb$", "file": "deskhub-{tag}-amd64.deb" },
+    { "platform": "linux", "label": "Linux", "sub": "Fedora / openSUSE · .rpm", "asset": "^deskhub-v.*\\.rpm$", "file": "deskhub-{tag}-x86_64.rpm" },
+    { "platform": "android", "label": "Android", "sub": "Direct · .apk", "asset": "^deskhub-v.*-android\\.apk$", "file": "deskhub-{tag}-android.apk" },
+    { "platform": "android", "label": "Google Play", "sub": "Open beta", "href": "https://play.google.com/apps/testing/com.manhpham.deskhub", "external": true },
+    { "platform": "ios", "label": "iOS", "sub": "TestFlight beta", "href": "https://testflight.apple.com/join/7qY7wgpd", "external": true }
+  ],
+  "packageManagers": [
+    { "platform": "windows", "label": "Windows · winget", "command": "winget install ManhPham.Deskhub" },
+    { "platform": "macos", "label": "macOS · Homebrew", "command": "brew install --cask manhpham90vn/tap/deskhub" },
+    {
+      "platform": "linux",
+      "label": "Ubuntu / Debian / Mint · apt",
+      "command": "sudo install -d /etc/apt/keyrings\ncurl -fsSL https://manhpham90vn.github.io/Deskhub/apt/deskhub.gpg | sudo tee /etc/apt/keyrings/deskhub.gpg >/dev/null\necho \"deb [arch=amd64 signed-by=/etc/apt/keyrings/deskhub.gpg] https://manhpham90vn.github.io/Deskhub/apt stable main\" | sudo tee /etc/apt/sources.list.d/deskhub.list\nsudo apt update && sudo apt install deskhub"
+    }
+  ],
+  "version": "v9.0.1"
+}
