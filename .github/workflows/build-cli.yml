@@ -88,7 +88,7 @@ jobs:
           if ($finalPath -ne $originalPath) { throw 'Uninstall did not restore the user PATH' }
 
       - name: Upload CLI installer
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: deskhub-cli-windows-installer
           path: out/installer/DeskHub-CLI-Setup.exe
@@ -96,7 +96,7 @@ jobs:
           if-no-files-found: error
 
       - name: Upload the command-line client
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: deskhub-cli-windows
           path: out/build/x64-release/client/cli/deskhub-cli.exe
@@ -138,7 +138,7 @@ jobs:
         run: scripts/cli-smoke.sh out/build/arm64-release/client/cli/deskhub-cli
 
       - name: Upload the command-line client
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: deskhub-cli-macos
           path: out/build/arm64-release/client/cli/deskhub-cli
@@ -194,7 +194,7 @@ jobs:
         run: scripts/cli-smoke.sh out/build/x64-release/client/cli/deskhub-cli
 
       - name: Upload the command-line client
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: deskhub-cli-linux
           path: out/build/x64-release/client/cli/deskhub-cli

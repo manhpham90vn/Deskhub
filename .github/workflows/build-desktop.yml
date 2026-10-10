@@ -87,7 +87,7 @@ jobs:
 
       - name: Upload installer
         if: ${{ inputs.for_release }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: deskhub-windows-installer
           path: out/installer/DeskHub-Setup.exe
@@ -95,7 +95,7 @@ jobs:
           if-no-files-found: error
 
       - name: Upload app
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: deskhub-windows
           path: ${{ env.APP_EXE }}
@@ -124,7 +124,7 @@ jobs:
         run: ditto -c -k --keepParent out/build/macos/Release/app.app deskhub-macos.zip
 
       - name: Upload app
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: deskhub-macos
           path: deskhub-macos.zip
@@ -195,7 +195,7 @@ jobs:
 
       - name: Upload app
         if: matrix.release
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: deskhub-linux
           path: out/build/x64-release/client/linux/deskhub
@@ -231,7 +231,7 @@ jobs:
 
       - name: Upload deb
         if: matrix.release
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: deskhub-linux-deb
           path: out/dist/linux/deskhub_*.deb
@@ -240,7 +240,7 @@ jobs:
 
       - name: Upload CLI deb
         if: matrix.release
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: deskhub-cli-linux-deb
           path: out/dist/linux/deskhub-cli_*.deb
@@ -276,7 +276,7 @@ jobs:
 
       - name: Upload rpm
         if: matrix.release
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: deskhub-linux-rpm
           path: out/dist/linux/deskhub-[0-9]*.rpm
@@ -285,7 +285,7 @@ jobs:
 
       - name: Upload CLI rpm
         if: matrix.release
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: deskhub-cli-linux-rpm
           path: out/dist/linux/deskhub-cli-*.rpm
