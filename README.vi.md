@@ -83,7 +83,7 @@ Các nền tảng còn lại lấy trên [Releases](https://github.com/manhpham9
   `deskhub-cli-v*-x86_64.rpm`; cài gói cần dùng bằng `dnf` hoặc `zypper`
 - **Arch, Linux khác** — bản portable `deskhub-v*-linux-x86_64` và
   `deskhub-cli-v*-linux-x86_64`, `chmod +x` rồi chạy
-- **Android** — `deskhub-v*-android.apk`, hoặc [bản beta trên Play](https://play.google.com/apps/testing/com.manhpham.deskhub)
+- **Android** — `deskhub-v*-android.apk`, hoặc [Google Play](https://play.google.com/store/apps/details?id=com.manhpham.deskhub)
 - **iOS** — [TestFlight](https://testflight.apple.com/join/7qY7wgpd)
 
 Chi tiết và quyền cần cấp trên từng nền tảng: [INSTALL.vi.md](docs/INSTALL.vi.md).
@@ -171,7 +171,7 @@ Threat model đầy đủ nằm trong [`SECURITY.vi.md`](SECURITY.vi.md).
 | -------- | :--: | :----: | ---------- |
 | **Windows** | ✅ | ✅ | Bản reference — sử dụng hằng ngày qua LAN và Tailscale (Internet/NAT) |
 | **macOS** | ✅ | ✅ | Cả hai vai trò đều hoạt động (ScreenCaptureKit + VideoToolbox + CGEvent) |
-| **Android** | ✅ | ✅ | Client: video và input (trackpad, keyboard). Host: share màn hình view-only (MediaProjection + MediaCodec), Android 10+ — đang thử nghiệm trên Google Play |
+| **Android** | ✅ | ✅ | Client: video và input (trackpad, keyboard). Host: share màn hình view-only (MediaProjection + MediaCodec), Android 10+ — đã có trên Google Play |
 | **iOS** | ✅ | ✅ | Client: video và input (trackpad, keyboard). Host: share màn hình view-only qua Broadcast Upload Extension (ReplayKit + VideoToolbox) — đang thử nghiệm qua TestFlight |
 | **Linux** | ✅ | ✅ | Cả hai vai trò đều hoạt động (PipeWire + VA-API/NVENC + uinput + GTK3) — Ubuntu, Debian, Mint, Fedora, openSUSE, Arch qua deb / rpm / binary chạy trực tiếp; đã kiểm chứng giữa hai máy trong LAN |
 

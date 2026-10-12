@@ -6,8 +6,8 @@ Chọn nền tảng của bạn bên dưới để cài bản release đã build
 source. Nếu muốn tự compile Deskhub, xem [`BUILD.vi.md`](BUILD.vi.md).
 
 Bộ cài desktop và file APK Android nằm trên
-[trang Releases](https://github.com/manhpham90vn/Deskhub/releases). Bản beta mobile cũng
-có trên TestFlight và Google Play.
+[trang Releases](https://github.com/manhpham90vn/Deskhub/releases). Bản Android cũng có
+trên Google Play, còn bản beta iOS trên TestFlight.
 
 Đây là bản dịch của [`INSTALL.md`](INSTALL.md). Nếu hai bản có khác biệt, bản tiếng Anh là
 bản chuẩn.
@@ -20,7 +20,7 @@ bản chuẩn.
 | 🐧 Fedora (Workstation và KDE spin) | `deskhub-v*-x86_64.rpm` | `sudo dnf install ./deskhub-v*-x86_64.rpm` |
 | 🐧 openSUSE Tumbleweed | `deskhub-v*-x86_64.rpm` | `sudo zypper install ./deskhub-v*-x86_64.rpm` |
 | 🐧 Arch và các distro khác | `deskhub-v*-linux-x86_64` | `chmod +x deskhub-v*-linux-x86_64 && ./deskhub-v*-linux-x86_64` |
-| 🤖 Android | `deskhub-v*-android.apk` | Cài apk, hoặc tham gia bản beta trên Play |
+| 🤖 Android | `deskhub-v*-android.apk` | Cài apk, hoặc [Google Play](https://play.google.com/store/apps/details?id=com.manhpham.deskhub) |
 | 📱 iOS | — | [TestFlight](https://testflight.apple.com/join/7qY7wgpd) |
 
 Bạn cũng có thể dùng `deskhub-cli` cho các lệnh terminal và script. Trên Windows và
@@ -254,17 +254,10 @@ view-only và yêu cầu **Android 10+**.
 cài đè lên bản từ Google Play, hoặc ngược lại, hãy gỡ bản kia trước — việc này xoá key của
 bản đó, nên các host phải cho thiết bị vào lại.
 
-**Beta trên Play** — ba bước, đều dùng **cùng tài khoản Google** với Play Store trên thiết
-bị:
-
-1. Tham gia nhóm tester: [groups.google.com/g/deskhub-test](https://groups.google.com/g/deskhub-test)
-2. Đăng ký làm tester: [play.google.com/apps/testing/com.manhpham.deskhub](https://play.google.com/apps/testing/com.manhpham.deskhub)
-3. Cài đặt (Play cần vài phút để sync): [play.google.com/store/apps/details?id=com.manhpham.deskhub](https://play.google.com/store/apps/details?id=com.manhpham.deskhub)
-
-Vui lòng giữ bản beta trên thiết bị **từ 14 ngày trở lên**; đây là điều kiện Google yêu
-cầu trước khi app được phát hành công khai. Bản beta trên Play có thể chậm hơn apk trên
-Releases: mỗi bản release vào track internal của Google Play trước, và chỉ tới bản beta khi
-được promote.
+**Google Play** — cài từ
+[play.google.com/store/apps/details?id=com.manhpham.deskhub](https://play.google.com/store/apps/details?id=com.manhpham.deskhub).
+Bản trên Google Play có thể chậm hơn apk trên Releases: mỗi bản release vào track internal
+của Google Play trước, và chỉ lên store khi được promote.
 
 ## 📱 iOS
 

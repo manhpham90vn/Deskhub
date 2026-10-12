@@ -6,8 +6,8 @@
 Deskhub，请参阅 [`BUILD.zh.md`](BUILD.zh.md)。
 
 桌面安装包和 Android APK 可从
-[Releases 页面](https://github.com/manhpham90vn/Deskhub/releases) 下载。移动端 beta 也可
-通过 TestFlight 或 Google Play 获取。
+[Releases 页面](https://github.com/manhpham90vn/Deskhub/releases) 下载。Android 版也已
+上架 Google Play，iOS beta 则通过 TestFlight 获取。
 
 本文件是 [`INSTALL.md`](INSTALL.md) 的译本；若两者有出入，以英文版为准。
 
@@ -19,7 +19,7 @@ Deskhub，请参阅 [`BUILD.zh.md`](BUILD.zh.md)。
 | 🐧 Fedora（Workstation 与 KDE spin） | `deskhub-v*-x86_64.rpm` | `sudo dnf install ./deskhub-v*-x86_64.rpm` |
 | 🐧 openSUSE Tumbleweed | `deskhub-v*-x86_64.rpm` | `sudo zypper install ./deskhub-v*-x86_64.rpm` |
 | 🐧 Arch 及其他发行版 | `deskhub-v*-linux-x86_64` | `chmod +x deskhub-v*-linux-x86_64 && ./deskhub-v*-linux-x86_64` |
-| 🤖 Android | `deskhub-v*-android.apk` | 安装 apk，或加入 Play 的 beta |
+| 🤖 Android | `deskhub-v*-android.apk` | 安装 apk，或从 [Google Play](https://play.google.com/store/apps/details?id=com.manhpham.deskhub) 安装 |
 | 📱 iOS | —— | [TestFlight](https://testflight.apple.com/join/7qY7wgpd) |
 
 还可以用 `deskhub-cli` 执行 terminal 命令或脚本。在 Windows 和 Linux 上，CLI 也能
@@ -240,15 +240,10 @@ Deskhub 需要 **Android 8.0** 或更高版本。作为 host 时仅支持 view-o
 `deskhub-v*-android.apk` 并安装。如果 Android 拒绝用它覆盖从 Google Play 安装的版本（或
 反过来），请先卸载另一个版本 —— 这会删除该版本的 key，因此各 host 需要重新放行这台设备。
 
-**Play beta** —— 三个步骤，全部使用与设备 Play Store **相同的 Google 账号**：
-
-1. 加入测试者群组：[groups.google.com/g/deskhub-test](https://groups.google.com/g/deskhub-test)
-2. 成为测试者：[play.google.com/apps/testing/com.manhpham.deskhub](https://play.google.com/apps/testing/com.manhpham.deskhub)
-3. 安装（Play 同步需要数分钟）：[play.google.com/store/apps/details?id=com.manhpham.deskhub](https://play.google.com/store/apps/details?id=com.manhpham.deskhub)
-
-请将 beta 保留在设备上 **14 天以上**；这是 Google 对 app 正式上架的前置要求。Play beta
-可能落后于 Releases 上的 apk：每个 release 先进入 Google Play 的 internal track，只有在被
-promote 后才会到达 beta。
+**Google Play** —— 从
+[play.google.com/store/apps/details?id=com.manhpham.deskhub](https://play.google.com/store/apps/details?id=com.manhpham.deskhub) 安装。
+Google Play 上的版本可能落后于 Releases 上的 apk：每个 release 先进入 Google Play 的
+internal track，只有在被 promote 后才会上架。
 
 ## 📱 iOS
 

@@ -84,7 +84,7 @@ Everything else is on [Releases](https://github.com/manhpham90vn/Deskhub/release
   `deskhub-v*-x86_64.rpm` or `deskhub-cli-v*-x86_64.rpm` with `dnf` or `zypper`
 - **Arch, other Linux** — portable `deskhub-v*-linux-x86_64` and
   `deskhub-cli-v*-linux-x86_64`, just `chmod +x` and run
-- **Android** — `deskhub-v*-android.apk`, or the [Play beta](https://play.google.com/apps/testing/com.manhpham.deskhub)
+- **Android** — `deskhub-v*-android.apk`, or [Google Play](https://play.google.com/store/apps/details?id=com.manhpham.deskhub)
 - **iOS** — [TestFlight](https://testflight.apple.com/join/7qY7wgpd)
 
 Details and permissions per platform: [INSTALL.md](docs/INSTALL.md).
@@ -172,7 +172,7 @@ no discovery, no switch that lets strangers in. Use a network you trust or a VPN
 | -------- | :--: | :----: | ------ |
 | **Windows** | ✅ | ✅ | Reference implementation — daily use over LAN + Tailscale (Internet/NAT) |
 | **macOS** | ✅ | ✅ | Both roles working (ScreenCaptureKit + VideoToolbox + CGEvent) |
-| **Android** | ✅ | ✅ | Client: video + input (trackpad, keyboard). Host: view-only screen share (MediaProjection + MediaCodec), Android 10+ — testing on Google Play |
+| **Android** | ✅ | ✅ | Client: video + input (trackpad, keyboard). Host: view-only screen share (MediaProjection + MediaCodec), Android 10+ — on Google Play |
 | **iOS** | ✅ | ✅ | Client: video + input (trackpad, keyboard). Host: view-only screen share via a Broadcast Upload Extension (ReplayKit + VideoToolbox) — testing via TestFlight |
 | **Linux** | ✅ | ✅ | Both roles working (PipeWire + VA-API/NVENC + uinput + GTK3) — Ubuntu, Debian, Mint, Fedora, openSUSE, Arch via deb / rpm / portable binary; verified between two machines over LAN |
 

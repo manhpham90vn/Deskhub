@@ -85,7 +85,7 @@ macOS の CLI は Homebrew により `PATH` に配置される。
   `deskhub-cli-v*-x86_64.rpm` を必要に応じて `dnf` または `zypper` でインストール
 - **Arch、その他の Linux** —— portable 版 `deskhub-v*-linux-x86_64` と
   `deskhub-cli-v*-linux-x86_64` を `chmod +x` して実行
-- **Android** —— `deskhub-v*-android.apk`、または [Play の beta](https://play.google.com/apps/testing/com.manhpham.deskhub)
+- **Android** —— `deskhub-v*-android.apk`、または [Google Play](https://play.google.com/store/apps/details?id=com.manhpham.deskhub)
 - **iOS** —— [TestFlight](https://testflight.apple.com/join/7qY7wgpd)
 
 プラットフォームごとの詳細と必要な権限：[INSTALL.ja.md](docs/INSTALL.ja.md)。
@@ -174,7 +174,7 @@ threat model は [`SECURITY.ja.md`](SECURITY.ja.md) を参照。
 | -------- | :--: | :----: | ------ |
 | **Windows** | ✅ | ✅ | reference 実装 —— LAN および Tailscale（Internet/NAT）で日常的に使用 |
 | **macOS** | ✅ | ✅ | 両方の役割が動作（ScreenCaptureKit + VideoToolbox + CGEvent） |
-| **Android** | ✅ | ✅ | Client: video と input（trackpad、keyboard）。Host: view-only の画面共有（MediaProjection + MediaCodec）、Android 10+ —— Google Play でテスト中 |
+| **Android** | ✅ | ✅ | Client: video と input（trackpad、keyboard）。Host: view-only の画面共有（MediaProjection + MediaCodec）、Android 10+ —— Google Play で公開中 |
 | **iOS** | ✅ | ✅ | Client: video と input（trackpad、keyboard）。Host: Broadcast Upload Extension による view-only の画面共有（ReplayKit + VideoToolbox）—— TestFlight でテスト中 |
 | **Linux** | ✅ | ✅ | 両方の役割が動作（PipeWire + VA-API/NVENC + uinput + GTK3）—— Ubuntu、Debian、Mint、Fedora、openSUSE、Arch に deb / rpm / portable binary で提供。2 台間の LAN で検証済み |
 

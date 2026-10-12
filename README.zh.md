@@ -83,7 +83,7 @@ sudo apt install deskhub-cli   # CLI；也可以单独安装
   安装 `deskhub-v*-x86_64.rpm`、`deskhub-cli-v*-x86_64.rpm`
 - **Arch 及其他 Linux** —— 免安装的 `deskhub-v*-linux-x86_64` 与
   `deskhub-cli-v*-linux-x86_64`，`chmod +x` 后运行
-- **Android** —— `deskhub-v*-android.apk`，或 [Play beta](https://play.google.com/apps/testing/com.manhpham.deskhub)
+- **Android** —— `deskhub-v*-android.apk`，或 [Google Play](https://play.google.com/store/apps/details?id=com.manhpham.deskhub)
 - **iOS** —— [TestFlight](https://testflight.apple.com/join/7qY7wgpd)
 
 各平台的详细说明与所需权限：[INSTALL.zh.md](docs/INSTALL.zh.md)。
@@ -170,7 +170,7 @@ passcode，没有 discovery，也没有任何放陌生人进来的开关。请�
 | -------- | :--: | :----: | ------ |
 | **Windows** | ✅ | ✅ | reference 实现 —— 日常通过 LAN 与 Tailscale（Internet/NAT）使用 |
 | **macOS** | ✅ | ✅ | 两个角色均可运行（ScreenCaptureKit + VideoToolbox + CGEvent） |
-| **Android** | ✅ | ✅ | Client：video 与 input（trackpad、keyboard）。Host：view-only 屏幕共享（MediaProjection + MediaCodec），Android 10+ —— 正在 Google Play 上测试 |
+| **Android** | ✅ | ✅ | Client：video 与 input（trackpad、keyboard）。Host：view-only 屏幕共享（MediaProjection + MediaCodec），Android 10+ —— 已上架 Google Play |
 | **iOS** | ✅ | ✅ | Client：video 与 input（trackpad、keyboard）。Host：通过 Broadcast Upload Extension 实现 view-only 屏幕共享（ReplayKit + VideoToolbox）—— 正在 TestFlight 上测试 |
 | **Linux** | ✅ | ✅ | 两个角色均可运行（PipeWire + VA-API/NVENC + uinput + GTK3）—— 支持 Ubuntu、Debian、Mint、Fedora、openSUSE、Arch，通过 deb / rpm / 免安装 binary 提供；已在两台机器间通过 LAN 验证 |
 

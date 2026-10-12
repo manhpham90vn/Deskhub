@@ -6,8 +6,8 @@ Choose your platform below to install a prebuilt release. You do not need to che
 the source code. If you want to build Deskhub yourself, see [`BUILD.md`](BUILD.md).
 
 Desktop installers and the Android APK are on the
-[Releases page](https://github.com/manhpham90vn/Deskhub/releases). You can also get the
-mobile beta through TestFlight or Google Play.
+[Releases page](https://github.com/manhpham90vn/Deskhub/releases). The Android app is also
+on Google Play, and the iOS beta on TestFlight.
 
 | Platform | File | How to install |
 | --- | --- | --- |
@@ -17,7 +17,7 @@ mobile beta through TestFlight or Google Play.
 | 🐧 Fedora (Workstation & KDE spin) | `deskhub-v*-x86_64.rpm` | `sudo dnf install ./deskhub-v*-x86_64.rpm` |
 | 🐧 openSUSE Tumbleweed | `deskhub-v*-x86_64.rpm` | `sudo zypper install ./deskhub-v*-x86_64.rpm` |
 | 🐧 Arch and other Linux distributions | `deskhub-v*-linux-x86_64` | `chmod +x deskhub-v*-linux-x86_64 && ./deskhub-v*-linux-x86_64` |
-| 🤖 Android | `deskhub-v*-android.apk` | Install the apk, or join the Play beta |
+| 🤖 Android | `deskhub-v*-android.apk` | Install the apk, or [Google Play](https://play.google.com/store/apps/details?id=com.manhpham.deskhub) |
 | 📱 iOS | — | [TestFlight](https://testflight.apple.com/join/7qY7wgpd) |
 
 There is also `deskhub-cli` for terminal commands and scripts. On Windows and Linux it
@@ -258,16 +258,10 @@ Deskhub needs **Android 8.0** or later. Hosting is a view-only screen share and 
 refuses to install it over a copy from Google Play, or the other way round, uninstall the
 other copy first — that removes its key, so hosts have to let the device in again.
 
-**Play beta** — three steps, all with the **same Google account** as your phone's Play
-Store:
-
-1. Join the tester group: [groups.google.com/g/deskhub-test](https://groups.google.com/g/deskhub-test)
-2. Become a tester: [play.google.com/apps/testing/com.manhpham.deskhub](https://play.google.com/apps/testing/com.manhpham.deskhub)
-3. Install (give Play a few minutes to sync): [play.google.com/store/apps/details?id=com.manhpham.deskhub](https://play.google.com/store/apps/details?id=com.manhpham.deskhub)
-
-Please keep the beta installed **14+ days** — Google requires that before the app can go
-public. The Play beta can trail the apk on Releases: each release reaches Google Play's
-internal track first and the beta only when it is promoted.
+**Google Play** — install from
+[play.google.com/store/apps/details?id=com.manhpham.deskhub](https://play.google.com/store/apps/details?id=com.manhpham.deskhub).
+Google Play can trail the apk on Releases: each release reaches Google Play's internal
+track first and the store only when it is promoted.
 
 ## 📱 iOS
 

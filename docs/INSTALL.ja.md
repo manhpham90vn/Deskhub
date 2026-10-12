@@ -7,7 +7,7 @@ checkout する必要はない。自分でコンパイルする場合は [`BUILD
 
 デスクトップのインストーラーと Android APK は
 [Releases ページ](https://github.com/manhpham90vn/Deskhub/releases) から入手できる。
-モバイルの beta は TestFlight または Google Play でも配布している。
+Android 版は Google Play でも、iOS の beta は TestFlight で配布している。
 
 本書は [`INSTALL.md`](INSTALL.md) の翻訳。食い違いがある場合は英語版が正文。
 
@@ -19,7 +19,7 @@ checkout する必要はない。自分でコンパイルする場合は [`BUILD
 | 🐧 Fedora（Workstation と KDE spin） | `deskhub-v*-x86_64.rpm` | `sudo dnf install ./deskhub-v*-x86_64.rpm` |
 | 🐧 openSUSE Tumbleweed | `deskhub-v*-x86_64.rpm` | `sudo zypper install ./deskhub-v*-x86_64.rpm` |
 | 🐧 Arch およびその他のディストリビューション | `deskhub-v*-linux-x86_64` | `chmod +x deskhub-v*-linux-x86_64 && ./deskhub-v*-linux-x86_64` |
-| 🤖 Android | `deskhub-v*-android.apk` | apk をインストール、または Play の beta に参加 |
+| 🤖 Android | `deskhub-v*-android.apk` | apk をインストール、または [Google Play](https://play.google.com/store/apps/details?id=com.manhpham.deskhub) から |
 | 📱 iOS | — | [TestFlight](https://testflight.apple.com/join/7qY7wgpd) |
 
 terminal からの操作やスクリプトには `deskhub-cli` も使える。Windows と Linux では、
@@ -260,16 +260,9 @@ Deskhub には **Android 8.0** 以降が必要である。host としては view
 （またはその逆に）インストールできないと Android に拒否された場合は、先にもう一方を
 アンインストールする。その key も削除されるため、各 host で改めて許可してもらう必要がある。
 
-**Play の beta** —— 3 段階で、いずれも端末の Play Store と**同じ Google アカウント**を
-使用する。
-
-1. テスターのグループに参加する: [groups.google.com/g/deskhub-test](https://groups.google.com/g/deskhub-test)
-2. テスターとして登録する: [play.google.com/apps/testing/com.manhpham.deskhub](https://play.google.com/apps/testing/com.manhpham.deskhub)
-3. インストールする（Play の同期に数分かかる）: [play.google.com/store/apps/details?id=com.manhpham.deskhub](https://play.google.com/store/apps/details?id=com.manhpham.deskhub)
-
-beta は **14 日以上**端末に残しておいてほしい。app を一般公開するために Google が求めて
-いる条件である。Play の beta は Releases の apk より遅れることがある。各 release はまず
-Google Play の internal track に入り、promote されて初めて beta に届く。
+**Google Play** —— [play.google.com/store/apps/details?id=com.manhpham.deskhub](https://play.google.com/store/apps/details?id=com.manhpham.deskhub)
+からインストールする。Google Play 版は Releases の apk より遅れることがある。各 release は
+まず Google Play の internal track に入り、promote されて初めてストアに届く。
 
 ## 📱 iOS
 
