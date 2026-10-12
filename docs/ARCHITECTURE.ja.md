@@ -807,6 +807,15 @@ scaling の 2 つの判定とともに実行する（共有 runner には時間�
   累積を行い、同じ frame を 4.0 ms で処理する。また swscale のバイリニア 1 タップでは
   なく、正しいアンチエイリアス結果が得られる。frame 全体の NVENC のコストはおよそ 5 ms
   であるため、60 fps には余裕がある。
+- **NVENC の bitstream buffer は、それと一緒に送った frame に対してのみ lock する。**
+  `nvEncLockBitstream` はその buffer を使う encode が完了するまで driver 内部でブロック
+  し、背後に frame のない buffer は永遠に完了しない。Windows の encoder は出力 buffer を
+  1 つだけ持つ同期動作であり、`nvEncEncodePicture` が成功するたびに buffer は即座に読み
+  出されるため、stream 終端（EOS）フラグを送る時点で未処理のものは残っていない。その
+  フラグの後に再度 lock すると、NVIDIA 機で共有を停止するたびに UI thread が永久にハング
+  していた。そのため `Finish` は EOS を送り、encoder が frame を保留している
+  （`NV_ENC_ERR_NEED_MORE_INPUT`）場合に限って buffer を読む。Linux の encoder は EOS の
+  後に lock すること自体がない。
 - **性能値は release build から得たものにのみ意味がある。** `make build-linux` と
   `make run-linux` は `x64-debug` preset を configure する。これは `-O0` であり、encode
   の経路は現在 `core/` 内のピクセル演算である。同じ frame の処理時間は、この構成では

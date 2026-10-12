@@ -681,6 +681,13 @@ runner 上与 base commit 的 A/B 结果（偏移仅作为警告，不导致失�
   每个源像素一次 32 位 load，使用整数累加，同一 frame 实测 4.0 ms，并给出正确的抗锯齿
   结果，而非 swscale 采用的双线性单点采样。整帧 NVENC 的开销约为 5 ms，因此 60 fps 仍有
   余量。
+- **NVENC 的 bitstream buffer 只会为随它一起提交的那一帧加锁。** `nvEncLockBitstream`
+  会在驱动内部阻塞，直到占用该 buffer 的那次 encode 完成；而背后没有任何一帧的 buffer
+  永远不会完成。Windows encoder 以同步方式运行且只有一个输出 buffer，因此每次
+  `nvEncEncodePicture` 成功后 buffer 立即被读空，发送流结束（EOS）标志时已无任何待处理
+  项；在该标志之后再次加锁，曾让 NVIDIA 机器上每次停止共享时的 UI 线程永久挂起。因此
+  `Finish` 发送 EOS 后，只有在 encoder 扣留了一帧（`NV_ENC_ERR_NEED_MORE_INPUT`）时才
+  读取 buffer；Linux encoder 则在 EOS 之后根本不加锁。
 - **性能数据只有来自 release 构建才有意义。** `make build-linux` 与 `make run-linux`
   配置的是 `x64-debug` preset，即 `-O0`，而 encode 路径现已是 `core/` 中的像素运算。同
   一帧在该配置下约需 19 ms，而 `make release-linux` 构建的版本约需 5 ms。基于 debug

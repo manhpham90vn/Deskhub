@@ -799,6 +799,14 @@ coverage của core.
   lần load 32-bit, cộng dồn bằng số nguyên, đo được 4,0 ms cho cùng frame, và cho kết quả
   khử răng cưa đúng thay vì phép lấy mẫu bilinear một tap của swscale. Chi phí NVENC cho cả
   frame vào khoảng 5 ms, nên 60 fps vẫn còn dư địa.
+- **Buffer bitstream của NVENC chỉ được khóa cho đúng ảnh đã gửi kèm nó.**
+  `nvEncLockBitstream` chặn bên trong driver cho tới khi lần encode sở hữu buffer đó hoàn
+  tất, mà một buffer không có ảnh nào phía sau thì không bao giờ hoàn tất. Encoder Windows
+  chạy đồng bộ với một buffer đầu ra duy nhất, nên mỗi lần `nvEncEncodePicture` thành công
+  buffer được đọc ngay và không còn gì tồn đọng khi cờ kết thúc luồng (EOS) được gửi; khóa
+  lại buffer sau cờ đó từng làm luồng UI treo vĩnh viễn mỗi khi dừng chia sẻ trên máy
+  NVIDIA. Vì vậy `Finish` gửi EOS và chỉ đọc buffer khi encoder đang giữ lại một frame
+  (`NV_ENC_ERR_NEED_MORE_INPUT`); encoder Linux thậm chí không bao giờ khóa sau EOS.
 - **Số liệu hiệu năng chỉ có ý nghĩa khi lấy từ bản release.** `make build-linux` và
   `make run-linux` cấu hình preset `x64-debug`, tức `-O0`, trong khi đường encode hiện là
   phép tính trên pixel nằm trong `core/`. Cùng một frame tốn khoảng 19 ms ở đó so với

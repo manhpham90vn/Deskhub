@@ -32,6 +32,7 @@ struct NvencEncoder::Impl {
     NV_ENC_CONFIG encCfg{};
     NV_ENC_INITIALIZE_PARAMS initParams{};
     bool loggedZeroReorder = false;
+    bool outputPending = false;
     uint64_t frameCount = 0;
     uint64_t totalBytes = 0;
 
@@ -246,7 +247,9 @@ struct NvencEncoder::Impl {
         bool ok = true;
         if (s == NV_ENC_SUCCESS) {
             ok = WriteOutput();
-        } else if (s != NV_ENC_ERR_NEED_MORE_INPUT) {
+        } else if (s == NV_ENC_ERR_NEED_MORE_INPUT) {
+            outputPending = true;
+        } else {
             ok = Fail("EncodePicture", s);
         }
 
@@ -259,6 +262,7 @@ struct NvencEncoder::Impl {
         lb.version = NV_ENC_LOCK_BITSTREAM_VER;
         lb.outputBitstream = bitstream;
         NVENCSTATUS s = nv.nvEncLockBitstream(enc, &lb);
+        outputPending = false;
         if (s != NV_ENC_SUCCESS) return Fail("LockBitstream", s);
 
         const bool keyframe = (lb.pictureType == NV_ENC_PIC_TYPE_IDR);
@@ -298,7 +302,8 @@ struct NvencEncoder::Impl {
         NV_ENC_PIC_PARAMS eos{};
         eos.version = NV_ENC_PIC_PARAMS_VER;
         eos.encodePicFlags = NV_ENC_PIC_FLAG_EOS;
-        if (nv.nvEncEncodePicture(enc, &eos) == NV_ENC_SUCCESS) WriteOutput();
+        const NVENCSTATUS flushed = nv.nvEncEncodePicture(enc, &eos);
+        if (flushed == NV_ENC_SUCCESS && outputPending) WriteOutput();
         if (out) std::fflush(out);
         LOGI("[NVENC] Encoded %llu frame, %.2f MB.",
             (unsigned long long)frameCount, totalBytes / 1e6);

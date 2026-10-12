@@ -804,6 +804,15 @@ line.
   this shape: one 32-bit load per source pixel, integer accumulation, 4.0 ms for the
   same frame, and correct antialiasing rather than the bilinear tap swscale was giving.
   Whole-frame NVENC cost lands at ~5 ms, so 60 fps has headroom.
+- **NVENC's bitstream buffer is locked only for a picture that was submitted with it**:
+  `nvEncLockBitstream` blocks inside the driver until the encode that owns that buffer
+  completes, and a buffer with no picture behind it never completes. The Windows encoder
+  runs synchronously with one output buffer, so every successful `nvEncEncodePicture` is
+  drained at once and nothing is outstanding by the time the end-of-stream flag is sent;
+  locking the buffer again after that flag hung the UI thread for good whenever sharing
+  stopped on an NVIDIA machine. `Finish` therefore sends EOS and reads the buffer only
+  when the encoder has held a frame back (`NV_ENC_ERR_NEED_MORE_INPUT`); the Linux
+  encoder never locks after EOS at all.
 - **Performance numbers only mean anything from a release build**: `make build-linux`
   and `make run-linux` configure the `x64-debug` preset, which is `-O0`, and the encode
   path is now pixel arithmetic in `core/`. The same frame costs ~19 ms there against
