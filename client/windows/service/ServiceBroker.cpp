@@ -262,8 +262,9 @@ void ServeHost(HANDLE pipeHandle) {
     }
     const std::wstring image = ProcessImagePath(host.get());
     if (!SamePath(image, ExpectedHostImage())) {
-        LOGW("[Service] Refused process %lu: it is not the Deskhub.exe installed beside this "
-             "service (%ls).",
+        LOGW(
+            "[Service] Refused process %lu: it is not the Deskhub.exe installed beside this "
+            "service (%ls).",
             pid, image.c_str());
         return;
     }
@@ -362,8 +363,9 @@ int RunSecureDesktopService() {
     std::wstring name = kSecureDesktopServiceName;
     SERVICE_TABLE_ENTRYW table[] = {{name.data(), ServiceMain}, {nullptr, nullptr}};
     if (StartServiceCtrlDispatcherW(table)) return 0;
-    LOGE("DeskhubService.exe is a Windows service: install it with --install from an "
-         "elevated prompt, or let the DeskHub installer do it (error %lu).",
+    LOGE(
+        "DeskhubService.exe is a Windows service: install it with --install from an "
+        "elevated prompt, or let the DeskHub installer do it (error %lu).",
         GetLastError());
     return 1;
 }

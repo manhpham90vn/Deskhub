@@ -55,18 +55,21 @@ bool SecureDesktopLink::ConnectToService() {
     if (pipe == INVALID_HANDLE_VALUE) {
         const DWORD error = GetLastError();
         if (error == ERROR_FILE_NOT_FOUND)
-            LOGW("[Secure] The DeskhubSecureDesktop service is not running: UAC prompts and the "
-                 "lock screen will freeze for viewers. Reinstall DeskHub to add the service.");
+            LOGW(
+                "[Secure] The DeskhubSecureDesktop service is not running: UAC prompts and the "
+                "lock screen will freeze for viewers. Reinstall DeskHub to add the service.");
         else
-            LOGW("[Secure] Could not reach the DeskhubSecureDesktop service (error %lu): UAC "
-                 "prompts and the lock screen will freeze for viewers.",
+            LOGW(
+                "[Secure] Could not reach the DeskhubSecureDesktop service (error %lu): UAC "
+                "prompts and the lock screen will freeze for viewers.",
                 error);
         return false;
     }
     control_.Reset(pipe);
     if (IsOurService(pipe)) return true;
-    LOGW("[Secure] %ls is not served by the DeskhubService.exe installed beside Deskhub.exe; "
-         "not using it.",
+    LOGW(
+        "[Secure] %ls is not served by the DeskhubService.exe installed beside Deskhub.exe; "
+        "not using it.",
         kSecureDesktopPipeName);
     control_.Reset(INVALID_HANDLE_VALUE);
     return false;
@@ -78,8 +81,9 @@ bool SecureDesktopLink::ReceiveAgentPipe() {
     size_t got = 0;
     while (bytes.size() < kHandleBytes) {
         if (!control_.ReadSome(std::span<uint8_t>(buf, kHandleBytes - bytes.size()), got)) {
-            LOGW("[Secure] The service refused this Deskhub.exe: it only serves the copy "
-                 "installed beside it.");
+            LOGW(
+                "[Secure] The service refused this Deskhub.exe: it only serves the copy "
+                "installed beside it.");
             return false;
         }
         bytes.insert(bytes.end(), buf, buf + got);

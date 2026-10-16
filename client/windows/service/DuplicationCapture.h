@@ -14,7 +14,9 @@
 
 class DuplicationCapture {
 public:
-    enum class Result { Frame, Unchanged, Lost };
+    enum class Result { Frame,
+        Unchanged,
+        Lost };
 
     bool Open(const RECT& monitorRect);
     void Close();
