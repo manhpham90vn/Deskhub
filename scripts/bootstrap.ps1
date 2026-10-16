@@ -6,6 +6,8 @@ if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
     throw "winget not found. Install 'App Installer' from Microsoft Store, then re-run."
 }
 
+$WingetAlreadyInstalled = -1978335189
+
 function Install-IfMissing([string]$Cmd, [string]$WingetId, [string]$Label) {
     if (Get-Command $Cmd -ErrorAction SilentlyContinue) {
         Write-Host "[ok]      $Label ($((Get-Command $Cmd).Source))"
@@ -13,7 +15,20 @@ function Install-IfMissing([string]$Cmd, [string]$WingetId, [string]$Label) {
     }
     Write-Host "[install] $Label ($WingetId)..."
     & winget install --id $WingetId --exact --accept-source-agreements --accept-package-agreements
+    if ($LASTEXITCODE -eq $WingetAlreadyInstalled) {
+        Write-Host "[ok]      $Label is installed but not on this terminal's PATH - open a new terminal."
+        return $true
+    }
     if ($LASTEXITCODE -ne 0) { throw "winget failed installing $WingetId (exit $LASTEXITCODE)" }
+    return $true
+}
+
+function Add-ToUserPath([string]$Dir) {
+    $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+    $entries = @($userPath -split ';' | Where-Object { $_ })
+    $normalized = $entries | ForEach-Object { $_.TrimEnd('\') }
+    if ($normalized -contains $Dir.TrimEnd('\')) { return $false }
+    [Environment]::SetEnvironmentVariable('Path', (($entries + $Dir) -join ';'), 'User')
     return $true
 }
 
@@ -66,7 +81,10 @@ if ($nasmOnPath) {
 } elseif (Test-Path $nasmExe) {
     $env:PATH = "$nasmDir;$env:PATH"
     Write-Host "[ok]      NASM (assembles BoringSSL) ($nasmExe)"
-    Write-Host "[action]  Add '$nasmDir' to your PATH - the NASM installer does not."
+    if (Add-ToUserPath $nasmDir) {
+        Write-Host "[install] Added '$nasmDir' to your user PATH - the NASM installer does not."
+        $restartNote = $true
+    }
 } else {
     Write-Host "[action]  nasm not found after install - 'build-quiche.sh windows' will fail without it."
 }

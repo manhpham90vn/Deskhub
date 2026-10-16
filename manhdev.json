@@ -64,5 +64,37 @@
       "command": "sudo install -d /etc/apt/keyrings\ncurl -fsSL https://manhpham90vn.github.io/Deskhub/apt/deskhub.gpg | sudo tee /etc/apt/keyrings/deskhub.gpg >/dev/null\necho \"deb [arch=amd64 signed-by=/etc/apt/keyrings/deskhub.gpg] https://manhpham90vn.github.io/Deskhub/apt stable main\" | sudo tee /etc/apt/sources.list.d/deskhub.list\nsudo apt update && sudo apt install deskhub"
     }
   ],
-  "version": "v9.0.2"
+  "version": "v9.0.2",
+  "translations": {
+    "vi": {
+      "tagline": "Remote desktop open source cho mọi nền tảng bạn đang dùng.",
+      "description": "Xem và điều khiển máy tính từ một thiết bị khác qua mạng LAN hoặc VPN của chính bạn. Một core C++20 duy nhất chạy native trên Windows, macOS, Linux, Android và iOS, đủ mượt để làm việc lẫn chơi game.",
+      "overview": [
+        "Deskhub biến bất kỳ máy tính nào của bạn thành một host có thể truy cập từ thiết bị khác. Mở app trên máy cần điều khiển, bấm bắt đầu chia sẻ, rồi pair client bằng cách quét QR code. Toàn bộ dữ liệu đi qua mạng LAN hoặc VPN của bạn trong một session QUIC/TLS, không có relay server và cũng không cần tài khoản nào ở giữa.",
+        "Mọi bản build đều dùng chung một core C++20, nên client trên Windows, macOS, Linux, Android và iOS hoạt động giống hệt nhau. Video được encode bằng GPU qua NVENC, VideoToolbox hoặc MediaCodec, lên tới 240 fps; relative mouse và DirectInput giúp chơi game được; âm thanh dùng Opus 64 kbps. Ngoài màn hình, Deskhub còn chạy được shell command và truyền file, kèm một CLI để bạn script các session giống như dùng SSH."
+      ],
+      "features": [
+        { "title": "Streaming tăng tốc bằng GPU", "body": "Lên tới 240 fps với NVENC, VideoToolbox và MediaCodec." },
+        { "title": "Mã hoá end-to-end", "body": "Session chạy trên QUIC/TLS, pair bằng QR code." },
+        { "title": "Không chỉ có màn hình", "body": "Chia sẻ màn hình, chạy shell command và truyền file." },
+        { "title": "Chơi game được", "body": "Relative mouse, bàn phím, DirectInput và âm thanh Opus 64 kbps." },
+        { "title": "Có sẵn CLI", "body": "Script các session hoặc dùng như SSH từ bất kỳ terminal nào." }
+      ],
+      "downloads": [
+        { "sub": "Bộ cài · .exe" },
+        { "sub": "Disk image · .dmg" },
+        {},
+        {},
+        { "sub": "Cài trực tiếp · .apk" },
+        { "sub": "Miễn phí · Android 8.0+" },
+        { "sub": "Bản beta trên TestFlight" }
+      ],
+      "screenshot": { "alt": "Trang Host của Deskhub trên macOS, hiện các địa chỉ mạng và nút Start sharing" },
+      "gallery": [
+        { "alt": "Trang Client của Deskhub trên macOS: ô địa chỉ host và UDP port, các ô chọn remote desktop, điều khiển và terminal, nút Connect và danh sách địa chỉ gần đây", "caption": "Client: nhập địa chỉ, dán link QR của host, hoặc chọn host gần đây hay host đã tin cậy." },
+        { "alt": "Trang Devices của Deskhub trên macOS: fingerprint key của máy này, các client key được phép kết nối và các host đã tin cậy", "caption": "Devices: các key được phép kết nối khi máy là host, và các host bạn tin cậy khi là client." },
+        { "alt": "Trang Settings của Deskhub trên macOS: tên thiết bị, fps, bitrate và chất lượng, UDP port, các công tắc điều khiển, clipboard và giữ máy không sleep, cùng trạng thái quyền của macOS", "caption": "Settings: fps, bitrate, chất lượng, port và trạng thái hiện tại các quyền của macOS." }
+      ]
+    }
+  }
 }
