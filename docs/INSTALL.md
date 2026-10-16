@@ -32,10 +32,13 @@ upgrade command when you want a newer release.
 
 ## 🪟 Windows
 
-Download `deskhub-v*-windows-setup.exe` and run it. Setup installs DeskHub for your
-Windows user, adds it to the Start Menu, and creates a Desktop shortcut by default.
-You can launch DeskHub at the end of setup. No account or background service is needed.
-The separate `deskhub-v*-windows.exe` file remains available for portable use.
+Download `deskhub-v*-windows-setup.exe` and run it. Setup asks for administrator rights,
+installs DeskHub for every user under `Program Files`, adds it to the Start Menu, and
+creates a Desktop shortcut by default. You can launch DeskHub at the end of setup. No
+account is needed. A DeskHub that an earlier version installed for your user alone is
+removed first, and *Start Deskhub when you log in* is pointed at the new location; your
+settings and keys stay where they are. The separate `deskhub-v*-windows.exe` file remains
+available for portable use.
 
 Or let winget install the same setup package and keep it current — `winget upgrade` brings
 each new release and `winget uninstall ManhPham.Deskhub` removes it:
@@ -48,16 +51,22 @@ If you installed the earlier portable winget package, run
 `winget uninstall ManhPham.Deskhub` once, then install it again. Your settings and keys
 in `%USERPROFILE%\.deskhub` are kept.
 
-Two things to expect:
+Three things to expect:
 
 - **Administrator, every time it starts.** Windows shows a UAC prompt on each launch,
   because injecting mouse and keyboard into elevated windows is not possible without it.
   With *Start Deskhub when you log in* turned on, it starts at sign-in as an elevated
   logon task, without the prompt.
 - **A Windows Firewall rule**, added by the app itself the first time you share.
+- **A system service, *DeskHub Secure Desktop***, running as LocalSystem. It does nothing
+  until DeskHub shares a screen. Then, when Windows switches to its secure desktop — a
+  UAC prompt from an installer, the lock screen, Ctrl+Alt+Del — viewers keep seeing the
+  screen and can click and type there, so they can answer a UAC prompt for you, and
+  anyone who knows your password can unlock the machine. The portable exe has no
+  service: with it those screens freeze for viewers until they close.
 
-Uninstall DeskHub from Windows Settings or with `winget uninstall ManhPham.Deskhub`.
-For the portable version, delete its exe. Settings and keys remain in
+Uninstall DeskHub from Windows Settings or with `winget uninstall ManhPham.Deskhub`;
+the service goes with it. For the portable version, delete its exe. Settings and keys remain in
 `%USERPROFILE%\.deskhub` until you remove that folder too, and files other machines sent
 you stay in `%USERPROFILE%\Deskhub` (or the folder you picked) until you delete them.
 

@@ -33,6 +33,7 @@
 #include "MainFrame.h"
 
 #include "AccessRequestListener.h"
+#include "secure/SecureDesktopStatus.h"
 #include "SourcePickerDialog.h"
 #include "FileSendWindow.h"
 #include "TerminalWindow.h"
@@ -778,6 +779,7 @@ private:
     bool filesRequested_ = false;
     uint16_t sharePort_ = 0;
     std::string shareBindWarning_;
+    std::string shareScreenNote_;
     bool shareViewOnly_ = false;
     std::vector<ui::HostRow> hostRows_;
     std::vector<ui::RecentDevice> recent_;
@@ -2130,6 +2132,7 @@ void MainFrame::ApplySharingBanner() {
     banner.port = sharePort_;
     banner.viewOnly = shareViewOnly_;
     banner.bindWarning = shareBindWarning_;
+    banner.screenNote = shareScreenNote_;
     ApplyHostState(HostShareState::kSharing, ToWx(share_.BannerText(banner)));
 }
 
@@ -2167,6 +2170,7 @@ void MainFrame::OnHostStarted(bool started, const std::string& error, uint16_t p
     sharePort_ = port;
     shareViewOnly_ = !allowInput;
     shareBindWarning_ = share_.sharingHost().BindWarning();
+    shareScreenNote_ = SecureDesktopMissing() ? ui::kSecureDesktopMissingNote : "";
     if (terminalRequested_) share_.StartTerminalShare();
     if (filesRequested_) StartFileShare();
     ApplySharingBanner();
@@ -2200,6 +2204,7 @@ void MainFrame::StopHosting() {
     filesRequested_ = false;
     pendingClipboard_.reset();
     shareBindWarning_.clear();
+    shareScreenNote_.clear();
     shareViewOnly_ = false;
     hostStatus_.clear();
     ShowIdleHostState();

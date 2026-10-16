@@ -145,7 +145,7 @@ so the controls stay familiar as you move between a Mac, PC, phone or tablet. A 
 
 | ⚡ Fast | 📦 Easy install | 🎛️ Simple |
 | ------ | ---------- | --------- |
-| Streams at 60 fps by default, up to 240 fps on supported hardware. The video path uses GPU memory where available. | Install with a package manager or download a release. No account or background service is required. | **Share** a display or **Connect** to an IP. Desktops can also share a **shell**, and every host — phones included — can receive **files**. Phones share their screens in view-only mode. |
+| Streams at 60 fps by default, up to 240 fps on supported hardware. The video path uses GPU memory where available. | Install with a package manager or download a release. No account is required. | **Share** a display or **Connect** to an IP. Desktops can also share a **shell**, and every host — phones included — can receive **files**. Phones share their screens in view-only mode. |
 
 Sessions are encrypted end to end over **QUIC/TLS**, and access works like SSH: every
 machine has one key, and a client gets in only if the host's owner has let that key in —

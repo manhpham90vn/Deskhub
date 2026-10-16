@@ -104,7 +104,7 @@ Logic mới trong `core/` cần có test trong thư mục con tương ứng ở 
 
 | Target | Sản phẩm | Yêu cầu |
 | --- | --- | --- |
-| `make build-windows` | một file `Deskhub.exe` | Windows và MSVC |
+| `make build-windows` | `Deskhub.exe` và, nằm cạnh nó, `DeskhubService.exe` | Windows và MSVC |
 | `make build-macos` | app macOS | macOS và Xcode |
 | `make build-linux` | một binary `deskhub` | Ubuntu và các package `-dev` |
 | `make build-ios` | app iOS cho Simulator | macOS, Xcode và một Simulator runtime |
@@ -320,7 +320,11 @@ Connect API key để notarize: `ASC_KEY_P8` (đường dẫn tới file `.p8`),
 `ASC_ISSUER_ID`. Nó dừng trước khi build nếu thiếu bất kỳ biến nào trong ba biến đó.
 
 Workflow release cũng tạo bộ cài Inno Setup cho app và CLI trên Windows từ
-`packaging/windows/`. Các bản Windows portable và app Linux vẫn là file đơn lẻ.
+`packaging/windows/`. Bộ cài của app cần quyền administrator: nó cài vào `Program Files`
+cho mọi người dùng, gỡ bản cài theo từng người dùng trước đó, và chạy
+`DeskhubService.exe --install` để đăng ký service *DeskHub Secure Desktop* (`--uninstall`
+khi gỡ cài đặt). Các bản Windows portable và app Linux vẫn là file đơn lẻ; app portable
+không có service, nên không thể cho viewer thấy hộp thoại UAC hay màn hình khoá.
 
 Mọi gói đều kèm `THIRD_PARTY_NOTICES.md` và các văn bản giấy phép trong `licenses/` áp dụng
 cho nó: `.deb` và `.rpm` của app và CLI (dưới `/usr/share/doc/<package>/`, các văn bản —
@@ -379,6 +383,10 @@ Mỗi job cần thiết lập một lần trước tag đầu tiên chạy nó:
   ```
 
   Làm lại với `ManhPham.DeskhubCLI` và URL `deskhub-cli-vX.Y.Z-windows.exe`.
+
+  Bộ cài của app chuyển sang cài cho toàn máy từ bản release thêm service secure desktop.
+  Nếu manifest `ManhPham.Deskhub` trong `winget-pkgs` vẫn ghi `Scope: user`, hãy sửa tay
+  thành `machine` trong pull request mà komac mở.
 - **Homebrew** — tạo repository public `manhpham90vn/homebrew-tap`; job sẽ tự điền nội dung.
 - **apt** — tạo signing key một lần, lưu file đó làm `APT_GPG_PRIVATE_KEY` và giữ một bản
   backup offline. Mọi người dùng đều trust key này: thay key sẽ làm hỏng `apt update` của họ.

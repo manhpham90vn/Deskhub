@@ -64,25 +64,32 @@ jobs:
           & 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe' "/DAppVersion=$version" packaging/windows/Deskhub.iss
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-      - name: Verify Windows installer shortcuts and uninstall
+      - name: Verify Windows installer shortcuts, service and uninstall
         shell: pwsh
         run: |
           $setup = (Resolve-Path 'out/installer/DeskHub-Setup.exe').Path
-          $installed = Join-Path $env:LOCALAPPDATA 'Programs\DeskHub\Deskhub.exe'
-          $shortcut = Join-Path ([Environment]::GetFolderPath('Programs')) 'DeskHub.lnk'
-          $desktopShortcut = Join-Path ([Environment]::GetFolderPath('Desktop')) 'DeskHub.lnk'
+          $installed = Join-Path $env:ProgramFiles 'DeskHub\Deskhub.exe'
+          $shortcut = Join-Path ([Environment]::GetFolderPath('CommonPrograms')) 'DeskHub.lnk'
+          $desktopShortcut = Join-Path ([Environment]::GetFolderPath('CommonDesktopDirectory')) 'DeskHub.lnk'
           $install = Start-Process $setup -ArgumentList '/VERYSILENT', '/NORESTART' -Wait -PassThru
           if ($install.ExitCode -ne 0) { throw "Installer exited with $($install.ExitCode)" }
           if (-not (Test-Path $installed) -or -not (Test-Path $shortcut) -or -not (Test-Path $desktopShortcut)) {
             throw 'Installer did not install the app and both shortcuts'
           }
-          foreach ($notice in 'THIRD_PARTY_NOTICES.md', 'licenses\wxWindows.txt', 'licenses\BSD-2-Clause-quiche.txt') {
-            if (-not (Test-Path (Join-Path (Split-Path $installed) $notice))) { throw "Installer did not install $notice" }
+          foreach ($file in 'DeskhubService.exe', 'THIRD_PARTY_NOTICES.md', 'licenses\wxWindows.txt', 'licenses\BSD-2-Clause-quiche.txt') {
+            if (-not (Test-Path (Join-Path (Split-Path $installed) $file))) { throw "Installer did not install $file" }
+          }
+          $service = Get-Service -Name DeskhubSecureDesktop -ErrorAction SilentlyContinue
+          if (-not $service -or $service.Status -ne 'Running' -or $service.StartType -ne 'Automatic') {
+            throw 'Installer did not register and start the DeskhubSecureDesktop service'
           }
           $uninstall = Start-Process (Join-Path (Split-Path $installed) 'unins000.exe') -ArgumentList '/VERYSILENT', '/NORESTART' -Wait -PassThru
           if ($uninstall.ExitCode -ne 0) { throw "Uninstaller exited with $($uninstall.ExitCode)" }
           if ((Test-Path $shortcut) -or (Test-Path $desktopShortcut)) {
             throw 'Uninstaller left a shortcut behind'
+          }
+          if (Get-Service -Name DeskhubSecureDesktop -ErrorAction SilentlyContinue) {
+            throw 'Uninstaller left the DeskhubSecureDesktop service behind'
           }
 
       - name: Upload installer

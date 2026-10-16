@@ -3,6 +3,7 @@
 #define NOMINMAX
 #include <windows.h>
 #include <cstdint>
+#include <functional>
 
 #include "deskhub/input/InputApplier.h"
 #include "deskhub/protocol/Wire.h"
@@ -11,7 +12,10 @@
 class InputInjector : public deskhub::InputApplier<InputInjector, int32_t>,
                       public deskhubp::LocalInputGate<InputInjector> {
 public:
+    using SecureRoute = std::function<bool(const INPUT&)>;
+
     bool Init(HMONITOR monitor);
+    void SetSecureRoute(SecureRoute route);
 
     void Apply(const deskhub::InputEvent& e);
 
@@ -27,5 +31,8 @@ public:
     void OnLocalUserIdle();
 
 private:
+    void Deliver(const INPUT& in);
+
     HMONITOR monitor_ = nullptr;
+    SecureRoute secureRoute_;
 };

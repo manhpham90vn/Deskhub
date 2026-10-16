@@ -144,7 +144,7 @@ chung xử lý protocol cho cả năm nền tảng.
 
 | ⚡ Nhanh | 📦 Dễ cài đặt | 🎛️ Đơn giản |
 | ------ | ---------- | --------- |
-| Mặc định stream ở 60 fps, tối đa 240 fps trên phần cứng phù hợp. Đường xử lý video dùng bộ nhớ GPU khi có thể. | Cài qua package manager hoặc tải bản release. Không cần tài khoản hay background service. | **Share** một display hoặc **Connect** tới một IP. Máy desktop còn share được **shell**, và mọi host — kể cả điện thoại — đều nhận được **file**; điện thoại share màn hình ở chế độ view-only. |
+| Mặc định stream ở 60 fps, tối đa 240 fps trên phần cứng phù hợp. Đường xử lý video dùng bộ nhớ GPU khi có thể. | Cài qua package manager hoặc tải bản release. Không cần tài khoản. | **Share** một display hoặc **Connect** tới một IP. Máy desktop còn share được **shell**, và mọi host — kể cả điện thoại — đều nhận được **file**; điện thoại share màn hình ở chế độ view-only. |
 
 Session được encrypt end-to-end trên **QUIC/TLS**, và quyền truy cập hoạt động như SSH: mỗi
 máy có một key, và client chỉ được vào khi chủ host đã cho key đó vào — bằng cách approve

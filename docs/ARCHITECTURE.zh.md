@@ -256,6 +256,25 @@ HostEngine（每个 app 一个实例，持有 SessionTransport）
   由此产生的丢失调整 encoder。
 - Input：host 优先。当机器前的用户操作自己的 mouse 时，`LocalInputMonitor` 暂停 remote
   input；同一时刻只有一个 viewer 进行操作。
+- Windows secure desktop：当 UAC 提示或锁屏把 input desktop 从 `Default` 夺走时，Windows
+  Graphics Capture 不再交付 frame，app 发出的 `SendInput` 也不再生效。此时每个 source 切换到
+  一个 SYSTEM agent：
+
+  ```
+  Deskhub.exe (user, elevated) ── \\.\pipe\DeskhubSecureDesktop ──▶ DeskhubService.exe
+       ▲                                               (LocalSystem, session 0)
+       │ private pipe, its handle duplicated into          │ CreateProcessAsUser,
+       │ Deskhub.exe by the service                        ▼ SYSTEM token, user session
+       └──────────────────────── DeskhubService.exe --agent
+                                  follows the input desktop; DXGI duplication +
+                                  pointer compositing → Frame; Input → SendInput
+  ```
+
+  `SecureDesktopLink`（每个 source 一个）发送带有该显示器矩形的 `Watch`，并接收
+  `DesktopState` 与 BGRA `Frame` message（`core/session/host/SecureDesktopWire`）。在 agent
+  报告处于 secure desktop 期间，WGC frame 被丢弃，agent 的 frame 被上传到一个 texture，并经由
+  同一条准入、scaler 与 encoder 路径处理；`InputInjector` 将每个 `INPUT` 转发给 agent，而不是
+  调用 `SendInput`。每次切换都会强制一个 keyframe。
 - Shell：每个 shell 对应一个 PTY（Windows 为 `ConPTY`，其他平台为 `forkpty`），最多 8
   个。连接中断时 shell 被分离，PTY 一直保留到 shell 进程退出或 shell 被关闭，不设时间
   限制。任何已准入的 client 均可列出被保留的 shell（`TermList`/`TermListAck`）、按 id
@@ -416,6 +435,17 @@ runner 上与 base commit 的 A/B 结果（偏移仅作为警告，不导致失�
 构建的负载下 integration 数据，以及 core 的 coverage 行。
 
 ## 9. 需要记录的设计决策
+
+- **secure desktop 需要 SYSTEM，因此由一个 service 在用户的 session 中启动 agent**：
+  `requireAdministrator` 并不够 —— UAC 与锁屏所运行的 `Winlogon` desktop 只能由附着于其上的
+  SYSTEM 进程打开、捕获并向其输入，而 WGC 根本无法捕获它，因此 agent 使用 DXGI desktop
+  duplication 并自行绘制指针。service 位于 session 0，无法访问用户的 desktop，因此它复制自己的
+  token、设置 session id，并在那里启动 agent。frame 以系统内存的形式穿过 pipe，因为 secure
+  desktop 变化很少，而共享的 GPU texture 将不得不跨越完整性边界；agent 将其上限设为每秒 10 个。
+  service 依据连接进程的映像路径信任 client —— 即位于其自身文件夹、在只有管理员可写的
+  `Program Files` 下的 `Deskhub.exe` —— app 也以同样方式信任服务端，因此无论是抢占 pipe 的
+  进程还是另一个提权程序，都得不到 SYSTEM agent 或 viewer 的按键。这也是安装程序改为
+  per-machine 的原因：位于 `%LOCALAPPDATA%` 中的 service binary 可能被用户运行的任何进程替换。
 
 - **只有 host 能提前结束 handshake，因此 client 留意它是如何结束的**：client 过去会为
   `AuthResult` 等待 65 秒 —— 这是批准还在一条保持的 connection 内完成时遗留下来的 —— 而

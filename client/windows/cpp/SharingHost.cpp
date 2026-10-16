@@ -27,6 +27,8 @@
 #include "encode/IVideoEncoder.h"
 #include "input/InputInjector.h"
 #include "net/Firewall.h"
+#include "secure/SecureDesktopLink.h"
+#include "secure/SecureDesktopStatus.h"
 
 #include "deskhub/control/FrameGate.h"
 #include "deskhub/control/StreamSize.h"
@@ -34,6 +36,8 @@
 #include "deskhub/session/host/SourcePipeline.h"
 
 namespace {
+
+std::atomic<bool> secureDesktopMissing{false};
 
 using WinSourceBase = deskhubp::HostSourceBase<ScreenCapture, InputInjector, IVideoEncoder>;
 
@@ -52,6 +56,66 @@ struct SourcePipeline : WinSourceBase {
     std::function<bool(uint32_t, uint32_t, uint32_t, uint32_t)> ensureEncoderFn;
 
     Microsoft::WRL::ComPtr<ID3D11Texture2D> cachedTex;
+
+    std::function<void(const FrameInfo&)> handleFrame;
+    Microsoft::WRL::ComPtr<ID3D11Texture2D> secureTex;
+    uint64_t secureFrameId = 0;
+    SecureDesktopLink secureLink;
+
+    bool EnsureSecureTexture(uint32_t width, uint32_t height) {
+        D3D11_TEXTURE2D_DESC have{};
+        if (secureTex) secureTex->GetDesc(&have);
+        if (secureTex && have.Width == width && have.Height == height) return true;
+        secureTex.Reset();
+        D3D11_TEXTURE2D_DESC d{};
+        d.Width = width;
+        d.Height = height;
+        d.MipLevels = 1;
+        d.ArraySize = 1;
+        d.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+        d.SampleDesc.Count = 1;
+        d.Usage = D3D11_USAGE_DEFAULT;
+        d.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
+        return SUCCEEDED(gpu.device->CreateTexture2D(&d, nullptr, secureTex.GetAddressOf()));
+    }
+
+    void OnSecureFrame(uint32_t width, uint32_t height, std::span<const uint8_t> bgra) {
+        if (!handleFrame || !EnsureSecureTexture(width, height)) return;
+        gpu.context->UpdateSubresource(secureTex.Get(), 0, nullptr, bgra.data(), width * 4, 0);
+        FrameInfo fi{};
+        fi.handle = secureTex.Get();
+        fi.meta.width = width;
+        fi.meta.height = height;
+        fi.meta.timestampUs = NowUs();
+        fi.meta.frameId = secureFrameId++;
+        handleFrame(fi);
+    }
+
+    void OnSecureState(bool secure) {
+        LOGI("[Host][%s] %s", name.c_str(),
+            secure ? "Secure desktop is up (UAC or lock screen) \xE2\x80\x94 streaming it through "
+                     "the DeskhubSecureDesktop service."
+                   : "Back on the normal desktop.");
+        forceIdr.store(true);
+    }
+
+    void WatchSecureDesktop() {
+        MONITORINFO mi{sizeof(MONITORINFO)};
+        if (!GetMonitorInfoW(monitor, &mi)) return;
+        deskhub::SecureDesktopWatch watch;
+        watch.sourceId = sourceId;
+        watch.left = mi.rcMonitor.left;
+        watch.top = mi.rcMonitor.top;
+        watch.width = uint32_t(mi.rcMonitor.right - mi.rcMonitor.left);
+        watch.height = uint32_t(mi.rcMonitor.bottom - mi.rcMonitor.top);
+        const bool started = secureLink.Start(
+            watch,
+            [this](uint32_t w, uint32_t h, std::span<const uint8_t> bgra) {
+                OnSecureFrame(w, h, bgra);
+            },
+            [this](bool secure) { OnSecureState(secure); });
+        if (!started) secureDesktopMissing.store(true);
+    }
 
     void ReleaseCached() {
         cachedTex.Reset();
@@ -85,12 +149,17 @@ void FireAccessRequested() {
 
 }
 
+bool SecureDesktopMissing() {
+    return secureDesktopMissing.load();
+}
+
 void SetAccessRequestedListener(std::function<void()> listener) {
     const std::lock_guard<std::mutex> lock(accessRequestedListenerMutex);
     accessRequestedListener = std::move(listener);
 }
 
 bool SharingHost::Start(const std::vector<ShareSource>& sources, const ShareOptions& opt) {
+    secureDesktopMissing.store(false);
     deskhubp::HostEngine* engine = &engine_;
     auto gpu = std::make_shared<GpuChoice>();
 
@@ -174,7 +243,7 @@ bool SharingHost::Start(const std::vector<ShareSource>& sources, const ShareOpti
             return true;
         };
 
-        auto onFrame = [p, maxDim](const FrameInfo& fi) {
+        p->handleFrame = [p, maxDim](const FrameInfo& fi) {
             p->captured.fetch_add(1, std::memory_order_relaxed);
             if (p->failed.load()) return;
 
@@ -229,17 +298,25 @@ bool SharingHost::Start(const std::vector<ShareSource>& sources, const ShareOpti
             p->EncodeTimed(encTex, p->forceIdr.exchange(false));
         };
 
+        auto onDesktopFrame = [p](const FrameInfo& fi) {
+            if (p->secureLink.Secure()) return;
+            p->handleFrame(fi);
+        };
+
         p->capture.SetDevice(p->gpu.device.Get());
         if (!p->capture.Start(uint64_t(uintptr_t(p->monitor)),
-                deskhub::media::CaptureOptions{fps, maxDim}, onFrame)) {
+                deskhub::media::CaptureOptions{fps, maxDim}, onDesktopFrame)) {
             LOGE("[Host][%s] Failed to start capture \xE2\x80\x94 skipping this source.",
                 p->name.c_str());
             p->failed.store(true);
+            return;
         }
+        p->WatchSecureDesktop();
     };
 
     policy.source.stopCapture = [](deskhubp::HostSource& st) {
         SourcePipeline& p = Pipeline(st);
+        p.secureLink.Stop();
         p.capture.Stop();
         std::lock_guard<std::mutex> lk(p.encMutex);
         if (p.encoder) p.encoder->Finish();
@@ -250,6 +327,8 @@ bool SharingHost::Start(const std::vector<ShareSource>& sources, const ShareOpti
         SourcePipeline& p = Pipeline(st);
         p.injector.SetLocalMonitor(&engine->localInput());
         p.injector.SetEnabled(p.injector.Init(p.monitor));
+        p.injector.SetSecureRoute(
+            [link = &p.secureLink](const INPUT& in) { return link->Forward(in); });
     };
 
     policy.source.retarget = [engine](deskhubp::HostSource& st) {

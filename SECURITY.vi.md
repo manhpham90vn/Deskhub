@@ -2,7 +2,7 @@
 
 # Chính sách bảo mật của Deskhub
 
-_Cập nhật lần cuối: 1 tháng 10 năm 2026_
+_Cập nhật lần cuối: 16 tháng 10 năm 2026_
 
 Đây là bản dịch của [`SECURITY.md`](SECURITY.md). Nếu hai bản có khác biệt, bản tiếng Anh
 là bản chuẩn.
@@ -207,6 +207,9 @@ nên việc thu hẹp bind không làm thu hẹp firewall; đây cũng là lý d
 có ý nghĩa. Deskhub chỉ thay thế đúng rule đó của chính nó. Rule chặn mà bạn tự tạo cho app
 được giữ nguyên, và vì Windows cho rule chặn thắng rule cho phép, host sẽ không truy cập
 được cho tới khi bạn gỡ rule đó.
+Trên Windows, trình cài đặt còn thêm một thứ nữa: service *DeskHub Secure Desktop*, giúp
+phiên share tiếp tục qua hộp thoại UAC hoặc màn hình khoá. Trong lúc bạn share, viewer thấy
+các màn hình đó và gõ được vào chúng — kể cả ô mật khẩu của màn hình khoá.
 
 ## Khả năng của kẻ tấn công trong cùng network
 
@@ -250,8 +253,9 @@ Nếu bạn tiếp tục sử dụng Deskhub ở trạng thái hiện tại, nê
       hạn, và một thiết bị đã bị deny không thể xin lại trong mười phút.
 - [ ] Ẩn mã QR ngay khi thiết bị bạn cho xem đã kết nối, và không bao giờ hiển thị mã trên
       màn hình đang share hoặc đang trình chiếu.
-- [ ] Thoát Deskhub khi không sử dụng. App không chạy như một background service, nên
-      thoát app là đóng luôn điểm truy cập. Ba setting trong *Launch & background* thay đổi
+- [ ] Thoát Deskhub khi không sử dụng. Thoát app là đóng luôn điểm truy cập: service
+      *DeskHub Secure Desktop* mà trình cài đặt Windows thêm vào không nhận gì từ network
+      và không làm gì khi app không share. Ba setting trong *Launch & background* thay đổi
       điều đó: *Start Deskhub when you log in* khởi động app ở mỗi lần đăng nhập (trên
       Windows qua một scheduled task chạy app ở quyền cao mà không có hộp thoại UAC),
       *Start sharing when Deskhub opens* sau đó share ngay, và *Keep running in the
@@ -266,6 +270,9 @@ Nếu bạn tiếp tục sử dụng Deskhub ở trạng thái hiện tại, nê
       `sudo ufw allow 47777/udp`.
 - [ ] Không để một phiên share đang chạy trên laptop mà bạn mang sang các network khác.
 - [ ] Khoá máy khi rời đi, để một session không người trông coi không bị chiếm quyền.
+      Trên Windows, viewer vẫn thấy màn hình khoá và gõ được vào đó, nên việc khoá máy chỉ
+      an toàn ngang với mật khẩu tài khoản — nếu một viewer có thể biết mật khẩu đó, hãy
+      dừng share luôn.
 - [ ] Với `deskhub-cli`, dùng `key public` để xem public key của máy này và
       `host-key public` để xem key của nó khi làm host — đó là cùng một key. Chuyển key qua
       kênh tin cậy, rồi dùng `access add --stdin` trên host và `host add … --host-key-stdin`
@@ -354,7 +361,17 @@ Không dữ liệu nào trong số này được upload; bạn có thể xoá th
   keyboard và mouse vào app khác, mà đó chính là điều khiển từ xa. Vì vậy app chạy với mọi
   thứ tài khoản người dùng của bạn truy cập được, như mọi app không sandbox khác.
 - **Windows.** App xin quyền administrator ở mỗi lần mở (xem phần trên), nên một lỗi trong
-  app là lỗi trong một tiến trình quyền cao.
+  app là lỗi trong một tiến trình quyền cao. Trình cài đặt còn đăng ký *DeskHub Secure
+  Desktop*, một service chạy dưới tài khoản LocalSystem. Named pipe của nó từ chối client
+  từ xa và network logon, chỉ nhận administrator ở mức integrity cao, và chỉ phục vụ
+  `Deskhub.exe` nằm trong cùng thư mục với nó, được kiểm tra qua đường dẫn image của tiến
+  trình kết nối; ngược lại, app chỉ nói chuyện với `DeskhubService.exe` nằm cạnh nó trong
+  session 0. Với app đó, service khởi động một agent dưới quyền SYSTEM trong session của
+  người dùng, gắn với một job sẽ kill agent khi app ngắt kết nối; agent capture secure
+  desktop và phát lại input của app ở đó, và không đọc gì khác. Cả hai binary nằm trong
+  `Program Files`, nơi chỉ administrator ghi được, nên một tiến trình chạy dưới quyền
+  người dùng không thể tráo một trong hai để chiếm quyền SYSTEM. Một lỗi trong agent vẫn là
+  lỗi trong một tiến trình SYSTEM, chỉ chạm tới được thông qua app quyền cao.
 - **Tích hợp liên tục.** Mọi pull request đều chạy ba bộ test dưới AddressSanitizer,
   UndefinedBehaviorSanitizer và ThreadSanitizer, clang-tidy, các fuzzer mô tả ở trên, CodeQL
   trên code C++, Kotlin và Swift, và một lượt quét gitleaks trên toàn bộ lịch sử Git để tìm

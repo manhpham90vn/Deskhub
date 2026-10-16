@@ -33,9 +33,10 @@ Windows 可通过 `winget`、macOS 可通过 Homebrew，Ubuntu、Kubuntu、Debia
 
 ## 🪟 Windows
 
-下载并运行 `deskhub-v*-windows-setup.exe`。安装程序会将 DeskHub 添加到开始菜单，
-默认创建桌面快捷方式，并可在安装完成后立即启动。无需账号或 background service。
-需要便携版时仍可下载 `deskhub-v*-windows.exe`。
+下载并运行 `deskhub-v*-windows-setup.exe`。安装程序会请求管理员权限，为所有用户将 DeskHub
+安装到 `Program Files` 下，添加到开始菜单，并默认创建桌面快捷方式，可在安装完成后立即启动。
+无需账号。早期版本仅为你的用户安装的 DeskHub 会先被移除，*Start Deskhub when you log in*
+也会改为指向新位置；你的设置和密钥保留在原处。需要便携版时仍可下载 `deskhub-v*-windows.exe`。
 
 也可以让 winget 安装同一个安装包并保持更新：`winget upgrade` 获取每个新 release，
 `winget uninstall ManhPham.Deskhub` 将其移除：
@@ -47,14 +48,20 @@ winget install ManhPham.Deskhub
 如果之前安装过 winget 便携版，请先运行一次 `winget uninstall ManhPham.Deskhub`，
 然后重新安装。`%USERPROFILE%\.deskhub` 中的设置和密钥会保留。
 
-需要注意两件事：
+需要注意三件事：
 
 - **每次启动都申请 Administrator。** 每次运行时 Windows 都会弹出 UAC 提示，否则无法将
   mouse 和 keyboard inject 进提权窗口。开启 *Start Deskhub when you log in* 后，它会在
   登录时作为提权的登录任务启动，不再弹出提示。
 - **添加一条 Windows Firewall 规则**，由 app 在首次 share 时自行添加。
+- **一个系统 service，*DeskHub Secure Desktop***，以 LocalSystem 运行。在 DeskHub 共享屏幕
+  之前它什么也不做。共享时，当 Windows 切换到其 secure desktop —— 安装程序弹出的 UAC 提示、
+  锁屏、Ctrl+Alt+Del —— viewer 仍能看到屏幕并可在其中点击和输入，因此他们可以替你回应 UAC
+  提示，任何知道你密码的人也可以解锁该机器。便携版 exe 没有该 service：使用它时，这些画面在
+  关闭之前对 viewer 而言是冻结的。
 
-可在 Windows 设置中卸载 DeskHub，或运行 `winget uninstall ManhPham.Deskhub`。
+可在 Windows 设置中卸载 DeskHub，或运行 `winget uninstall ManhPham.Deskhub`；
+该 service 会随之一并移除。
 便携版只需删除 exe。Settings 和 key 会保留在 `%USERPROFILE%\.deskhub`，直到删除该文件夹；
 其他机器发来的文件保留在 `%USERPROFILE%\Deskhub`（或你选择的文件夹）中，直到你删除它们。
 

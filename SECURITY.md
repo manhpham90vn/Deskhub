@@ -2,7 +2,7 @@
 
 # Deskhub Security Policy
 
-_Last updated: October 1, 2026_
+_Last updated: October 16, 2026_
 
 ## ⚠️ Read this first
 
@@ -208,6 +208,9 @@ profile, so a narrowed bind does not narrow the firewall; that convenience is al
 makes the rule above matter. Deskhub replaces only that rule of its own. A block rule
 you created for the app yourself is left alone, and because Windows lets a block rule
 win over an allow rule, the host then stays unreachable until you remove it.
+The installer adds one more thing on Windows: the *DeskHub Secure Desktop* service, which
+lets a share carry on through a UAC prompt or the lock screen. While you share, a viewer
+sees those screens and can type into them — including the lock screen's password box.
 
 ## What an attacker on the same network can do
 
@@ -251,8 +254,9 @@ If you want to keep using Deskhub as it is today, these are worth doing:
       their own, and a denied device cannot ask again for ten minutes.
 - [ ] Hide the QR code as soon as the device you showed it to is connected, and never
       show it on a screen you are sharing or presenting.
-- [ ] Quit Deskhub when you are not actively using it. It does not run as a background
-      service — quitting it closes the hole. Three settings under *Launch & background*
+- [ ] Quit Deskhub when you are not actively using it. Quitting it closes the hole: the
+      *DeskHub Secure Desktop* service the Windows installer adds accepts nothing from
+      the network and does nothing while the app is not sharing. Three settings under *Launch & background*
       change that: *Start Deskhub when you log in* launches it at every logon (on Windows
       through a scheduled task that runs it elevated without a UAC prompt),
       *Start sharing when Deskhub opens* then shares straight away, and
@@ -267,7 +271,9 @@ If you want to keep using Deskhub as it is today, these are worth doing:
       `sudo ufw allow 47777/udp`.
 - [ ] Do not leave a share running on a laptop that you carry onto other networks.
 - [ ] Lock your machine when you walk away, so an unattended session cannot be taken
-      over silently.
+      over silently. On Windows a viewer still sees the lock screen and can type into
+      it, so locking holds only as well as the account password does — if a viewer
+      might know it, stop sharing as well.
 - [ ] With `deskhub-cli`, use `key public` to display this machine's public key
       and `host-key public` to display its key as a host — they are the same key.
       Transfer it over a channel you trust, then use `access add --stdin` on the host
@@ -359,7 +365,17 @@ Nothing uploads any of this; delete the folder at any time.
   keyboard and mouse events into other apps, which is what remote control is. It
   therefore runs with everything your user account can reach, like any unsandboxed app.
 - **Windows.** The app asks for administrator rights on every launch (see above), so a
-  flaw in it is a flaw in an elevated process.
+  flaw in it is a flaw in an elevated process. The installer also registers *DeskHub
+  Secure Desktop*, a service running as LocalSystem. Its named pipe refuses remote
+  clients and the network logon, admits only administrators at high integrity, and
+  serves only the `Deskhub.exe` in its own folder, checked by the connecting process's
+  image path; the app, in turn, talks only to the `DeskhubService.exe` beside it in
+  session 0. For that app the service starts an agent as SYSTEM in the user's session,
+  tied to a job that kills it when the app disconnects; the agent captures the secure
+  desktop and replays the app's input there, and reads nothing else. Both binaries
+  live under `Program Files`, which only administrators can write, so a process running
+  as the user cannot swap one to gain SYSTEM. A flaw in the agent is still a flaw in a
+  SYSTEM process, reachable only through the elevated app.
 - **Continuous integration.** Every pull request runs the three test suites under
   AddressSanitizer, UndefinedBehaviorSanitizer and ThreadSanitizer, clang-tidy, the
   fuzzers described above, CodeQL over the C++, Kotlin and Swift code, and a gitleaks

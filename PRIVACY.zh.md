@@ -2,7 +2,7 @@
 
 # Deskhub 隐私政策
 
-_生效日期：2026 年 10 月 1 日 —— 版本 2.13_
+_生效日期：2026 年 10 月 16 日 —— 版本 2.14_
 
 > 本文件译自 [`PRIVACY.md`](PRIVACY.md)。如有出入，以英文版为准。
 
@@ -96,7 +96,9 @@ Android 与 iOS 设备既可共享自身屏幕，也可观看其他机器。该 
 view-only，到达的 input 将被丢弃而非 inject。在允许操作期间，两项安全机制始终生效：
 若 PC 前的用户操作了真实的 mouse 或 keyboard，remote input 将暂停（host 优先）；远端
 按住的任何按键，都会在连接结束或 viewer 切换时自动释放。最多五个 viewer 可同时观看同一
-台 PC，但任一时刻只有其中一个操作 mouse 与 keyboard。
+台 PC，但任一时刻只有其中一个操作 mouse 与 keyboard。在 Windows 上，系统切换到其 secure
+desktop 时，已安装的 app 会继续共享：viewer 能看到 UAC 提示、锁屏以及登录与 Ctrl+Alt+Del
+画面，其 input 也会到达这些画面。
 
 ## 4. App 申请的 permission
 
@@ -118,6 +120,7 @@ view-only，到达的 input 将被丢弃而非 inject。在允许操作期间，
 | macOS | 辅助功能（Accessibility） | 本 Mac 在允许操作的情况下共享时，用于 inject viewer 的 mouse 与 keyboard input，并察觉 Mac 前的用户何时操作了它（host 优先）。 |
 | macOS | Local Network | Deskhub 首次访问你 network 上的另一台设备时由 macOS 询问。仅用于 session。 |
 | Windows | 管理员权限（UAC） | app 以提权方式运行，以便向提权窗口 inject input。每次启动时 UAC 都会询问，唯一的例外是 *Start Deskhub when you log in* 通过其 scheduled task 启动它。 |
+| Windows | 系统 service（*DeskHub Secure Desktop*） | 由安装程序添加，以 LocalSystem 运行。仅在 app 共享期间，它捕获 Windows 的 secure desktop —— UAC 提示、锁屏、登录与 Ctrl+Alt+Del 画面 —— 交由 app 像其他画面一样发送给 viewer，并将 viewer 的 mouse 与 keyboard input 送达那里。它不存储任何内容，也不建立任何 network 连接。 |
 | Windows | Windows Firewall | 共享时，提权运行的 app 会为自己添加或刷新一条名为 *Deskhub (host)* 的入站 UDP 规则，覆盖所有 network profile。它不修改其他任何规则；你为 Deskhub 创建的 block 规则会保持不变，并使它继续无法被访问。 |
 | Linux | 屏幕共享同意（桌面 portal） | 桌面自身的对话框会在首次共享时询问要共享哪些屏幕；该回答通过第 3 节所述的 token 被记住。 |
 | Linux | 虚拟 input 设备（`/dev/uinput`） | 用于 inject viewer 的 input。`.deb` 与 `.rpm` 会安装一条 udev 规则，将其开放给 `input` 组以及在座席上登录的用户。 |
@@ -218,6 +221,7 @@ https://github.com/manhpham90vn/Deskhub/blob/main/PRIVACY.md
 
 | 版本 | 日期 | 变更内容 |
 |---|---|---|
+| 2.14 | 2026-10-16 | **在 Windows 上，共享现在会贯穿 secure desktop 继续进行。** 安装程序现在为所有用户安装 DeskHub，并添加一个系统 service *DeskHub Secure Desktop*。在 app 共享期间，该 service 捕获 UAC 提示、锁屏以及登录与 Ctrl+Alt+Del 画面，这些画面随后像屏幕的其余部分一样传输给 viewer，并将 viewer 的 mouse 与 keyboard input 送达那里 —— 因此 viewer 可以回应 UAC 提示，知道账户密码的 viewer 也可以解锁该机器。早期版本在这些画面出现期间向 viewer 显示的是冻结的画面。不会存储任何新数据，该 service 也不会自行建立任何 network 连接。 |
 | 2.13 | 2026-10-01 | **被拒绝的 connection request 会保留到过期。** 以前在 connection request 上按下 *Deny* 会立即从 `access_requests` 中删除该行。现在它会立即将该请求从列表中移除，但保留该行 —— 同样的名称、public key、地址与时间，并标记为已拒绝 —— 直到其 10 分钟期满，因此被拒绝设备之后的尝试会被拒绝，而不会提交新的请求。不会收集或传输任何新数据。 |
 | 2.12 | 2026-10-01 | **更正与更严格的本地数据处理。** Windows、macOS 与 Linux 上的诊断日志文件现在仅你可读，较旧的日志会被自动删除，只保留最新的十个；Windows app 不再把 viewer 按下的按键写入日志，无论是在 remote control 中还是在 terminal 中；本政策现已列出日志包含的内容，其中不包括 viewer 按下的按键。连接统计会记录在这些日志中，而本政策的早期版本未说明这一点。connection request 只有在请求设备用其 key 签名之后才会被记录，因此它出示的 key 已得到证明。由本设备 key 构建的 TLS certificate —— 仅公开部分 —— 会被短暂写入仅你可读的文件并立即删除，因 crash 而遗留的文件会在本设备下次开始共享时删除；早期版本称其从不保存。在 iOS 上，保存本设备 private key 的文件夹现已被排除在 iCloud 与电脑备份之外。旧的 `auth_salt` 文件现在会被删除，旧 `ui-settings.txt` 中遗留的 passcode 行会在加载该文件时立即移除。本版本还更正了早期的陈述：`known_hosts` 会记录首次与最后一次连上每个 host 的时间；设置文件还保存本设备是否操作其所观看的机器以及是否播放其声音；现已列出 *Start Deskhub when you log in* 创建的启动项；iOS 的 broadcast 状态文件保存已连接 viewer 的名称；使用 QR code 或链接连接的设备会在 TLS handshake 的第一个 packet 中以未 encrypt 的形式发送 host 的名称；你输入的地址是 IPv4 地址，从不解析 host 名称；permission 表现已涵盖 macOS、Windows 与 Linux；本软件包含开源库，但没有收集数据的 SDK；iOS app 通过 TestFlight 分发，TestFlight 与 Google Play Console 一样，可向开发者展示单台设备的 crash 报告。 |
 | 2.11 | 2026-09-30 | **每台设备一把 key、connection request 与 QR pairing。** 每台设备现在只有一把 key（`host_key.pem`），共享与 connect 时均以它为身份；单独的 client key（`client_key*.pem`）与保存的 certificate（`host_cert.pem`）不再存在 —— certificate 在内存中构建、从不保存，遗留文件被忽略而非转换。受信任的 host 按 key fingerprint 记忆，并附各自最后一次应答的地址，不再按地址记忆。app 文件夹中新增两个文件，均不会传输到相关两台设备之外：`access_requests` 保存每台尚未获允许却请求 connect 的设备的名称、public key、地址与时间（最多 16 条，每条在 10 分钟后或在 *Approve* / *Deny* 时删除）；`pairing_tokens` 保存 host 在共享期间可展示的 QR code 背后的一次性随机 token（在隐藏该码、被使用或 5 分钟后过期时删除）。QR code 本身包含 host 的地址、port、key fingerprint、设备名与 token，任何看到屏幕的人都能读取。设备名现在还会显示在它留下的 connection request 中，并在 host 批准它或通过 QR code 准入它时成为其 key 的 label。在 Android 与 iOS 上，摄像头仅在你扫描 QR code 期间使用，并在那一刻申请 permission；画面在设备上解码，从不保存或发送。新的 connection request 还会在本设备上触发一条系统通知，说明请求设备的名称与地址；该通知由本设备自己的通知中心显示，不会发往其他任何地方。 |

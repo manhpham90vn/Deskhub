@@ -105,7 +105,7 @@ make lint      # C++・Kotlin・Swift の format を検査し、続けて不要�
 
 | Target | 生成物 | 必要なもの |
 | --- | --- | --- |
-| `make build-windows` | `Deskhub.exe` 1 つ | Windows と MSVC |
+| `make build-windows` | `Deskhub.exe` と、その隣の `DeskhubService.exe` | Windows と MSVC |
 | `make build-macos` | macOS app | macOS と Xcode |
 | `make build-linux` | `deskhub` binary 1 つ | Ubuntu と各 `-dev` package |
 | `make build-ios` | Simulator 向けの iOS app | macOS、Xcode、Simulator runtime |
@@ -326,7 +326,12 @@ private な Kotlin コード、import、引数で失敗する。ある振る舞�
 `ASC_ISSUER_ID` —— が必要である。3 つのいずれかが欠けていれば build の前に停止する。
 
 Release workflow は `packaging/windows/` から Windows app と CLI の Inno Setup インストーラー
-も作成する。Windows ポータブル版と Linux app は引き続き単一ファイルである。
+も作成する。app のインストーラーには管理者権限が必要である。すべてのユーザー向けに
+`Program Files` 配下へインストールし、以前のユーザー単位のインストールを削除し、
+`DeskhubService.exe --install` を実行して *DeskHub Secure Desktop* サービスを登録する
+（アンインストール時は `--uninstall`）。Windows ポータブル版と Linux app は引き続き単一
+ファイルである。ポータブル版の app にはサービスがないため、viewer に UAC の確認画面や
+ロック画面を見せることはできない。
 
 すべてのパッケージは `THIRD_PARTY_NOTICES.md` と、`licenses/` のうちそのパッケージに
 該当するライセンス文を同梱する。対象は app と CLI の `.deb` と `.rpm`
@@ -386,6 +391,10 @@ GitHub Release の作成後、`deploy.yml` は tag を `publish-packages.yml` �
   ```
 
   `ManhPham.DeskhubCLI` と `deskhub-cli-vX.Y.Z-windows.exe` の URL でも同様に行う。
+
+  app のインストーラーは、secure desktop サービスを追加した release で per-machine に
+  なった。`winget-pkgs` の `ManhPham.Deskhub` manifest がまだ `Scope: user` のままなら、
+  komac が開く pull request の中で手動で `machine` に変更する。
 - **Homebrew** —— public repository `manhpham90vn/homebrew-tap` を作成する。中身は job が
   書き込む。
 - **apt** —— signing key を一度だけ生成し、そのファイルを `APT_GPG_PRIVATE_KEY` として

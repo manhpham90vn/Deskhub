@@ -293,6 +293,26 @@ HostEngine（app ごとに 1 インスタンス、SessionTransport を保持）
 - Input: host を優先する。マシンの前にいる利用者が自身の mouse を操作している間、
   `LocalInputMonitor` は remote input を停止する。同時に操作できる viewer は 1 つで
   ある。
+- Windows の secure desktop: UAC の確認画面やロック画面が input desktop を `Default` から
+  奪うと、Windows Graphics Capture は frame を届けなくなり、app からの `SendInput` も
+  届かなくなる。そこで各 source は SYSTEM の agent に切り替わる。
+
+  ```
+  Deskhub.exe (user, elevated) ── \\.\pipe\DeskhubSecureDesktop ──▶ DeskhubService.exe
+       ▲                                               (LocalSystem, session 0)
+       │ private pipe, its handle duplicated into          │ CreateProcessAsUser,
+       │ Deskhub.exe by the service                        ▼ SYSTEM token, user session
+       └──────────────────────── DeskhubService.exe --agent
+                                  follows the input desktop; DXGI duplication +
+                                  pointer compositing → Frame; Input → SendInput
+  ```
+
+  `SecureDesktopLink`（source ごとに 1 つ）は monitor の矩形を付けた `Watch` を送り、
+  `DesktopState` と BGRA の `Frame` メッセージを受け取る（`core/session/host/SecureDesktopWire`）。
+  agent が secure desktop を報告している間、WGC の frame は破棄され、agent の frame が
+  texture にアップロードされて、同じ admission、scaler、encoder の経路を通る。また
+  `InputInjector` は `SendInput` を呼ぶ代わりに、すべての `INPUT` を agent へ転送する。
+  切り替えのたびに keyframe を強制する。
 - Shell: shell ごとに PTY を 1 つ割り当てる（Windows は `ConPTY`、他は `forkpty`）。
   上限は 8 である。接続が切れた場合は shell を切り離し、shell プロセスが終了するか
   shell が閉じられるまで PTY を保持する。時間制限はない。許可された client はいずれも、
@@ -479,6 +499,21 @@ scaling の 2 つの判定とともに実行する（共有 runner には時間�
 の数値、および core の coverage 行である。
 
 ## 9. 記録しておくべき設計判断
+
+- **secure desktop には SYSTEM が必要なため、サービスがユーザーの session に agent を起動する**:
+  `requireAdministrator` では足りない —— UAC とロック画面が動作する `Winlogon` desktop を
+  開き、capture し、入力できるのは、そこにアタッチした SYSTEM プロセスだけであり、WGC は
+  それをまったく capture できない。そのため agent は DXGI desktop duplication を使い、
+  ポインタを自ら描画する。サービスはユーザーの desktop にアクセスできない session 0 に
+  いるため、自身の token を複製し、session id を設定して、そこで agent を起動する。frame が
+  システムメモリで pipe を渡るのは、secure desktop の変化が少なく、共有 GPU texture では
+  integrity の境界を越えなければならないためである。agent は frame を毎秒 10 に制限する。
+  サービスは接続するプロセスの image path —— 管理者のみが書き込める `Program Files` 配下の、
+  自身と同じフォルダにある `Deskhub.exe` —— によって client を信頼し、app も同じ方法で
+  server を信頼する。そのため、pipe を先取りするプロセスも、他の昇格したプログラムも、
+  SYSTEM の agent や viewer のキー入力を手に入れることはできない。インストーラーが
+  per-machine になった理由もここにある。`%LOCALAPPDATA%` にあるサービスのバイナリは、
+  ユーザーが実行するどのプロセスにも置き換えられてしまう。
 
 - **handshake を早く終えられるのはホストだけなので、クライアントはその終わり方を聞き取る**:
   クライアントは以前、`AuthResult` を 65 秒待っていた —— 承認が保持された一つの接続の中で

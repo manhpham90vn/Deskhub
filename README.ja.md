@@ -146,7 +146,7 @@ macOS の CLI は Homebrew により `PATH` に配置される。
 
 | ⚡ 速い | 📦 簡単インストール | 🎛️ シンプル |
 | ------ | ---------- | --------- |
-| 既定は 60 fps で、対応するハードウェアでは最大 240 fps で stream できる。video 処理には、利用できる場合に GPU メモリを使う。 | package manager からインストールするか、release をダウンロードできる。アカウントも background service も不要。 | display を **Share** するか、IP アドレスへ **Connect** する。デスクトップでは **shell** も共有でき、スマートフォンを含むすべての host が**ファイル**を受信できる。スマートフォンは view-only で画面を共有する。 |
+| 既定は 60 fps で、対応するハードウェアでは最大 240 fps で stream できる。video 処理には、利用できる場合に GPU メモリを使う。 | package manager からインストールするか、release をダウンロードできる。アカウントは不要。 | display を **Share** するか、IP アドレスへ **Connect** する。デスクトップでは **shell** も共有でき、スマートフォンを含むすべての host が**ファイル**を受信できる。スマートフォンは view-only で画面を共有する。 |
 
 Session は **QUIC/TLS** 上で end-to-end に encrypt され、アクセスは SSH と同じ仕組みで
 行われる。すべてのマシンは key を 1 つ持ち、client が受け入れられるのは、host の所有者が

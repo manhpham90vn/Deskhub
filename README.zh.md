@@ -143,7 +143,7 @@ sudo apt install deskhub-cli   # CLI；也可以单独安装
 
 | ⚡ 快 | 📦 安装方便 | 🎛️ 简单 |
 | ------ | ---------- | --------- |
-| 默认以 60 fps stream，在适用的硬件上最高可达 240 fps。video 处理会在可用时使用 GPU 内存。 | 可通过 package manager 安装，也可下载 release。无需账号或 background service。 | **Share** 一块 display，或 **Connect** 到一个 IP。桌面端还可共享 **shell**，并且每个 host —— 包括手机 —— 都能接收**文件**；手机以 view-only 模式共享屏幕。 |
+| 默认以 60 fps stream，在适用的硬件上最高可达 240 fps。video 处理会在可用时使用 GPU 内存。 | 可通过 package manager 安装，也可下载 release。无需账号。 | **Share** 一块 display，或 **Connect** 到一个 IP。桌面端还可共享 **shell**，并且每个 host —— 包括手机 —— 都能接收**文件**；手机以 view-only 模式共享屏幕。 |
 
 Session 在 **QUIC/TLS** 上以 end-to-end 方式 encrypt，访问方式与 SSH 相同：每台机器只有
 一把 key，client 只有在 host 的所有者放行了这把 key 之后才能接入——批准它的 connection

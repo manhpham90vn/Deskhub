@@ -175,6 +175,9 @@ int main() {
     std::printf("--- source list for authenticated viewers (LIST_SOURCES + PING) ---\n");
     RunSourceListResponderTests();
 
+    std::printf("--- session: secure desktop agent wire ---\n");
+    RunSecureDesktopWireTests();
+
     std::printf("--- net: dotted-quad IPv4 parsing ---\n");
     RunIpv4Tests();
 

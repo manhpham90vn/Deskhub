@@ -97,7 +97,7 @@ make lint      # 检查 C++、Kotlin 和 Swift 的 format，随后执行无用�
 
 | Target | 产物 | 要求 |
 | --- | --- | --- |
-| `make build-windows` | 一个 `Deskhub.exe` | Windows 与 MSVC |
+| `make build-windows` | `Deskhub.exe` 及其旁边的 `DeskhubService.exe` | Windows 与 MSVC |
 | `make build-macos` | macOS app | macOS 与 Xcode |
 | `make build-linux` | 一个 `deskhub` binary | Ubuntu 与相应 `-dev` package |
 | `make build-ios` | 面向 Simulator 的 iOS app | macOS、Xcode 与一个 Simulator runtime |
@@ -293,7 +293,10 @@ clang 构建会对未使用的 member function、template 与 exception 参数�
 `ASC_ISSUER_ID`。三者缺少任何一个，它都会在构建之前停止。
 
 Release workflow 还会通过 `packaging/windows/` 构建 Windows app 和 CLI 的 Inno Setup
-安装程序。Windows 便携版和 Linux app 仍是单文件。
+安装程序。app 的安装程序需要管理员权限：它为所有用户安装到 `Program Files` 下，移除早先的
+per-user 安装，并运行 `DeskhubService.exe --install` 注册 *DeskHub Secure Desktop* service
+（卸载时运行 `--uninstall`）。Windows 便携版和 Linux app 仍是单文件；便携版 app 没有该 service，
+因此无法向 viewer 显示 UAC 提示或锁屏。
 
 每个安装包都附带 `THIRD_PARTY_NOTICES.md` 以及 `licenses/` 中适用于它的 licence 文本：
 app 与 CLI 的 `.deb` 和 `.rpm`（位于 `/usr/share/doc/<package>/`，文本 —— 包括 LGPL ——
@@ -348,6 +351,10 @@ GitHub Release 创建后，`deploy.yml` 将 tag 交给 `publish-packages.yml`，
   ```
 
   再对 `ManhPham.DeskhubCLI` 和 `deskhub-cli-vX.Y.Z-windows.exe` 的 URL 执行一次。
+
+  app 的安装程序在加入 secure desktop service 的那个 release 中改为 per-machine。若
+  `winget-pkgs` 中的 `ManhPham.Deskhub` manifest 仍写着 `Scope: user`，请在 komac 打开的
+  pull request 中手动将其改为 `machine`。
 - **Homebrew** —— 创建 public repository `manhpham90vn/homebrew-tap`，由 job 填充内容。
 - **apt** —— 生成一次 signing key，将该文件存为 `APT_GPG_PRIVATE_KEY`，并保留离线备份。
   所有用户都信任这把 key：更换它会让他们的 `apt update` 失败。

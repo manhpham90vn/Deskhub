@@ -34,9 +34,12 @@ Windows では `winget`、macOS では Homebrew、Ubuntu・Kubuntu・Debian・Mi
 
 ## 🪟 Windows
 
-`deskhub-v*-windows-setup.exe` をダウンロードして実行する。スタートメニューに登録され、
-デスクトップのショートカットも既定で作成される。インストール後すぐに起動することもできる。
-アカウントや background service は不要。ポータブル版の `deskhub-v*-windows.exe` も引き続き利用できる。
+`deskhub-v*-windows-setup.exe` をダウンロードして実行する。セットアップは管理者権限を求め、
+DeskHub をすべてのユーザー向けに `Program Files` 配下へインストールする。スタートメニューに
+登録され、デスクトップのショートカットも既定で作成される。インストール後すぐに起動することも
+できる。アカウントは不要。以前のバージョンが自分のユーザーだけにインストールした DeskHub は
+先に削除され、*Start Deskhub when you log in* は新しい場所を指すように更新される。設定と鍵は
+そのまま残る。ポータブル版の `deskhub-v*-windows.exe` も引き続き利用できる。
 
 winget に同じインストーラーを取得させ、最新に保つこともできる。`winget upgrade` で新しい release
 を取得し、`winget uninstall ManhPham.Deskhub` で削除する。
@@ -49,16 +52,22 @@ winget install ManhPham.Deskhub
 `winget uninstall ManhPham.Deskhub` を一度実行してから再インストールする。
 `%USERPROFILE%\.deskhub` の設定と鍵は保持される。
 
-次の 2 点に注意する。
+次の 3 点に注意する。
 
 - **起動のたびに Administrator を要求する。** 起動するごとに Windows が UAC の確認を表示
   する。これがないと、昇格したウィンドウへ mouse と keyboard を inject できないためである。
   *Start Deskhub when you log in* をオンにすると、サインイン時に昇格したログオンタスクと
   して起動し、確認は表示されない。
 - **Windows Firewall のルールを 1 本追加する。** 初回の share 時に app 自身が追加する。
+- **システムサービス *DeskHub Secure Desktop* が加わる。** LocalSystem として動作する。
+  DeskHub が画面を共有するまでは何もしない。共有中に Windows が secure desktop ——
+  インストーラーによる UAC の確認、ロック画面、Ctrl+Alt+Del —— に切り替わると、viewer は
+  引き続き画面を見ることができ、そこでクリックや入力もできる。そのため viewer が代わりに
+  UAC の確認に応答でき、パスワードを知っている人ならマシンのロックを解除できる。ポータブル
+  版の exe にはサービスがなく、それらの画面は閉じるまで viewer 側で停止して見える。
 
 DeskHub は Windows の設定または `winget uninstall ManhPham.Deskhub` でアンインストールできる。
-ポータブル版は exe を削除する。Settings と key は、フォルダを削除するまで
+サービスも一緒に削除される。ポータブル版は exe を削除する。Settings と key は、フォルダを削除するまで
 `%USERPROFILE%\.deskhub` に残る。他のマシンから届いたファイルも、削除するまで
 `%USERPROFILE%\Deskhub`（または選んだフォルダ）に残る。
 

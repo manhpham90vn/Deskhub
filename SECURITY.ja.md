@@ -2,7 +2,7 @@
 
 # Deskhub セキュリティポリシー
 
-_最終更新: 2026 年 10 月 1 日_
+_最終更新: 2026 年 10 月 16 日_
 
 本書は [`SECURITY.md`](SECURITY.md) の翻訳。食い違いがある場合は英語版が正文。
 
@@ -209,6 +209,9 @@ profile を対象とするため、バインドを限定しても firewall は�
 上記の原則が重要である理由の一つである。Deskhub が置き換えるのは自身のこのルールだけで
 ある。利用者が app に対して自ら作成した block ルールはそのまま残され、Windows では
 block ルールが allow ルールに優先するため、それを削除するまで host には到達できない。
+Windows ではインストーラーがもう一つ追加する。*DeskHub Secure Desktop* サービスであり、
+UAC の確認画面やロック画面の間も共有を継続させる。共有している間、viewer はそれらの画面を
+見ることができ、そこへ入力することもできる —— ロック画面のパスワード欄も含む。
 
 ## 同一 network 上の攻撃者にできること
 
@@ -252,8 +255,9 @@ Deskhub を現状のまま使い続ける場合、次の項目を実施するこ
       要求できない。
 - [ ] 見せた相手のデバイスが接続したら直ちに QR code を隠し、共有中や発表中の画面には
       決して表示しない。
-- [ ] 使用していないときは Deskhub を終了する。background service ではないため、終了
-      すれば受け入れ口も閉じる。ただし *Launch & background* の 3 つの設定がこれを
+- [ ] 使用していないときは Deskhub を終了する。終了すれば受け入れ口も閉じる。Windows
+      インストーラーが追加する *DeskHub Secure Desktop* サービスは network から何も
+      受け付けず、app が共有していない間は何もしない。ただし *Launch & background* の 3 つの設定がこれを
       変える。*Start Deskhub when you log in* はログオンのたびに起動し（Windows では
       UAC の確認なしに昇格して実行する scheduled task による）、
       *Start sharing when Deskhub opens* はすぐに共有を始め、
@@ -270,6 +274,9 @@ Deskhub を現状のまま使い続ける場合、次の項目を実施するこ
       `sudo ufw allow from 100.64.0.0/10 to any port 47777 proto udp` とする。
 - [ ] 他の network へ持ち出すノート PC で共有を動作させたままにしない。
 - [ ] 離席時にはマシンをロックし、無人の session が引き継がれないようにする。
+      Windows では viewer はロック画面を見ることができ、そこへ入力もできるため、ロック
+      の効果はアカウントのパスワードの強さに依存する —— viewer がそれを知っている可能性
+      がある場合は、共有も停止すること。
 - [ ] `deskhub-cli` の `key public` で本マシンの public key、`host-key public` で host と
       しての key を表示する —— 両者は同じ key である。信頼できる経路で渡し、host では
       `access add --stdin`、client では `host add … --host-key-stdin` を使う。terminal から
@@ -359,7 +366,17 @@ app と broadcast extension が共有する app group のコンテナ内の `.de
   sandbox 化されていない app と同様に、利用者のアカウントが到達できるすべてにアクセス
   できる状態で動作する。
 - **Windows。** app は起動のたびに管理者権限を求める（前述）。そのため app の欠陥は、
-  昇格したプロセスの欠陥となる。
+  昇格したプロセスの欠陥となる。インストーラーはさらに、LocalSystem として動作する
+  サービス *DeskHub Secure Desktop* を登録する。その named pipe はリモートの client と
+  network logon を拒否し、high integrity の管理者のみを受け入れ、接続するプロセスの
+  image path で確認したうえで、自身と同じフォルダにある `Deskhub.exe` にのみ応答する。
+  app の側も、session 0 で自身の隣にある `DeskhubService.exe` とのみ通信する。サービスは
+  その app のために、ユーザーの session で SYSTEM として agent を起動し、app が切断すると
+  agent を終了させる job に結び付ける。agent は secure desktop を capture し、app の input を
+  そこで再生するだけで、それ以外は何も読み取らない。両バイナリは管理者のみが書き込める
+  `Program Files` 配下にあるため、ユーザーとして動作するプロセスがいずれかを差し替えて
+  SYSTEM 権限を得ることはできない。それでも agent の欠陥は SYSTEM プロセスの欠陥であり、
+  昇格した app を経由してのみ到達できる。
 - **継続的インテグレーション。** すべての pull request で、3 つの test suite を
   AddressSanitizer、UndefinedBehaviorSanitizer、ThreadSanitizer の下で実行し、
   clang-tidy、前述の fuzzer、C++・Kotlin・Swift のコードに対する CodeQL、Git の全履歴に

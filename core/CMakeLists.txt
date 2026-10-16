@@ -67,6 +67,7 @@ add_library(core STATIC
     src/diag/LogRetention.cpp
 
     src/session/host/SourceListResponder.cpp
+    src/session/host/SecureDesktopWire.cpp
 
     src/net/Ipv4.cpp
     src/net/BindAddress.cpp
@@ -185,6 +186,7 @@ if(DESKHUB_CORE_TESTS)
         tests/media/PcmRingTests.cpp
 
         tests/session/SourceListResponderTests.cpp
+        tests/session/SecureDesktopWireTests.cpp
 
         tests/net/Ipv4Tests.cpp
         tests/net/BindAddressTests.cpp

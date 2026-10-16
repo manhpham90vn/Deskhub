@@ -2,7 +2,7 @@
 
 # Deskhub プライバシーポリシー
 
-_発効日: 2026 年 10 月 1 日 — バージョン 2.13_
+_発効日: 2026 年 10 月 16 日 — バージョン 2.14_
 
 > 本書は [`PRIVACY.md`](PRIVACY.md) の翻訳。内容に差がある場合は英語版を優先する。
 
@@ -106,7 +106,9 @@ display 上に表示されているあらゆるアプリケーション**に作�
 した場合、remote input は停止する（host 優先）。また、リモート側が押している状態のキー
 は、接続の終了時または viewer の切り替え時に自動的に解放される。1 台の PC を同時に閲覧
 できるのは最大 5 viewer であるが、ある時点で mouse と keyboard を操作できるのはそのうち
-1 つのみである。
+1 つのみである。Windows では、インストールした app はシステムが secure desktop に切り替わっ
+ても共有を継続する。viewer には UAC の確認画面、ロック画面、サインイン画面および
+Ctrl+Alt+Del 画面が表示され、viewer の input もそこへ届く。
 
 ## 4. App が要求する permission
 
@@ -128,6 +130,7 @@ display 上に表示されているあらゆるアプリケーション**に作�
 | macOS | アクセシビリティ | この Mac が操作を許可して共有する際に viewer の mouse と keyboard の input を inject するため、および Mac の前にいる人が操作したことを検知するため（host を優先する挙動）に必要である。 |
 | macOS | Local Network | Deskhub が初めて network 上の他の端末に到達する際に macOS が確認する。session にのみ使用する。 |
 | Windows | 管理者権限（UAC） | 昇格したウィンドウへ input を inject できるよう、app は昇格して動作する。UAC は起動のたびに確認するが、*Start Deskhub when you log in* が scheduled task を通じて起動する場合は確認しない。 |
+| Windows | システムサービス（*DeskHub Secure Desktop*） | インストーラーが追加し、LocalSystem として動作する。app が共有している間に限り、Windows の secure desktop —— UAC の確認画面、ロック画面、サインイン画面および Ctrl+Alt+Del 画面 —— を capture し、app が他の画像と同様に viewer へ送信できるようにするとともに、viewer の mouse と keyboard の input をそこへ届ける。何も保存せず、network 接続も開かない。 |
 | Windows | Windows ファイアウォール | 共有時に、昇格した app が自身に対して *Deskhub (host)* という名前の受信 UDP ルールを、すべての network profile について 1 つ追加または更新する。他のルールは変更しない。利用者が Deskhub に対して作成した block ルールはそのまま残り、Deskhub への到達を妨げ続ける。 |
 | Linux | 画面共有の同意（デスクトップの portal） | 初回はデスクトップ自身のダイアログが共有する画面を尋ねる。その回答は第 3 節に記載した token によって記憶される。 |
 | Linux | 仮想入力デバイス（`/dev/uinput`） | viewer の input を inject するために必要である。`.deb` と `.rpm` は、これを `input` グループと seat にログインしている利用者に開放する udev ルールをインストールする。 |
@@ -246,6 +249,7 @@ https://github.com/manhpham90vn/Deskhub/blob/main/PRIVACY.md
 
 | バージョン | 日付 | 変更内容 |
 |---|---|---|
+| 2.14 | 2026-10-16 | **Windows では、secure desktop の間も共有が継続されるようになった。** インストーラーは DeskHub をすべてのユーザー向けにインストールし、システムサービス *DeskHub Secure Desktop* を追加するようになった。app が共有している間、このサービスは UAC の確認画面、ロック画面、サインイン画面および Ctrl+Alt+Del 画面を capture し、それらは画面の他の部分と同様に viewer へ送信される。また viewer の mouse と keyboard の input をそこへ届ける —— そのため viewer は UAC の確認に応答でき、アカウントのパスワードを知る viewer はマシンのロックを解除できる。以前のバージョンでは、これらの画面が表示されている間、viewer には停止した画像が表示されていた。新たに保存されるものはなく、サービスが独自に network 接続を開くこともない。 |
 | 2.13 | 2026-10-01 | **拒否した接続要求は失効まで保持される。** 以前は接続要求で *Deny* を押すと、`access_requests` からその行を直ちに削除していた。現在は要求を直ちに一覧から外すが、行 —— 同じ名前、public key、アドレス、時刻に、拒否済みの印を付けたもの —— を 10 分が経過するまで残すため、拒否された端末の次の試行は新しい要求として記録されず、拒否される。新たに収集・送信されるものはない。 |
 | 2.12 | 2026-10-01 | **訂正と、ローカルデータの扱いの強化。** Windows、macOS、Linux の診断 log ファイルは本人のみが読み取れるようになり、古いものは自動的に削除されて最新の 10 件のみが残るようになった。Windows の app は、remote control でも terminal でも、viewer が押したキーを log に書き込まなくなった。本ポリシーには log の内容を記載した。viewer が押したキーはその中に含まれない。接続の統計はこの log に記録されるが、本ポリシーの旧版はそれを記載していなかった。接続要求は、要求する端末がその key で署名した後にのみ記録されるようになったため、表示される key は証明済みである。本端末の key から構築される TLS certificate —— 公開部分のみ —— は、本人のみが読み取れるファイルに一瞬だけ書き込まれて直ちに削除され、crash により残ったものは本端末が次に共有を開始したときに削除される。旧版は保存しないと記載していた。iOS では、本端末の private key を保持するフォルダが iCloud とコンピュータへのバックアップから除外されるようになった。以前の `auth_salt` ファイルは削除されるようになり、古い `ui-settings.txt` に残る passcode の行はファイルの読み込み時に除去されるようになった。本バージョンでは旧版の記載も訂正する。`known_hosts` は各 host に最初と最後に到達した時刻を記録する。設定ファイルには、本端末が閲覧するマシンを操作するかどうか、およびその音声を再生するかどうかも保存される。*Start Deskhub when you log in* が作成する起動エントリを記載した。iOS の broadcast の状態ファイルは接続中の viewer の名前を保持する。QR code またはリンクを使って接続する端末は、TLS handshake の最初の packet で host の名前を encrypt せずに送る。入力するアドレスは IPv4 アドレスであり、host 名の名前解決は行わない。permission の表に macOS、Windows、Linux を加えた。本ソフトウェアはオープンソースのライブラリを含むが、データを収集する SDK は含まない。iOS の app は TestFlight で配布しており、TestFlight は Google Play Console と同様に、端末ごとの crash レポートを開発者に示すことがある。 |
 | 2.11 | 2026-09-30 | **端末ごとに 1 つの key、接続要求、QR pairing。** 各端末は、共有時と connect 時の双方で identity となる単一の key（`host_key.pem`）を持つようになった。別個の client key（`client_key*.pem`）と保存していた certificate（`host_cert.pem`）は廃止され、certificate はメモリ上で構築されて保存されず、残ったファイルは変換されずに無視される。信頼済み host は、アドレスではなく key の fingerprint と最後に応答したアドレスによって記憶される。app のフォルダに 2 つのファイルが追加され、いずれも関係する 2 台の端末の外には送信されない。`access_requests` は、まだ許可されていない状態で接続を求めた各端末の名前、public key、アドレス、時刻を保持する（最大 16 件、それぞれ 10 分後または *Approve* / *Deny* で削除）。`pairing_tokens` は、host が共有中に表示できる QR code の背後にあるランダムな 1 回限りの token を保持する（code を隠したとき、使用されたとき、または 5 分で期限切れになったときに削除）。QR code 自体は host のアドレス、port、key の fingerprint、デバイス名、token を含み、画面を見た者なら誰でも読み取れる。端末の名前は、その端末が残す接続要求にも表示され、host が承認または QR code で受け入れた際に key のラベルになる。Android と iOS では、QR code をスキャンしている間のみカメラを使用し、その時点で要求する permission の背後に置く。frame は端末上で decode され、保存も送信もされない。新しい接続要求は、この端末上にも要求元端末の名前とアドレスを示すシステム通知を表示する。それはこの端末自身の通知センターが表示するもので、他のどこにも送られない。 |

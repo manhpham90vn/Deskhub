@@ -35,9 +35,12 @@ hãy dùng lệnh nâng cấp của package manager tương ứng.
 
 ## 🪟 Windows
 
-Tải `deskhub-v*-windows-setup.exe` và chạy. Bộ cài thêm DeskHub vào Start Menu và tạo
-shortcut trên Desktop theo mặc định; bạn cũng có thể mở app ngay khi cài xong. Không cần
-tài khoản hay background service. File `deskhub-v*-windows.exe` vẫn có cho ai muốn chạy portable.
+Tải `deskhub-v*-windows-setup.exe` và chạy. Bộ cài xin quyền administrator, cài DeskHub
+cho mọi người dùng vào `Program Files`, thêm nó vào Start Menu và tạo shortcut trên
+Desktop theo mặc định; bạn cũng có thể mở app ngay khi cài xong. Không cần tài khoản. Bản
+DeskHub mà phiên bản trước cài riêng cho người dùng của bạn sẽ được gỡ trước, và
+*Start Deskhub when you log in* được trỏ sang vị trí mới; settings và key của bạn vẫn nằm
+nguyên chỗ cũ. File `deskhub-v*-windows.exe` vẫn có cho ai muốn chạy portable.
 
 Hoặc để winget cài bộ cài đó và giữ nó luôn mới: `winget upgrade` lấy bản release mới,
 `winget uninstall ManhPham.Deskhub` gỡ nó đi:
@@ -49,16 +52,22 @@ winget install ManhPham.Deskhub
 Nếu đã cài bản winget portable trước đây, chạy `winget uninstall ManhPham.Deskhub` một
 lần rồi cài lại. Settings và key trong `%USERPROFILE%\.deskhub` vẫn được giữ.
 
-Có hai điểm cần lưu ý:
+Có ba điểm cần lưu ý:
 
 - **Quyền Administrator, mỗi lần khởi động.** Windows hiện hộp thoại UAC ở mỗi lần chạy,
   vì không có quyền này thì không thể inject mouse và keyboard vào các cửa sổ chạy ở quyền
   cao. Khi bật *Start Deskhub when you log in*, app khởi động lúc đăng nhập dưới dạng một
   logon task chạy quyền cao, không hiện hộp thoại.
 - **Rule Windows Firewall** do app tự thêm trong lần share đầu tiên.
+- **Một system service, *DeskHub Secure Desktop***, chạy dưới tài khoản LocalSystem. Nó
+  không làm gì cho tới khi DeskHub share màn hình. Khi đó, lúc Windows chuyển sang secure
+  desktop — hộp thoại UAC của một trình cài đặt, màn hình khoá, Ctrl+Alt+Del — viewer vẫn
+  thấy màn hình và click, gõ được ở đó, nên họ có thể trả lời hộp thoại UAC thay bạn, và
+  bất kỳ ai biết mật khẩu của bạn đều mở khoá được máy. File exe portable không có service:
+  với nó, các màn hình đó đứng yên với viewer cho tới khi chúng đóng lại.
 
-Gỡ DeskHub trong Windows Settings hoặc chạy `winget uninstall ManhPham.Deskhub`. Với bản
-portable, chỉ cần xoá file exe. Settings và key vẫn nằm trong `%USERPROFILE%\.deskhub`
+Gỡ DeskHub trong Windows Settings hoặc chạy `winget uninstall ManhPham.Deskhub`; service
+cũng được gỡ theo. Với bản portable, chỉ cần xoá file exe. Settings và key vẫn nằm trong `%USERPROFILE%\.deskhub`
 cho đến khi bạn xoá thư mục đó, còn file máy khác gửi tới vẫn nằm trong
 `%USERPROFILE%\Deskhub` (hoặc thư mục bạn đã chọn) cho đến khi bạn xoá.
 

@@ -288,6 +288,26 @@ HostEngine (one per app, owns SessionTransport)
   adapts the encoder to the loss that results.
 - Input: "host wins" — `LocalInputMonitor` pauses remote input while the person at
   the machine moves their own mouse; one viewer drives at a time.
+- Windows secure desktop: when a UAC prompt or the lock screen takes the input desktop
+  away from `Default`, Windows Graphics Capture stops delivering frames and `SendInput`
+  from the app no longer lands. Each source then switches to a SYSTEM agent:
+
+  ```
+  Deskhub.exe (user, elevated) ── \\.\pipe\DeskhubSecureDesktop ──▶ DeskhubService.exe
+       ▲                                               (LocalSystem, session 0)
+       │ private pipe, its handle duplicated into          │ CreateProcessAsUser,
+       │ Deskhub.exe by the service                        ▼ SYSTEM token, user session
+       └──────────────────────── DeskhubService.exe --agent
+                                  follows the input desktop; DXGI duplication +
+                                  pointer compositing → Frame; Input → SendInput
+  ```
+
+  `SecureDesktopLink` (one per source) sends a `Watch` with the monitor's rectangle and
+  receives `DesktopState` and BGRA `Frame` messages (`core/session/host/SecureDesktopWire`).
+  While the agent reports a secure desktop, WGC frames are dropped, agent frames are
+  uploaded into a texture and fed through the same admission, scaler and encoder path,
+  and `InputInjector` forwards every `INPUT` to the agent instead of calling
+  `SendInput`. Each switch forces a keyframe.
 - Shells: one PTY per shell (`ConPTY` on Windows, `forkpty` elsewhere), at most 8; a
   dropped connection detaches the shell and the PTY stays alive until the shell
   process exits or the shell is closed — no time limit. Any admitted client can list
@@ -482,6 +502,21 @@ under-load integration numbers from the pull-request build, and the core coverag
 line.
 
 ## 9. Decisions worth remembering
+
+- **The secure desktop needs SYSTEM, so a service starts an agent in the user's session**:
+  `requireAdministrator` is not enough — the `Winlogon` desktop that UAC and the lock
+  screen run on can be opened, captured and typed into only by a SYSTEM process attached
+  to it, and WGC cannot capture it at all, so the agent uses DXGI desktop duplication and
+  draws the pointer itself. A service lives in session 0, which has no access to the
+  user's desktops, so it duplicates its own token, sets the session id and starts the
+  agent there. Frames cross the pipe in system memory because the secure desktop changes
+  little and a shared GPU texture would have to cross an integrity boundary; the agent
+  caps them at 10 per second. The service trusts a client by the image path of the
+  connecting process — `Deskhub.exe` in its own folder under `Program Files`, which only
+  administrators can write — and the app trusts the server the same way, so neither a
+  pipe squatter nor another elevated program gets a SYSTEM agent or the viewer's
+  keystrokes. That is also why the installer became per-machine: a service binary in
+  `%LOCALAPPDATA%` could be replaced by any process the user runs.
 
 - **Only the host can end a handshake early, so the client listens for how it ended**:
   the client used to wait 65 s for an `AuthResult` — a leftover from when approval was

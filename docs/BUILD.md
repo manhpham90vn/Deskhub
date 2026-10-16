@@ -100,7 +100,7 @@ New logic in `core/` needs a test in the matching `core/tests/` subdirectory.
 
 | Target | Builds | Needs |
 | --- | --- | --- |
-| `make build-windows` | one `Deskhub.exe` | Windows + MSVC |
+| `make build-windows` | `Deskhub.exe` and, beside it, `DeskhubService.exe` | Windows + MSVC |
 | `make build-macos` | the macOS app | macOS + Xcode |
 | `make build-linux` | one `deskhub` binary | Ubuntu + the `-dev` packages |
 | `make build-ios` | the iOS app for the Simulator | macOS + Xcode + a Simulator runtime |
@@ -317,8 +317,12 @@ Connect API key for notarization: `ASC_KEY_P8` (the path to the `.p8` file), `AS
 and `ASC_ISSUER_ID`. It stops before building when any of the three is missing.
 
 The Windows app and CLI are also published as Inno Setup installers, built from
-`packaging/windows/` by the release workflow. Their portable Windows builds and the Linux
-app remain single files.
+`packaging/windows/` by the release workflow. The app's installer needs administrator
+rights: it installs under `Program Files` for every user, removes an earlier per-user
+install, and runs `DeskhubService.exe --install` to register the *DeskHub Secure Desktop*
+service (`--uninstall` on the way out). Their portable Windows builds and the Linux app
+remain single files; the portable app has no service, so it cannot show viewers a UAC
+prompt or the lock screen.
 
 Every package carries `THIRD_PARTY_NOTICES.md` and the licence texts from `licenses/`
 that apply to it: the app and CLI `.deb` and `.rpm` (under `/usr/share/doc/<package>/`,
@@ -377,6 +381,10 @@ Each needs a one-time setup before the first tag that runs it:
   ```
 
   Repeat with `ManhPham.DeskhubCLI` and the `deskhub-cli-vX.Y.Z-windows.exe` URL.
+
+  The app's installer became per-machine in the release that added the secure desktop
+  service. If the `ManhPham.Deskhub` manifest in `winget-pkgs` still says
+  `Scope: user`, change it to `machine` by hand in the pull request komac opens.
 - **Homebrew** — create the public repository `manhpham90vn/homebrew-tap`; the job fills it.
 - **apt** — generate the signing key once, store the file as `APT_GPG_PRIVATE_KEY` and keep
   an offline backup. Every user trusts this key: replacing it breaks their `apt update`.

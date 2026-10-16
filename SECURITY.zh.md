@@ -2,7 +2,7 @@
 
 # Deskhub 安全策略
 
-_最后更新：2026 年 10 月 1 日_
+_最后更新：2026 年 10 月 16 日_
 
 本文件是 [`SECURITY.md`](SECURITY.md) 的译本；若两者有出入，以英文版为准。
 
@@ -177,6 +177,9 @@ Connect 到 host 的 `100.x.y.z` 地址。
 便利之处也正是上述原则重要的原因。Deskhub 只替换它自己的这条规则。你自己为该 app 创建的
 block 规则会保持不变；由于 Windows 中 block 规则优先于 allow 规则，host 在你移除该规则之前
 将一直无法被访问。
+在 Windows 上，安装程序还会额外添加一项：*DeskHub Secure Desktop* service，它让共享在
+UAC 提示或锁屏出现时得以继续。在你共享期间，viewer 能看到这些屏幕并可在其中输入 —— 包括
+锁屏的密码框。
 
 ## 同一 network 中攻击者的能力
 
@@ -212,7 +215,9 @@ host 优先的机制可在你*坐在*机器前时限制异常操作，但在你�
       其余的请 Deny 或置之不理 —— 它们会自行过期，且被拒绝的设备在十分钟内无法再次请求。
 - [ ] 你展示 QR code 的那台设备一旦连接，就立即隐藏该码；绝不要在正在共享或演示的屏幕上
       展示它。
-- [ ] 不使用时退出 Deskhub。它不是 background service，退出即关闭了接入点。但
+- [ ] 不使用时退出 Deskhub。退出即关闭了接入点：Windows 安装程序添加的
+      *DeskHub Secure Desktop* service 不接受任何来自 network 的连接，且在 app 未共享时
+      不做任何事。但
       *Launch & background* 下的三项设置会改变这一点：*Start Deskhub when you log in*
       会在每次登录时启动它（在 Windows 上通过一个以提权方式运行、不弹出 UAC 的
       scheduled task），*Start sharing when Deskhub opens* 随即开始共享，而
@@ -225,7 +230,9 @@ host 优先的机制可在你*坐在*机器前时限制异常操作，但在你�
       `sudo ufw allow from 100.64.0.0/10 to any port 47777 proto udp`，而不是
       `sudo ufw allow 47777/udp`。
 - [ ] 不要在会被带往其他 network 的笔记本上保持共享运行。
-- [ ] 离开时锁定机器，避免无人看管的 session 被接管。
+- [ ] 离开时锁定机器，避免无人看管的 session 被悄然接管。在 Windows 上，viewer 仍能看到
+      锁屏并可在其中输入，因此锁定的保护力只取决于账户密码 —— 若 viewer 可能知道该密码，
+      请同时停止共享。
 - [ ] 使用 `deskhub-cli` 时，以 `key public` 显示本机的 public key，以 `host-key public`
       显示本机作为 host 的 key —— 两者是同一把 key。通过可信渠道传递它，然后在 host 上使用
       `access add --stdin`，在 client 上使用 `host add … --host-key-stdin`。要在 terminal
@@ -300,7 +307,14 @@ client 放入你设备的文件。
   keyboard 与 mouse 事件，而这正是 remote control。因此它与任何未沙箱化的 app 一样，可以
   访问你的用户账户能触及的一切。
 - **Windows。** app 在每次启动时都请求管理员权限（见上文），因此它的缺陷就是一个提权进程的
-  缺陷。
+  缺陷。安装程序还会注册 *DeskHub Secure Desktop*，一个以 LocalSystem 运行的 service。它的
+  named pipe 拒绝远程 client 与 network logon，只接纳高完整性级别的管理员，并且只为其自身
+  文件夹中的 `Deskhub.exe` 提供服务 —— 通过连接进程的映像路径核验；反过来，app 也只与位于
+  session 0、在它旁边的 `DeskhubService.exe` 通信。service 为该 app 在用户的 session 中以
+  SYSTEM 身份启动一个 agent，并将其绑定到一个 job，app 断开时该 job 会结束它；agent 捕获
+  secure desktop 并在其上重放 app 的 input，除此之外不读取任何东西。两个 binary 都位于只有
+  管理员可写的 `Program Files` 下，因此以用户身份运行的进程无法替换其中之一来获得 SYSTEM。
+  agent 中的缺陷仍是一个 SYSTEM 进程的缺陷，只能经由提权的 app 触及。
 - **持续集成。** 每个 pull request 都会在 AddressSanitizer、UndefinedBehaviorSanitizer 与
   ThreadSanitizer 下运行三套测试，并运行 clang-tidy、上文所述的 fuzzer、针对 C++、Kotlin
   与 Swift 代码的 CodeQL，以及用 gitleaks 扫描整个 Git 历史中提交的机密；CodeQL 与

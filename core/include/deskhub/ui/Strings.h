@@ -62,6 +62,10 @@ inline constexpr const char* kAllowControlLabel =
 inline constexpr const char* kRequestControlLabel =
     "Control the remote machine (untick to just watch)";
 inline constexpr const char* kViewOnlyNote = "View-only: viewers can watch but not control.";
+inline constexpr const char* kSecureDesktopMissingNote =
+    "When Windows asks \"Do you want to allow this app to make changes to your device?\" "
+    "or the screen is locked, viewers see a frozen picture and cannot click. Install "
+    "Deskhub with the setup file to fix this.";
 inline constexpr const char* kPickSourcesHint =
     "Tick what to share \xE2\x80\x94 displays, the terminal, file transfer \xE2\x80\x94 then "
     "press Share. Nothing is shared until you press it.";

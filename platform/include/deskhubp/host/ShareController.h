@@ -22,6 +22,7 @@ struct ShareBanner {
     uint16_t port = 0;
     bool viewOnly = false;
     std::string bindWarning;
+    std::string screenNote;
 };
 
 class ShareController {
@@ -147,6 +148,7 @@ public:
             status += "\n" + deskhub::ui::TransferFolderNote(PathText(fileHost_.Directory()));
         if (banner.screenSharing && banner.viewOnly)
             status += std::string("\n") + deskhub::ui::kViewOnlyNote;
+        if (banner.screenSharing && !banner.screenNote.empty()) status += "\n" + banner.screenNote;
         if (banner.hosting && !banner.bindWarning.empty()) status += "\n" + banner.bindWarning;
         return status;
     }

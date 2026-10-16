@@ -289,6 +289,26 @@ HostEngine (mỗi app một instance, sở hữu SessionTransport)
   app điều chỉnh encoder theo mức mất mát phát sinh.
 - Input: host được ưu tiên. `LocalInputMonitor` tạm dừng remote input khi người dùng tại
   máy đang thao tác với mouse của họ; mỗi thời điểm chỉ một viewer điều khiển.
+- Secure desktop trên Windows: khi hộp thoại UAC hoặc màn hình khoá lấy input desktop
+  khỏi `Default`, Windows Graphics Capture ngừng trả frame và `SendInput` từ app không còn
+  tới đích. Khi đó mỗi source chuyển sang một agent chạy dưới quyền SYSTEM:
+
+  ```
+  Deskhub.exe (user, elevated) ── \\.\pipe\DeskhubSecureDesktop ──▶ DeskhubService.exe
+       ▲                                               (LocalSystem, session 0)
+       │ private pipe, its handle duplicated into          │ CreateProcessAsUser,
+       │ Deskhub.exe by the service                        ▼ SYSTEM token, user session
+       └──────────────────────── DeskhubService.exe --agent
+                                  follows the input desktop; DXGI duplication +
+                                  pointer compositing → Frame; Input → SendInput
+  ```
+
+  `SecureDesktopLink` (mỗi source một cái) gửi `Watch` kèm hình chữ nhật của màn hình và
+  nhận các message `DesktopState` và `Frame` dạng BGRA (`core/session/host/SecureDesktopWire`).
+  Trong lúc agent báo đang ở secure desktop, frame WGC bị bỏ, frame của agent được upload
+  vào một texture rồi đi qua cùng đường admission, scaler và encoder, và `InputInjector`
+  chuyển mọi `INPUT` tới agent thay vì gọi `SendInput`. Mỗi lần chuyển đổi đều ép một
+  keyframe.
 - Shell: mỗi shell một PTY (`ConPTY` trên Windows, `forkpty` trên các nền tảng khác), tối
   đa 8 shell. Khi mất kết nối, shell được tách ra và PTY được giữ sống cho đến khi tiến trình shell thoát hoặc shell bị đóng — không giới hạn thời gian. Mọi client đã được chấp nhận đều có thể liệt kê các shell đang được giữ (`TermList`/`TermListAck`) và reattach một shell theo id. Mọi thao tác open, close, detach và reattach đều được ghi vào audit log kèm
   địa chỉ, tên và key. `TERM_CLOSE` được trả lời trước guard theo peer mà các message
@@ -476,6 +496,21 @@ không gây fail), các số liệu integration dưới tải từ bản build c
 coverage của core.
 
 ## 9. Những quyết định cần ghi nhớ
+
+- **Secure desktop cần quyền SYSTEM, nên một service khởi động agent trong session của
+  người dùng**: `requireAdministrator` là chưa đủ — desktop `Winlogon` nơi UAC và màn hình
+  khoá chạy chỉ có thể được mở, capture và gõ vào bởi một tiến trình SYSTEM gắn vào nó, và
+  WGC hoàn toàn không capture được nó, nên agent dùng DXGI desktop duplication và tự vẽ con
+  trỏ. Service sống trong session 0, nơi không truy cập được các desktop của người dùng, nên
+  nó nhân bản token của chính nó, đặt session id và khởi động agent ở đó. Frame đi qua pipe
+  trong bộ nhớ hệ thống vì secure desktop ít thay đổi và một texture GPU dùng chung sẽ phải
+  vượt qua một ranh giới integrity; agent giới hạn ở 10 frame mỗi giây. Service tin một
+  client dựa trên đường dẫn image của tiến trình kết nối — `Deskhub.exe` trong chính thư
+  mục của nó dưới `Program Files`, nơi chỉ administrator ghi được — và app tin server theo
+  cùng cách, nên cả kẻ chiếm trước pipe lẫn một chương trình quyền cao khác đều không có
+  được agent SYSTEM hay phím viewer bấm. Đó cũng là lý do bộ cài chuyển sang cài cho toàn
+  máy: một binary service trong `%LOCALAPPDATA%` có thể bị bất kỳ tiến trình nào người dùng
+  chạy thay thế.
 
 - **Chỉ host mới có thể kết thúc sớm một handshake, nên client lắng nghe xem nó kết thúc
   thế nào**: client từng chờ `AuthResult` tới 65 giây — di sản từ thời việc approve diễn ra

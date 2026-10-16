@@ -4,6 +4,7 @@
 #include "input/InputInjector.h"
 
 #include <cstdio>
+#include <utility>
 
 #include "deskhubp/diag/Log.h"
 #include "deskhub/input/PointerMap.h"
@@ -42,6 +43,16 @@ bool InputInjector::Init(HMONITOR monitor) {
     return true;
 }
 
+void InputInjector::SetSecureRoute(SecureRoute route) {
+    secureRoute_ = std::move(route);
+}
+
+void InputInjector::Deliver(const INPUT& in) {
+    if (secureRoute_ && secureRoute_(in)) return;
+    INPUT copy = in;
+    SendInput(1, &copy, sizeof(INPUT));
+}
+
 void InputInjector::OnLocalUserTookOver() {
     LOGI("[Inject] Local user is active - pausing remote input (host wins).");
 }
@@ -67,7 +78,7 @@ void InputInjector::SendKey(int32_t vk, int32_t scan, bool down) {
     } else {
         in.ki.wVk = WORD(vk);
     }
-    SendInput(1, &in, sizeof(INPUT));
+    Deliver(in);
 }
 
 void InputInjector::SendButton(deskhub::MouseButton btn, bool down) {
@@ -78,7 +89,7 @@ void InputInjector::SendButton(deskhub::MouseButton btn, bool down) {
     in.mi.dwFlags = ButtonFlag(btn, down);
     if (btn == deskhub::MouseButton::X1) in.mi.mouseData = XBUTTON1;
     if (btn == deskhub::MouseButton::X2) in.mi.mouseData = XBUTTON2;
-    if (in.mi.dwFlags) SendInput(1, &in, sizeof(INPUT));
+    if (in.mi.dwFlags) Deliver(in);
 }
 
 void InputInjector::SendMoveAbsolute(int32_t nx, int32_t ny) {
@@ -95,7 +106,7 @@ void InputInjector::SendMoveAbsolute(int32_t nx, int32_t ny) {
     in.type = INPUT_MOUSE;
     in.mi.dwFlags = MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_VIRTUALDESK;
     ScreenToVirtualDesk(pt.x, pt.y, in.mi.dx, in.mi.dy);
-    SendInput(1, &in, sizeof(INPUT));
+    Deliver(in);
 }
 
 void InputInjector::SendMoveRelative(int32_t dx, int32_t dy) {
@@ -104,7 +115,7 @@ void InputInjector::SendMoveRelative(int32_t dx, int32_t dy) {
     in.mi.dwFlags = MOUSEEVENTF_MOVE;
     in.mi.dx = dx;
     in.mi.dy = dy;
-    SendInput(1, &in, sizeof(INPUT));
+    Deliver(in);
 }
 
 void InputInjector::Apply(const deskhub::InputEvent& e) {
@@ -117,7 +128,7 @@ void InputInjector::SendWheel(int32_t delta) {
     in.type = INPUT_MOUSE;
     in.mi.dwFlags = MOUSEEVENTF_WHEEL;
     in.mi.mouseData = DWORD(delta);
-    SendInput(1, &in, sizeof(INPUT));
+    Deliver(in);
 }
 
 void InputInjector::ReleaseAll() {
