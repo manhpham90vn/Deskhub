@@ -382,9 +382,9 @@ Each needs a one-time setup before the first tag that runs it:
 
   Repeat with `ManhPham.DeskhubCLI` and the `deskhub-cli-vX.Y.Z-windows.exe` URL.
 
-  The app's installer became per-machine in the release that added the secure desktop
-  service. If the `ManhPham.Deskhub` manifest in `winget-pkgs` still says
-  `Scope: user`, change it to `machine` by hand in the pull request komac opens.
+  The app's installer is per-machine since the release that added the secure desktop
+  service, so submit `ManhPham.Deskhub` with `Scope: machine` — and if its first pull
+  request is still waiting for review with `Scope: user`, update it to `machine`.
 - **Homebrew** — create the public repository `manhpham90vn/homebrew-tap`; the job fills it.
 - **apt** — generate the signing key once, store the file as `APT_GPG_PRIVATE_KEY` and keep
   an offline backup. Every user trusts this key: replacing it breaks their `apt update`.

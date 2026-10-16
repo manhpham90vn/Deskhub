@@ -352,9 +352,9 @@ GitHub Release 创建后，`deploy.yml` 将 tag 交给 `publish-packages.yml`，
 
   再对 `ManhPham.DeskhubCLI` 和 `deskhub-cli-vX.Y.Z-windows.exe` 的 URL 执行一次。
 
-  app 的安装程序在加入 secure desktop service 的那个 release 中改为 per-machine。若
-  `winget-pkgs` 中的 `ManhPham.Deskhub` manifest 仍写着 `Scope: user`，请在 komac 打开的
-  pull request 中手动将其改为 `machine`。
+  自加入 secure desktop service 的那个 release 起，app 的安装程序为 per-machine，因此请以
+  `Scope: machine` 提交 `ManhPham.Deskhub`；若其首个 pull request 仍以 `Scope: user` 等待
+  审核，请将其改为 `machine`。
 - **Homebrew** —— 创建 public repository `manhpham90vn/homebrew-tap`，由 job 填充内容。
 - **apt** —— 生成一次 signing key，将该文件存为 `APT_GPG_PRIVATE_KEY`，并保留离线备份。
   所有用户都信任这把 key：更换它会让他们的 `apt update` 失败。

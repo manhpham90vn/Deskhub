@@ -11,7 +11,8 @@
     { "title": "End-to-end encrypted", "body": "Sessions over QUIC/TLS, paired with a QR code." },
     { "title": "More than pixels", "body": "Share the display, run shell commands and transfer files." },
     { "title": "Built for games", "body": "Relative mouse, keyboard, DirectInput and 64 kbps Opus audio." },
-    { "title": "CLI included", "body": "Script sessions or use it like SSH from any terminal." }
+    { "title": "CLI included", "body": "Script sessions or use it like SSH from any terminal." },
+    { "title": "Answers Windows prompts", "body": "Viewers can approve admin prompts and unlock the screen of a Windows PC." }
   ],
   "screenshot": {
     "src": "docs/imgs/macos_1.png",
@@ -64,7 +65,7 @@
       "command": "sudo install -d /etc/apt/keyrings\ncurl -fsSL https://manhpham90vn.github.io/Deskhub/apt/deskhub.gpg | sudo tee /etc/apt/keyrings/deskhub.gpg >/dev/null\necho \"deb [arch=amd64 signed-by=/etc/apt/keyrings/deskhub.gpg] https://manhpham90vn.github.io/Deskhub/apt stable main\" | sudo tee /etc/apt/sources.list.d/deskhub.list\nsudo apt update && sudo apt install deskhub"
     }
   ],
-  "version": "v9.0.3",
+  "version": "v9.1.0",
   "translations": {
     "vi": {
       "tagline": "Remote desktop open source cho mọi nền tảng bạn đang dùng.",
@@ -78,7 +79,8 @@
         { "title": "Mã hoá end-to-end", "body": "Session chạy trên QUIC/TLS, pair bằng QR code." },
         { "title": "Không chỉ có màn hình", "body": "Chia sẻ màn hình, chạy shell command và truyền file." },
         { "title": "Chơi game được", "body": "Relative mouse, bàn phím, DirectInput và âm thanh Opus 64 kbps." },
-        { "title": "Có sẵn CLI", "body": "Script các session hoặc dùng như SSH từ bất kỳ terminal nào." }
+        { "title": "Có sẵn CLI", "body": "Script các session hoặc dùng như SSH từ bất kỳ terminal nào." },
+        { "title": "Trả lời được hộp thoại Windows", "body": "Viewer bấm được hộp thoại xin quyền admin và mở khoá màn hình của máy Windows." }
       ],
       "downloads": [
         { "sub": "Bộ cài · .exe" },

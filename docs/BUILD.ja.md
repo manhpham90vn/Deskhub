@@ -392,9 +392,9 @@ GitHub Release の作成後、`deploy.yml` は tag を `publish-packages.yml` �
 
   `ManhPham.DeskhubCLI` と `deskhub-cli-vX.Y.Z-windows.exe` の URL でも同様に行う。
 
-  app のインストーラーは、secure desktop サービスを追加した release で per-machine に
-  なった。`winget-pkgs` の `ManhPham.Deskhub` manifest がまだ `Scope: user` のままなら、
-  komac が開く pull request の中で手動で `machine` に変更する。
+  app のインストーラーは secure desktop サービスを追加した release から per-machine なので、
+  `ManhPham.Deskhub` は `Scope: machine` で提出する。最初の pull request が `Scope: user`
+  のままレビュー待ちなら、`machine` に更新する。
 - **Homebrew** —— public repository `manhpham90vn/homebrew-tap` を作成する。中身は job が
   書き込む。
 - **apt** —— signing key を一度だけ生成し、そのファイルを `APT_GPG_PRIVATE_KEY` として

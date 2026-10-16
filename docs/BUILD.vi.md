@@ -384,9 +384,9 @@ Mỗi job cần thiết lập một lần trước tag đầu tiên chạy nó:
 
   Làm lại với `ManhPham.DeskhubCLI` và URL `deskhub-cli-vX.Y.Z-windows.exe`.
 
-  Bộ cài của app chuyển sang cài cho toàn máy từ bản release thêm service secure desktop.
-  Nếu manifest `ManhPham.Deskhub` trong `winget-pkgs` vẫn ghi `Scope: user`, hãy sửa tay
-  thành `machine` trong pull request mà komac mở.
+  Bộ cài của app cài cho toàn máy kể từ bản release thêm service secure desktop, nên hãy
+  submit `ManhPham.Deskhub` với `Scope: machine` — và nếu pull request đầu tiên vẫn đang
+  chờ duyệt với `Scope: user`, hãy sửa nó thành `machine`.
 - **Homebrew** — tạo repository public `manhpham90vn/homebrew-tap`; job sẽ tự điền nội dung.
 - **apt** — tạo signing key một lần, lưu file đó làm `APT_GPG_PRIVATE_KEY` và giữ một bản
   backup offline. Mọi người dùng đều trust key này: thay key sẽ làm hỏng `apt update` của họ.
