@@ -860,6 +860,15 @@ scaling の 2 つの判定とともに実行する（共有 runner には時間�
   スロット ring へコピーし、capture 時刻を記録するのみである。encode、診断、viewer ごと
   の送信は worker thread が担う。worker が処理しきれない場合の影響は計数される破棄
   （`framesRefused`）であり、host の音声の乱れではない。
+- **WASAPI loopback は無音になったデバイスだけを埋め、ミュートは自分で守る。** 何も再生
+  していない間 loopback は packet を届けないため、capture thread は無音フレームで埋めて
+  ストリームを一定の間隔で流し続ける。この埋め処理はかつて、実際の packet が届いているか
+  どうかに関係なく独自の 20 ms タイマーで動いており、再生中の音声の途中にゼロを差し込み、
+  フレームレートを倍にしていた——viewer 側では途切れないパチパチ音として聞こえる。現在は
+  まる 1 フレームの間 packet が一つも来なかった場合にのみ埋める。loopback は endpoint の
+  ミュートが適用される前のミックスを取得するため、ミュートした Windows host でも再生内容
+  をすべて共有してしまう。capture は `IAudioEndpointVolume::GetMute` を読み、スピーカーが
+  ミュートの間は無音を送る。
 - **音声は双方が有効にした場合にのみ流れる。** viewer が `Hello.features` の bit 0 を
   設定し、host は capability に `kHostSharesAudio` を提示し、host は当該ビットが設定されて
   いる viewer にのみ packet を送信する。

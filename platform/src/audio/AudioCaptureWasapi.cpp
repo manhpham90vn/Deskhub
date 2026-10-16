@@ -8,6 +8,7 @@
 #include <windows.h>
 
 #include <audioclient.h>
+#include <endpointvolume.h>
 #include <mmdeviceapi.h>
 #include <mmreg.h>
 #include <objbase.h>
@@ -46,6 +47,11 @@ int16_t ClampToPcm(float sample) {
     return int16_t(scaled);
 }
 
+bool EndpointMuted(IAudioEndpointVolume* volume) {
+    BOOL muted = FALSE;
+    return volume != nullptr && SUCCEEDED(volume->GetMute(&muted)) && muted != FALSE;
+}
+
 }
 
 struct AudioCapture::Impl {
@@ -59,12 +65,20 @@ struct AudioCapture::Impl {
     std::atomic<bool> quit{false};
     std::atomic<bool> opened{false};
     bool emittedAny = false;
+    uint64_t frameUs = 0;
+    uint64_t nextPadUs = 0;
+    uint64_t lastPacketUs = 0;
     HANDLE ready = nullptr;
 
     void Emit() {
         if (onFrame) onFrame(staging);
         emittedAny = true;
         staged = 0;
+        nextPadUs = NowUs() + frameUs;
+    }
+
+    bool DeviceWentQuiet(uint64_t nowUs) const {
+        return nowUs - lastPacketUs >= frameUs && nowUs >= nextPadUs;
     }
 
     void FeedInterleaved(const void* data, size_t deviceFrames, const WAVEFORMATEX& wf,
@@ -91,8 +105,26 @@ struct AudioCapture::Impl {
         Emit();
     }
 
+    bool DrainPackets(IAudioCaptureClient& capture, const WAVEFORMATEX& wf, bool muted);
     void Run();
 };
+
+bool AudioCapture::Impl::DrainPackets(IAudioCaptureClient& capture, const WAVEFORMATEX& wf,
+    bool muted) {
+    bool drained = false;
+    UINT32 available = 0;
+    while (SUCCEEDED(capture.GetNextPacketSize(&available)) && available > 0) {
+        BYTE* data = nullptr;
+        UINT32 deviceFrames = 0;
+        DWORD flags = 0;
+        if (FAILED(capture.GetBuffer(&data, &deviceFrames, &flags, nullptr, nullptr))) break;
+        const bool silent = muted || (flags & AUDCLNT_BUFFERFLAGS_SILENT) != 0;
+        FeedInterleaved(data, deviceFrames, wf, silent);
+        capture.ReleaseBuffer(deviceFrames);
+        drained = true;
+    }
+    return drained;
+}
 
 void AudioCapture::Impl::Run() {
     ComScope com;
@@ -105,6 +137,11 @@ void AudioCapture::Impl::Run() {
 
     Microsoft::WRL::ComPtr<IAudioClient> client;
     if (SUCCEEDED(hr)) hr = device->Activate(__uuidof(IAudioClient), CLSCTX_ALL, nullptr, &client);
+
+    Microsoft::WRL::ComPtr<IAudioEndpointVolume> volume;
+    if (SUCCEEDED(hr) &&
+        FAILED(device->Activate(__uuidof(IAudioEndpointVolume), CLSCTX_ALL, nullptr, &volume)))
+        LOGW("[audio] evt=capture_mute_unknown backend=wasapi note=shares sound while muted");
 
     WAVEFORMATEX* mix = nullptr;
     if (SUCCEEDED(hr)) hr = client->GetMixFormat(&mix);
@@ -143,27 +180,18 @@ void AudioCapture::Impl::Run() {
     LOGI("[audio] evt=capture_open backend=wasapi source=default render loopback rate=%u ch=%u",
         format.sampleRate, format.channels);
 
-    const uint64_t frameUs = uint64_t(format.samplesPerFrame) * 1'000'000 / format.sampleRate;
-    uint64_t nextDueUs = NowUs() + frameUs;
+    frameUs = uint64_t(format.samplesPerFrame) * 1'000'000 / format.sampleRate;
+    lastPacketUs = NowUs();
+    nextPadUs = lastPacketUs + frameUs;
 
     while (!quit.load(std::memory_order_acquire)) {
-        UINT32 available = 0;
-        while (SUCCEEDED(capture->GetNextPacketSize(&available)) && available > 0) {
-            BYTE* data = nullptr;
-            UINT32 deviceFrames = 0;
-            DWORD flags = 0;
-            if (FAILED(capture->GetBuffer(&data, &deviceFrames, &flags, nullptr, nullptr))) break;
-            FeedInterleaved(data, deviceFrames, wf, (flags & AUDCLNT_BUFFERFLAGS_SILENT) != 0);
-            capture->ReleaseBuffer(deviceFrames);
-        }
+        if (DrainPackets(*capture.Get(), wf, EndpointMuted(volume.Get()))) lastPacketUs = NowUs();
 
         const uint64_t nowUs = NowUs();
-        if (nowUs >= nextDueUs) {
-            if (staged > 0 || emittedAny) PadWithSilence();
-            nextDueUs = nowUs + frameUs;
-        } else {
+        if (DeviceWentQuiet(nowUs) && (staged > 0 || emittedAny))
+            PadWithSilence();
+        else
             Sleep(kPollMs);
-        }
     }
 
     client->Stop();

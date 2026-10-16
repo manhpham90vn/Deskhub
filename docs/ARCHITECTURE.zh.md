@@ -723,6 +723,13 @@ runner 上与 base commit 的 A/B 结果（偏移仅作为警告，不导致失�
   无锁槽位 ring 中并记录 capture 时间；encode、诊断与按 viewer 的发送由 worker thread
   完成。worker 处理不及时的后果是一次被计数的丢弃（`framesRefused`），而不是 host 音频
   中的异常。
+- **WASAPI loopback 只在设备安静下来后补静音，并自行遵循静音设置。** 没有声音播放时
+  loopback 不交付任何 packet，因此 capture thread 用静音帧补齐，使流保持匀速。这段补齐
+  过去按独立的 20 ms 定时器运行，不论真实 packet 是否正在到达，于是在正在播放的声音中间
+  插入零值，并使帧率翻倍——viewer 端听到的是持续的沙沙声。现在只有在整整一帧内没有任何
+  packet 时才补齐。loopback 还在 endpoint 的静音生效之前采集混音，所以已静音的 Windows
+  host 仍会共享它播放的一切；capture 读取 `IAudioEndpointVolume::GetMute`，在扬声器
+  静音期间发送静音。
 - **音频需要双方同时启用。** viewer 设置 `Hello.features` 的 bit 0，host 在其 capability
   中声明 `kHostSharesAudio`，host 仅向设置了该位的 viewer 发送 packet。
 - **协议版本 3 只与自身通信。** 当 `Hello`、`LIST_SOURCES` 与 `TERM_OPEN` 去掉了因

@@ -853,6 +853,15 @@ coverage của core.
   phần encode, phần chẩn đoán và các lượt gửi theo từng viewer. Khi worker không theo kịp,
   hệ quả là một lần drop được đếm (`framesRefused`), không phải hiện tượng nhiễu trong âm
   thanh của host.
+- **WASAPI loopback chỉ chèn im lặng khi thiết bị đã ngừng phát, và tự tôn trọng chế độ
+  tắt tiếng.** Loopback không trả về packet nào khi không có gì đang phát, nên thread
+  capture chèn các frame im lặng để luồng tiếp tục chạy đều. Phần chèn này từng chạy theo
+  một bộ hẹn giờ 20 ms riêng bất kể packet thật có đang tới hay không, cắt các đoạn số 0
+  vào giữa âm thanh đang phát và làm tốc độ frame tăng gấp đôi — phía viewer nghe thành
+  tiếng rè liên tục. Giờ nó chỉ chèn sau trọn một frame không có packet nào. Loopback cũng
+  lấy bản mix trước khi chế độ tắt tiếng của endpoint được áp dụng, nên một host Windows
+  đã tắt tiếng vẫn chia sẻ mọi thứ nó phát; phần capture đọc
+  `IAudioEndpointVolume::GetMute` và gửi im lặng khi loa đang tắt tiếng.
 - **Âm thanh cần cả hai phía cùng bật.** Viewer đặt bit 0 của `Hello.features`, host công
   bố `kHostSharesAudio` trong phần capability, và host chỉ gửi packet tới những viewer có
   bit này được đặt.

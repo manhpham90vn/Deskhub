@@ -859,6 +859,15 @@ line.
   preallocated lock-free slot ring and stamps the capture time; a worker thread does
   the encode, the diagnostics and the per-viewer sends. A worker that falls behind
   costs a counted drop (`framesRefused`), never a glitch in the host's audio.
+- **WASAPI loopback pads only a device that went quiet, and honours mute itself**:
+  loopback delivers no packets while nothing plays, so the capture thread pads the
+  stream with silent frames to keep it ticking. That padding once ran on its own 20 ms
+  timer whether or not real packets were arriving, cutting zeros into the middle of
+  live sound and doubling the frame rate — heard on the viewer as a steady crackle. It
+  now pads only after a full frame with no packet at all. Loopback also captures the
+  mix before the endpoint's mute is applied, so a muted Windows host would still share
+  everything it plays; the capture reads `IAudioEndpointVolume::GetMute` and sends
+  silence while the speakers are muted.
 - **Sound needs both ends to say yes**: a viewer sets bit 0 of `Hello.features`, a host
   advertises `kHostSharesAudio` in its capabilities, and the host sends a packet only to
   viewers whose bit is set.
