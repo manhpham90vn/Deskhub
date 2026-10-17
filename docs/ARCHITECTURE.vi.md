@@ -294,7 +294,7 @@ HostEngine (mỗi app một instance, sở hữu SessionTransport)
   tới đích. Khi đó mỗi source chuyển sang một agent chạy dưới quyền SYSTEM:
 
   ```
-  Deskhub.exe (user, elevated) ── \\.\pipe\DeskhubSecureDesktop ──▶ DeskhubService.exe
+  Deskhub.exe / CLI (elevated) ── \\.\pipe\DeskhubSecureDesktop ──▶ DeskhubService.exe
        ▲                                               (LocalSystem, session 0)
        │ private pipe, its handle duplicated into          │ CreateProcessAsUser,
        │ Deskhub.exe by the service                        ▼ SYSTEM token, user session
@@ -314,19 +314,20 @@ HostEngine (mỗi app một instance, sở hữu SessionTransport)
   `Agent` là luồng mô tả ở trên; `Takeover` và `Configure` phục vụ truy cập trước khi đăng
   nhập (T-28). Khi tính năng này bật, thread giám sát của service giữ
   `DeskhubService.exe --unattended-host` chạy dưới quyền SYSTEM trong console session bất
-  cứ khi nào không có `Deskhub.exe` nào giữ một kết nối `Takeover`. Tiến trình đó chính là
+  cứ khi nào cả `Deskhub.exe` lẫn `deskhub-cli.exe` đều không giữ một kết nối `Takeover`. Tiến trình đó chính là
   `SharingHost` + `HostEngine` thông thường với `SetConfigDir`/`SetAppDataDir` trỏ tới
   `%ProgramData%\DeskHub`, một cờ `UnattendedMode()` toàn tiến trình bỏ qua WGC, chuyển mọi
   `INPUT` qua link, và gửi một `Watch` kèm `alwaysStream` và fps của phiên share làm
   `maxFps`; nó xin service một agent cho mỗi màn hình đúng như app làm, nên nhiều màn hình
-  không cần thêm đường ống mới nào. `SharingHost::Start` trong `Deskhub.exe` gửi `Takeover`
+  không cần thêm đường ống mới nào. `SharingHost::Start` trong app và CLI gửi `Takeover`
   trước khi engine bind: service kết thúc unattended host, chờ nó thoát để UDP port được
   giải phóng, ack, và giữ nó không chạy cho tới khi kết nối đó đóng trong
   `SharingHost::Stop`. `Configure` mang một `UnattendedConfig` (cờ enabled, `host_key.pem`,
   `authorized_keys`, nội dung `ui-settings.txt`); service ghi ba file đó atomic vào thư mục
   của máy, khởi động lại host khi key hoặc settings thay đổi, và xoá các file khi tắt. App
   gửi nó khi setting được bật hoặc tắt, sau mỗi lần lưu settings, sau mỗi thay đổi với danh
-  sách được phép, khi một phiên share dừng và một lần lúc khởi động.
+  sách được phép, khi một phiên share dừng và một lần lúc khởi động; CLI gửi nó từ
+  `settings set`, từ các lệnh `access` làm thay đổi danh sách được phép và khi `share` dừng.
 - Shell: mỗi shell một PTY (`ConPTY` trên Windows, `forkpty` trên các nền tảng khác), tối
   đa 8 shell. Khi mất kết nối, shell được tách ra và PTY được giữ sống cho đến khi tiến trình shell thoát hoặc shell bị đóng — không giới hạn thời gian. Mọi client đã được chấp nhận đều có thể liệt kê các shell đang được giữ (`TermList`/`TermListAck`) và reattach một shell theo id. Mọi thao tác open, close, detach và reattach đều được ghi vào audit log kèm
   địa chỉ, tên và key. `TERM_CLOSE` được trả lời trước guard theo peer mà các message
@@ -533,12 +534,19 @@ coverage của core.
   nó nhân bản token của chính nó, đặt session id và khởi động agent ở đó. Frame đi qua pipe
   trong bộ nhớ hệ thống vì secure desktop ít thay đổi và một texture GPU dùng chung sẽ phải
   vượt qua một ranh giới integrity; agent giới hạn ở 10 frame mỗi giây. Service tin một
-  client dựa trên đường dẫn image của tiến trình kết nối — `Deskhub.exe` trong chính thư
-  mục của nó dưới `Program Files`, nơi chỉ administrator ghi được — và app tin server theo
+  client dựa trên đường dẫn image của tiến trình kết nối — `Deskhub.exe` hoặc
+  `deskhub-cli.exe` trong chính thư mục của nó dưới `Program Files`, nơi chỉ administrator ghi được — và app tin server theo
   cùng cách, nên cả kẻ chiếm trước pipe lẫn một chương trình quyền cao khác đều không có
   được agent SYSTEM hay phím viewer bấm. Đó cũng là lý do bộ cài chuyển sang cài cho toàn
   máy: một binary service trong `%LOCALAPPDATA%` có thể bị bất kỳ tiến trình nào người dùng
   chạy thay thế.
+
+- **CLI nằm trong bộ cài Windows, không có bộ cài riêng**: service tin client theo đường
+  dẫn image trong chính thư mục của nó, và giao thức pipe gắn với phiên bản của các binary,
+  nên một `deskhub-cli.exe` cài riêng chỉ có thể được phục vụ bởi một service thứ hai, hoặc
+  bởi một `DeskhubService.exe` mà hai bộ cài thay nhau ghi đè, mỗi bên một phiên bản. Một
+  bộ cài giữ ba exe ở cùng một phiên bản và đưa thư mục vào `PATH` hệ thống; điều đó cũng
+  chấm dứt exe CLI portable và các gói winget, vốn không còn bộ cài nào để trỏ tới.
 
 - **Truy cập trước khi đăng nhập chạy chính host của Deskhub, không phải một bản cài đặt
   thứ hai**: service lẽ ra có thể có socket và encoder của riêng nó, nhưng mọi quy tắc về

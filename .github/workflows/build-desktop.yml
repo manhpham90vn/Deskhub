@@ -16,6 +16,7 @@ jobs:
     timeout-minutes: 45
     env:
       APP_EXE: out/build/x64-release/client/windows/win32/Deskhub.exe
+      CLI_EXE: out/build/x64-release/client/cli/deskhub-cli.exe
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -35,24 +36,26 @@ jobs:
           cache-key: windows
 
       - name: Configure
-        run: cmake --preset x64-release
+        run: cmake --preset x64-release -DDESKHUB_CLI=ON
 
-      - name: Build the Windows app
+      - name: Build the Windows app, the service and the CLI
         shell: bash
         run: |
           cmake --build --preset x64-release 2>&1 | tee app-build.log ||
             { grep -iE "error|warning C[0-9]|LNK[0-9]" app-build.log | tail -40 | sed 's/^/::error::/' || true
               exit 1; }
 
-      - name: Assert the exe needs no redistributable
+      - name: Assert the exes need no redistributable
         shell: pwsh
         run: |
-          $deps = dumpbin /dependents $env:APP_EXE
-          $deps
-          $bad = $deps | Select-String -Pattern 'VCRUNTIME|MSVCP\d|MSVCR\d'
-          if ($bad) {
-            Write-Output "::error::$env:APP_EXE needs the Visual C++ Redistributable - the installer ships it without one"
-            exit 1
+          foreach ($exe in $env:APP_EXE, $env:CLI_EXE) {
+            $deps = dumpbin /dependents $exe
+            $deps
+            $bad = $deps | Select-String -Pattern 'VCRUNTIME|MSVCP\d|MSVCR\d'
+            if ($bad) {
+              Write-Output "::error::$exe needs the Visual C++ Redistributable - the installer ships it without one"
+              exit 1
+            }
           }
           Write-Output "OK - the MSVC runtime is linked statically."
 
@@ -64,26 +67,37 @@ jobs:
           & 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe' "/DAppVersion=$version" packaging/windows/Deskhub.iss
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-      - name: Verify Windows installer shortcuts, service and uninstall
+      - name: Verify Windows installer shortcuts, service, CLI on PATH and uninstall
         shell: pwsh
         run: |
           $setup = (Resolve-Path 'out/installer/DeskHub-Setup.exe').Path
           $installed = Join-Path $env:ProgramFiles 'DeskHub\Deskhub.exe'
+          $directory = Split-Path $installed
           $shortcut = Join-Path ([Environment]::GetFolderPath('CommonPrograms')) 'DeskHub.lnk'
           $desktopShortcut = Join-Path ([Environment]::GetFolderPath('CommonDesktopDirectory')) 'DeskHub.lnk'
-          $install = Start-Process $setup -ArgumentList '/VERYSILENT', '/NORESTART' -Wait -PassThru
-          if ($install.ExitCode -ne 0) { throw "Installer exited with $($install.ExitCode)" }
-          if (-not (Test-Path $installed) -or -not (Test-Path $shortcut) -or -not (Test-Path $desktopShortcut)) {
-            throw 'Installer did not install the app and both shortcuts'
-          }
-          foreach ($file in 'DeskhubService.exe', 'THIRD_PARTY_NOTICES.md', 'licenses\wxWindows.txt', 'licenses\BSD-2-Clause-quiche.txt') {
-            if (-not (Test-Path (Join-Path (Split-Path $installed) $file))) { throw "Installer did not install $file" }
+          $originalPath = [Environment]::GetEnvironmentVariable('Path', 'Machine')
+          foreach ($run in 1..2) {
+            $install = Start-Process $setup -ArgumentList '/VERYSILENT', '/NORESTART' -Wait -PassThru
+            if ($install.ExitCode -ne 0) { throw "Installer exited with $($install.ExitCode)" }
+            if (-not (Test-Path $installed) -or -not (Test-Path $shortcut) -or -not (Test-Path $desktopShortcut)) {
+              throw 'Installer did not install the app and both shortcuts'
+            }
+            foreach ($file in 'DeskhubService.exe', 'deskhub-cli.exe', 'THIRD_PARTY_NOTICES.md', 'licenses\wxWindows.txt', 'licenses\BSD-2-Clause-quiche.txt') {
+              if (-not (Test-Path (Join-Path $directory $file))) { throw "Installer did not install $file" }
+            }
+            $machinePath = [Environment]::GetEnvironmentVariable('Path', 'Machine')
+            if (@($machinePath -split ';' | Where-Object { $_ -eq $directory }).Count -ne 1) {
+              throw 'The install folder must appear exactly once in the system PATH'
+            }
           }
           $service = Get-Service -Name DeskhubSecureDesktop -ErrorAction SilentlyContinue
           if (-not $service -or $service.Status -ne 'Running' -or $service.StartType -ne 'Automatic') {
             throw 'Installer did not register and start the DeskhubSecureDesktop service'
           }
-          $uninstall = Start-Process (Join-Path (Split-Path $installed) 'unins000.exe') -ArgumentList '/VERYSILENT', '/NORESTART' -Wait -PassThru
+          $version = & (Join-Path $directory 'deskhub-cli.exe') version
+          if ($LASTEXITCODE -ne 0) { throw 'The installed deskhub-cli.exe does not run' }
+          Write-Output "deskhub-cli reports: $version"
+          $uninstall = Start-Process (Join-Path $directory 'unins000.exe') -ArgumentList '/VERYSILENT', '/NORESTART' -Wait -PassThru
           if ($uninstall.ExitCode -ne 0) { throw "Uninstaller exited with $($uninstall.ExitCode)" }
           if ((Test-Path $shortcut) -or (Test-Path $desktopShortcut)) {
             throw 'Uninstaller left a shortcut behind'
@@ -91,6 +105,8 @@ jobs:
           if (Get-Service -Name DeskhubSecureDesktop -ErrorAction SilentlyContinue) {
             throw 'Uninstaller left the DeskhubSecureDesktop service behind'
           }
+          $finalPath = [Environment]::GetEnvironmentVariable('Path', 'Machine')
+          if ($finalPath -ne $originalPath) { throw 'Uninstall did not restore the system PATH' }
 
       - name: Upload installer
         if: ${{ inputs.for_release }}

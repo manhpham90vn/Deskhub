@@ -81,6 +81,7 @@ void RunTransferViewTests();
 void RunRecentDevicesTests();
 void RunHostProfilesTests();
 void RunUiSettingsTests();
+void RunUnattendedAccessTests();
 void RunCliCommandTests();
 void RunCliJsonTests();
 void RunAutostartConfigTests();

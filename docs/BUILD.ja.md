@@ -325,22 +325,24 @@ private な Kotlin コード、import、引数で失敗する。ある振る舞�
 用の App Store Connect API key —— `ASC_KEY_P8`（`.p8` ファイルのパス）、`ASC_KEY_ID`、
 `ASC_ISSUER_ID` —— が必要である。3 つのいずれかが欠けていれば build の前に停止する。
 
-Release workflow は `packaging/windows/` から Windows app と CLI の Inno Setup インストーラー
-も作成する。app のインストーラーには管理者権限が必要である。すべてのユーザー向けに
-`Program Files` 配下へインストールし、以前のユーザー単位のインストールを削除し、
+Windows は 1 つの Inno Setup インストーラーとして配布する。Release workflow が
+`packaging/windows/Deskhub.iss` から作成し、`Deskhub.exe`、`deskhub-cli.exe`、
+`DeskhubService.exe` を収める。管理者権限が必要である。すべてのユーザー向けに
+`Program Files` 配下へインストールし、そのフォルダをシステムの `PATH` に追加し、以前の
+ユーザー単位のインストール（app のもの、または旧来の単体 CLI のもの）を削除し、
 `DeskhubService.exe --install` を実行して *DeskHub Secure Desktop* サービスを登録する
-（アンインストール時は `--uninstall`）。Windows app はこのインストーラーのみで配布する。
-ポータブル版の app exe は存在しない。サービスがなければ viewer に UAC の確認画面、
-ロック画面、サインイン画面を見せられないからである。CLI の Windows ポータブル版と
-Linux app は引き続き単一ファイルである。
+（アンインストール時は `--uninstall`）。Windows 向けにはそれ以外に何も配布しない ——
+ポータブル版の app exe も CLI exe もなく、CLI 単体のインストーラーもない。サービスは
+自身のフォルダにあるプログラムしか信頼せず、3 つのバイナリは同じバージョンでなければ
+ならないからである。Linux の app と CLI は引き続き単一ファイルである。
 
 すべてのパッケージは `THIRD_PARTY_NOTICES.md` と、`licenses/` のうちそのパッケージに
 該当するライセンス文を同梱する。対象は app と CLI の `.deb` と `.rpm`
 （`/usr/share/doc/<package>/` の下に置き、LGPL を含むライセンス文はその `licenses/`
-フォルダに置く）、両方の Windows インストーラー、macOS app の `Resources`、iOS の app
+フォルダに置く）、Windows インストーラー、macOS app の `Resources`、iOS の app
 bundle、Android APK の assets である。Linux と Apple 向けの組は
 `scripts/stage-licenses.sh` が配置し、Windows 向けは `packaging/windows/*.iss` が列挙し、
-Android の build は自ら必要なものをコピーする。CLI と Linux のポータブル版バイナリには
+Android の build は自ら必要なものをコピーする。Linux と macOS のポータブル版バイナリには
 何も同梱されないため、リリースには `LICENSE`、notices、`licenses/` フォルダ全体を収めた
 `deskhub-<tag>-licenses.zip` が加わる。`licenses/rust-crates.txt` は生成物であり、
 quiche の pin が変わったら
@@ -376,26 +378,11 @@ GitHub Release の作成後、`deploy.yml` は tag を `publish-packages.yml` �
 
 | Job | 公開先 | `stg` environment の secret |
 | --- | --- | --- |
-| `winget` | [komac](https://github.com/russellbanks/Komac)（`scripts/pinned-versions.txt` で pin）経由で、`ManhPham.Deskhub` と `ManhPham.DeskhubCLI` の pull request を `microsoft/winget-pkgs` に出す | `WINGET_TOKEN` —— `public_repo` を持つ classic PAT |
 | `homebrew` | `manhpham90vn/homebrew-tap` の `Casks/deskhub.rb` と `Formula/deskhub-cli.rb`。`packaging/homebrew/` から生成する | `HOMEBREW_TAP_TOKEN` —— tap に Contents: write を持つ fine-grained PAT |
 | `build-apt-repo` → `deploy-apt-repo` | 直近 3 つの release の deb を収めた署名付き apt repository。GitHub Pages の `/apt` に置く（`scripts/build-apt-repo.sh`） | `APT_GPG_PRIVATE_KEY`、`APT_GPG_PASSPHRASE` |
 
 いずれも、それを実行する最初の tag より前に一度だけ設定が必要である。
 
-- **winget** —— job は既存の package しか更新しないため、各 package の最初の版は手動で
-  提出する。`ManhPham.Deskhub` には Inno Setup インストーラーを使用し、
-  `ManhPham.DeskhubCLI` の portable command alias には `deskhub-cli` を選ぶ。
-  Microsoft がその pull request を merge するまで、job は警告を出してスキップする。
-
-  ```bash
-  komac new ManhPham.Deskhub --version X.Y.Z --urls https://github.com/manhpham90vn/Deskhub/releases/download/vX.Y.Z/deskhub-vX.Y.Z-windows-setup.exe
-  ```
-
-  `ManhPham.DeskhubCLI` と `deskhub-cli-vX.Y.Z-windows.exe` の URL でも同様に行う。
-
-  app のインストーラーは secure desktop サービスを追加した release から per-machine なので、
-  `ManhPham.Deskhub` は `Scope: machine` で提出する。最初の pull request が `Scope: user`
-  のままレビュー待ちなら、`machine` に更新する。
 - **Homebrew** —— public repository `manhpham90vn/homebrew-tap` を作成する。中身は job が
   書き込む。
 - **apt** —— signing key を一度だけ生成し、そのファイルを `APT_GPG_PRIVATE_KEY` として

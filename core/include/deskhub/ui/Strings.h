@@ -72,11 +72,20 @@ inline constexpr const char* kUnattendedHint =
     "right after Windows starts, and whenever Deskhub is not running. Needs the setup-file "
     "install; Ctrl+Alt+Del cannot be sent.";
 inline constexpr const char* kUnattendedServiceMissingNote =
-    "The DeskHub Secure Desktop service is not installed beside this Deskhub.exe. Install "
+    "The DeskHub Secure Desktop service is not installed beside this program. Install "
     "Deskhub with the setup file to allow access before sign-in.";
 inline constexpr const char* kUnattendedPushFailedNote =
     "The DeskHub Secure Desktop service did not accept the settings for access before "
     "sign-in. Check that it is running (services.msc) and try again.";
+inline constexpr const char* kUnattendedSyncFailedNote =
+    "The change is saved here, but the DeskHub Secure Desktop service did not take the "
+    "new copy for access before sign-in and keeps the previous one.";
+inline constexpr const char* kUnattendedNeedsAdminTerminal =
+    "Only administrators may talk to the DeskHub Secure Desktop service: run the terminal "
+    "as an administrator and try again.";
+inline constexpr const char* kUnattendedWindowsOnlyNote =
+    "Access before anyone signs in exists on Windows only, installed from the setup file; "
+    "Linux and macOS hosts do not have it yet.";
 inline constexpr const char* kPickSourcesHint =
     "Tick what to share \xE2\x80\x94 displays, the terminal, file transfer \xE2\x80\x94 then "
     "press Share. Nothing is shared until you press it.";

@@ -209,10 +209,11 @@ có ý nghĩa. Deskhub chỉ thay thế đúng rule đó của chính nó. Rule 
 được giữ nguyên, và vì Windows cho rule chặn thắng rule cho phép, host sẽ không truy cập
 được cho tới khi bạn gỡ rule đó.
 Trên Windows, trình cài đặt còn thêm một thứ nữa: service *DeskHub Secure Desktop*, giúp
-phiên share tiếp tục qua hộp thoại UAC hoặc màn hình khoá. Trong lúc bạn share, viewer thấy
+phiên share — từ app hay từ `deskhub-cli` — tiếp tục qua hộp thoại UAC hoặc màn hình khoá.
+Trong lúc bạn share, viewer thấy
 các màn hình đó và gõ được vào chúng — kể cả ô mật khẩu của màn hình khoá.
 Khi bật *Allow access before anyone signs in* (mặc định tắt), chính service này còn chạy một
-host của riêng nó bất cứ khi nào app không share, từ màn hình đăng nhập trở đi, cho các
+host của riêng nó bất cứ khi nào cả hai đều không share, từ màn hình đăng nhập trở đi, cho các
 thiết bị đã có trong danh sách được phép của bạn; nó mở thêm một rule UDP inbound thứ hai,
 *Deskhub Secure Desktop (host)*, cho `DeskhubService.exe`.
 
@@ -260,7 +261,7 @@ Nếu bạn tiếp tục sử dụng Deskhub ở trạng thái hiện tại, nê
       màn hình đang share hoặc đang trình chiếu.
 - [ ] Thoát Deskhub khi không sử dụng. Thoát app là đóng luôn điểm truy cập: service
       *DeskHub Secure Desktop* mà trình cài đặt Windows thêm vào không nhận gì từ network
-      và không làm gì khi app không share — trừ khi bạn đã bật *Allow access before anyone
+      và không làm gì khi cả app lẫn `deskhub-cli` đều không share — trừ khi bạn đã bật *Allow access before anyone
       signs in*, chính là setting giữ một host lắng nghe khi không có ai ở máy, ngay từ lúc
       Windows khởi động. Hãy để nó tắt trừ khi bạn cần truy cập máy sau khi khởi động lại,
       giữ danh sách được phép thật ngắn trong lúc nó bật, và nhớ rằng ai có tên trong danh
@@ -383,20 +384,22 @@ Không dữ liệu nào trong số này được upload; bạn có thể xoá th
   app là lỗi trong một tiến trình quyền cao. Trình cài đặt còn đăng ký *DeskHub Secure
   Desktop*, một service chạy dưới tài khoản LocalSystem. Named pipe của nó từ chối client
   từ xa và network logon, chỉ nhận administrator ở mức integrity cao, và chỉ phục vụ
-  `Deskhub.exe` nằm trong cùng thư mục với nó, được kiểm tra qua đường dẫn image của tiến
-  trình kết nối; ngược lại, app chỉ nói chuyện với `DeskhubService.exe` nằm cạnh nó trong
-  session 0. Với app đó, service khởi động một agent dưới quyền SYSTEM trong session của
-  người dùng, gắn với một job sẽ kill agent khi app ngắt kết nối; agent capture secure
-  desktop và phát lại input của app ở đó, và không đọc gì khác. Cả hai binary nằm trong
+  `Deskhub.exe` và `deskhub-cli.exe` nằm trong cùng thư mục với nó, được kiểm tra qua đường
+  dẫn image của tiến trình kết nối; ngược lại, mỗi chương trình đó chỉ nói chuyện với
+  `DeskhubService.exe` nằm cạnh nó trong session 0. Với chương trình đó, service khởi động
+  một agent dưới quyền SYSTEM trong session của người dùng, gắn với một job sẽ kill agent
+  khi chương trình ngắt kết nối; agent capture secure desktop và phát lại input của chương
+  trình ấy ở đó, và không đọc gì khác. Cả ba binary nằm trong
   `Program Files`, nơi chỉ administrator ghi được, nên một tiến trình chạy dưới quyền
-  người dùng không thể tráo một trong hai để chiếm quyền SYSTEM. Một lỗi trong agent vẫn là
-  lỗi trong một tiến trình SYSTEM, chỉ chạm tới được thông qua app quyền cao. Khi bật *Allow
+  người dùng không thể tráo một trong số đó để chiếm quyền SYSTEM. Một lỗi trong agent vẫn là
+  lỗi trong một tiến trình SYSTEM, chỉ chạm tới được thông qua app hay CLI quyền cao. Khi bật *Allow
   access before anyone signs in*, service còn khởi động chính mã host mà app chạy, dưới
   quyền SYSTEM trong console session, và host đó truy cập được từ network; nó đọc key, danh
   sách được phép và settings của mình từ `%ProgramData%\DeskHub`, nơi chỉ SYSTEM và
-  administrator mở được, và service chỉ nhận bản copy mới của chúng từ `Deskhub.exe` đã
-  cài, cũng qua đường dẫn image. Mọi kết nối tới pipe của service giờ mở đầu bằng một byte
-  yêu cầu, và hai yêu cầu mới bị từ chối với bất cứ gì không phải app đó.
+  administrator mở được, và service chỉ nhận bản copy mới của chúng từ `Deskhub.exe` hoặc
+  `deskhub-cli.exe` đã cài, cũng qua đường dẫn image. Mọi kết nối tới pipe của service giờ
+  mở đầu bằng một byte yêu cầu, và hai yêu cầu mới bị từ chối với bất cứ gì không phải hai
+  chương trình đó.
 - **Tích hợp liên tục.** Mọi pull request đều chạy ba bộ test dưới AddressSanitizer,
   UndefinedBehaviorSanitizer và ThreadSanitizer, clang-tidy, các fuzzer mô tả ở trên, CodeQL
   trên code C++, Kotlin và Swift, và một lượt quét gitleaks trên toàn bộ lịch sử Git để tìm

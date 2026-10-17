@@ -40,19 +40,15 @@
 
 ## 📦 インストール
 
-Windows、macOS、Ubuntu、Debian、Mint では package manager からインストールできる。
+Windows では [Releases](https://github.com/manhpham90vn/Deskhub/releases) から
+`deskhub-v*-windows-setup.exe` をダウンロードする。1 つのセットアップファイルで app、
+`deskhub-cli`、*DeskHub Secure Desktop* サービスがまとめてインストールされる。macOS、
+Ubuntu、Debian、Mint では package manager からインストールできる。
 
 ```bash
-winget install ManhPham.Deskhub                  # Windows · app
-winget install ManhPham.DeskhubCLI               # Windows · deskhub-cli
 brew install --cask manhpham90vn/tap/deskhub     # macOS · app
 brew install manhpham90vn/tap/deskhub-cli        # macOS · deskhub-cli
 ```
-
-> **winget はまだ使えない。** Deskhub のパッケージは winget-pkgs でまだレビュー待ちで
-> （アプリは [#439628](https://github.com/microsoft/winget-pkgs/pull/439628)、CLI は [#439629](https://github.com/microsoft/winget-pkgs/pull/439629)）、
-> マージされるまで 2 つの `winget install` コマンドはどちらも失敗する。それまでは
-> [Releases](https://github.com/manhpham90vn/Deskhub/releases) から Windows インストーラーを入手すること。
 
 Ubuntu / Debian / Mint では、デスクトップ app と CLI は別パッケージである。
 apt repository を一度追加し、必要な方だけ、または両方をインストールする。
@@ -69,16 +65,14 @@ sudo apt install deskhub-cli   # CLI。単独でもインストール可能
 
 デスクトップパッケージはアプリケーションメニューに Deskhub を追加し、`deskhub` を
 `/usr/bin` にインストールする。CLI パッケージは `deskhub-cli` を `/usr/bin` に
-インストールする。Windows の app インストーラーはスタートメニューとデスクトップに
-ショートカットを作成し、別の CLI インストーラーはユーザーの `PATH` にコマンドを
-追加する。winget は CLI を portable 版 exe としてインストールし、`PATH` に配置する。
+インストールする。Windows のセットアップはスタートメニューとデスクトップに
+ショートカットを作成し、`deskhub-cli` を含むそのフォルダをシステムの `PATH` に追加する。
 macOS の CLI は Homebrew により `PATH` に配置される。
 
 その他のプラットフォームは [Releases](https://github.com/manhpham90vn/Deskhub/releases) から：
 
-- **Windows 直接ダウンロード** —— app 用 `deskhub-v*-windows-setup.exe`（app はこの形式
-  のみ）と CLI 用 `deskhub-cli-v*-windows-setup.exe`。CLI には portable 版
-  `deskhub-cli-v*-windows.exe` もある
+- **Windows 直接ダウンロード** —— `deskhub-v*-windows-setup.exe` のみ。app、`deskhub-cli`、
+  サービスが 1 つのセットアップに収まっている
 - **macOS 直接ダウンロード** —— app は `deskhub-v*-macos.dmg`、CLI は `deskhub-cli-v*-macos`
 - **repository を使わない Ubuntu / Debian / Mint** —— `deskhub-v*-amd64.deb` と
   `deskhub-cli-v*-amd64.deb`

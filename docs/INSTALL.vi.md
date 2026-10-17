@@ -27,32 +27,29 @@ Bạn cũng có thể dùng `deskhub-cli` cho các lệnh terminal và script. T
 Linux, CLI vẫn có thể mở cửa sổ xem màn hình từ xa (trên Linux là cửa sổ X11, nên desktop
 Wayland cần XWayland). Xem [Command line](#-command-line).
 
-Bạn có thể cài qua `winget` trên Windows, Homebrew trên macOS hoặc
-[apt repository](#-linux) trên Ubuntu, Kubuntu, Debian và Mint. Khi muốn lên bản mới,
-hãy dùng lệnh nâng cấp của package manager tương ứng.
+Bạn có thể cài qua Homebrew trên macOS hoặc [apt repository](#-linux) trên Ubuntu,
+Kubuntu, Debian và Mint. Khi muốn lên bản mới, hãy dùng lệnh nâng cấp của package manager
+tương ứng. Windows không có kênh package manager: tải file setup từ Releases, và chạy bản
+mới đè lên bản cũ để nâng cấp.
 
 ---
 
 ## 🪟 Windows
 
 Tải `deskhub-v*-windows-setup.exe` và chạy. Bộ cài xin quyền administrator, cài DeskHub
-cho mọi người dùng vào `Program Files`, thêm nó vào Start Menu và tạo shortcut trên
-Desktop theo mặc định; bạn cũng có thể mở app ngay khi cài xong. Không cần tài khoản. Bản
-DeskHub mà phiên bản trước cài riêng cho người dùng của bạn sẽ được gỡ trước, và
+cho mọi người dùng vào `Program Files` — `Deskhub.exe`, `deskhub-cli.exe` và service
+*DeskHub Secure Desktop* cùng nhau — thêm nó vào Start Menu, đưa thư mục đó vào `PATH` hệ
+thống để `deskhub-cli` chạy được trong mọi terminal mở mới, và tạo shortcut trên Desktop
+theo mặc định; bạn cũng có thể mở app ngay khi cài xong. Không cần tài khoản. Bản DeskHub
+hay DeskHub CLI mà phiên bản trước cài riêng cho người dùng của bạn sẽ được gỡ trước, và
 *Start Deskhub when you log in* được trỏ sang vị trí mới; settings và key của bạn vẫn nằm
-nguyên chỗ cũ. Không có bản exe portable: file setup là cách duy nhất để cài app Windows,
-vì service mà nó cài chính là thứ cho viewer đi qua hộp thoại UAC, màn hình khoá và màn
-hình đăng nhập.
+nguyên chỗ cũ. Không có bản exe portable và không có bản tải CLI riêng: file setup là cách
+duy nhất để cài Deskhub trên Windows, vì service mà nó cài chính là thứ cho viewer đi qua
+hộp thoại UAC, màn hình khoá và màn hình đăng nhập, và service chỉ phục vụ các chương trình
+nằm trong chính thư mục của nó.
 
-Hoặc để winget cài bộ cài đó và giữ nó luôn mới: `winget upgrade` lấy bản release mới,
-`winget uninstall ManhPham.Deskhub` gỡ nó đi:
-
-```powershell
-winget install ManhPham.Deskhub
-```
-
-Nếu đã cài bản winget portable trước đây, chạy `winget uninstall ManhPham.Deskhub` một
-lần rồi cài lại. Settings và key trong `%USERPROFILE%\.deskhub` vẫn được giữ.
+Muốn nâng cấp, chạy file setup mới đè lên bản cũ; nó thay file tại chỗ, còn settings và
+key trong `%USERPROFILE%\.deskhub` vẫn được giữ.
 
 Có ba điểm cần lưu ý:
 
@@ -62,18 +59,19 @@ Có ba điểm cần lưu ý:
   logon task chạy quyền cao, không hiện hộp thoại.
 - **Rule Windows Firewall** do app tự thêm trong lần share đầu tiên.
 - **Một system service, *DeskHub Secure Desktop***, chạy dưới tài khoản LocalSystem. Mặc
-  định nó không làm gì cho tới khi DeskHub share màn hình. Khi đó, lúc Windows chuyển sang
+  định nó không làm gì cho tới khi DeskHub hoặc `deskhub-cli` share màn hình. Khi đó, lúc Windows chuyển sang
   secure desktop — hộp thoại UAC của một trình cài đặt, màn hình khoá, Ctrl+Alt+Del — viewer
   vẫn thấy màn hình và click, gõ được ở đó, nên họ có thể trả lời hộp thoại UAC thay bạn,
   và bất kỳ ai biết mật khẩu của bạn đều mở khoá được máy. Tick *Allow access before anyone
-  signs in* trong Settings → Host thì service còn tự làm host bất cứ khi nào DeskHub không
-  share — từ màn hình đăng nhập ngay sau khi máy khởi động — cho các thiết bị đã có trong
+  signs in* trong Settings → Host — hoặc chạy `deskhub-cli settings set unattended=on` từ
+  một terminal administrator — thì service còn tự làm host bất cứ khi nào cả app lẫn CLI
+  đều không share — từ màn hình đăng nhập ngay sau khi máy khởi động — cho các thiết bị đã có trong
   danh sách được phép của bạn; xem [đặc tả](SPECIFICATION.vi.md) (T-28) để biết nó làm gì
   và không làm gì. Bản build từ source chạy không có service thì các màn hình đó đứng yên
   với viewer cho tới khi chúng đóng lại, và ô chọn của nó bị mờ đi.
 
-Gỡ DeskHub trong Windows Settings hoặc chạy `winget uninstall ManhPham.Deskhub`; service
-cũng được gỡ theo, cùng với `%ProgramData%\DeskHub`, nơi nó giữ log và các bản copy mà
+Gỡ DeskHub trong Windows Settings; CLI và service cũng được gỡ theo, cùng với
+`%ProgramData%\DeskHub`, nơi service giữ log và các bản copy mà
 *Allow access before anyone signs in* đã tạo.
 Settings và key vẫn nằm trong `%USERPROFILE%\.deskhub` cho đến khi bạn xoá thư mục đó, còn
 file máy khác gửi tới vẫn nằm trong `%USERPROFILE%\Deskhub` (hoặc thư mục bạn đã chọn) cho
@@ -299,7 +297,7 @@ chung settings, key của máy, client được phép, yêu cầu kết nối v�
 
 | Nền tảng | File |
 | --- | --- |
-| 🪟 Windows | `deskhub-cli-v*-windows-setup.exe` — cài `deskhub-cli` vào `PATH` của người dùng |
+| 🪟 Windows | nằm trong `deskhub-v*-windows-setup.exe` — bộ cài đặt `deskhub-cli` cạnh app và đưa nó vào `PATH` hệ thống |
 | 🍎 macOS | `deskhub-cli-v*-macos` — một binary cho cả Apple Silicon và Intel |
 | 🐧 Linux | `deskhub-cli-v*-amd64.deb`, `deskhub-cli-v*-x86_64.rpm`, hoặc file portable `deskhub-cli-v*-linux-x86_64` |
 
@@ -313,29 +311,27 @@ như file dmg, nên lần chạy đầu tiên có thể cần
 `xattr -d com.apple.quarantine deskhub-cli-v*-macos`, hoặc chọn *Open Anyway* trong System
 Settings → Privacy & Security.
 
-Bộ cài Windows thêm CLI vào `PATH` của người dùng mà không cần quyền Administrator.
-File `deskhub-cli-v*-windows.exe` vẫn có cho ai muốn chạy portable.
-
-**CLI không bao giờ có service *DeskHub Secure Desktop*.** Bộ cài CLI không cài service,
-và service — kể cả khi bộ cài app đã cài nó trên cùng máy — chỉ phục vụ `Deskhub.exe` nằm
-cạnh nó, không bao giờ phục vụ `deskhub-cli.exe`, dù file đó ở đâu. Vì vậy
-`deskhub-cli share` trên Windows cho viewer thấy hình đứng yên khi có hộp thoại UAC, màn
-hình khoá hay màn hình đăng nhập, phím chuột của họ không tới được các màn hình đó, và
-*Allow access before anyone signs in* là setting chỉ có ở app. Cần những thứ đó thì cài app
-bằng file setup.
+**Trên Windows, CLI không có bản tải riêng.** File setup cài `deskhub-cli.exe` cạnh
+`Deskhub.exe` và service *DeskHub Secure Desktop*, và service phục vụ cả hai chương trình
+trong thư mục đó. Vì vậy `deskhub-cli share` đi tiếp qua hộp thoại UAC, màn hình khoá và
+màn hình đăng nhập đúng như app, còn `deskhub-cli settings set unattended=on` bật *Allow
+access before anyone signs in* — cùng một setting với ô chọn của app, đẩy tới cùng một
+service, và `access add`, `access remove`, `access approve`, `access clear` giữ cho host
+trước khi đăng nhập luôn đồng bộ. Hai điều cần biết: chỉ administrator mới nói chuyện được
+với service, nên hãy chạy terminal dưới quyền administrator cho các phần đó — một
+`deskhub-cli share` không nâng quyền vẫn chạy, nhưng không có secure desktop, và khi
+setting kia đang bật thì nó không giành lại được port từ host trước khi đăng nhập; và một
+`deskhub-cli.exe` copy đi nơi khác, hay build từ source, không được phục vụ, như mọi bản
+copy nằm ngoài thư mục đã cài.
 Mọi bộ cài và gói cài đặt đều mang theo `THIRD_PARTY_NOTICES.md` và văn bản giấy phép của
 các thư viện bên trong; các binary portable thì không thể, nên mỗi bản release còn có
 `deskhub-v*-licenses.zip` chứa `LICENSE`, `THIRD_PARTY_NOTICES.md` và mọi văn bản giấy phép.
-Cài qua package
-manager cũng đưa lệnh vào `PATH`:
-`winget install ManhPham.DeskhubCLI` trên Windows (winget cài file exe portable, không phải
-bộ cài), `brew install manhpham90vn/tap/deskhub-cli` trên macOS — Homebrew cài mà không gắn
-cờ quarantine. Trên Ubuntu hoặc Debian, sau khi thêm
-apt repository ở trên, chạy `sudo apt install deskhub-cli`.
+Cài qua package manager cũng đưa lệnh vào `PATH`: `brew install manhpham90vn/tap/deskhub-cli`
+trên macOS — Homebrew cài mà không gắn cờ quarantine — và trên Ubuntu hoặc Debian,
+`sudo apt install deskhub-cli` sau khi thêm apt repository ở trên.
 
-Trên Windows, sau khi cài bằng winget hãy mở cửa sổ PowerShell mới và chạy
-`deskhub-cli help`. Chạy `Get-Command deskhub-cli` để xem Windows tìm thấy file nào.
-File exe portable tải trực tiếp không tự thêm vào `PATH`.
+Trên Windows, sau khi cài xong hãy mở cửa sổ PowerShell mới và chạy `deskhub-cli help`.
+Chạy `Get-Command deskhub-cli` để xem Windows tìm thấy file nào.
 
 Trên Linux, `deskhub-cli` share màn hình qua cùng portal và VA-API driver mà app cần, đồng
 thời dựa vào cùng rule `/dev/uinput` cho remote input, nên toàn bộ mục [Linux](#-linux) áp

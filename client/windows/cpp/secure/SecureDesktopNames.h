@@ -8,5 +8,6 @@ inline constexpr wchar_t kSecureDesktopServiceDescription[] =
 inline constexpr wchar_t kSecureDesktopPipeName[] = L"\\\\.\\pipe\\DeskhubSecureDesktop";
 inline constexpr wchar_t kSecureDesktopServiceExe[] = L"DeskhubService.exe";
 inline constexpr wchar_t kSecureDesktopHostExe[] = L"Deskhub.exe";
+inline constexpr wchar_t kSecureDesktopCliExe[] = L"deskhub-cli.exe";
 inline constexpr wchar_t kSecureDesktopAgentArg[] = L"--agent";
 inline constexpr wchar_t kUnattendedHostArg[] = L"--unattended-host";

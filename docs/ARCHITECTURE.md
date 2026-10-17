@@ -293,7 +293,7 @@ HostEngine (one per app, owns SessionTransport)
   from the app no longer lands. Each source then switches to a SYSTEM agent:
 
   ```
-  Deskhub.exe (user, elevated) ── \\.\pipe\DeskhubSecureDesktop ──▶ DeskhubService.exe
+  Deskhub.exe / CLI (elevated) ── \\.\pipe\DeskhubSecureDesktop ──▶ DeskhubService.exe
        ▲                                               (LocalSystem, session 0)
        │ private pipe, its handle duplicated into          │ CreateProcessAsUser,
        │ Deskhub.exe by the service                        ▼ SYSTEM token, user session
@@ -313,12 +313,12 @@ HostEngine (one per app, owns SessionTransport)
   (`SecureDesktopRequest`): `Agent` is the flow above; `Takeover` and `Configure` serve
   access before sign-in (T-28). With it on, the service's supervisor thread keeps
   `DeskhubService.exe --unattended-host` running as SYSTEM in the console session
-  whenever no `Deskhub.exe` holds a `Takeover` connection. That process is the ordinary
+  whenever neither `Deskhub.exe` nor `deskhub-cli.exe` holds a `Takeover` connection. That process is the ordinary
   `SharingHost` + `HostEngine` with `SetConfigDir`/`SetAppDataDir` pointed at
   `%ProgramData%\DeskHub`, a process-wide `UnattendedMode()` flag that skips WGC, routes
   every `INPUT` through the link, and sends a `Watch` with `alwaysStream` and the share
   fps as `maxFps`; it asks the service for one agent per display exactly as the app
-  does, so multi-monitor needs no new plumbing. `SharingHost::Start` in `Deskhub.exe`
+  does, so multi-monitor needs no new plumbing. `SharingHost::Start` in the app and the CLI
   sends `Takeover` before the engine binds: the service terminates the unattended host,
   waits for it to exit so the UDP port is free, acks, and keeps it down until that
   connection closes in `SharingHost::Stop`. `Configure` carries an `UnattendedConfig`
@@ -326,7 +326,8 @@ HostEngine (one per app, owns SessionTransport)
   writes the three files atomically into the machine folder, restarts the host when the
   key or the settings changed, and wipes the files when disabled. The app sends it when
   the setting is toggled, after every settings save, after every change to the allowed
-  list, when a share stops and once at start.
+  list, when a share stops and once at start; the CLI sends it from `settings set`, from
+  the `access` commands that change the allowed list and when `share` stops.
 - Shells: one PTY per shell (`ConPTY` on Windows, `forkpty` elsewhere), at most 8; a
   dropped connection detaches the shell and the PTY stays alive until the shell
   process exits or the shell is closed — no time limit. Any admitted client can list
@@ -540,11 +541,19 @@ line.
   agent there. Frames cross the pipe in system memory because the secure desktop changes
   little and a shared GPU texture would have to cross an integrity boundary; the agent
   caps them at 10 per second. The service trusts a client by the image path of the
-  connecting process — `Deskhub.exe` in its own folder under `Program Files`, which only
-  administrators can write — and the app trusts the server the same way, so neither a
+  connecting process — `Deskhub.exe` or `deskhub-cli.exe` in its own folder under
+  `Program Files`, which only administrators can write — and the app trusts the server the same way, so neither a
   pipe squatter nor another elevated program gets a SYSTEM agent or the viewer's
   keystrokes. That is also why the installer became per-machine: a service binary in
   `%LOCALAPPDATA%` could be replaced by any process the user runs.
+
+- **The CLI ships inside the Windows setup, not as an installer of its own**: the service
+  trusts a client by image path in its own folder, and the pipe protocol is versioned
+  with the binaries, so a separately installed `deskhub-cli.exe` could only have been
+  served by a second service or by a `DeskhubService.exe` that two installers overwrite
+  in turn, each at its own version. One setup holds the three exes at one version and
+  puts the folder on the system `PATH`; that also ended the portable CLI exe and the
+  winget packages, which had no installer to point at.
 
 - **Access before sign-in runs Deskhub's own host, not a second implementation**: the
   service could have grown a socket and an encoder of its own, but every rule about

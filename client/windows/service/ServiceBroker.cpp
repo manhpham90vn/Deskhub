@@ -129,10 +129,6 @@ DWORD WINAPI ControlHandler(DWORD control, DWORD, void*, void*) {
     return NO_ERROR;
 }
 
-std::wstring ExpectedHostImage() {
-    return DirectoryOf(SelfExePath()) + L"\\" + kSecureDesktopHostExe;
-}
-
 bool WaitConnected(HANDLE pipe, HANDLE stopEvent) {
     OVERLAPPED ov{};
     OwnedHandle event(CreateEventW(nullptr, TRUE, FALSE, nullptr));
@@ -433,14 +429,14 @@ void ServeTakeover(OverlappedPipe& control, ULONG pid) {
         ++g_unattended.takeoverHolds;
         StopUnattendedHostLocked();
     }
-    LOGI("[Service] Deskhub.exe (pid %lu) is taking over from the unattended host.", pid);
+    LOGI("[Service] Process %lu is taking over from the unattended host.", pid);
     if (SendByte(control, deskhub::kSecureDesktopAck)) DrainUntilClosed(control, nullptr);
     {
         const std::lock_guard<std::mutex> lock(g_unattended.mutex);
         --g_unattended.takeoverHolds;
     }
     SetEvent(g_stateChanged);
-    LOGI("[Service] Deskhub.exe (pid %lu) stopped sharing; the unattended host may return.", pid);
+    LOGI("[Service] Process %lu stopped sharing; the unattended host may return.", pid);
 }
 
 std::optional<deskhub::UnattendedConfig> ReadConfig(OverlappedPipe& control) {
@@ -501,14 +497,16 @@ void ServeConfigure(OverlappedPipe& control, ULONG pid) {
     SendByte(control, deskhub::kSecureDesktopAck);
 }
 
-bool TrustedClient(HANDLE host, ULONG pid, DWORD& sessionId, bool& isApp) {
+bool TrustedClient(HANDLE host, ULONG pid, DWORD& sessionId, bool& mayControl) {
     const std::wstring image = ProcessImagePath(host);
-    isApp = SamePath(image, ExpectedHostImage());
+    const std::wstring folder = DirectoryOf(SelfExePath()) + L"\\";
+    mayControl = SamePath(image, folder + kSecureDesktopHostExe) ||
+                 SamePath(image, folder + kSecureDesktopCliExe);
     const bool isService = SamePath(image, SelfExePath());
-    if (!isApp && !isService) {
+    if (!mayControl && !isService) {
         LOGW(
-            "[Service] Refused process %lu: it is not the Deskhub.exe or DeskhubService.exe "
-            "installed beside this service (%ls).",
+            "[Service] Refused process %lu: it is not the Deskhub.exe, deskhub-cli.exe or "
+            "DeskhubService.exe installed beside this service (%ls).",
             pid, image.c_str());
         return false;
     }
@@ -530,8 +528,8 @@ void ServeHost(HANDLE pipeHandle) {
         return;
     }
     DWORD sessionId = 0;
-    bool isApp = false;
-    if (!TrustedClient(host.get(), pid, sessionId, isApp)) return;
+    bool mayControl = false;
+    if (!TrustedClient(host.get(), pid, sessionId, mayControl)) return;
 
     uint8_t requestByte = 0;
     if (!ReadExactly(control, std::span<uint8_t>(&requestByte, 1))) return;
@@ -545,8 +543,10 @@ void ServeHost(HANDLE pipeHandle) {
         ServeAgent(control, host.get(), pid, sessionId);
         return;
     }
-    if (!isApp) {
-        LOGW("[Service] Refused request %u from pid %lu: only Deskhub.exe may send it.",
+    if (!mayControl) {
+        LOGW(
+            "[Service] Refused request %u from pid %lu: only Deskhub.exe or deskhub-cli.exe "
+            "may send it.",
             unsigned(requestByte), pid);
         return;
     }
@@ -607,7 +607,7 @@ void WINAPI ServiceMain(DWORD, wchar_t**) {
         return;
     }
     ReportStatus(SERVICE_RUNNING);
-    LOGI("[Service] Running; waiting for Deskhub.exe on %ls.", kSecureDesktopPipeName);
+    LOGI("[Service] Running; waiting for hosts on %ls.", kSecureDesktopPipeName);
     std::thread supervisor(SuperviseUnattendedHost);
     ServePipe();
     SetEvent(g_stopEvent);

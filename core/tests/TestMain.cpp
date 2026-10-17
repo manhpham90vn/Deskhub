@@ -237,6 +237,7 @@ int main() {
 
     std::printf("--- ui: persisted share settings ---\n");
     RunUiSettingsTests();
+    RunUnattendedAccessTests();
 
     std::printf("--- ui: launch-at-login artifacts ---\n");
     RunAutostartConfigTests();

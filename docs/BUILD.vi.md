@@ -319,20 +319,22 @@ Quy ước của dự án, bản rút gọn; bản đầy đủ nằm trong `CLA
 Connect API key để notarize: `ASC_KEY_P8` (đường dẫn tới file `.p8`), `ASC_KEY_ID` và
 `ASC_ISSUER_ID`. Nó dừng trước khi build nếu thiếu bất kỳ biến nào trong ba biến đó.
 
-Workflow release cũng tạo bộ cài Inno Setup cho app và CLI trên Windows từ
-`packaging/windows/`. Bộ cài của app cần quyền administrator: nó cài vào `Program Files`
-cho mọi người dùng, gỡ bản cài theo từng người dùng trước đó, và chạy
-`DeskhubService.exe --install` để đăng ký service *DeskHub Secure Desktop* (`--uninstall`
-khi gỡ cài đặt). App Windows chỉ phát hành dưới dạng bộ cài đó — không có exe app portable,
-vì thiếu service thì viewer không thấy được hộp thoại UAC, màn hình khoá hay màn hình đăng
-nhập; bản Windows portable của CLI và app Linux vẫn là file đơn lẻ.
+Windows phát hành dưới dạng một bộ cài Inno Setup duy nhất, do workflow release tạo từ
+`packaging/windows/Deskhub.iss`, chứa `Deskhub.exe`, `deskhub-cli.exe` và
+`DeskhubService.exe`. Nó cần quyền administrator: cài vào `Program Files` cho mọi người
+dùng, đưa thư mục đó vào `PATH` hệ thống, gỡ bản cài theo từng người dùng trước đó của app
+hoặc của CLI riêng cũ, và chạy `DeskhubService.exe --install` để đăng ký service *DeskHub
+Secure Desktop* (`--uninstall` khi gỡ cài đặt). Windows không phát hành gì khác — không exe
+portable cho app hay CLI, không bộ cài CLI riêng — vì service chỉ tin các chương trình trong
+chính thư mục của nó và ba binary phải cùng một phiên bản; app và CLI Linux vẫn là file đơn
+lẻ.
 
 Mọi gói đều kèm `THIRD_PARTY_NOTICES.md` và các văn bản giấy phép trong `licenses/` áp dụng
 cho nó: `.deb` và `.rpm` của app và CLI (dưới `/usr/share/doc/<package>/`, các văn bản —
-kể cả LGPL — nằm trong thư mục `licenses/` của nó), cả hai bộ cài Windows, `Resources` của
+kể cả LGPL — nằm trong thư mục `licenses/` của nó), bộ cài Windows, `Resources` của
 app macOS, bundle của app iOS và assets của APK Android. `scripts/stage-licenses.sh` chuẩn bị
 bộ cho Linux và Apple, `packaging/windows/*.iss` liệt kê bộ cho Windows, còn bản build
-Android tự copy bộ của nó. Các binary portable của CLI và Linux không mang theo gì, nên bản release thêm
+Android tự copy bộ của nó. Các binary portable trên Linux và macOS không mang theo gì, nên bản release thêm
 `deskhub-<tag>-licenses.zip` chứa `LICENSE`, file notices và toàn bộ thư mục `licenses/`.
 `licenses/rust-crates.txt` được sinh ra:
 `scripts/rust-crate-notices.py <quiche source dir> > licenses/rust-crates.txt` ghi lại nó
@@ -368,26 +370,11 @@ một trong các script này — chạy tay: `gh workflow run publish-packages.y
 
 | Job | Publish | Secret trong environment `stg` |
 | --- | --- | --- |
-| `winget` | pull request vào `microsoft/winget-pkgs` cho `ManhPham.Deskhub` và `ManhPham.DeskhubCLI`, qua [komac](https://github.com/russellbanks/Komac) (pin trong `scripts/pinned-versions.txt`) | `WINGET_TOKEN` — classic PAT có `public_repo` |
 | `homebrew` | `Casks/deskhub.rb` và `Formula/deskhub-cli.rb` trong `manhpham90vn/homebrew-tap`, sinh từ `packaging/homebrew/` | `HOMEBREW_TAP_TOKEN` — fine-grained PAT, Contents: write trên tap |
 | `build-apt-repo` → `deploy-apt-repo` | apt repository đã ký, chứa deb của ba release gần nhất, trên GitHub Pages tại `/apt` (`scripts/build-apt-repo.sh`) | `APT_GPG_PRIVATE_KEY`, `APT_GPG_PASSPHRASE` |
 
 Mỗi job cần thiết lập một lần trước tag đầu tiên chạy nó:
 
-- **winget** — job chỉ cập nhật package đã tồn tại, nên bản đầu tiên của mỗi package phải
-  gửi bằng tay. Dùng bộ cài Inno Setup cho `ManhPham.Deskhub`; chọn `deskhub-cli` làm
-  portable command alias cho `ManhPham.DeskhubCLI` khi komac hỏi.
-  Trước khi Microsoft merge pull request đó, job chỉ cảnh báo rồi bỏ qua.
-
-  ```bash
-  komac new ManhPham.Deskhub --version X.Y.Z --urls https://github.com/manhpham90vn/Deskhub/releases/download/vX.Y.Z/deskhub-vX.Y.Z-windows-setup.exe
-  ```
-
-  Làm lại với `ManhPham.DeskhubCLI` và URL `deskhub-cli-vX.Y.Z-windows.exe`.
-
-  Bộ cài của app cài cho toàn máy kể từ bản release thêm service secure desktop, nên hãy
-  submit `ManhPham.Deskhub` với `Scope: machine` — và nếu pull request đầu tiên vẫn đang
-  chờ duyệt với `Scope: user`, hãy sửa nó thành `machine`.
 - **Homebrew** — tạo repository public `manhpham90vn/homebrew-tap`; job sẽ tự điền nội dung.
 - **apt** — tạo signing key một lần, lưu file đó làm `APT_GPG_PRIVATE_KEY` và giữ một bản
   backup offline. Mọi người dùng đều trust key này: thay key sẽ làm hỏng `apt update` của họ.

@@ -40,19 +40,15 @@ runs natively across five platforms, and is built for responsive work and play.*
 
 ## 📦 Install
 
-Install through a package manager on Windows, macOS, Ubuntu, Debian or Mint:
+On Windows, download `deskhub-v*-windows-setup.exe` from
+[Releases](https://github.com/manhpham90vn/Deskhub/releases): one setup file installs the
+app, `deskhub-cli` and the *DeskHub Secure Desktop* service together. Install through a
+package manager on macOS, Ubuntu, Debian or Mint:
 
 ```bash
-winget install ManhPham.Deskhub                  # Windows · app
-winget install ManhPham.DeskhubCLI               # Windows · deskhub-cli
 brew install --cask manhpham90vn/tap/deskhub     # macOS · app
 brew install manhpham90vn/tap/deskhub-cli        # macOS · deskhub-cli
 ```
-
-> **winget does not work yet.** The Deskhub packages are still waiting for review in
-> winget-pkgs ([#439628](https://github.com/microsoft/winget-pkgs/pull/439628) for the app, [#439629](https://github.com/microsoft/winget-pkgs/pull/439629) for
-> the CLI), so both `winget install` commands fail until they are merged. Until then, get
-> the Windows installers from [Releases](https://github.com/manhpham90vn/Deskhub/releases).
 
 On Ubuntu / Debian / Mint, the desktop app and CLI are separate packages. Add the apt
 repository once, then install either or both:
@@ -69,15 +65,13 @@ sudo apt install deskhub-cli   # CLI; also works on its own
 
 The desktop package adds Deskhub to the application menu and installs `deskhub` in
 `/usr/bin`; the CLI package installs `deskhub-cli` in `/usr/bin`. Windows setup adds
-Start Menu and Desktop shortcuts; the separate CLI setup adds its command to the user
-`PATH`, and winget installs the CLI as a portable exe on `PATH`. Homebrew places the macOS
-CLI on `PATH`.
+Start Menu and Desktop shortcuts and puts its folder, with `deskhub-cli`, on the system
+`PATH`. Homebrew places the macOS CLI on `PATH`.
 
 Everything else is on [Releases](https://github.com/manhpham90vn/Deskhub/releases):
 
-- **Windows downloads** — app setup `deskhub-v*-windows-setup.exe` (the only form the
-  app comes in) and CLI setup `deskhub-cli-v*-windows-setup.exe`; the CLI also has a
-  portable `deskhub-cli-v*-windows.exe`
+- **Windows downloads** — `deskhub-v*-windows-setup.exe`, the only Windows file: the
+  app, `deskhub-cli` and the service in one setup
 - **macOS downloads** — the app as `deskhub-v*-macos.dmg`, the CLI as `deskhub-cli-v*-macos`
 - **Ubuntu / Debian / Mint without the repository** — `deskhub-v*-amd64.deb` and
   `deskhub-cli-v*-amd64.deb`

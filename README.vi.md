@@ -40,19 +40,15 @@ chạy native trên năm nền tảng và hướng tới trải nghiệm mượt
 
 ## 📦 Cài đặt
 
-Có thể cài Deskhub qua package manager trên Windows, macOS, Ubuntu, Debian hoặc Mint:
+Trên Windows, tải `deskhub-v*-windows-setup.exe` từ
+[Releases](https://github.com/manhpham90vn/Deskhub/releases): một file setup cài cả app,
+`deskhub-cli` và service *DeskHub Secure Desktop*. Trên macOS, Ubuntu, Debian hoặc Mint,
+cài qua package manager:
 
 ```bash
-winget install ManhPham.Deskhub                  # Windows · app
-winget install ManhPham.DeskhubCLI               # Windows · deskhub-cli
 brew install --cask manhpham90vn/tap/deskhub     # macOS · app
 brew install manhpham90vn/tap/deskhub-cli        # macOS · deskhub-cli
 ```
-
-> **winget chưa dùng được.** Các gói Deskhub vẫn đang chờ duyệt trên winget-pkgs
-> ([#439628](https://github.com/microsoft/winget-pkgs/pull/439628) cho app, [#439629](https://github.com/microsoft/winget-pkgs/pull/439629) cho CLI), nên cả hai
-> lệnh `winget install` sẽ báo lỗi cho tới khi chúng được merge. Trong lúc chờ, hãy tải bộ cài
-> Windows từ [Releases](https://github.com/manhpham90vn/Deskhub/releases).
 
 Trên Ubuntu / Debian / Mint, app desktop và CLI là hai gói riêng. Thêm apt repository
 một lần, sau đó cài gói cần dùng hoặc cả hai:
@@ -69,14 +65,13 @@ sudo apt install deskhub-cli   # CLI; cũng cài riêng được
 
 Gói desktop thêm Deskhub vào menu ứng dụng và cài lệnh `deskhub` trong `/usr/bin`; gói
 CLI cài `deskhub-cli` trong `/usr/bin`. Bộ cài Windows tạo shortcut trong Start Menu và
-Desktop; bộ cài CLI riêng thêm lệnh vào `PATH` của người dùng, còn winget cài CLI dưới
-dạng exe portable nằm trên `PATH`. Homebrew đưa CLI trên macOS vào `PATH`.
+Desktop, đồng thời đưa thư mục của nó, có `deskhub-cli` bên trong, vào `PATH` hệ thống.
+Homebrew đưa CLI trên macOS vào `PATH`.
 
 Các nền tảng còn lại lấy trên [Releases](https://github.com/manhpham90vn/Deskhub/releases):
 
-- **Bản tải cho Windows** — bộ cài app `deskhub-v*-windows-setup.exe` (dạng duy nhất của
-  app) và bộ cài CLI `deskhub-cli-v*-windows-setup.exe`; CLI còn có bản portable
-  `deskhub-cli-v*-windows.exe`
+- **Bản tải cho Windows** — `deskhub-v*-windows-setup.exe`, file Windows duy nhất: app,
+  `deskhub-cli` và service trong một bộ cài
 - **Bản tải cho macOS** — app là `deskhub-v*-macos.dmg`, CLI là `deskhub-cli-v*-macos`
 - **Ubuntu / Debian / Mint không dùng repository** — `deskhub-v*-amd64.deb` và
   `deskhub-cli-v*-amd64.deb`

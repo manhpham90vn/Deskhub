@@ -24,33 +24,29 @@ There is also `deskhub-cli` for terminal commands and scripts. On Windows and Li
 can open a window to display a remote screen (on Linux an X11 window, so a Wayland desktop
 needs XWayland). See [Command line](#-command-line).
 
-You can also install through `winget` on Windows, Homebrew on macOS, or the
-[apt repository](#-linux) on Ubuntu, Kubuntu, Debian and Mint. Use the package manager's
-upgrade command when you want a newer release.
+You can also install through Homebrew on macOS, or the [apt repository](#-linux) on
+Ubuntu, Kubuntu, Debian and Mint. Use the package manager's upgrade command when you want
+a newer release. Windows has no package-manager channel: download the setup file from
+Releases, and run the newer one over the old to upgrade.
 
 ---
 
 ## 🪟 Windows
 
 Download `deskhub-v*-windows-setup.exe` and run it. Setup asks for administrator rights,
-installs DeskHub for every user under `Program Files`, adds it to the Start Menu, and
-creates a Desktop shortcut by default. You can launch DeskHub at the end of setup. No
-account is needed. A DeskHub that an earlier version installed for your user alone is
-removed first, and *Start Deskhub when you log in* is pointed at the new location; your
-settings and keys stay where they are. There is no portable exe: the setup file is the
-only way to install the Windows app, because the service it installs is what lets viewers
-through UAC prompts, the lock screen and the sign-in screen.
+installs DeskHub for every user under `Program Files` — `Deskhub.exe`, `deskhub-cli.exe`
+and the *DeskHub Secure Desktop* service together — adds it to the Start Menu, puts that
+folder on the system `PATH` so `deskhub-cli` works in any new terminal, and creates a
+Desktop shortcut by default. You can launch DeskHub at the end of setup. No account is
+needed. A DeskHub, or a DeskHub CLI, that an earlier version installed for your user alone
+is removed first, and *Start Deskhub when you log in* is pointed at the new location; your
+settings and keys stay where they are. There is no portable exe and no separate CLI
+download: the setup file is the only way to install Deskhub on Windows, because the
+service it installs is what lets viewers through UAC prompts, the lock screen and the
+sign-in screen, and it serves only the programs in its own folder.
 
-Or let winget install the same setup package and keep it current — `winget upgrade` brings
-each new release and `winget uninstall ManhPham.Deskhub` removes it:
-
-```powershell
-winget install ManhPham.Deskhub
-```
-
-If you installed the earlier portable winget package, run
-`winget uninstall ManhPham.Deskhub` once, then install it again. Your settings and keys
-in `%USERPROFILE%\.deskhub` are kept.
+To upgrade, run the newer setup file over the old one; it replaces the files in place, and
+your settings and keys in `%USERPROFILE%\.deskhub` are kept.
 
 Three things to expect:
 
@@ -60,19 +56,20 @@ Three things to expect:
   logon task, without the prompt.
 - **A Windows Firewall rule**, added by the app itself the first time you share.
 - **A system service, *DeskHub Secure Desktop***, running as LocalSystem. Out of the box
-  it does nothing until DeskHub shares a screen. Then, when Windows switches to its
+  it does nothing until DeskHub or `deskhub-cli` shares a screen. Then, when Windows switches to its
   secure desktop — a UAC prompt from an installer, the lock screen, Ctrl+Alt+Del —
   viewers keep seeing the screen and can click and type there, so they can answer a UAC
   prompt for you, and anyone who knows your password can unlock the machine. Tick
-  *Allow access before anyone signs in* in Settings → Host and the service also hosts on
-  its own whenever DeskHub is not sharing — from the sign-in screen right after the PC
-  starts — for the devices already on your allowed list; see the
+  *Allow access before anyone signs in* in Settings → Host — or run
+  `deskhub-cli settings set unattended=on` from an administrator terminal — and the service
+  also hosts on its own whenever neither the app nor the CLI is sharing — from the sign-in
+  screen right after the PC starts — for the devices already on your allowed list; see the
   [specification](SPECIFICATION.md) (T-28) for what it does and does not do. A build
   from source run without the service shows those screens frozen to viewers until they
   close, and its checkbox is greyed out.
 
-Uninstall DeskHub from Windows Settings or with `winget uninstall ManhPham.Deskhub`;
-the service goes with it, together with `%ProgramData%\DeskHub`, where it keeps its logs
+Uninstall DeskHub from Windows Settings; the CLI and the service go with it, together
+with `%ProgramData%\DeskHub`, where the service keeps its logs
 and the copies *Allow access before anyone signs in* made. Settings and keys remain in
 `%USERPROFILE%\.deskhub` until you remove that folder too, and files other machines sent
 you stay in `%USERPROFILE%\Deskhub` (or the folder you picked) until you delete them.
@@ -303,7 +300,7 @@ connection requests and trusted hosts.
 
 | Platform | File |
 | --- | --- |
-| 🪟 Windows | `deskhub-cli-v*-windows-setup.exe` — installs `deskhub-cli` on your user `PATH` |
+| 🪟 Windows | inside `deskhub-v*-windows-setup.exe` — the setup installs `deskhub-cli` beside the app and puts it on the system `PATH` |
 | 🍎 macOS | `deskhub-cli-v*-macos` — one binary for Apple Silicon and Intel |
 | 🐧 Linux | `deskhub-cli-v*-amd64.deb`, `deskhub-cli-v*-x86_64.rpm`, or portable `deskhub-cli-v*-linux-x86_64` |
 
@@ -317,28 +314,27 @@ signed or notarized like the dmg, so its first run may need
 `xattr -d com.apple.quarantine deskhub-cli-v*-macos`, or *Open Anyway* in System Settings
 → Privacy & Security.
 
-The Windows setup package adds the CLI to your user `PATH` without requiring an administrator.
-The separate `deskhub-cli-v*-windows.exe` remains available for portable use.
-
-**The CLI never gets the *DeskHub Secure Desktop* service.** Its setup does not install
-the service, and the service — even when the app's setup has installed it on the same PC —
-serves only the `Deskhub.exe` beside it, never `deskhub-cli.exe`, wherever that lives. So
-a `deskhub-cli share` on Windows shows viewers a frozen picture while a UAC prompt, the
-lock screen or the sign-in screen is up, their input does not reach those screens, and
-*Allow access before anyone signs in* is an app-only setting. Install the app from its
-setup file when you need any of that.
+**On Windows the CLI has no download of its own.** The setup file installs
+`deskhub-cli.exe` beside `Deskhub.exe` and the *DeskHub Secure Desktop* service, and the
+service serves both programs in that folder. So `deskhub-cli share` carries on through UAC
+prompts, the lock screen and the sign-in screen exactly as the app does, and
+`deskhub-cli settings set unattended=on` turns on *Allow access before anyone signs in* —
+the same setting as the app's checkbox, pushed to the same service, and `access add`,
+`access remove`, `access approve` and `access clear` keep the host before sign-in in step.
+Two things to know: only administrators may talk to the service, so run the terminal as an
+administrator for those parts — a non-elevated `deskhub-cli share` still works, but without
+the secure desktop, and while that setting is on it cannot take the port over from the host
+before sign-in; and a `deskhub-cli.exe` copied anywhere else, or built from source, is not
+served, like any other copy outside the installed folder.
 Every installer and package carries `THIRD_PARTY_NOTICES.md` and the licence texts of the
 libraries inside it; the portable binaries cannot, so each release also offers
 `deskhub-v*-licenses.zip` with `LICENSE`, `THIRD_PARTY_NOTICES.md` and every licence text.
-Package managers also put the command on `PATH`:
-`winget install ManhPham.DeskhubCLI` on Windows (winget installs the portable exe, not the
-setup package), `brew install manhpham90vn/tap/deskhub-cli` on macOS — Homebrew installs it
-without the quarantine flag. On Ubuntu or Debian, run
+Package managers also put the command on `PATH`: `brew install manhpham90vn/tap/deskhub-cli`
+on macOS — Homebrew installs it without the quarantine flag — and, on Ubuntu or Debian,
 `sudo apt install deskhub-cli` after adding the DeskHub apt repository above.
 
-On Windows, open a new PowerShell window after the winget install and run
-`deskhub-cli help`. To check which executable Windows finds, run
-`Get-Command deskhub-cli`. The portable exe does not add itself to `PATH`.
+On Windows, open a new PowerShell window after setup and run `deskhub-cli help`. To check
+which executable Windows finds, run `Get-Command deskhub-cli`.
 
 On Linux it shares a screen through the same portal and VA-API driver the app needs, and
 relies on the same `/dev/uinput` rule for remote input, so everything under

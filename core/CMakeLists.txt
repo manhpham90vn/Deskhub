@@ -92,6 +92,7 @@ add_library(core STATIC
     src/ui/RecentDevices.cpp
     src/ui/HostProfiles.cpp
     src/ui/UiSettings.cpp
+    src/ui/UnattendedAccess.cpp
     src/ui/AutostartConfig.cpp
     src/ui/AutoShareGate.cpp
     src/ui/Theme.cpp
@@ -212,6 +213,7 @@ if(DESKHUB_CORE_TESTS)
         tests/ui/RecentDevicesTests.cpp
         tests/ui/HostProfilesTests.cpp
         tests/ui/UiSettingsTests.cpp
+        tests/ui/UnattendedAccessTests.cpp
         tests/ui/AutostartConfigTests.cpp
         tests/ui/AutoShareGateTests.cpp
         tests/ui/ThemeTests.cpp

@@ -316,21 +316,23 @@ House rules, in short — the full version is in `CLAUDE.md`:
 Connect API key for notarization: `ASC_KEY_P8` (the path to the `.p8` file), `ASC_KEY_ID`
 and `ASC_ISSUER_ID`. It stops before building when any of the three is missing.
 
-The Windows app and CLI are also published as Inno Setup installers, built from
-`packaging/windows/` by the release workflow. The app's installer needs administrator
-rights: it installs under `Program Files` for every user, removes an earlier per-user
-install, and runs `DeskhubService.exe --install` to register the *DeskHub Secure Desktop*
-service (`--uninstall` on the way out). The Windows app ships only as that installer —
-there is no portable app exe, because without the service viewers cannot see a UAC prompt,
-the lock screen or the sign-in screen; the CLI's portable Windows build and the Linux app
-remain single files.
+Windows is published as one Inno Setup installer, built from
+`packaging/windows/Deskhub.iss` by the release workflow and holding `Deskhub.exe`,
+`deskhub-cli.exe` and `DeskhubService.exe`. It needs administrator rights: it installs under
+`Program Files` for every user, puts that folder on the system `PATH`, removes an earlier
+per-user install of the app or of the old separate CLI, and runs
+`DeskhubService.exe --install` to register the *DeskHub Secure Desktop* service
+(`--uninstall` on the way out). Nothing else ships for Windows — no portable app or CLI exe
+and no separate CLI installer — because the service trusts only the programs in its own
+folder and the three binaries must stay at one version; the Linux app and CLI remain single
+files.
 
 Every package carries `THIRD_PARTY_NOTICES.md` and the licence texts from `licenses/`
 that apply to it: the app and CLI `.deb` and `.rpm` (under `/usr/share/doc/<package>/`,
-the texts — the LGPL included — in its `licenses/` folder), both Windows installers, the
+the texts — the LGPL included — in its `licenses/` folder), the Windows installer, the
 macOS app's `Resources`, the iOS app bundle and the Android APK's assets.
 `scripts/stage-licenses.sh` stages the Linux and Apple sets, `packaging/windows/*.iss`
-list the Windows ones, and the Android build copies its own. The portable CLI and Linux
+list the Windows ones, and the Android build copies its own. The portable Linux and macOS
 binaries carry nothing, so the release adds `deskhub-<tag>-licenses.zip` with `LICENSE`, the notices
 and the whole `licenses/` folder. `licenses/rust-crates.txt` is generated:
 `scripts/rust-crate-notices.py <quiche source dir> > licenses/rust-crates.txt` rewrites
@@ -366,26 +368,11 @@ scripts, say — run it by hand: `gh workflow run publish-packages.yml -f tag=vX
 
 | Job | Publishes | Secret in the `stg` environment |
 | --- | --- | --- |
-| `winget` | pull requests to `microsoft/winget-pkgs` for `ManhPham.Deskhub` and `ManhPham.DeskhubCLI`, through [komac](https://github.com/russellbanks/Komac) (pinned in `scripts/pinned-versions.txt`) | `WINGET_TOKEN` — classic PAT with `public_repo` |
 | `homebrew` | `Casks/deskhub.rb` and `Formula/deskhub-cli.rb` in `manhpham90vn/homebrew-tap`, rendered from `packaging/homebrew/` | `HOMEBREW_TAP_TOKEN` — fine-grained PAT, Contents: write on the tap |
 | `build-apt-repo` → `deploy-apt-repo` | a signed apt repository holding the debs of the last three releases, on GitHub Pages under `/apt` (`scripts/build-apt-repo.sh`) | `APT_GPG_PRIVATE_KEY`, `APT_GPG_PASSPHRASE` |
 
 Each needs a one-time setup before the first tag that runs it:
 
-- **winget** — the job only updates packages that already exist, so submit the first
-  version of each by hand. Use the Inno Setup installer for `ManhPham.Deskhub`, and
-  choose `deskhub-cli` as the portable command alias for `ManhPham.DeskhubCLI`.
-  Until Microsoft merges those pull requests the job warns and skips.
-
-  ```bash
-  komac new ManhPham.Deskhub --version X.Y.Z --urls https://github.com/manhpham90vn/Deskhub/releases/download/vX.Y.Z/deskhub-vX.Y.Z-windows-setup.exe
-  ```
-
-  Repeat with `ManhPham.DeskhubCLI` and the `deskhub-cli-vX.Y.Z-windows.exe` URL.
-
-  The app's installer is per-machine since the release that added the secure desktop
-  service, so submit `ManhPham.Deskhub` with `Scope: machine` — and if its first pull
-  request is still waiting for review with `Scope: user`, update it to `machine`.
 - **Homebrew** — create the public repository `manhpham90vn/homebrew-tap`; the job fills it.
 - **apt** — generate the signing key once, store the file as `APT_GPG_PRIVATE_KEY` and keep
   an offline backup. Every user trusts this key: replacing it breaks their `apt update`.

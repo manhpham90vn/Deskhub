@@ -35,6 +35,7 @@
 #include "AccessRequestListener.h"
 #include "secure/SecureDesktopStatus.h"
 #include "secure/ServiceControlPipe.h"
+#include "secure/UnattendedAccess.h"
 #include "SourcePickerDialog.h"
 #include "FileSendWindow.h"
 #include "TerminalWindow.h"
@@ -1744,27 +1745,11 @@ void MainFrame::OnUnattendedToggled() {
 }
 
 bool MainFrame::PushUnattendedConfig() {
-    deskhub::UnattendedConfig config;
-    config.enabled = settings_.unattended;
-    if (config.enabled) {
-        const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity();
-        if (!identity.Valid()) return false;
-        config.hostKeyPem = identity.keyPem;
-        config.authorizedKeys = deskhubp::ReadAppDataFile(deskhubp::kAuthorizedKeysFileName);
-        ui::UiSettings forHost = settings_;
-        forHost.shareAudio = false;
-        forHost.playAudio = false;
-        forHost.clipboardSync = false;
-        forHost.autostart = false;
-        forHost.autoShare = false;
-        forHost.startHidden = false;
-        config.settings = ui::SerializeUiSettings(forHost);
-    }
-    return SendUnattendedConfig(config);
+    return PushUnattendedAccess(settings_);
 }
 
 void MainFrame::SyncUnattended() {
-    if (settings_.unattended) PushUnattendedConfig();
+    SyncUnattendedAccess(settings_);
 }
 
 wxWindow* MainFrame::BuildSettingsPage(wxWindow* parent) {

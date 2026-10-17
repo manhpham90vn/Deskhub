@@ -9,6 +9,7 @@
 
 #include "Output.h"
 #include "Signals.h"
+#include "Unattended.h"
 
 #include "deskhub/cli/Json.h"
 #include "deskhub/media/SourceLabel.h"
@@ -229,6 +230,7 @@ ExitCode RunShare(const Command& command) {
     if (files.Running()) files.Stop();
     if (terminal.Running()) terminal.Stop();
     host.Stop();
+    SyncUnattended(deskhubp::LoadUiSettings());
     if (command.share.qr) deskhubp::RevokePairingTokens();
     if (!command.quiet) PrintError("Stopped sharing.");
     return ExitCode::Ok;

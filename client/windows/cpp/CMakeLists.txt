@@ -41,6 +41,7 @@ add_library(deskhub_win_core STATIC
 
     secure/SecureDesktopLink.cpp
     secure/ServiceControlPipe.cpp
+    secure/UnattendedAccess.cpp
     secure/UnattendedMode.cpp
 )
 
