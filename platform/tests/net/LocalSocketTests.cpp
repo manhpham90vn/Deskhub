@@ -11,23 +11,16 @@
 #include <system_error>
 #include <thread>
 
-#ifndef _WIN32
+#ifdef DESKHUB_LOCAL_SOCKET
 #include <unistd.h>
 #endif
 
 namespace {
 
-constexpr int kAcceptWaitMs = 3000;
-constexpr int kNoClientWaitMs = 50;
+#ifndef DESKHUB_LOCAL_SOCKET
 
-std::string FreshSocketPath(const char* prefix) {
-    return UniqueTempDir(prefix).string() + ".sock";
-}
-
-#ifdef _WIN32
-
-void TestLocalSocketsAreAbsentOnWindows() {
-    std::printf("[local] Windows has no Unix socket helper; every call fails cleanly...\n");
+void TestLocalSocketsAreAbsentHere() {
+    std::printf("[local] this platform has no Unix socket helper; every call fails cleanly...\n");
     deskhubp::LocalSocket server = deskhubp::LocalSocket::Listen("unused", 0666);
     Check(!server.Valid(), "listening is refused");
     Check(!server.Accept(0).has_value(), "accepting yields nothing");
@@ -35,6 +28,13 @@ void TestLocalSocketsAreAbsentOnWindows() {
 }
 
 #else
+
+constexpr int kAcceptWaitMs = 3000;
+constexpr int kNoClientWaitMs = 50;
+
+std::string FreshSocketPath(const char* prefix) {
+    return UniqueTempDir(prefix).string() + ".sock";
+}
 
 void TestEchoAndPeerIdentity() {
     std::printf("[local] a client reaches the listener and is identified by pid and uid...\n");
@@ -117,8 +117,8 @@ void TestShutdownUnblocksAReader() {
 }
 
 void RunLocalSocketTests() {
-#ifdef _WIN32
-    TestLocalSocketsAreAbsentOnWindows();
+#ifndef DESKHUB_LOCAL_SOCKET
+    TestLocalSocketsAreAbsentHere();
 #else
     TestEchoAndPeerIdentity();
     TestNobodyThereAndNobodyListening();

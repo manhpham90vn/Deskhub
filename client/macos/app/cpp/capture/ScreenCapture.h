@@ -33,8 +33,6 @@ public:
     struct Impl;
 
 private:
-    bool FinishStart();
-
     std::unique_ptr<Impl> impl_;
 };
 

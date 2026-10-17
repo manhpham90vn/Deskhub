@@ -345,10 +345,10 @@ HostEngine (mỗi app một instance, sở hữu SessionTransport)
   `CFRunLoopRun` để `LocalInputMonitor` dispatch lên được, và một supervisor poll thư mục
   mỗi 500 ms: dừng host khi marker `unattended-hold` của daemon tồn tại (một cho mỗi kết
   nối `Takeover` app đang giữ), khởi động lại khi `host_key.pem` hoặc `ui-settings.txt`
-  đổi, và thoát khi key biến mất. Capture thử ScreenCaptureKit trước và rơi về
-  `CGDisplayStream` (`DisplayStreamCapture`) khi `SCShareableContent` không trả gì trong
-  phiên login window; liệt kê màn hình rơi về `CGGetActiveDisplayList` theo cùng cách. Host
-  ghi `unattended-status.txt` với trạng thái Screen Recording và Accessibility của chính
+  đổi, và thoát khi key biến mất. Capture là ScreenCaptureKit như trong app
+  (`CGDisplayStream` đã bị bỏ từ macOS 15 và không còn biên dịch được); liệt kê màn hình rơi
+  về `CGGetActiveDisplayList` khi `SCShareableContent` không trả gì trong phiên login window.
+  Host ghi `unattended-status.txt` với trạng thái Screen Recording và Accessibility của chính
   nó, thứ daemon trả về cho request `Status` của app để hiện trên trang Settings.
 - Shell: mỗi shell một PTY (`ConPTY` trên Windows, `forkpty` trên các nền tảng khác), tối
   đa 8 shell. Khi mất kết nối, shell được tách ra và PTY được giữ sống cho đến khi tiến trình shell thoát hoặc shell bị đóng — không giới hạn thời gian. Mọi client đã được chấp nhận đều có thể liệt kê các shell đang được giữ (`TermList`/`TermListAck`) và reattach một shell theo id. Mọi thao tác open, close, detach và reattach đều được ghi vào audit log kèm

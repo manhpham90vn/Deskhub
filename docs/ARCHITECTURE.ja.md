@@ -350,10 +350,10 @@ HostEngine（app ごとに 1 インスタンス、SessionTransport を保持）
   は `CFRunLoopRun` を回し、supervisor がフォルダを 500 ms ごとにポーリングする。daemon
   の `unattended-hold` マーカー（app が保持する `Takeover` 接続 1 つにつき 1 つ）がある
   間は host を止め、`host_key.pem` か `ui-settings.txt` が変わったら再起動し、key が
-  消えたら終了する。capture はまず ScreenCaptureKit を試し、ログインウィンドウの
-  session で `SCShareableContent` が何も返さなければ `CGDisplayStream`
-  （`DisplayStreamCapture`）に切り替える。display の列挙も同様に
-  `CGGetActiveDisplayList` に切り替える。host は自身の Screen Recording と
+  消えたら終了する。capture は app と同じ ScreenCaptureKit である（`CGDisplayStream` は
+  macOS 15 で廃止され、もうコンパイルできない）。ログインウィンドウの session で
+  `SCShareableContent` が何も返さなければ、display の列挙は `CGGetActiveDisplayList` に
+  切り替える。host は自身の Screen Recording と
   Accessibility の状態を `unattended-status.txt` に書き、daemon はそれを app の
   `Status` 要求に返して Settings ページに表示させる。
 - Shell: shell ごとに PTY を 1 つ割り当てる（Windows は `ConPTY`、他は `forkpty`）。

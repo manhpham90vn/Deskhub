@@ -150,7 +150,7 @@ khi `UnattendedMode()` bật.
 > `client/macos/daemon/`, `secure/ControlSocket.mm`, FFI `dh_unattended_*`, checkbox trong
 > `PermissionsSection.swift`, cask, docs bốn ngôn ngữ, release note 9.3.0). Ba spike ở cuối
 > mục này **chưa chạy**: cần một máy Mac thật đăng xuất ra login window để xác nhận
-> ScreenCaptureKit/CGDisplayStream capture được login window, `CGEventPost` gõ được vào ô mật
+> ScreenCaptureKit capture được login window (`CGDisplayStream` đã bị Apple bỏ từ macOS 15, không còn là phương án dự phòng), `CGEventPost` gõ được vào ô mật
 > khẩu, TCC chấp nhận cấp Screen Recording/Accessibility cho `DeskhubDaemon` chạy trong phiên
 > LoginWindow, và LaunchAgent `LimitLoadToSessionType=LoginWindow` được launchd nạp từ
 > `/Library/LaunchAgents` sau khi daemon ghi. Tới khi đó tính năng trên macOS là "đã cài dây,

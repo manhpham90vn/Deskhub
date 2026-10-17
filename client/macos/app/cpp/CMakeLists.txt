@@ -2,7 +2,6 @@ add_library(deskhub_mac_core STATIC
     SharingHost.cpp
     Permissions.mm
     capture/ScreenCapture.mm
-    capture/DisplayStreamCapture.mm
     input/InputInjector.mm
     secure/ControlSocket.mm
     secure/DaemonRegistration.mm

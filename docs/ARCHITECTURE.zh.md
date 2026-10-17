@@ -305,10 +305,9 @@ HostEngine（每个 app 一个实例，持有 SessionTransport）
   就是普通的 `SharingHost`，开启 `UnattendedMode()`，主线程跑 `CFRunLoopRun` 以便
   `LocalInputMonitor` 能向其 dispatch，另有一个 supervisor 每 500 ms 轮询该文件夹：daemon 的
   `unattended-hold` 标记存在时（app 持有的每条 `Takeover` 连接对应一个）停止 host，
-  `host_key.pem` 或 `ui-settings.txt` 变化时重启，key 消失时退出。capture 先尝试
-  ScreenCaptureKit，在登录窗口 session 中 `SCShareableContent` 一无所获时回退到
-  `CGDisplayStream`（`DisplayStreamCapture`）；display 枚举同样回退到
-  `CGGetActiveDisplayList`。host 把自身的 Screen Recording 与 Accessibility 状态写入
+  `host_key.pem` 或 `ui-settings.txt` 变化时重启，key 消失时退出。capture 与 app 一样使用
+  ScreenCaptureKit（`CGDisplayStream` 自 macOS 15 起已废弃，无法再编译）；在登录窗口 session
+  中 `SCShareableContent` 一无所获时，display 枚举回退到 `CGGetActiveDisplayList`。host 把自身的 Screen Recording 与 Accessibility 状态写入
   `unattended-status.txt`，daemon 在 app 的 `Status` request 中返回它，供 Settings 页显示。
 - Shell：每个 shell 对应一个 PTY（Windows 为 `ConPTY`，其他平台为 `forkpty`），最多 8
   个。连接中断时 shell 被分离，PTY 一直保留到 shell 进程退出或 shell 被关闭，不设时间

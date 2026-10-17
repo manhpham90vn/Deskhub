@@ -347,10 +347,10 @@ HostEngine (one per app, owns SessionTransport)
   to it, and a supervisor polling the folder every 500 ms: it stops the host while the
   daemon's `unattended-hold` marker exists (one per `Takeover` connection the app holds),
   restarts it when `host_key.pem` or `ui-settings.txt` change, and exits when the key is
-  gone. Capture tries ScreenCaptureKit first and falls back to `CGDisplayStream`
-  (`DisplayStreamCapture`) when `SCShareableContent` returns nothing in the login window
-  session; display enumeration falls back to `CGGetActiveDisplayList` the same way. The
-  host writes `unattended-status.txt` with its own Screen Recording and Accessibility
+  gone. Capture is ScreenCaptureKit, as in the app (`CGDisplayStream` is obsoleted since
+  macOS 15 and no longer compiles); display enumeration falls back to
+  `CGGetActiveDisplayList` when `SCShareableContent` lists nothing in the login window
+  session. The host writes `unattended-status.txt` with its own Screen Recording and Accessibility
   state, which the daemon returns to the app's `Status` request for the Settings page.
 - Shells: one PTY per shell (`ConPTY` on Windows, `forkpty` elsewhere), at most 8; a
   dropped connection detaches the shell and the PTY stays alive until the shell

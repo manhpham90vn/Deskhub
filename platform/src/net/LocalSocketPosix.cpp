@@ -4,6 +4,8 @@
 #include <cstring>
 #include <utility>
 
+#include "deskhubp/diag/Log.h"
+
 #include <fcntl.h>
 #include <poll.h>
 #include <sys/socket.h>
@@ -12,10 +14,15 @@
 #include <unistd.h>
 
 #ifdef __APPLE__
-#include <libproc.h>
+#include <TargetConditionals.h>
 #include <sys/ucred.h>
+#if TARGET_OS_OSX
+#include <libproc.h>
+#include <mach/mach.h>
+#endif
 #else
 #include <climits>
+#include <limits.h>
 #endif
 
 namespace deskhubp {
@@ -74,9 +81,11 @@ std::optional<LocalPeer> ReadPeer(int fd) {
     socklen_t pidLen = sizeof(pid);
     if (getsockopt(fd, SOL_LOCAL, LOCAL_PEERPID, &pid, &pidLen) != 0) return std::nullopt;
     peer.pid = int32_t(pid);
+#if TARGET_OS_OSX
     char exe[PROC_PIDPATHINFO_MAXSIZE] = {};
     if (proc_pidpath(pid, exe, sizeof(exe)) > 0) peer.exePath = exe;
-#ifdef LOCAL_PEERTOKEN
+#endif
+#if TARGET_OS_OSX && defined(LOCAL_PEERTOKEN)
     audit_token_t token{};
     socklen_t tokenLen = sizeof(token);
     if (getsockopt(fd, SOL_LOCAL, LOCAL_PEERTOKEN, &token, &tokenLen) == 0 &&
@@ -125,9 +134,15 @@ LocalSocket LocalSocket::Listen(const std::string& path, uint32_t mode) {
     if (fd < 0) return LocalSocket();
     unlink(path.c_str());
     const sockaddr_un address = AddressOf(path);
-    const bool bound = bind(fd, reinterpret_cast<const sockaddr*>(&address), sizeof(address)) == 0 &&
-                       chmod(path.c_str(), mode_t(mode)) == 0 && listen(fd, kBacklog) == 0;
-    if (!bound) {
+    const char* failedStep = nullptr;
+    if (bind(fd, reinterpret_cast<const sockaddr*>(&address), sizeof(address)) != 0)
+        failedStep = "bind";
+    else if (chmod(path.c_str(), mode_t(mode)) != 0)
+        failedStep = "chmod";
+    else if (listen(fd, kBacklog) != 0)
+        failedStep = "listen";
+    if (failedStep) {
+        LOGW("[Local] Could not %s %s: %s", failedStep, path.c_str(), std::strerror(errno));
         close(fd);
         unlink(path.c_str());
         return LocalSocket();

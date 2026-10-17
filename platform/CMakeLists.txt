@@ -86,7 +86,6 @@ if(WIN32)
     set(deskhub_platform_os
         src/net/UdpSocketWin.cpp
         src/net/NetInfoWin.cpp
-        src/net/LocalSocketNone.cpp
         src/input/LocalInputWin.cpp
         src/input/NativeKeyMapWin.cpp
         src/media/DisplayEnumWin.cpp
@@ -103,7 +102,6 @@ else()
     set(deskhub_platform_os
         src/net/UdpSocketPosix.cpp
         src/net/NetInfoPosix.cpp
-        src/net/LocalSocketPosix.cpp
         src/system/DeviceNamePosix.cpp
         src/system/ConsolePosix.cpp
         src/system/EnvironmentPosix.cpp
@@ -191,8 +189,17 @@ else()
     endif()
 endif()
 
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux" OR (APPLE AND NOT CMAKE_SYSTEM_NAME STREQUAL "iOS"))
+    set(deskhub_platform_local_socket src/net/LocalSocketPosix.cpp)
+    set(deskhub_platform_local_socket_define DESKHUB_LOCAL_SOCKET=1)
+else()
+    set(deskhub_platform_local_socket src/net/LocalSocketNone.cpp)
+    set(deskhub_platform_local_socket_define)
+endif()
+
 add_library(platform STATIC
     src/system/AppDataFile.cpp
+    ${deskhub_platform_local_socket}
     src/system/ConfigFileLock.cpp
     ${deskhub_platform_os}
     ${deskhub_platform_quic}
@@ -236,7 +243,8 @@ add_library(platform STATIC
     src/ffi/PairingFfi.cpp
 )
 target_include_directories(platform PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
-target_compile_definitions(platform PUBLIC $<$<CONFIG:Debug>:DESKHUB_DEV_BUILD>)
+target_compile_definitions(platform PUBLIC $<$<CONFIG:Debug>:DESKHUB_DEV_BUILD>
+    ${deskhub_platform_local_socket_define})
 target_compile_features(platform PUBLIC cxx_std_20)
 target_link_libraries(platform PUBLIC core)
 
