@@ -25,9 +25,9 @@ enum class SecureDesktopRequest : uint8_t {
 inline constexpr uint8_t kSecureDesktopAck = 1;
 inline constexpr uint32_t kSecureDesktopDefaultMaxFps = 10;
 inline constexpr uint32_t kSecureDesktopMaxFps = 240;
-inline constexpr size_t kUnattendedMaxHostKeyBytes = 8 * 1024;
-inline constexpr size_t kUnattendedMaxAuthorizedKeysBytes = 256 * 1024;
-inline constexpr size_t kUnattendedMaxSettingsBytes = 16 * 1024;
+inline constexpr size_t kUnattendedMaxHostKeyBytes = size_t{8} * 1024;
+inline constexpr size_t kUnattendedMaxAuthorizedKeysBytes = size_t{256} * 1024;
+inline constexpr size_t kUnattendedMaxSettingsBytes = size_t{16} * 1024;
 inline constexpr size_t kUnattendedConfigLengthSize = 4;
 inline constexpr size_t kUnattendedConfigMaxBytes = 1 + 3 * 4 + kUnattendedMaxHostKeyBytes +
                                                     kUnattendedMaxAuthorizedKeysBytes +
