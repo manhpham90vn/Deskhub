@@ -73,6 +73,10 @@ dist-macos:
 verify-macos:
 	xcrun stapler validate $(MACOS_APP)
 	spctl -a -vvv -t install $(MACOS_APP)
+	test -f $(MACOS_APP)/Contents/Library/LaunchDaemons/com.deskhub.macos.daemon.plist
+	codesign --verify --strict --verbose=2 $(MACOS_APP)/Contents/MacOS/DeskhubDaemon
+	codesign --verify --strict --verbose=2 $(MACOS_APP)/Contents/MacOS/deskhub-cli
+	$(MACOS_APP)/Contents/MacOS/deskhub-cli version
 
 reset-macos-permissions:
 	@scripts/reset-macos-permissions.sh $(ARGS)

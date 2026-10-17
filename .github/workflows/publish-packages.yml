@@ -21,19 +21,6 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  winget:
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    environment: stg
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Open the winget-pkgs pull requests
-        env:
-          WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
-          TAG: ${{ inputs.tag }}
-        run: scripts/publish-winget.sh "$TAG"
-
   homebrew:
     runs-on: ubuntu-latest
     timeout-minutes: 10

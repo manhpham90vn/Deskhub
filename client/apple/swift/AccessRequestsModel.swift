@@ -4,6 +4,7 @@ import Observation
 @MainActor @Observable
 final class AccessRequestsModel {
     private(set) var requests: [AccessRequestRow] = []
+    @ObservationIgnored var afterDecision: (@MainActor () -> Void)?
     @ObservationIgnored private var generation: UInt64?
 
     func refresh() {
@@ -32,5 +33,6 @@ final class AccessRequestsModel {
     private func reload() {
         generation = nil
         refresh()
+        afterDecision?()
     }
 }

@@ -146,6 +146,16 @@ khi `UnattendedMode()` bật.
 
 ## 2. macOS
 
+> **Trạng thái 2026-10-17:** §0 và toàn bộ bước làm của §2 đã có trong cây mã (daemon
+> `client/macos/daemon/`, `secure/ControlSocket.mm`, FFI `dh_unattended_*`, checkbox trong
+> `PermissionsSection.swift`, cask, docs bốn ngôn ngữ, release note 9.3.0). Ba spike ở cuối
+> mục này **chưa chạy**: cần một máy Mac thật đăng xuất ra login window để xác nhận
+> ScreenCaptureKit/CGDisplayStream capture được login window, `CGEventPost` gõ được vào ô mật
+> khẩu, TCC chấp nhận cấp Screen Recording/Accessibility cho `DeskhubDaemon` chạy trong phiên
+> LoginWindow, và LaunchAgent `LimitLoadToSessionType=LoginWindow` được launchd nạp từ
+> `/Library/LaunchAgents` sau khi daemon ghi. Tới khi đó tính năng trên macOS là "đã cài dây,
+> chưa kiểm chứng".
+
 ### Thực trạng
 
 - Không có LaunchDaemon, LaunchAgent, XPC hay pkg; chỉ `SMAppService.mainAppService` cho

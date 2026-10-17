@@ -40,22 +40,15 @@ chạy native trên năm nền tảng và hướng tới trải nghiệm mượt
 
 ## 📦 Cài đặt
 
-Có thể cài Deskhub qua package manager trên Windows, macOS, Ubuntu, Debian hoặc Mint:
+Có thể cài Deskhub qua package manager trên macOS, Ubuntu, Debian hoặc Mint; trên Windows,
+tải bộ cài từ [Releases](https://github.com/manhpham90vn/Deskhub/releases):
 
 ```bash
-winget install ManhPham.Deskhub                  # Windows · app
-winget install ManhPham.DeskhubCLI               # Windows · deskhub-cli
-brew install --cask manhpham90vn/tap/deskhub     # macOS · app
-brew install manhpham90vn/tap/deskhub-cli        # macOS · deskhub-cli
+brew install --cask manhpham90vn/tap/deskhub     # macOS · app + deskhub-cli
 ```
 
-> **winget chưa dùng được.** Các gói Deskhub vẫn đang chờ duyệt trên winget-pkgs
-> ([#439628](https://github.com/microsoft/winget-pkgs/pull/439628) cho app, [#439629](https://github.com/microsoft/winget-pkgs/pull/439629) cho CLI), nên cả hai
-> lệnh `winget install` sẽ báo lỗi cho tới khi chúng được merge. Trong lúc chờ, hãy tải bộ cài
-> Windows từ [Releases](https://github.com/manhpham90vn/Deskhub/releases).
-
-Trên Ubuntu / Debian / Mint, app desktop và CLI là hai gói riêng. Thêm apt repository
-một lần, sau đó cài gói cần dùng hoặc cả hai:
+Trên Ubuntu / Debian / Mint, thêm apt repository một lần, sau đó cài gói duy nhất, trong
+đó có sẵn app và `deskhub-cli`:
 
 ```bash
 sudo install -d /etc/apt/keyrings
@@ -63,27 +56,22 @@ curl -fsSL https://manhpham90vn.github.io/Deskhub/apt/deskhub.gpg | sudo tee /et
 echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/deskhub.gpg] https://manhpham90vn.github.io/Deskhub/apt stable main" \
   | sudo tee /etc/apt/sources.list.d/deskhub.list
 sudo apt update
-sudo apt install deskhub       # app desktop
-sudo apt install deskhub-cli   # CLI; cũng cài riêng được
+sudo apt install deskhub       # app desktop + deskhub-cli
 ```
 
-Gói desktop thêm Deskhub vào menu ứng dụng và cài lệnh `deskhub` trong `/usr/bin`; gói
-CLI cài `deskhub-cli` trong `/usr/bin`. Bộ cài Windows tạo shortcut trong Start Menu và
-Desktop; bộ cài CLI riêng thêm lệnh vào `PATH` của người dùng, còn winget cài CLI dưới
-dạng exe portable nằm trên `PATH`. Homebrew đưa CLI trên macOS vào `PATH`.
+Gói này thêm Deskhub vào menu ứng dụng và cài `deskhub` cùng `deskhub-cli` trong
+`/usr/bin`. Bộ cài Windows tạo shortcut trong Start Menu và Desktop, đồng thời đưa thư mục
+cài đặt (có `deskhub-cli.exe`) vào `PATH` của máy. Cask Homebrew link `deskhub-cli` trên
+macOS vào `PATH`; với dmg thì nó nằm trong app, ở `Deskhub.app/Contents/MacOS/deskhub-cli`.
 
 Các nền tảng còn lại lấy trên [Releases](https://github.com/manhpham90vn/Deskhub/releases):
 
-- **Bản tải cho Windows** — bộ cài app `deskhub-v*-windows-setup.exe` (dạng duy nhất của
-  app) và bộ cài CLI `deskhub-cli-v*-windows-setup.exe`; CLI còn có bản portable
-  `deskhub-cli-v*-windows.exe`
-- **Bản tải cho macOS** — app là `deskhub-v*-macos.dmg`, CLI là `deskhub-cli-v*-macos`
-- **Ubuntu / Debian / Mint không dùng repository** — `deskhub-v*-amd64.deb` và
-  `deskhub-cli-v*-amd64.deb`
-- **Fedora / openSUSE** — RPM riêng cho app `deskhub-v*-x86_64.rpm` và CLI
-  `deskhub-cli-v*-x86_64.rpm`; cài gói cần dùng bằng `dnf` hoặc `zypper`
-- **Arch, Linux khác** — bản portable `deskhub-v*-linux-x86_64` và
-  `deskhub-cli-v*-linux-x86_64`, `chmod +x` rồi chạy
+- **Windows** — `deskhub-v*-windows-setup.exe`, dạng duy nhất của app, có sẵn
+  `deskhub-cli` bên trong
+- **macOS** — `deskhub-v*-macos.dmg`, có `deskhub-cli` bên trong app
+- **Ubuntu / Debian / Mint không dùng repository** — `deskhub-v*-amd64.deb`
+- **Fedora / openSUSE** — `deskhub-v*-x86_64.rpm`, cài bằng `dnf` hoặc `zypper`
+- **Distro Linux khác** — build từ source, xem [BUILD.vi.md](docs/BUILD.vi.md)
 - **Android** — `deskhub-v*-android.apk`, hoặc [Google Play](https://play.google.com/store/apps/details?id=com.manhpham.deskhub)
 - **iOS** — [TestFlight](https://testflight.apple.com/join/7qY7wgpd)
 

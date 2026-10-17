@@ -156,6 +156,17 @@ const char* dh_string(DHStringId id) {
         case DHStrQrExpiredNote: return deskhub::ui::kQrExpiredNote;
         case DHStrNewQrAction: return deskhub::ui::kNewQrAction;
         case DHStrQrUnavailable: return deskhub::ui::kQrUnavailable;
+        case DHStrUnattendedLabel: return deskhub::ui::kUnattendedLabel;
+        case DHStrUnattendedHintMac: return deskhub::ui::kUnattendedHintMac;
+        case DHStrUnattendedServiceMissingNote: return deskhub::ui::kUnattendedServiceMissingNote;
+        case DHStrUnattendedPushFailedNote: return deskhub::ui::kUnattendedPushFailedNote;
+        case DHStrUnattendedApprovalNote: return deskhub::ui::kUnattendedApprovalNote;
+        case DHStrUnattendedHostPermissionsHint:
+            return deskhub::ui::kUnattendedHostPermissionsHint;
+        case DHStrUnattendedHostScreenLabel: return deskhub::ui::kUnattendedHostScreenLabel;
+        case DHStrUnattendedHostInputLabel: return deskhub::ui::kUnattendedHostInputLabel;
+        case DHStrUnattendedPermissionUnknown: return deskhub::ui::kUnattendedPermissionUnknown;
+        case DHStrUnattendedOpenLoginItems: return deskhub::ui::kUnattendedOpenLoginItems;
         case DHStrTrustNewHostTitle: return deskhub::ui::kTrustNewHostTitle;
         case DHStrTrustNewHostAction: return deskhub::ui::kTrustNewHostAction;
         case DHStrCancelAction: return deskhub::ui::kCancelAction;

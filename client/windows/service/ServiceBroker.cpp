@@ -550,6 +550,10 @@ void ServeHost(HANDLE pipeHandle) {
             unsigned(requestByte), pid);
         return;
     }
+    if (*request == deskhub::SecureDesktopRequest::Status) {
+        LOGW("[Service] Process %lu asked for a status the Windows service does not report.", pid);
+        return;
+    }
     if (*request == deskhub::SecureDesktopRequest::Takeover)
         ServeTakeover(control, pid);
     else

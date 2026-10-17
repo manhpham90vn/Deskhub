@@ -47,7 +47,7 @@ or terminal.
 | A machine-in-the-middle | Every machine has one key. A client pins the host's key — on first connection after the user compares the fingerprint, or from the QR code, which carries it — and checks it before sending anything on every later one. Trust follows the key, so a host at a new address is still the host; a *different* key at an address the client knows is refused as trusted and shown as a **New host** with a warning naming the machine that used to answer there — it cannot be accepted as a "change", only trusted afresh with its fingerprint on show. A client that scans a QR code sends the token only after the machine answering has proved, through the TLS handshake, that it holds the key printed in the code; anything else at that address gets nothing. The client's signature covers a session identifier exported from the TLS session and the host key fingerprint the client saw, so a signature relayed to another host, or replayed on another connection, does not verify. |
 | Viewers fighting each other for the mouse | Up to 5 viewers may watch one host, but only one drives input: the earliest to have joined wins, and a later viewer's input is dropped until the earlier one has been idle for a second. A 6th viewer is rejected as `Busy`. |
 | A viewer you only want to show the screen to | View-only sharing, available on every host, drops input packets at the host before anything is injected — it is not enforced by asking the client to behave. Android and iOS hosts are view-only unconditionally. |
-| A Windows PC reachable before anyone signs in | Off by default. With *Allow access before anyone signs in* on, the *DeskHub Secure Desktop* service runs a host whenever the app is not sharing — at the sign-in screen included — that admits only the keys already in `authorized_keys`, answers with the same machine key, and never shows or approves a request: pairing happens while someone is signed in, or not at all. The copies it reads live in a folder only SYSTEM and administrators can open, and only the installed `Deskhub.exe` can replace them. It cannot send Ctrl+Alt+Del. |
+| A Windows PC or a Mac reachable before anyone signs in | Off by default. With *Allow access before anyone signs in* on, the *DeskHub Secure Desktop* service on Windows, or the `DeskhubDaemon` inside the macOS app, runs a host whenever the app is not sharing — at the sign-in screen included, and on macOS only while nobody is signed in — that admits only the keys already in `authorized_keys`, answers with the same machine key, and never shows or approves a request: pairing happens while someone is signed in, or not at all. The copies it reads live in a folder only SYSTEM and administrators (Windows) or root (macOS) can open, and only the installed `Deskhub.exe`, or an app carrying Deskhub's own code signature, can replace them. It cannot send Ctrl+Alt+Del. |
 | A phone left sharing by accident | The operating system, not Deskhub, is the backstop: Android keeps a permanent notification up and re-asks for recording consent on every single share, and iOS keeps its broadcast indicator visible. Either can stop the share without opening the app. |
 | An allowed client writing files onto yours | Only an admitted machine can send files, and only while the receiving machine is offering file transfer. What arrives cannot escape the folder that machine chose: the name on the wire is cut to its last path element and scrubbed of separators, control bytes, characters the filesystem rejects and reserved device names before any file is opened; each file is written under a `.deskhub-part` name and renamed only once it has arrived whole with a matching CRC-32; and a name already present gets a number rather than overwriting anything. A batch is capped at 32 files, 8 GiB per file and 32 GiB in total. The same scrubbing runs on a phone or tablet before anything reaches its photo library or its Downloads folder. |
 | Malformed packets | Every field is bounds-checked before it is read. The parsers are covered by unit tests, run under AddressSanitizer, UndefinedBehaviorSanitizer and ThreadSanitizer in CI, and fuzzed with libFuzzer — for 30 seconds per target on every pull request and 15 minutes per target nightly. There are nine targets, covering the wire format, H.264 parsing (Annex B and SPS), packet reassembly, the host and viewer session state machines, UI text, terminal byte streams, the stored key and trust files with the pairing link, and the QR code encoder. Crashes found by fuzzing are kept in-repo as regression tests, and new coverage is folded back into the seed corpus. |
@@ -217,6 +217,12 @@ also runs a host of its own whenever the app is not sharing, from the sign-in sc
 onwards, for the devices already on your allowed list; it opens a second inbound UDP
 rule, *Deskhub Secure Desktop (host)*, for `DeskhubService.exe`.
 
+On macOS the app carries `DeskhubDaemon` inside its bundle. It does nothing until you
+tick *Allow access before anyone signs in*, which registers it as a root daemon after
+macOS asks you once under *Login Items & Extensions*. From then on it keeps the copies
+described below and runs the same host at the login window while nobody is signed in;
+untick the setting and it is unregistered again.
+
 ## What an attacker on the same network can do
 
 If someone is on the same LAN as a machine that is sharing its screen, and Deskhub is
@@ -336,6 +342,16 @@ your own account cannot open it — and the service refreshes the copies wheneve
 changes the originals. Turning the setting off deletes the copies; uninstalling DeskHub
 deletes the folder. An administrator on the machine can read that private key, as they
 can read yours.
+
+On macOS the second folder is `/Library/Application Support/Deskhub`, created by
+`DeskhubDaemon` as root and readable by root alone; it holds the same copies, the host's
+permission state and the daemon's and the host's logs. The daemon accepts a new copy
+only from a process whose code signature is Deskhub's — `com.deskhub.macos` signed with
+Deskhub's Team ID, checked through Security.framework — never by where the app sits.
+Turning the setting off deletes the copies and the login window agent;
+`brew uninstall --zap deskhub` deletes the folder, and after a drag-to-Trash uninstall
+you delete it yourself. Anyone with `sudo` can read that private key, as they can read
+yours.
 
 No certificate is kept. The TLS certificate is built from `host_key.pem` in memory each
 time the port opens, but the TLS library loads certificates only from a file, so it is

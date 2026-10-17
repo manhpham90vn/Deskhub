@@ -18,15 +18,16 @@ Android 版は Google Play でも、iOS の beta は TestFlight で配布して�
 | 🐧 Ubuntu、Kubuntu、Debian、Mint | `deskhub-v*-amd64.deb` | `sudo apt install ./deskhub-v*-amd64.deb` |
 | 🐧 Fedora（Workstation と KDE spin） | `deskhub-v*-x86_64.rpm` | `sudo dnf install ./deskhub-v*-x86_64.rpm` |
 | 🐧 openSUSE Tumbleweed | `deskhub-v*-x86_64.rpm` | `sudo zypper install ./deskhub-v*-x86_64.rpm` |
-| 🐧 Arch およびその他のディストリビューション | `deskhub-v*-linux-x86_64` | `chmod +x deskhub-v*-linux-x86_64 && ./deskhub-v*-linux-x86_64` |
+| 🐧 その他の Linux ディストリビューション | — | ソースから build する: [BUILD.ja.md](BUILD.ja.md) |
 | 🤖 Android | `deskhub-v*-android.apk` | apk をインストール、または [Google Play](https://play.google.com/store/apps/details?id=com.manhpham.deskhub) から |
 | 📱 iOS | — | [TestFlight](https://testflight.apple.com/join/7qY7wgpd) |
 
-terminal からの操作やスクリプトには `deskhub-cli` も使える。Windows と Linux では、
-CLI からリモート画面のウィンドウも開ける（Linux では X11 のウィンドウなので、Wayland の
-デスクトップでは XWayland が必要）。[Command line](#-command-line) を参照。
+どのデスクトップパッケージも、terminal からの操作やスクリプト向けに `deskhub-cli` も
+インストールする。Windows と Linux では、CLI からリモート画面のウィンドウも開ける（Linux
+では X11 のウィンドウなので、Wayland のデスクトップでは XWayland が必要）。
+[Command line](#-command-line) を参照。
 
-Windows では `winget`、macOS では Homebrew、Ubuntu・Kubuntu・Debian・Mint では
+macOS では Homebrew、Ubuntu・Kubuntu・Debian・Mint では
 [apt repository](#-linux) からもインストールできる。新しい release が必要になったら、
 それぞれの package manager の更新コマンドを使う。
 
@@ -41,18 +42,10 @@ DeskHub をすべてのユーザー向けに `Program Files` 配下へインス�
 先に削除され、*Start Deskhub when you log in* は新しい場所を指すように更新される。設定と鍵は
 そのまま残る。ポータブル版の exe は存在しない。Windows app をインストールする方法は
 セットアップファイルのみである。セットアップが入れるサービスこそが、viewer に UAC の確認、
-ロック画面、サインイン画面を通過させるものだからである。
-
-winget に同じインストーラーを取得させ、最新に保つこともできる。`winget upgrade` で新しい release
-を取得し、`winget uninstall ManhPham.Deskhub` で削除する。
-
-```powershell
-winget install ManhPham.Deskhub
-```
-
-以前の winget ポータブル版をインストール済みの場合は、
-`winget uninstall ManhPham.Deskhub` を一度実行してから再インストールする。
-`%USERPROFILE%\.deskhub` の設定と鍵は保持される。
+ロック画面、サインイン画面を通過させるものだからである。セットアップは app の隣に
+`deskhub-cli.exe` も入れ、そのフォルダをマシンの `PATH` に追加するので、以後に開いた
+どの terminal でも `deskhub-cli` が使える。以前の別個の *DeskHub CLI* インストールは
+その過程で削除される。
 
 次の 3 点に注意する。
 
@@ -73,7 +66,7 @@ winget install ManhPham.Deskhub
   動かした場合、それらの画面は閉じるまで viewer 側で停止して見え、チェックボックスは
   灰色になる。
 
-DeskHub は Windows の設定または `winget uninstall ManhPham.Deskhub` でアンインストールできる。
+DeskHub は Windows の設定からアンインストールできる。
 サービスも一緒に削除され、サービスが log と *Allow access before anyone signs in* が作った
 コピーを保持する `%ProgramData%\DeskHub` も削除される。
 Settings と key は、フォルダを削除するまで
@@ -111,6 +104,20 @@ brew install --cask manhpham90vn/tap/deskhub
 アクセスは、共有でも connect でも相手のマシンに届くために必要である。**通知**の許可は、
 connection request を知らせる必要が初めて生じたときに求められる。
 
+**Allow access before anyone signs in**（既定ではオフ）は同じ Settings ページにある。
+チェックを入れると、app に同梱されたヘルパー `DeskhubDaemon` がバックグラウンド項目として
+登録される。macOS はシステム設定 → 一般 → ログイン項目と機能拡張 で一度だけ許可を求め、
+app はそのペインを開くことを提案する。ヘルパーには独自の**画面収録**と**アクセシビリティ**
+が必要で、同じ 2 つのペインで `DeskhubDaemon` に付与する。Settings ページは最後に実行した
+ときに見つけた状態を表示する。以後、許可済み一覧にある端末は、誰もサインインしていない間
+—— サインアウト後、および FileVault がオフのときの再起動直後 —— にログインウィンドウを見て
+パスワードを入力できる。FileVault がオンの Mac は再起動後にディスク解除画面で待ち、そこでは
+何も動かず、解除した利用者をそのままサインインさせるため、対象はサインアウトの場合だけに
+なる。誰かがサインインするとヘルパーの host は止まり、共有するのは app だけになる。チェックを
+外すと、ヘルパーが `/Library/Application Support/Deskhub` に保持していたコピーは削除され、
+登録も解除される。`brew uninstall --zap deskhub` はそのフォルダを削除し、ゴミ箱へドラッグして
+アンインストールした場合は自分で削除する。
+
 ## 🐧 Linux
 
 **connect して画面を見るなら、まず app の package をインストールする。** H.264
@@ -119,16 +126,14 @@ PipeWire、libva など、app が使うデスクトップ向けライブラリ�
 
 deb と rpm の内容は同一であり、利用中の package manager が扱えるほうを選べばよい。
 どちらにも下記の要件 3 で説明する `/dev/uinput` の udev rule が含まれるため、インストール
-直後から remote input が動作する。group の変更も再ログインも不要である。deb、rpm、
-portable を問わず、すべての Linux 版は glibc 2.35 以上の x86_64 を必要とする（Ubuntu
-22.04、Debian 12、Fedora 36、openSUSE Tumbleweed、現行の Arch）。openSUSE Leap 15.5 の
-glibc は 2.31 のため動作しない。
+直後から remote input が動作する。group の変更も再ログインも不要である。どちらも
+glibc 2.35 以上の x86_64 を必要とする（Ubuntu 22.04、Debian 12、Fedora 36、openSUSE
+Tumbleweed）。openSUSE Leap 15.5 の glibc は 2.31 のため動作しない。
 
-CLI には別の deb と rpm があり、単独で、または同じかより新しいバージョンのデスクトップ
-app と一緒にインストールできる。package manager は古い `deskhub` を新しい `deskhub-cli`
-と並べて残さないため、両方をまとめて更新する。
-両方ともコマンドを `/usr/bin` に配置し、デスクトップ app はアプリケーションメニューに
-ランチャーも追加する。
+各パッケージはデスクトップ app を `/usr/bin/deskhub` としてインストールし、
+アプリケーションメニューにランチャーを追加し、その隣に `/usr/bin/deskhub-cli` も
+インストールする。以前のリリースにあった別個の `deskhub-cli` パッケージはなくなった。
+このパッケージがそれを置き換えるため、古いものはアップグレード時に削除される。
 
 Ubuntu、Kubuntu、Debian、Mint では、Deskhub の apt repository が同じ deb をインストール
 し、以後の release は `sudo apt upgrade` で届く。対応するのは Ubuntu 22.04 以降と
@@ -141,9 +146,6 @@ echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/deskhub.gpg] https://manhpham9
   | sudo tee /etc/apt/sources.list.d/deskhub.list
 sudo apt update && sudo apt install deskhub
 ```
-
-CLI は `sudo apt install deskhub-cli` で別途インストールする。以前の `deskhub`
-パッケージに同梱されていた CLI を使い続けるには、アップグレード後にこのパッケージを入れる。
 
 **このマシンの画面を共有する**には、さらに 3 つの条件が必要である。
 
@@ -206,7 +208,7 @@ vainfo | grep -E 'H264.*Enc'                 # 1 行以上出力されること�
 ### 3. `/dev/uinput` への書き込み権限
 
 mouse と keyboard はここから inject される。deb と rpm は udev rule を導入するため、
-追加の操作は不要である。portable binary の場合はコマンド 1 本で設定でき、clone も
+追加の操作は不要である。ソースから build した場合はコマンド 1 本で設定でき、clone も
 デスクトップの再ログインも必要ない。
 
 ```bash
@@ -253,13 +255,13 @@ sudo firewall-cmd --add-port=47777/udp --permanent        # Fedora / openSUSE
 ### アンインストール
 
 ```bash
-sudo apt remove deskhub deskhub-cli   # インストールしたもの。または dnf remove / zypper remove
+sudo apt remove deskhub      # または dnf remove / zypper remove
 rm -rf ~/.deskhub            # settings、key、許可済み client、信頼済み host
 sudo rm -f /etc/apt/sources.list.d/deskhub.list /etc/apt/keyrings/deskhub.gpg   # apt repository を追加した場合
 ```
 
 他のマシンから届いたファイルは、削除するまで `~/Deskhub`（または選んだフォルダ）に残る。
-portable binary はファイル 1 つであり、削除すればよい。`setup-uinput.sh` は udev rule、
+`setup-uinput.sh` は udev rule、
 module-load ファイル、`input` グループへの所属を残すので、ほかに必要なければ手動で削除
 する。
 
@@ -304,46 +306,26 @@ macOS で画面を見る場合はデスクトップ app を使う。コマンド
 で確認できる。settings、マシンの key、許可済み client、接続要求、信頼済み host は app と
 共通である。
 
-| プラットフォーム | ファイル |
+別個のダウンロードはない。どのデスクトップパッケージも app の隣にインストールする。
+
+| プラットフォーム | 場所 |
 | --- | --- |
-| 🪟 Windows | `deskhub-cli-v*-windows-setup.exe` —— `deskhub-cli` をユーザーの `PATH` に追加 |
-| 🍎 macOS | `deskhub-cli-v*-macos` —— Apple Silicon と Intel の両方に対応した binary 1 つ |
-| 🐧 Linux | `deskhub-cli-v*-amd64.deb`、`deskhub-cli-v*-x86_64.rpm`、またはポータブル版 `deskhub-cli-v*-linux-x86_64` |
+| 🪟 Windows | DeskHub のインストール先フォルダの `deskhub-cli.exe`。セットアップがそのフォルダをマシンの `PATH` に追加する |
+| 🍎 macOS | `Deskhub.app/Contents/MacOS/deskhub-cli`。Apple Silicon と Intel の両方に対応した binary 1 つで、Homebrew cask が `PATH` にリンクする |
+| 🐧 Linux | `/usr/bin/deskhub-cli`。app と同じ deb または rpm から入る |
 
-Linux のパッケージを直接ダウンロードした場合、Ubuntu/Debian では
-`sudo apt install ./deskhub-cli-v*-amd64.deb`、Fedora では
-`sudo dnf install ./deskhub-cli-v*-x86_64.rpm` でインストールする。デスクトップ app
-をインストールしなくても、コマンドは `/usr/bin` から実行できる。
+Windows でセットアップの完了後は、新しい PowerShell ウィンドウを開いて `deskhub-cli help`
+を実行する。`Get-Command deskhub-cli` で Windows が見つけたファイルを確認できる。Homebrew
+を使わない macOS では、フルパスで実行するか自分でリンクする:
+`ln -s /Applications/Deskhub.app/Contents/MacOS/deskhub-cli /usr/local/bin/deskhub-cli`。
 
-macOS と Linux のポータブル binary はダウンロード後に `chmod +x` が必要な場合がある。
-`.deb` と `.rpm` は package manager でインストールする。macOS のポータブル binary は
-dmg のように署名や notarize をしていないため、初回の実行時に
-`xattr -d com.apple.quarantine deskhub-cli-v*-macos`、または System Settings →
-Privacy & Security の *Open Anyway* が必要である。
-
-Windows のインストーラーは管理者権限なしで CLI をユーザーの `PATH` に追加する。
-ポータブル版 `deskhub-cli-v*-windows.exe` も利用できる。
-
-**CLI が *DeskHub Secure Desktop* サービスを使えることはない。** CLI のインストーラーは
-サービスを入れないし、サービスは —— app のインストーラーが同じ PC に入れていても ——
-隣にある `Deskhub.exe` だけに応え、`deskhub-cli.exe` にはどこにあっても応えない。そのため
-Windows で `deskhub-cli share` を使うと、UAC の確認、ロック画面、サインイン画面が出ている間、
-viewer には停止した画面が見え、その入力はそれらの画面に届かず、*Allow access before anyone
-signs in* は app だけの設定である。それらが必要なら、セットアップファイルで app を
-インストールすること。
-すべてのインストーラーとパッケージは `THIRD_PARTY_NOTICES.md` と、中に含まれる
-ライブラリのライセンス本文を同梱する。ポータブル版のバイナリにはそれができないため、
-各リリースは `LICENSE`、`THIRD_PARTY_NOTICES.md` とすべてのライセンス本文を収めた
-`deskhub-v*-licenses.zip` も提供する。package manager 経由でも
-`PATH` に配置される。Windows では
-`winget install ManhPham.DeskhubCLI`（winget はインストーラーではなくポータブル版 exe を
-入れる）、macOS では `brew install manhpham90vn/tap/deskhub-cli`
-を使う。Homebrew は quarantine フラグを付けずにインストールする。Ubuntu や Debian では
-上記の apt repository を追加した後、`sudo apt install deskhub-cli` を実行する。
-
-Windows で winget からインストールした後は、新しい PowerShell ウィンドウを開いて
-`deskhub-cli help` を実行する。`Get-Command deskhub-cli` で実際のファイルを確認できる。
-直接ダウンロードしたポータブル版 exe は自動的に `PATH` に追加されない。
+**CLI が *DeskHub Secure Desktop* サービスを使えることはない。** 同じセットアップが入れる
+そのサービスは、隣にある `Deskhub.exe` だけに応え、`deskhub-cli.exe` には応えない。
+そのため Windows で `deskhub-cli share` を使うと、UAC の確認、ロック画面、サインイン画面が
+出ている間、viewer には停止した画面が見え、その入力はそれらの画面に届かず、*Allow access
+before anyone signs in* は Windows でも macOS でも app だけの設定である。それらが必要なら
+app を使うこと。すべてのインストーラーとパッケージは `THIRD_PARTY_NOTICES.md` と、中に
+含まれるライブラリのライセンス本文を同梱する。
 
 Linux では app と同じ portal および VA-API driver で画面を共有し、remote input も同じ
 `/dev/uinput` rule に依存するため、[Linux](#-linux) の節がそのまま当てはまる。macOS で

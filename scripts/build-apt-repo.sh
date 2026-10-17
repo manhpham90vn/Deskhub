@@ -35,8 +35,7 @@ fetch_debs() {
         while read -r tag; do
             deskhub_release_asset "$tag" "deskhub-$tag-$ARCH.deb" "$pool" ||
                 echo "::warning::$tag has no deskhub-$tag-$ARCH.deb - left out of the apt repo"
-            deskhub_release_asset "$tag" "deskhub-cli-$tag-$ARCH.deb" "$pool" ||
-                echo "::warning::$tag has no deskhub-cli-$tag-$ARCH.deb - left out of the apt repo"
+            deskhub_release_asset "$tag" "deskhub-cli-$tag-$ARCH.deb" "$pool" 2>/dev/null || true
         done
     compgen -G "$pool/*.deb" >/dev/null || {
         echo "build-apt-repo.sh: none of the last $KEEP_RELEASES releases carries a $ARCH deb." >&2

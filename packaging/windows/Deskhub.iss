@@ -18,10 +18,12 @@ SetupIconFile=..\..\client\windows\win32\Deskhub.ico
 Compression=lzma2
 SolidCompression=yes
 UninstallDisplayIcon={app}\Deskhub.exe
+ChangesEnvironment=yes
 
 [Files]
 Source: "..\..\out\build\x64-release\client\windows\win32\Deskhub.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\..\out\build\x64-release\client\windows\win32\DeskhubService.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\..\out\build\x64-release\client\cli\deskhub-cli.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\..\THIRD_PARTY_NOTICES.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\..\licenses\BSD-2-Clause-quiche.txt"; DestDir: "{app}\licenses"; Flags: ignoreversion
 Source: "..\..\licenses\BoringSSL.txt"; DestDir: "{app}\licenses"; Flags: ignoreversion
@@ -49,12 +51,109 @@ Filename: "{app}\DeskhubService.exe"; Parameters: "--uninstall"; RunOnceId: "Rem
 [Code]
 const
   PerUserUninstallKey = 'Software\Microsoft\Windows\CurrentVersion\Uninstall\{A54D0B95-4B42-4A02-A9C6-EC43BA13034E}_is1';
+  PerUserCliUninstallKey = 'Software\Microsoft\Windows\CurrentVersion\Uninstall\{F62A9A7E-FC4C-4D1E-983B-03B6D67B8209}_is1';
   AutostartTaskName = 'Deskhub';
   PerUserUninstallWaitMs = 30000;
   PerUserUninstallPollMs = 250;
+  MachinePathKey = 'SYSTEM\CurrentControlSet\Control\Session Manager\Environment';
+  PathMarkerKey = 'Software\ManhPham\DeskHub';
 
 var
   RemovedPerUserInstall: Boolean;
+
+function SamePath(const Left, Right: String): Boolean;
+begin
+  Result := SameText(RemoveBackslashUnlessRoot(Trim(Left)),
+    RemoveBackslashUnlessRoot(Trim(Right)));
+end;
+
+function ContainsPath(const Value, Directory: String): Boolean;
+var
+  Remaining, Part: String;
+  Separator: Integer;
+begin
+  Result := False;
+  Remaining := Value;
+  repeat
+    Separator := Pos(';', Remaining);
+    if Separator = 0 then
+      Part := Remaining
+    else
+    begin
+      Part := Copy(Remaining, 1, Separator - 1);
+      Delete(Remaining, 1, Separator);
+    end;
+    if SamePath(Part, Directory) then
+    begin
+      Result := True;
+      Exit;
+    end;
+  until Separator = 0;
+end;
+
+function RemovePath(const Value, Directory: String): String;
+var
+  Remaining, Part: String;
+  Separator: Integer;
+  Removed, FirstPart: Boolean;
+begin
+  Result := '';
+  Remaining := Value;
+  Removed := False;
+  FirstPart := True;
+  repeat
+    Separator := Pos(';', Remaining);
+    if Separator = 0 then
+      Part := Remaining
+    else
+    begin
+      Part := Copy(Remaining, 1, Separator - 1);
+      Delete(Remaining, 1, Separator);
+    end;
+    if not Removed and SamePath(Part, Directory) then
+      Removed := True
+    else
+    begin
+      if FirstPart then
+        Result := Part
+      else
+        Result := Result + ';' + Part;
+      FirstPart := False;
+    end;
+  until Separator = 0;
+end;
+
+procedure AddAppToMachinePath();
+var
+  Existing, Directory: String;
+begin
+  Directory := ExpandConstant('{app}');
+  if not RegQueryStringValue(HKLM, MachinePathKey, 'Path', Existing) then
+    Existing := '';
+  if ContainsPath(Existing, Directory) then Exit;
+  if Existing <> '' then
+    Existing := Existing + ';';
+  if RegWriteExpandStringValue(HKLM, MachinePathKey, 'Path', Existing + Directory) then
+    RegWriteStringValue(HKLM, PathMarkerKey, 'PathAdded', '1')
+  else
+    Log('Could not add ' + Directory + ' to the machine PATH; deskhub-cli must be run by full path.');
+end;
+
+procedure RemoveAppFromMachinePath();
+var
+  Existing, NewPath, Marker, Directory: String;
+begin
+  if not RegQueryStringValue(HKLM, PathMarkerKey, 'PathAdded', Marker) then Exit;
+  Directory := ExpandConstant('{app}');
+  if RegQueryStringValue(HKLM, MachinePathKey, 'Path', Existing) then
+  begin
+    NewPath := RemovePath(Existing, Directory);
+    if NewPath <> Existing then
+      RegWriteExpandStringValue(HKLM, MachinePathKey, 'Path', NewPath);
+  end;
+  RegDeleteValue(HKLM, PathMarkerKey, 'PathAdded');
+  RegDeleteKeyIfEmpty(HKLM, PathMarkerKey);
+end;
 
 function RunHidden(const FileName, Params: String): Integer;
 var
@@ -104,6 +203,19 @@ begin
   RemovedPerUserInstall := True;
 end;
 
+procedure RemovePerUserCliInstall();
+var
+  Uninstaller: String;
+begin
+  if not RegQueryStringValue(HKCU, PerUserCliUninstallKey, 'UninstallString', Uninstaller) then
+    Exit;
+  Uninstaller := RemoveQuotes(Uninstaller);
+  if not FileExists(Uninstaller) then
+    Exit;
+  Log('Removing the earlier separate DeskHub CLI install: ' + Uninstaller);
+  RunHidden(Uninstaller, '/VERYSILENT /SUPPRESSMSGBOXES /NORESTART');
+end;
+
 procedure PointAutostartAtNewPath();
 var
   Schtasks: String;
@@ -119,11 +231,20 @@ function PrepareToInstall(var NeedsRestart: Boolean): String;
 begin
   StopExistingService();
   RemovePerUserInstall();
+  RemovePerUserCliInstall();
   Result := '';
 end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
 begin
-  if (CurStep = ssPostInstall) and RemovedPerUserInstall then
+  if CurStep <> ssPostInstall then Exit;
+  if RemovedPerUserInstall then
     PointAutostartAtNewPath();
+  AddAppToMachinePath();
+end;
+
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+begin
+  if CurUninstallStep = usPostUninstall then
+    RemoveAppFromMachinePath();
 end;

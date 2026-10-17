@@ -327,6 +327,27 @@ HostEngine (mỗi app một instance, sở hữu SessionTransport)
   của máy, khởi động lại host khi key hoặc settings thay đổi, và xoá các file khi tắt. App
   gửi nó khi setting được bật hoặc tắt, sau mỗi lần lưu settings, sau mỗi thay đổi với danh
   sách được phép, khi một phiên share dừng và một lần lúc khởi động.
+- macOS trước khi đăng nhập (T-28): app nhúng `Contents/MacOS/DeskhubDaemon` và một plist
+  LaunchDaemon dưới `Contents/Library/LaunchDaemons`, đăng ký qua `SMAppService.daemon` khi
+  setting được tick (một lần xác nhận *Allow in background*). Daemon chạy root, lắng nghe
+  trên Unix socket `/var/run/deskhub/control.sock` (`deskhubp/net/LocalSocket`) và đưa byte
+  của mỗi kết nối qua `UnattendedControlServer` (`core/session/host/UnattendedControl`),
+  cùng luồng request với pipe Windows: `Takeover`, `Configure` và một `Status` mà service
+  Windows từ chối. Nó tin peer theo chữ ký code — `identifier "com.deskhub.macos"` với Team
+  ID của Deskhub, kiểm tra bằng Security.framework trên audit token của tiến trình kết nối
+  — không bao giờ theo đường dẫn. `Configure` ghi ba file vào
+  `/Library/Application Support/Deskhub` (`deskhubp/system/MachineFolder`, root `0700`) và
+  ghi hoặc xoá `/Library/LaunchAgents/com.deskhub.macos.unattended.plist`, một LaunchAgent
+  giới hạn ở session type `LoginWindow` chạy `DeskhubDaemon --unattended-host`. Tiến trình
+  đó là `SharingHost` bình thường với `UnattendedMode()` bật, một main thread chạy
+  `CFRunLoopRun` để `LocalInputMonitor` dispatch lên được, và một supervisor poll thư mục
+  mỗi 500 ms: dừng host khi marker `unattended-hold` của daemon tồn tại (một cho mỗi kết
+  nối `Takeover` app đang giữ), khởi động lại khi `host_key.pem` hoặc `ui-settings.txt`
+  đổi, và thoát khi key biến mất. Capture thử ScreenCaptureKit trước và rơi về
+  `CGDisplayStream` (`DisplayStreamCapture`) khi `SCShareableContent` không trả gì trong
+  phiên login window; liệt kê màn hình rơi về `CGGetActiveDisplayList` theo cùng cách. Host
+  ghi `unattended-status.txt` với trạng thái Screen Recording và Accessibility của chính
+  nó, thứ daemon trả về cho request `Status` của app để hiện trên trang Settings.
 - Shell: mỗi shell một PTY (`ConPTY` trên Windows, `forkpty` trên các nền tảng khác), tối
   đa 8 shell. Khi mất kết nối, shell được tách ra và PTY được giữ sống cho đến khi tiến trình shell thoát hoặc shell bị đóng — không giới hạn thời gian. Mọi client đã được chấp nhận đều có thể liệt kê các shell đang được giữ (`TermList`/`TermListAck`) và reattach một shell theo id. Mọi thao tác open, close, detach và reattach đều được ghi vào audit log kèm
   địa chỉ, tên và key. `TERM_CLOSE` được trả lời trước guard theo peer mà các message
@@ -483,6 +504,12 @@ cập trước khi đăng nhập bật (T-28), nó còn giữ bản copy của `
 và `pairing_tokens` host đó ghi ra. Tắt setting sẽ xoá các file đó;
 `DeskhubService.exe --uninstall` xoá cả thư mục.
 
+Trên macOS, thư mục thứ hai là `/Library/Application Support/Deskhub`, do `DeskhubDaemon`
+tạo dưới quyền root (`0700`), chứa cùng ba bản copy, `unattended-status.txt` của host,
+marker `unattended-hold` trong lúc app share, và log của daemon lẫn host. Tắt setting sẽ
+xoá các bản copy và plist của agent login window; `zap` của cask Homebrew xoá thư mục, còn
+gỡ bằng cách kéo vào Thùng rác thì để lại.
+
 File do viewer gửi được lưu ở nơi khác: một thư mục do host chọn (trường `transfer_dir`
 trong `ui-settings.txt`, mặc định là `Deskhub` trong thư mục home của người dùng).
 `FileStore` ghi từng file dưới tên `<name>.deskhub-part` và chỉ đổi tên sau khi toàn bộ
@@ -560,6 +587,20 @@ coverage của core.
   Administrators. Việc pair vẫn là hành động của người đã đăng nhập: một yêu cầu gửi ở màn
   hình đăng nhập rơi vào một thư mục không ai nhìn tới, và cho phép màn hình đăng nhập
   approve thiết bị sẽ trao cho kẻ lạ chính quyết định mà toàn bộ mô hình dựa vào.
+
+- **macOS dùng một daemon root cộng một agent LoginWindow, không phải pkg và không phải một
+  tiến trình duy nhất**: một LaunchAgent giới hạn ở session `LoginWindow` là cách được hỗ
+  trợ duy nhất để chạy thứ gì đó ở login window với window server để capture và gửi sự
+  kiện — daemon root không có session nên không làm được cả hai — nhưng chỉ root ghi được
+  `/Library/LaunchAgents`, nên một daemon root phải ghi plist đó, giữ bản copy của máy và
+  giữ takeover. `SMAppService.daemon(plistName:)` cho app đăng ký daemon ấy với một lần
+  xác nhận *Allow in background* và không cần gói cài đặt, đó là lý do vẫn chưa có pkg hay
+  chứng chỉ Developer ID Installer. Daemon tin app theo chữ ký code chứ không theo đường
+  dẫn image vì mỗi người dùng đều quản trị chính máy Mac của mình và ghi được
+  `/Applications`: kiểm tra đường dẫn sẽ tin bất cứ thứ gì nằm ở đó. Tính năng dừng ở lúc
+  đăng nhập, khác Windows, vì launchd tháo phiên LoginWindow ngay lúc đó; host trong phiên
+  của chính người dùng khi app không share cần một agent theo người dùng và một vòng cấp
+  quyền TCC nữa, để lại cho phiên sau.
 
 - **Chỉ host mới có thể kết thúc sớm một handshake, nên client lắng nghe xem nó kết thúc
   thế nào**: client từng chờ `AuthResult` tới 65 giây — di sản từ thời việc approve diễn ra

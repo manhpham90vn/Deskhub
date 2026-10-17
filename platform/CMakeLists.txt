@@ -86,6 +86,7 @@ if(WIN32)
     set(deskhub_platform_os
         src/net/UdpSocketWin.cpp
         src/net/NetInfoWin.cpp
+        src/net/LocalSocketNone.cpp
         src/input/LocalInputWin.cpp
         src/input/NativeKeyMapWin.cpp
         src/media/DisplayEnumWin.cpp
@@ -102,6 +103,7 @@ else()
     set(deskhub_platform_os
         src/net/UdpSocketPosix.cpp
         src/net/NetInfoPosix.cpp
+        src/net/LocalSocketPosix.cpp
         src/system/DeviceNamePosix.cpp
         src/system/ConsolePosix.cpp
         src/system/EnvironmentPosix.cpp
@@ -221,6 +223,9 @@ add_library(platform STATIC
     src/host/HostNetLoop.cpp
     src/host/ViewerBroadcast.cpp
     src/host/HostEngine.cpp
+    src/host/UnattendedMode.cpp
+    src/host/UnattendedPush.cpp
+    src/system/MachineFolder.cpp
     src/ffi/ClientFfi.cpp
     src/ffi/ShareFfi.cpp
     src/ffi/SettingsFfi.cpp
@@ -332,7 +337,10 @@ if(DESKHUB_PLATFORM_TESTS)
         tests/net/NetAddrTests.cpp
         tests/net/SourceQueryTests.cpp
         tests/net/UdpSocketTests.cpp
+        tests/net/LocalSocketTests.cpp
         tests/system/AppDataFileTests.cpp
+        tests/system/MachineFolderTests.cpp
+        tests/host/UnattendedPushTests.cpp
         tests/system/HostIdentityTests.cpp
         tests/system/AuthProofTests.cpp
         tests/system/AccessRequestsFileTests.cpp

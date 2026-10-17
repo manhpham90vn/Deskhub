@@ -133,7 +133,8 @@ bundle id bình thường.
 
 `client/cli/` build ra `deskhub-cli`, dùng lệnh thay cho các trang của app. Bạn có thể
 chạy qua SSH, từ script hoặc dưới systemd. Lệnh `connect` mở cửa sổ viewer trên Windows
-và Linux; bản macOS chưa hỗ trợ lệnh đó.
+và Linux; bản macOS chưa hỗ trợ lệnh đó. Nó không có gói riêng: bộ cài Windows, app bundle
+macOS và deb/rpm Linux đều mang nó cạnh app.
 
 ```bash
 make build-cli                       # bản debug cho OS hiện tại
@@ -313,28 +314,29 @@ Quy ước của dự án, bản rút gọn; bản đầy đủ nằm trong `CLA
 | --- | --- |
 | `make dist-macos` | một file dmg đã sign bằng Developer ID, đã notarize và staple |
 | `make verify-macos` | kiểm tra Gatekeeper trên bản vừa build |
-| `make dist-linux` | gói `.deb` và `.rpm` riêng cho app và CLI, mỗi gói cài udev rule cho uinput |
+| `make dist-linux` | một `.deb` và một `.rpm`, mỗi gói chứa app lẫn `deskhub-cli` và cài udev rule cho uinput |
 
 `dist-macos` cần một identity *Developer ID Application* trong keychain và một App Store
 Connect API key để notarize: `ASC_KEY_P8` (đường dẫn tới file `.p8`), `ASC_KEY_ID` và
 `ASC_ISSUER_ID`. Nó dừng trước khi build nếu thiếu bất kỳ biến nào trong ba biến đó.
 
-Workflow release cũng tạo bộ cài Inno Setup cho app và CLI trên Windows từ
-`packaging/windows/`. Bộ cài của app cần quyền administrator: nó cài vào `Program Files`
-cho mọi người dùng, gỡ bản cài theo từng người dùng trước đó, và chạy
-`DeskhubService.exe --install` để đăng ký service *DeskHub Secure Desktop* (`--uninstall`
-khi gỡ cài đặt). App Windows chỉ phát hành dưới dạng bộ cài đó — không có exe app portable,
-vì thiếu service thì viewer không thấy được hộp thoại UAC, màn hình khoá hay màn hình đăng
-nhập; bản Windows portable của CLI và app Linux vẫn là file đơn lẻ.
+Workflow release tạo bộ cài Inno Setup cho app Windows từ `packaging/windows/Deskhub.iss`.
+Bộ cài cần quyền administrator: nó cài vào `Program Files` cho mọi người dùng, gỡ bản cài
+theo từng người dùng và bản cài *DeskHub CLI* riêng trước đó, đặt `deskhub-cli.exe` cạnh
+app và thêm thư mục vào `PATH` của máy, rồi chạy `DeskhubService.exe --install` để đăng ký
+service *DeskHub Secure Desktop* (`--uninstall` khi gỡ cài đặt). App Windows chỉ phát hành
+dưới dạng bộ cài đó — không có exe portable, vì thiếu service thì viewer không thấy được
+hộp thoại UAC, màn hình khoá hay màn hình đăng nhập. Trên macOS, phase CMake của Xcode
+project cũng build `deskhub-cli` và `DeskhubDaemon`, rồi `scripts/embed-macos-daemon.sh`
+copy cả hai vào `Contents/MacOS` và ký bằng identity của app; cask Homebrew link CLI vào
+`PATH`.
 
 Mọi gói đều kèm `THIRD_PARTY_NOTICES.md` và các văn bản giấy phép trong `licenses/` áp dụng
-cho nó: `.deb` và `.rpm` của app và CLI (dưới `/usr/share/doc/<package>/`, các văn bản —
-kể cả LGPL — nằm trong thư mục `licenses/` của nó), cả hai bộ cài Windows, `Resources` của
-app macOS, bundle của app iOS và assets của APK Android. `scripts/stage-licenses.sh` chuẩn bị
-bộ cho Linux và Apple, `packaging/windows/*.iss` liệt kê bộ cho Windows, còn bản build
-Android tự copy bộ của nó. Các binary portable của CLI và Linux không mang theo gì, nên bản release thêm
-`deskhub-<tag>-licenses.zip` chứa `LICENSE`, file notices và toàn bộ thư mục `licenses/`.
-`licenses/rust-crates.txt` được sinh ra:
+cho nó: `.deb` và `.rpm` (dưới `/usr/share/doc/deskhub/`, các văn bản — kể cả LGPL — nằm
+trong thư mục `licenses/` của nó), bộ cài Windows, `Resources` của app macOS, bundle của
+app iOS và assets của APK Android. `scripts/stage-licenses.sh` chuẩn bị bộ cho Linux và
+Apple, `packaging/windows/Deskhub.iss` liệt kê bộ cho Windows, còn bản build Android tự
+copy bộ của nó. `licenses/rust-crates.txt` được sinh ra:
 `scripts/rust-crate-notices.py <quiche source dir> > licenses/rust-crates.txt` ghi lại nó
 khi pin của quiche thay đổi. APK còn mang theo `licenses/android-libraries.txt` — các thư
 viện Java và Kotlin mà Gradle đóng gói vào nó, kèm notice của từng thư viện — và file này
@@ -368,26 +370,11 @@ một trong các script này — chạy tay: `gh workflow run publish-packages.y
 
 | Job | Publish | Secret trong environment `stg` |
 | --- | --- | --- |
-| `winget` | pull request vào `microsoft/winget-pkgs` cho `ManhPham.Deskhub` và `ManhPham.DeskhubCLI`, qua [komac](https://github.com/russellbanks/Komac) (pin trong `scripts/pinned-versions.txt`) | `WINGET_TOKEN` — classic PAT có `public_repo` |
-| `homebrew` | `Casks/deskhub.rb` và `Formula/deskhub-cli.rb` trong `manhpham90vn/homebrew-tap`, sinh từ `packaging/homebrew/` | `HOMEBREW_TAP_TOKEN` — fine-grained PAT, Contents: write trên tap |
+| `homebrew` | `Casks/deskhub.rb` trong `manhpham90vn/homebrew-tap`, sinh từ `packaging/homebrew/deskhub.rb`; `Formula/deskhub-cli.rb` đã bỏ được xoá khỏi tap | `HOMEBREW_TAP_TOKEN` — fine-grained PAT, Contents: write trên tap |
 | `build-apt-repo` → `deploy-apt-repo` | apt repository đã ký, chứa deb của ba release gần nhất, trên GitHub Pages tại `/apt` (`scripts/build-apt-repo.sh`) | `APT_GPG_PRIVATE_KEY`, `APT_GPG_PASSPHRASE` |
 
 Mỗi job cần thiết lập một lần trước tag đầu tiên chạy nó:
 
-- **winget** — job chỉ cập nhật package đã tồn tại, nên bản đầu tiên của mỗi package phải
-  gửi bằng tay. Dùng bộ cài Inno Setup cho `ManhPham.Deskhub`; chọn `deskhub-cli` làm
-  portable command alias cho `ManhPham.DeskhubCLI` khi komac hỏi.
-  Trước khi Microsoft merge pull request đó, job chỉ cảnh báo rồi bỏ qua.
-
-  ```bash
-  komac new ManhPham.Deskhub --version X.Y.Z --urls https://github.com/manhpham90vn/Deskhub/releases/download/vX.Y.Z/deskhub-vX.Y.Z-windows-setup.exe
-  ```
-
-  Làm lại với `ManhPham.DeskhubCLI` và URL `deskhub-cli-vX.Y.Z-windows.exe`.
-
-  Bộ cài của app cài cho toàn máy kể từ bản release thêm service secure desktop, nên hãy
-  submit `ManhPham.Deskhub` với `Scope: machine` — và nếu pull request đầu tiên vẫn đang
-  chờ duyệt với `Scope: user`, hãy sửa nó thành `machine`.
 - **Homebrew** — tạo repository public `manhpham90vn/homebrew-tap`; job sẽ tự điền nội dung.
 - **apt** — tạo signing key một lần, lưu file đó làm `APT_GPG_PRIVATE_KEY` và giữ một bản
   backup offline. Mọi người dùng đều trust key này: thay key sẽ làm hỏng `apt update` của họ.

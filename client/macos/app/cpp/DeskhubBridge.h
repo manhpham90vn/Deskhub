@@ -24,6 +24,27 @@ bool dh_has_accessibility(void);
 bool dh_request_accessibility(void);
 void dh_open_accessibility_settings(void);
 
+typedef enum {
+    DHUnattendedDaemonNotRegistered = 0,
+    DHUnattendedDaemonEnabled = 1,
+    DHUnattendedDaemonRequiresApproval = 2,
+    DHUnattendedDaemonNotFound = 3,
+} DHUnattendedDaemonStatus;
+
+typedef struct {
+    bool known;
+    bool screenRecording;
+    bool accessibility;
+} DHUnattendedPermissions;
+
+bool dh_unattended_available(void);
+DHUnattendedDaemonStatus dh_unattended_daemon_status(void);
+bool dh_unattended_enabled(void);
+bool dh_unattended_set(bool on);
+bool dh_unattended_sync(void);
+void dh_unattended_open_login_items(void);
+DHUnattendedPermissions dh_unattended_permissions(void);
+
 #ifdef __cplusplus
 }
 #endif

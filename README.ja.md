@@ -40,22 +40,15 @@
 
 ## 📦 インストール
 
-Windows、macOS、Ubuntu、Debian、Mint では package manager からインストールできる。
+macOS、Ubuntu、Debian、Mint では package manager からインストールできる。Windows では
+[Releases](https://github.com/manhpham90vn/Deskhub/releases) からインストーラーを入手する。
 
 ```bash
-winget install ManhPham.Deskhub                  # Windows · app
-winget install ManhPham.DeskhubCLI               # Windows · deskhub-cli
-brew install --cask manhpham90vn/tap/deskhub     # macOS · app
-brew install manhpham90vn/tap/deskhub-cli        # macOS · deskhub-cli
+brew install --cask manhpham90vn/tap/deskhub     # macOS · app + deskhub-cli
 ```
 
-> **winget はまだ使えない。** Deskhub のパッケージは winget-pkgs でまだレビュー待ちで
-> （アプリは [#439628](https://github.com/microsoft/winget-pkgs/pull/439628)、CLI は [#439629](https://github.com/microsoft/winget-pkgs/pull/439629)）、
-> マージされるまで 2 つの `winget install` コマンドはどちらも失敗する。それまでは
-> [Releases](https://github.com/manhpham90vn/Deskhub/releases) から Windows インストーラーを入手すること。
-
-Ubuntu / Debian / Mint では、デスクトップ app と CLI は別パッケージである。
-apt repository を一度追加し、必要な方だけ、または両方をインストールする。
+Ubuntu / Debian / Mint では、apt repository を一度追加し、app と `deskhub-cli` を
+あわせて収めた 1 つのパッケージをインストールする。
 
 ```bash
 sudo install -d /etc/apt/keyrings
@@ -63,29 +56,23 @@ curl -fsSL https://manhpham90vn.github.io/Deskhub/apt/deskhub.gpg | sudo tee /et
 echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/deskhub.gpg] https://manhpham90vn.github.io/Deskhub/apt stable main" \
   | sudo tee /etc/apt/sources.list.d/deskhub.list
 sudo apt update
-sudo apt install deskhub       # デスクトップ app
-sudo apt install deskhub-cli   # CLI。単独でもインストール可能
+sudo apt install deskhub       # デスクトップ app + deskhub-cli
 ```
 
-デスクトップパッケージはアプリケーションメニューに Deskhub を追加し、`deskhub` を
-`/usr/bin` にインストールする。CLI パッケージは `deskhub-cli` を `/usr/bin` に
-インストールする。Windows の app インストーラーはスタートメニューとデスクトップに
-ショートカットを作成し、別の CLI インストーラーはユーザーの `PATH` にコマンドを
-追加する。winget は CLI を portable 版 exe としてインストールし、`PATH` に配置する。
-macOS の CLI は Homebrew により `PATH` に配置される。
+このパッケージはアプリケーションメニューに Deskhub を追加し、`deskhub` と `deskhub-cli`
+を `/usr/bin` にインストールする。Windows のインストーラーはスタートメニューと
+デスクトップにショートカットを作成し、インストール先フォルダ（`deskhub-cli.exe` を含む）
+をマシンの `PATH` に追加する。Homebrew cask は macOS の `deskhub-cli` を `PATH` にリンク
+する。dmg の場合は app の中、`Deskhub.app/Contents/MacOS/deskhub-cli` にある。
 
 その他のプラットフォームは [Releases](https://github.com/manhpham90vn/Deskhub/releases) から：
 
-- **Windows 直接ダウンロード** —— app 用 `deskhub-v*-windows-setup.exe`（app はこの形式
-  のみ）と CLI 用 `deskhub-cli-v*-windows-setup.exe`。CLI には portable 版
-  `deskhub-cli-v*-windows.exe` もある
-- **macOS 直接ダウンロード** —— app は `deskhub-v*-macos.dmg`、CLI は `deskhub-cli-v*-macos`
-- **repository を使わない Ubuntu / Debian / Mint** —— `deskhub-v*-amd64.deb` と
-  `deskhub-cli-v*-amd64.deb`
-- **Fedora / openSUSE** —— app と CLI は別の RPM。`deskhub-v*-x86_64.rpm` と
-  `deskhub-cli-v*-x86_64.rpm` を必要に応じて `dnf` または `zypper` でインストール
-- **Arch、その他の Linux** —— portable 版 `deskhub-v*-linux-x86_64` と
-  `deskhub-cli-v*-linux-x86_64` を `chmod +x` して実行
+- **Windows** —— `deskhub-v*-windows-setup.exe`。app はこの形式のみで、`deskhub-cli` を
+  同梱する
+- **macOS** —— `deskhub-v*-macos.dmg`。`deskhub-cli` は app の中にある
+- **repository を使わない Ubuntu / Debian / Mint** —— `deskhub-v*-amd64.deb`
+- **Fedora / openSUSE** —— `deskhub-v*-x86_64.rpm` を `dnf` または `zypper` でインストール
+- **その他の Linux ディストリビューション** —— ソースから build する。[BUILD.ja.md](docs/BUILD.ja.md) を参照
 - **Android** —— `deskhub-v*-android.apk`、または [Google Play](https://play.google.com/store/apps/details?id=com.manhpham.deskhub)
 - **iOS** —— [TestFlight](https://testflight.apple.com/join/7qY7wgpd)
 

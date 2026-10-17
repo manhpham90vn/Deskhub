@@ -10,6 +10,16 @@ cask "deskhub" do
   depends_on macos: ">= :sonoma"
 
   app "Deskhub.app"
+  binary "#{appdir}/Deskhub.app/Contents/MacOS/deskhub-cli"
 
-  zap trash: "~/.deskhub"
+  uninstall launchctl: [
+    "com.deskhub.macos.daemon",
+    "com.deskhub.macos.unattended",
+  ]
+
+  zap trash: [
+    "~/.deskhub",
+    "/Library/Application Support/Deskhub",
+    "/Library/LaunchAgents/com.deskhub.macos.unattended.plist",
+  ]
 end

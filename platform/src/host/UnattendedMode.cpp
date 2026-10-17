@@ -1,7 +1,8 @@
-#include "secure/UnattendedMode.h"
+#include "deskhubp/host/UnattendedMode.h"
 
 #include <atomic>
 
+namespace deskhubp {
 namespace {
 
 std::atomic<bool> unattendedMode{false};
@@ -14,4 +15,6 @@ void SetUnattendedMode(bool on) {
 
 bool UnattendedMode() {
     return unattendedMode.load(std::memory_order_acquire);
+}
+
 }

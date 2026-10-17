@@ -178,6 +178,9 @@ int main() {
     std::printf("--- session: secure desktop agent wire ---\n");
     RunSecureDesktopWireTests();
 
+    std::printf("--- session: the request stream a root daemon reads from the app ---\n");
+    RunUnattendedControlTests();
+
     std::printf("--- net: dotted-quad IPv4 parsing ---\n");
     RunIpv4Tests();
 

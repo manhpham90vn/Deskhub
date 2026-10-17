@@ -59,6 +59,7 @@ void RunPcmRingTests();
 void RunRgbDownscaleTests();
 void RunSourceListResponderTests();
 void RunSecureDesktopWireTests();
+void RunUnattendedControlTests();
 void RunIpv4Tests();
 void RunBindAddressTests();
 void RunTrustStoreTests();

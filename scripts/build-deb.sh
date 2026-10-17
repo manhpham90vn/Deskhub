@@ -20,7 +20,7 @@ scripts/stage-linux-pkgroot.sh "$STAGE"
 
 mkdir -p "$STAGE/debian"
 touch "$STAGE/debian/control"
-DEPENDS="$(cd "$STAGE" && dpkg-shlibdeps -O usr/bin/deskhub | sed 's/^shlibs:Depends=//')"
+DEPENDS="$(cd "$STAGE" && dpkg-shlibdeps -O usr/bin/deskhub usr/bin/deskhub-cli | sed 's/^shlibs:Depends=//')"
 rm -rf "$STAGE/debian"
 
 INSTALLED_SIZE="$(du -sk "$STAGE" | cut -f1)"
@@ -36,14 +36,18 @@ Priority: optional
 Installed-Size: $INSTALLED_SIZE
 Depends: $DEPENDS
 Recommends: xdg-desktop-portal, va-driver-all
+Provides: deskhub-cli
+Replaces: deskhub-cli
+Conflicts: deskhub-cli
 Homepage: https://github.com/manhpham90vn/Deskhub
 Description: LAN remote desktop - share and control screens
  Deskhub shares the screen of one machine and controls it from another
  over UDP on the local network.
  .
- This package contains the Ubuntu app (host + viewer role) and the udev
- rule that grants access to /dev/uinput, so remote mouse and keyboard
- input works without any manual permission setup.
+ This package contains the Ubuntu app (host + viewer role), the deskhub-cli
+ command for scripts and SSH sessions, and the udev rule that grants access
+ to /dev/uinput, so remote mouse and keyboard input works without any
+ manual permission setup.
 EOF
 
 cat > "$STAGE/DEBIAN/postinst" <<'EOF'

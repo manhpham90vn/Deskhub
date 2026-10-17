@@ -72,6 +72,14 @@ nonisolated enum DeskhubShare {
     static func openScreenRecordingSettings() { dh_open_screen_recording_settings() }
     static func openAccessibilitySettings() { dh_open_accessibility_settings() }
 
+    static var unattendedAvailable: Bool { dh_unattended_available() }
+    static var unattendedEnabled: Bool { dh_unattended_enabled() }
+    static var unattendedDaemonStatus: DHUnattendedDaemonStatus { dh_unattended_daemon_status() }
+    static func setUnattended(_ on: Bool) -> Bool { dh_unattended_set(on) }
+    static func syncUnattended() { _ = dh_unattended_sync() }
+    static func openLoginItemsSettings() { dh_unattended_open_login_items() }
+    static var unattendedPermissions: DHUnattendedPermissions { dh_unattended_permissions() }
+
     static func listShareSources() -> [ShareSource] {
         DeskhubClient.ffiList(
             128, DHShareSource(),

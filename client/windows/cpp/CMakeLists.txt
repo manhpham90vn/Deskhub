@@ -41,7 +41,6 @@ add_library(deskhub_win_core STATIC
 
     secure/SecureDesktopLink.cpp
     secure/ServiceControlPipe.cpp
-    secure/UnattendedMode.cpp
 )
 
 target_compile_definitions(deskhub_win_core PUBLIC UNICODE _UNICODE)

@@ -18,7 +18,7 @@
 #include "deskhubp/system/DeviceName.h"
 #include "deskhubp/system/UiSettingsStore.h"
 #include "net/Firewall.h"
-#include "secure/UnattendedMode.h"
+#include "deskhubp/host/UnattendedMode.h"
 
 namespace {
 
@@ -49,7 +49,7 @@ int RunUnattendedHost() {
     if (!EnterMachineFolder()) return 1;
     deskhubp::StartProcessLog();
     SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
-    SetUnattendedMode(true);
+    deskhubp::SetUnattendedMode(true);
     if (!UnattendedEnabled()) {
         LOGE("[Unattended] No host key in the machine folder; access before sign-in is off.");
         return 1;

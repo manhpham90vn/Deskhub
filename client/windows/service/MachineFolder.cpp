@@ -4,12 +4,9 @@
 
 #include "MachineFolder.h"
 
-#include <filesystem>
 #include <string>
 
-#include "deskhubp/diag/LogFile.h"
-#include "deskhubp/system/AppDataFile.h"
-#include "deskhubp/system/HostIdentity.h"
+#include "deskhubp/system/MachineFolder.h"
 
 namespace {
 
@@ -36,29 +33,13 @@ std::wstring MachineFolderPath() {
 }
 
 bool EnterMachineFolder() {
-    const std::wstring folder = MachineFolderPath();
-    if (folder.empty()) return false;
-    std::error_code ec;
-    std::filesystem::create_directories(std::filesystem::path(folder), ec);
-    if (ec) return false;
-    const std::string utf8 = Narrow(folder);
-    deskhubp::SetAppDataDir(utf8);
-    deskhubp::SetConfigDir(utf8);
-    return !deskhubp::ConfigDir().empty();
+    return deskhubp::EnterMachineFolder(Narrow(MachineFolderPath()));
 }
 
 bool UnattendedEnabled() {
-    const std::wstring folder = MachineFolderPath();
-    if (folder.empty()) return false;
-    std::error_code ec;
-    return std::filesystem::is_regular_file(
-        std::filesystem::path(folder) / deskhubp::kHostKeyFileName, ec);
+    return deskhubp::UnattendedEnabled(Narrow(MachineFolderPath()));
 }
 
 bool WipeMachineFolder() {
-    const std::wstring folder = MachineFolderPath();
-    if (folder.empty()) return false;
-    std::error_code ec;
-    std::filesystem::remove_all(std::filesystem::path(folder), ec);
-    return !ec;
+    return deskhubp::WipeMachineFolder(Narrow(MachineFolderPath()));
 }

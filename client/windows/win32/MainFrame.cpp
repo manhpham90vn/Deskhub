@@ -73,6 +73,7 @@
 #include "deskhubp/system/Clock.h"
 #include "deskhubp/system/Autostart.h"
 #include "deskhubp/system/DeviceName.h"
+#include "deskhubp/host/UnattendedPush.h"
 #include "deskhubp/system/HostIdentity.h"
 #include "deskhubp/system/PairingTokenFile.h"
 #include "deskhubp/system/TrustStoreFile.h"
@@ -1727,7 +1728,7 @@ void MainFrame::AddUnattendedSetting(const SettingsArea& area) {
     unattendedCheck_->Bind(wxEVT_CHECKBOX, [this](wxCommandEvent&) { OnUnattendedToggled(); });
     area.sizer->Add(unattendedCheck_, AreaRowFlags(area));
     unattendedNote_ = MakeHint(area.body,
-        ToWx(installed ? ui::kUnattendedHint : ui::kUnattendedServiceMissingNote));
+        ToWx(installed ? ui::kUnattendedHintWindows : ui::kUnattendedServiceMissingNote));
     area.sizer->Add(unattendedNote_, AreaRowFlags(area));
 }
 
@@ -1738,29 +1739,16 @@ void MainFrame::OnUnattendedToggled() {
         settings_.unattended = false;
         unattendedCheck_->SetValue(false);
     }
-    unattendedNote_->SetLabel(ToWx(accepted ? ui::kUnattendedHint : ui::kUnattendedPushFailedNote));
+    unattendedNote_->SetLabel(
+        ToWx(accepted ? ui::kUnattendedHintWindows : ui::kUnattendedPushFailedNote));
     unattendedNote_->GetParent()->Layout();
     deskhubp::SaveUiSettings(settings_);
 }
 
 bool MainFrame::PushUnattendedConfig() {
-    deskhub::UnattendedConfig config;
-    config.enabled = settings_.unattended;
-    if (config.enabled) {
-        const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity();
-        if (!identity.Valid()) return false;
-        config.hostKeyPem = identity.keyPem;
-        config.authorizedKeys = deskhubp::ReadAppDataFile(deskhubp::kAuthorizedKeysFileName);
-        ui::UiSettings forHost = settings_;
-        forHost.shareAudio = false;
-        forHost.playAudio = false;
-        forHost.clipboardSync = false;
-        forHost.autostart = false;
-        forHost.autoShare = false;
-        forHost.startHidden = false;
-        config.settings = ui::SerializeUiSettings(forHost);
-    }
-    return SendUnattendedConfig(config);
+    const std::optional<deskhub::UnattendedConfig> config =
+        deskhubp::BuildUnattendedConfig(settings_);
+    return config && SendUnattendedConfig(*config);
 }
 
 void MainFrame::SyncUnattended() {

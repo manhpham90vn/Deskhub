@@ -22,18 +22,16 @@ license 上の義務を一覧にする。Deskhub 自体の source は MIT Licens
 | [`licenses/rust-crates.txt`](licenses/rust-crates.txt) | quiche に組み込まれる各 Rust crate とその表示 —— [`scripts/rust-crate-notices.py`](scripts/rust-crate-notices.py) が生成 | すべてのパッケージ |
 | [`licenses/BSD-3-Clause-opus.txt`](licenses/BSD-3-Clause-opus.txt) | libopus | すべてのパッケージ |
 | [`licenses/android-libraries.txt`](licenses/android-libraries.txt) | Android APK に同梱される各 Java / Kotlin ライブラリと、そのライセンス・プロジェクト・作者・同梱の NOTICE — [`scripts/android-library-notices.py`](scripts/android-library-notices.py) で生成 | Android APK |
-| [`licenses/LGPL-2.1.txt`](licenses/LGPL-2.1.txt) | FFmpeg。wxWindows Library Licence の基礎でもある | Linux の app と CLI のパッケージ、Windows app のインストーラー |
+| [`licenses/LGPL-2.1.txt`](licenses/LGPL-2.1.txt) | FFmpeg。wxWindows Library Licence の基礎でもある | Linux のパッケージ、Windows のインストーラー |
 | [`licenses/wxWindows.txt`](licenses/wxWindows.txt) | wxWidgets | Windows app のインストーラー |
 | [`licenses/wxWidgets-bundled.txt`](licenses/wxWidgets-bundled.txt) | wxWidgets が同梱するライブラリ —— zlib、libpng、IJG libjpeg、LibTIFF、PCRE2、libwebp、NanoSVG | Windows app のインストーラー |
 
-置き場所: app と command line client の `.deb` と `.rpm` は本書を
-`/usr/share/doc/<package>/` に、本文を `/usr/share/doc/<package>/licenses/` に置く（たとえば
-LGPL の本文は `/usr/share/doc/deskhub/licenses/LGPL-2.1.txt`）。両方の Windows
-インストーラーは実行ファイルの隣、すなわちインストール先フォルダとその `licenses`
-サブフォルダに置く。macOS app は app bundle の `Contents/Resources` に、iOS app はその
-bundle に、Android APK はその assets に収める。ポータブル版の command line バイナリは隣に
-何も置けないため、各リリースは `LICENSE`、本書、`licenses/` フォルダ全体を収めた
-`deskhub-<tag>-licenses.zip` も提供する。
+置き場所: `.deb` と `.rpm` は本書を `/usr/share/doc/deskhub/` に、本文を
+`/usr/share/doc/deskhub/licenses/` に置く（たとえば LGPL の本文は
+`/usr/share/doc/deskhub/licenses/LGPL-2.1.txt`）。Windows のインストーラーは実行ファイルの
+隣、すなわちインストール先フォルダとその `licenses` サブフォルダに置く。macOS app は app
+bundle の `Contents/Resources` に収め、これは中の `deskhub-cli` と `DeskhubDaemon` にも
+及ぶ。iOS app はその bundle に、Android APK はその assets に収める。
 
 ## Linux app（`client/linux`）
 

@@ -20,6 +20,7 @@ enum class SecureDesktopRequest : uint8_t {
     Agent = 1,
     Takeover = 2,
     Configure = 3,
+    Status = 4,
 };
 
 inline constexpr uint8_t kSecureDesktopAck = 1;

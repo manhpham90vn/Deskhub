@@ -31,7 +31,7 @@
 #include "secure/SecureDesktopLink.h"
 #include "secure/SecureDesktopStatus.h"
 #include "secure/ServiceControlPipe.h"
-#include "secure/UnattendedMode.h"
+#include "deskhubp/host/UnattendedMode.h"
 
 #include "deskhub/control/FrameGate.h"
 #include "deskhub/control/StreamSize.h"
@@ -111,9 +111,9 @@ struct SourcePipeline : WinSourceBase {
         watch.top = mi.rcMonitor.top;
         watch.width = uint32_t(mi.rcMonitor.right - mi.rcMonitor.left);
         watch.height = uint32_t(mi.rcMonitor.bottom - mi.rcMonitor.top);
-        watch.alwaysStream = UnattendedMode();
-        watch.maxFps = UnattendedMode() ? std::clamp(fps, 1u, deskhub::kSecureDesktopMaxFps)
-                                        : deskhub::kSecureDesktopDefaultMaxFps;
+        watch.alwaysStream = deskhubp::UnattendedMode();
+        watch.maxFps = deskhubp::UnattendedMode() ? std::clamp(fps, 1u, deskhub::kSecureDesktopMaxFps)
+                                                  : deskhub::kSecureDesktopDefaultMaxFps;
         const bool started = secureLink.Start(
             watch,
             [this](uint32_t w, uint32_t h, std::span<const uint8_t> bgra) {
@@ -185,7 +185,7 @@ bool SharingHost::Start(const std::vector<ShareSource>& sources, const ShareOpti
     };
 
     policy.afterSocket = [] {
-        if (UnattendedMode()) return std::string();
+        if (deskhubp::UnattendedMode()) return std::string();
         if (EnsureHostFirewallRule())
             LOGI("[Host] Windows Firewall: inbound rule verified (all profiles).");
         else
@@ -306,7 +306,7 @@ bool SharingHost::Start(const std::vector<ShareSource>& sources, const ShareOpti
             p->EncodeTimed(encTex, p->forceIdr.exchange(false));
         };
 
-        if (UnattendedMode()) {
+        if (deskhubp::UnattendedMode()) {
             if (!p->WatchSecureDesktop(fps)) {
                 LOGE(
                     "[Host][%s] No secure desktop agent for the unattended host \xE2\x80\x94 "
@@ -375,6 +375,6 @@ bool SharingHost::Start(const std::vector<ShareSource>& sources, const ShareOpti
         p.EncodeTimed(p.cachedTex.Get(), p.forceIdr.exchange(false));
     };
 
-    if (!UnattendedMode()) HoldWhileSharing(TakeoverUnattendedHost());
+    if (!deskhubp::UnattendedMode()) HoldWhileSharing(TakeoverUnattendedHost());
     return StartEngine(sources, opt, std::move(policy));
 }

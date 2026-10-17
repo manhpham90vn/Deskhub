@@ -40,22 +40,15 @@
 
 ## 📦 安装
 
-在 Windows、macOS、Ubuntu、Debian 或 Mint 上，可以通过 package manager 安装：
+在 macOS、Ubuntu、Debian 或 Mint 上，可以通过 package manager 安装；Windows 请从
+[Releases](https://github.com/manhpham90vn/Deskhub/releases) 下载安装程序：
 
 ```bash
-winget install ManhPham.Deskhub                  # Windows · app
-winget install ManhPham.DeskhubCLI               # Windows · deskhub-cli
-brew install --cask manhpham90vn/tap/deskhub     # macOS · app
-brew install manhpham90vn/tap/deskhub-cli        # macOS · deskhub-cli
+brew install --cask manhpham90vn/tap/deskhub     # macOS · app + deskhub-cli
 ```
 
-> **winget 暂时无法使用。** Deskhub 的软件包仍在 winget-pkgs 中等待审核
-> （应用为 [#439628](https://github.com/microsoft/winget-pkgs/pull/439628)，CLI 为 [#439629](https://github.com/microsoft/winget-pkgs/pull/439629)），
-> 在合并之前两条 `winget install` 命令都会失败。在此之前，请从
-> [Releases](https://github.com/manhpham90vn/Deskhub/releases) 下载 Windows 安装程序。
-
-在 Ubuntu / Debian / Mint 上，桌面应用与 CLI 使用独立软件包。添加一次 apt repository，
-再按需安装其中一个或两个：
+在 Ubuntu / Debian / Mint 上，添加一次 apt repository，再安装这一个软件包，其中同时包含
+桌面应用与 `deskhub-cli`：
 
 ```bash
 sudo install -d /etc/apt/keyrings
@@ -63,27 +56,21 @@ curl -fsSL https://manhpham90vn.github.io/Deskhub/apt/deskhub.gpg | sudo tee /et
 echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/deskhub.gpg] https://manhpham90vn.github.io/Deskhub/apt stable main" \
   | sudo tee /etc/apt/sources.list.d/deskhub.list
 sudo apt update
-sudo apt install deskhub       # 桌面应用
-sudo apt install deskhub-cli   # CLI；也可以单独安装
+sudo apt install deskhub       # 桌面应用 + deskhub-cli
 ```
 
-桌面软件包会在应用菜单添加 Deskhub，并将 `deskhub` 安装到 `/usr/bin`；CLI 软件包将
-`deskhub-cli` 安装到 `/usr/bin`。Windows 的应用安装程序创建开始菜单和桌面快捷方式；
-独立的 CLI 安装程序将命令加入用户 `PATH`，而 winget 以便携版 exe 的形式安装 CLI 并放入
-`PATH`。Homebrew 会将 macOS CLI 加入 `PATH`。
+该软件包会在应用菜单添加 Deskhub，并将 `deskhub` 与 `deskhub-cli` 安装到 `/usr/bin`。
+Windows 安装程序创建开始菜单和桌面快捷方式，并把安装文件夹（含 `deskhub-cli.exe`）加入
+机器 `PATH`。Homebrew cask 会把 macOS 的 `deskhub-cli` 链接到 `PATH`；使用 dmg 时它位于
+app 内部的 `Deskhub.app/Contents/MacOS/deskhub-cli`。
 
 其余平台请从 [Releases](https://github.com/manhpham90vn/Deskhub/releases) 获取：
 
-- **Windows 下载版** —— 应用安装程序 `deskhub-v*-windows-setup.exe`（应用仅此一种形式）
-  与 CLI 安装程序 `deskhub-cli-v*-windows-setup.exe`；CLI 另有便携版
-  `deskhub-cli-v*-windows.exe`
-- **macOS 下载版** —— 应用为 `deskhub-v*-macos.dmg`，CLI 为 `deskhub-cli-v*-macos`
-- **不使用 repository 的 Ubuntu / Debian / Mint** —— `deskhub-v*-amd64.deb` 与
-  `deskhub-cli-v*-amd64.deb`
-- **Fedora / openSUSE** —— 应用与 CLI 使用独立 RPM：按需使用 `dnf` 或 `zypper`
-  安装 `deskhub-v*-x86_64.rpm`、`deskhub-cli-v*-x86_64.rpm`
-- **Arch 及其他 Linux** —— 免安装的 `deskhub-v*-linux-x86_64` 与
-  `deskhub-cli-v*-linux-x86_64`，`chmod +x` 后运行
+- **Windows** —— `deskhub-v*-windows-setup.exe`，应用仅此一种形式，内含 `deskhub-cli`
+- **macOS** —— `deskhub-v*-macos.dmg`，`deskhub-cli` 在 app 内部
+- **不使用 repository 的 Ubuntu / Debian / Mint** —— `deskhub-v*-amd64.deb`
+- **Fedora / openSUSE** —— `deskhub-v*-x86_64.rpm`，用 `dnf` 或 `zypper` 安装
+- **其他 Linux 发行版** —— 从源码构建，见 [BUILD.zh.md](docs/BUILD.zh.md)
 - **Android** —— `deskhub-v*-android.apk`，或 [Google Play](https://play.google.com/store/apps/details?id=com.manhpham.deskhub)
 - **iOS** —— [TestFlight](https://testflight.apple.com/join/7qY7wgpd)
 

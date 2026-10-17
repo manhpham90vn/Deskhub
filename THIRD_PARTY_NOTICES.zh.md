@@ -20,17 +20,16 @@ source 仍采用 MIT License；表中各组件保留各自的 license。
 | [`licenses/rust-crates.txt`](licenses/rust-crates.txt) | 编译进 quiche 的每个 Rust crate 及其各自的声明 —— 由 [`scripts/rust-crate-notices.py`](scripts/rust-crate-notices.py) 生成 | 所有安装包 |
 | [`licenses/BSD-3-Clause-opus.txt`](licenses/BSD-3-Clause-opus.txt) | libopus | 所有安装包 |
 | [`licenses/android-libraries.txt`](licenses/android-libraries.txt) | 打包进 Android APK 的每个 Java 与 Kotlin 库，附其许可证、项目、作者以及随附的 NOTICE——由 [`scripts/android-library-notices.py`](scripts/android-library-notices.py) 生成 | Android APK |
-| [`licenses/LGPL-2.1.txt`](licenses/LGPL-2.1.txt) | FFmpeg；也是 wxWindows Library Licence 的基础 | Linux app 与 CLI 安装包、Windows app 安装程序 |
+| [`licenses/LGPL-2.1.txt`](licenses/LGPL-2.1.txt) | FFmpeg；也是 wxWindows Library Licence 的基础 | Linux 安装包、Windows 安装程序 |
 | [`licenses/wxWindows.txt`](licenses/wxWindows.txt) | wxWidgets | Windows app 安装程序 |
 | [`licenses/wxWidgets-bundled.txt`](licenses/wxWidgets-bundled.txt) | wxWidgets 自带的库 —— zlib、libpng、IJG libjpeg、LibTIFF、PCRE2、libwebp、NanoSVG | Windows app 安装程序 |
 
-存放位置：app 与 command line client 的 `.deb` 和 `.rpm` 把本文件放在
-`/usr/share/doc/<package>/`，把许可证原文放在 `/usr/share/doc/<package>/licenses/`（例如
-LGPL 原文位于 `/usr/share/doc/deskhub/licenses/LGPL-2.1.txt`）；两个 Windows 安装程序把它们
-放在可执行文件旁边，即安装文件夹及其 `licenses` 子文件夹中；macOS app 将它们放在 app bundle
-的 `Contents/Resources` 中，iOS app 放在其 bundle 中，Android APK 放在其 assets 中。便携版
-command line binary 旁边无法附带任何文件，因此每个 release 还提供
-`deskhub-<tag>-licenses.zip`，内含 `LICENSE`、本文件以及整个 `licenses/` 文件夹。
+存放位置：`.deb` 和 `.rpm` 把本文件放在 `/usr/share/doc/deskhub/`，把许可证原文放在
+`/usr/share/doc/deskhub/licenses/`（例如 LGPL 原文位于
+`/usr/share/doc/deskhub/licenses/LGPL-2.1.txt`）；Windows 安装程序把它们放在可执行文件旁边，
+即安装文件夹及其 `licenses` 子文件夹中；macOS app 将它们放在 app bundle 的
+`Contents/Resources` 中，同时覆盖其中的 `deskhub-cli` 与 `DeskhubDaemon`，iOS app 放在其
+bundle 中，Android APK 放在其 assets 中。
 
 ## Linux app（`client/linux`）
 

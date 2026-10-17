@@ -64,7 +64,7 @@ bool TakeBlock(std::span<const uint8_t>& body, size_t maxBytes, std::string& out
 
 std::optional<SecureDesktopRequest> DecodeSecureDesktopRequest(uint8_t byte) {
     if (byte < uint8_t(SecureDesktopRequest::Agent) ||
-        byte > uint8_t(SecureDesktopRequest::Configure))
+        byte > uint8_t(SecureDesktopRequest::Status))
         return std::nullopt;
     return SecureDesktopRequest(byte);
 }

@@ -14,7 +14,6 @@ WORK=$(mktemp -d "${TMPDIR:-/tmp}/deskhub-homebrew.XXXXXX")
 trap 'rm -rf "$WORK"' EXIT
 
 DMG="deskhub-$TAG-macos.dmg"
-CLI="deskhub-cli-$TAG-macos"
 
 sha256_of() {
     sha256sum "$1" | cut -d' ' -f1
@@ -25,15 +24,14 @@ render() {
 }
 
 deskhub_release_asset "$TAG" "$DMG" "$WORK/assets"
-deskhub_release_asset "$TAG" "$CLI" "$WORK/assets"
 
 git clone --depth 1 "https://x-access-token:$HOMEBREW_TAP_TOKEN@github.com/$TAP_REPO.git" "$WORK/tap"
-mkdir -p "$WORK/tap/Casks" "$WORK/tap/Formula"
+mkdir -p "$WORK/tap/Casks"
 render deskhub.rb "$(sha256_of "$WORK/assets/$DMG")" > "$WORK/tap/Casks/deskhub.rb"
-render deskhub-cli.rb "$(sha256_of "$WORK/assets/$CLI")" > "$WORK/tap/Formula/deskhub-cli.rb"
+rm -f "$WORK/tap/Formula/deskhub-cli.rb"
 
 cd "$WORK/tap"
-git add Casks/deskhub.rb Formula/deskhub-cli.rb
+git add -A Casks Formula
 if git diff --cached --quiet; then
     echo "[ok]      $TAP_REPO already at $VERSION"
     exit 0

@@ -49,7 +49,7 @@ hình hoặc terminal.
 | Tấn công xen giữa | Mỗi máy có một key. Client ghim key của host — ở lần connect đầu tiên sau khi người dùng đối chiếu fingerprint, hoặc từ mã QR, vốn mang sẵn key đó — và kiểm tra nó trước khi gửi bất cứ thứ gì ở mọi lần sau. Trust đi theo key, nên host ở địa chỉ mới vẫn là host đó; một key *khác* ở địa chỉ mà client đã biết bị từ chối tư cách đã trust và được hiển thị như một **New host** kèm cảnh báo nêu tên máy từng trả lời ở đó — nó không thể được chấp nhận như một "thay đổi", chỉ có thể được trust lại từ đầu với fingerprint hiển thị rõ. Client scan mã QR chỉ gửi token sau khi máy đang trả lời đã chứng minh, qua TLS handshake, rằng nó giữ key in trong mã; bất cứ thứ gì khác ở địa chỉ đó không nhận được gì. Chữ ký của client bao gồm một session identifier export từ phiên TLS và fingerprint host key mà client nhìn thấy, nên chữ ký bị relay sang host khác, hoặc bị phát lại trên connection khác, sẽ không hợp lệ. |
 | Nhiều viewer tranh quyền điều khiển mouse | Tối đa 5 viewer cùng xem một host, nhưng chỉ một viewer điều khiển input: viewer tham gia sớm hơn được ưu tiên, và input của viewer tới sau bị loại bỏ cho tới khi viewer trước không thao tác trong một giây. Viewer thứ 6 bị từ chối với trạng thái `Busy`. |
 | Viewer chỉ được phép xem | Chế độ share view-only, có trên mọi host, loại bỏ các packet input ngay tại host trước khi bất cứ thao tác nào được inject; cơ chế này không dựa vào việc client tự tuân thủ. Host trên Android và iOS luôn ở chế độ view-only. |
-| Máy Windows truy cập được trước khi có ai đăng nhập | Mặc định tắt. Khi bật *Allow access before anyone signs in*, service *DeskHub Secure Desktop* chạy một host bất cứ khi nào app không share — kể cả ở màn hình đăng nhập — host này chỉ cho vào các key đã có trong `authorized_keys`, trả lời bằng cùng key của máy, và không bao giờ hiển thị hay approve một yêu cầu nào: việc pair diễn ra trong lúc có người đang đăng nhập, hoặc không diễn ra. Các bản copy nó đọc nằm trong một thư mục chỉ SYSTEM và administrator mở được, và chỉ `Deskhub.exe` đã cài mới thay được chúng. Host này không gửi được Ctrl+Alt+Del. |
+| Máy Windows hay máy Mac truy cập được trước khi có ai đăng nhập | Mặc định tắt. Khi bật *Allow access before anyone signs in*, service *DeskHub Secure Desktop* trên Windows, hoặc `DeskhubDaemon` nằm trong app macOS, chạy một host bất cứ khi nào app không share — kể cả ở màn hình đăng nhập, và trên macOS chỉ khi không ai đăng nhập — host này chỉ cho vào các key đã có trong `authorized_keys`, trả lời bằng cùng key của máy, và không bao giờ hiển thị hay approve một yêu cầu nào: việc pair diễn ra trong lúc có người đang đăng nhập, hoặc không diễn ra. Các bản copy nó đọc nằm trong một thư mục chỉ SYSTEM và administrator (Windows) hoặc root (macOS) mở được, và chỉ `Deskhub.exe` đã cài, hoặc app mang đúng chữ ký code của Deskhub, mới thay được chúng. Host này không gửi được Ctrl+Alt+Del. |
 | Điện thoại bị bỏ quên trong trạng thái đang share | Cơ chế bảo vệ cuối cùng thuộc về hệ điều hành chứ không phải Deskhub: Android hiển thị một notification thường trực và yêu cầu đồng ý ghi màn hình ở từng phiên share, còn iOS giữ chỉ báo broadcast luôn hiển thị. Cả hai đều cho phép dừng share mà không cần mở app. |
 | Client được phép ghi file vào máy của bạn | Chỉ máy đã được chấp nhận mới gửi được file, và chỉ khi máy nhận đang bật file transfer. Dữ liệu tới không thể thoát khỏi thư mục mà máy đó chọn: tên file trên đường truyền bị cắt còn phần cuối của đường dẫn và loại bỏ dấu phân cách, byte điều khiển, ký tự filesystem không chấp nhận cùng các tên thiết bị dành riêng, trước khi bất kỳ file nào được mở. Mỗi file được ghi dưới tên có hậu tố `.deskhub-part` và chỉ được đổi tên khi đã nhận đủ với CRC-32 khớp. Tên đã tồn tại sẽ được thêm số thứ tự thay vì ghi đè. Một batch bị giới hạn ở 32 file, 8 GiB mỗi file và 32 GiB tổng cộng. Cùng cơ chế xử lý tên này cũng chạy trên điện thoại và tablet trước khi dữ liệu tới thư viện ảnh hoặc thư mục Downloads. |
 | Packet không hợp lệ | Mọi trường đều được kiểm tra giới hạn trước khi đọc. Các parser có unit test, chạy dưới AddressSanitizer, UndefinedBehaviorSanitizer và ThreadSanitizer trong CI, và được fuzz bằng libFuzzer — 30 giây cho mỗi target trên mọi pull request và 15 phút cho mỗi target mỗi đêm. Có chín target, bao phủ wire format, phần parse H.264 (Annex B và SPS), reassembly packet, session state machine phía host và phía viewer, chuỗi UI, byte stream terminal, các file key và trust đã lưu cùng pairing link, và bộ mã hoá mã QR. Các crash phát hiện qua fuzzing được lưu trong repo dưới dạng regression test, và phần coverage mới được bổ sung vào seed corpus. |
@@ -216,6 +216,12 @@ host của riêng nó bất cứ khi nào app không share, từ màn hình đă
 thiết bị đã có trong danh sách được phép của bạn; nó mở thêm một rule UDP inbound thứ hai,
 *Deskhub Secure Desktop (host)*, cho `DeskhubService.exe`.
 
+Trên macOS, app mang theo `DeskhubDaemon` trong bundle của nó. Daemon này không làm gì cho
+tới khi bạn tick *Allow access before anyone signs in*, việc đó đăng ký nó làm daemon root
+sau khi macOS hỏi bạn một lần ở *Login Items & Extensions*. Từ đó nó giữ các bản copy mô
+tả bên dưới và chạy cùng host ấy ở login window trong lúc không ai đăng nhập; bỏ tick thì
+nó được huỷ đăng ký.
+
 ## Khả năng của kẻ tấn công trong cùng network
 
 Nếu một người ở cùng LAN với máy đang share màn hình và Deskhub đang chạy, họ có thể:
@@ -331,6 +337,15 @@ Thư mục do SYSTEM tạo và chỉ SYSTEM cùng Administrators đọc được
 không mở được — và service làm mới các bản copy mỗi khi app thay đổi bản gốc. Tắt setting
 sẽ xoá các bản copy; gỡ cài đặt DeskHub sẽ xoá thư mục. Một administrator trên máy có thể
 đọc private key đó, cũng như có thể đọc key của bạn.
+
+Trên macOS, thư mục thứ hai là `/Library/Application Support/Deskhub`, do `DeskhubDaemon`
+tạo dưới quyền root và chỉ root đọc được; nó giữ cùng các bản copy, trạng thái quyền của
+host, và log của daemon lẫn host. Daemon chỉ nhận bản copy mới từ tiến trình có chữ ký
+code là của Deskhub — `com.deskhub.macos` ký bằng Team ID của Deskhub, kiểm tra qua
+Security.framework — không bao giờ theo vị trí app nằm. Tắt setting sẽ xoá các bản copy
+và agent login window; `brew uninstall --zap deskhub` xoá thư mục, còn sau khi gỡ bằng
+cách kéo vào Thùng rác thì bạn tự xoá. Ai có `sudo` đều đọc được private key đó, cũng như
+đọc được key của bạn.
 
 Không certificate nào được giữ lại. Certificate TLS được dựng từ `host_key.pem` trong bộ nhớ
 mỗi lần port mở, nhưng thư viện TLS chỉ nạp certificate từ file, nên nó được ghi trong chốc

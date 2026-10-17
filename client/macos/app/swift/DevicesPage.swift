@@ -175,20 +175,24 @@ struct DevicesPage: View {
         publicKeyInput = ""
         publicKeyError = false
         refresh()
+        DeskhubShare.syncUnattended()
     }
 
     private func forget(_ device: PairedDeviceRow) {
         _ = dh_paired_forget(device.fingerprint)
         refresh()
+        DeskhubShare.syncUnattended()
     }
 
     private func forgetAll() {
         dh_paired_forget_all()
         refresh()
+        DeskhubShare.syncUnattended()
     }
 
     @MainActor
     private func pollAccessRequests() async {
+        accessRequests.afterDecision = { DeskhubShare.syncUnattended() }
         while !Task.isCancelled {
             accessRequests.refresh()
             try? await Task.sleep(for: Self.accessRequestsPollInterval)

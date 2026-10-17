@@ -145,4 +145,15 @@ std::string SerializeUiSettings(const UiSettings& settings) {
     return out;
 }
 
+UiSettings UnattendedHostSettings(const UiSettings& settings) {
+    UiSettings forHost = settings;
+    forHost.shareAudio = false;
+    forHost.playAudio = false;
+    forHost.clipboardSync = false;
+    forHost.autostart = false;
+    forHost.autoShare = false;
+    forHost.startHidden = false;
+    return forHost;
+}
+
 }

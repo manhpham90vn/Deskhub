@@ -36,14 +36,17 @@ Summary: LAN remote desktop - share and control screens
 License: MIT
 URL: https://github.com/manhpham90vn/Deskhub
 Recommends: xdg-desktop-portal
+Provides: deskhub-cli = $VERSION
+Obsoletes: deskhub-cli < $VERSION
 
 %description
 Deskhub shares the screen of one machine and controls it from another
 over UDP on the local network.
 
-This package contains the Linux app (host + viewer role) and the udev
-rule that grants access to /dev/uinput, so remote mouse and keyboard
-input works without any manual permission setup.
+This package contains the Linux app (host + viewer role), the deskhub-cli
+command for scripts and SSH sessions, and the udev rule that grants access
+to /dev/uinput, so remote mouse and keyboard input works without any
+manual permission setup.
 
 %install
 cp -a %{pkgroot}/. %{buildroot}/
@@ -62,6 +65,7 @@ fi
 
 %files
 /usr/bin/deskhub
+/usr/bin/deskhub-cli
 /usr/share/applications/deskhub.desktop
 /usr/share/icons/hicolor/256x256/apps/deskhub.png
 /usr/share/icons/hicolor/512x512/apps/deskhub.png

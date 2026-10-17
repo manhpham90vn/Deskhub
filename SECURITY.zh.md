@@ -45,7 +45,7 @@ Connect 到 host 的 `100.x.y.z` 地址。
 | 中间人攻击 | 每台机器只有一把 key。client 会 pin 住 host 的 key —— 首次连接时在用户核对 fingerprint 之后，或直接取自携带该 key 的 QR code —— 并在此后每次连接发送任何内容之前进行检查。信任跟随 key，因此换了地址的 host 仍是那个 host；而在 client 已知的地址上出现的*另一把* key 不会被当作受信任的 host，而是作为 **New host** 显示，并附带警告，指出以前在该地址应答的是哪台机器 —— 它不能被当作"变更"接受，只能在 fingerprint 展示在眼前的情况下重新信任。扫描 QR code 的 client 只有在应答的机器已通过 TLS handshake 证明其持有码中印出的 key 之后才会发送 token；该地址上的其他任何东西都得不到任何内容。client 的签名覆盖从 TLS session 导出的 session 标识以及 client 所见的 host key fingerprint，因此被 relay 到其他 host 或在其他 connection 上重放的签名无法通过验证。 |
 | 多个 viewer 争夺 mouse | 最多 5 个 viewer 观看同一 host，但只有一个 viewer 控制 input：先加入者优先，后加入者的 input 会被丢弃，直到前者持续一秒无操作。第 6 个 viewer 以 `Busy` 状态被拒绝。 |
 | 仅允许观看的 viewer | view-only 共享在所有 host 上可用，它在 host 侧、在任何操作被 inject 之前即丢弃 input packet，并不依赖 client 自觉遵守。Android 与 iOS 的 host 始终为 view-only。 |
-| 在任何人登录之前即可访问的 Windows PC | 默认关闭。*Allow access before anyone signs in* 开启时，*DeskHub Secure Desktop* service 会在 app 未共享的任何时候 —— 包括在登录画面 —— 运行一个 host，它只准入 `authorized_keys` 中已有的 key，以同一把机器 key 应答，并且从不显示或批准任何 request：配对要么在有人登录期间完成，要么根本不发生。它读取的副本位于一个只有 SYSTEM 与管理员能打开的文件夹中，且只有已安装的 `Deskhub.exe` 能替换它们。它无法发送 Ctrl+Alt+Del。 |
+| 在任何人登录之前即可访问的 Windows PC 或 Mac | 默认关闭。*Allow access before anyone signs in* 开启时，Windows 上的 *DeskHub Secure Desktop* service，或 macOS app 内的 `DeskhubDaemon`，会在 app 未共享的任何时候 —— 包括在登录画面；macOS 上仅限无人登录期间 —— 运行一个 host，它只准入 `authorized_keys` 中已有的 key，以同一把机器 key 应答，并且从不显示或批准任何 request：配对要么在有人登录期间完成，要么根本不发生。它读取的副本位于一个只有 SYSTEM 与管理员（Windows）或 root（macOS）能打开的文件夹中，且只有已安装的 `Deskhub.exe`，或带有 Deskhub 自身代码签名的 app，能替换它们。它无法发送 Ctrl+Alt+Del。 |
 | 手机在共享状态下被遗忘 | 最终的防护由操作系统提供，而非 Deskhub：Android 显示常驻通知，并在每次共享时重新征求录屏同意；iOS 保持 broadcast 指示可见。两者都可在不打开 app 的情况下停止共享。 |
 | 允许的 client 向本机写入文件 | 只有已接受的机器才能发送文件，且仅在接收方启用 file transfer 时。到达的数据无法离开接收方选定的文件夹：线上的文件名会被截取为路径的最后一段，并在任何文件被打开之前清除分隔符、控制字节、filesystem 不接受的字符以及保留设备名。每个文件先以 `.deskhub-part` 后缀写入，仅在完整到达且 CRC-32 匹配后改名。已存在的同名文件会追加编号而不被覆盖。单个 batch 限制为 32 个文件、单文件 8 GiB、合计 32 GiB。同样的名称处理在手机与平板上也会执行，早于数据进入相册或 Downloads 文件夹。 |
 | 畸形 packet | 每个字段在读取前都进行边界检查。parser 具备 unit test，在 CI 中于 AddressSanitizer、UndefinedBehaviorSanitizer 与 ThreadSanitizer 下运行，并由 libFuzzer 进行 fuzz —— 每个 pull request 对每个 target 运行 30 秒，每晚对每个 target 运行 15 分钟。共有九个 target，覆盖 wire format、H.264 解析（Annex B 与 SPS）、packet reassembly、host 与 viewer 两侧的 session state machine、UI 文案、terminal byte stream、保存的 key 与信任文件以及 pairing link，还有 QR code 编码器。通过 fuzzing 发现的 crash 会作为 regression test 保留在 repo 中，新的覆盖也会并入 seed corpus。 |
@@ -184,6 +184,11 @@ UAC 提示或锁屏出现时得以继续。在你共享期间，viewer 能看到
 app 未共享的任何时候 —— 从登录画面开始 —— 为已在你允许列表上的设备运行一个自己的 host；
 它会为 `DeskhubService.exe` 打开第二条入站 UDP 规则 *Deskhub Secure Desktop (host)*。
 
+在 macOS 上，app 的 bundle 内自带 `DeskhubDaemon`。在你勾选 *Allow access before anyone
+signs in* 之前它什么也不做；勾选后，macOS 会在 *Login Items & Extensions* 中请你允许一次，
+随后它被注册为 root daemon。从那时起它保管下文所述的副本，并在无人登录期间于登录窗口运行
+同一个 host；取消勾选即注销它。
+
 ## 同一 network 中攻击者的能力
 
 若有人与正在共享屏幕、且 Deskhub 正在运行的机器处于同一 LAN，他们可以：
@@ -280,6 +285,13 @@ session 有意义，不会被传输）。在它们旁边，你可能还会看到
 SYSTEM 与 Administrators 可读 —— 你自己的账户无法打开它 —— 并且每当 app 更改原件时，
 service 都会刷新副本。关闭该设置会删除副本；卸载 DeskHub 会删除该文件夹。本机的管理员
 可以读取那把 private key，正如他们也能读取你的那把。
+
+在 macOS 上，第二个文件夹是 `/Library/Application Support/Deskhub`，由 `DeskhubDaemon` 以
+root 创建，只有 root 可读；它保存同样的副本、host 的权限状态，以及 daemon 与 host 的日志。
+该 daemon 只接受来自代码签名属于 Deskhub 的进程的新副本 —— 以 Deskhub 的 Team ID 签名的
+`com.deskhub.macos`，通过 Security.framework 核验 —— 从不看 app 放在哪里。关闭该设置会删除
+副本和登录窗口 agent；`brew uninstall --zap deskhub` 会删除该文件夹，拖到废纸篓卸载后则需
+你自行删除。任何拥有 `sudo` 的人都能读取那把 private key，正如他们也能读取你的那把。
 
 不保存任何 certificate。TLS certificate 在每次打开 port 时由 `host_key.pem` 于内存中构建，
 但 TLS 库只能从文件加载 certificate，因此它会被短暂写入同一文件夹中的

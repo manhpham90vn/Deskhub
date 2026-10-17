@@ -55,54 +55,6 @@ jobs:
         shell: bash
         run: scripts/cli-smoke.sh out/build/x64-release/client/cli/deskhub-cli.exe
 
-      - name: Build Windows CLI installer
-        shell: pwsh
-        run: |
-          choco install innosetup -y
-          $version = (Get-Content VERSION -Raw).Trim()
-          & 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe' "/DAppVersion=$version" packaging/windows/DeskhubCLI.iss
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
-      - name: Verify CLI PATH install, upgrade, and uninstall
-        shell: pwsh
-        run: |
-          $setup = (Resolve-Path 'out/installer/DeskHub-CLI-Setup.exe').Path
-          $installed = Join-Path $env:LOCALAPPDATA 'Programs\DeskHub CLI\deskhub-cli.exe'
-          $directory = Split-Path $installed
-          $originalPath = Get-ItemPropertyValue 'HKCU:\Environment' 'Path' -ErrorAction SilentlyContinue
-          foreach ($run in 1..2) {
-            $install = Start-Process $setup -ArgumentList '/VERYSILENT', '/NORESTART' -Wait -PassThru
-            if ($install.ExitCode -ne 0) { throw "Installer exited with $($install.ExitCode)" }
-            if (-not (Test-Path $installed)) { throw 'CLI executable was not installed' }
-            foreach ($notice in 'THIRD_PARTY_NOTICES.md', 'licenses\BSD-2-Clause-quiche.txt') {
-              if (-not (Test-Path (Join-Path $directory $notice))) { throw "CLI installer did not install $notice" }
-            }
-            $path = Get-ItemPropertyValue 'HKCU:\Environment' 'Path'
-            if (@($path -split ';' | Where-Object { $_ -eq $directory }).Count -ne 1) {
-              throw 'CLI directory must appear exactly once in the user PATH'
-            }
-          }
-          $uninstall = Start-Process (Join-Path $directory 'unins000.exe') -ArgumentList '/VERYSILENT', '/NORESTART' -Wait -PassThru
-          if ($uninstall.ExitCode -ne 0) { throw "Uninstaller exited with $($uninstall.ExitCode)" }
-          $finalPath = Get-ItemPropertyValue 'HKCU:\Environment' 'Path' -ErrorAction SilentlyContinue
-          if ($finalPath -ne $originalPath) { throw 'Uninstall did not restore the user PATH' }
-
-      - name: Upload CLI installer
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: deskhub-cli-windows-installer
-          path: out/installer/DeskHub-CLI-Setup.exe
-          retention-days: 14
-          if-no-files-found: error
-
-      - name: Upload the command-line client
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: deskhub-cli-windows
-          path: out/build/x64-release/client/cli/deskhub-cli.exe
-          retention-days: 14
-          if-no-files-found: error
-
   macos:
     runs-on: macos-latest
     timeout-minutes: 45
@@ -136,14 +88,6 @@ jobs:
 
       - name: Smoke the command-line client
         run: scripts/cli-smoke.sh out/build/arm64-release/client/cli/deskhub-cli
-
-      - name: Upload the command-line client
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: deskhub-cli-macos
-          path: out/build/arm64-release/client/cli/deskhub-cli
-          retention-days: 14
-          if-no-files-found: error
 
   linux:
     runs-on: ubuntu-22.04
@@ -192,11 +136,3 @@ jobs:
 
       - name: Smoke the command-line client
         run: scripts/cli-smoke.sh out/build/x64-release/client/cli/deskhub-cli
-
-      - name: Upload the command-line client
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: deskhub-cli-linux
-          path: out/build/x64-release/client/cli/deskhub-cli
-          retention-days: 14
-          if-no-files-found: error

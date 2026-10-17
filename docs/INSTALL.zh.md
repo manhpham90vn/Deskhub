@@ -18,15 +18,15 @@ Deskhub，请参阅 [`BUILD.zh.md`](BUILD.zh.md)。
 | 🐧 Ubuntu、Kubuntu、Debian、Mint | `deskhub-v*-amd64.deb` | `sudo apt install ./deskhub-v*-amd64.deb` |
 | 🐧 Fedora（Workstation 与 KDE spin） | `deskhub-v*-x86_64.rpm` | `sudo dnf install ./deskhub-v*-x86_64.rpm` |
 | 🐧 openSUSE Tumbleweed | `deskhub-v*-x86_64.rpm` | `sudo zypper install ./deskhub-v*-x86_64.rpm` |
-| 🐧 Arch 及其他发行版 | `deskhub-v*-linux-x86_64` | `chmod +x deskhub-v*-linux-x86_64 && ./deskhub-v*-linux-x86_64` |
+| 🐧 其他 Linux 发行版 | — | 从源码构建：[BUILD.zh.md](BUILD.zh.md) |
 | 🤖 Android | `deskhub-v*-android.apk` | 安装 apk，或从 [Google Play](https://play.google.com/store/apps/details?id=com.manhpham.deskhub) 安装 |
 | 📱 iOS | —— | [TestFlight](https://testflight.apple.com/join/7qY7wgpd) |
 
-还可以用 `deskhub-cli` 执行 terminal 命令或脚本。在 Windows 和 Linux 上，CLI 也能
-打开远程屏幕窗口（在 Linux 上是 X11 窗口，因此 Wayland 桌面需要 XWayland）。见
+每个桌面软件包还会安装 `deskhub-cli`，用于 terminal 命令或脚本。在 Windows 和 Linux 上，
+CLI 也能打开远程屏幕窗口（在 Linux 上是 X11 窗口，因此 Wayland 桌面需要 XWayland）。见
 [Command line](#-command-line)。
 
-Windows 可通过 `winget`、macOS 可通过 Homebrew，Ubuntu、Kubuntu、Debian 和 Mint 可通过
+macOS 可通过 Homebrew，Ubuntu、Kubuntu、Debian 和 Mint 可通过
 [apt repository](#-linux) 安装。需要新版本时，使用相应 package manager 的升级命令。
 
 ---
@@ -38,16 +38,8 @@ Windows 可通过 `winget`、macOS 可通过 Homebrew，Ubuntu、Kubuntu、Debia
 无需账号。早期版本仅为你的用户安装的 DeskHub 会先被移除，*Start Deskhub when you log in*
 也会改为指向新位置；你的设置和密钥保留在原处。没有便携版 exe：安装程序是安装 Windows app 的
 唯一方式，因为它所安装的 service 正是让 viewer 通过 UAC 提示、锁屏和登录画面的关键。
-
-也可以让 winget 安装同一个安装包并保持更新：`winget upgrade` 获取每个新 release，
-`winget uninstall ManhPham.Deskhub` 将其移除：
-
-```powershell
-winget install ManhPham.Deskhub
-```
-
-如果之前安装过 winget 便携版，请先运行一次 `winget uninstall ManhPham.Deskhub`，
-然后重新安装。`%USERPROFILE%\.deskhub` 中的设置和密钥会保留。
+安装程序还会把 `deskhub-cli.exe` 装在 app 旁边，并把该文件夹加入机器 `PATH`，之后打开的
+任何终端都能运行 `deskhub-cli`；早先单独安装的 *DeskHub CLI* 会在安装过程中被移除。
 
 需要注意三件事：
 
@@ -64,7 +56,7 @@ winget install ManhPham.Deskhub
   什么，见[规范](SPECIFICATION.zh.md)（T-28）。从源码构建且未安装该 service 的版本，这些
   画面在关闭之前对 viewer 而言是冻结的，其复选框也呈灰色。
 
-可在 Windows 设置中卸载 DeskHub，或运行 `winget uninstall ManhPham.Deskhub`；
+可在 Windows 设置中卸载 DeskHub；
 该 service 会随之一并移除，连同 `%ProgramData%\DeskHub` —— 它在那里保存日志以及
 *Allow access before anyone signs in* 所做的副本。
 Settings 和 key 会保留在 `%USERPROFILE%\.deskhub`，直到删除该文件夹；
@@ -98,6 +90,16 @@ macOS 还会自行弹出两项请求：**Local Network**（本地网络）访问
 Deskhub 都需要它才能连到另一台机器；以及显示**通知**的权限，在首次有 connection request
 需要提醒时申请。
 
+**Allow access before anyone signs in**（默认关闭）位于同一个 Settings 页。勾选后会把 app 内
+附带的助手 `DeskhubDaemon` 注册为后台项目：macOS 会在 System Settings → General → Login
+Items & Extensions 中请你允许一次，app 也提供打开该面板的入口。该助手需要自己的**屏幕录制**
+与**辅助功能**权限 —— 请在同样的两个面板中授予 `DeskhubDaemon`；Settings 页显示它上次运行时
+看到的状态 —— 此后，已在你允许列表上的设备就能在无人登录的任何时候看到登录窗口并输入密码：
+注销之后，以及 FileVault 关闭时重启之后。开启 FileVault 的 Mac 重启后会停在磁盘解锁画面，
+那里什么都不运行，随后直接登录解锁的用户，因此只覆盖注销的情形。一旦有人登录，助手的 host
+即停止，只剩 app 共享。取消勾选会移除助手保存在 `/Library/Application Support/Deskhub` 中的
+副本并注销它；`brew uninstall --zap deskhub` 会移除该文件夹，拖到废纸篓卸载后请自行删除。
+
 ## 🐧 Linux
 
 **若只需 connect 并观看，先安装 app 软件包即可。** H.264 decoder 已包含在 app 中，
@@ -105,13 +107,12 @@ Deskhub 都需要它才能连到另一台机器；以及显示**通知**的权�
 
 deb 与 rpm 内容一致，选择系统 package manager 支持的一种即可。两者都会安装下文第 3 条
 所述的 `/dev/uinput` udev rule，因此安装后 remote input 立即可用，无需修改 group，也无需
-重新登录。所有 Linux 版本 —— deb、rpm 和免安装 binary —— 都需要 x86_64 且 glibc 2.35
-及以上（Ubuntu 22.04、Debian 12、Fedora 36、openSUSE Tumbleweed、当前版本的 Arch）。
-openSUSE Leap 15.5 的 glibc 为 2.31，无法运行。
+重新登录。两者都需要 x86_64 且 glibc 2.35 及以上（Ubuntu 22.04、Debian 12、Fedora 36、
+openSUSE Tumbleweed）。openSUSE Leap 15.5 的 glibc 为 2.31，无法运行。
 
-CLI 有单独的 deb 和 rpm 包，可独立安装，或与相同或更新版本的桌面 app 同时安装 —— 请将
-两者一起升级，因为 package manager 不会让旧版 `deskhub` 与新版 `deskhub-cli` 并存。
-两个包都将命令放在 `/usr/bin`，桌面 app 还会在应用菜单中创建启动器。
+每个软件包都把桌面 app 安装为 `/usr/bin/deskhub`，在应用菜单中创建启动器，并在旁边安装
+`/usr/bin/deskhub-cli`。早期版本单独的 `deskhub-cli` 包已不复存在：本包取代了它，升级时
+旧包会被移除。
 
 在 Ubuntu、Kubuntu、Debian 和 Mint 上，Deskhub 的 apt repository 安装的是同一个 deb，
 并让 `sudo apt upgrade` 获取之后的每个 release。它支持 Ubuntu 22.04 及以上、Debian 12
@@ -124,9 +125,6 @@ echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/deskhub.gpg] https://manhpham9
   | sudo tee /etc/apt/sources.list.d/deskhub.list
 sudo apt update && sudo apt install deskhub
 ```
-
-CLI 可单独运行 `sudo apt install deskhub-cli` 安装。从旧版包含 CLI 的 `deskhub`
-包升级后，也需安装 `deskhub-cli` 才能保留该命令。
 
 **若需共享本机屏幕**，还需满足三个条件。
 
@@ -185,8 +183,8 @@ vainfo | grep -E 'H264.*Enc'                 # 必须至少输出一行，否则
 
 ### 3. `/dev/uinput` 的写权限
 
-mouse 和 keyboard 通过它 inject。deb 与 rpm 已安装相应的 udev rule，无需额外操作。使用
-免安装 binary 时，一条命令即可完成设置，无需 clone，也无需重新登录桌面：
+mouse 和 keyboard 通过它 inject。deb 与 rpm 已安装相应的 udev rule，无需额外操作。从源码
+构建时，一条命令即可完成设置，无需 clone，也无需重新登录桌面：
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/manhpham90vn/Deskhub/main/scripts/setup-uinput.sh | sudo bash
@@ -228,13 +226,13 @@ sudo firewall-cmd --add-port=47777/udp --permanent        # Fedora / openSUSE
 ### 卸载
 
 ```bash
-sudo apt remove deskhub deskhub-cli   # 装了哪个就卸哪个；或 dnf remove / zypper remove
+sudo apt remove deskhub      # 或 dnf remove / zypper remove
 rm -rf ~/.deskhub            # settings、key、允许的 client 与受信任的 host
 sudo rm -f /etc/apt/sources.list.d/deskhub.list /etc/apt/keyrings/deskhub.gpg   # apt repository（若已添加）
 ```
 
-其他机器发来的文件保留在 `~/Deskhub`（或你选择的文件夹）中，直到你删除它们。免安装
-binary 只是一个文件，删除即可。`setup-uinput.sh` 会留下它的 udev rule、module-load 文件
+其他机器发来的文件保留在 `~/Deskhub`（或你选择的文件夹）中，直到你删除它们。
+`setup-uinput.sh` 会留下它的 udev rule、module-load 文件
 以及你在 `input` 组中的成员身份；若没有其他用途，请手动移除：
 
 ```bash
@@ -277,42 +275,25 @@ Deskhub 需要 iOS 或 iPadOS 17 或更高版本。ipa 无法 sideload，因此 
 桌面通过 XWayland 显示它；在 macOS 上，请用桌面 app 观看屏幕。运行 `deskhub-cli help` 可查看命令列表。CLI 与 app 共用 settings、机器 key、允许的
 client、connection request 及受信任的 host。
 
-| 平台 | 文件 |
+没有单独的下载：每个桌面软件包都会把它装在 app 旁边。
+
+| 平台 | 位置 |
 | --- | --- |
-| 🪟 Windows | `deskhub-cli-v*-windows-setup.exe` —— 安装后可从 `PATH` 运行 `deskhub-cli` |
-| 🍎 macOS | `deskhub-cli-v*-macos` —— 一个 binary 同时支持 Apple Silicon 与 Intel |
-| 🐧 Linux | `deskhub-cli-v*-amd64.deb`、`deskhub-cli-v*-x86_64.rpm`，或便携版 `deskhub-cli-v*-linux-x86_64` |
+| 🪟 Windows | DeskHub 安装文件夹中的 `deskhub-cli.exe`，安装程序已把该文件夹加入机器 `PATH` |
+| 🍎 macOS | `Deskhub.app/Contents/MacOS/deskhub-cli`，一个 binary 同时支持 Apple Silicon 与 Intel；Homebrew cask 会把它链接到 `PATH` |
+| 🐧 Linux | `/usr/bin/deskhub-cli`，来自与 app 相同的 deb 或 rpm |
 
-直接下载 Linux 软件包时，在 Ubuntu/Debian 上运行
-`sudo apt install ./deskhub-cli-v*-amd64.deb`，在 Fedora 上运行
-`sudo dnf install ./deskhub-cli-v*-x86_64.rpm`。无需安装桌面应用，也能从 `/usr/bin`
-运行该命令。
+在 Windows 上安装程序完成后，请打开新的 PowerShell 窗口运行 `deskhub-cli help`；
+`Get-Command deskhub-cli` 显示 Windows 找到的是哪个文件。在未使用 Homebrew 的 macOS 上，
+可用完整路径运行，或自行链接：
+`ln -s /Applications/Deskhub.app/Contents/MacOS/deskhub-cli /usr/local/bin/deskhub-cli`。
 
-macOS 与 Linux 的便携版 binary 下载后可能需要执行一次 `chmod +x`；`.deb` 和 `.rpm`
-应通过软件包管理器安装。macOS 便携版 binary 未像 dmg 一样签名或公证，首次运行可能需要
-`xattr -d com.apple.quarantine deskhub-cli-v*-macos`，或在 System Settings → Privacy &
-Security 中选择 *Open Anyway*。
-
-Windows 安装程序无需管理员权限即可将 CLI 加入用户的 `PATH`。
-便携版 `deskhub-cli-v*-windows.exe` 仍可下载。
-
-**CLI 永远不会获得 *DeskHub Secure Desktop* service。** CLI 的安装程序不安装该 service，
-而该 service —— 即使 app 的安装程序已在同一台电脑上安装了它 —— 也只为与之并列的
-`Deskhub.exe` 服务，绝不为 `deskhub-cli.exe` 服务，无论后者放在哪里。因此在 Windows 上
+**CLI 永远不会获得 *DeskHub Secure Desktop* service。** 该 service —— 由同一个安装程序
+安装 —— 只为与之并列的 `Deskhub.exe` 服务，绝不为 `deskhub-cli.exe` 服务。因此在 Windows 上
 `deskhub-cli share` 时，UAC 提示、锁屏或登录画面出现期间 viewer 看到的是冻结画面，他们的
-输入也到不了那些画面，而 *Allow access before anyone signs in* 是只有 app 才有的设置。
-需要这些功能时，请用安装程序安装 app。
-每个安装程序和安装包都附带 `THIRD_PARTY_NOTICES.md` 以及其中所含库的许可证文本；便携版
-二进制文件无法附带，因此每个 release 还提供 `deskhub-v*-licenses.zip`，其中包含
-`LICENSE`、`THIRD_PARTY_NOTICES.md` 以及全部许可证文本。
-通过 package manager 安装也会把命令加入 `PATH`：Windows 上用
-`winget install ManhPham.DeskhubCLI`（winget 安装的是便携版 exe，而非安装程序），macOS 上用 `brew install manhpham90vn/tap/deskhub-cli`
-—— Homebrew 安装时不会附加 quarantine 标记。在 Ubuntu 或 Debian 上添加上述 apt
-repository 后，运行 `sudo apt install deskhub-cli`。
-
-在 Windows 上通过 winget 安装后，请打开新的 PowerShell 窗口运行
-`deskhub-cli help`。用 `Get-Command deskhub-cli` 查看实际调用的文件。
-直接下载的便携版 exe 不会自动加入 `PATH`。
+输入也到不了那些画面，而 *Allow access before anyone signs in* 在 Windows 与 macOS 上都
+只是 app 的设置。需要这些功能时，请使用 app。每个安装程序和安装包都附带
+`THIRD_PARTY_NOTICES.md` 以及其中所含库的许可证文本。
 
 在 Linux 上，它通过 app 所需的同一个 portal 和 VA-API driver 共享屏幕，remote input 也
 依赖同一条 `/dev/uinput` rule，因此 [Linux](#-linux) 一节同样适用。在 macOS 上它可以共享

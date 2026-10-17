@@ -57,7 +57,6 @@
     { "platform": "ios", "label": "iOS", "sub": "TestFlight beta", "href": "https://testflight.apple.com/join/7qY7wgpd", "external": true }
   ],
   "packageManagers": [
-    { "platform": "windows", "label": "Windows · winget", "command": "winget install ManhPham.Deskhub" },
     { "platform": "macos", "label": "macOS · Homebrew", "command": "brew install --cask manhpham90vn/tap/deskhub" },
     {
       "platform": "linux",

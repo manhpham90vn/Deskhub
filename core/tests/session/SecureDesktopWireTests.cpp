@@ -84,7 +84,9 @@ void TestRequestBytes() {
         "2 takes the machine over from the unattended host");
     Check(DecodeSecureDesktopRequest(3) == SecureDesktopRequest::Configure,
         "3 carries the unattended configuration");
-    Check(!DecodeSecureDesktopRequest(0) && !DecodeSecureDesktopRequest(4),
+    Check(DecodeSecureDesktopRequest(4) == SecureDesktopRequest::Status,
+        "4 asks how the unattended host is doing");
+    Check(!DecodeSecureDesktopRequest(0) && !DecodeSecureDesktopRequest(5),
         "anything else is refused before the service does any work");
 }
 

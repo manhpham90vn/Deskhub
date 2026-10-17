@@ -7,7 +7,7 @@
 #include "deskhub/protocol/ByteOrder.h"
 #include "deskhubp/diag/Log.h"
 #include "secure/ServiceControlPipe.h"
-#include "secure/UnattendedMode.h"
+#include "deskhubp/host/UnattendedMode.h"
 
 namespace {
 
@@ -83,7 +83,7 @@ void SecureDesktopLink::Stop() {
 }
 
 bool SecureDesktopLink::Forward(const INPUT& input) {
-    if (!Secure() && !UnattendedMode()) return false;
+    if (!Secure() && !deskhubp::UnattendedMode()) return false;
     return agent_.WriteAll(deskhub::EncodeSecureDesktopInput(ToWireInput(input)));
 }
 

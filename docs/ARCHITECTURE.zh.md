@@ -290,6 +290,25 @@ HostEngine（每个 app 一个实例，持有 SessionTransport）
   `authorized_keys`、`ui-settings.txt` 的文本）；service 把这三个文件原子地写入机器文件夹，
   在 key 或 settings 变化时重启该 host，并在禁用时抹除这些文件。app 会在该设置被切换时、
   每次保存 settings 之后、允许列表每次变动之后、共享停止时以及启动时各发送一次。
+- macOS 的登录前访问（T-28）：app 内嵌 `Contents/MacOS/DeskhubDaemon` 以及
+  `Contents/Library/LaunchDaemons` 下的一个 LaunchDaemon plist，在勾选该设置时通过
+  `SMAppService.daemon` 注册（一次 *Allow in background* 批准）。该 daemon 以 root 运行，
+  监听 Unix socket `/var/run/deskhub/control.sock`（`deskhubp/net/LocalSocket`），把每条连接
+  的字节交给 `UnattendedControlServer`（`core/session/host/UnattendedControl`），与 Windows
+  pipe 使用同一套 request 流：`Takeover`、`Configure`，以及 Windows service 会拒绝的
+  `Status`。它凭代码签名信任对端 —— `identifier "com.deskhub.macos"` 加 Deskhub 的 Team ID，
+  用 Security.framework 对连接进程的 audit token 核验 —— 从不凭路径。`Configure` 把三个文件写入
+  `/Library/Application Support/Deskhub`（`deskhubp/system/MachineFolder`，root `0700`），并
+  写入或移除 `/Library/LaunchAgents/com.deskhub.macos.unattended.plist` —— 一个限定于
+  `LoginWindow` session 类型、运行 `DeskhubDaemon --unattended-host` 的 LaunchAgent。该进程
+  就是普通的 `SharingHost`，开启 `UnattendedMode()`，主线程跑 `CFRunLoopRun` 以便
+  `LocalInputMonitor` 能向其 dispatch，另有一个 supervisor 每 500 ms 轮询该文件夹：daemon 的
+  `unattended-hold` 标记存在时（app 持有的每条 `Takeover` 连接对应一个）停止 host，
+  `host_key.pem` 或 `ui-settings.txt` 变化时重启，key 消失时退出。capture 先尝试
+  ScreenCaptureKit，在登录窗口 session 中 `SCShareableContent` 一无所获时回退到
+  `CGDisplayStream`（`DisplayStreamCapture`）；display 枚举同样回退到
+  `CGGetActiveDisplayList`。host 把自身的 Screen Recording 与 Accessibility 状态写入
+  `unattended-status.txt`，daemon 在 app 的 `Status` request 中返回它，供 Settings 页显示。
 - Shell：每个 shell 对应一个 PTY（Windows 为 `ConPTY`，其他平台为 `forkpty`），最多 8
   个。连接中断时 shell 被分离，PTY 一直保留到 shell 进程退出或 shell 被关闭，不设时间
   限制。任何已准入的 client 均可列出被保留的 shell（`TermList`/`TermListAck`）、按 id
@@ -422,6 +441,11 @@ unattended host 读取的 `host_key.pem`、`authorized_keys` 与 `ui-settings.tx
 host 写入的任何 `access_requests` 与 `pairing_tokens`。关闭该设置会移除这些文件；
 `DeskhubService.exe --uninstall` 会移除该文件夹。
 
+在 macOS 上，第二个文件夹是 `/Library/Application Support/Deskhub`，由 `DeskhubDaemon` 以
+root 创建（`0700`），保存同样的三份副本、host 的 `unattended-status.txt`、app 共享期间的
+`unattended-hold` 标记，以及 daemon 与 host 的日志。关闭该设置会移除副本和登录窗口 agent 的
+plist；Homebrew cask 的 `zap` 会移除该文件夹，拖到废纸篓卸载则会把它留下。
+
 viewer 发送的文件保存在其他位置：由 host 选定的文件夹（`ui-settings.txt` 中的
 `transfer_dir`，默认为用户主目录下的 `Deskhub`）。`FileStore` 将每个文件写为
 `<name>.deskhub-part`，仅在整个文件到达且 CRC-32 匹配后改名，因此写入中途的文件不会以
@@ -486,6 +510,17 @@ runner 上与 base commit 的 A/B 结果（偏移仅作为警告，不导致失�
   文件夹恰好得到 SYSTEM + Administrators。配对仍然是登录后的动作：在登录画面提交的 request
   会落在一个无人查看的文件夹里，而让登录画面批准设备，等于把整个模型赖以成立的那一个决定
   交到陌生人手上。
+
+- **macOS 采用 root daemon 加 LoginWindow agent，既不是 pkg，也不是单个进程**：限定于
+  `LoginWindow` session 的 LaunchAgent 是在登录窗口拥有 window server 以便捕获画面并投递
+  事件的唯一受支持方式 —— root daemon 没有 session，两者都做不到 —— 但只有 root 能写入
+  `/Library/LaunchAgents`，因此必须由一个 root daemon 写入该 plist、保管机器副本并持有
+  takeover。`SMAppService.daemon(plistName:)` 让 app 以一次 *Allow in background* 批准注册该
+  daemon，无需安装包，这就是仍然没有 pkg 和 Developer ID Installer 证书的原因。daemon 凭代码
+  签名而非映像路径信任 app，因为每个用户都管理着自己的 Mac 并能写入 `/Applications`：路径
+  核验会信任放在那里的任何东西。与 Windows 不同，该功能止于登录，因为 launchd 会在那一刻
+  拆除 LoginWindow session；在 app 未共享时于用户自己的 session 内 host 需要一个按用户的
+  agent 和第二轮 TCC 授权，留待以后的阶段。
 
 - **只有 host 能提前结束 handshake，因此 client 留意它是如何结束的**：client 过去会为
   `AuthResult` 等待 65 秒 —— 这是批准还在一条保持的 connection 内完成时遗留下来的 —— 而

@@ -16,15 +16,15 @@ on Google Play, and the iOS beta on TestFlight.
 | 🐧 Ubuntu, Kubuntu, Debian, Mint | `deskhub-v*-amd64.deb` | `sudo apt install ./deskhub-v*-amd64.deb` |
 | 🐧 Fedora (Workstation & KDE spin) | `deskhub-v*-x86_64.rpm` | `sudo dnf install ./deskhub-v*-x86_64.rpm` |
 | 🐧 openSUSE Tumbleweed | `deskhub-v*-x86_64.rpm` | `sudo zypper install ./deskhub-v*-x86_64.rpm` |
-| 🐧 Arch and other Linux distributions | `deskhub-v*-linux-x86_64` | `chmod +x deskhub-v*-linux-x86_64 && ./deskhub-v*-linux-x86_64` |
+| 🐧 Other Linux distributions | — | Build from source: [BUILD.md](BUILD.md) |
 | 🤖 Android | `deskhub-v*-android.apk` | Install the apk, or [Google Play](https://play.google.com/store/apps/details?id=com.manhpham.deskhub) |
 | 📱 iOS | — | [TestFlight](https://testflight.apple.com/join/7qY7wgpd) |
 
-There is also `deskhub-cli` for terminal commands and scripts. On Windows and Linux it
-can open a window to display a remote screen (on Linux an X11 window, so a Wayland desktop
-needs XWayland). See [Command line](#-command-line).
+Every desktop package also installs `deskhub-cli` for terminal commands and scripts. On
+Windows and Linux it can open a window to display a remote screen (on Linux an X11
+window, so a Wayland desktop needs XWayland). See [Command line](#-command-line).
 
-You can also install through `winget` on Windows, Homebrew on macOS, or the
+You can also install through Homebrew on macOS, or the
 [apt repository](#-linux) on Ubuntu, Kubuntu, Debian and Mint. Use the package manager's
 upgrade command when you want a newer release.
 
@@ -39,18 +39,10 @@ account is needed. A DeskHub that an earlier version installed for your user alo
 removed first, and *Start Deskhub when you log in* is pointed at the new location; your
 settings and keys stay where they are. There is no portable exe: the setup file is the
 only way to install the Windows app, because the service it installs is what lets viewers
-through UAC prompts, the lock screen and the sign-in screen.
-
-Or let winget install the same setup package and keep it current — `winget upgrade` brings
-each new release and `winget uninstall ManhPham.Deskhub` removes it:
-
-```powershell
-winget install ManhPham.Deskhub
-```
-
-If you installed the earlier portable winget package, run
-`winget uninstall ManhPham.Deskhub` once, then install it again. Your settings and keys
-in `%USERPROFILE%\.deskhub` are kept.
+through UAC prompts, the lock screen and the sign-in screen. Setup also installs
+`deskhub-cli.exe` beside the app and adds that folder to the machine `PATH`, so
+`deskhub-cli` works in any terminal opened afterwards; an earlier separate *DeskHub CLI*
+install is removed on the way in.
 
 Three things to expect:
 
@@ -71,7 +63,7 @@ Three things to expect:
   from source run without the service shows those screens frozen to viewers until they
   close, and its checkbox is greyed out.
 
-Uninstall DeskHub from Windows Settings or with `winget uninstall ManhPham.Deskhub`;
+Uninstall DeskHub from Windows Settings;
 the service goes with it, together with `%ProgramData%\DeskHub`, where it keeps its logs
 and the copies *Allow access before anyone signs in* made. Settings and keys remain in
 `%USERPROFILE%\.deskhub` until you remove that folder too, and files other machines sent
@@ -108,6 +100,21 @@ Two more prompts come from macOS itself: **Local Network** access, which Deskhub
 reach the other machine whether it is sharing or connecting, and permission to show
 **notifications**, asked the first time there is a connection request to announce.
 
+**Allow access before anyone signs in** (off by default) sits on the same Settings page.
+Ticking it registers `DeskhubDaemon`, a helper carried inside the app, as a background
+item: macOS asks you once under System Settings → General → Login Items & Extensions,
+and the app offers to open that pane. The helper needs **Screen Recording** and
+**Accessibility** of its own — grant them to `DeskhubDaemon` in the same two panes; the
+Settings page shows what it found the last time it ran — and from then on devices
+already on your allowed list can see the login window and type the password whenever
+nobody is signed in: after a sign-out, and right after a restart when FileVault is off.
+With FileVault on, a restarted Mac waits at the disk-unlock screen, where nothing runs,
+and then signs the unlocking user straight in, so only sign-outs are covered. Once
+someone signs in, the helper's host stops and only the app shares. Unticking the setting
+removes the copies the helper kept in `/Library/Application Support/Deskhub` and
+unregisters it; `brew uninstall --zap deskhub` removes that folder, and after a
+drag-to-Trash uninstall delete it yourself.
+
 ## 🐧 Linux
 
 **To connect and view, start with the app package.** The H.264 decoder is included, so
@@ -116,16 +123,14 @@ provide the desktop libraries the app uses, including GTK3, PipeWire and libva.
 
 The deb and the rpm carry identical content — pick the one your package manager
 understands. Both ship the `/dev/uinput` udev rule described in requirement 3 below, so
-remote input works right after install, with no group change and no re-login. Every Linux
-build — deb, rpm and portable — needs x86_64 with glibc 2.35+ (Ubuntu 22.04, Debian 12,
-Fedora 36, openSUSE Tumbleweed, any current Arch). openSUSE Leap 15.5 ships glibc 2.31 and
-cannot run it.
+remote input works right after install, with no group change and no re-login. Both need
+x86_64 with glibc 2.35+ (Ubuntu 22.04, Debian 12, Fedora 36, openSUSE Tumbleweed).
+openSUSE Leap 15.5 ships glibc 2.31 and cannot run them.
 
-The CLI has separate deb and rpm packages. Install `deskhub-cli` only if you need the
-terminal commands; it can be installed on its own, or alongside a desktop app of the same
-version or newer — upgrade both together, since the package manager will not keep an
-older `deskhub` next to a newer `deskhub-cli`. Both packages place their commands in
-`/usr/bin`, and the desktop app adds a launcher to the application menu.
+Each package installs the desktop app as `/usr/bin/deskhub`, adds its launcher to the
+application menu, and installs `/usr/bin/deskhub-cli` beside it. The separate
+`deskhub-cli` package earlier releases had is gone: this package replaces it, so an old
+one is removed on upgrade.
 
 On Ubuntu, Kubuntu, Debian and Mint, the Deskhub apt repository installs the same deb and
 lets `sudo apt upgrade` bring every later release. It serves Ubuntu 22.04 and newer, and
@@ -138,9 +143,6 @@ echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/deskhub.gpg] https://manhpham9
   | sudo tee /etc/apt/sources.list.d/deskhub.list
 sudo apt update && sudo apt install deskhub
 ```
-
-Install the CLI separately with `sudo apt install deskhub-cli`. If upgrading from an
-older `deskhub` package that included the CLI, install `deskhub-cli` to keep that command.
 
 **To share this machine's screen**, three more things must be in place.
 
@@ -203,7 +205,7 @@ vainfo | grep -E 'H264.*Enc'                 # must print ≥1 line, or this mac
 ### 3. Write access to `/dev/uinput`
 
 This is how mouse and keyboard get injected. The deb and the rpm install the udev rule
-for you — nothing to do. On the portable binary, one command sets it up, with no clone
+for you — nothing to do. On a build from source, one command sets it up, with no clone
 and no re-login on the desktop:
 
 ```bash
@@ -249,13 +251,13 @@ sudo firewall-cmd --add-port=47777/udp --permanent        # Fedora / openSUSE
 ### Uninstall
 
 ```bash
-sudo apt remove deskhub deskhub-cli   # whichever you installed; or dnf remove / zypper remove
+sudo apt remove deskhub      # or dnf remove / zypper remove
 rm -rf ~/.deskhub            # settings, keys, allowed clients and trusted hosts
 sudo rm -f /etc/apt/sources.list.d/deskhub.list /etc/apt/keyrings/deskhub.gpg   # the apt repository, if you added it
 ```
 
 Files other machines sent you stay in `~/Deskhub` (or the folder you picked) until you
-delete them. The portable binary is a single file — delete it. `setup-uinput.sh` leaves
+delete them. `setup-uinput.sh` leaves
 its udev rule, its module-load file and your `input` group membership behind; remove them
 by hand if nothing else needs them:
 
@@ -301,44 +303,26 @@ XWayland; on macOS, use the desktop app to watch a screen. Run `deskhub-cli help
 for the command list. The CLI and app use the same settings, machine key, allowed clients,
 connection requests and trusted hosts.
 
-| Platform | File |
+There is no separate download: every desktop package installs it beside the app.
+
+| Platform | Where it lands |
 | --- | --- |
-| 🪟 Windows | `deskhub-cli-v*-windows-setup.exe` — installs `deskhub-cli` on your user `PATH` |
-| 🍎 macOS | `deskhub-cli-v*-macos` — one binary for Apple Silicon and Intel |
-| 🐧 Linux | `deskhub-cli-v*-amd64.deb`, `deskhub-cli-v*-x86_64.rpm`, or portable `deskhub-cli-v*-linux-x86_64` |
+| 🪟 Windows | `deskhub-cli.exe` in the DeskHub install folder, which setup adds to the machine `PATH` |
+| 🍎 macOS | `Deskhub.app/Contents/MacOS/deskhub-cli`, one binary for Apple Silicon and Intel; the Homebrew cask links it into `PATH` |
+| 🐧 Linux | `/usr/bin/deskhub-cli`, from the same deb or rpm as the app |
 
-For a downloaded Linux package, use `sudo apt install ./deskhub-cli-v*-amd64.deb` on
-Ubuntu/Debian or `sudo dnf install ./deskhub-cli-v*-x86_64.rpm` on Fedora. These install
-the command in `/usr/bin` without installing the desktop app.
+On Windows, open a new PowerShell window after setup finishes and run `deskhub-cli help`;
+`Get-Command deskhub-cli` shows which executable Windows found. On macOS without Homebrew,
+run it by its full path or link it yourself:
+`ln -s /Applications/Deskhub.app/Contents/MacOS/deskhub-cli /usr/local/bin/deskhub-cli`.
 
-Only the portable macOS and Linux binaries may need `chmod +x` after download; `.deb` and
-`.rpm` packages are installed with the package manager. The portable macOS binary is not
-signed or notarized like the dmg, so its first run may need
-`xattr -d com.apple.quarantine deskhub-cli-v*-macos`, or *Open Anyway* in System Settings
-→ Privacy & Security.
-
-The Windows setup package adds the CLI to your user `PATH` without requiring an administrator.
-The separate `deskhub-cli-v*-windows.exe` remains available for portable use.
-
-**The CLI never gets the *DeskHub Secure Desktop* service.** Its setup does not install
-the service, and the service — even when the app's setup has installed it on the same PC —
-serves only the `Deskhub.exe` beside it, never `deskhub-cli.exe`, wherever that lives. So
-a `deskhub-cli share` on Windows shows viewers a frozen picture while a UAC prompt, the
+**The CLI never gets the *DeskHub Secure Desktop* service.** The service — installed by
+the same setup — serves only the `Deskhub.exe` beside it, never `deskhub-cli.exe`. So a
+`deskhub-cli share` on Windows shows viewers a frozen picture while a UAC prompt, the
 lock screen or the sign-in screen is up, their input does not reach those screens, and
-*Allow access before anyone signs in* is an app-only setting. Install the app from its
-setup file when you need any of that.
-Every installer and package carries `THIRD_PARTY_NOTICES.md` and the licence texts of the
-libraries inside it; the portable binaries cannot, so each release also offers
-`deskhub-v*-licenses.zip` with `LICENSE`, `THIRD_PARTY_NOTICES.md` and every licence text.
-Package managers also put the command on `PATH`:
-`winget install ManhPham.DeskhubCLI` on Windows (winget installs the portable exe, not the
-setup package), `brew install manhpham90vn/tap/deskhub-cli` on macOS — Homebrew installs it
-without the quarantine flag. On Ubuntu or Debian, run
-`sudo apt install deskhub-cli` after adding the DeskHub apt repository above.
-
-On Windows, open a new PowerShell window after the winget install and run
-`deskhub-cli help`. To check which executable Windows finds, run
-`Get-Command deskhub-cli`. The portable exe does not add itself to `PATH`.
+*Allow access before anyone signs in* is an app-only setting on Windows and on macOS.
+Use the app when you need any of that. Every installer and package carries
+`THIRD_PARTY_NOTICES.md` and the licence texts of the libraries inside it.
 
 On Linux it shares a screen through the same portal and VA-API driver the app needs, and
 relies on the same `/dev/uinput` rule for remote input, so everything under

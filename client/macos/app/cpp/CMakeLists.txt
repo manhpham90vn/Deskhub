@@ -2,7 +2,10 @@ add_library(deskhub_mac_core STATIC
     SharingHost.cpp
     Permissions.mm
     capture/ScreenCapture.mm
+    capture/DisplayStreamCapture.mm
     input/InputInjector.mm
+    secure/ControlSocket.mm
+    secure/DaemonRegistration.mm
 )
 
 target_include_directories(deskhub_mac_core PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
@@ -14,7 +17,10 @@ target_link_libraries(deskhub_mac_core PUBLIC
     "-framework CoreMedia"
     "-framework CoreVideo"
     "-framework ScreenCaptureKit"
+    "-framework IOSurface"
+    "-framework ServiceManagement"
 )
 target_compile_features(deskhub_mac_core PUBLIC cxx_std_20)
+target_compile_options(deskhub_mac_core PRIVATE $<$<COMPILE_LANGUAGE:OBJCXX>:-fobjc-arc>)
 deskhub_target_warnings(deskhub_mac_core)
 deskhub_target_hardening(deskhub_mac_core)

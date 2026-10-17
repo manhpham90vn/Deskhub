@@ -6,12 +6,15 @@
 
 #include <algorithm>
 #include <atomic>
+#include <memory>
 #include <mutex>
 #include <vector>
 
+#include "capture/DisplayStreamCapture.h"
 #include "deskhub/control/StreamSize.h"
 #include "deskhub/media/AudioTypes.h"
 #include "deskhubp/diag/Log.h"
+#include "deskhubp/host/UnattendedMode.h"
 #include "deskhubp/system/Clock.h"
 
 @class DeskhubStreamOutput;
@@ -39,6 +42,7 @@ struct ScreenCapture::Impl {
     DeskhubStreamOutput* output = nil;
     dispatch_queue_t frameQueue = nil;
     dispatch_source_t sizeTimer = nil;
+    std::unique_ptr<DisplayStreamCapture> fallback;
 
     double scale = 1.0;
 
@@ -176,6 +180,32 @@ SCStreamConfiguration* MakeConfig(uint32_t w, uint32_t h, uint32_t fps, bool sca
     return cfg;
 }
 
+bool StartDisplayStream(ScreenCapture::Impl* impl, uint32_t width, uint32_t height) {
+    if (!impl->fallback) impl->fallback = std::make_unique<DisplayStreamCapture>();
+    return impl->fallback->Start(
+        impl->displayId, width, height, impl->fps,
+        [impl](const MacFrameInfo& fi) {
+            if (impl->running.load(std::memory_order_acquire) && impl->onFrame) impl->onFrame(fi);
+        },
+        [impl] { impl->idleFrames.fetch_add(1, std::memory_order_relaxed); });
+}
+
+bool StartWithoutScreenCaptureKit(ScreenCapture::Impl* impl) {
+    impl->scale = 1.0;
+    uint32_t w = 0, h = 0;
+    if (!CurrentSourceSize(impl->displayId, impl->scale, w, h)) {
+        LOGE("[Capture] Display %u has no usable size.", impl->displayId);
+        return false;
+    }
+    impl->curW = w;
+    impl->curH = h;
+    const deskhub::StreamSize t0 = deskhub::TargetStreamSize(w, h, impl->maxDim, impl->cliW,
+        impl->cliH, impl->qualityPct);
+    impl->cfgW = t0.width;
+    impl->cfgH = t0.height;
+    return StartDisplayStream(impl, t0.width, t0.height);
+}
+
 deskhub::StreamSize ApplySizeLocked(ScreenCapture::Impl* impl) {
     const deskhub::StreamSize t = deskhub::TargetStreamSize(impl->curW, impl->curH, impl->maxDim,
         impl->cliW, impl->cliH, impl->qualityPct);
@@ -184,6 +214,11 @@ deskhub::StreamSize ApplySizeLocked(ScreenCapture::Impl* impl) {
 
     impl->cfgW = t.width;
     impl->cfgH = t.height;
+    if (impl->fallback) {
+        if (!StartDisplayStream(impl, t.width, t.height))
+            impl->closed.store(true, std::memory_order_release);
+        return t;
+    }
     SCStreamConfiguration* cfg = MakeConfig(t.width, t.height, impl->fps,
         t.width != impl->curW || t.height != impl->curH, impl->wantAudio);
     impl->config = cfg;
@@ -240,15 +275,20 @@ bool ScreenCapture::Start(uint64_t targetId, const deskhub::media::CaptureOption
                                                    content = c;
                                                    dispatch_semaphore_signal(sem);
                                                  }];
-    if (dispatch_semaphore_wait(sem, dispatch_time(DISPATCH_TIME_NOW, 2 * NSEC_PER_SEC)) != 0) {
-        LOGE("[Capture] SCShareableContent timed out (2s).");
-        return false;
-    }
-    if (!content) return false;
+    const bool timedOut =
+        dispatch_semaphore_wait(sem, dispatch_time(DISPATCH_TIME_NOW, 2 * NSEC_PER_SEC)) != 0;
+    if (timedOut) LOGE("[Capture] SCShareableContent timed out (2s).");
 
     SCDisplay* found = nil;
-    for (SCDisplay* d in content.displays)
-        if (uint32_t(d.displayID) == displayId) found = d;
+    if (!timedOut && content)
+        for (SCDisplay* d in content.displays)
+            if (uint32_t(d.displayID) == displayId) found = d;
+    if (!found && deskhubp::UnattendedMode()) {
+        LOGI("[Capture] ScreenCaptureKit cannot see display %u here; using CGDisplayStream.",
+            displayId);
+        if (!StartWithoutScreenCaptureKit(impl_.get())) return false;
+        return FinishStart();
+    }
     if (!found) {
         LOGE("[Capture] Display %u not found.", displayId);
         return false;
@@ -328,7 +368,14 @@ bool ScreenCapture::Start(uint64_t targetId, const deskhub::media::CaptureOption
         Stop();
         return false;
     }
+    return FinishStart();
+}
+
+bool ScreenCapture::FinishStart() {
     impl_->running.store(true, std::memory_order_release);
+    const uint32_t displayId = impl_->displayId;
+    const uint32_t w = impl_->curW;
+    const uint32_t h = impl_->curH;
 
     Impl* impl = impl_.get();
     impl_->sizeTimer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0,
@@ -428,6 +475,11 @@ void ScreenCapture::Stop() {
     if (impl_->sizeTimer) {
         dispatch_source_cancel(impl_->sizeTimer);
         impl_->sizeTimer = nil;
+    }
+
+    if (impl_->fallback) {
+        impl_->fallback->Stop();
+        impl_->fallback.reset();
     }
 
     if (impl_->stream) {

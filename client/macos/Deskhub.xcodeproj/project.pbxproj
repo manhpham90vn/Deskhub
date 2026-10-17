@@ -111,6 +111,7 @@
 				CC1620B83011D2F4006CCD14 /* Frameworks */,
 				CC1620B93011D2F4006CCD14 /* Resources */,
 				CCSH000100000002006CCD14 /* Bundle third-party notices */,
+				CCSH000100000003006CCD14 /* Embed DeskhubDaemon */,
 			);
 			buildRules = (
 			);
@@ -189,7 +190,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/bash;
-			shellScript = "set -euo pipefail\nexport PATH=\"/opt/homebrew/bin:/usr/local/bin:$PATH\"\nBUILD_DIR=\"$SRCROOT/../../out/build/macos-core/$PLATFORM_NAME-$CONFIGURATION\"\ncmake -S \"$SRCROOT/../..\" -B \"$BUILD_DIR\" -G \"Unix Makefiles\" \\\n    -DCMAKE_BUILD_TYPE=\"$CONFIGURATION\" \\\n    -DCMAKE_OSX_SYSROOT=\"$SDKROOT\" \\\n    -DCMAKE_OSX_ARCHITECTURES=\"$(echo \"$ARCHS\" | tr ' ' ';')\" \\\n    -DCMAKE_OSX_DEPLOYMENT_TARGET=\"$MACOSX_DEPLOYMENT_TARGET\" \\\n    -DDESKHUB_CORE_TESTS=OFF\ncmake --build \"$BUILD_DIR\" --target platform -j \"$(sysctl -n hw.ncpu)\"\n";
+			shellScript = "set -euo pipefail\nexport PATH=\"/opt/homebrew/bin:/usr/local/bin:$PATH\"\nBUILD_DIR=\"$SRCROOT/../../out/build/macos-core/$PLATFORM_NAME-$CONFIGURATION\"\ncmake -S \"$SRCROOT/../..\" -B \"$BUILD_DIR\" -G \"Unix Makefiles\" \\\n    -DCMAKE_BUILD_TYPE=\"$CONFIGURATION\" \\\n    -DCMAKE_OSX_SYSROOT=\"$SDKROOT\" \\\n    -DCMAKE_OSX_ARCHITECTURES=\"$(echo \"$ARCHS\" | tr ' ' ';')\" \\\n    -DCMAKE_OSX_DEPLOYMENT_TARGET=\"$MACOSX_DEPLOYMENT_TARGET\" \\\n    -DDESKHUB_CORE_TESTS=OFF \\\n    -DDESKHUB_PLATFORM_TESTS=OFF \\\n    -DDESKHUB_INTEGRATION_TESTS=OFF \\\n    -DDESKHUB_MACOS_DAEMON=ON \\\n    -DDESKHUB_CLI=ON\ncmake --build \"$BUILD_DIR\" --target platform --target deskhub_daemon --target deskhub_cli -j \"$(sysctl -n hw.ncpu)\"\n";
 		};
 		CCSH000100000002006CCD14 /* Bundle third-party notices */ = {
 			isa = PBXShellScriptBuildPhase;
@@ -209,6 +210,25 @@
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/bash;
 			shellScript = "set -euo pipefail\n\"$SRCROOT/../../scripts/stage-licenses.sh\" apple \"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH\"\n";
+		};
+		CCSH000100000003006CCD14 /* Embed DeskhubDaemon */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Embed DeskhubDaemon";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/bash;
+			shellScript = "set -euo pipefail\n\"$SRCROOT/../../scripts/embed-macos-daemon.sh\" \"$SRCROOT/../../out/build/macos-core/$PLATFORM_NAME-$CONFIGURATION/client/macos/daemon/DeskhubDaemon\" \"$TARGET_BUILD_DIR/$CONTENTS_FOLDER_PATH\" \"$PRODUCT_BUNDLE_IDENTIFIER\" \"$SRCROOT/daemon/LaunchDaemon.plist.in\" \"$SRCROOT/../../out/build/macos-core/$PLATFORM_NAME-$CONFIGURATION/client/cli/deskhub-cli\"\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
@@ -267,6 +287,7 @@
 				GCC_OPTIMIZATION_LEVEL = 0;
 				GCC_PREPROCESSOR_DEFINITIONS = (
 					"DEBUG=1",
+					"DESKHUB_DEV_BUILD=1",
 					"$(inherited)",
 				);
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;

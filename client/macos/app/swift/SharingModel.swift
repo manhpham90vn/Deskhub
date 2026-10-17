@@ -28,6 +28,11 @@ final class SharingModel {
     var hasScreenRecording = false
     var hasAccessibility = false
     var screenRecordingNeedsRelaunch = false
+    var unattended = DeskhubShare.unattendedEnabled
+    var unattendedAvailable = DeskhubShare.unattendedAvailable
+    var unattendedDaemonStatus = DeskhubShare.unattendedDaemonStatus
+    var unattendedPushFailed = false
+    var unattendedPermissions = DHUnattendedPermissions()
 
     var clientControl = SharingModel.stored.clientControl
     var bindIp = DeskhubClient.buffered(64) { dh_bind_ip($0, $1) }
@@ -48,9 +53,42 @@ final class SharingModel {
     private var sharingFiles = false
     private var lastPasteboardChange = NSPasteboard.general.changeCount
 
+    init() {
+        accessRequests.afterDecision = { [weak self] in self?.syncUnattended() }
+    }
+
     func applyAutostart() {
         dh_set_autostart(autostart)
         autostart = dh_autostart_enabled()
+    }
+
+    var unattendedNeedsApproval: Bool {
+        unattended && unattendedDaemonStatus == DHUnattendedDaemonRequiresApproval
+    }
+
+    var unattendedNote: String {
+        if !unattendedAvailable { return DeskhubClient.string(DHStrUnattendedServiceMissingNote) }
+        if unattendedPushFailed { return DeskhubClient.string(DHStrUnattendedPushFailedNote) }
+        if unattendedNeedsApproval { return DeskhubClient.string(DHStrUnattendedApprovalNote) }
+        return DeskhubClient.string(DHStrUnattendedHintMac)
+    }
+
+    func setUnattended(_ on: Bool) {
+        unattendedPushFailed = !DeskhubShare.setUnattended(on)
+        refreshUnattended()
+    }
+
+    func refreshUnattended() {
+        unattended = DeskhubShare.unattendedEnabled
+        unattendedAvailable = DeskhubShare.unattendedAvailable
+        unattendedDaemonStatus = DeskhubShare.unattendedDaemonStatus
+        unattendedPermissions = DeskhubShare.unattendedPermissions
+    }
+
+    func syncUnattended() {
+        guard unattended else { return }
+        DeskhubShare.syncUnattended()
+        refreshUnattended()
     }
 
     var sharingPort: UInt16 { UInt16(max(1, min(65535, port))) }
@@ -91,6 +129,7 @@ final class SharingModel {
         dh_set_share_audio(shareAudio)
         dh_set_play_audio(playAudio)
         dh_set_keep_awake(keepAwake)
+        syncUnattended()
     }
 
     private var pollTimer: Timer?
@@ -101,6 +140,7 @@ final class SharingModel {
         if hasScreenRecording {
             screenRecordingNeedsRelaunch = false
         }
+        syncUnattended()
     }
 
     func requestScreenRecording() {
@@ -222,6 +262,7 @@ final class SharingModel {
         sharingTerminal = false
         sharingFiles = false
         rows = []
+        syncUnattended()
         Task { await refreshShareSources() }
     }
 

@@ -123,7 +123,8 @@ client、受信任的 host、设置与日志保存在 `~/.deskhub-dev`（Windows
 
 `client/cli/` 会构建 `deskhub-cli`，用命令代替 app 页面。它适合通过 SSH、脚本或
 systemd 运行。在 Windows 和 Linux 上，`connect` 会打开 viewer 窗口；macOS 版本暂不
-支持该命令。
+支持该命令。它没有自己的软件包：Windows 安装程序、macOS app bundle 以及 Linux 的 deb 与
+rpm 都把它放在 app 旁边。
 
 ```bash
 make build-cli                       # 当前 OS 的 debug build
@@ -286,26 +287,27 @@ clang 构建会对未使用的 member function、template 与 exception 参数�
 | --- | --- |
 | `make dist-macos` | 使用 Developer ID sign、经 notarize 并 staple 的 dmg |
 | `make verify-macos` | 对刚构建的产物执行 Gatekeeper 检查 |
-| `make dist-linux` | 分别构建 app 和 CLI 的 `.deb` 与 `.rpm`，每个包都有 uinput 的 udev rule |
+| `make dist-linux` | 一个 `.deb` 与一个 `.rpm`，各自包含 app 与 `deskhub-cli`，并安装 uinput 的 udev rule |
 
 `dist-macos` 需要 keychain 中有 *Developer ID Application* identity，并需要用于 notarization
 的 App Store Connect API key：`ASC_KEY_P8`（`.p8` 文件的路径）、`ASC_KEY_ID` 与
 `ASC_ISSUER_ID`。三者缺少任何一个，它都会在构建之前停止。
 
-Release workflow 还会通过 `packaging/windows/` 构建 Windows app 和 CLI 的 Inno Setup
-安装程序。app 的安装程序需要管理员权限：它为所有用户安装到 `Program Files` 下，移除早先的
-per-user 安装，并运行 `DeskhubService.exe --install` 注册 *DeskHub Secure Desktop* service
-（卸载时运行 `--uninstall`）。Windows app 仅以该安装程序发布 —— 没有便携版 app exe，因为
-没有该 service 时 viewer 无法看到 UAC 提示、锁屏或登录画面；CLI 的 Windows 便携版和 Linux app
-仍是单文件。
+Release workflow 通过 `packaging/windows/Deskhub.iss` 构建 Windows app 的 Inno Setup
+安装程序。它需要管理员权限：为所有用户安装到 `Program Files` 下，移除早先的 per-user 安装
+和早先单独的 *DeskHub CLI* 安装，把 `deskhub-cli.exe` 装在 app 旁边并把该文件夹加入机器
+`PATH`，再运行 `DeskhubService.exe --install` 注册 *DeskHub Secure Desktop* service（卸载时
+运行 `--uninstall`）。Windows app 仅以该安装程序发布 —— 没有便携版 exe，因为没有该 service
+时 viewer 无法看到 UAC 提示、锁屏或登录画面。在 macOS 上，Xcode 项目的 CMake 阶段同时构建
+`deskhub-cli` 与 `DeskhubDaemon`，`scripts/embed-macos-daemon.sh` 把两者复制到
+`Contents/MacOS` 并用 app 的身份签名；Homebrew cask 会把 CLI 链接到 `PATH`。
 
 每个安装包都附带 `THIRD_PARTY_NOTICES.md` 以及 `licenses/` 中适用于它的 licence 文本：
-app 与 CLI 的 `.deb` 和 `.rpm`（位于 `/usr/share/doc/<package>/`，文本 —— 包括 LGPL ——
-位于其 `licenses/` 文件夹中）、两个 Windows 安装程序、macOS app 的 `Resources`、iOS app
-bundle 以及 Android APK 的 assets。`scripts/stage-licenses.sh` 准备 Linux 与 Apple 的文件集，
-`packaging/windows/*.iss` 列出 Windows 的文件，Android 构建自行复制其文件。CLI 与 Linux 的
-便携版 binary 无法附带任何内容，因此 release 另外提供 `deskhub-<tag>-licenses.zip`，内含 `LICENSE`、
-notices 以及整个 `licenses/` 文件夹。`licenses/rust-crates.txt` 是生成的：quiche 的 pin
+`.deb` 和 `.rpm`（位于 `/usr/share/doc/deskhub/`，文本 —— 包括 LGPL —— 位于其 `licenses/`
+文件夹中）、Windows 安装程序、macOS app 的 `Resources`、iOS app bundle 以及 Android APK 的
+assets。`scripts/stage-licenses.sh` 准备 Linux 与 Apple 的文件集，
+`packaging/windows/Deskhub.iss` 列出 Windows 的文件，Android 构建自行复制其文件。
+`licenses/rust-crates.txt` 是生成的：quiche 的 pin
 变动时，`scripts/rust-crate-notices.py <quiche source dir> > licenses/rust-crates.txt`
 会重写它。APK 还附带 `licenses/android-libraries.txt`，即 Gradle 打包进 APK 的 Java 与
 Kotlin 库及其各自的 notice；它同样是生成的：`scripts/android-library-notices.py >
@@ -336,26 +338,11 @@ GitHub Release 创建后，`deploy.yml` 将 tag 交给 `publish-packages.yml`，
 
 | Job | 发布内容 | `stg` environment 中的 secret |
 | --- | --- | --- |
-| `winget` | 通过 [komac](https://github.com/russellbanks/Komac)（版本 pin 在 `scripts/pinned-versions.txt`）向 `microsoft/winget-pkgs` 提交 `ManhPham.Deskhub` 与 `ManhPham.DeskhubCLI` 的 pull request | `WINGET_TOKEN` —— 带 `public_repo` 的 classic PAT |
-| `homebrew` | `manhpham90vn/homebrew-tap` 中的 `Casks/deskhub.rb` 与 `Formula/deskhub-cli.rb`，由 `packaging/homebrew/` 生成 | `HOMEBREW_TAP_TOKEN` —— 对该 tap 有 Contents: write 的 fine-grained PAT |
+| `homebrew` | `manhpham90vn/homebrew-tap` 中的 `Casks/deskhub.rb`，由 `packaging/homebrew/deskhub.rb` 生成；已停用的 `Formula/deskhub-cli.rb` 会从 tap 中移除 | `HOMEBREW_TAP_TOKEN` —— 对该 tap 有 Contents: write 的 fine-grained PAT |
 | `build-apt-repo` → `deploy-apt-repo` | 已签名的 apt repository，包含最近三个 release 的 deb，位于 GitHub Pages 的 `/apt`（`scripts/build-apt-repo.sh`） | `APT_GPG_PRIVATE_KEY`、`APT_GPG_PASSPHRASE` |
 
 每个 job 在首次运行它的 tag 之前都需要一次性设置：
 
-- **winget** —— 该 job 只更新已存在的 package，因此每个 package 的第一个版本需手动提交。
-  `ManhPham.Deskhub` 使用 Inno Setup 安装程序；`ManhPham.DeskhubCLI` 的 portable command alias
-  设为 `deskhub-cli`。在 Microsoft merge
-  该 pull request 之前，job 只会警告并跳过。
-
-  ```bash
-  komac new ManhPham.Deskhub --version X.Y.Z --urls https://github.com/manhpham90vn/Deskhub/releases/download/vX.Y.Z/deskhub-vX.Y.Z-windows-setup.exe
-  ```
-
-  再对 `ManhPham.DeskhubCLI` 和 `deskhub-cli-vX.Y.Z-windows.exe` 的 URL 执行一次。
-
-  自加入 secure desktop service 的那个 release 起，app 的安装程序为 per-machine，因此请以
-  `Scope: machine` 提交 `ManhPham.Deskhub`；若其首个 pull request 仍以 `Scope: user` 等待
-  审核，请将其改为 `machine`。
 - **Homebrew** —— 创建 public repository `manhpham90vn/homebrew-tap`，由 job 填充内容。
 - **apt** —— 生成一次 signing key，将该文件存为 `APT_GPG_PRIVATE_KEY`，并保留离线备份。
   所有用户都信任这把 key：更换它会让他们的 `apt update` 失败。

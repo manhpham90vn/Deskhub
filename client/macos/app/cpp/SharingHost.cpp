@@ -9,10 +9,12 @@
 #include "Permissions.h"
 #include "capture/ScreenCapture.h"
 #include "deskhubp/diag/Log.h"
+#include "deskhubp/host/UnattendedMode.h"
 #include "deskhubp/input/LocalInput.h"
 #include "deskhubp/media/VtSourcePipeline.h"
 #include "deskhubp/system/Clock.h"
 #include "input/InputInjector.h"
+#include "secure/ControlSocket.h"
 
 #include "deskhub/control/StreamSize.h"
 #include "deskhub/diag/ShareDiag.h"
@@ -142,5 +144,7 @@ bool SharingHost::Start(const std::vector<ShareSource>& sources, const ShareOpti
 
     policy.source.flush = deskhubp::FlushVtSource<SourcePipeline>;
 
+    if (!deskhubp::UnattendedMode() && UnattendedDaemonInstalled())
+        HoldWhileSharing(TakeoverUnattendedHost());
     return StartEngine(sources, opt, std::move(policy));
 }

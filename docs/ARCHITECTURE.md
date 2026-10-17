@@ -327,6 +327,29 @@ HostEngine (one per app, owns SessionTransport)
   key or the settings changed, and wipes the files when disabled. The app sends it when
   the setting is toggled, after every settings save, after every change to the allowed
   list, when a share stops and once at start.
+- macOS before sign-in (T-28): the app embeds `Contents/MacOS/DeskhubDaemon` and a
+  LaunchDaemon plist under `Contents/Library/LaunchDaemons`, registered through
+  `SMAppService.daemon` when the setting is ticked (one *Allow in background* approval).
+  The daemon runs as root, listens on the Unix socket `/var/run/deskhub/control.sock`
+  (`deskhubp/net/LocalSocket`) and feeds each connection's bytes through
+  `UnattendedControlServer` (`core/session/host/UnattendedControl`), the same request
+  stream as the Windows pipe: `Takeover`, `Configure` and a `Status` the Windows service
+  refuses. It trusts a peer by code signature — `identifier "com.deskhub.macos"` with
+  Deskhub's Team ID, checked with Security.framework against the audit token of the
+  connecting process — never by path. `Configure` writes the three files into
+  `/Library/Application Support/Deskhub` (`deskhubp/system/MachineFolder`, root `0700`)
+  and writes or removes `/Library/LaunchAgents/com.deskhub.macos.unattended.plist`, a
+  LaunchAgent limited to the `LoginWindow` session type that runs
+  `DeskhubDaemon --unattended-host`. That process is the ordinary `SharingHost` with
+  `UnattendedMode()` on, a `CFRunLoopRun` main thread so `LocalInputMonitor` can dispatch
+  to it, and a supervisor polling the folder every 500 ms: it stops the host while the
+  daemon's `unattended-hold` marker exists (one per `Takeover` connection the app holds),
+  restarts it when `host_key.pem` or `ui-settings.txt` change, and exits when the key is
+  gone. Capture tries ScreenCaptureKit first and falls back to `CGDisplayStream`
+  (`DisplayStreamCapture`) when `SCShareableContent` returns nothing in the login window
+  session; display enumeration falls back to `CGGetActiveDisplayList` the same way. The
+  host writes `unattended-status.txt` with its own Screen Recording and Accessibility
+  state, which the daemon returns to the app's `Status` request for the Settings page.
 - Shells: one PTY per shell (`ConPTY` on Windows, `forkpty` elsewhere), at most 8; a
   dropped connection detaches the shell and the PTY stays alive until the shell
   process exits or the shell is closed — no time limit. Any admitted client can list
@@ -488,6 +511,13 @@ copies of `host_key.pem`, `authorized_keys` and `ui-settings.txt` the unattended
 reads, plus whatever `access_requests` and `pairing_tokens` that host writes. Turning the
 setting off removes those files; `DeskhubService.exe --uninstall` removes the folder.
 
+On macOS the second folder is `/Library/Application Support/Deskhub`, created by
+`DeskhubDaemon` as root (`0700`) and holding the same three copies, the host's
+`unattended-status.txt`, the `unattended-hold` marker while the app shares, and the
+daemon's and the host's logs. Turning the setting off removes the copies and the login
+window agent plist; the Homebrew cask's `zap` removes the folder, a drag-to-Trash
+uninstall leaves it behind.
+
 Files a viewer sends land somewhere else entirely: a folder the host picks
 (`ui-settings.txt`'s `transfer_dir`, defaulting to `Deskhub` in the user's home
 folder). `FileStore` writes each one as `<name>.deskhub-part` and renames it only
@@ -567,6 +597,21 @@ line.
   SYSTEM + Administrators. Pairing stays a signed-in act: a request filed at the sign-in
   screen lands in a folder nobody looks at, and letting the sign-in screen approve
   devices would hand a stranger the one decision the whole model rests on.
+
+- **macOS uses a root daemon plus a LoginWindow agent, not a pkg and not one process**:
+  a LaunchAgent limited to the `LoginWindow` session is the only supported way to run
+  something at the login window with a window server to capture and post events to — a
+  root daemon has no session and can do neither — but only root can write
+  `/Library/LaunchAgents`, so a root daemon has to write that plist, keep the machine
+  copies and hold the takeover. `SMAppService.daemon(plistName:)` lets the app register
+  the daemon with one *Allow in background* approval and no installer package, which is
+  why there is still no pkg and no Developer ID Installer certificate. The daemon trusts
+  the app by code signature rather than by image path because every user administers the
+  Mac they own and can write `/Applications`: a path check would trust whatever sits
+  there. The feature stops at sign-in, unlike Windows, because launchd tears the
+  LoginWindow session down at that moment; hosting inside the user's own session when the
+  app is not sharing would need a per-user agent and a second round of TCC grants, and is
+  left for a later phase.
 
 - **Only the host can end a handshake early, so the client listens for how it ended**:
   the client used to wait 65 s for an `AuthResult` — a leftover from when approval was

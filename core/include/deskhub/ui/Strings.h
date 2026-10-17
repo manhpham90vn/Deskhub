@@ -67,16 +67,34 @@ inline constexpr const char* kSecureDesktopMissingNote =
     "or the screen is locked, viewers see a frozen picture and cannot click. Install "
     "Deskhub with the setup file to fix this.";
 inline constexpr const char* kUnattendedLabel = "Allow access before anyone signs in";
-inline constexpr const char* kUnattendedHint =
+inline constexpr const char* kUnattendedHintWindows =
     "Devices already on the allowed list can see the sign-in screen and type the password "
     "right after Windows starts, and whenever Deskhub is not running. Needs the setup-file "
     "install; Ctrl+Alt+Del cannot be sent.";
+inline constexpr const char* kUnattendedHintMac =
+    "Devices already on the allowed list can see the login window and type the password "
+    "while nobody is signed in: after a sign-out, and right after this Mac starts when "
+    "FileVault is off. Once someone signs in, only the app shares. macOS asks you once to "
+    "allow Deskhub to run in the background.";
 inline constexpr const char* kUnattendedServiceMissingNote =
-    "The DeskHub Secure Desktop service is not installed beside this Deskhub.exe. Install "
-    "Deskhub with the setup file to allow access before sign-in.";
+    "The Deskhub background service is not installed beside this app. Reinstall Deskhub "
+    "from its setup file or disk image to allow access before sign-in.";
 inline constexpr const char* kUnattendedPushFailedNote =
-    "The DeskHub Secure Desktop service did not accept the settings for access before "
-    "sign-in. Check that it is running (services.msc) and try again.";
+    "The Deskhub background service did not accept the settings for access before "
+    "sign-in. Check that it is running and try again.";
+inline constexpr const char* kUnattendedApprovalNote =
+    "macOS is waiting for your approval: open System Settings \xE2\x86\x92 General "
+    "\xE2\x86\x92 Login Items & Extensions, allow Deskhub to run in the background, then "
+    "tick this again.";
+inline constexpr const char* kUnattendedHostPermissionsHint =
+    "The host that runs before sign-in is its own program, DeskhubDaemon, inside the "
+    "Deskhub app. It needs Screen Recording and Accessibility of its own: grant them to "
+    "DeskhubDaemon in System Settings. The state shown is what it found the last time it "
+    "ran.";
+inline constexpr const char* kUnattendedHostScreenLabel = "Screen Recording (before sign-in)";
+inline constexpr const char* kUnattendedHostInputLabel = "Accessibility (before sign-in)";
+inline constexpr const char* kUnattendedPermissionUnknown = "Not checked yet";
+inline constexpr const char* kUnattendedOpenLoginItems = "Open Login Items";
 inline constexpr const char* kPickSourcesHint =
     "Tick what to share \xE2\x80\x94 displays, the terminal, file transfer \xE2\x80\x94 then "
     "press Share. Nothing is shared until you press it.";

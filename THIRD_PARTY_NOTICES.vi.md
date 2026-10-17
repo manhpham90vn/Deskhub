@@ -22,18 +22,16 @@ dụng cho gói đó:
 | [`licenses/rust-crates.txt`](licenses/rust-crates.txt) | từng crate Rust được biên dịch vào quiche, kèm thông báo riêng của nó — sinh bởi [`scripts/rust-crate-notices.py`](scripts/rust-crate-notices.py) | mọi gói |
 | [`licenses/BSD-3-Clause-opus.txt`](licenses/BSD-3-Clause-opus.txt) | libopus | mọi gói |
 | [`licenses/android-libraries.txt`](licenses/android-libraries.txt) | từng thư viện Java và Kotlin được đóng gói vào APK Android, kèm licence, dự án, tác giả và mọi NOTICE nó mang theo — sinh bởi [`scripts/android-library-notices.py`](scripts/android-library-notices.py) | APK Android |
-| [`licenses/LGPL-2.1.txt`](licenses/LGPL-2.1.txt) | FFmpeg; đồng thời là nền của wxWindows Library Licence | gói app và CLI Linux, bộ cài app Windows |
+| [`licenses/LGPL-2.1.txt`](licenses/LGPL-2.1.txt) | FFmpeg; đồng thời là nền của wxWindows Library Licence | gói Linux, bộ cài Windows |
 | [`licenses/wxWindows.txt`](licenses/wxWindows.txt) | wxWidgets | bộ cài app Windows |
 | [`licenses/wxWidgets-bundled.txt`](licenses/wxWidgets-bundled.txt) | các thư viện mà wxWidgets đóng kèm — zlib, libpng, IJG libjpeg, LibTIFF, PCRE2, libwebp, NanoSVG | bộ cài app Windows |
 
-Vị trí của chúng: gói `.deb` và `.rpm` của app và của command line client đặt file này ở
-`/usr/share/doc/<package>/` và các văn bản ở `/usr/share/doc/<package>/licenses/` (ví dụ
-văn bản LGPL nằm ở `/usr/share/doc/deskhub/licenses/LGPL-2.1.txt`); cả hai bộ cài Windows
-đặt chúng cạnh file thực thi, trong thư mục cài đặt và thư mục con `licenses`; app macOS
-mang chúng trong `Contents/Resources` của app bundle, app iOS trong bundle của nó, và APK
-Android trong assets. Các binary command line portable không thể mang gì kèm theo, nên mỗi
-bản release còn có `deskhub-<tag>-licenses.zip` chứa `LICENSE`, file này và toàn bộ thư mục
-`licenses/`.
+Vị trí của chúng: gói `.deb` và `.rpm` đặt file này ở `/usr/share/doc/deskhub/` và các
+văn bản ở `/usr/share/doc/deskhub/licenses/` (ví dụ văn bản LGPL nằm ở
+`/usr/share/doc/deskhub/licenses/LGPL-2.1.txt`); bộ cài Windows đặt chúng cạnh các file
+thực thi, trong thư mục cài đặt và thư mục con `licenses`; app macOS mang chúng trong
+`Contents/Resources` của app bundle, bao phủ cả `deskhub-cli` và `DeskhubDaemon` bên
+trong, app iOS trong bundle của nó, và APK Android trong assets.
 
 ## App Linux (`client/linux`)
 

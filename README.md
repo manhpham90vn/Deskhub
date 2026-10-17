@@ -40,22 +40,15 @@ runs natively across five platforms, and is built for responsive work and play.*
 
 ## 📦 Install
 
-Install through a package manager on Windows, macOS, Ubuntu, Debian or Mint:
+Install through a package manager on macOS, Ubuntu, Debian or Mint; on Windows, download
+the setup file from [Releases](https://github.com/manhpham90vn/Deskhub/releases):
 
 ```bash
-winget install ManhPham.Deskhub                  # Windows · app
-winget install ManhPham.DeskhubCLI               # Windows · deskhub-cli
-brew install --cask manhpham90vn/tap/deskhub     # macOS · app
-brew install manhpham90vn/tap/deskhub-cli        # macOS · deskhub-cli
+brew install --cask manhpham90vn/tap/deskhub     # macOS · app + deskhub-cli
 ```
 
-> **winget does not work yet.** The Deskhub packages are still waiting for review in
-> winget-pkgs ([#439628](https://github.com/microsoft/winget-pkgs/pull/439628) for the app, [#439629](https://github.com/microsoft/winget-pkgs/pull/439629) for
-> the CLI), so both `winget install` commands fail until they are merged. Until then, get
-> the Windows installers from [Releases](https://github.com/manhpham90vn/Deskhub/releases).
-
-On Ubuntu / Debian / Mint, the desktop app and CLI are separate packages. Add the apt
-repository once, then install either or both:
+On Ubuntu / Debian / Mint, add the apt repository once, then install the one package,
+which carries the app and `deskhub-cli`:
 
 ```bash
 sudo install -d /etc/apt/keyrings
@@ -63,28 +56,23 @@ curl -fsSL https://manhpham90vn.github.io/Deskhub/apt/deskhub.gpg | sudo tee /et
 echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/deskhub.gpg] https://manhpham90vn.github.io/Deskhub/apt stable main" \
   | sudo tee /etc/apt/sources.list.d/deskhub.list
 sudo apt update
-sudo apt install deskhub       # desktop app
-sudo apt install deskhub-cli   # CLI; also works on its own
+sudo apt install deskhub       # desktop app + deskhub-cli
 ```
 
-The desktop package adds Deskhub to the application menu and installs `deskhub` in
-`/usr/bin`; the CLI package installs `deskhub-cli` in `/usr/bin`. Windows setup adds
-Start Menu and Desktop shortcuts; the separate CLI setup adds its command to the user
-`PATH`, and winget installs the CLI as a portable exe on `PATH`. Homebrew places the macOS
-CLI on `PATH`.
+The package adds Deskhub to the application menu and installs `deskhub` and `deskhub-cli`
+in `/usr/bin`. Windows setup adds Start Menu and Desktop shortcuts and puts its folder,
+`deskhub-cli.exe` included, on the machine `PATH`. The Homebrew cask links the macOS
+`deskhub-cli` into `PATH`; from the dmg it sits inside the app, at
+`Deskhub.app/Contents/MacOS/deskhub-cli`.
 
 Everything else is on [Releases](https://github.com/manhpham90vn/Deskhub/releases):
 
-- **Windows downloads** — app setup `deskhub-v*-windows-setup.exe` (the only form the
-  app comes in) and CLI setup `deskhub-cli-v*-windows-setup.exe`; the CLI also has a
-  portable `deskhub-cli-v*-windows.exe`
-- **macOS downloads** — the app as `deskhub-v*-macos.dmg`, the CLI as `deskhub-cli-v*-macos`
-- **Ubuntu / Debian / Mint without the repository** — `deskhub-v*-amd64.deb` and
-  `deskhub-cli-v*-amd64.deb`
-- **Fedora / openSUSE** — separate app and CLI RPMs: install
-  `deskhub-v*-x86_64.rpm` or `deskhub-cli-v*-x86_64.rpm` with `dnf` or `zypper`
-- **Arch, other Linux** — portable `deskhub-v*-linux-x86_64` and
-  `deskhub-cli-v*-linux-x86_64`, just `chmod +x` and run
+- **Windows** — `deskhub-v*-windows-setup.exe`, the only form the app comes in, with
+  `deskhub-cli` inside
+- **macOS** — `deskhub-v*-macos.dmg`, with `deskhub-cli` inside the app
+- **Ubuntu / Debian / Mint without the repository** — `deskhub-v*-amd64.deb`
+- **Fedora / openSUSE** — `deskhub-v*-x86_64.rpm`, installed with `dnf` or `zypper`
+- **Other Linux distributions** — build from source, see [BUILD.md](docs/BUILD.md)
 - **Android** — `deskhub-v*-android.apk`, or [Google Play](https://play.google.com/store/apps/details?id=com.manhpham.deskhub)
 - **iOS** — [TestFlight](https://testflight.apple.com/join/7qY7wgpd)
 

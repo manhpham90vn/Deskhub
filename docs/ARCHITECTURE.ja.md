@@ -331,6 +331,30 @@ HostEngine（app ごとに 1 インスタンス、SessionTransport を保持）
   atomic に書き込み、key または settings が変わった場合は host を再起動し、無効化された
   場合はファイルを消去する。app はこれを、設定の切り替え時、settings の保存のたび、
   許可済み一覧の変更のたび、共有の停止時、および起動時に 1 度送る。
+- macOS のサインイン前アクセス（T-28）: app は `Contents/MacOS/DeskhubDaemon` と
+  `Contents/Library/LaunchDaemons` 配下の LaunchDaemon plist を同梱し、設定にチェックが
+  入ると `SMAppService.daemon` で登録する（*Allow in background* の承認は 1 回）。daemon は
+  root で動き、Unix socket `/var/run/deskhub/control.sock`（`deskhubp/net/LocalSocket`）で
+  待ち受け、各接続のバイト列を `UnattendedControlServer`
+  （`core/session/host/UnattendedControl`）に通す。Windows の pipe と同じ要求ストリーム
+  で、`Takeover`、`Configure`、そして Windows のサービスが拒否する `Status` がある。
+  相手の信頼はコード署名で決める —— `identifier "com.deskhub.macos"` と Deskhub の
+  Team ID を、接続プロセスの audit token に対して Security.framework で検証する ——
+  パスでは決して決めない。`Configure` は 3 つのファイルを
+  `/Library/Application Support/Deskhub`（`deskhubp/system/MachineFolder`、root `0700`）
+  に書き、`/Library/LaunchAgents/com.deskhub.macos.unattended.plist` を書くか削除する。
+  これは `LoginWindow` session type に限定された LaunchAgent で、
+  `DeskhubDaemon --unattended-host` を動かす。そのプロセスは `UnattendedMode()` を
+  オンにした通常の `SharingHost` で、`LocalInputMonitor` が dispatch できるよう主スレッド
+  は `CFRunLoopRun` を回し、supervisor がフォルダを 500 ms ごとにポーリングする。daemon
+  の `unattended-hold` マーカー（app が保持する `Takeover` 接続 1 つにつき 1 つ）がある
+  間は host を止め、`host_key.pem` か `ui-settings.txt` が変わったら再起動し、key が
+  消えたら終了する。capture はまず ScreenCaptureKit を試し、ログインウィンドウの
+  session で `SCShareableContent` が何も返さなければ `CGDisplayStream`
+  （`DisplayStreamCapture`）に切り替える。display の列挙も同様に
+  `CGGetActiveDisplayList` に切り替える。host は自身の Screen Recording と
+  Accessibility の状態を `unattended-status.txt` に書き、daemon はそれを app の
+  `Status` 要求に返して Settings ページに表示させる。
 - Shell: shell ごとに PTY を 1 つ割り当てる（Windows は `ConPTY`、他は `forkpty`）。
   上限は 8 である。接続が切れた場合は shell を切り離し、shell プロセスが終了するか
   shell が閉じられるまで PTY を保持する。時間制限はない。許可された client はいずれも、
@@ -485,6 +509,12 @@ Windows には 2 つ目のフォルダ `%ProgramData%\DeskHub` があり、*Desk
 オフにするとそれらのファイルは削除され、`DeskhubService.exe --uninstall` はフォルダを
 削除する。
 
+macOS では 2 つ目のフォルダは `/Library/Application Support/Deskhub` で、`DeskhubDaemon`
+が root で作る（`0700`）。同じ 3 つのコピー、host の `unattended-status.txt`、app が
+共有している間の `unattended-hold` マーカー、daemon と host の log を保持する。設定を
+オフにするとコピーとログインウィンドウ agent の plist は削除される。Homebrew cask の
+`zap` はフォルダを削除し、ゴミ箱へのドラッグによるアンインストールは残す。
+
 viewer が送信したファイルは別の場所に保存される。host が選択したフォルダ
 （`ui-settings.txt` の `transfer_dir`。既定は利用者のホームディレクトリ直下の
 `Deskhub`）である。`FileStore` は各ファイルを `<name>.deskhub-part` として書き込み、
@@ -564,6 +594,21 @@ scaling の 2 つの判定とともに実行する（共有 runner には時間�
   SYSTEM + Administrators になる。ペアリングはサインイン済みの行為のままである。サインイン
   画面で出された要求は誰も見ないフォルダに落ち、サインイン画面にデバイスの承認を許せば、
   モデル全体が依拠する唯一の判断を見知らぬ相手に渡すことになる。
+
+- **macOS は root daemon と LoginWindow agent の組み合わせであり、pkg でも単一プロセスでも
+  ない**: `LoginWindow` session に限定した LaunchAgent は、画面を取り込みイベントを投げる
+  ための window server を持った状態でログインウィンドウで何かを動かす唯一のサポートされた
+  手段である —— root daemon には session がなく、どちらもできない —— が、
+  `/Library/LaunchAgents` に書けるのは root だけなので、root daemon がその plist を書き、
+  マシンのコピーを保持し、takeover を握る必要がある。`SMAppService.daemon(plistName:)`
+  により app は *Allow in background* の承認 1 回でその daemon を登録でき、インストーラ
+  パッケージは要らない。pkg も Developer ID Installer 証明書も依然として存在しないのは
+  そのためである。daemon が app を image path ではなくコード署名で信頼するのは、誰もが
+  自分の Mac の管理者で `/Applications` に書けるからで、パスの確認はそこに置かれたものを
+  何でも信頼してしまう。この機能が Windows と違ってサインインで止まるのは、launchd が
+  その瞬間に LoginWindow session を解体するからである。app が共有していない間に利用者
+  自身の session で host することには利用者ごとの agent と 2 回目の TCC 許可が必要で、
+  後の段階に残してある。
 
 - **handshake を早く終えられるのはホストだけなので、クライアントはその終わり方を聞き取る**:
   クライアントは以前、`AuthResult` を 65 秒待っていた —— 承認が保持された一つの接続の中で

@@ -220,6 +220,16 @@ typedef enum {
     DHStrQrExpiredNote = 221,
     DHStrNewQrAction = 222,
     DHStrQrUnavailable = 223,
+    DHStrUnattendedLabel = 224,
+    DHStrUnattendedHintMac = 225,
+    DHStrUnattendedServiceMissingNote = 226,
+    DHStrUnattendedPushFailedNote = 227,
+    DHStrUnattendedApprovalNote = 228,
+    DHStrUnattendedHostPermissionsHint = 229,
+    DHStrUnattendedHostScreenLabel = 230,
+    DHStrUnattendedHostInputLabel = 231,
+    DHStrUnattendedPermissionUnknown = 232,
+    DHStrUnattendedOpenLoginItems = 233,
 } DHStringId;
 
 typedef enum {

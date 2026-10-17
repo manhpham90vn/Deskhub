@@ -60,6 +60,12 @@ int main() {
     std::printf("--- system: app data files next to the logs ---\n");
     RunAppDataFileTests();
 
+    std::printf("--- system: the machine folder a root daemon keeps ---\n");
+    RunMachineFolderTests();
+
+    std::printf("--- net: Unix socket between the app and the daemon ---\n");
+    RunLocalSocketTests();
+
     std::printf("--- system: the host's own key pair and the machines it trusts ---\n");
     RunHostIdentityTests();
     RunAccessRequestsFileTests();
@@ -67,6 +73,9 @@ int main() {
 
     std::printf("--- system: proving which machine, and that it knows the code ---\n");
     RunAuthProofTests();
+
+    std::printf("--- host: what the app hands the daemon for access before sign-in ---\n");
+    RunUnattendedPushTests();
 
     std::printf("--- client: saved hosts and their pinned keys ---\n");
     RunHostProfilesTests();

@@ -43,6 +43,30 @@ void TestUnattendedPersists() {
         "the key is written so the service can be told again at the next start");
 }
 
+void TestUnattendedHostKeepsOnlySharingChoices() {
+    std::printf("[settings] the host before sign-in shares the screen and nothing else...\n");
+    ui::UiSettings s;
+    s.fps = 30;
+    s.port = 48000;
+    s.allowInput = false;
+    s.deviceName = "office";
+    s.shareAudio = true;
+    s.playAudio = true;
+    s.clipboardSync = true;
+    s.autostart = true;
+    s.autoShare = true;
+    s.startHidden = true;
+    s.unattended = true;
+    const ui::UiSettings host = ui::UnattendedHostSettings(s);
+    Check(host.fps == 30 && host.port == 48000 && !host.allowInput && host.deviceName == "office",
+        "frame rate, port, control and the device name carry over");
+    Check(!host.shareAudio && !host.playAudio && !host.clipboardSync,
+        "sound and the clipboard stay off before sign-in");
+    Check(!host.autostart && !host.autoShare && !host.startHidden,
+        "launch choices that belong to the app are not copied");
+    Check(host.unattended, "the copy still says the feature is on");
+}
+
 void TestBindIpPersistence() {
     std::printf("[settings] the bind address persists only when it is a real IPv4...\n");
     Check(ui::ParseUiSettings("").bindIp.empty(), "all interfaces by default");
@@ -236,4 +260,5 @@ void RunUiSettingsTests() {
     TestBoundsAreEnforced();
     TestTerminalSharePersistence();
     TestUnattendedPersists();
+    TestUnattendedHostKeepsOnlySharingChoices();
 }

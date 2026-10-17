@@ -68,6 +68,7 @@ add_library(core STATIC
 
     src/session/host/SourceListResponder.cpp
     src/session/host/SecureDesktopWire.cpp
+    src/session/host/UnattendedControl.cpp
 
     src/net/Ipv4.cpp
     src/net/BindAddress.cpp
@@ -187,6 +188,7 @@ if(DESKHUB_CORE_TESTS)
 
         tests/session/SourceListResponderTests.cpp
         tests/session/SecureDesktopWireTests.cpp
+        tests/session/UnattendedControlTests.cpp
 
         tests/net/Ipv4Tests.cpp
         tests/net/BindAddressTests.cpp

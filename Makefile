@@ -62,9 +62,9 @@
 #                       ASC_KEY_P8=<path to the .p8>, ASC_KEY_ID, ASC_ISSUER_ID and a
 #                       "Developer ID Application" identity in the keychain
 #   make verify-macos   check that Gatekeeper accepts the build that was just produced
-#   make dist-linux     Separate app and CLI .deb (Ubuntu/Debian) + .rpm (Fedora/openSUSE).
-#                       Each installs its own uinput udev rule from its post-install step,
-#                       so installing either package replaces setup-linux-permissions
+#   make dist-linux     One .deb (Ubuntu/Debian) + one .rpm (Fedora/openSUSE) holding the app
+#                       and deskhub-cli. Each installs the uinput udev rule from its
+#                       post-install step, so installing it replaces setup-linux-permissions
 #
 # Shared CMake tree (core + platform + whatever client the current OS builds):
 #   make debug          configure + build the debug preset
