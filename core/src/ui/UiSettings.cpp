@@ -60,6 +60,7 @@ void ApplyKeyValue(UiSettings& out, std::string_view key, std::string_view value
     if (key == "play_audio") out.playAudio = *v != 0;
     if (key == "start_hidden") out.startHidden = *v != 0;
     if (key == "keep_awake") out.keepAwake = *v != 0;
+    if (key == "unattended") out.unattended = *v != 0;
 }
 
 }
@@ -139,6 +140,7 @@ std::string SerializeUiSettings(const UiSettings& settings) {
     out += std::string("play_audio=") + (settings.playAudio ? "1" : "0") + '\n';
     out += std::string("start_hidden=") + (settings.startHidden ? "1" : "0") + '\n';
     out += std::string("keep_awake=") + (settings.keepAwake ? "1" : "0") + '\n';
+    out += std::string("unattended=") + (settings.unattended ? "1" : "0") + '\n';
     out += "transfer_dir=" + TruncateSettingsPath(settings.transferDir) + '\n';
     return out;
 }

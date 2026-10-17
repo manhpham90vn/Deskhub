@@ -54,14 +54,18 @@ winget install ManhPham.Deskhub
   mouse 和 keyboard inject 进提权窗口。开启 *Start Deskhub when you log in* 后，它会在
   登录时作为提权的登录任务启动，不再弹出提示。
 - **添加一条 Windows Firewall 规则**，由 app 在首次 share 时自行添加。
-- **一个系统 service，*DeskHub Secure Desktop***，以 LocalSystem 运行。在 DeskHub 共享屏幕
-  之前它什么也不做。共享时，当 Windows 切换到其 secure desktop —— 安装程序弹出的 UAC 提示、
-  锁屏、Ctrl+Alt+Del —— viewer 仍能看到屏幕并可在其中点击和输入，因此他们可以替你回应 UAC
-  提示，任何知道你密码的人也可以解锁该机器。便携版 exe 没有该 service：使用它时，这些画面在
-  关闭之前对 viewer 而言是冻结的。
+- **一个系统 service，*DeskHub Secure Desktop***，以 LocalSystem 运行。默认情况下，在
+  DeskHub 共享屏幕之前它什么也不做。共享时，当 Windows 切换到其 secure desktop —— 安装程序
+  弹出的 UAC 提示、锁屏、Ctrl+Alt+Del —— viewer 仍能看到屏幕并可在其中点击和输入，因此他们
+  可以替你回应 UAC 提示，任何知道你密码的人也可以解锁该机器。在 Settings → Host 中勾选
+  *Allow access before anyone signs in*，该 service 还会在 DeskHub 未共享的任何时候 ——
+  从电脑启动后紧接着的登录画面开始 —— 为已在你允许列表上的设备自行 host；它做什么、不做
+  什么，见[规范](SPECIFICATION.zh.md)（T-28）。便携版 exe 没有该 service：使用它时，这些
+  画面在关闭之前对 viewer 而言是冻结的，该复选框也呈灰色。
 
 可在 Windows 设置中卸载 DeskHub，或运行 `winget uninstall ManhPham.Deskhub`；
-该 service 会随之一并移除。
+该 service 会随之一并移除，连同 `%ProgramData%\DeskHub` —— 它在那里保存日志以及
+*Allow access before anyone signs in* 所做的副本。
 便携版只需删除 exe。Settings 和 key 会保留在 `%USERPROFILE%\.deskhub`，直到删除该文件夹；
 其他机器发来的文件保留在 `%USERPROFILE%\Deskhub`（或你选择的文件夹）中，直到你删除它们。
 

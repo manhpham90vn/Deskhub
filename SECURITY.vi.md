@@ -2,7 +2,7 @@
 
 # Chính sách bảo mật của Deskhub
 
-_Cập nhật lần cuối: 16 tháng 10 năm 2026_
+_Cập nhật lần cuối: 17 tháng 10 năm 2026_
 
 Đây là bản dịch của [`SECURITY.md`](SECURITY.md). Nếu hai bản có khác biệt, bản tiếng Anh
 là bản chuẩn.
@@ -49,6 +49,7 @@ hình hoặc terminal.
 | Tấn công xen giữa | Mỗi máy có một key. Client ghim key của host — ở lần connect đầu tiên sau khi người dùng đối chiếu fingerprint, hoặc từ mã QR, vốn mang sẵn key đó — và kiểm tra nó trước khi gửi bất cứ thứ gì ở mọi lần sau. Trust đi theo key, nên host ở địa chỉ mới vẫn là host đó; một key *khác* ở địa chỉ mà client đã biết bị từ chối tư cách đã trust và được hiển thị như một **New host** kèm cảnh báo nêu tên máy từng trả lời ở đó — nó không thể được chấp nhận như một "thay đổi", chỉ có thể được trust lại từ đầu với fingerprint hiển thị rõ. Client scan mã QR chỉ gửi token sau khi máy đang trả lời đã chứng minh, qua TLS handshake, rằng nó giữ key in trong mã; bất cứ thứ gì khác ở địa chỉ đó không nhận được gì. Chữ ký của client bao gồm một session identifier export từ phiên TLS và fingerprint host key mà client nhìn thấy, nên chữ ký bị relay sang host khác, hoặc bị phát lại trên connection khác, sẽ không hợp lệ. |
 | Nhiều viewer tranh quyền điều khiển mouse | Tối đa 5 viewer cùng xem một host, nhưng chỉ một viewer điều khiển input: viewer tham gia sớm hơn được ưu tiên, và input của viewer tới sau bị loại bỏ cho tới khi viewer trước không thao tác trong một giây. Viewer thứ 6 bị từ chối với trạng thái `Busy`. |
 | Viewer chỉ được phép xem | Chế độ share view-only, có trên mọi host, loại bỏ các packet input ngay tại host trước khi bất cứ thao tác nào được inject; cơ chế này không dựa vào việc client tự tuân thủ. Host trên Android và iOS luôn ở chế độ view-only. |
+| Máy Windows truy cập được trước khi có ai đăng nhập | Mặc định tắt. Khi bật *Allow access before anyone signs in*, service *DeskHub Secure Desktop* chạy một host bất cứ khi nào app không share — kể cả ở màn hình đăng nhập — host này chỉ cho vào các key đã có trong `authorized_keys`, trả lời bằng cùng key của máy, và không bao giờ hiển thị hay approve một yêu cầu nào: việc pair diễn ra trong lúc có người đang đăng nhập, hoặc không diễn ra. Các bản copy nó đọc nằm trong một thư mục chỉ SYSTEM và administrator mở được, và chỉ `Deskhub.exe` đã cài mới thay được chúng. Host này không gửi được Ctrl+Alt+Del. |
 | Điện thoại bị bỏ quên trong trạng thái đang share | Cơ chế bảo vệ cuối cùng thuộc về hệ điều hành chứ không phải Deskhub: Android hiển thị một notification thường trực và yêu cầu đồng ý ghi màn hình ở từng phiên share, còn iOS giữ chỉ báo broadcast luôn hiển thị. Cả hai đều cho phép dừng share mà không cần mở app. |
 | Client được phép ghi file vào máy của bạn | Chỉ máy đã được chấp nhận mới gửi được file, và chỉ khi máy nhận đang bật file transfer. Dữ liệu tới không thể thoát khỏi thư mục mà máy đó chọn: tên file trên đường truyền bị cắt còn phần cuối của đường dẫn và loại bỏ dấu phân cách, byte điều khiển, ký tự filesystem không chấp nhận cùng các tên thiết bị dành riêng, trước khi bất kỳ file nào được mở. Mỗi file được ghi dưới tên có hậu tố `.deskhub-part` và chỉ được đổi tên khi đã nhận đủ với CRC-32 khớp. Tên đã tồn tại sẽ được thêm số thứ tự thay vì ghi đè. Một batch bị giới hạn ở 32 file, 8 GiB mỗi file và 32 GiB tổng cộng. Cùng cơ chế xử lý tên này cũng chạy trên điện thoại và tablet trước khi dữ liệu tới thư viện ảnh hoặc thư mục Downloads. |
 | Packet không hợp lệ | Mọi trường đều được kiểm tra giới hạn trước khi đọc. Các parser có unit test, chạy dưới AddressSanitizer, UndefinedBehaviorSanitizer và ThreadSanitizer trong CI, và được fuzz bằng libFuzzer — 30 giây cho mỗi target trên mọi pull request và 15 phút cho mỗi target mỗi đêm. Có chín target, bao phủ wire format, phần parse H.264 (Annex B và SPS), reassembly packet, session state machine phía host và phía viewer, chuỗi UI, byte stream terminal, các file key và trust đã lưu cùng pairing link, và bộ mã hoá mã QR. Các crash phát hiện qua fuzzing được lưu trong repo dưới dạng regression test, và phần coverage mới được bổ sung vào seed corpus. |
@@ -210,6 +211,10 @@ có ý nghĩa. Deskhub chỉ thay thế đúng rule đó của chính nó. Rule 
 Trên Windows, trình cài đặt còn thêm một thứ nữa: service *DeskHub Secure Desktop*, giúp
 phiên share tiếp tục qua hộp thoại UAC hoặc màn hình khoá. Trong lúc bạn share, viewer thấy
 các màn hình đó và gõ được vào chúng — kể cả ô mật khẩu của màn hình khoá.
+Khi bật *Allow access before anyone signs in* (mặc định tắt), chính service này còn chạy một
+host của riêng nó bất cứ khi nào app không share, từ màn hình đăng nhập trở đi, cho các
+thiết bị đã có trong danh sách được phép của bạn; nó mở thêm một rule UDP inbound thứ hai,
+*Deskhub Secure Desktop (host)*, cho `DeskhubService.exe`.
 
 ## Khả năng của kẻ tấn công trong cùng network
 
@@ -255,7 +260,12 @@ Nếu bạn tiếp tục sử dụng Deskhub ở trạng thái hiện tại, nê
       màn hình đang share hoặc đang trình chiếu.
 - [ ] Thoát Deskhub khi không sử dụng. Thoát app là đóng luôn điểm truy cập: service
       *DeskHub Secure Desktop* mà trình cài đặt Windows thêm vào không nhận gì từ network
-      và không làm gì khi app không share. Ba setting trong *Launch & background* thay đổi
+      và không làm gì khi app không share — trừ khi bạn đã bật *Allow access before anyone
+      signs in*, chính là setting giữ một host lắng nghe khi không có ai ở máy, ngay từ lúc
+      Windows khởi động. Hãy để nó tắt trừ khi bạn cần truy cập máy sau khi khởi động lại,
+      giữ danh sách được phép thật ngắn trong lúc nó bật, và nhớ rằng ai có tên trong danh
+      sách đó mà biết mật khẩu Windows đều đăng nhập được. Ba setting trong *Launch &
+      background* thay đổi
       điều đó: *Start Deskhub when you log in* khởi động app ở mỗi lần đăng nhập (trên
       Windows qua một scheduled task chạy app ở quyền cao mà không có hộp thoại UAC),
       *Start sharing when Deskhub opens* sau đó share ngay, và *Keep running in the
@@ -312,6 +322,15 @@ chọn, chỉ có ý nghĩa với phiên desktop của bạn và không được
 có thể thấy một file `.lock` cho mỗi file `authorized_keys`, `known_hosts`,
 `access_requests` và `pairing_tokens`, giúp app và CLI lần lượt ghi, cùng các file `.tmp-…`
 tồn tại rất ngắn, là nửa của một lần ghi atomic.
+
+Trên Windows, khi bật *Allow access before anyone signs in*, một thư mục thứ hai,
+`%ProgramData%\DeskHub`, giữ bản copy của `host_key.pem`, `authorized_keys` và
+`ui-settings.txt` cho host mà service *DeskHub Secure Desktop* chạy trước khi đăng nhập,
+cùng mọi `access_requests` và `pairing_tokens` host đó ghi ra và log của chính service.
+Thư mục do SYSTEM tạo và chỉ SYSTEM cùng Administrators đọc được — tài khoản của chính bạn
+không mở được — và service làm mới các bản copy mỗi khi app thay đổi bản gốc. Tắt setting
+sẽ xoá các bản copy; gỡ cài đặt DeskHub sẽ xoá thư mục. Một administrator trên máy có thể
+đọc private key đó, cũng như có thể đọc key của bạn.
 
 Không certificate nào được giữ lại. Certificate TLS được dựng từ `host_key.pem` trong bộ nhớ
 mỗi lần port mở, nhưng thư viện TLS chỉ nạp certificate từ file, nên nó được ghi trong chốc
@@ -371,7 +390,13 @@ Không dữ liệu nào trong số này được upload; bạn có thể xoá th
   desktop và phát lại input của app ở đó, và không đọc gì khác. Cả hai binary nằm trong
   `Program Files`, nơi chỉ administrator ghi được, nên một tiến trình chạy dưới quyền
   người dùng không thể tráo một trong hai để chiếm quyền SYSTEM. Một lỗi trong agent vẫn là
-  lỗi trong một tiến trình SYSTEM, chỉ chạm tới được thông qua app quyền cao.
+  lỗi trong một tiến trình SYSTEM, chỉ chạm tới được thông qua app quyền cao. Khi bật *Allow
+  access before anyone signs in*, service còn khởi động chính mã host mà app chạy, dưới
+  quyền SYSTEM trong console session, và host đó truy cập được từ network; nó đọc key, danh
+  sách được phép và settings của mình từ `%ProgramData%\DeskHub`, nơi chỉ SYSTEM và
+  administrator mở được, và service chỉ nhận bản copy mới của chúng từ `Deskhub.exe` đã
+  cài, cũng qua đường dẫn image. Mọi kết nối tới pipe của service giờ mở đầu bằng một byte
+  yêu cầu, và hai yêu cầu mới bị từ chối với bất cứ gì không phải app đó.
 - **Tích hợp liên tục.** Mọi pull request đều chạy ba bộ test dưới AddressSanitizer,
   UndefinedBehaviorSanitizer và ThreadSanitizer, clang-tidy, các fuzzer mô tả ở trên, CodeQL
   trên code C++, Kotlin và Swift, và một lượt quét gitleaks trên toàn bộ lịch sử Git để tìm

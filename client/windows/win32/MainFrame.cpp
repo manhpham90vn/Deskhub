@@ -34,6 +34,7 @@
 
 #include "AccessRequestListener.h"
 #include "secure/SecureDesktopStatus.h"
+#include "secure/ServiceControlPipe.h"
 #include "SourcePickerDialog.h"
 #include "FileSendWindow.h"
 #include "TerminalWindow.h"
@@ -612,6 +613,10 @@ private:
     wxWindow* BuildSettingsPage(wxWindow* parent);
     void AddSetting(const SettingsArea& area, const ui::SettingsEntry& entry,
         wxFlexGridSizer*& grid);
+    void AddUnattendedSetting(const SettingsArea& area);
+    void OnUnattendedToggled();
+    bool PushUnattendedConfig();
+    void SyncUnattended();
     void AddLabelledSetting(const SettingsArea& area, wxFlexGridSizer*& grid, const char* label,
         wxWindow* control);
     wxSizer* MakeTransferFolderRow(wxWindow* area, const char* label);
@@ -765,6 +770,8 @@ private:
     wxChoice* qualityChoice_ = nullptr;
     wxChoice* bindChoice_ = nullptr;
     std::map<ui::SettingField, wxCheckBox*> settingChecks_;
+    wxCheckBox* unattendedCheck_ = nullptr;
+    wxStaticText* unattendedNote_ = nullptr;
     wxStaticText* transferDirLabel_ = nullptr;
     DeskhubTrayIcon* trayIcon_ = nullptr;
     bool quitting_ = false;
@@ -876,6 +883,7 @@ MainFrame::MainFrame() : wxFrame(nullptr, wxID_ANY, ToWx(ui::kAppTitle)) {
         post([this] { OnAccessRequestedByEngine(); });
     });
 
+    SyncUnattended();
     RefreshAccessRequests();
     RefreshDeviceList();
     SelectPage(kPageClient);
@@ -1265,6 +1273,7 @@ void MainFrame::AddAccessRequestRow(const AccessRequestsView& view,
 
 void MainFrame::ApproveRequestRow(const deskhub::Fingerprint& fingerprint) {
     deskhubp::ApproveAccessRequest(fingerprint);
+    SyncUnattended();
     AccessRequestsChanged();
 }
 
@@ -1482,6 +1491,7 @@ void MainFrame::AllowClientKey() {
     const bool allowed = deskhubp::RememberAuthorizedKey(keyText);
     allowClientError_->Show(!allowed);
     if (allowed) allowClientCtrl_->Clear();
+    if (allowed) SyncUnattended();
     RefreshPairedDevices();
 }
 
@@ -1522,6 +1532,7 @@ void MainFrame::RefreshPairedDevices() {
         const deskhub::Fingerprint fingerprint = device.fingerprint;
         forget->Bind(wxEVT_BUTTON, [this, fingerprint](wxCommandEvent&) {
             deskhubp::ForgetAuthorizedClient(fingerprint);
+            SyncUnattended();
             RefreshPairedDevices();
         });
         row.cells->Add(forget, wxSizerFlags().CentreVertical());
@@ -1615,6 +1626,7 @@ void MainFrame::ForgetEveryDevice() {
         wxYES_NO | wxNO_DEFAULT | wxICON_WARNING);
     if (dialog.ShowModal() != wxID_YES) return;
     deskhubp::ClearAuthorizedKeys();
+    SyncUnattended();
     RefreshPairedDevices();
 }
 
@@ -1681,8 +1693,11 @@ void MainFrame::AddSetting(const SettingsArea& area, const ui::SettingsEntry& en
             grid = nullptr;
             area.sizer->Add(MakeTransferFolderRow(parent, entry.text), AreaWideRowFlags(area));
             return;
-        case ui::SettingField::None:
         case ui::SettingField::Permissions:
+            grid = nullptr;
+            AddUnattendedSetting(area);
+            return;
+        case ui::SettingField::None:
         case ui::SettingField::Count: return;
         case ui::SettingField::AllowInput:
         case ui::SettingField::ShareAudio:
@@ -1701,6 +1716,55 @@ void MainFrame::AddSetting(const SettingsArea& area, const ui::SettingsEntry& en
     check->Bind(wxEVT_CHECKBOX, [this](wxCommandEvent&) { SaveSettings(); });
     settingChecks_[entry.field] = check;
     area.sizer->Add(check, pad);
+}
+
+void MainFrame::AddUnattendedSetting(const SettingsArea& area) {
+    const bool installed = SecureDesktopServiceInstalled();
+    unattendedCheck_ = new wxCheckBox(area.body, wxID_ANY, ToWx(ui::kUnattendedLabel));
+    unattendedCheck_->SetName("unattended-check");
+    unattendedCheck_->SetValue(installed && settings_.unattended);
+    unattendedCheck_->Enable(installed);
+    unattendedCheck_->Bind(wxEVT_CHECKBOX, [this](wxCommandEvent&) { OnUnattendedToggled(); });
+    area.sizer->Add(unattendedCheck_, AreaRowFlags(area));
+    unattendedNote_ = MakeHint(area.body,
+        ToWx(installed ? ui::kUnattendedHint : ui::kUnattendedServiceMissingNote));
+    area.sizer->Add(unattendedNote_, AreaRowFlags(area));
+}
+
+void MainFrame::OnUnattendedToggled() {
+    settings_.unattended = unattendedCheck_->GetValue();
+    const bool accepted = PushUnattendedConfig();
+    if (!accepted) {
+        settings_.unattended = false;
+        unattendedCheck_->SetValue(false);
+    }
+    unattendedNote_->SetLabel(ToWx(accepted ? ui::kUnattendedHint : ui::kUnattendedPushFailedNote));
+    unattendedNote_->GetParent()->Layout();
+    deskhubp::SaveUiSettings(settings_);
+}
+
+bool MainFrame::PushUnattendedConfig() {
+    deskhub::UnattendedConfig config;
+    config.enabled = settings_.unattended;
+    if (config.enabled) {
+        const deskhubp::HostIdentity identity = deskhubp::LoadOrCreateHostIdentity();
+        if (!identity.Valid()) return false;
+        config.hostKeyPem = identity.keyPem;
+        config.authorizedKeys = deskhubp::ReadAppDataFile(deskhubp::kAuthorizedKeysFileName);
+        ui::UiSettings forHost = settings_;
+        forHost.shareAudio = false;
+        forHost.playAudio = false;
+        forHost.clipboardSync = false;
+        forHost.autostart = false;
+        forHost.autoShare = false;
+        forHost.startHidden = false;
+        config.settings = ui::SerializeUiSettings(forHost);
+    }
+    return SendUnattendedConfig(config);
+}
+
+void MainFrame::SyncUnattended() {
+    if (settings_.unattended) PushUnattendedConfig();
 }
 
 wxWindow* MainFrame::BuildSettingsPage(wxWindow* parent) {
@@ -2198,6 +2262,7 @@ void MainFrame::StopHosting() {
     share_.StopFileShare();
     share_.sharingHost().Stop();
     shareDriver_.Join();
+    SyncUnattended();
     hosting_ = false;
     screenSharing_ = false;
     terminalRequested_ = false;
@@ -2510,6 +2575,7 @@ void MainFrame::SaveSettings() {
         settingChecks_[ui::SettingField::Autostart]->SetValue(settings_.autostart);
     }
     deskhubp::SaveUiSettings(settings_);
+    SyncUnattended();
     if (!Sharing()) ShowIdleHostState();
 }
 

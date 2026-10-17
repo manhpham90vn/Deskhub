@@ -2,7 +2,7 @@
 
 # Deskhub セキュリティポリシー
 
-_最終更新: 2026 年 10 月 16 日_
+_最終更新: 2026 年 10 月 17 日_
 
 本書は [`SECURITY.md`](SECURITY.md) の翻訳。食い違いがある場合は英語版が正文。
 
@@ -50,6 +50,7 @@ host は信頼できる network 上に置き、画面や terminal を共有す�
 | 中間者攻撃 | すべてのマシンは key を 1 つ持つ。client は host の key を —— 初回接続時に利用者が fingerprint を照合した後、または fingerprint を含む QR code から —— 固定し、以降の接続では何かを送る前に毎回照合する。信頼は key に従うため、新しいアドレスにいる host も同じ host である。一方、client が知っているアドレスに現れた*別の* key は信頼済みとしては拒否され、以前そこで応答していたマシンの名前を添えた警告とともに **New host** として表示される。「変更」として受け入れることはできず、fingerprint を示した上で改めて信頼するしかない。QR code をスキャンした client は、応答したマシンが code に印字された key を保持していることを TLS handshake で証明した後にのみ token を送る。そのアドレスにいる他のものには何も渡らない。client の署名は、TLS session から export した session 識別子と client が受け取った host key の fingerprint を対象とするため、別の host に relay された署名や、別の connection で replay された署名は検証を通らない。 |
 | viewer 同士による mouse の競合 | 1 つの host を最大 5 viewer が閲覧できるが、input を操作できるのは 1 つのみである。先に参加した viewer が優先され、後から参加した viewer の input は、先行する viewer が 1 秒間無操作になるまで破棄される。6 番目の viewer は `Busy` として拒否される。 |
 | 閲覧のみを許可したい viewer | view-only の共有はすべての host で利用でき、何らかの操作が inject される前に host 側で input の packet を破棄する。client の自主的な遵守には依存しない。Android と iOS の host は常に view-only である。 |
+| 誰もサインインしていない状態で到達できる Windows PC | 既定ではオフである。*Allow access before anyone signs in* が on の場合、*DeskHub Secure Desktop* サービスは app が共有していない間はいつでも —— サインイン画面も含めて —— host を動かす。この host は `authorized_keys` にすでにある key だけを受け入れ、同じ machine key で応答し、要求を表示することも承認することも決してない。ペアリングは誰かがサインインしている間に行うか、まったく行えない。この host が読むコピーは SYSTEM と管理者のみが開けるフォルダにあり、それを置き換えられるのはインストールされた `Deskhub.exe` だけである。Ctrl+Alt+Del は送れない。 |
 | 共有したまま放置されたスマートフォン | 最終的な防護は Deskhub ではなく OS が担う。Android は常駐通知を表示し、共有のたびに録画の同意を求める。iOS は broadcast のインジケータを表示し続ける。いずれも app を開かずに共有を停止できる。 |
 | 許可済み client による自機へのファイル書き込み | ファイルを送信できるのは受け入れ済みのマシンのみであり、かつ受信側が file transfer を有効にしている場合に限られる。到達したデータは受信側が選択したフォルダの外に出られない。ネットワーク上のファイル名は、いずれかのファイルが開かれる前に、パスの最後の要素へ切り詰められ、区切り文字、制御バイト、filesystem が受け付けない文字、予約デバイス名が除去される。各ファイルは `.deskhub-part` の接尾辞付きで書き込まれ、全体が到着し CRC-32 が一致した時点でのみ改名される。既存の同名ファイルは上書きされず、番号が付加される。1 batch は 32 ファイル、1 ファイル 8 GiB、合計 32 GiB に制限される。同じ名称処理は、スマートフォンやタブレットでも写真ライブラリや Downloads フォルダに到達する前に実行される。 |
 | 不正な packet | すべてのフィールドは読み取り前に境界検査を行う。parser は unit test を備え、CI では AddressSanitizer、UndefinedBehaviorSanitizer、ThreadSanitizer の下で実行され、libFuzzer により fuzz される —— すべての pull request で target ごとに 30 秒、毎晩 target ごとに 15 分。target は 9 つで、wire format、H.264 の解析（Annex B と SPS）、packet の reassembly、host 側と viewer 側の session state machine、UI テキスト、terminal の byte stream、保存される key と信頼のファイルおよび pairing link、QR code の encoder を対象とする。fuzzing で検出された crash は regression test として repo に保存し、新たな coverage は seed corpus に取り込む。 |
@@ -212,6 +213,10 @@ block ルールが allow ルールに優先するため、それを削除する�
 Windows ではインストーラーがもう一つ追加する。*DeskHub Secure Desktop* サービスであり、
 UAC の確認画面やロック画面の間も共有を継続させる。共有している間、viewer はそれらの画面を
 見ることができ、そこへ入力することもできる —— ロック画面のパスワード欄も含む。
+*Allow access before anyone signs in* をオンにすると（既定ではオフ）、同じサービスが app の
+共有していない間はいつでも、サインイン画面以降、許可済み一覧にあるデバイスのために独自の
+host も動かす。そのため `DeskhubService.exe` 用に 2 本目の受信 UDP ルール
+*Deskhub Secure Desktop (host)* を開く。
 
 ## 同一 network 上の攻撃者にできること
 
@@ -257,7 +262,11 @@ Deskhub を現状のまま使い続ける場合、次の項目を実施するこ
       決して表示しない。
 - [ ] 使用していないときは Deskhub を終了する。終了すれば受け入れ口も閉じる。Windows
       インストーラーが追加する *DeskHub Secure Desktop* サービスは network から何も
-      受け付けず、app が共有していない間は何もしない。ただし *Launch & background* の 3 つの設定がこれを
+      受け付けず、app が共有していない間は何もしない —— ただし *Allow access before anyone
+      signs in* をオンにした場合は別で、これこそが Windows の起動した瞬間から、誰もいない
+      まま host を待ち受けさせる設定である。再起動後にマシンへ到達する必要がない限りオフの
+      ままにし、オンにしている間は許可済み一覧を短く保ち、その一覧にいて Windows の
+      パスワードを知る者は誰でもサインインできることを忘れないこと。*Launch & background* の 3 つの設定がこれを
       変える。*Start Deskhub when you log in* はログオンのたびに起動し（Windows では
       UAC の確認なしに昇格して実行する scheduled task による）、
       *Start sharing when Deskhub opens* はすぐに共有を始め、
@@ -316,6 +325,16 @@ host として本マシンになりすませる*上に*、本マシンが許可�
 `authorized_keys`、`known_hosts`、`access_requests`、`pairing_tokens` それぞれの `.lock`
 ファイル（app と CLI が交互に書き込むためのもの）や、atomic な書き込みの途中で一時的に
 現れる `.tmp-…` ファイルが見えることもある。
+
+Windows で *Allow access before anyone signs in* が on の場合、2 つ目のフォルダ
+`%ProgramData%\DeskHub` が、*DeskHub Secure Desktop* サービスがサインイン前に動かす host の
+ための `host_key.pem`、`authorized_keys`、`ui-settings.txt` のコピーに加え、その host が
+書く `access_requests` と `pairing_tokens`、およびサービス自身の log を保持する。この
+フォルダは SYSTEM が作成し、SYSTEM と Administrators のみが読める —— 利用者自身の
+アカウントでは開けない —— そして app が原本を変更するたびにサービスがコピーを更新する。
+設定をオフにするとコピーは削除され、DeskHub をアンインストールするとフォルダは削除
+される。そのマシンの管理者はその private key を読めるが、それは利用者の key についても
+同じである。
 
 certificate は保持されない。TLS certificate は port を開くたびに `host_key.pem` から
 メモリ上で構築されるが、TLS ライブラリは certificate をファイルからしか読み込めないため、
@@ -376,7 +395,13 @@ app と broadcast extension が共有する app group のコンテナ内の `.de
   そこで再生するだけで、それ以外は何も読み取らない。両バイナリは管理者のみが書き込める
   `Program Files` 配下にあるため、ユーザーとして動作するプロセスがいずれかを差し替えて
   SYSTEM 権限を得ることはできない。それでも agent の欠陥は SYSTEM プロセスの欠陥であり、
-  昇格した app を経由してのみ到達できる。
+  昇格した app を経由してのみ到達できる。*Allow access before anyone signs in* が on の
+  場合、サービスは app が実行するのと同じ host のコードも、コンソール session で SYSTEM
+  として起動し、その host は network から到達できる。この host は key、許可済み一覧、
+  settings を、SYSTEM と管理者のみが開ける `%ProgramData%\DeskHub` から読み、サービスが
+  それらの新しいコピーを受け付けるのは、やはり image path で確認した、インストール済みの
+  `Deskhub.exe` からだけである。サービスの pipe へのすべての接続は要求バイト 1 つで
+  始まるようになり、新しい 2 つの要求はその app 以外からは拒否される。
 - **継続的インテグレーション。** すべての pull request で、3 つの test suite を
   AddressSanitizer、UndefinedBehaviorSanitizer、ThreadSanitizer の下で実行し、
   clang-tidy、前述の fuzzer、C++・Kotlin・Swift のコードに対する CodeQL、Git の全履歴に

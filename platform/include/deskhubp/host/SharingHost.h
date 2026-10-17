@@ -2,6 +2,7 @@
 #include "deskhubp/host/HostEngine.h"
 
 #include <cstdint>
+#include <memory>
 #include <optional>
 #include <span>
 #include <string>
@@ -22,6 +23,7 @@ public:
 
     void Stop() {
         engine_.Stop();
+        hold_.reset();
     }
 
     void OfferAudio(std::span<const int16_t> pcm) {
@@ -79,9 +81,16 @@ public:
 protected:
     bool StartEngine(const std::vector<ShareSource>& sources, const ShareOptions& opt,
         deskhubp::HostEnginePolicy policy) {
-        return engine_.Start(sources, opt, std::move(policy));
+        const bool started = engine_.Start(sources, opt, std::move(policy));
+        if (!started) hold_.reset();
+        return started;
+    }
+
+    void HoldWhileSharing(std::shared_ptr<void> hold) {
+        hold_ = std::move(hold);
     }
 
 private:
     deskhubp::HostEngine engine_;
+    std::shared_ptr<void> hold_;
 };

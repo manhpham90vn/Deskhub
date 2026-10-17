@@ -58,17 +58,24 @@ Three things to expect:
   With *Start Deskhub when you log in* turned on, it starts at sign-in as an elevated
   logon task, without the prompt.
 - **A Windows Firewall rule**, added by the app itself the first time you share.
-- **A system service, *DeskHub Secure Desktop***, running as LocalSystem. It does nothing
-  until DeskHub shares a screen. Then, when Windows switches to its secure desktop — a
-  UAC prompt from an installer, the lock screen, Ctrl+Alt+Del — viewers keep seeing the
-  screen and can click and type there, so they can answer a UAC prompt for you, and
-  anyone who knows your password can unlock the machine. The portable exe has no
-  service: with it those screens freeze for viewers until they close.
+- **A system service, *DeskHub Secure Desktop***, running as LocalSystem. Out of the box
+  it does nothing until DeskHub shares a screen. Then, when Windows switches to its
+  secure desktop — a UAC prompt from an installer, the lock screen, Ctrl+Alt+Del —
+  viewers keep seeing the screen and can click and type there, so they can answer a UAC
+  prompt for you, and anyone who knows your password can unlock the machine. Tick
+  *Allow access before anyone signs in* in Settings → Host and the service also hosts on
+  its own whenever DeskHub is not sharing — from the sign-in screen right after the PC
+  starts — for the devices already on your allowed list; see the
+  [specification](SPECIFICATION.md) (T-28) for what it does and does not do. The
+  portable exe has no service: with it those screens freeze for viewers until they
+  close, and the checkbox is greyed out.
 
 Uninstall DeskHub from Windows Settings or with `winget uninstall ManhPham.Deskhub`;
-the service goes with it. For the portable version, delete its exe. Settings and keys remain in
-`%USERPROFILE%\.deskhub` until you remove that folder too, and files other machines sent
-you stay in `%USERPROFILE%\Deskhub` (or the folder you picked) until you delete them.
+the service goes with it, together with `%ProgramData%\DeskHub`, where it keeps its logs
+and the copies *Allow access before anyone signs in* made. For the portable version,
+delete its exe. Settings and keys remain in `%USERPROFILE%\.deskhub` until you remove that
+folder too, and files other machines sent you stay in `%USERPROFILE%\Deskhub` (or the
+folder you picked) until you delete them.
 
 ## 🍎 macOS
 

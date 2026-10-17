@@ -3,23 +3,35 @@
 #include <windows.h>
 
 #include <sddl.h>
+#include <wtsapi32.h>
 
 #include "ServiceBroker.h"
 
 #include <atomic>
 #include <cstdint>
 #include <memory>
+#include <mutex>
+#include <optional>
 #include <string>
 #include <thread>
 #include <vector>
 
+#include "MachineFolder.h"
 #include "WinPaths.h"
 #include "deskhub/protocol/ByteOrder.h"
+#include "deskhub/session/host/SecureDesktopWire.h"
 #include "deskhubp/diag/Log.h"
+#include "deskhubp/system/AccessRequestsFile.h"
+#include "deskhubp/system/AppDataFile.h"
+#include "deskhubp/system/AuthorizedKeysFile.h"
+#include "deskhubp/system/HostIdentity.h"
+#include "deskhubp/system/PairingTokenFile.h"
+#include "deskhubp/system/UiSettingsStore.h"
 #include "secure/OverlappedPipe.h"
 #include "secure/SecureDesktopNames.h"
 
 #pragma comment(lib, "advapi32.lib")
+#pragma comment(lib, "wtsapi32.lib")
 
 namespace {
 
@@ -27,10 +39,15 @@ constexpr wchar_t kControlPipeSddl[] = L"D:P(D;;GA;;;NU)(A;;GA;;;SY)(A;;GRGW;;;B
 constexpr wchar_t kAgentPipeSddl[] = L"D:P(A;;GA;;;SY)";
 constexpr DWORD kPipeBufferBytes = 1u << 20;
 constexpr DWORD kStartHintMs = 3000;
+constexpr DWORD kSupervisorPollMs = 2000;
+constexpr DWORD kRespawnBackoffMs = 2000;
+constexpr DWORD kHostExitWaitMs = 5000;
+constexpr DWORD kNoConsoleSession = 0xFFFFFFFF;
 constexpr int kMaxConcurrentHosts = 16;
 
 SERVICE_STATUS_HANDLE g_statusHandle = nullptr;
 HANDLE g_stopEvent = nullptr;
+HANDLE g_stateChanged = nullptr;
 std::atomic<int> g_activeHosts{0};
 std::atomic<uint32_t> g_agentPipeCounter{0};
 
@@ -61,6 +78,16 @@ public:
 private:
     HANDLE h_;
 };
+
+struct UnattendedSupervisor {
+    std::mutex mutex;
+    int takeoverHolds = 0;
+    OwnedHandle job;
+    OwnedHandle process;
+    uint64_t lastExitMs = 0;
+};
+
+UnattendedSupervisor g_unattended;
 
 class SecurityAttributes {
 public:
@@ -179,55 +206,90 @@ OwnedHandle KillOnCloseJob() {
     return OwnedHandle(job.release());
 }
 
-OwnedHandle SpawnAgent(DWORD sessionId, HANDLE agentPipe, HANDLE job) {
+class InheritedHandleList {
+public:
+    explicit InheritedHandleList(HANDLE handle) : handle_(handle) {
+        if (!handle_) return;
+        SIZE_T bytes = 0;
+        InitializeProcThreadAttributeList(nullptr, 1, 0, &bytes);
+        storage_.resize(bytes);
+        auto* attrs = reinterpret_cast<LPPROC_THREAD_ATTRIBUTE_LIST>(storage_.data());
+        if (!InitializeProcThreadAttributeList(attrs, 1, 0, &bytes)) return;
+        initialized_ = true;
+        ok_ = UpdateProcThreadAttribute(attrs, 0, PROC_THREAD_ATTRIBUTE_HANDLE_LIST, &handle_,
+            sizeof(handle_), nullptr, nullptr);
+    }
+    ~InheritedHandleList() {
+        if (initialized_)
+            DeleteProcThreadAttributeList(
+                reinterpret_cast<LPPROC_THREAD_ATTRIBUTE_LIST>(storage_.data()));
+    }
+    InheritedHandleList(const InheritedHandleList&) = delete;
+    InheritedHandleList& operator=(const InheritedHandleList&) = delete;
+
+    bool ok() const {
+        return !handle_ || ok_;
+    }
+    LPPROC_THREAD_ATTRIBUTE_LIST attributes() {
+        return handle_ ? reinterpret_cast<LPPROC_THREAD_ATTRIBUTE_LIST>(storage_.data())
+                       : nullptr;
+    }
+
+private:
+    HANDLE handle_;
+    std::vector<uint8_t> storage_;
+    bool initialized_ = false;
+    bool ok_ = false;
+};
+
+OwnedHandle SpawnInSession(DWORD sessionId, HANDLE job, const std::wstring& arguments,
+    HANDLE inherited, const char* what) {
     OwnedHandle token = SystemTokenForSession(sessionId);
     if (!token) {
         LOGE("[Service] Could not build a SYSTEM token for session %lu: %lu", sessionId,
             GetLastError());
         return OwnedHandle();
     }
-
-    SIZE_T attrBytes = 0;
-    InitializeProcThreadAttributeList(nullptr, 1, 0, &attrBytes);
-    std::vector<uint8_t> attrStorage(attrBytes);
-    auto* attrs = reinterpret_cast<LPPROC_THREAD_ATTRIBUTE_LIST>(attrStorage.data());
-    if (!InitializeProcThreadAttributeList(attrs, 1, 0, &attrBytes)) return OwnedHandle();
-    HANDLE inherit[] = {agentPipe};
-    const bool listed = UpdateProcThreadAttribute(attrs, 0, PROC_THREAD_ATTRIBUTE_HANDLE_LIST,
-        inherit, sizeof(inherit), nullptr, nullptr);
-    if (!listed) {
-        DeleteProcThreadAttributeList(attrs);
-        return OwnedHandle();
-    }
+    InheritedHandleList handles(inherited);
+    if (!handles.ok()) return OwnedHandle();
 
     std::wstring desktop = L"winsta0\\default";
     STARTUPINFOEXW si{};
     si.StartupInfo.cb = sizeof(si);
     si.StartupInfo.lpDesktop = desktop.data();
-    si.lpAttributeList = attrs;
+    si.lpAttributeList = handles.attributes();
 
     const std::wstring exe = SelfExePath();
-    std::wstring cmd = L"\"" + exe + L"\" " + kSecureDesktopAgentArg + L" " +
-                       std::to_wstring(uintptr_t(agentPipe));
+    std::wstring cmd = L"\"" + exe + L"\" " + arguments;
+    const DWORD flags = CREATE_NO_WINDOW | CREATE_SUSPENDED |
+                        (inherited ? EXTENDED_STARTUPINFO_PRESENT : 0);
     PROCESS_INFORMATION pi{};
     const BOOL created = CreateProcessAsUserW(token.get(), exe.c_str(), cmd.data(), nullptr,
-        nullptr, TRUE, EXTENDED_STARTUPINFO_PRESENT | CREATE_NO_WINDOW | CREATE_SUSPENDED,
-        nullptr, nullptr, &si.StartupInfo, &pi);
-    DeleteProcThreadAttributeList(attrs);
+        nullptr, inherited ? TRUE : FALSE, flags, nullptr, nullptr, &si.StartupInfo, &pi);
     if (!created) {
-        LOGE("[Service] Could not start the secure desktop agent in session %lu: %lu", sessionId,
+        LOGE("[Service] Could not start the %s in session %lu: %lu", what, sessionId,
             GetLastError());
         return OwnedHandle();
     }
     OwnedHandle thread(pi.hThread);
     OwnedHandle process(pi.hProcess);
     if (!AssignProcessToJobObject(job, process.get())) {
-        LOGE("[Service] Could not tie the agent to the host's lifetime: %lu", GetLastError());
+        LOGE("[Service] Could not tie the %s to its job: %lu", what, GetLastError());
         TerminateProcess(process.get(), 1);
         return OwnedHandle();
     }
     ResumeThread(thread.get());
     return OwnedHandle(process.release());
+}
+
+OwnedHandle SpawnAgent(DWORD sessionId, HANDLE agentPipe, HANDLE job) {
+    const std::wstring arguments =
+        std::wstring(kSecureDesktopAgentArg) + L" " + std::to_wstring(uintptr_t(agentPipe));
+    return SpawnInSession(sessionId, job, arguments, agentPipe, "secure desktop agent");
+}
+
+bool SendByte(OverlappedPipe& control, uint8_t byte) {
+    return control.WriteAll(std::span<const uint8_t>(&byte, 1));
 }
 
 bool SendHandleValue(OverlappedPipe& control, HANDLE remote) {
@@ -236,11 +298,24 @@ bool SendHandleValue(OverlappedPipe& control, HANDLE remote) {
     return control.WriteAll(bytes);
 }
 
-void WaitForHostToLeave(OverlappedPipe& control, HANDLE agentProcess) {
+bool ReadExactly(OverlappedPipe& control, std::span<uint8_t> into) {
+    size_t filled = 0;
+    while (filled < into.size()) {
+        size_t got = 0;
+        if (!control.ReadSome(into.subspan(filled), got)) return false;
+        filled += got;
+    }
+    return true;
+}
+
+void DrainUntilClosed(OverlappedPipe& control, HANDLE alsoStopOn) {
     OwnedHandle done(CreateEventW(nullptr, TRUE, FALSE, nullptr));
-    std::thread watcher([&control, agentProcess, doneEvent = done.get()] {
-        const HANDLE waits[] = {doneEvent, g_stopEvent, agentProcess};
-        if (WaitForMultipleObjects(3, waits, FALSE, INFINITE) != WAIT_OBJECT_0) control.Close();
+    std::thread watcher([&control, alsoStopOn, doneEvent = done.get()] {
+        std::vector<HANDLE> waits = {doneEvent, g_stopEvent};
+        if (alsoStopOn) waits.push_back(alsoStopOn);
+        if (WaitForMultipleObjects(DWORD(waits.size()), waits.data(), FALSE, INFINITE) !=
+            WAIT_OBJECT_0)
+            control.Close();
     });
     uint8_t sink[64];
     size_t got = 0;
@@ -250,30 +325,82 @@ void WaitForHostToLeave(OverlappedPipe& control, HANDLE agentProcess) {
     watcher.join();
 }
 
-void ServeHost(HANDLE pipeHandle) {
-    OverlappedPipe control(pipeHandle);
-    ULONG pid = 0;
-    if (!GetNamedPipeClientProcessId(control.Handle(), &pid)) return;
+bool UnattendedHostAlive() {
+    return g_unattended.process &&
+           WaitForSingleObject(g_unattended.process.get(), 0) == WAIT_TIMEOUT;
+}
 
-    OwnedHandle host(OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_DUP_HANDLE, FALSE, pid));
-    if (!host) {
-        LOGW("[Service] Could not open the connecting process %lu: %lu", pid, GetLastError());
-        return;
+void StopUnattendedHostLocked() {
+    if (g_unattended.process) {
+        TerminateProcess(g_unattended.process.get(), 0);
+        if (WaitForSingleObject(g_unattended.process.get(), kHostExitWaitMs) != WAIT_OBJECT_0)
+            LOGW("[Service] The unattended host did not exit within %lu ms.", kHostExitWaitMs);
+        else
+            LOGI("[Service] The unattended host stepped aside.");
     }
-    const std::wstring image = ProcessImagePath(host.get());
-    if (!SamePath(image, ExpectedHostImage())) {
-        LOGW(
-            "[Service] Refused process %lu: it is not the Deskhub.exe installed beside this "
-            "service (%ls).",
-            pid, image.c_str());
-        return;
-    }
-    DWORD sessionId = 0;
-    if (!ProcessIdToSessionId(pid, &sessionId) || sessionId == 0) {
-        LOGW("[Service] Refused process %lu: it is not in an interactive session.", pid);
-        return;
-    }
+    g_unattended.process.reset();
+    g_unattended.job.reset();
+    g_unattended.lastExitMs = GetTickCount64();
+}
 
+void StopUnattendedHost() {
+    const std::lock_guard<std::mutex> lock(g_unattended.mutex);
+    StopUnattendedHostLocked();
+}
+
+void SpawnUnattendedHostLocked() {
+    const DWORD sessionId = WTSGetActiveConsoleSessionId();
+    if (sessionId == kNoConsoleSession || sessionId == 0) return;
+    OwnedHandle job = KillOnCloseJob();
+    if (!job) {
+        LOGE("[Service] Could not create the unattended host job: %lu", GetLastError());
+        return;
+    }
+    OwnedHandle process =
+        SpawnInSession(sessionId, job.get(), kUnattendedHostArg, nullptr, "unattended host");
+    if (!process) {
+        g_unattended.lastExitMs = GetTickCount64();
+        return;
+    }
+    LOGI("[Service] Unattended host started in session %lu (pid %lu).", sessionId,
+        GetProcessId(process.get()));
+    g_unattended.job.reset(job.release());
+    g_unattended.process.reset(process.release());
+}
+
+OwnedHandle DuplicateForWait(HANDLE process) {
+    HANDLE copy = nullptr;
+    if (!process || !DuplicateHandle(GetCurrentProcess(), process, GetCurrentProcess(), &copy,
+                        SYNCHRONIZE, FALSE, 0))
+        return OwnedHandle();
+    return OwnedHandle(copy);
+}
+
+void SuperviseUnattendedHost() {
+    while (WaitForSingleObject(g_stopEvent, 0) == WAIT_TIMEOUT) {
+        OwnedHandle process;
+        {
+            const std::lock_guard<std::mutex> lock(g_unattended.mutex);
+            if (g_unattended.process && !UnattendedHostAlive()) {
+                LOGW("[Service] The unattended host exited; it will be started again.");
+                g_unattended.process.reset();
+                g_unattended.job.reset();
+                g_unattended.lastExitMs = GetTickCount64();
+            }
+            const bool wanted = g_unattended.takeoverHolds == 0 && UnattendedEnabled();
+            const bool backedOff = GetTickCount64() - g_unattended.lastExitMs >= kRespawnBackoffMs;
+            if (wanted && !g_unattended.process && backedOff) SpawnUnattendedHostLocked();
+            if (!wanted && g_unattended.process) StopUnattendedHostLocked();
+            process.reset(DuplicateForWait(g_unattended.process.get()).release());
+        }
+        std::vector<HANDLE> waits = {g_stopEvent, g_stateChanged};
+        if (process) waits.push_back(process.get());
+        WaitForMultipleObjects(DWORD(waits.size()), waits.data(), FALSE, kSupervisorPollMs);
+    }
+    StopUnattendedHost();
+}
+
+void ServeAgent(OverlappedPipe& control, HANDLE host, ULONG pid, DWORD sessionId) {
     AgentPipePair pair;
     if (!CreateAgentPipePair(pair)) {
         LOGE("[Service] Could not create the agent pipe: %lu", GetLastError());
@@ -289,16 +416,144 @@ void ServeHost(HANDLE pipeHandle) {
     pair.agentEnd.reset();
 
     HANDLE remote = nullptr;
-    if (!DuplicateHandle(GetCurrentProcess(), pair.hostEnd.release(), host.get(), &remote, 0,
-            FALSE, DUPLICATE_SAME_ACCESS | DUPLICATE_CLOSE_SOURCE)) {
+    if (!DuplicateHandle(GetCurrentProcess(), pair.hostEnd.release(), host, &remote, 0, FALSE,
+            DUPLICATE_SAME_ACCESS | DUPLICATE_CLOSE_SOURCE)) {
         LOGE("[Service] Could not hand the agent pipe to process %lu: %lu", pid, GetLastError());
         return;
     }
     if (!SendHandleValue(control, remote)) return;
-    LOGI("[Service] Secure desktop agent started for Deskhub.exe (pid %lu, session %lu).", pid,
-        sessionId);
-    WaitForHostToLeave(control, agent.get());
-    LOGI("[Service] Deskhub.exe (pid %lu) left; stopping its agent.", pid);
+    LOGI("[Service] Secure desktop agent started for pid %lu, session %lu.", pid, sessionId);
+    DrainUntilClosed(control, agent.get());
+    LOGI("[Service] Process %lu left; stopping its agent.", pid);
+}
+
+void ServeTakeover(OverlappedPipe& control, ULONG pid) {
+    {
+        const std::lock_guard<std::mutex> lock(g_unattended.mutex);
+        ++g_unattended.takeoverHolds;
+        StopUnattendedHostLocked();
+    }
+    LOGI("[Service] Deskhub.exe (pid %lu) is taking over from the unattended host.", pid);
+    if (SendByte(control, deskhub::kSecureDesktopAck)) DrainUntilClosed(control, nullptr);
+    {
+        const std::lock_guard<std::mutex> lock(g_unattended.mutex);
+        --g_unattended.takeoverHolds;
+    }
+    SetEvent(g_stateChanged);
+    LOGI("[Service] Deskhub.exe (pid %lu) stopped sharing; the unattended host may return.", pid);
+}
+
+std::optional<deskhub::UnattendedConfig> ReadConfig(OverlappedPipe& control) {
+    uint8_t prefix[deskhub::kUnattendedConfigLengthSize];
+    if (!ReadExactly(control, prefix)) return std::nullopt;
+    const std::optional<uint32_t> length = deskhub::DecodeUnattendedConfigLength(prefix);
+    if (!length) return std::nullopt;
+    std::vector<uint8_t> body(*length);
+    if (!ReadExactly(control, body)) return std::nullopt;
+    return deskhub::DecodeUnattendedConfig(body);
+}
+
+void RemoveUnattendedFiles() {
+    deskhubp::RemoveAppDataFile(deskhubp::kHostKeyFileName);
+    deskhubp::RemoveAppDataFile(deskhubp::kAuthorizedKeysFileName);
+    deskhubp::RemoveAppDataFile(deskhubp::kUiSettingsFileName);
+    deskhubp::RemoveAppDataFile(deskhubp::kAccessRequestsFileName);
+    deskhubp::RemoveAppDataFile(deskhubp::kPairingTokensFileName);
+}
+
+bool ApplyConfig(const deskhub::UnattendedConfig& config) {
+    const std::lock_guard<std::mutex> lock(g_unattended.mutex);
+    if (!config.enabled) {
+        StopUnattendedHostLocked();
+        RemoveUnattendedFiles();
+        LOGI("[Service] Access before sign-in switched off; the machine copies are removed.");
+        return true;
+    }
+    const bool restart = deskhubp::ReadAppDataFile(deskhubp::kHostKeyFileName) != config.hostKeyPem ||
+                         deskhubp::ReadAppDataFile(deskhubp::kUiSettingsFileName) != config.settings;
+    const bool written =
+        deskhubp::WriteAppDataFileAtomic(deskhubp::kHostKeyFileName, config.hostKeyPem) &&
+        deskhubp::WriteAppDataFileAtomic(deskhubp::kAuthorizedKeysFileName, config.authorizedKeys) &&
+        deskhubp::WriteAppDataFileAtomic(deskhubp::kUiSettingsFileName, config.settings);
+    if (!written) {
+        LOGE("[Service] Could not write the unattended configuration into %ls.",
+            MachineFolderPath().c_str());
+        return false;
+    }
+    if (restart) {
+        StopUnattendedHostLocked();
+        g_unattended.lastExitMs = 0;
+    }
+    LOGI("[Service] Access before sign-in is on; %s.",
+        restart ? "the unattended host restarts with the new key or settings"
+                : "the allowed list is updated in place");
+    return true;
+}
+
+void ServeConfigure(OverlappedPipe& control, ULONG pid) {
+    const std::optional<deskhub::UnattendedConfig> config = ReadConfig(control);
+    if (!config) {
+        LOGW("[Service] Process %lu sent an unusable unattended configuration.", pid);
+        return;
+    }
+    if (!ApplyConfig(*config)) return;
+    SetEvent(g_stateChanged);
+    SendByte(control, deskhub::kSecureDesktopAck);
+}
+
+bool TrustedClient(HANDLE host, ULONG pid, DWORD& sessionId, bool& isApp) {
+    const std::wstring image = ProcessImagePath(host);
+    isApp = SamePath(image, ExpectedHostImage());
+    const bool isService = SamePath(image, SelfExePath());
+    if (!isApp && !isService) {
+        LOGW(
+            "[Service] Refused process %lu: it is not the Deskhub.exe or DeskhubService.exe "
+            "installed beside this service (%ls).",
+            pid, image.c_str());
+        return false;
+    }
+    if (!ProcessIdToSessionId(pid, &sessionId) || sessionId == 0) {
+        LOGW("[Service] Refused process %lu: it is not in an interactive session.", pid);
+        return false;
+    }
+    return true;
+}
+
+void ServeHost(HANDLE pipeHandle) {
+    OverlappedPipe control(pipeHandle);
+    ULONG pid = 0;
+    if (!GetNamedPipeClientProcessId(control.Handle(), &pid)) return;
+
+    OwnedHandle host(OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_DUP_HANDLE, FALSE, pid));
+    if (!host) {
+        LOGW("[Service] Could not open the connecting process %lu: %lu", pid, GetLastError());
+        return;
+    }
+    DWORD sessionId = 0;
+    bool isApp = false;
+    if (!TrustedClient(host.get(), pid, sessionId, isApp)) return;
+
+    uint8_t requestByte = 0;
+    if (!ReadExactly(control, std::span<uint8_t>(&requestByte, 1))) return;
+    const std::optional<deskhub::SecureDesktopRequest> request =
+        deskhub::DecodeSecureDesktopRequest(requestByte);
+    if (!request) {
+        LOGW("[Service] Process %lu sent an unknown request %u.", pid, unsigned(requestByte));
+        return;
+    }
+    if (*request == deskhub::SecureDesktopRequest::Agent) {
+        ServeAgent(control, host.get(), pid, sessionId);
+        return;
+    }
+    if (!isApp) {
+        LOGW("[Service] Refused request %u from pid %lu: only Deskhub.exe may send it.",
+            unsigned(requestByte), pid);
+        return;
+    }
+    if (*request == deskhub::SecureDesktopRequest::Takeover)
+        ServeTakeover(control, pid);
+    else
+        ServeConfigure(control, pid);
 }
 
 void StartHostThread(HANDLE pipe) {
@@ -346,13 +601,17 @@ void WINAPI ServiceMain(DWORD, wchar_t**) {
     if (!g_statusHandle) return;
     ReportStatus(SERVICE_START_PENDING);
     g_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-    if (!g_stopEvent) {
+    g_stateChanged = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+    if (!g_stopEvent || !g_stateChanged) {
         ReportStatus(SERVICE_STOPPED, GetLastError());
         return;
     }
     ReportStatus(SERVICE_RUNNING);
     LOGI("[Service] Running; waiting for Deskhub.exe on %ls.", kSecureDesktopPipeName);
+    std::thread supervisor(SuperviseUnattendedHost);
     ServePipe();
+    SetEvent(g_stopEvent);
+    supervisor.join();
     LOGI("[Service] Stopped.");
     ReportStatus(SERVICE_STOPPED);
 }

@@ -59,17 +59,23 @@ Có ba điểm cần lưu ý:
   cao. Khi bật *Start Deskhub when you log in*, app khởi động lúc đăng nhập dưới dạng một
   logon task chạy quyền cao, không hiện hộp thoại.
 - **Rule Windows Firewall** do app tự thêm trong lần share đầu tiên.
-- **Một system service, *DeskHub Secure Desktop***, chạy dưới tài khoản LocalSystem. Nó
-  không làm gì cho tới khi DeskHub share màn hình. Khi đó, lúc Windows chuyển sang secure
-  desktop — hộp thoại UAC của một trình cài đặt, màn hình khoá, Ctrl+Alt+Del — viewer vẫn
-  thấy màn hình và click, gõ được ở đó, nên họ có thể trả lời hộp thoại UAC thay bạn, và
-  bất kỳ ai biết mật khẩu của bạn đều mở khoá được máy. File exe portable không có service:
-  với nó, các màn hình đó đứng yên với viewer cho tới khi chúng đóng lại.
+- **Một system service, *DeskHub Secure Desktop***, chạy dưới tài khoản LocalSystem. Mặc
+  định nó không làm gì cho tới khi DeskHub share màn hình. Khi đó, lúc Windows chuyển sang
+  secure desktop — hộp thoại UAC của một trình cài đặt, màn hình khoá, Ctrl+Alt+Del — viewer
+  vẫn thấy màn hình và click, gõ được ở đó, nên họ có thể trả lời hộp thoại UAC thay bạn,
+  và bất kỳ ai biết mật khẩu của bạn đều mở khoá được máy. Tick *Allow access before anyone
+  signs in* trong Settings → Host thì service còn tự làm host bất cứ khi nào DeskHub không
+  share — từ màn hình đăng nhập ngay sau khi máy khởi động — cho các thiết bị đã có trong
+  danh sách được phép của bạn; xem [đặc tả](SPECIFICATION.vi.md) (T-28) để biết nó làm gì
+  và không làm gì. File exe portable không có service: với nó, các màn hình đó đứng yên với
+  viewer cho tới khi chúng đóng lại, và ô chọn bị mờ đi.
 
 Gỡ DeskHub trong Windows Settings hoặc chạy `winget uninstall ManhPham.Deskhub`; service
-cũng được gỡ theo. Với bản portable, chỉ cần xoá file exe. Settings và key vẫn nằm trong `%USERPROFILE%\.deskhub`
-cho đến khi bạn xoá thư mục đó, còn file máy khác gửi tới vẫn nằm trong
-`%USERPROFILE%\Deskhub` (hoặc thư mục bạn đã chọn) cho đến khi bạn xoá.
+cũng được gỡ theo, cùng với `%ProgramData%\DeskHub`, nơi nó giữ log và các bản copy mà
+*Allow access before anyone signs in* đã tạo. Với bản portable, chỉ cần xoá file exe.
+Settings và key vẫn nằm trong `%USERPROFILE%\.deskhub` cho đến khi bạn xoá thư mục đó, còn
+file máy khác gửi tới vẫn nằm trong `%USERPROFILE%\Deskhub` (hoặc thư mục bạn đã chọn) cho
+đến khi bạn xoá.
 
 ## 🍎 macOS
 

@@ -313,6 +313,24 @@ HostEngine（app ごとに 1 インスタンス、SessionTransport を保持）
   texture にアップロードされて、同じ admission、scaler、encoder の経路を通る。また
   `InputInjector` は `SendInput` を呼ぶ代わりに、すべての `INPUT` を agent へ転送する。
   切り替えのたびに keyframe を強制する。
+
+  control pipe へのすべての接続は、要求バイト 1 つ（`SecureDesktopRequest`）で始まる。
+  `Agent` は上記の流れであり、`Takeover` と `Configure` はサインイン前のアクセス（T-28）
+  に用いる。これが on の間、サービスの supervisor thread は、`Takeover` 接続を保持する
+  `Deskhub.exe` が存在しない限り、`DeskhubService.exe --unattended-host` をコンソール
+  session で SYSTEM として動かし続ける。このプロセスは通常の `SharingHost` + `HostEngine`
+  であり、`SetConfigDir`/`SetAppDataDir` を `%ProgramData%\DeskHub` に向け、プロセス全体の
+  `UnattendedMode()` フラグによって WGC を省略し、すべての `INPUT` を link 経由で送り、
+  `alwaysStream` と、共有の fps を `maxFps` とした `Watch` を送る。app とまったく同じように
+  display ごとに 1 つの agent をサービスへ要求するため、マルチモニタに新たな配線は
+  要らない。`Deskhub.exe` の `SharingHost::Start` は engine が bind する前に `Takeover` を
+  送る。サービスは unattended host を終了させ、UDP port が空くようにその終了を待ってから
+  ack し、`SharingHost::Stop` でその接続が閉じるまで host を止めたままにする。`Configure`
+  は `UnattendedConfig`（enabled フラグ、`host_key.pem`、`authorized_keys`、
+  `ui-settings.txt` のテキスト）を運ぶ。サービスは 3 つのファイルを machine folder へ
+  atomic に書き込み、key または settings が変わった場合は host を再起動し、無効化された
+  場合はファイルを消去する。app はこれを、設定の切り替え時、settings の保存のたび、
+  許可済み一覧の変更のたび、共有の停止時、および起動時に 1 度送る。
 - Shell: shell ごとに PTY を 1 つ割り当てる（Windows は `ConPTY`、他は `forkpty`）。
   上限は 8 である。接続が切れた場合は shell を切り離し、shell プロセスが終了するか
   shell が閉じられるまで PTY を保持する。時間制限はない。許可された client はいずれも、
@@ -457,6 +475,16 @@ log も含めて独自の mode を持たず、その ACL を継承する。iOS �
 app の一覧に届き、app の *Approve* が extension に届く。ファイル I/O は `platform/` に
 置き、解析処理とデータ構造は `core/` に置いて unit test を備える。
 
+Windows には 2 つ目のフォルダ `%ProgramData%\DeskHub` があり、*DeskHub Secure Desktop*
+サービスが所有する。サービスとそれが起動するプロセスは、これに対して `SetConfigDir` と
+`SetAppDataDir` を呼ぶ。それらは SYSTEM として動作するため、`ProtectWindowsConfigDir` は
+その ACL に SYSTEM と Administrators だけを残す —— 対話的な利用者は含まれない。この
+フォルダは常にサービスと agent の log を保持する。サインイン前のアクセス（T-28）が on の
+場合は、unattended host が読む `host_key.pem`、`authorized_keys`、`ui-settings.txt` の
+コピーに加え、その host が書く `access_requests` と `pairing_tokens` も保持する。設定を
+オフにするとそれらのファイルは削除され、`DeskhubService.exe --uninstall` はフォルダを
+削除する。
+
 viewer が送信したファイルは別の場所に保存される。host が選択したフォルダ
 （`ui-settings.txt` の `transfer_dir`。既定は利用者のホームディレクトリ直下の
 `Deskhub`）である。`FileStore` は各ファイルを `<name>.deskhub-part` として書き込み、
@@ -514,6 +542,28 @@ scaling の 2 つの判定とともに実行する（共有 runner には時間�
   SYSTEM の agent や viewer のキー入力を手に入れることはできない。インストーラーが
   per-machine になった理由もここにある。`%LOCALAPPDATA%` にあるサービスのバイナリは、
   ユーザーが実行するどのプロセスにも置き換えられてしまう。
+
+- **サインイン前のアクセスは Deskhub 自身の host を動かすのであって、2 つ目の実装ではない**:
+  サービスに独自の socket と encoder を持たせることもできたが、admission、revocation、
+  bitrate、input に関するすべての規則はすでに `HostEngine` にある。そのため unattended
+  host は、app と CLI が link するのと同じ `deskhub_win_core` であり、サービスがコンソール
+  session で SYSTEM として起動し、プロセス全体の 1 つのフラグによって、WGC の代わりに
+  すべての frame に agent を使うよう指示される。app と同じ pipe で display ごとに 1 つの
+  agent をサービスへ要求する。信頼の検査が `Agent` 要求に限ってサービスの隣の
+  `DeskhubService.exe` も受け入れるようになり、それ以外は受け入れない理由はここにある
+  —— 共有の agent を 1 つにすると、N 台のモニタを 1 本の pipe で多重化することになって
+  いた。takeover は `HostEnginePolicy::preflight` ではなく `SharingHost::Start` にある。
+  engine は terminal のみ、または file のみの共有では `preflight` を省略しつつ port を
+  bind するからである。app は共有している間ずっと takeover 接続を保持し、それが閉じると
+  サービスが unattended host を再起動する。したがって「app が host しないときは常に
+  サービスが host する」に session 変更の通知は要らない。machine key は新たに生成せず
+  コピーするため、viewer にはサインインの前後で 1 つの fingerprint が見える。それが
+  `%ProgramData%\DeskHub` に置かれるのは、`ConfigDir()` が呼び出しのたびにフォルダの ACL を
+  呼び出し側の token へ書き換えるからである。利用者のフォルダに向けると、SYSTEM プロセスが
+  利用者を自身のファイルから締め出してしまう一方、SYSTEM が新たに作るフォルダはちょうど
+  SYSTEM + Administrators になる。ペアリングはサインイン済みの行為のままである。サインイン
+  画面で出された要求は誰も見ないフォルダに落ち、サインイン画面にデバイスの承認を許せば、
+  モデル全体が依拠する唯一の判断を見知らぬ相手に渡すことになる。
 
 - **handshake を早く終えられるのはホストだけなので、クライアントはその終わり方を聞き取る**:
   クライアントは以前、`AuthResult` を 65 秒待っていた —— 承認が保持された一つの接続の中で

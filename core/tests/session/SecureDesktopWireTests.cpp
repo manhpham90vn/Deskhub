@@ -48,6 +48,25 @@ void TestWatchRoundTrip() {
     Check(back && back->sourceId == 3 && back->left == -1920 && back->top == -200 &&
               back->width == 1920 && back->height == 1080,
         "every watch field round-trips");
+    Check(back && !back->alwaysStream && back->maxFps == kSecureDesktopDefaultMaxFps,
+        "a plain watch streams only the secure desktop at the default cap");
+
+    w.alwaysStream = true;
+    w.maxFps = 60;
+    const auto always = DecodeSecureDesktopWatch(PayloadOf(EncodeSecureDesktopWatch(w)));
+    Check(always && always->alwaysStream && always->maxFps == 60,
+        "an unattended watch asks for every desktop at the share fps");
+    w.maxFps = 0;
+    Check(!DecodeSecureDesktopWatch(PayloadOf(EncodeSecureDesktopWatch(w))),
+        "a zero fps cap is refused");
+    w.maxFps = kSecureDesktopMaxFps + 1;
+    Check(!DecodeSecureDesktopWatch(PayloadOf(EncodeSecureDesktopWatch(w))),
+        "an fps cap past the settings limit is refused");
+    w.maxFps = 60;
+    std::vector<uint8_t> badFlag = EncodeSecureDesktopWatch(w);
+    badFlag[kSecureDesktopHeaderSize + 17] = 2;
+    Check(!DecodeSecureDesktopWatch(PayloadOf(badFlag)),
+        "a stream flag other than 0 or 1 is refused");
 
     w.width = 0;
     Check(!DecodeSecureDesktopWatch(PayloadOf(EncodeSecureDesktopWatch(w))),
@@ -56,6 +75,87 @@ void TestWatchRoundTrip() {
     Check(!DecodeSecureDesktopWatch(PayloadOf(EncodeSecureDesktopWatch(w))),
         "an oversized monitor is refused");
     Check(!DecodeSecureDesktopWatch(std::vector<uint8_t>(5)), "a short watch is refused");
+}
+
+void TestRequestBytes() {
+    std::printf("[securedesk] the first byte on the control pipe names the request...\n");
+    Check(DecodeSecureDesktopRequest(1) == SecureDesktopRequest::Agent, "1 asks for an agent");
+    Check(DecodeSecureDesktopRequest(2) == SecureDesktopRequest::Takeover,
+        "2 takes the machine over from the unattended host");
+    Check(DecodeSecureDesktopRequest(3) == SecureDesktopRequest::Configure,
+        "3 carries the unattended configuration");
+    Check(!DecodeSecureDesktopRequest(0) && !DecodeSecureDesktopRequest(4),
+        "anything else is refused before the service does any work");
+}
+
+UnattendedConfig SampleConfig() {
+    UnattendedConfig config;
+    config.enabled = true;
+    config.hostKeyPem = "-----BEGIN PRIVATE KEY-----\nabc\n-----END PRIVATE KEY-----\n";
+    config.authorizedKeys = "ssh-ed25519 AAAA laptop\n";
+    config.settings = "port=4200\nfps=30\n";
+    return config;
+}
+
+std::span<const uint8_t> BodyOf(const std::vector<uint8_t>& encoded) {
+    return std::span<const uint8_t>(encoded).subspan(kUnattendedConfigLengthSize);
+}
+
+void TestUnattendedConfigRoundTrip() {
+    std::printf("[securedesk] the unattended configuration is length-prefixed blocks...\n");
+    const UnattendedConfig config = SampleConfig();
+    const std::vector<uint8_t> encoded = EncodeUnattendedConfig(config);
+    Check(!encoded.empty(), "a complete configuration encodes");
+    const auto length = DecodeUnattendedConfigLength(
+        std::span<const uint8_t>(encoded).first(kUnattendedConfigLengthSize));
+    Check(length && *length == encoded.size() - kUnattendedConfigLengthSize,
+        "the prefix is the body length");
+    Check(DecodeUnattendedConfig(BodyOf(encoded)) == config, "every block round-trips");
+
+    UnattendedConfig off;
+    const std::vector<uint8_t> offBytes = EncodeUnattendedConfig(off);
+    Check(DecodeUnattendedConfig(BodyOf(offBytes)) == off,
+        "switching off carries no key and no list");
+
+    UnattendedConfig keyless = config;
+    keyless.hostKeyPem.clear();
+    Check(EncodeUnattendedConfig(keyless).empty(), "enabled without a key is not encoded");
+    std::vector<uint8_t> forged = encoded;
+    forged[kUnattendedConfigLengthSize] = 1;
+    PutU32(forged.data() + kUnattendedConfigLengthSize + 1, 0);
+    Check(!DecodeUnattendedConfig(BodyOf(forged)), "nor decoded");
+}
+
+void TestUnattendedConfigLimits() {
+    std::printf("[securedesk] oversized or truncated configurations are refused...\n");
+    UnattendedConfig big = SampleConfig();
+    big.authorizedKeys.assign(kUnattendedMaxAuthorizedKeysBytes + 1, 'k');
+    Check(EncodeUnattendedConfig(big).empty(), "a list past the file limit is not encoded");
+    big = SampleConfig();
+    big.settings.assign(kUnattendedMaxSettingsBytes, 's');
+    Check(!EncodeUnattendedConfig(big).empty(), "a block at its limit is fine");
+
+    const std::vector<uint8_t> encoded = EncodeUnattendedConfig(SampleConfig());
+    std::vector<uint8_t> truncated(BodyOf(encoded).begin(), BodyOf(encoded).end());
+    truncated.pop_back();
+    Check(!DecodeUnattendedConfig(truncated), "a body missing a byte is refused");
+    std::vector<uint8_t> padded(BodyOf(encoded).begin(), BodyOf(encoded).end());
+    padded.push_back(0);
+    Check(!DecodeUnattendedConfig(padded), "a body with a trailing byte is refused");
+    std::vector<uint8_t> badFlag(BodyOf(encoded).begin(), BodyOf(encoded).end());
+    badFlag[0] = 7;
+    Check(!DecodeUnattendedConfig(badFlag), "an enabled flag other than 0 or 1 is refused");
+    Check(!DecodeUnattendedConfig({}), "an empty body is refused");
+
+    uint8_t zero[kUnattendedConfigLengthSize] = {};
+    Check(!DecodeUnattendedConfigLength(zero), "a zero length is refused");
+    uint8_t huge[kUnattendedConfigLengthSize];
+    PutU32(huge, uint32_t(kUnattendedConfigMaxBytes + 1));
+    Check(!DecodeUnattendedConfigLength(huge), "a length past every block limit is refused");
+    Check(!DecodeUnattendedConfigLength(std::vector<uint8_t>(3)), "a short prefix is refused");
+    std::vector<uint8_t> lying(BodyOf(encoded).begin(), BodyOf(encoded).end());
+    PutU32(lying.data() + 1, uint32_t(kUnattendedMaxHostKeyBytes + 1));
+    Check(!DecodeUnattendedConfig(lying), "a block claiming more than its limit is refused");
 }
 
 void TestDesktopState() {
@@ -168,6 +268,9 @@ void TestStreamRejectsGarbage() {
 void RunSecureDesktopWireTests() {
     TestDesktopNames();
     TestWatchRoundTrip();
+    TestRequestBytes();
+    TestUnattendedConfigRoundTrip();
+    TestUnattendedConfigLimits();
     TestDesktopState();
     TestInputRoundTrip();
     TestFrameRoundTrip();

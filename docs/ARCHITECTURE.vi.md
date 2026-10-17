@@ -309,6 +309,24 @@ HostEngine (mỗi app một instance, sở hữu SessionTransport)
   vào một texture rồi đi qua cùng đường admission, scaler và encoder, và `InputInjector`
   chuyển mọi `INPUT` tới agent thay vì gọi `SendInput`. Mỗi lần chuyển đổi đều ép một
   keyframe.
+
+  Mỗi kết nối tới control pipe mở đầu bằng một byte yêu cầu (`SecureDesktopRequest`):
+  `Agent` là luồng mô tả ở trên; `Takeover` và `Configure` phục vụ truy cập trước khi đăng
+  nhập (T-28). Khi tính năng này bật, thread giám sát của service giữ
+  `DeskhubService.exe --unattended-host` chạy dưới quyền SYSTEM trong console session bất
+  cứ khi nào không có `Deskhub.exe` nào giữ một kết nối `Takeover`. Tiến trình đó chính là
+  `SharingHost` + `HostEngine` thông thường với `SetConfigDir`/`SetAppDataDir` trỏ tới
+  `%ProgramData%\DeskHub`, một cờ `UnattendedMode()` toàn tiến trình bỏ qua WGC, chuyển mọi
+  `INPUT` qua link, và gửi một `Watch` kèm `alwaysStream` và fps của phiên share làm
+  `maxFps`; nó xin service một agent cho mỗi màn hình đúng như app làm, nên nhiều màn hình
+  không cần thêm đường ống mới nào. `SharingHost::Start` trong `Deskhub.exe` gửi `Takeover`
+  trước khi engine bind: service kết thúc unattended host, chờ nó thoát để UDP port được
+  giải phóng, ack, và giữ nó không chạy cho tới khi kết nối đó đóng trong
+  `SharingHost::Stop`. `Configure` mang một `UnattendedConfig` (cờ enabled, `host_key.pem`,
+  `authorized_keys`, nội dung `ui-settings.txt`); service ghi ba file đó atomic vào thư mục
+  của máy, khởi động lại host khi key hoặc settings thay đổi, và xoá các file khi tắt. App
+  gửi nó khi setting được bật hoặc tắt, sau mỗi lần lưu settings, sau mỗi thay đổi với danh
+  sách được phép, khi một phiên share dừng và một lần lúc khởi động.
 - Shell: mỗi shell một PTY (`ConPTY` trên Windows, `forkpty` trên các nền tảng khác), tối
   đa 8 shell. Khi mất kết nối, shell được tách ra và PTY được giữ sống cho đến khi tiến trình shell thoát hoặc shell bị đóng — không giới hạn thời gian. Mọi client đã được chấp nhận đều có thể liệt kê các shell đang được giữ (`TermList`/`TermListAck`) và reattach một shell theo id. Mọi thao tác open, close, detach và reattach đều được ghi vào audit log kèm
   địa chỉ, tên và key. `TERM_CLOSE` được trả lời trước guard theo peer mà các message
@@ -455,6 +473,16 @@ iCloud và Finder, và app cùng broadcast extension dùng chung nó, và đó l
 tới được danh sách của app và *Approve* của app tới được extension. Phần file I/O nằm trong
 `platform/`; phần parse và các cấu trúc dữ liệu nằm trong `core/` và có unit test.
 
+Trên Windows còn có một thư mục thứ hai, `%ProgramData%\DeskHub`, thuộc về service *DeskHub
+Secure Desktop*. Service và các tiến trình nó khởi động gọi `SetConfigDir` và
+`SetAppDataDir` trên thư mục này, và vì chúng chạy dưới quyền SYSTEM,
+`ProtectWindowsConfigDir` chỉ để lại đúng SYSTEM và Administrators trên ACL của nó — không
+có người dùng tương tác nào. Thư mục luôn giữ log của service và của các agent; khi truy
+cập trước khi đăng nhập bật (T-28), nó còn giữ bản copy của `host_key.pem`,
+`authorized_keys` và `ui-settings.txt` mà unattended host đọc, cùng mọi `access_requests`
+và `pairing_tokens` host đó ghi ra. Tắt setting sẽ xoá các file đó;
+`DeskhubService.exe --uninstall` xoá cả thư mục.
+
 File do viewer gửi được lưu ở nơi khác: một thư mục do host chọn (trường `transfer_dir`
 trong `ui-settings.txt`, mặc định là `Deskhub` trong thư mục home của người dùng).
 `FileStore` ghi từng file dưới tên `<name>.deskhub-part` và chỉ đổi tên sau khi toàn bộ
@@ -511,6 +539,27 @@ coverage của core.
   được agent SYSTEM hay phím viewer bấm. Đó cũng là lý do bộ cài chuyển sang cài cho toàn
   máy: một binary service trong `%LOCALAPPDATA%` có thể bị bất kỳ tiến trình nào người dùng
   chạy thay thế.
+
+- **Truy cập trước khi đăng nhập chạy chính host của Deskhub, không phải một bản cài đặt
+  thứ hai**: service lẽ ra có thể có socket và encoder của riêng nó, nhưng mọi quy tắc về
+  admission, thu hồi, bitrate và input đã nằm sẵn trong `HostEngine`, nên unattended host
+  chính là `deskhub_win_core` mà app và CLI link tới, được service khởi động dưới quyền
+  SYSTEM trong console session và được bảo, qua một cờ toàn tiến trình, dùng agent cho mọi
+  frame thay vì WGC. Nó xin service một agent cho mỗi màn hình qua cùng pipe với app, đó là
+  lý do phép kiểm tra tin cậy giờ cũng chấp nhận `DeskhubService.exe` bên cạnh service cho
+  yêu cầu `Agent` và không gì khác — một agent dùng chung sẽ phải multiplex N màn hình qua
+  một pipe. Phần takeover nằm trong `SharingHost::Start`, không phải trong
+  `HostEnginePolicy::preflight`, vì engine bỏ qua `preflight` với phiên share chỉ terminal
+  hoặc chỉ file mà vẫn bind port; app giữ kết nối takeover chừng nào còn share, và service
+  khởi động lại unattended host khi kết nối đó đóng, nên "service làm host bất cứ khi nào
+  app không làm" không cần thông báo đổi session nào. Key của máy được copy thay vì tạo
+  mới để viewer thấy cùng một fingerprint trước và sau khi đăng nhập, và nó được đặt trong
+  `%ProgramData%\DeskHub` vì `ConfigDir()` ghi lại ACL của thư mục theo token gọi ở mỗi lần
+  gọi: nếu trỏ vào thư mục của người dùng, một tiến trình SYSTEM sẽ khoá người dùng khỏi
+  chính file của họ, trong khi một thư mục mới do SYSTEM tạo ra có đúng SYSTEM +
+  Administrators. Việc pair vẫn là hành động của người đã đăng nhập: một yêu cầu gửi ở màn
+  hình đăng nhập rơi vào một thư mục không ai nhìn tới, và cho phép màn hình đăng nhập
+  approve thiết bị sẽ trao cho kẻ lạ chính quyết định mà toàn bộ mô hình dựa vào.
 
 - **Chỉ host mới có thể kết thúc sớm một handshake, nên client lắng nghe xem nó kết thúc
   thế nào**: client từng chờ `AuthResult` tới 65 giây — di sản từ thời việc approve diễn ra

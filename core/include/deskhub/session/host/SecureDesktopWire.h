@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <optional>
 #include <span>
+#include <string>
 #include <string_view>
 #include <vector>
 
@@ -14,6 +15,23 @@ enum class SecureDesktopMsg : uint8_t {
     DesktopState = 3,
     Frame = 4,
 };
+
+enum class SecureDesktopRequest : uint8_t {
+    Agent = 1,
+    Takeover = 2,
+    Configure = 3,
+};
+
+inline constexpr uint8_t kSecureDesktopAck = 1;
+inline constexpr uint32_t kSecureDesktopDefaultMaxFps = 10;
+inline constexpr uint32_t kSecureDesktopMaxFps = 240;
+inline constexpr size_t kUnattendedMaxHostKeyBytes = 8 * 1024;
+inline constexpr size_t kUnattendedMaxAuthorizedKeysBytes = 256 * 1024;
+inline constexpr size_t kUnattendedMaxSettingsBytes = 16 * 1024;
+inline constexpr size_t kUnattendedConfigLengthSize = 4;
+inline constexpr size_t kUnattendedConfigMaxBytes = 1 + 3 * 4 + kUnattendedMaxHostKeyBytes +
+                                                    kUnattendedMaxAuthorizedKeysBytes +
+                                                    kUnattendedMaxSettingsBytes;
 
 inline constexpr size_t kSecureDesktopHeaderSize = 5;
 inline constexpr uint32_t kSecureDesktopMaxFrameSide = 8192;
@@ -28,6 +46,17 @@ struct SecureDesktopWatch {
     int32_t top = 0;
     uint32_t width = 0;
     uint32_t height = 0;
+    bool alwaysStream = false;
+    uint32_t maxFps = kSecureDesktopDefaultMaxFps;
+};
+
+struct UnattendedConfig {
+    bool enabled = false;
+    std::string hostKeyPem;
+    std::string authorizedKeys;
+    std::string settings;
+
+    bool operator==(const UnattendedConfig&) const = default;
 };
 
 enum class SecureDesktopInputKind : uint8_t {
@@ -58,6 +87,11 @@ struct SecureDesktopMessage {
 };
 
 bool IsSecureDesktopName(std::string_view inputDesktopName);
+std::optional<SecureDesktopRequest> DecodeSecureDesktopRequest(uint8_t byte);
+
+std::vector<uint8_t> EncodeUnattendedConfig(const UnattendedConfig& config);
+std::optional<uint32_t> DecodeUnattendedConfigLength(std::span<const uint8_t> prefix);
+std::optional<UnattendedConfig> DecodeUnattendedConfig(std::span<const uint8_t> body);
 
 std::vector<uint8_t> EncodeSecureDesktopWatch(const SecureDesktopWatch& watch);
 std::vector<uint8_t> EncodeSecureDesktopInput(const SecureDesktopInput& input);

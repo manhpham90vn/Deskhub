@@ -7,6 +7,7 @@
 #include <cstdio>
 #include <string>
 
+#include "MachineFolder.h"
 #include "WinPaths.h"
 #include "secure/SecureDesktopNames.h"
 
@@ -117,5 +118,7 @@ int UninstallSecureDesktopService() {
             kStopWaitMs);
     if (!DeleteService(service.get()) && GetLastError() != ERROR_SERVICE_MARKED_FOR_DELETE)
         return Fail("DeleteService");
+    if (!WipeMachineFolder())
+        std::fprintf(stderr, "DeskhubService: could not remove %ls.\n", MachineFolderPath().c_str());
     return 0;
 }

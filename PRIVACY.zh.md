@@ -2,7 +2,7 @@
 
 # Deskhub 隐私政策
 
-_生效日期：2026 年 10 月 16 日 —— 版本 2.14_
+_生效日期：2026 年 10 月 17 日 —— 版本 2.15_
 
 > 本文件译自 [`PRIVACY.md`](PRIVACY.md)。如有出入，以英文版为准。
 
@@ -46,6 +46,7 @@ analytics、crash reporting、广告，也未嵌入收集数据的第三方 SDK�
 | 你输入的 IPv4 地址（以及你给出的 port）—— Deskhub 不解析 host 名称 | 连接到另一台机器 | 仅保留在你输入它的设备上 | 本地保留至你修改为止 |
 | 最近连接的 10 个 host —— 地址、最近一次连接的时间以及 host 自报的名称 | 填充 *Recent devices* 列表 | 写入你设备上 app 自身文件夹中的 `recent-hosts.txt`，每个 host 一行：Windows 为 `%USERPROFILE%\.deskhub`，macOS 与 Linux 为 `~/.deskhub`，iOS 与 Android 为 app 沙箱；从不传输。早期版本的 `recent-devices.txt` 文件会被删除，而非转换 | 保留至你连接了 10 个更新的 host，或删除该文件为止 |
 | 你的共享设置（frame rate、bitrate、分辨率上限、port、network 地址、viewer 操作权限、本设备是否操作它所观看的机器，以及 clipboard sync、共享声音、播放所观看机器的声音、keep awake、随 OS 启动、自动共享与后台模式等开关） | 在下次打开 app 时恢复你的 settings | 写入同一文件夹中的 `ui-settings.txt`；在 iOS 上位于 app 与 broadcast extension 共享的 app group 容器中 | 保留至你修改或删除该文件为止 |
+| 本设备的 key、其允许的 client 及其共享设置的副本，为在任何人登录之前运行的 host 保留（仅 Windows，且仅在 *Allow access before anyone signs in* 开启期间） | 让已在允许列表上的设备在 Windows 启动后随即看到登录画面并输入密码，并在 app 未运行的任何时候访问该机器 | 由 *DeskHub Secure Desktop* service 应 app 的请求写入 `%ProgramData%\DeskHub` 中的 `host_key.pem`、`authorized_keys` 与 `ui-settings.txt`，该文件夹只有 SYSTEM 与管理员能打开；每当 app 更改原件时刷新。读取它们的 host 也会在那里写入 `access_requests` 与 `pairing_tokens`，service 的日志也位于那里。传输的内容不超出 app 自身会发送的范围：同一把 key、同一个 fingerprint、同样的准入 | 在你关闭该设置时移除；卸载 DeskHub 时整个文件夹一并移除 |
 | *Start Deskhub when you log in* 创建的启动项（仅桌面端） | 在你登录时启动 Deskhub | 由操作系统自身的机制创建，位于 app 文件夹之外：Windows 上为名为 *Deskhub* 的 scheduled task（在登录时以最高权限运行），Linux 上为 `~/.config/autostart/deskhub.desktop`，macOS 上为一个登录项。它只包含 app 的路径；不会传输任何内容 | 在你关闭该设置时移除 |
 | 你在 Linux 桌面的屏幕共享对话框中选定 display 后，桌面签发的屏幕 permission token（仅 Linux） | 使后续共享复用该选择，从而对话框仅在首次出现 | 写入同一文件夹中的 `portal-restore-token.txt`；该 token 仅对本机上你自己的桌面 session 有意义，不会被传输 | 每次共享后被替换；在你选择 *Choose screens again* 或删除该文件时移除 |
 | Clipboard 文本（仅当 clipboard sync 开关开启且存在运行中的 session 时） | 使在一台设备上复制的文本可在其他设备上粘贴 | 在你的设备之间直接发送，传输中 encrypt（QUIC/TLS），每次复制上限 32 KiB；仅限纯文本，不包含图片或文件 | Deskhub 不存储；仅存在于各设备自身的系统 clipboard 中 |
@@ -120,7 +121,7 @@ desktop 时，已安装的 app 会继续共享：viewer 能看到 UAC 提示、�
 | macOS | 辅助功能（Accessibility） | 本 Mac 在允许操作的情况下共享时，用于 inject viewer 的 mouse 与 keyboard input，并察觉 Mac 前的用户何时操作了它（host 优先）。 |
 | macOS | Local Network | Deskhub 首次访问你 network 上的另一台设备时由 macOS 询问。仅用于 session。 |
 | Windows | 管理员权限（UAC） | app 以提权方式运行，以便向提权窗口 inject input。每次启动时 UAC 都会询问，唯一的例外是 *Start Deskhub when you log in* 通过其 scheduled task 启动它。 |
-| Windows | 系统 service（*DeskHub Secure Desktop*） | 由安装程序添加，以 LocalSystem 运行。仅在 app 共享期间，它捕获 Windows 的 secure desktop —— UAC 提示、锁屏、登录与 Ctrl+Alt+Del 画面 —— 交由 app 像其他画面一样发送给 viewer，并将 viewer 的 mouse 与 keyboard input 送达那里。它不存储任何内容，也不建立任何 network 连接。 |
+| Windows | 系统 service（*DeskHub Secure Desktop*） | 由安装程序添加，以 LocalSystem 运行。在 app 共享期间，它捕获 Windows 的 secure desktop —— UAC 提示、锁屏、登录与 Ctrl+Alt+Del 画面 —— 交由 app 像其他画面一样发送给 viewer，并将 viewer 的 mouse 与 keyboard input 送达那里。开启 *Allow access before anyone signs in*（默认关闭）后，它还会在 app 未共享的任何时候 —— 从登录画面开始 —— 运行一个自己的 host，使用第 3 节所述的副本，并只准入已被允许的设备；该 host 会添加一条名为 *Deskhub Secure Desktop (host)* 的 firewall 规则。该 service 把日志保存在 `%ProgramData%\DeskHub` 中，仅 SYSTEM 与管理员可读；除此之外不存储任何内容。 |
 | Windows | Windows Firewall | 共享时，提权运行的 app 会为自己添加或刷新一条名为 *Deskhub (host)* 的入站 UDP 规则，覆盖所有 network profile。它不修改其他任何规则；你为 Deskhub 创建的 block 规则会保持不变，并使它继续无法被访问。 |
 | Linux | 屏幕共享同意（桌面 portal） | 桌面自身的对话框会在首次共享时询问要共享哪些屏幕；该回答通过第 3 节所述的 token 被记住。 |
 | Linux | 虚拟 input 设备（`/dev/uinput`） | 用于 inject viewer 的 input。`.deb` 与 `.rpm` 会安装一条 udev 规则，将其开放给 `input` 组以及在座席上登录的用户。 |
@@ -187,7 +188,9 @@ token 可通过删除 app 的文件夹移除（Windows 上为
 `%USERPROFILE%\.deskhub`，macOS 与 Linux 上为 `~/.deskhub`），app 会在下次启动时重新
 创建空的文件夹；诊断日志也位于同一文件夹中，会随之删除。在 iOS 与 Android 上，卸载 app
 即可移除这些数据。*Start Deskhub when you log in* 创建的启动项位于该文件夹之外：请在删除
-该文件夹或卸载之前关闭该设置，或手动移除该启动项。
+该文件夹或卸载之前关闭该设置，或手动移除该启动项。在 Windows 上，为
+*Allow access before anyone signs in* 保留的副本位于 `%ProgramData%\DeskHub`：关闭该设置即移除
+它们，卸载 DeskHub 则移除该文件夹，日志也一并移除。
 
 其他设备发送给你的文件属于你，而不属于 app。送达之后，这些文件位于该电脑选定的文件夹
 中，或位于手机与平板的相册、Documents 或 Downloads 中。卸载 Deskhub 不会影响这些文件，
@@ -221,6 +224,7 @@ https://github.com/manhpham90vn/Deskhub/blob/main/PRIVACY.md
 
 | 版本 | 日期 | 变更内容 |
 |---|---|---|
+| 2.15 | 2026-10-17 | **如果你开启，Windows 可在任何人登录之前被访问。** 新增设置 *Allow access before anyone signs in*，默认关闭，且仅在 DeskHub 通过安装程序安装时可用；开启后，*DeskHub Secure Desktop* service 会在 app 未共享的任何时候 —— 从 Windows 启动后紧接着的登录画面开始 —— 运行一个自己的 host。为此，该 service 在 `%ProgramData%\DeskHub` 中保留本设备的 key、其允许的 client 及其共享设置的副本，该文件夹只有 SYSTEM 与管理员能打开；读取它们的 host 也可能在那里写入 connection request 与 QR token，service 的日志现在也位于该文件夹中。只有已被允许的设备才能进入；该 host 不显示任何内容，也不批准任何人。关闭该设置会删除副本，卸载则删除该文件夹。不会传输任何新内容。 |
 | 2.14 | 2026-10-16 | **在 Windows 上，共享现在会贯穿 secure desktop 继续进行。** 安装程序现在为所有用户安装 DeskHub，并添加一个系统 service *DeskHub Secure Desktop*。在 app 共享期间，该 service 捕获 UAC 提示、锁屏以及登录与 Ctrl+Alt+Del 画面，这些画面随后像屏幕的其余部分一样传输给 viewer，并将 viewer 的 mouse 与 keyboard input 送达那里 —— 因此 viewer 可以回应 UAC 提示，知道账户密码的 viewer 也可以解锁该机器。早期版本在这些画面出现期间向 viewer 显示的是冻结的画面。不会存储任何新数据，该 service 也不会自行建立任何 network 连接。 |
 | 2.13 | 2026-10-01 | **被拒绝的 connection request 会保留到过期。** 以前在 connection request 上按下 *Deny* 会立即从 `access_requests` 中删除该行。现在它会立即将该请求从列表中移除，但保留该行 —— 同样的名称、public key、地址与时间，并标记为已拒绝 —— 直到其 10 分钟期满，因此被拒绝设备之后的尝试会被拒绝，而不会提交新的请求。不会收集或传输任何新数据。 |
 | 2.12 | 2026-10-01 | **更正与更严格的本地数据处理。** Windows、macOS 与 Linux 上的诊断日志文件现在仅你可读，较旧的日志会被自动删除，只保留最新的十个；Windows app 不再把 viewer 按下的按键写入日志，无论是在 remote control 中还是在 terminal 中；本政策现已列出日志包含的内容，其中不包括 viewer 按下的按键。连接统计会记录在这些日志中，而本政策的早期版本未说明这一点。connection request 只有在请求设备用其 key 签名之后才会被记录，因此它出示的 key 已得到证明。由本设备 key 构建的 TLS certificate —— 仅公开部分 —— 会被短暂写入仅你可读的文件并立即删除，因 crash 而遗留的文件会在本设备下次开始共享时删除；早期版本称其从不保存。在 iOS 上，保存本设备 private key 的文件夹现已被排除在 iCloud 与电脑备份之外。旧的 `auth_salt` 文件现在会被删除，旧 `ui-settings.txt` 中遗留的 passcode 行会在加载该文件时立即移除。本版本还更正了早期的陈述：`known_hosts` 会记录首次与最后一次连上每个 host 的时间；设置文件还保存本设备是否操作其所观看的机器以及是否播放其声音；现已列出 *Start Deskhub when you log in* 创建的启动项；iOS 的 broadcast 状态文件保存已连接 viewer 的名称；使用 QR code 或链接连接的设备会在 TLS handshake 的第一个 packet 中以未 encrypt 的形式发送 host 的名称；你输入的地址是 IPv4 地址，从不解析 host 名称；permission 表现已涵盖 macOS、Windows 与 Linux；本软件包含开源库，但没有收集数据的 SDK；iOS app 通过 TestFlight 分发，TestFlight 与 Google Play Console 一样，可向开发者展示单台设备的 crash 报告。 |

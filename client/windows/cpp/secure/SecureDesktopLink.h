@@ -6,6 +6,7 @@
 #include <atomic>
 #include <cstdint>
 #include <functional>
+#include <memory>
 #include <span>
 #include <thread>
 
@@ -33,12 +34,11 @@ public:
     bool Forward(const INPUT& input);
 
 private:
-    bool ConnectToService();
     bool ReceiveAgentPipe();
     void ReadLoop();
     void Dispatch(const deskhub::SecureDesktopMessage& msg);
 
-    OverlappedPipe control_;
+    std::unique_ptr<OverlappedPipe> control_;
     OverlappedPipe agent_;
     std::thread reader_;
     FrameSink onFrame_;

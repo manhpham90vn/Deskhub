@@ -31,6 +31,8 @@ void TestEveryLabelSaysSomething() {
         ui::kNoDisplayTicked, ui::kNoDisplayFound, ui::kWaitingForDisplays,
         ui::kStopDisplayAction, ui::kDisconnectViewerAction,
         ui::kAllowControlLabel, ui::kViewOnlyNote, ui::kRequestControlLabel,
+        ui::kUnattendedLabel, ui::kUnattendedHint, ui::kUnattendedServiceMissingNote,
+        ui::kUnattendedPushFailedNote,
         ui::kClientIpPlaceholder, ui::kUdpPortLabel,
         ui::kLanDevicesEmpty,
         ui::kAppVersion, ui::kProjectUrl, ui::kProjectLinkLabel,

@@ -308,6 +308,25 @@ HostEngine (one per app, owns SessionTransport)
   uploaded into a texture and fed through the same admission, scaler and encoder path,
   and `InputInjector` forwards every `INPUT` to the agent instead of calling
   `SendInput`. Each switch forces a keyframe.
+
+  Every connection to the control pipe opens with one request byte
+  (`SecureDesktopRequest`): `Agent` is the flow above; `Takeover` and `Configure` serve
+  access before sign-in (T-28). With it on, the service's supervisor thread keeps
+  `DeskhubService.exe --unattended-host` running as SYSTEM in the console session
+  whenever no `Deskhub.exe` holds a `Takeover` connection. That process is the ordinary
+  `SharingHost` + `HostEngine` with `SetConfigDir`/`SetAppDataDir` pointed at
+  `%ProgramData%\DeskHub`, a process-wide `UnattendedMode()` flag that skips WGC, routes
+  every `INPUT` through the link, and sends a `Watch` with `alwaysStream` and the share
+  fps as `maxFps`; it asks the service for one agent per display exactly as the app
+  does, so multi-monitor needs no new plumbing. `SharingHost::Start` in `Deskhub.exe`
+  sends `Takeover` before the engine binds: the service terminates the unattended host,
+  waits for it to exit so the UDP port is free, acks, and keeps it down until that
+  connection closes in `SharingHost::Stop`. `Configure` carries an `UnattendedConfig`
+  (enabled flag, `host_key.pem`, `authorized_keys`, `ui-settings.txt` text); the service
+  writes the three files atomically into the machine folder, restarts the host when the
+  key or the settings changed, and wipes the files when disabled. The app sends it when
+  the setting is toggled, after every settings save, after every change to the allowed
+  list, when a share stops and once at start.
 - Shells: one PTY per shell (`ConPTY` on Windows, `forkpty` elsewhere), at most 8; a
   dropped connection detaches the shell and the PTY stays alive until the shell
   process exits or the shell is closed — no time limit. Any admitted client can list
@@ -460,6 +479,15 @@ and the broadcast extension share it, which is how the extension's request reach
 app's list and the app's *Approve* reaches the extension. File I/O stays in `platform/`;
 the parsing and the data structures live in `core/` and are unit-tested.
 
+On Windows a second folder exists, `%ProgramData%\DeskHub`, owned by the *DeskHub Secure
+Desktop* service. The service and the processes it starts call `SetConfigDir` and
+`SetAppDataDir` on it, and because they run as SYSTEM, `ProtectWindowsConfigDir` leaves
+exactly SYSTEM and Administrators on its ACL — no interactive user. It always holds the
+service's and the agents' logs; with access before sign-in on (T-28) it also holds the
+copies of `host_key.pem`, `authorized_keys` and `ui-settings.txt` the unattended host
+reads, plus whatever `access_requests` and `pairing_tokens` that host writes. Turning the
+setting off removes those files; `DeskhubService.exe --uninstall` removes the folder.
+
 Files a viewer sends land somewhere else entirely: a folder the host picks
 (`ui-settings.txt`'s `transfer_dir`, defaulting to `Deskhub` in the user's home
 folder). `FileStore` writes each one as `<name>.deskhub-part` and renames it only
@@ -517,6 +545,28 @@ line.
   pipe squatter nor another elevated program gets a SYSTEM agent or the viewer's
   keystrokes. That is also why the installer became per-machine: a service binary in
   `%LOCALAPPDATA%` could be replaced by any process the user runs.
+
+- **Access before sign-in runs Deskhub's own host, not a second implementation**: the
+  service could have grown a socket and an encoder of its own, but every rule about
+  admission, revocation, bitrate and input already lives in `HostEngine`, so the
+  unattended host is the same `deskhub_win_core` the app and the CLI link, started by the
+  service as SYSTEM in the console session and told, through one process-wide flag, to
+  use the agent for every frame instead of WGC. It asks the service for one agent per
+  display over the same pipe as the app, which is why the trust check now also accepts
+  `DeskhubService.exe` beside the service for the `Agent` request and nothing else — a
+  single shared agent would have meant multiplexing N monitors over one pipe. The
+  takeover sits in `SharingHost::Start`, not in `HostEnginePolicy::preflight`, because
+  the engine skips `preflight` for a terminal- or file-only share and still binds the
+  port; the app holds the takeover connection for as long as it shares, and the service
+  restarts the unattended host when it closes, so "the service hosts whenever the app
+  does not" needs no session-change notifications. The machine key is copied rather than
+  generated anew so viewers see one fingerprint before and after sign-in, and it goes to
+  `%ProgramData%\DeskHub` because `ConfigDir()` rewrites the folder ACL to the calling
+  token on every call: pointed at the user's folder, a SYSTEM process would lock the user
+  out of their own files, while a fresh folder created by SYSTEM comes out as exactly
+  SYSTEM + Administrators. Pairing stays a signed-in act: a request filed at the sign-in
+  screen lands in a folder nobody looks at, and letting the sign-in screen approve
+  devices would hand a stranger the one decision the whole model rests on.
 
 - **Only the host can end a handshake early, so the client listens for how it ended**:
   the client used to wait 65 s for an `AuthResult` — a leftover from when approval was

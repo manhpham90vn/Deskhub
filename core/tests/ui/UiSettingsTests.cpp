@@ -26,8 +26,21 @@ void TestRoundTrip() {
     s.clipboardSync = true;
     s.startHidden = true;
     s.keepAwake = false;
+    s.unattended = true;
     Check(ui::ParseUiSettings(ui::SerializeUiSettings(s)) == s,
         "serialize then parse is identity");
+}
+
+void TestUnattendedPersists() {
+    std::printf("[settings] access before sign-in defaults off and round-trips...\n");
+    Check(!ui::UiSettings{}.unattended, "nobody gets in before sign-in unless the owner says so");
+    Check(ui::ParseUiSettings("unattended=1").unattended, "unattended round-trips on");
+    Check(!ui::ParseUiSettings("unattended=0").unattended, "and off");
+    Check(!ui::ParseUiSettings("unattended=x").unattended, "junk falls back to off");
+    ui::UiSettings s;
+    s.unattended = true;
+    Check(ui::SerializeUiSettings(s).find("unattended=1\n") != std::string::npos,
+        "the key is written so the service can be told again at the next start");
 }
 
 void TestBindIpPersistence() {
@@ -222,4 +235,5 @@ void RunUiSettingsTests() {
     TestGarbageFallsBackPerKey();
     TestBoundsAreEnforced();
     TestTerminalSharePersistence();
+    TestUnattendedPersists();
 }

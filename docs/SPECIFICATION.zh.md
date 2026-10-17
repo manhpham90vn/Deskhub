@@ -94,7 +94,7 @@ CLI 可在 Windows 和 Linux 上查看远程屏幕；macOS 上请使用 app 观�
 | H-15 | 空闲的 shell 不视为断开 | 无流量的 terminal 连接由 client 保活，因此停留在提示符处的 shell 不会被误判为链路断开而关闭。 |
 | H-16 | File transfer source（桌面） | source 列表中另有 **File transfer — files viewers send**，在每次列表显示时重新勾选，且不会被保存。与 terminal（H-11）相同，它共用 app 的同一个 UDP port（T-4）、允许的 client 列表（S-2）与 network 选择。文件写入共享开始后实时表中 *File transfer* 行标明的文件夹（H-17、T-25）。单个 batch 最多 **32** 个文件、单文件 **8 GiB**、合计 **32 GiB**；超出部分或无法保存的文件名将连同原因被拒绝。每个文件先以最终名称加 `.deskhub-part` 后缀写入，仅在完整到达且 checksum 匹配后改名；损坏的文件被丢弃，并终止整个 batch。不会覆盖任何文件：文件夹中已存在的同名文件将追加编号。若该文件夹不可写，host 不接收任何文件并明确告知，而非静默失败。 |
 | H-17 | 表中的传输 | file transfer 共享期间，实时表中显示一行 *File transfer* 标明文件夹，旁边配一个 **Open folder** 按钮，用于在系统文件管理器中打开该文件夹，每台正在发送的机器在其下各占一行，标识方式与 viewer 相同（C-7），并显示正在接收的文件、其在 batch 中的位置与完成比例，或 batch 终止的原因。*File transfer* 行上的 *Stop* 仅结束文件传输。batch 的提出、接受、拒绝与完成均连同该机器的地址、名称和 key 写入 session log（G-3）。 |
-| H-18 | Connection request | 不在允许的 client 之列却前来 connect 的设备不会被直接打发走：一旦它证明自己持有所出示 key 的 private 部分 —— 因此无人能以其他设备的名义提交 request —— host 便记录一条 **connection request**，Host 页在地址列表与实时 session 表之间列出它，所有平台一致。每行显示该设备的名称（或 *(unnamed)*）、其 key fingerprint 的开头、其地址，以及 **Approve** 与 **Deny**。*Approve* 把该设备的 key 以设备名称为 label 加入允许的 client，因此它的下一次尝试 —— 它会自行持续尝试（C-5）—— 即可接入；*Deny* 把该 request 从列表中移除，并在该 request 剩余的 10 分钟内拒绝该设备：它的下一次尝试会被拒绝而不会再次提交，仍在等待（C-5）的设备会立即停止，并说明所有者拒绝了它的 request。request 在 **10 分钟**后自行过期，host 最多保留 **16** 条，并丢弃最旧的一条以腾出位置，且**每个地址最多一条**：同一设备再次请求只刷新自己那一行而不新增，来自已有 request 的地址的新 request 会取代那一行，无论由哪台设备发出。没有等待中的 request 时，该区域用一行文字说明。同一列表也出现在 Devices 页（S-3），因此无需打开 Host 页即可回应 request；每条新 request 还会在应用运行期间触发一条**系统通知** —— *Connection request*：‹名称›（‹地址›）wants to connect to this machine —— 每台设备一条，所有平台一致；应用关闭时到达的 request 不会产生通知，通知也只发往本机自己的通知中心。CLI 以 `access requests` 列出它们，以 `access approve` / `access deny --fingerprint SHA256:…` 作答；正在运行的 `share` 也会在每条新 request 到达时打印它。 |
+| H-18 | Connection request | 不在允许的 client 之列却前来 connect 的设备不会被直接打发走：一旦它证明自己持有所出示 key 的 private 部分 —— 因此无人能以其他设备的名义提交 request —— host 便记录一条 **connection request**，Host 页在地址列表与实时 session 表之间列出它，所有平台一致。每行显示该设备的名称（或 *(unnamed)*）、其 key fingerprint 的开头、其地址，以及 **Approve** 与 **Deny**。*Approve* 把该设备的 key 以设备名称为 label 加入允许的 client，因此它的下一次尝试 —— 它会自行持续尝试（C-5）—— 即可接入；*Deny* 把该 request 从列表中移除，并在该 request 剩余的 10 分钟内拒绝该设备：它的下一次尝试会被拒绝而不会再次提交，仍在等待（C-5）的设备会立即停止，并说明所有者拒绝了它的 request。request 在 **10 分钟**后自行过期，host 最多保留 **16** 条，并丢弃最旧的一条以腾出位置，且**每个地址最多一条**：同一设备再次请求只刷新自己那一行而不新增，来自已有 request 的地址的新 request 会取代那一行，无论由哪台设备发出。没有等待中的 request 时，该区域用一行文字说明。同一列表也出现在 Devices 页（S-3），因此无需打开 Host 页即可回应 request；每条新 request 还会在应用运行期间触发一条**系统通知** —— *Connection request*：‹名称›（‹地址›）wants to connect to this machine —— 每台设备一条，所有平台一致；应用关闭时到达的 request 不会产生通知，通知也只发往本机自己的通知中心。在任何人登录之前连接 Windows 机器（T-28）的设备会以同样方式被拒绝，但那条 request 永远不会显示：它必须在有人登录期间获得批准，或由对方粘贴其 key。CLI 以 `access requests` 列出它们，以 `access approve` / `access deny --fingerprint SHA256:…` 作答；正在运行的 `share` 也会在每条新 request 到达时打印它。 |
 
 ## 5. Connect —— 观看另一台机器
 
@@ -161,9 +161,10 @@ CLI 可在 Windows 和 Linux 上查看远程屏幕；macOS 上请使用 app 观�
 | S-4 | 连续失败后锁定 | 同一 client key 与地址在一分钟内出现 **3** 次无效签名，该 key 将在该地址上被封锁 **10 秒**；由已用其 key 签名的设备发送的错误 QR token 按其来源地址计入同一限制，因此 token 无法被猜出。等待批准从不算作失败。host 同时最多保留 **8** 个等待 authenticate 的连接，拒绝之后的任何连接，并断开自连接起 **10 秒**内未完成 authenticate 的连接。host 未放行的连接 —— 被拒绝或正在等待批准 —— 在 host 作出答复约 **2 秒**后由 host 关闭。它还最多保留 **16** 条 connection request，**每个地址最多一条**，每条 **10 分钟**（H-18）。其他 client 不受影响。 |
 | S-5 | control 开关 | host 可在关闭 *viewers can control this machine* 的状态下共享，此时无论 viewer 请求什么，所有 session 均为 view-only。 |
 | S-6 | capture 的同意 | 在有此要求的平台上，使用操作系统自身的 permission 提示与屏幕选择对话框；未获用户授予时 Deskhub 无法 capture。 |
-| S-7 | 仅在明确要求时共享 | 在用户开始共享之前不共享任何内容。关闭或停止即结束所有 session。 |
+| S-7 | 仅在明确要求时共享 | 在用户开始共享之前不共享任何内容。关闭或停止即结束所有 session。唯一的例外是有意为之且默认关闭的：所有者开启了 T-28 的 Windows 机器会在 app 未共享的任何时候 —— 包括在任何人登录之前 —— 向其允许列表上的设备共享其 display。 |
 | S-8 | 受信任的 host 跟随 key | client 固定其信任的每个 host 的 key —— 首次连接时在用户确认 fingerprint 后（C-2），包括从 app 外部打开的 `deskhub://pair/…` 链接，或取自在 app 内扫描或粘贴的 host QR code（C-12）—— 并在发送任何内容之前进行检查。信任属于 key 而非地址：迁到新地址的受信任 host 在那里同样被识别，无需任何对话框即可 connect，*Trusted hosts* 会把新地址记为其最后地址。已知地址上的另一把 key 只是本机尚未见过的一个 host：*New host* 对话框像任何首次连接一样出现，并附警告说明该地址曾属于另一个受信任的 host；后者会留在列表中，直到用户移除它。CLI 会拒绝未知的 host 并打印其 fingerprint，仅在带 `--accept-new-host-key` 重新运行时才保存；也可以预先固定某个 host（`host add ALIAS --address IP[:PORT] --host-key-stdin`），`trust forget` 接受 fingerprint、alias 或最后一次应答的地址。 |
 | S-9 | 机器 key | 每台机器恰有一把 key，在首次运行时创建，永远不会自动替换；它是两种角色下的身份，没有任何需要生成、导入或挑选的东西。Devices 页上的 *Copy public key*（CLI：`key public`）复制一行 `ecdsa-sha2-nistp256 AAAA… <device name>`，以本机的设备名称（T-27）为 label；host 的所有者粘贴以允许本机的正是这一行（`ssh-ed25519` 行同样被接受），host 在批准本机的 connection request 或通过 QR code 准入本机时保存的也是它。private key 永远不会离开本机。删除该 key 文件会让本机获得新的身份：曾允许它的 host 需要重新允许，曾信任它的 client 会再次看到 *New host* 对话框。 |
+| S-12 | 登录前访问会保留副本 | T-28 开启时，Windows 机器会在 `%ProgramData%\DeskHub` 中保留 `host_key.pem`、`authorized_keys` 与共享 settings 的第二份副本，由 *DeskHub Secure Desktop* service 代 app 写入，且只有 SYSTEM 与管理员可读 —— 用户自己的账户不能，本机的其他用户也不能。只有已安装的 `Deskhub.exe` 能向该 service 提供新副本，以连接进程的映像路径核验；app 对允许列表或 settings 的每一次更改都会立即复制过去。该 service 运行的 host 只读取那个文件夹：SYSTEM 从不触碰用户自己的文件夹。关闭 T-28 会删除这些副本；卸载 DeskHub 会删除整个文件夹。该 service 自身的日志也位于该文件夹中，受同样的限制。 |
 | S-10 | 不沿用旧的访问设置 | 旧版本的访问设置不会被转换。从 7.0.x 升级时，每个 client 都必须重新被放行一次 —— 通过批准、QR code，或粘贴其 key —— 因为 client 现在用来登录的 key 是其机器 key；遗留的 `client_key*.pem` 与 `host_cert.pem` 会被忽略，从不读取或迁移。旧版本无法 connect 到 9.0，并会被告知版本不匹配：7.0.x、8.0.0 与 9.0 之间互不相通，请更新所有设备。 |
 
 ## 10. Settings
@@ -173,7 +174,7 @@ Settings 按机器保存，跨重启保留，并自下一次开始共享时生�
 提供共享所用的 network（T-9）。其余项目使用内置默认值。
 
 在桌面端，Settings 页面把这些项目分成三个区域：**Host** 放仅共享时使用的项目（T-1 – T-3、
-T-6、T-11、T-22 以及 T-25 的文件夹），**Client** 放仅观看时使用的项目（T-23），
+T-6、T-11、T-22、T-25 的文件夹，以及 Windows 上的 T-28），**Client** 放仅观看时使用的项目（T-23），
 **General** 放两端都会使用的项目（T-26、T-4、T-13、T-15、T-17、T-19）。
 
 | ID | Setting | 取值范围 | 默认值 |
@@ -192,6 +193,7 @@ T-6、T-11、T-22 以及 T-25 的文件夹），**Client** 放仅观看时使用
 | T-22 | 向 viewer 共享本设备的声音 | 开 / 关 | 开 |
 | T-23 | 播放所观看设备的声音 | 开 / 关 | 开 |
 | T-26 | 设备名称 | 最多 64 字节文本 | 留空 —— 使用操作系统为本机设定的名称 |
+| T-28 | 允许在任何人登录之前访问 | 开 / 关 | 关 |
 
 | ID | 功能 | 说明 |
 | --- | --- | --- |
@@ -206,6 +208,7 @@ T-6、T-11、T-22 以及 T-25 的文件夹），**Client** 放仅观看时使用
 | T-25 | 接收文件的存放位置 | 仅桌面。viewer 发送的文件写入本机选定的文件夹，默认为用户主目录下的 `Deskhub`。所选文件夹在共享期间标注于实时表的 *File transfer* 行（H-17），旁边配一个 **Open folder** 按钮——共享开始前不显示，因为此时它还没有任何作用。该文件夹若不存在则自动创建，所选路径与其他 settings 一并保存。不会向该文件夹之外写入任何内容：发送方提供的名称会被截取为路径的最后一段，并清除本地 filesystem 无法保存的字符。 |
 | T-27 | 设备名称 | Settings → General → *Device name* 为本机在所有场合命名：作为 host 时 viewer 可见（H-7），被本机接纳的 client 在其最近列表中可见（D-5），connect 时 host 可见（C-7），并用作其所复制 public key 的 label，以及 host 在批准本设备或通过 QR code 准入本设备时所保存 key 的 label（S-9）。留空时使用操作系统为本机设定的名称：Windows、Linux、macOS 与 iOS 使用 hostname，Android 使用设备型号。在 macOS 与 iOS 上，留空的输入框和 Devices 页会以系统的设备名称作为提示，但其他机器看到的、以及用作 key label 的是 hostname。控制字符会被移除。 |
 | T-24 | 共享的声音内容 | T-22 开启时，host 共享其扬声器正在播放的内容，即该机器上所有应用产生的混合音频。Deskhub 不 capture microphone，也不提供双向音频。Android 是唯一涉及 permission 的平台：其 playback-capture API 位于系统标记为 *Microphone* 的 permission 之后，app 在开始共享时申请该 permission，且不作其他用途；若被拒绝，共享继续进行但没有声音。其他平台不申请 microphone permission。viewer 仅在自行开启相应选项（T-23）时才接收声音，因此开启 T-22 的 host 也不会向未开启接收的 viewer 发送数据；两个开关均自下一次 session 开始时生效。 |
+| T-28 | 登录前访问 | 仅 Windows app，且仅当 DeskHub 是通过安装程序安装时 —— 否则该复选框呈灰色，并附一行说明。开启后，*DeskHub Secure Desktop* service 会在 app 未共享的任何时候保持一个自己的 host 运行：从 Windows 启动的那一刻起、在登录画面、用户注销之后，以及 app 退出之后。该 host 共享每个 display，viewer 是否可 control 依 T-6 而定，此外别无其他 —— 没有声音、clipboard、terminal 或 file transfer。它以本机惯常的 key 与 fingerprint 应答，并恰好准入允许列表（S-2）上的设备，因此已被允许的 viewer 可以在登录画面连接、输入账户密码并一路进入桌面；未被允许的设备会被拒绝，必须在有人登录期间获得批准或被粘贴 key —— 登录前的 request 不会显示，也没有人能从登录画面本身放行任何设备。开启该设置会把机器 key、允许列表与共享 settings 复制到一个只有 SYSTEM 与管理员可读的文件夹（S-12）；此后对允许列表或 settings 的每次更改都会立即复制过去，因此在 Devices 页移除某台设备，一秒之内就会把它挡在登录画面之外。app 开始共享时，service 的 host 先行让位，viewer 的连接会短暂中断，随后对着 app 恢复，fingerprint 保持不变；app 停止共享或退出时，service 的 host 会在约两秒内回来。关闭该设置会移除副本并停止该 host。限制：该 host 无法发送 Ctrl+Alt+Del，因此策略要求在密码框之前按下它的机器无法以此方式登录（锁屏的幕帘用任意按键或点击即可消除，不受影响）；在接上 display 之前它不会运行；且全机只有一份副本 —— 最后开启它的用户决定其内容。 |
 
 ## 11. 状态与故障排查
 
@@ -220,7 +223,7 @@ T-6、T-11、T-22 以及 T-25 的文件夹），**Client** 放仅观看时使用
 
 | ID | 平台 | 行为 |
 | --- | --- | --- |
-| P-1 | Windows | app 在启动时申请一次管理员权限，这是它能够向提权窗口输入的前提。开始共享时会自行添加一条 firewall 规则，并且只替换或移除自己创建的规则 —— 用户创建的规则（例如阻止 Deskhub 的规则）保持不变。installer 还会添加一个系统 service *DeskHub Secure Desktop*，使 Windows 切换到其 secure desktop —— UAC 提示、锁屏、登录与 Ctrl+Alt+Del 画面 —— 时共享得以继续：viewer 能看到它，其 mouse 与 keyboard 也能到达它，因此知道账户密码的 viewer 可以解锁该机器。该 service 只为安装在其旁边的 `Deskhub.exe` 服务，且只在该 app 共享期间工作。没有它时 —— 便携版 exe、从源码构建的版本或 command-line client —— viewer 会一直看到最后一个正常画面，直到 secure desktop 关闭，其 input 也不会到达那里；Windows app 会在共享状态中说明这一点，并提示改用安装程序安装。在 secure desktop 上，host 优先的暂停不会察觉本地的 mouse 与 keyboard。 |
+| P-1 | Windows | app 在启动时申请一次管理员权限，这是它能够向提权窗口输入的前提。开始共享时会自行添加一条 firewall 规则，并且只替换或移除自己创建的规则 —— 用户创建的规则（例如阻止 Deskhub 的规则）保持不变。installer 还会添加一个系统 service *DeskHub Secure Desktop*，使 Windows 切换到其 secure desktop —— UAC 提示、锁屏、登录与 Ctrl+Alt+Del 画面 —— 时共享得以继续：viewer 能看到它，其 mouse 与 keyboard 也能到达它，因此知道账户密码的 viewer 可以解锁该机器。该 service 只为安装在其旁边的 `Deskhub.exe` 服务 —— 并且在 T-28 开启时，会在该 app 未共享的任何时候运行一个自己的 host，使该机器在启动后随即可被访问并登录。没有它时 —— 便携版 exe、从源码构建的版本或 command-line client —— viewer 会一直看到最后一个正常画面，直到 secure desktop 关闭，其 input 也不会到达那里；Windows app 会在共享状态中说明这一点，并提示改用安装程序安装。在 secure desktop 上，host 优先的暂停不会察觉本地的 mouse 与 keyboard。 |
 | P-2 | macOS | 显示 **Permissions** 面板，包含 *Screen Recording*（共享所需）与 *Accessibility*（接受 remote input 所需）的实时授权状态、各自的申请按钮，以及通往 System Settings 的快捷入口。未授予 Accessibility 时，部分按键会被 macOS 静默拦截。 |
 | P-3 | Linux | Host 页与其他桌面平台一致，将本机的各块 display 与 terminal 列为勾选项，仅勾选的 display 会被共享。按下 Share 后，桌面仍会通过其自身的屏幕共享对话框确认 screen capture；在桌面支持的情况下（ScreenCast portal 版本 4 及以上），该确认会被保存，之后的共享静默复用，跨重启同样有效，因此对话框仅在首次出现。若桌面授予的内容与勾选的 display 不匹配，已保存的确认将被清除并再次显示对话框，以便用户授予正确的 display；若桌面拒绝或该确认已过期 —— 例如更换 compositor 或变更显示器之后 —— 对话框将再次出现，而取消对话框不会触发重试。若桌面授予的 display 无法与勾选列表对应，则共享桌面授予的全部内容，而非不共享任何内容。仅勾选 terminal 时完全跳过桌面对话框。此外，共享还要求系统允许 input injection。 |
 | P-4 | Android / iOS | 作为 host 时为 **view-only**：设备推送屏幕内容，并丢弃所有 control packet，因为两个 OS 均不允许 app 在系统范围内 inject input。设备不共享 terminal，并在被查询时予以说明，因此不会有 client 对手机打开 terminal 窗口（C-8）；桌面 client 据此可提示勾选 control 不会生效（C-3）。只要 app 显示在屏幕上，设备即按 H-16 的 batch 规则接收文件，无需查找开关，并在屏幕共享期间持续接收，因此 viewer 可以一边观看屏幕一边发送文件。iOS 上，broadcast extension 在整个 broadcast 期间占用同一个 port 并由其提供两项功能。接收到的照片与视频将加入设备的相册：iOS 上需经系统仅添加模式的 Photos permission，在首个文件到达时申请，且不授予 Deskhub 任何读取权限，若被拒绝则文件改存至 Documents；Android 上通过系统媒体库存入 `Pictures/Deskhub` 与 `Movies/Deskhub`。其他文件存放在系统文件浏览器可见的位置（iOS 为 app 的 Documents 文件夹，Android 为 `Download/Deskhub`），并通过通知说明到达的内容。此处使用的 Android 媒体库需要 Android 10：在 Android 9 及更早版本上，到达的文件保留在设备上 app 自身的文件夹中，不会出现在相册或 Downloads 中。整块屏幕作为单一 source 共享，因此 display 选择、多 display 共享与单块停止（H-1、H-2、H-3、H-5）均不适用。作为 host 时，手机显示与桌面相同的 **Show QR code** 按钮（H-6）以及带 *Approve* / *Deny* 的 **Connection requests** 列表（H-18）。旋转设备时 stream 随之旋转：viewer 看到的画面始终方向正确，其窗口也会按新形状重新适配（V-1）。session 界面以触摸操作为主：trackpad 手势、缩放控件、快捷键条、屏幕 keyboard、display 切换，以及位于角落、与 shell 和文件传输界面共用的关闭按钮。 |
@@ -240,5 +243,6 @@ Deskhub **不**提供，本规格也不涉及：
 - Discovery、relay、rendezvous 或 NAT-traversal 服务。经由互联网访问 host 属于用户自身的
   责任，例如通过 VPN 实现。
 - Session 录制。
-- 无人值守访问、wake-on-LAN，或远程电源控制。
+- Wake-on-LAN 或远程电源控制。在任何人登录之前访问机器仅在 Windows 上存在（T-28）；没有任何
+  办法开启一台机器。
 - 多用户管理、角色划分，或审计记录。

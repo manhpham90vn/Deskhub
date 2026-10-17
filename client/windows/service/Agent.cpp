@@ -30,7 +30,6 @@ constexpr auto kDesktopPoll = std::chrono::milliseconds(100);
 constexpr UINT kAcquireTimeoutMs = 100;
 constexpr DWORD kIdleSleepMs = 100;
 constexpr DWORD kRetryOpenMs = 250;
-constexpr uint64_t kMinFrameIntervalMs = 100;
 constexpr size_t kReadChunk = 64 * 1024;
 constexpr size_t kMaxQueuedInputs = 4096;
 
@@ -168,10 +167,11 @@ private:
         DuplicationCapture capture;
         const RECT rect{w.watch.left, w.watch.top, LONG(w.watch.left + int64_t(w.watch.width)),
             LONG(w.watch.top + int64_t(w.watch.height))};
+        const uint64_t minFrameIntervalMs = 1000 / w.watch.maxFps;
         uint64_t lastSentMs = 0;
         bool pending = false;
         while (!w.stop.load() && !stop_.load()) {
-            if (!secure_.load()) {
+            if (!secure_.load() && !w.watch.alwaysStream) {
                 capture.Close();
                 pending = false;
                 Sleep(kIdleSleepMs);
@@ -184,7 +184,7 @@ private:
             const DuplicationCapture::Result result = capture.Next(kAcquireTimeoutMs);
             if (result == DuplicationCapture::Result::Lost) continue;
             if (result == DuplicationCapture::Result::Frame) pending = true;
-            if (!pending || NowMs() - lastSentMs < kMinFrameIntervalMs) continue;
+            if (!pending || NowMs() - lastSentMs < minFrameIntervalMs) continue;
             Send(deskhub::EncodeSecureDesktopFrame(w.watch.sourceId, capture.Width(),
                 capture.Height(), capture.Pixels()));
             pending = false;
@@ -199,8 +199,9 @@ private:
         Watcher* raw = w.get();
         w->thread = std::thread([this, raw] { CaptureLoop(*raw); });
         watchers_[watch.sourceId] = std::move(w);
-        LOGI("[Agent] Watching source %u at (%d,%d) %ux%u.", unsigned(watch.sourceId), watch.left,
-            watch.top, watch.width, watch.height);
+        LOGI("[Agent] Watching source %u at (%d,%d) %ux%u, %s, up to %u fps.",
+            unsigned(watch.sourceId), watch.left, watch.top, watch.width, watch.height,
+            watch.alwaysStream ? "every desktop" : "secure desktops only", watch.maxFps);
     }
 
     void StopWatcher(uint8_t sourceId) {

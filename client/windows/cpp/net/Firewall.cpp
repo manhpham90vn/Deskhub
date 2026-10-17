@@ -16,8 +16,6 @@
 
 namespace {
 
-constexpr wchar_t kRuleName[] = L"Deskhub (host)";
-
 constexpr long kWantProfiles =
     NET_FW_PROFILE2_DOMAIN | NET_FW_PROFILE2_PRIVATE | NET_FW_PROFILE2_PUBLIC;
 
@@ -57,8 +55,8 @@ void ReleaseRules(INetFwRules* rules, INetFwPolicy2* policy) {
     if (policy) policy->Release();
 }
 
-int InspectOwnRule(INetFwRules* rules, const std::wstring& exe) {
-    BSTR name = SysAllocString(kRuleName);
+int InspectOwnRule(INetFwRules* rules, const wchar_t* ruleName, const std::wstring& exe) {
+    BSTR name = SysAllocString(ruleName);
     if (!name) return 0;
     INetFwRule* rule = nullptr;
     int state = 0;
@@ -79,14 +77,14 @@ int InspectOwnRule(INetFwRules* rules, const std::wstring& exe) {
     return state;
 }
 
-void RemoveOwnRule(INetFwRules* rules) {
-    if (BSTR name = SysAllocString(kRuleName)) {
+void RemoveOwnRule(INetFwRules* rules, const wchar_t* ruleName) {
+    if (BSTR name = SysAllocString(ruleName)) {
         rules->Remove(name);
         SysFreeString(name);
     }
 }
 
-bool AddOwnRule(INetFwRules* rules, const std::wstring& exe) {
+bool AddOwnRule(INetFwRules* rules, const wchar_t* ruleName, const std::wstring& exe) {
     INetFwRule* rule = nullptr;
     if (FAILED(CoCreateInstance(__uuidof(NetFwRule), nullptr, CLSCTX_INPROC_SERVER,
             __uuidof(INetFwRule), (void**)&rule)) ||
@@ -94,7 +92,7 @@ bool AddOwnRule(INetFwRules* rules, const std::wstring& exe) {
         return false;
 
     bool ok = false;
-    BSTR name = SysAllocString(kRuleName);
+    BSTR name = SysAllocString(ruleName);
     BSTR desc = SysAllocString(L"Allow incoming connections for Deskhub host.");
     BSTR app = SysAllocString(exe.c_str());
     if (name && app) {
@@ -120,8 +118,7 @@ bool AddOwnRule(INetFwRules* rules, const std::wstring& exe) {
 
 }
 
-bool EnsureHostFirewallRule() {
-    const std::wstring exe = SelfExePath();
+bool EnsureFirewallRule(const wchar_t* ruleName, const std::wstring& exe) {
     if (exe.empty()) return false;
 
     ComScope com;
@@ -136,15 +133,19 @@ bool EnsureHostFirewallRule() {
         return false;
     }
 
-    if (InspectOwnRule(rules, exe) == 2) {
+    if (InspectOwnRule(rules, ruleName, exe) == 2) {
         ReleaseRules(rules, policy);
         return true;
     }
 
-    RemoveOwnRule(rules);
-    AddOwnRule(rules, exe);
+    RemoveOwnRule(rules, ruleName);
+    AddOwnRule(rules, ruleName, exe);
 
-    const bool ok = InspectOwnRule(rules, exe) == 2;
+    const bool ok = InspectOwnRule(rules, ruleName, exe) == 2;
     ReleaseRules(rules, policy);
     return ok;
+}
+
+bool EnsureHostFirewallRule() {
+    return EnsureFirewallRule(kHostFirewallRuleName, SelfExePath());
 }

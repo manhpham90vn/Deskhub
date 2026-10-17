@@ -66,6 +66,17 @@ inline constexpr const char* kSecureDesktopMissingNote =
     "When Windows asks \"Do you want to allow this app to make changes to your device?\" "
     "or the screen is locked, viewers see a frozen picture and cannot click. Install "
     "Deskhub with the setup file to fix this.";
+inline constexpr const char* kUnattendedLabel = "Allow access before anyone signs in";
+inline constexpr const char* kUnattendedHint =
+    "Devices already on the allowed list can see the sign-in screen and type the password "
+    "right after Windows starts, and whenever Deskhub is not running. Needs the setup-file "
+    "install; Ctrl+Alt+Del cannot be sent.";
+inline constexpr const char* kUnattendedServiceMissingNote =
+    "The DeskHub Secure Desktop service is not installed beside this Deskhub.exe. Install "
+    "Deskhub with the setup file to allow access before sign-in.";
+inline constexpr const char* kUnattendedPushFailedNote =
+    "The DeskHub Secure Desktop service did not accept the settings for access before "
+    "sign-in. Check that it is running (services.msc) and try again.";
 inline constexpr const char* kPickSourcesHint =
     "Tick what to share \xE2\x80\x94 displays, the terminal, file transfer \xE2\x80\x94 then "
     "press Share. Nothing is shared until you press it.";

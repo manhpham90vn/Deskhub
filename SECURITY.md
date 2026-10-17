@@ -2,7 +2,7 @@
 
 # Deskhub Security Policy
 
-_Last updated: October 16, 2026_
+_Last updated: October 17, 2026_
 
 ## ⚠️ Read this first
 
@@ -47,6 +47,7 @@ or terminal.
 | A machine-in-the-middle | Every machine has one key. A client pins the host's key — on first connection after the user compares the fingerprint, or from the QR code, which carries it — and checks it before sending anything on every later one. Trust follows the key, so a host at a new address is still the host; a *different* key at an address the client knows is refused as trusted and shown as a **New host** with a warning naming the machine that used to answer there — it cannot be accepted as a "change", only trusted afresh with its fingerprint on show. A client that scans a QR code sends the token only after the machine answering has proved, through the TLS handshake, that it holds the key printed in the code; anything else at that address gets nothing. The client's signature covers a session identifier exported from the TLS session and the host key fingerprint the client saw, so a signature relayed to another host, or replayed on another connection, does not verify. |
 | Viewers fighting each other for the mouse | Up to 5 viewers may watch one host, but only one drives input: the earliest to have joined wins, and a later viewer's input is dropped until the earlier one has been idle for a second. A 6th viewer is rejected as `Busy`. |
 | A viewer you only want to show the screen to | View-only sharing, available on every host, drops input packets at the host before anything is injected — it is not enforced by asking the client to behave. Android and iOS hosts are view-only unconditionally. |
+| A Windows PC reachable before anyone signs in | Off by default. With *Allow access before anyone signs in* on, the *DeskHub Secure Desktop* service runs a host whenever the app is not sharing — at the sign-in screen included — that admits only the keys already in `authorized_keys`, answers with the same machine key, and never shows or approves a request: pairing happens while someone is signed in, or not at all. The copies it reads live in a folder only SYSTEM and administrators can open, and only the installed `Deskhub.exe` can replace them. It cannot send Ctrl+Alt+Del. |
 | A phone left sharing by accident | The operating system, not Deskhub, is the backstop: Android keeps a permanent notification up and re-asks for recording consent on every single share, and iOS keeps its broadcast indicator visible. Either can stop the share without opening the app. |
 | An allowed client writing files onto yours | Only an admitted machine can send files, and only while the receiving machine is offering file transfer. What arrives cannot escape the folder that machine chose: the name on the wire is cut to its last path element and scrubbed of separators, control bytes, characters the filesystem rejects and reserved device names before any file is opened; each file is written under a `.deskhub-part` name and renamed only once it has arrived whole with a matching CRC-32; and a name already present gets a number rather than overwriting anything. A batch is capped at 32 files, 8 GiB per file and 32 GiB in total. The same scrubbing runs on a phone or tablet before anything reaches its photo library or its Downloads folder. |
 | Malformed packets | Every field is bounds-checked before it is read. The parsers are covered by unit tests, run under AddressSanitizer, UndefinedBehaviorSanitizer and ThreadSanitizer in CI, and fuzzed with libFuzzer — for 30 seconds per target on every pull request and 15 minutes per target nightly. There are nine targets, covering the wire format, H.264 parsing (Annex B and SPS), packet reassembly, the host and viewer session state machines, UI text, terminal byte streams, the stored key and trust files with the pairing link, and the QR code encoder. Crashes found by fuzzing are kept in-repo as regression tests, and new coverage is folded back into the seed corpus. |
@@ -211,6 +212,10 @@ win over an allow rule, the host then stays unreachable until you remove it.
 The installer adds one more thing on Windows: the *DeskHub Secure Desktop* service, which
 lets a share carry on through a UAC prompt or the lock screen. While you share, a viewer
 sees those screens and can type into them — including the lock screen's password box.
+With *Allow access before anyone signs in* turned on (off by default), the same service
+also runs a host of its own whenever the app is not sharing, from the sign-in screen
+onwards, for the devices already on your allowed list; it opens a second inbound UDP
+rule, *Deskhub Secure Desktop (host)*, for `DeskhubService.exe`.
 
 ## What an attacker on the same network can do
 
@@ -256,7 +261,12 @@ If you want to keep using Deskhub as it is today, these are worth doing:
       show it on a screen you are sharing or presenting.
 - [ ] Quit Deskhub when you are not actively using it. Quitting it closes the hole: the
       *DeskHub Secure Desktop* service the Windows installer adds accepts nothing from
-      the network and does nothing while the app is not sharing. Three settings under *Launch & background*
+      the network and does nothing while the app is not sharing — unless you turned on
+      *Allow access before anyone signs in*, which is exactly the setting that keeps a
+      host listening with nobody there, from the moment Windows starts. Leave it off
+      unless you need to reach the machine after a reboot, keep the allowed list short
+      while it is on, and remember that whoever is on that list and knows the Windows
+      password can sign in. Three settings under *Launch & background*
       change that: *Start Deskhub when you log in* launches it at every logon (on Windows
       through a scheduled task that runs it elevated without a UAC prompt),
       *Start sharing when Deskhub opens* then shares straight away, and
@@ -317,6 +327,16 @@ and never transmitted). Beside them you may see a `.lock` file for each of
 the app and the CLI take turns writing, and short-lived `.tmp-…` files, the halves of
 an atomic write.
 
+On Windows, with *Allow access before anyone signs in* on, a second folder,
+`%ProgramData%\DeskHub`, holds copies of `host_key.pem`, `authorized_keys` and
+`ui-settings.txt` for the host the *DeskHub Secure Desktop* service runs before sign-in,
+plus any `access_requests` and `pairing_tokens` that host writes and the service's own
+logs. The folder is created by SYSTEM and readable only by SYSTEM and Administrators —
+your own account cannot open it — and the service refreshes the copies whenever the app
+changes the originals. Turning the setting off deletes the copies; uninstalling DeskHub
+deletes the folder. An administrator on the machine can read that private key, as they
+can read yours.
+
 No certificate is kept. The TLS certificate is built from `host_key.pem` in memory each
 time the port opens, but the TLS library loads certificates only from a file, so it is
 written for a moment to `transport_cert.<random>.pem` in the same folder, created
@@ -375,7 +395,14 @@ Nothing uploads any of this; delete the folder at any time.
   desktop and replays the app's input there, and reads nothing else. Both binaries
   live under `Program Files`, which only administrators can write, so a process running
   as the user cannot swap one to gain SYSTEM. A flaw in the agent is still a flaw in a
-  SYSTEM process, reachable only through the elevated app.
+  SYSTEM process, reachable only through the elevated app. With *Allow access before
+  anyone signs in* on, the service also starts the same host code the app runs, as
+  SYSTEM in the console session, and that host is reachable from the network; it reads
+  its key, its allowed list and its settings from `%ProgramData%\DeskHub`, which only
+  SYSTEM and administrators can open, and the service accepts a new copy of them only
+  from the installed `Deskhub.exe`, again by image path. Every connection to the
+  service's pipe now opens with a request byte, and the two new requests are refused
+  from anything but that app.
 - **Continuous integration.** Every pull request runs the three test suites under
   AddressSanitizer, UndefinedBehaviorSanitizer and ThreadSanitizer, clang-tidy, the
   fuzzers described above, CodeQL over the C++, Kotlin and Swift code, and a gitleaks

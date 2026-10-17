@@ -60,14 +60,20 @@ winget install ManhPham.Deskhub
   して起動し、確認は表示されない。
 - **Windows Firewall のルールを 1 本追加する。** 初回の share 時に app 自身が追加する。
 - **システムサービス *DeskHub Secure Desktop* が加わる。** LocalSystem として動作する。
-  DeskHub が画面を共有するまでは何もしない。共有中に Windows が secure desktop ——
-  インストーラーによる UAC の確認、ロック画面、Ctrl+Alt+Del —— に切り替わると、viewer は
-  引き続き画面を見ることができ、そこでクリックや入力もできる。そのため viewer が代わりに
-  UAC の確認に応答でき、パスワードを知っている人ならマシンのロックを解除できる。ポータブル
-  版の exe にはサービスがなく、それらの画面は閉じるまで viewer 側で停止して見える。
+  初期状態では、DeskHub が画面を共有するまでは何もしない。共有中に Windows が secure
+  desktop —— インストーラーによる UAC の確認、ロック画面、Ctrl+Alt+Del —— に切り替わると、
+  viewer は引き続き画面を見ることができ、そこでクリックや入力もできる。そのため viewer が
+  代わりに UAC の確認に応答でき、パスワードを知っている人ならマシンのロックを解除できる。
+  Settings → Host の *Allow access before anyone signs in* にチェックを入れると、DeskHub が
+  共有していない間はいつでも —— PC の起動直後のサインイン画面から —— 許可済み一覧にある
+  デバイスのために、サービスが独自に host も行う。何ができて何ができないかは
+  [仕様](SPECIFICATION.ja.md)（T-28）を参照のこと。ポータブル版の exe にはサービスがなく、
+  それらの画面は閉じるまで viewer 側で停止して見え、チェックボックスは灰色になる。
 
 DeskHub は Windows の設定または `winget uninstall ManhPham.Deskhub` でアンインストールできる。
-サービスも一緒に削除される。ポータブル版は exe を削除する。Settings と key は、フォルダを削除するまで
+サービスも一緒に削除され、サービスが log と *Allow access before anyone signs in* が作った
+コピーを保持する `%ProgramData%\DeskHub` も削除される。ポータブル版は exe を削除する。
+Settings と key は、フォルダを削除するまで
 `%USERPROFILE%\.deskhub` に残る。他のマシンから届いたファイルも、削除するまで
 `%USERPROFILE%\Deskhub`（または選んだフォルダ）に残る。
 

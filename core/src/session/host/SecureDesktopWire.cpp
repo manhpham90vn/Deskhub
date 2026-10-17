@@ -7,7 +7,7 @@
 namespace deskhub {
 namespace {
 
-constexpr size_t kWatchSize = 17;
+constexpr size_t kWatchSize = 22;
 constexpr size_t kInputSize = 21;
 constexpr size_t kStateSize = 1;
 
@@ -39,6 +39,69 @@ char AsciiLower(char c) {
     return (c >= 'A' && c <= 'Z') ? char(c - 'A' + 'a') : c;
 }
 
+bool ValidMaxFps(uint32_t maxFps) {
+    return maxFps >= 1 && maxFps <= kSecureDesktopMaxFps;
+}
+
+void PutBlock(std::vector<uint8_t>& out, const std::string& text) {
+    uint8_t length[4];
+    PutU32(length, uint32_t(text.size()));
+    out.insert(out.end(), length, length + 4);
+    out.insert(out.end(), text.begin(), text.end());
+}
+
+bool TakeBlock(std::span<const uint8_t>& body, size_t maxBytes, std::string& out) {
+    if (body.size() < 4) return false;
+    const uint32_t length = GetU32(body.data());
+    body = body.subspan(4);
+    if (length > maxBytes || body.size() < length) return false;
+    out.assign(body.begin(), body.begin() + length);
+    body = body.subspan(length);
+    return true;
+}
+
+}
+
+std::optional<SecureDesktopRequest> DecodeSecureDesktopRequest(uint8_t byte) {
+    if (byte < uint8_t(SecureDesktopRequest::Agent) ||
+        byte > uint8_t(SecureDesktopRequest::Configure))
+        return std::nullopt;
+    return SecureDesktopRequest(byte);
+}
+
+std::vector<uint8_t> EncodeUnattendedConfig(const UnattendedConfig& config) {
+    if (config.hostKeyPem.size() > kUnattendedMaxHostKeyBytes ||
+        config.authorizedKeys.size() > kUnattendedMaxAuthorizedKeysBytes ||
+        config.settings.size() > kUnattendedMaxSettingsBytes)
+        return {};
+    if (config.enabled && config.hostKeyPem.empty()) return {};
+    std::vector<uint8_t> out(kUnattendedConfigLengthSize);
+    out.push_back(config.enabled ? 1 : 0);
+    PutBlock(out, config.hostKeyPem);
+    PutBlock(out, config.authorizedKeys);
+    PutBlock(out, config.settings);
+    PutU32(out.data(), uint32_t(out.size() - kUnattendedConfigLengthSize));
+    return out;
+}
+
+std::optional<uint32_t> DecodeUnattendedConfigLength(std::span<const uint8_t> prefix) {
+    if (prefix.size() != kUnattendedConfigLengthSize) return std::nullopt;
+    const uint32_t length = GetU32(prefix.data());
+    if (length == 0 || length > kUnattendedConfigMaxBytes) return std::nullopt;
+    return length;
+}
+
+std::optional<UnattendedConfig> DecodeUnattendedConfig(std::span<const uint8_t> body) {
+    if (body.empty() || body[0] > 1) return std::nullopt;
+    UnattendedConfig config;
+    config.enabled = body[0] == 1;
+    body = body.subspan(1);
+    if (!TakeBlock(body, kUnattendedMaxHostKeyBytes, config.hostKeyPem) ||
+        !TakeBlock(body, kUnattendedMaxAuthorizedKeysBytes, config.authorizedKeys) ||
+        !TakeBlock(body, kUnattendedMaxSettingsBytes, config.settings) || !body.empty())
+        return std::nullopt;
+    if (config.enabled && config.hostKeyPem.empty()) return std::nullopt;
+    return config;
 }
 
 bool IsSecureDesktopName(std::string_view inputDesktopName) {
@@ -57,6 +120,8 @@ std::vector<uint8_t> EncodeSecureDesktopWatch(const SecureDesktopWatch& watch) {
     PutU32(p + 5, uint32_t(watch.top));
     PutU32(p + 9, watch.width);
     PutU32(p + 13, watch.height);
+    p[17] = watch.alwaysStream ? 1 : 0;
+    PutU32(p + 18, watch.maxFps);
     return out;
 }
 
@@ -101,7 +166,11 @@ std::optional<SecureDesktopWatch> DecodeSecureDesktopWatch(std::span<const uint8
     watch.top = int32_t(GetU32(p + 5));
     watch.width = GetU32(p + 9);
     watch.height = GetU32(p + 13);
-    if (!ValidFrameSize(watch.width, watch.height)) return std::nullopt;
+    if (p[17] > 1) return std::nullopt;
+    watch.alwaysStream = p[17] == 1;
+    watch.maxFps = GetU32(p + 18);
+    if (!ValidFrameSize(watch.width, watch.height) || !ValidMaxFps(watch.maxFps))
+        return std::nullopt;
     return watch;
 }
 

@@ -2,7 +2,7 @@
 
 # Deskhub 安全策略
 
-_最后更新：2026 年 10 月 16 日_
+_最后更新：2026 年 10 月 17 日_
 
 本文件是 [`SECURITY.md`](SECURITY.md) 的译本；若两者有出入，以英文版为准。
 
@@ -45,6 +45,7 @@ Connect 到 host 的 `100.x.y.z` 地址。
 | 中间人攻击 | 每台机器只有一把 key。client 会 pin 住 host 的 key —— 首次连接时在用户核对 fingerprint 之后，或直接取自携带该 key 的 QR code —— 并在此后每次连接发送任何内容之前进行检查。信任跟随 key，因此换了地址的 host 仍是那个 host；而在 client 已知的地址上出现的*另一把* key 不会被当作受信任的 host，而是作为 **New host** 显示，并附带警告，指出以前在该地址应答的是哪台机器 —— 它不能被当作"变更"接受，只能在 fingerprint 展示在眼前的情况下重新信任。扫描 QR code 的 client 只有在应答的机器已通过 TLS handshake 证明其持有码中印出的 key 之后才会发送 token；该地址上的其他任何东西都得不到任何内容。client 的签名覆盖从 TLS session 导出的 session 标识以及 client 所见的 host key fingerprint，因此被 relay 到其他 host 或在其他 connection 上重放的签名无法通过验证。 |
 | 多个 viewer 争夺 mouse | 最多 5 个 viewer 观看同一 host，但只有一个 viewer 控制 input：先加入者优先，后加入者的 input 会被丢弃，直到前者持续一秒无操作。第 6 个 viewer 以 `Busy` 状态被拒绝。 |
 | 仅允许观看的 viewer | view-only 共享在所有 host 上可用，它在 host 侧、在任何操作被 inject 之前即丢弃 input packet，并不依赖 client 自觉遵守。Android 与 iOS 的 host 始终为 view-only。 |
+| 在任何人登录之前即可访问的 Windows PC | 默认关闭。*Allow access before anyone signs in* 开启时，*DeskHub Secure Desktop* service 会在 app 未共享的任何时候 —— 包括在登录画面 —— 运行一个 host，它只准入 `authorized_keys` 中已有的 key，以同一把机器 key 应答，并且从不显示或批准任何 request：配对要么在有人登录期间完成，要么根本不发生。它读取的副本位于一个只有 SYSTEM 与管理员能打开的文件夹中，且只有已安装的 `Deskhub.exe` 能替换它们。它无法发送 Ctrl+Alt+Del。 |
 | 手机在共享状态下被遗忘 | 最终的防护由操作系统提供，而非 Deskhub：Android 显示常驻通知，并在每次共享时重新征求录屏同意；iOS 保持 broadcast 指示可见。两者都可在不打开 app 的情况下停止共享。 |
 | 允许的 client 向本机写入文件 | 只有已接受的机器才能发送文件，且仅在接收方启用 file transfer 时。到达的数据无法离开接收方选定的文件夹：线上的文件名会被截取为路径的最后一段，并在任何文件被打开之前清除分隔符、控制字节、filesystem 不接受的字符以及保留设备名。每个文件先以 `.deskhub-part` 后缀写入，仅在完整到达且 CRC-32 匹配后改名。已存在的同名文件会追加编号而不被覆盖。单个 batch 限制为 32 个文件、单文件 8 GiB、合计 32 GiB。同样的名称处理在手机与平板上也会执行，早于数据进入相册或 Downloads 文件夹。 |
 | 畸形 packet | 每个字段在读取前都进行边界检查。parser 具备 unit test，在 CI 中于 AddressSanitizer、UndefinedBehaviorSanitizer 与 ThreadSanitizer 下运行，并由 libFuzzer 进行 fuzz —— 每个 pull request 对每个 target 运行 30 秒，每晚对每个 target 运行 15 分钟。共有九个 target，覆盖 wire format、H.264 解析（Annex B 与 SPS）、packet reassembly、host 与 viewer 两侧的 session state machine、UI 文案、terminal byte stream、保存的 key 与信任文件以及 pairing link，还有 QR code 编码器。通过 fuzzing 发现的 crash 会作为 regression test 保留在 repo 中，新的覆盖也会并入 seed corpus。 |
@@ -179,7 +180,9 @@ block 规则会保持不变；由于 Windows 中 block 规则优先于 allow 规
 将一直无法被访问。
 在 Windows 上，安装程序还会额外添加一项：*DeskHub Secure Desktop* service，它让共享在
 UAC 提示或锁屏出现时得以继续。在你共享期间，viewer 能看到这些屏幕并可在其中输入 —— 包括
-锁屏的密码框。
+锁屏的密码框。开启 *Allow access before anyone signs in*（默认关闭）后，同一 service 还会在
+app 未共享的任何时候 —— 从登录画面开始 —— 为已在你允许列表上的设备运行一个自己的 host；
+它会为 `DeskhubService.exe` 打开第二条入站 UDP 规则 *Deskhub Secure Desktop (host)*。
 
 ## 同一 network 中攻击者的能力
 
@@ -217,7 +220,10 @@ host 优先的机制可在你*坐在*机器前时限制异常操作，但在你�
       展示它。
 - [ ] 不使用时退出 Deskhub。退出即关闭了接入点：Windows 安装程序添加的
       *DeskHub Secure Desktop* service 不接受任何来自 network 的连接，且在 app 未共享时
-      不做任何事。但
+      不做任何事 —— 除非你开启了 *Allow access before anyone signs in*，而这恰恰就是让
+      host 在无人在场的情况下、从 Windows 启动那一刻起持续监听的设置。除非你需要在重启后
+      访问该机器，否则请保持关闭；开启期间请让允许列表保持精简，并记住名单上任何知道
+      Windows 密码的人都能登录。但
       *Launch & background* 下的三项设置会改变这一点：*Start Deskhub when you log in*
       会在每次登录时启动它（在 Windows 上通过一个以提权方式运行、不弹出 UAC 的
       scheduled task），*Start sharing when Deskhub opens* 随即开始共享，而
@@ -267,6 +273,14 @@ session 有意义，不会被传输）。在它们旁边，你可能还会看到
 `access_requests` 与 `pairing_tokens` 各自的 `.lock` 文件 —— 它让 app 与 CLI 轮流写入 ——
 以及短暂存在的 `.tmp-…` 文件，即原子写入的中间文件。
 
+在 Windows 上，开启 *Allow access before anyone signs in* 后，还有第二个文件夹
+`%ProgramData%\DeskHub`，为 *DeskHub Secure Desktop* service 在登录前运行的 host 保存
+`host_key.pem`、`authorized_keys` 与 `ui-settings.txt` 的副本，外加该 host 写入的任何
+`access_requests` 与 `pairing_tokens`，以及 service 自身的日志。该文件夹由 SYSTEM 创建，只有
+SYSTEM 与 Administrators 可读 —— 你自己的账户无法打开它 —— 并且每当 app 更改原件时，
+service 都会刷新副本。关闭该设置会删除副本；卸载 DeskHub 会删除该文件夹。本机的管理员
+可以读取那把 private key，正如他们也能读取你的那把。
+
 不保存任何 certificate。TLS certificate 在每次打开 port 时由 `host_key.pem` 于内存中构建，
 但 TLS 库只能从文件加载 certificate，因此它会被短暂写入同一文件夹中的
 `transport_cert.<random>.pem`，以 `0600` 创建，并在加载后立即删除；任何超过一分钟的此类
@@ -314,7 +328,12 @@ client 放入你设备的文件。
   SYSTEM 身份启动一个 agent，并将其绑定到一个 job，app 断开时该 job 会结束它；agent 捕获
   secure desktop 并在其上重放 app 的 input，除此之外不读取任何东西。两个 binary 都位于只有
   管理员可写的 `Program Files` 下，因此以用户身份运行的进程无法替换其中之一来获得 SYSTEM。
-  agent 中的缺陷仍是一个 SYSTEM 进程的缺陷，只能经由提权的 app 触及。
+  agent 中的缺陷仍是一个 SYSTEM 进程的缺陷，只能经由提权的 app 触及。开启 *Allow access
+  before anyone signs in* 后，service 还会以 SYSTEM 身份在 console session 中启动与 app 相同的
+  host 代码，而该 host 可从 network 访问；它从只有 SYSTEM 与管理员能打开的
+  `%ProgramData%\DeskHub` 读取其 key、允许列表与 settings，而 service 只接受来自已安装的
+  `Deskhub.exe` 的新副本 —— 同样以映像路径核验。现在每条到 service pipe 的连接都以一个
+  request 字节开头，两个新 request 来自该 app 之外的任何进程都会被拒绝。
 - **持续集成。** 每个 pull request 都会在 AddressSanitizer、UndefinedBehaviorSanitizer 与
   ThreadSanitizer 下运行三套测试，并运行 clang-tidy、上文所述的 fuzzer、针对 C++、Kotlin
   与 Swift 代码的 CodeQL，以及用 gitleaks 扫描整个 Git 历史中提交的机密；CodeQL 与

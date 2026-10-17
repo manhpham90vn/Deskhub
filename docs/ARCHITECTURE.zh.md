@@ -275,6 +275,21 @@ HostEngine（每个 app 一个实例，持有 SessionTransport）
   报告处于 secure desktop 期间，WGC frame 被丢弃，agent 的 frame 被上传到一个 texture，并经由
   同一条准入、scaler 与 encoder 路径处理；`InputInjector` 将每个 `INPUT` 转发给 agent，而不是
   调用 `SendInput`。每次切换都会强制一个 keyframe。
+
+  到 control pipe 的每条连接都以一个 request 字节（`SecureDesktopRequest`）开头：`Agent`
+  即上述流程；`Takeover` 与 `Configure` 服务于登录前访问（T-28）。开启后，service 的
+  supervisor 线程会在没有任何 `Deskhub.exe` 持有 `Takeover` 连接的时候，让
+  `DeskhubService.exe --unattended-host` 以 SYSTEM 身份在 console session 中持续运行。该
+  进程就是普通的 `SharingHost` + `HostEngine`，其 `SetConfigDir`/`SetAppDataDir` 指向
+  `%ProgramData%\DeskHub`，加上一个进程级的 `UnattendedMode()` 标志，用于跳过 WGC、把每个
+  `INPUT` 经由 link 转发，并发送带 `alwaysStream` 且以共享 fps 为 `maxFps` 的 `Watch`；它像
+  app 一样向 service 为每个 display 请求一个 agent，因此多显示器无需新的管线。`Deskhub.exe`
+  中的 `SharingHost::Start` 在 engine 绑定之前发送 `Takeover`：service 终止 unattended host，
+  等待它退出以释放 UDP port，再回复 ack，并在该连接于 `SharingHost::Stop` 中关闭之前让它
+  保持停止。`Configure` 携带一个 `UnattendedConfig`（enabled 标志，以及 `host_key.pem`、
+  `authorized_keys`、`ui-settings.txt` 的文本）；service 把这三个文件原子地写入机器文件夹，
+  在 key 或 settings 变化时重启该 host，并在禁用时抹除这些文件。app 会在该设置被切换时、
+  每次保存 settings 之后、允许列表每次变动之后、共享停止时以及启动时各发送一次。
 - Shell：每个 shell 对应一个 PTY（Windows 为 `ConPTY`，其他平台为 `forkpty`），最多 8
   个。连接中断时 shell 被分离，PTY 一直保留到 shell 进程退出或 shell 被关闭，不设时间
   限制。任何已准入的 client 均可列出被保留的 shell（`TermList`/`TermListAck`）、按 id
@@ -399,6 +414,14 @@ Administrators 访问，其中的每个文件（包括 log）都继承该 ACL，
 *Approve* 也由此到达 extension。文件
 I/O 位于 `platform/`；解析逻辑与数据结构位于 `core/`，并具备 unit test。
 
+在 Windows 上还有第二个文件夹 `%ProgramData%\DeskHub`，归 *DeskHub Secure Desktop* service
+所有。该 service 及其启动的进程都对它调用 `SetConfigDir` 与 `SetAppDataDir`，并且由于它们以
+SYSTEM 身份运行，`ProtectWindowsConfigDir` 在其 ACL 上恰好只留下 SYSTEM 与 Administrators ——
+没有任何交互用户。它始终保存 service 与各 agent 的日志；登录前访问（T-28）开启时，还保存
+unattended host 读取的 `host_key.pem`、`authorized_keys` 与 `ui-settings.txt` 副本，以及该
+host 写入的任何 `access_requests` 与 `pairing_tokens`。关闭该设置会移除这些文件；
+`DeskhubService.exe --uninstall` 会移除该文件夹。
+
 viewer 发送的文件保存在其他位置：由 host 选定的文件夹（`ui-settings.txt` 中的
 `transfer_dir`，默认为用户主目录下的 `Deskhub`）。`FileStore` 将每个文件写为
 `<name>.deskhub-part`，仅在整个文件到达且 CRC-32 匹配后改名，因此写入中途的文件不会以
@@ -446,6 +469,23 @@ runner 上与 base commit 的 A/B 结果（偏移仅作为警告，不导致失�
   `Program Files` 下的 `Deskhub.exe` —— app 也以同样方式信任服务端，因此无论是抢占 pipe 的
   进程还是另一个提权程序，都得不到 SYSTEM agent 或 viewer 的按键。这也是安装程序改为
   per-machine 的原因：位于 `%LOCALAPPDATA%` 中的 service binary 可能被用户运行的任何进程替换。
+
+- **登录前访问运行的是 Deskhub 自己的 host，而不是第二套实现**：service 本可以长出自己的
+  socket 与 encoder，但关于准入、撤销、bitrate 与 input 的每条规则都已经在 `HostEngine` 中，
+  因此 unattended host 就是 app 与 CLI 所链接的同一个 `deskhub_win_core`，由 service 以 SYSTEM
+  身份在 console session 中启动，并通过一个进程级标志被告知：每一帧都使用 agent 而非 WGC。
+  它经由与 app 相同的 pipe 向 service 为每个 display 请求一个 agent，这也是信任检查现在针对
+  `Agent` request 在 service 之外还接受 `DeskhubService.exe`（且仅此而已）的原因 —— 若共用
+  单个 agent，就意味着要把 N 个显示器复用到一条 pipe 上。takeover 位于 `SharingHost::Start`
+  而非 `HostEnginePolicy::preflight`，因为 engine 对仅 terminal 或仅文件的共享会跳过
+  `preflight`，却仍然绑定 port；app 在整个共享期间持有 takeover 连接，service 在它关闭时
+  重启 unattended host，因此「app 不 host 时由 service host」不需要任何 session 变更通知。
+  机器 key 是复制而非重新生成的，这样 viewer 在登录前后看到的是同一个 fingerprint；它放在
+  `%ProgramData%\DeskHub`，因为 `ConfigDir()` 每次调用都会把文件夹 ACL 改写为调用方的
+  token：若指向用户的文件夹，一个 SYSTEM 进程会把用户锁在自己的文件之外，而由 SYSTEM 新建的
+  文件夹恰好得到 SYSTEM + Administrators。配对仍然是登录后的动作：在登录画面提交的 request
+  会落在一个无人查看的文件夹里，而让登录画面批准设备，等于把整个模型赖以成立的那一个决定
+  交到陌生人手上。
 
 - **只有 host 能提前结束 handshake，因此 client 留意它是如何结束的**：client 过去会为
   `AuthResult` 等待 65 秒 —— 这是批准还在一条保持的 connection 内完成时遗留下来的 —— 而
