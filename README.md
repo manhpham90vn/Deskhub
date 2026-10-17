@@ -75,8 +75,9 @@ CLI on `PATH`.
 
 Everything else is on [Releases](https://github.com/manhpham90vn/Deskhub/releases):
 
-- **Windows downloads** — app setup `deskhub-v*-windows-setup.exe` and CLI setup
-  `deskhub-cli-v*-windows-setup.exe`; portable exe files are also available
+- **Windows downloads** — app setup `deskhub-v*-windows-setup.exe` (the only form the
+  app comes in) and CLI setup `deskhub-cli-v*-windows-setup.exe`; the CLI also has a
+  portable `deskhub-cli-v*-windows.exe`
 - **macOS downloads** — the app as `deskhub-v*-macos.dmg`, the CLI as `deskhub-cli-v*-macos`
 - **Ubuntu / Debian / Mint without the repository** — `deskhub-v*-amd64.deb` and
   `deskhub-cli-v*-amd64.deb`

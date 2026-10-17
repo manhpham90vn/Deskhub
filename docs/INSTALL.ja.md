@@ -39,7 +39,9 @@ DeskHub をすべてのユーザー向けに `Program Files` 配下へインス�
 登録され、デスクトップのショートカットも既定で作成される。インストール後すぐに起動することも
 できる。アカウントは不要。以前のバージョンが自分のユーザーだけにインストールした DeskHub は
 先に削除され、*Start Deskhub when you log in* は新しい場所を指すように更新される。設定と鍵は
-そのまま残る。ポータブル版の `deskhub-v*-windows.exe` も引き続き利用できる。
+そのまま残る。ポータブル版の exe は存在しない。Windows app をインストールする方法は
+セットアップファイルのみである。セットアップが入れるサービスこそが、viewer に UAC の確認、
+ロック画面、サインイン画面を通過させるものだからである。
 
 winget に同じインストーラーを取得させ、最新に保つこともできる。`winget upgrade` で新しい release
 を取得し、`winget uninstall ManhPham.Deskhub` で削除する。
@@ -67,12 +69,13 @@ winget install ManhPham.Deskhub
   Settings → Host の *Allow access before anyone signs in* にチェックを入れると、DeskHub が
   共有していない間はいつでも —— PC の起動直後のサインイン画面から —— 許可済み一覧にある
   デバイスのために、サービスが独自に host も行う。何ができて何ができないかは
-  [仕様](SPECIFICATION.ja.md)（T-28）を参照のこと。ポータブル版の exe にはサービスがなく、
-  それらの画面は閉じるまで viewer 側で停止して見え、チェックボックスは灰色になる。
+  [仕様](SPECIFICATION.ja.md)（T-28）を参照のこと。ソースから build してサービスなしで
+  動かした場合、それらの画面は閉じるまで viewer 側で停止して見え、チェックボックスは
+  灰色になる。
 
 DeskHub は Windows の設定または `winget uninstall ManhPham.Deskhub` でアンインストールできる。
 サービスも一緒に削除され、サービスが log と *Allow access before anyone signs in* が作った
-コピーを保持する `%ProgramData%\DeskHub` も削除される。ポータブル版は exe を削除する。
+コピーを保持する `%ProgramData%\DeskHub` も削除される。
 Settings と key は、フォルダを削除するまで
 `%USERPROFILE%\.deskhub` に残る。他のマシンから届いたファイルも、削除するまで
 `%USERPROFILE%\Deskhub`（または選んだフォルダ）に残る。
@@ -320,6 +323,14 @@ Privacy & Security の *Open Anyway* が必要である。
 
 Windows のインストーラーは管理者権限なしで CLI をユーザーの `PATH` に追加する。
 ポータブル版 `deskhub-cli-v*-windows.exe` も利用できる。
+
+**CLI が *DeskHub Secure Desktop* サービスを使えることはない。** CLI のインストーラーは
+サービスを入れないし、サービスは —— app のインストーラーが同じ PC に入れていても ——
+隣にある `Deskhub.exe` だけに応え、`deskhub-cli.exe` にはどこにあっても応えない。そのため
+Windows で `deskhub-cli share` を使うと、UAC の確認、ロック画面、サインイン画面が出ている間、
+viewer には停止した画面が見え、その入力はそれらの画面に届かず、*Allow access before anyone
+signs in* は app だけの設定である。それらが必要なら、セットアップファイルで app を
+インストールすること。
 すべてのインストーラーとパッケージは `THIRD_PARTY_NOTICES.md` と、中に含まれる
 ライブラリのライセンス本文を同梱する。ポータブル版のバイナリにはそれができないため、
 各リリースは `LICENSE`、`THIRD_PARTY_NOTICES.md` とすべてのライセンス本文を収めた

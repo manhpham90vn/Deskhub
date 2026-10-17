@@ -61,7 +61,6 @@ jobs:
       - name: Rename with tag
         run: |
           mkdir -p out
-          mv dist/deskhub-windows/Deskhub.exe "out/deskhub-${GITHUB_REF_NAME}-windows.exe"
           mv dist/deskhub-windows-installer/DeskHub-Setup.exe "out/deskhub-${GITHUB_REF_NAME}-windows-setup.exe"
           mv dist/deskhub-linux/deskhub "out/deskhub-${GITHUB_REF_NAME}-linux-x86_64"
           chmod +x "out/deskhub-${GITHUB_REF_NAME}-linux-x86_64"
@@ -99,7 +98,6 @@ jobs:
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
           files: |
-            out/deskhub-${{ github.ref_name }}-windows.exe
             out/deskhub-${{ github.ref_name }}-windows-setup.exe
             out/deskhub-${{ github.ref_name }}-linux-x86_64
             out/deskhub-${{ github.ref_name }}-amd64.deb

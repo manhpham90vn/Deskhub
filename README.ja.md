@@ -76,8 +76,9 @@ macOS の CLI は Homebrew により `PATH` に配置される。
 
 その他のプラットフォームは [Releases](https://github.com/manhpham90vn/Deskhub/releases) から：
 
-- **Windows 直接ダウンロード** —— app 用 `deskhub-v*-windows-setup.exe` と CLI 用
-  `deskhub-cli-v*-windows-setup.exe`。portable 版 exe も利用可能
+- **Windows 直接ダウンロード** —— app 用 `deskhub-v*-windows-setup.exe`（app はこの形式
+  のみ）と CLI 用 `deskhub-cli-v*-windows-setup.exe`。CLI には portable 版
+  `deskhub-cli-v*-windows.exe` もある
 - **macOS 直接ダウンロード** —— app は `deskhub-v*-macos.dmg`、CLI は `deskhub-cli-v*-macos`
 - **repository を使わない Ubuntu / Debian / Mint** —— `deskhub-v*-amd64.deb` と
   `deskhub-cli-v*-amd64.deb`

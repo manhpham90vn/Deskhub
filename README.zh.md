@@ -74,8 +74,9 @@ sudo apt install deskhub-cli   # CLI；也可以单独安装
 
 其余平台请从 [Releases](https://github.com/manhpham90vn/Deskhub/releases) 获取：
 
-- **Windows 下载版** —— 应用安装程序 `deskhub-v*-windows-setup.exe` 与 CLI 安装程序
-  `deskhub-cli-v*-windows-setup.exe`；也提供便携版 exe
+- **Windows 下载版** —— 应用安装程序 `deskhub-v*-windows-setup.exe`（应用仅此一种形式）
+  与 CLI 安装程序 `deskhub-cli-v*-windows-setup.exe`；CLI 另有便携版
+  `deskhub-cli-v*-windows.exe`
 - **macOS 下载版** —— 应用为 `deskhub-v*-macos.dmg`，CLI 为 `deskhub-cli-v*-macos`
 - **不使用 repository 的 Ubuntu / Debian / Mint** —— `deskhub-v*-amd64.deb` 与
   `deskhub-cli-v*-amd64.deb`

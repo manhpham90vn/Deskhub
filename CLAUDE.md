@@ -186,8 +186,9 @@ Rules for these files:
 - `PRIVACY.md` is a published legal document: any behaviour change that touches what is
   stored or transmitted needs a new version number, a new effective date, and a changelog
   row — in all four languages.
-- `CLAUDE.md` and the store listings under `client/android/fastlane/metadata/android/vi/`
-  and `client/ios/fastlane/metadata/vi/` are outside this scheme.
+- `CLAUDE.md`, the store listings under `client/android/fastlane/metadata/android/vi/`
+  and `client/ios/fastlane/metadata/vi/`, and the working plan `docs/UNATTENDED_PLAN.md`
+  (Vietnamese only, deleted once the work it describes ships) are outside this scheme.
 
 When you change behaviour, check whether these documents still describe it. Passcode
 handling, what is persisted on disk, and per-platform capability tables go stale fastest.

@@ -36,7 +36,8 @@ Windows 可通过 `winget`、macOS 可通过 Homebrew，Ubuntu、Kubuntu、Debia
 下载并运行 `deskhub-v*-windows-setup.exe`。安装程序会请求管理员权限，为所有用户将 DeskHub
 安装到 `Program Files` 下，添加到开始菜单，并默认创建桌面快捷方式，可在安装完成后立即启动。
 无需账号。早期版本仅为你的用户安装的 DeskHub 会先被移除，*Start Deskhub when you log in*
-也会改为指向新位置；你的设置和密钥保留在原处。需要便携版时仍可下载 `deskhub-v*-windows.exe`。
+也会改为指向新位置；你的设置和密钥保留在原处。没有便携版 exe：安装程序是安装 Windows app 的
+唯一方式，因为它所安装的 service 正是让 viewer 通过 UAC 提示、锁屏和登录画面的关键。
 
 也可以让 winget 安装同一个安装包并保持更新：`winget upgrade` 获取每个新 release，
 `winget uninstall ManhPham.Deskhub` 将其移除：
@@ -60,13 +61,13 @@ winget install ManhPham.Deskhub
   可以替你回应 UAC 提示，任何知道你密码的人也可以解锁该机器。在 Settings → Host 中勾选
   *Allow access before anyone signs in*，该 service 还会在 DeskHub 未共享的任何时候 ——
   从电脑启动后紧接着的登录画面开始 —— 为已在你允许列表上的设备自行 host；它做什么、不做
-  什么，见[规范](SPECIFICATION.zh.md)（T-28）。便携版 exe 没有该 service：使用它时，这些
-  画面在关闭之前对 viewer 而言是冻结的，该复选框也呈灰色。
+  什么，见[规范](SPECIFICATION.zh.md)（T-28）。从源码构建且未安装该 service 的版本，这些
+  画面在关闭之前对 viewer 而言是冻结的，其复选框也呈灰色。
 
 可在 Windows 设置中卸载 DeskHub，或运行 `winget uninstall ManhPham.Deskhub`；
 该 service 会随之一并移除，连同 `%ProgramData%\DeskHub` —— 它在那里保存日志以及
 *Allow access before anyone signs in* 所做的副本。
-便携版只需删除 exe。Settings 和 key 会保留在 `%USERPROFILE%\.deskhub`，直到删除该文件夹；
+Settings 和 key 会保留在 `%USERPROFILE%\.deskhub`，直到删除该文件夹；
 其他机器发来的文件保留在 `%USERPROFILE%\Deskhub`（或你选择的文件夹）中，直到你删除它们。
 
 ## 🍎 macOS
@@ -294,6 +295,13 @@ Security 中选择 *Open Anyway*。
 
 Windows 安装程序无需管理员权限即可将 CLI 加入用户的 `PATH`。
 便携版 `deskhub-cli-v*-windows.exe` 仍可下载。
+
+**CLI 永远不会获得 *DeskHub Secure Desktop* service。** CLI 的安装程序不安装该 service，
+而该 service —— 即使 app 的安装程序已在同一台电脑上安装了它 —— 也只为与之并列的
+`Deskhub.exe` 服务，绝不为 `deskhub-cli.exe` 服务，无论后者放在哪里。因此在 Windows 上
+`deskhub-cli share` 时，UAC 提示、锁屏或登录画面出现期间 viewer 看到的是冻结画面，他们的
+输入也到不了那些画面，而 *Allow access before anyone signs in* 是只有 app 才有的设置。
+需要这些功能时，请用安装程序安装 app。
 每个安装程序和安装包都附带 `THIRD_PARTY_NOTICES.md` 以及其中所含库的许可证文本；便携版
 二进制文件无法附带，因此每个 release 还提供 `deskhub-v*-licenses.zip`，其中包含
 `LICENSE`、`THIRD_PARTY_NOTICES.md` 以及全部许可证文本。

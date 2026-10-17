@@ -295,15 +295,16 @@ clang 构建会对未使用的 member function、template 与 exception 参数�
 Release workflow 还会通过 `packaging/windows/` 构建 Windows app 和 CLI 的 Inno Setup
 安装程序。app 的安装程序需要管理员权限：它为所有用户安装到 `Program Files` 下，移除早先的
 per-user 安装，并运行 `DeskhubService.exe --install` 注册 *DeskHub Secure Desktop* service
-（卸载时运行 `--uninstall`）。Windows 便携版和 Linux app 仍是单文件；便携版 app 没有该 service，
-因此无法向 viewer 显示 UAC 提示或锁屏。
+（卸载时运行 `--uninstall`）。Windows app 仅以该安装程序发布 —— 没有便携版 app exe，因为
+没有该 service 时 viewer 无法看到 UAC 提示、锁屏或登录画面；CLI 的 Windows 便携版和 Linux app
+仍是单文件。
 
 每个安装包都附带 `THIRD_PARTY_NOTICES.md` 以及 `licenses/` 中适用于它的 licence 文本：
 app 与 CLI 的 `.deb` 和 `.rpm`（位于 `/usr/share/doc/<package>/`，文本 —— 包括 LGPL ——
 位于其 `licenses/` 文件夹中）、两个 Windows 安装程序、macOS app 的 `Resources`、iOS app
 bundle 以及 Android APK 的 assets。`scripts/stage-licenses.sh` 准备 Linux 与 Apple 的文件集，
-`packaging/windows/*.iss` 列出 Windows 的文件，Android 构建自行复制其文件。便携版 binary
-无法附带任何内容，因此 release 另外提供 `deskhub-<tag>-licenses.zip`，内含 `LICENSE`、
+`packaging/windows/*.iss` 列出 Windows 的文件，Android 构建自行复制其文件。CLI 与 Linux 的
+便携版 binary 无法附带任何内容，因此 release 另外提供 `deskhub-<tag>-licenses.zip`，内含 `LICENSE`、
 notices 以及整个 `licenses/` 文件夹。`licenses/rust-crates.txt` 是生成的：quiche 的 pin
 变动时，`scripts/rust-crate-notices.py <quiche source dir> > licenses/rust-crates.txt`
 会重写它。APK 还附带 `licenses/android-libraries.txt`，即 Gradle 打包进 APK 的 Java 与

@@ -323,15 +323,16 @@ Workflow release cũng tạo bộ cài Inno Setup cho app và CLI trên Windows 
 `packaging/windows/`. Bộ cài của app cần quyền administrator: nó cài vào `Program Files`
 cho mọi người dùng, gỡ bản cài theo từng người dùng trước đó, và chạy
 `DeskhubService.exe --install` để đăng ký service *DeskHub Secure Desktop* (`--uninstall`
-khi gỡ cài đặt). Các bản Windows portable và app Linux vẫn là file đơn lẻ; app portable
-không có service, nên không thể cho viewer thấy hộp thoại UAC hay màn hình khoá.
+khi gỡ cài đặt). App Windows chỉ phát hành dưới dạng bộ cài đó — không có exe app portable,
+vì thiếu service thì viewer không thấy được hộp thoại UAC, màn hình khoá hay màn hình đăng
+nhập; bản Windows portable của CLI và app Linux vẫn là file đơn lẻ.
 
 Mọi gói đều kèm `THIRD_PARTY_NOTICES.md` và các văn bản giấy phép trong `licenses/` áp dụng
 cho nó: `.deb` và `.rpm` của app và CLI (dưới `/usr/share/doc/<package>/`, các văn bản —
 kể cả LGPL — nằm trong thư mục `licenses/` của nó), cả hai bộ cài Windows, `Resources` của
 app macOS, bundle của app iOS và assets của APK Android. `scripts/stage-licenses.sh` chuẩn bị
 bộ cho Linux và Apple, `packaging/windows/*.iss` liệt kê bộ cho Windows, còn bản build
-Android tự copy bộ của nó. Các binary portable không mang theo gì, nên bản release thêm
+Android tự copy bộ của nó. Các binary portable của CLI và Linux không mang theo gì, nên bản release thêm
 `deskhub-<tag>-licenses.zip` chứa `LICENSE`, file notices và toàn bộ thư mục `licenses/`.
 `licenses/rust-crates.txt` được sinh ra:
 `scripts/rust-crate-notices.py <quiche source dir> > licenses/rust-crates.txt` ghi lại nó

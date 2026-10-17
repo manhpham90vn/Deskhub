@@ -51,7 +51,7 @@ jobs:
           $deps
           $bad = $deps | Select-String -Pattern 'VCRUNTIME|MSVCP\d|MSVCR\d'
           if ($bad) {
-            Write-Output "::error::$env:APP_EXE needs the Visual C++ Redistributable - the release is supposed to be a single self-contained exe"
+            Write-Output "::error::$env:APP_EXE needs the Visual C++ Redistributable - the installer ships it without one"
             exit 1
           }
           Write-Output "OK - the MSVC runtime is linked statically."
@@ -98,14 +98,6 @@ jobs:
         with:
           name: deskhub-windows-installer
           path: out/installer/DeskHub-Setup.exe
-          retention-days: 14
-          if-no-files-found: error
-
-      - name: Upload app
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: deskhub-windows
-          path: ${{ env.APP_EXE }}
           retention-days: 14
           if-no-files-found: error
 

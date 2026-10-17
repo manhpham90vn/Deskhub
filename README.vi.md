@@ -74,8 +74,9 @@ dạng exe portable nằm trên `PATH`. Homebrew đưa CLI trên macOS vào `PAT
 
 Các nền tảng còn lại lấy trên [Releases](https://github.com/manhpham90vn/Deskhub/releases):
 
-- **Bản tải cho Windows** — bộ cài app `deskhub-v*-windows-setup.exe` và bộ cài CLI
-  `deskhub-cli-v*-windows-setup.exe`; vẫn có các file exe portable
+- **Bản tải cho Windows** — bộ cài app `deskhub-v*-windows-setup.exe` (dạng duy nhất của
+  app) và bộ cài CLI `deskhub-cli-v*-windows-setup.exe`; CLI còn có bản portable
+  `deskhub-cli-v*-windows.exe`
 - **Bản tải cho macOS** — app là `deskhub-v*-macos.dmg`, CLI là `deskhub-cli-v*-macos`
 - **Ubuntu / Debian / Mint không dùng repository** — `deskhub-v*-amd64.deb` và
   `deskhub-cli-v*-amd64.deb`

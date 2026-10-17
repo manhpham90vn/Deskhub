@@ -320,17 +320,18 @@ The Windows app and CLI are also published as Inno Setup installers, built from
 `packaging/windows/` by the release workflow. The app's installer needs administrator
 rights: it installs under `Program Files` for every user, removes an earlier per-user
 install, and runs `DeskhubService.exe --install` to register the *DeskHub Secure Desktop*
-service (`--uninstall` on the way out). Their portable Windows builds and the Linux app
-remain single files; the portable app has no service, so it cannot show viewers a UAC
-prompt or the lock screen.
+service (`--uninstall` on the way out). The Windows app ships only as that installer —
+there is no portable app exe, because without the service viewers cannot see a UAC prompt,
+the lock screen or the sign-in screen; the CLI's portable Windows build and the Linux app
+remain single files.
 
 Every package carries `THIRD_PARTY_NOTICES.md` and the licence texts from `licenses/`
 that apply to it: the app and CLI `.deb` and `.rpm` (under `/usr/share/doc/<package>/`,
 the texts — the LGPL included — in its `licenses/` folder), both Windows installers, the
 macOS app's `Resources`, the iOS app bundle and the Android APK's assets.
 `scripts/stage-licenses.sh` stages the Linux and Apple sets, `packaging/windows/*.iss`
-list the Windows ones, and the Android build copies its own. The portable binaries carry
-nothing, so the release adds `deskhub-<tag>-licenses.zip` with `LICENSE`, the notices
+list the Windows ones, and the Android build copies its own. The portable CLI and Linux
+binaries carry nothing, so the release adds `deskhub-<tag>-licenses.zip` with `LICENSE`, the notices
 and the whole `licenses/` folder. `licenses/rust-crates.txt` is generated:
 `scripts/rust-crate-notices.py <quiche source dir> > licenses/rust-crates.txt` rewrites
 it when the quiche pin moves. The APK also carries `licenses/android-libraries.txt`, the

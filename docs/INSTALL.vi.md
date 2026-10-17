@@ -40,7 +40,9 @@ cho mọi người dùng vào `Program Files`, thêm nó vào Start Menu và t�
 Desktop theo mặc định; bạn cũng có thể mở app ngay khi cài xong. Không cần tài khoản. Bản
 DeskHub mà phiên bản trước cài riêng cho người dùng của bạn sẽ được gỡ trước, và
 *Start Deskhub when you log in* được trỏ sang vị trí mới; settings và key của bạn vẫn nằm
-nguyên chỗ cũ. File `deskhub-v*-windows.exe` vẫn có cho ai muốn chạy portable.
+nguyên chỗ cũ. Không có bản exe portable: file setup là cách duy nhất để cài app Windows,
+vì service mà nó cài chính là thứ cho viewer đi qua hộp thoại UAC, màn hình khoá và màn
+hình đăng nhập.
 
 Hoặc để winget cài bộ cài đó và giữ nó luôn mới: `winget upgrade` lấy bản release mới,
 `winget uninstall ManhPham.Deskhub` gỡ nó đi:
@@ -67,12 +69,12 @@ Có ba điểm cần lưu ý:
   signs in* trong Settings → Host thì service còn tự làm host bất cứ khi nào DeskHub không
   share — từ màn hình đăng nhập ngay sau khi máy khởi động — cho các thiết bị đã có trong
   danh sách được phép của bạn; xem [đặc tả](SPECIFICATION.vi.md) (T-28) để biết nó làm gì
-  và không làm gì. File exe portable không có service: với nó, các màn hình đó đứng yên với
-  viewer cho tới khi chúng đóng lại, và ô chọn bị mờ đi.
+  và không làm gì. Bản build từ source chạy không có service thì các màn hình đó đứng yên
+  với viewer cho tới khi chúng đóng lại, và ô chọn của nó bị mờ đi.
 
 Gỡ DeskHub trong Windows Settings hoặc chạy `winget uninstall ManhPham.Deskhub`; service
 cũng được gỡ theo, cùng với `%ProgramData%\DeskHub`, nơi nó giữ log và các bản copy mà
-*Allow access before anyone signs in* đã tạo. Với bản portable, chỉ cần xoá file exe.
+*Allow access before anyone signs in* đã tạo.
 Settings và key vẫn nằm trong `%USERPROFILE%\.deskhub` cho đến khi bạn xoá thư mục đó, còn
 file máy khác gửi tới vẫn nằm trong `%USERPROFILE%\Deskhub` (hoặc thư mục bạn đã chọn) cho
 đến khi bạn xoá.
@@ -313,6 +315,14 @@ Settings → Privacy & Security.
 
 Bộ cài Windows thêm CLI vào `PATH` của người dùng mà không cần quyền Administrator.
 File `deskhub-cli-v*-windows.exe` vẫn có cho ai muốn chạy portable.
+
+**CLI không bao giờ có service *DeskHub Secure Desktop*.** Bộ cài CLI không cài service,
+và service — kể cả khi bộ cài app đã cài nó trên cùng máy — chỉ phục vụ `Deskhub.exe` nằm
+cạnh nó, không bao giờ phục vụ `deskhub-cli.exe`, dù file đó ở đâu. Vì vậy
+`deskhub-cli share` trên Windows cho viewer thấy hình đứng yên khi có hộp thoại UAC, màn
+hình khoá hay màn hình đăng nhập, phím chuột của họ không tới được các màn hình đó, và
+*Allow access before anyone signs in* là setting chỉ có ở app. Cần những thứ đó thì cài app
+bằng file setup.
 Mọi bộ cài và gói cài đặt đều mang theo `THIRD_PARTY_NOTICES.md` và văn bản giấy phép của
 các thư viện bên trong; các binary portable thì không thể, nên mỗi bản release còn có
 `deskhub-v*-licenses.zip` chứa `LICENSE`, `THIRD_PARTY_NOTICES.md` và mọi văn bản giấy phép.

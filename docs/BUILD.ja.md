@@ -329,9 +329,10 @@ Release workflow は `packaging/windows/` から Windows app と CLI の Inno Se
 も作成する。app のインストーラーには管理者権限が必要である。すべてのユーザー向けに
 `Program Files` 配下へインストールし、以前のユーザー単位のインストールを削除し、
 `DeskhubService.exe --install` を実行して *DeskHub Secure Desktop* サービスを登録する
-（アンインストール時は `--uninstall`）。Windows ポータブル版と Linux app は引き続き単一
-ファイルである。ポータブル版の app にはサービスがないため、viewer に UAC の確認画面や
-ロック画面を見せることはできない。
+（アンインストール時は `--uninstall`）。Windows app はこのインストーラーのみで配布する。
+ポータブル版の app exe は存在しない。サービスがなければ viewer に UAC の確認画面、
+ロック画面、サインイン画面を見せられないからである。CLI の Windows ポータブル版と
+Linux app は引き続き単一ファイルである。
 
 すべてのパッケージは `THIRD_PARTY_NOTICES.md` と、`licenses/` のうちそのパッケージに
 該当するライセンス文を同梱する。対象は app と CLI の `.deb` と `.rpm`
@@ -339,8 +340,8 @@ Release workflow は `packaging/windows/` から Windows app と CLI の Inno Se
 フォルダに置く）、両方の Windows インストーラー、macOS app の `Resources`、iOS の app
 bundle、Android APK の assets である。Linux と Apple 向けの組は
 `scripts/stage-licenses.sh` が配置し、Windows 向けは `packaging/windows/*.iss` が列挙し、
-Android の build は自ら必要なものをコピーする。ポータブル版のバイナリには何も同梱され
-ないため、リリースには `LICENSE`、notices、`licenses/` フォルダ全体を収めた
+Android の build は自ら必要なものをコピーする。CLI と Linux のポータブル版バイナリには
+何も同梱されないため、リリースには `LICENSE`、notices、`licenses/` フォルダ全体を収めた
 `deskhub-<tag>-licenses.zip` が加わる。`licenses/rust-crates.txt` は生成物であり、
 quiche の pin が変わったら
 `scripts/rust-crate-notices.py <quiche source dir> > licenses/rust-crates.txt` で書き直す。

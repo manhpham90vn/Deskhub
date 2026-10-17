@@ -37,8 +37,9 @@ installs DeskHub for every user under `Program Files`, adds it to the Start Menu
 creates a Desktop shortcut by default. You can launch DeskHub at the end of setup. No
 account is needed. A DeskHub that an earlier version installed for your user alone is
 removed first, and *Start Deskhub when you log in* is pointed at the new location; your
-settings and keys stay where they are. The separate `deskhub-v*-windows.exe` file remains
-available for portable use.
+settings and keys stay where they are. There is no portable exe: the setup file is the
+only way to install the Windows app, because the service it installs is what lets viewers
+through UAC prompts, the lock screen and the sign-in screen.
 
 Or let winget install the same setup package and keep it current — `winget upgrade` brings
 each new release and `winget uninstall ManhPham.Deskhub` removes it:
@@ -66,16 +67,15 @@ Three things to expect:
   *Allow access before anyone signs in* in Settings → Host and the service also hosts on
   its own whenever DeskHub is not sharing — from the sign-in screen right after the PC
   starts — for the devices already on your allowed list; see the
-  [specification](SPECIFICATION.md) (T-28) for what it does and does not do. The
-  portable exe has no service: with it those screens freeze for viewers until they
-  close, and the checkbox is greyed out.
+  [specification](SPECIFICATION.md) (T-28) for what it does and does not do. A build
+  from source run without the service shows those screens frozen to viewers until they
+  close, and its checkbox is greyed out.
 
 Uninstall DeskHub from Windows Settings or with `winget uninstall ManhPham.Deskhub`;
 the service goes with it, together with `%ProgramData%\DeskHub`, where it keeps its logs
-and the copies *Allow access before anyone signs in* made. For the portable version,
-delete its exe. Settings and keys remain in `%USERPROFILE%\.deskhub` until you remove that
-folder too, and files other machines sent you stay in `%USERPROFILE%\Deskhub` (or the
-folder you picked) until you delete them.
+and the copies *Allow access before anyone signs in* made. Settings and keys remain in
+`%USERPROFILE%\.deskhub` until you remove that folder too, and files other machines sent
+you stay in `%USERPROFILE%\Deskhub` (or the folder you picked) until you delete them.
 
 ## 🍎 macOS
 
@@ -319,6 +319,14 @@ signed or notarized like the dmg, so its first run may need
 
 The Windows setup package adds the CLI to your user `PATH` without requiring an administrator.
 The separate `deskhub-cli-v*-windows.exe` remains available for portable use.
+
+**The CLI never gets the *DeskHub Secure Desktop* service.** Its setup does not install
+the service, and the service — even when the app's setup has installed it on the same PC —
+serves only the `Deskhub.exe` beside it, never `deskhub-cli.exe`, wherever that lives. So
+a `deskhub-cli share` on Windows shows viewers a frozen picture while a UAC prompt, the
+lock screen or the sign-in screen is up, their input does not reach those screens, and
+*Allow access before anyone signs in* is an app-only setting. Install the app from its
+setup file when you need any of that.
 Every installer and package carries `THIRD_PARTY_NOTICES.md` and the licence texts of the
 libraries inside it; the portable binaries cannot, so each release also offers
 `deskhub-v*-licenses.zip` with `LICENSE`, `THIRD_PARTY_NOTICES.md` and every licence text.
