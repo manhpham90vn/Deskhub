@@ -211,9 +211,10 @@ profile を対象とするため、バインドを限定しても firewall は�
 ある。利用者が app に対して自ら作成した block ルールはそのまま残され、Windows では
 block ルールが allow ルールに優先するため、それを削除するまで host には到達できない。
 Windows ではインストーラーがもう一つ追加する。*DeskHub Secure Desktop* サービスであり、
-UAC の確認画面やロック画面の間も共有を継続させる。共有している間、viewer はそれらの画面を
+app からの共有も `deskhub-cli` からの共有も、UAC の確認画面やロック画面の間継続させる。
+共有している間、viewer はそれらの画面を
 見ることができ、そこへ入力することもできる —— ロック画面のパスワード欄も含む。
-*Allow access before anyone signs in* をオンにすると（既定ではオフ）、同じサービスが app の
+*Allow access before anyone signs in* をオンにすると（既定ではオフ）、同じサービスがどちらも
 共有していない間はいつでも、サインイン画面以降、許可済み一覧にあるデバイスのために独自の
 host も動かす。そのため `DeskhubService.exe` 用に 2 本目の受信 UDP ルール
 *Deskhub Secure Desktop (host)* を開く。
@@ -268,7 +269,7 @@ Deskhub を現状のまま使い続ける場合、次の項目を実施するこ
       決して表示しない。
 - [ ] 使用していないときは Deskhub を終了する。終了すれば受け入れ口も閉じる。Windows
       インストーラーが追加する *DeskHub Secure Desktop* サービスは network から何も
-      受け付けず、app が共有していない間は何もしない —— ただし *Allow access before anyone
+      受け付けず、app も `deskhub-cli` も共有していない間は何もしない —— ただし *Allow access before anyone
       signs in* をオンにした場合は別で、これこそが Windows の起動した瞬間から、誰もいない
       まま host を待ち受けさせる設定である。再起動後にマシンへ到達する必要がない限りオフの
       ままにし、オンにしている間は許可済み一覧を短く保ち、その一覧にいて Windows の
@@ -403,20 +404,22 @@ app と broadcast extension が共有する app group のコンテナ内の `.de
   昇格したプロセスの欠陥となる。インストーラーはさらに、LocalSystem として動作する
   サービス *DeskHub Secure Desktop* を登録する。その named pipe はリモートの client と
   network logon を拒否し、high integrity の管理者のみを受け入れ、接続するプロセスの
-  image path で確認したうえで、自身と同じフォルダにある `Deskhub.exe` にのみ応答する。
-  app の側も、session 0 で自身の隣にある `DeskhubService.exe` とのみ通信する。サービスは
-  その app のために、ユーザーの session で SYSTEM として agent を起動し、app が切断すると
-  agent を終了させる job に結び付ける。agent は secure desktop を capture し、app の input を
-  そこで再生するだけで、それ以外は何も読み取らない。両バイナリは管理者のみが書き込める
+  image path で確認したうえで、自身と同じフォルダにある `Deskhub.exe` と `deskhub-cli.exe`
+  にのみ応答する。それぞれのプログラムの側も、session 0 で自身の隣にある
+  `DeskhubService.exe` とのみ通信する。サービスはそのプログラムのために、ユーザーの
+  session で SYSTEM として agent を起動し、そのプログラムが切断すると agent を終了させる
+  job に結び付ける。agent は secure desktop を capture し、そのプログラムの input を
+  そこで再生するだけで、それ以外は何も読み取らない。3 つのバイナリは管理者のみが書き込める
   `Program Files` 配下にあるため、ユーザーとして動作するプロセスがいずれかを差し替えて
   SYSTEM 権限を得ることはできない。それでも agent の欠陥は SYSTEM プロセスの欠陥であり、
-  昇格した app を経由してのみ到達できる。*Allow access before anyone signs in* が on の
+  昇格した app または CLI を経由してのみ到達できる。*Allow access before anyone signs in* が on の
   場合、サービスは app が実行するのと同じ host のコードも、コンソール session で SYSTEM
   として起動し、その host は network から到達できる。この host は key、許可済み一覧、
   settings を、SYSTEM と管理者のみが開ける `%ProgramData%\DeskHub` から読み、サービスが
   それらの新しいコピーを受け付けるのは、やはり image path で確認した、インストール済みの
-  `Deskhub.exe` からだけである。サービスの pipe へのすべての接続は要求バイト 1 つで
-  始まるようになり、新しい 2 つの要求はその app 以外からは拒否される。
+  `Deskhub.exe` または `deskhub-cli.exe` からだけである。サービスの pipe へのすべての接続は
+  要求バイト 1 つで始まるようになり、新しい 2 つの要求はその 2 つのプログラム以外からは
+  拒否される。
 - **継続的インテグレーション。** すべての pull request で、3 つの test suite を
   AddressSanitizer、UndefinedBehaviorSanitizer、ThreadSanitizer の下で実行し、
   clang-tidy、前述の fuzzer、C++・Kotlin・Swift のコードに対する CodeQL、Git の全履歴に

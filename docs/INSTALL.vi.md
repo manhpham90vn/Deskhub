@@ -27,24 +27,28 @@ Mọi gói desktop còn cài kèm `deskhub-cli` cho các lệnh terminal và scr
 và Linux, CLI vẫn có thể mở cửa sổ xem màn hình từ xa (trên Linux là cửa sổ X11, nên
 desktop Wayland cần XWayland). Xem [Command line](#-command-line).
 
-Bạn có thể cài qua Homebrew trên macOS hoặc
-[apt repository](#-linux) trên Ubuntu, Kubuntu, Debian và Mint. Khi muốn lên bản mới,
-hãy dùng lệnh nâng cấp của package manager tương ứng.
+Bạn có thể cài qua Homebrew trên macOS hoặc [apt repository](#-linux) trên Ubuntu,
+Kubuntu, Debian và Mint. Khi muốn lên bản mới, hãy dùng lệnh nâng cấp của package manager
+tương ứng. Windows không có kênh package manager: tải file setup từ Releases, và chạy bản
+mới đè lên bản cũ để nâng cấp.
 
 ---
 
 ## 🪟 Windows
 
 Tải `deskhub-v*-windows-setup.exe` và chạy. Bộ cài xin quyền administrator, cài DeskHub
-cho mọi người dùng vào `Program Files`, thêm nó vào Start Menu và tạo shortcut trên
-Desktop theo mặc định; bạn cũng có thể mở app ngay khi cài xong. Không cần tài khoản. Bản
-DeskHub mà phiên bản trước cài riêng cho người dùng của bạn sẽ được gỡ trước, và
+cho mọi người dùng vào `Program Files` — `Deskhub.exe`, `deskhub-cli.exe` và service
+*DeskHub Secure Desktop* cùng nhau — thêm nó vào Start Menu, đưa thư mục đó vào `PATH` hệ
+thống để `deskhub-cli` chạy được trong mọi terminal mở mới, và tạo shortcut trên Desktop
+theo mặc định; bạn cũng có thể mở app ngay khi cài xong. Không cần tài khoản. Bản DeskHub
+hay DeskHub CLI mà phiên bản trước cài riêng cho người dùng của bạn sẽ được gỡ trước, và
 *Start Deskhub when you log in* được trỏ sang vị trí mới; settings và key của bạn vẫn nằm
 nguyên chỗ cũ. Không có bản exe portable: file setup là cách duy nhất để cài app Windows,
 vì service mà nó cài chính là thứ cho viewer đi qua hộp thoại UAC, màn hình khoá và màn
-hình đăng nhập. Bộ cài còn đặt `deskhub-cli.exe` cạnh app và thêm thư mục đó vào `PATH`
-của máy, nên `deskhub-cli` chạy được trong mọi terminal mở sau đó; bản cài *DeskHub CLI*
-riêng trước đây được gỡ trên đường cài.
+hình đăng nhập.
+
+Muốn nâng cấp, chạy file setup mới đè lên bản cũ; nó thay file tại chỗ, còn settings và
+key trong `%USERPROFILE%\.deskhub` vẫn được giữ.
 
 Có ba điểm cần lưu ý:
 
@@ -54,18 +58,19 @@ Có ba điểm cần lưu ý:
   logon task chạy quyền cao, không hiện hộp thoại.
 - **Rule Windows Firewall** do app tự thêm trong lần share đầu tiên.
 - **Một system service, *DeskHub Secure Desktop***, chạy dưới tài khoản LocalSystem. Mặc
-  định nó không làm gì cho tới khi DeskHub share màn hình. Khi đó, lúc Windows chuyển sang
+  định nó không làm gì cho tới khi DeskHub hoặc `deskhub-cli` share màn hình. Khi đó, lúc Windows chuyển sang
   secure desktop — hộp thoại UAC của một trình cài đặt, màn hình khoá, Ctrl+Alt+Del — viewer
   vẫn thấy màn hình và click, gõ được ở đó, nên họ có thể trả lời hộp thoại UAC thay bạn,
   và bất kỳ ai biết mật khẩu của bạn đều mở khoá được máy. Tick *Allow access before anyone
-  signs in* trong Settings → Host thì service còn tự làm host bất cứ khi nào DeskHub không
-  share — từ màn hình đăng nhập ngay sau khi máy khởi động — cho các thiết bị đã có trong
+  signs in* trong Settings → Host — hoặc chạy `deskhub-cli settings set unattended=on` từ
+  một terminal administrator — thì service còn tự làm host bất cứ khi nào cả app lẫn CLI
+  đều không share — từ màn hình đăng nhập ngay sau khi máy khởi động — cho các thiết bị đã có trong
   danh sách được phép của bạn; xem [đặc tả](SPECIFICATION.vi.md) (T-28) để biết nó làm gì
   và không làm gì. Bản build từ source chạy không có service thì các màn hình đó đứng yên
   với viewer cho tới khi chúng đóng lại, và ô chọn của nó bị mờ đi.
 
-Gỡ DeskHub trong Windows Settings; service
-cũng được gỡ theo, cùng với `%ProgramData%\DeskHub`, nơi nó giữ log và các bản copy mà
+Gỡ DeskHub trong Windows Settings; CLI và service cũng được gỡ theo, cùng với
+`%ProgramData%\DeskHub`, nơi service giữ log và các bản copy mà
 *Allow access before anyone signs in* đã tạo.
 Settings và key vẫn nằm trong `%USERPROFILE%\.deskhub` cho đến khi bạn xoá thư mục đó, còn
 file máy khác gửi tới vẫn nằm trong `%USERPROFILE%\Deskhub` (hoặc thư mục bạn đã chọn) cho
@@ -311,13 +316,23 @@ Trên Windows, sau khi bộ cài chạy xong hãy mở cửa sổ PowerShell m�
 macOS không dùng Homebrew, chạy bằng đường dẫn đầy đủ hoặc tự link:
 `ln -s /Applications/Deskhub.app/Contents/MacOS/deskhub-cli /usr/local/bin/deskhub-cli`.
 
-**CLI không bao giờ có service *DeskHub Secure Desktop*.** Service — do cùng bộ cài đặt
-vào — chỉ phục vụ `Deskhub.exe` nằm cạnh nó, không bao giờ phục vụ `deskhub-cli.exe`. Vì
-vậy `deskhub-cli share` trên Windows cho viewer thấy hình đứng yên khi có hộp thoại UAC,
-màn hình khoá hay màn hình đăng nhập, phím chuột của họ không tới được các màn hình đó, và
-*Allow access before anyone signs in* là setting chỉ có ở app, trên Windows lẫn macOS. Cần
-những thứ đó thì dùng app. Mọi bộ cài và gói cài đặt đều mang theo `THIRD_PARTY_NOTICES.md`
-và văn bản giấy phép của các thư viện bên trong.
+**Trên Windows, CLI dùng service *DeskHub Secure Desktop* như app.** Bộ cài đặt
+`deskhub-cli.exe` cạnh `Deskhub.exe` và service, và service phục vụ cả hai chương trình
+trong thư mục đó. Vì vậy `deskhub-cli share` đi tiếp qua hộp thoại UAC, màn hình khoá và
+màn hình đăng nhập đúng như app, còn `deskhub-cli settings set unattended=on` bật *Allow
+access before anyone signs in* — cùng một setting với ô chọn của app, đẩy tới cùng một
+service, và `access add`, `access remove`, `access approve`, `access clear` giữ cho host
+trước khi đăng nhập luôn đồng bộ. Hai điều cần biết: chỉ administrator mới nói chuyện được
+với service, nên hãy chạy terminal dưới quyền administrator cho các phần đó — một
+`deskhub-cli share` không nâng quyền vẫn chạy, nhưng không có secure desktop, và khi
+setting kia đang bật thì nó không giành lại được port từ host trước khi đăng nhập; và một
+`deskhub-cli.exe` copy đi nơi khác, hay build từ source, không được phục vụ, như mọi bản
+copy nằm ngoài thư mục đã cài. Trên macOS, *Allow access before anyone signs in* chỉ bật
+được trong app: `deskhub-cli settings set unattended=on` từ chối ở đó, cũng như trên Linux,
+nơi chưa có host trước khi đăng nhập, và thay đổi CLI thực hiện với danh sách được phép trên
+Mac sẽ tới host trước khi đăng nhập ở lần kế tiếp app khởi động hoặc dừng share. Mọi bộ cài
+và gói cài đặt đều mang theo `THIRD_PARTY_NOTICES.md` và văn bản giấy phép của các thư viện
+bên trong.
 
 Trên Linux, `deskhub-cli` share màn hình qua cùng portal và VA-API driver mà app cần, đồng
 thời dựa vào cùng rule `/dev/uinput` cho remote input, nên toàn bộ mục [Linux](#-linux) áp

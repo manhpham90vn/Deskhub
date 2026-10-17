@@ -1,7 +1,9 @@
 if(WIN32)
     set(deskhub_cli_signals SignalsWin.cpp)
+    set(deskhub_cli_unattended UnattendedWin.cpp)
 else()
     set(deskhub_cli_signals SignalsPosix.cpp)
+    set(deskhub_cli_unattended UnattendedNone.cpp)
 endif()
 
 add_executable(deskhub_cli
@@ -14,6 +16,7 @@ add_executable(deskhub_cli
     ShellCommand.cpp
     ConnectCommand.cpp
     ${deskhub_cli_signals}
+    ${deskhub_cli_unattended}
 )
 
 set_target_properties(deskhub_cli PROPERTIES OUTPUT_NAME deskhub-cli)

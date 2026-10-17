@@ -178,10 +178,11 @@ Connect 到 host 的 `100.x.y.z` 地址。
 便利之处也正是上述原则重要的原因。Deskhub 只替换它自己的这条规则。你自己为该 app 创建的
 block 规则会保持不变；由于 Windows 中 block 规则优先于 allow 规则，host 在你移除该规则之前
 将一直无法被访问。
-在 Windows 上，安装程序还会额外添加一项：*DeskHub Secure Desktop* service，它让共享在
-UAC 提示或锁屏出现时得以继续。在你共享期间，viewer 能看到这些屏幕并可在其中输入 —— 包括
+在 Windows 上，安装程序还会额外添加一项：*DeskHub Secure Desktop* service，它让共享 ——
+来自 app 或来自 `deskhub-cli` —— 在 UAC 提示或锁屏出现时得以继续。在你共享期间，viewer
+能看到这些屏幕并可在其中输入 —— 包括
 锁屏的密码框。开启 *Allow access before anyone signs in*（默认关闭）后，同一 service 还会在
-app 未共享的任何时候 —— 从登录画面开始 —— 为已在你允许列表上的设备运行一个自己的 host；
+两者都未共享的任何时候 —— 从登录画面开始 —— 为已在你允许列表上的设备运行一个自己的 host；
 它会为 `DeskhubService.exe` 打开第二条入站 UDP 规则 *Deskhub Secure Desktop (host)*。
 
 在 macOS 上，app 的 bundle 内自带 `DeskhubDaemon`。在你勾选 *Allow access before anyone
@@ -224,7 +225,7 @@ host 优先的机制可在你*坐在*机器前时限制异常操作，但在你�
 - [ ] 你展示 QR code 的那台设备一旦连接，就立即隐藏该码；绝不要在正在共享或演示的屏幕上
       展示它。
 - [ ] 不使用时退出 Deskhub。退出即关闭了接入点：Windows 安装程序添加的
-      *DeskHub Secure Desktop* service 不接受任何来自 network 的连接，且在 app 未共享时
+      *DeskHub Secure Desktop* service 不接受任何来自 network 的连接，且在 app 与 `deskhub-cli` 都未共享时
       不做任何事 —— 除非你开启了 *Allow access before anyone signs in*，而这恰恰就是让
       host 在无人在场的情况下、从 Windows 启动那一刻起持续监听的设置。除非你需要在重启后
       访问该机器，否则请保持关闭；开启期间请让允许列表保持精简，并记住名单上任何知道
@@ -335,17 +336,18 @@ client 放入你设备的文件。
 - **Windows。** app 在每次启动时都请求管理员权限（见上文），因此它的缺陷就是一个提权进程的
   缺陷。安装程序还会注册 *DeskHub Secure Desktop*，一个以 LocalSystem 运行的 service。它的
   named pipe 拒绝远程 client 与 network logon，只接纳高完整性级别的管理员，并且只为其自身
-  文件夹中的 `Deskhub.exe` 提供服务 —— 通过连接进程的映像路径核验；反过来，app 也只与位于
-  session 0、在它旁边的 `DeskhubService.exe` 通信。service 为该 app 在用户的 session 中以
-  SYSTEM 身份启动一个 agent，并将其绑定到一个 job，app 断开时该 job 会结束它；agent 捕获
-  secure desktop 并在其上重放 app 的 input，除此之外不读取任何东西。两个 binary 都位于只有
+  文件夹中的 `Deskhub.exe` 与 `deskhub-cli.exe` 提供服务 —— 通过连接进程的映像路径核验；
+  反过来，这两个程序也各自只与位于 session 0、在它旁边的 `DeskhubService.exe` 通信。service
+  为该程序在用户的 session 中以 SYSTEM 身份启动一个 agent，并将其绑定到一个 job，该程序
+  断开时该 job 会结束它；agent 捕获 secure desktop 并在其上重放该程序的 input，除此之外不
+  读取任何东西。三个 binary 都位于只有
   管理员可写的 `Program Files` 下，因此以用户身份运行的进程无法替换其中之一来获得 SYSTEM。
-  agent 中的缺陷仍是一个 SYSTEM 进程的缺陷，只能经由提权的 app 触及。开启 *Allow access
+  agent 中的缺陷仍是一个 SYSTEM 进程的缺陷，只能经由提权的 app 或 CLI 触及。开启 *Allow access
   before anyone signs in* 后，service 还会以 SYSTEM 身份在 console session 中启动与 app 相同的
   host 代码，而该 host 可从 network 访问；它从只有 SYSTEM 与管理员能打开的
   `%ProgramData%\DeskHub` 读取其 key、允许列表与 settings，而 service 只接受来自已安装的
-  `Deskhub.exe` 的新副本 —— 同样以映像路径核验。现在每条到 service pipe 的连接都以一个
-  request 字节开头，两个新 request 来自该 app 之外的任何进程都会被拒绝。
+  `Deskhub.exe` 或 `deskhub-cli.exe` 的新副本 —— 同样以映像路径核验。现在每条到 service pipe
+  的连接都以一个 request 字节开头，两个新 request 来自这两个程序之外的任何进程都会被拒绝。
 - **持续集成。** 每个 pull request 都会在 AddressSanitizer、UndefinedBehaviorSanitizer 与
   ThreadSanitizer 下运行三套测试，并运行 clang-tidy、上文所述的 fuzzer、针对 C++、Kotlin
   与 Swift 代码的 CodeQL，以及用 gitleaks 扫描整个 Git 历史中提交的机密；CodeQL 与

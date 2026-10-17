@@ -26,8 +26,9 @@ Deskhub，请参阅 [`BUILD.zh.md`](BUILD.zh.md)。
 CLI 也能打开远程屏幕窗口（在 Linux 上是 X11 窗口，因此 Wayland 桌面需要 XWayland）。见
 [Command line](#-command-line)。
 
-macOS 可通过 Homebrew，Ubuntu、Kubuntu、Debian 和 Mint 可通过
-[apt repository](#-linux) 安装。需要新版本时，使用相应 package manager 的升级命令。
+macOS 可通过 Homebrew，Ubuntu、Kubuntu、Debian 和 Mint 可通过 [apt repository](#-linux)
+安装。需要新版本时，使用相应 package manager 的升级命令。Windows 没有 package manager
+渠道：从 Releases 下载安装程序，升级时用新版覆盖运行即可。
 
 ---
 
@@ -41,6 +42,9 @@ macOS 可通过 Homebrew，Ubuntu、Kubuntu、Debian 和 Mint 可通过
 安装程序还会把 `deskhub-cli.exe` 装在 app 旁边，并把该文件夹加入机器 `PATH`，之后打开的
 任何终端都能运行 `deskhub-cli`；早先单独安装的 *DeskHub CLI* 会在安装过程中被移除。
 
+升级时，用新版安装程序覆盖运行即可；文件会就地替换，`%USERPROFILE%\.deskhub` 中的设置和
+密钥会保留。
+
 需要注意三件事：
 
 - **每次启动都申请 Administrator。** 每次运行时 Windows 都会弹出 UAC 提示，否则无法将
@@ -48,16 +52,17 @@ macOS 可通过 Homebrew，Ubuntu、Kubuntu、Debian 和 Mint 可通过
   登录时作为提权的登录任务启动，不再弹出提示。
 - **添加一条 Windows Firewall 规则**，由 app 在首次 share 时自行添加。
 - **一个系统 service，*DeskHub Secure Desktop***，以 LocalSystem 运行。默认情况下，在
-  DeskHub 共享屏幕之前它什么也不做。共享时，当 Windows 切换到其 secure desktop —— 安装程序
+  DeskHub 或 `deskhub-cli` 共享屏幕之前它什么也不做。共享时，当 Windows 切换到其 secure desktop —— 安装程序
   弹出的 UAC 提示、锁屏、Ctrl+Alt+Del —— viewer 仍能看到屏幕并可在其中点击和输入，因此他们
   可以替你回应 UAC 提示，任何知道你密码的人也可以解锁该机器。在 Settings → Host 中勾选
-  *Allow access before anyone signs in*，该 service 还会在 DeskHub 未共享的任何时候 ——
+  *Allow access before anyone signs in*，或在管理员终端中运行
+  `deskhub-cli settings set unattended=on`，该 service 还会在 app 与 CLI 都未共享的任何时候 ——
   从电脑启动后紧接着的登录画面开始 —— 为已在你允许列表上的设备自行 host；它做什么、不做
   什么，见[规范](SPECIFICATION.zh.md)（T-28）。从源码构建且未安装该 service 的版本，这些
   画面在关闭之前对 viewer 而言是冻结的，其复选框也呈灰色。
 
-可在 Windows 设置中卸载 DeskHub；
-该 service 会随之一并移除，连同 `%ProgramData%\DeskHub` —— 它在那里保存日志以及
+可在 Windows 设置中卸载 DeskHub；CLI 与该 service 会随之一并移除，连同
+`%ProgramData%\DeskHub` —— service 在那里保存日志以及
 *Allow access before anyone signs in* 所做的副本。
 Settings 和 key 会保留在 `%USERPROFILE%\.deskhub`，直到删除该文件夹；
 其他机器发来的文件保留在 `%USERPROFILE%\Deskhub`（或你选择的文件夹）中，直到你删除它们。
@@ -288,12 +293,19 @@ client、connection request 及受信任的 host。
 可用完整路径运行，或自行链接：
 `ln -s /Applications/Deskhub.app/Contents/MacOS/deskhub-cli /usr/local/bin/deskhub-cli`。
 
-**CLI 永远不会获得 *DeskHub Secure Desktop* service。** 该 service —— 由同一个安装程序
-安装 —— 只为与之并列的 `Deskhub.exe` 服务，绝不为 `deskhub-cli.exe` 服务。因此在 Windows 上
-`deskhub-cli share` 时，UAC 提示、锁屏或登录画面出现期间 viewer 看到的是冻结画面，他们的
-输入也到不了那些画面，而 *Allow access before anyone signs in* 在 Windows 与 macOS 上都
-只是 app 的设置。需要这些功能时，请使用 app。每个安装程序和安装包都附带
-`THIRD_PARTY_NOTICES.md` 以及其中所含库的许可证文本。
+**在 Windows 上，CLI 与 app 一样使用 *DeskHub Secure Desktop* service。** 安装程序把
+`deskhub-cli.exe` 装在 `Deskhub.exe` 与该 service 旁边，该 service 为该文件夹中的两个程序服务。
+因此 `deskhub-cli share` 与 app 一样能贯穿 UAC 提示、锁屏和登录画面继续进行，而
+`deskhub-cli settings set unattended=on` 会开启 *Allow access before anyone signs in* ——
+与 app 复选框相同的设置，推送到同一个 service；`access add`、`access remove`、
+`access approve` 与 `access clear` 会让登录前的 host 保持同步。有两点需要知道：只有管理员
+才能与该 service 通信，所以这些操作请在管理员终端中进行 —— 未提权的 `deskhub-cli share`
+仍然可用，但没有 secure desktop，并且在该设置开启期间无法从登录前的 host 手中接管端口；
+另外，复制到别处或从源码构建的 `deskhub-cli.exe`，和安装文件夹之外的任何副本一样，不会得到
+service 的服务。在 macOS 上，*Allow access before anyone signs in* 只能在 app 中开启：
+`deskhub-cli settings set unattended=on` 在那里会被拒绝，在没有登录前 host 的 Linux 上亦然；
+CLI 在 Mac 上对允许列表的更改，会在 app 下一次启动或停止共享时到达登录前的 host。每个安装
+程序和安装包都附带 `THIRD_PARTY_NOTICES.md` 以及其中所含库的许可证文本。
 
 在 Linux 上，它通过 app 所需的同一个 portal 和 VA-API driver 共享屏幕，remote input 也
 依赖同一条 `/dev/uinput` rule，因此 [Linux](#-linux) 一节同样适用。在 macOS 上它可以共享

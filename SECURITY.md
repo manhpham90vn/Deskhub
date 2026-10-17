@@ -210,10 +210,11 @@ makes the rule above matter. Deskhub replaces only that rule of its own. A block
 you created for the app yourself is left alone, and because Windows lets a block rule
 win over an allow rule, the host then stays unreachable until you remove it.
 The installer adds one more thing on Windows: the *DeskHub Secure Desktop* service, which
-lets a share carry on through a UAC prompt or the lock screen. While you share, a viewer
+lets a share — from the app or from `deskhub-cli` — carry on through a UAC prompt or the
+lock screen. While you share, a viewer
 sees those screens and can type into them — including the lock screen's password box.
 With *Allow access before anyone signs in* turned on (off by default), the same service
-also runs a host of its own whenever the app is not sharing, from the sign-in screen
+also runs a host of its own whenever neither is sharing, from the sign-in screen
 onwards, for the devices already on your allowed list; it opens a second inbound UDP
 rule, *Deskhub Secure Desktop (host)*, for `DeskhubService.exe`.
 
@@ -267,7 +268,7 @@ If you want to keep using Deskhub as it is today, these are worth doing:
       show it on a screen you are sharing or presenting.
 - [ ] Quit Deskhub when you are not actively using it. Quitting it closes the hole: the
       *DeskHub Secure Desktop* service the Windows installer adds accepts nothing from
-      the network and does nothing while the app is not sharing — unless you turned on
+      the network and does nothing while neither the app nor `deskhub-cli` is sharing — unless you turned on
       *Allow access before anyone signs in*, which is exactly the setting that keeps a
       host listening with nobody there, from the moment Windows starts. Leave it off
       unless you need to reach the machine after a reboot, keep the allowed list short
@@ -404,21 +405,22 @@ Nothing uploads any of this; delete the folder at any time.
   flaw in it is a flaw in an elevated process. The installer also registers *DeskHub
   Secure Desktop*, a service running as LocalSystem. Its named pipe refuses remote
   clients and the network logon, admits only administrators at high integrity, and
-  serves only the `Deskhub.exe` in its own folder, checked by the connecting process's
-  image path; the app, in turn, talks only to the `DeskhubService.exe` beside it in
-  session 0. For that app the service starts an agent as SYSTEM in the user's session,
-  tied to a job that kills it when the app disconnects; the agent captures the secure
-  desktop and replays the app's input there, and reads nothing else. Both binaries
+  serves only the `Deskhub.exe` and `deskhub-cli.exe` in its own folder, checked by the
+  connecting process's image path; each of them, in turn, talks only to the
+  `DeskhubService.exe` beside it in session 0. For that program the service starts an
+  agent as SYSTEM in the user's session, tied to a job that kills it when the program
+  disconnects; the agent captures the secure desktop and replays that program's input
+  there, and reads nothing else. All three binaries
   live under `Program Files`, which only administrators can write, so a process running
   as the user cannot swap one to gain SYSTEM. A flaw in the agent is still a flaw in a
-  SYSTEM process, reachable only through the elevated app. With *Allow access before
+  SYSTEM process, reachable only through an elevated app or CLI. With *Allow access before
   anyone signs in* on, the service also starts the same host code the app runs, as
   SYSTEM in the console session, and that host is reachable from the network; it reads
   its key, its allowed list and its settings from `%ProgramData%\DeskHub`, which only
   SYSTEM and administrators can open, and the service accepts a new copy of them only
-  from the installed `Deskhub.exe`, again by image path. Every connection to the
+  from the installed `Deskhub.exe` or `deskhub-cli.exe`, again by image path. Every connection to the
   service's pipe now opens with a request byte, and the two new requests are refused
-  from anything but that app.
+  from anything but those two programs.
 - **Continuous integration.** Every pull request runs the three test suites under
   AddressSanitizer, UndefinedBehaviorSanitizer and ThreadSanitizer, clang-tidy, the
   fuzzers described above, CodeQL over the C++, Kotlin and Swift code, and a gitleaks

@@ -36,6 +36,8 @@ void TestEveryLabelSaysSomething() {
         ui::kUnattendedApprovalNote, ui::kUnattendedHostPermissionsHint,
         ui::kUnattendedHostScreenLabel, ui::kUnattendedHostInputLabel,
         ui::kUnattendedPermissionUnknown, ui::kUnattendedOpenLoginItems,
+        ui::kUnattendedSyncFailedNote, ui::kUnattendedNeedsAdminTerminal,
+        ui::kUnattendedAppOnlyNote,
         ui::kClientIpPlaceholder, ui::kUdpPortLabel,
         ui::kLanDevicesEmpty,
         ui::kAppVersion, ui::kProjectUrl, ui::kProjectLinkLabel,

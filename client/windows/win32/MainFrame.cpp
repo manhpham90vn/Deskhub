@@ -35,6 +35,7 @@
 #include "AccessRequestListener.h"
 #include "secure/SecureDesktopStatus.h"
 #include "secure/ServiceControlPipe.h"
+#include "secure/UnattendedAccess.h"
 #include "SourcePickerDialog.h"
 #include "FileSendWindow.h"
 #include "TerminalWindow.h"
@@ -73,7 +74,6 @@
 #include "deskhubp/system/Clock.h"
 #include "deskhubp/system/Autostart.h"
 #include "deskhubp/system/DeviceName.h"
-#include "deskhubp/host/UnattendedPush.h"
 #include "deskhubp/system/HostIdentity.h"
 #include "deskhubp/system/PairingTokenFile.h"
 #include "deskhubp/system/TrustStoreFile.h"
@@ -1746,13 +1746,11 @@ void MainFrame::OnUnattendedToggled() {
 }
 
 bool MainFrame::PushUnattendedConfig() {
-    const std::optional<deskhub::UnattendedConfig> config =
-        deskhubp::BuildUnattendedConfig(settings_);
-    return config && SendUnattendedConfig(*config);
+    return PushUnattendedAccess(settings_);
 }
 
 void MainFrame::SyncUnattended() {
-    if (settings_.unattended) PushUnattendedConfig();
+    SyncUnattendedAccess(settings_);
 }
 
 wxWindow* MainFrame::BuildSettingsPage(wxWindow* parent) {

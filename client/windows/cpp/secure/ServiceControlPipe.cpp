@@ -25,6 +25,11 @@ void LogUnreachable(DWORD error) {
         LOGW(
             "[Secure] The DeskhubSecureDesktop service is not running: UAC prompts and the "
             "lock screen will freeze for viewers. Reinstall DeskHub to add the service.");
+    else if (error == ERROR_ACCESS_DENIED)
+        LOGW(
+            "[Secure] Only administrators may talk to the DeskhubSecureDesktop service: run "
+            "this program as an administrator for UAC prompts, the lock screen and access "
+            "before sign-in to work.");
     else
         LOGW(
             "[Secure] Could not reach the DeskhubSecureDesktop service (error %lu): UAC "

@@ -24,9 +24,10 @@ Every desktop package also installs `deskhub-cli` for terminal commands and scri
 Windows and Linux it can open a window to display a remote screen (on Linux an X11
 window, so a Wayland desktop needs XWayland). See [Command line](#-command-line).
 
-You can also install through Homebrew on macOS, or the
-[apt repository](#-linux) on Ubuntu, Kubuntu, Debian and Mint. Use the package manager's
-upgrade command when you want a newer release.
+You can also install through Homebrew on macOS, or the [apt repository](#-linux) on
+Ubuntu, Kubuntu, Debian and Mint. Use the package manager's upgrade command when you want
+a newer release. Windows has no package-manager channel: download the setup file from
+Releases, and run the newer one over the old to upgrade.
 
 ---
 
@@ -44,6 +45,9 @@ through UAC prompts, the lock screen and the sign-in screen. Setup also installs
 `deskhub-cli` works in any terminal opened afterwards; an earlier separate *DeskHub CLI*
 install is removed on the way in.
 
+To upgrade, run the newer setup file over the old one; it replaces the files in place, and
+your settings and keys in `%USERPROFILE%\.deskhub` are kept.
+
 Three things to expect:
 
 - **Administrator, every time it starts.** Windows shows a UAC prompt on each launch,
@@ -52,19 +56,20 @@ Three things to expect:
   logon task, without the prompt.
 - **A Windows Firewall rule**, added by the app itself the first time you share.
 - **A system service, *DeskHub Secure Desktop***, running as LocalSystem. Out of the box
-  it does nothing until DeskHub shares a screen. Then, when Windows switches to its
+  it does nothing until DeskHub or `deskhub-cli` shares a screen. Then, when Windows switches to its
   secure desktop — a UAC prompt from an installer, the lock screen, Ctrl+Alt+Del —
   viewers keep seeing the screen and can click and type there, so they can answer a UAC
   prompt for you, and anyone who knows your password can unlock the machine. Tick
-  *Allow access before anyone signs in* in Settings → Host and the service also hosts on
-  its own whenever DeskHub is not sharing — from the sign-in screen right after the PC
-  starts — for the devices already on your allowed list; see the
+  *Allow access before anyone signs in* in Settings → Host — or run
+  `deskhub-cli settings set unattended=on` from an administrator terminal — and the service
+  also hosts on its own whenever neither the app nor the CLI is sharing — from the sign-in
+  screen right after the PC starts — for the devices already on your allowed list; see the
   [specification](SPECIFICATION.md) (T-28) for what it does and does not do. A build
   from source run without the service shows those screens frozen to viewers until they
   close, and its checkbox is greyed out.
 
-Uninstall DeskHub from Windows Settings;
-the service goes with it, together with `%ProgramData%\DeskHub`, where it keeps its logs
+Uninstall DeskHub from Windows Settings; the CLI and the service go with it, together
+with `%ProgramData%\DeskHub`, where the service keeps its logs
 and the copies *Allow access before anyone signs in* made. Settings and keys remain in
 `%USERPROFILE%\.deskhub` until you remove that folder too, and files other machines sent
 you stay in `%USERPROFILE%\Deskhub` (or the folder you picked) until you delete them.
@@ -316,13 +321,23 @@ On Windows, open a new PowerShell window after setup finishes and run `deskhub-c
 run it by its full path or link it yourself:
 `ln -s /Applications/Deskhub.app/Contents/MacOS/deskhub-cli /usr/local/bin/deskhub-cli`.
 
-**The CLI never gets the *DeskHub Secure Desktop* service.** The service — installed by
-the same setup — serves only the `Deskhub.exe` beside it, never `deskhub-cli.exe`. So a
-`deskhub-cli share` on Windows shows viewers a frozen picture while a UAC prompt, the
-lock screen or the sign-in screen is up, their input does not reach those screens, and
-*Allow access before anyone signs in* is an app-only setting on Windows and on macOS.
-Use the app when you need any of that. Every installer and package carries
-`THIRD_PARTY_NOTICES.md` and the licence texts of the libraries inside it.
+**On Windows the CLI uses the *DeskHub Secure Desktop* service like the app.** The setup
+installs `deskhub-cli.exe` beside `Deskhub.exe` and the service, and the service serves both
+programs in that folder. So `deskhub-cli share` carries on through UAC prompts, the lock
+screen and the sign-in screen exactly as the app does, and
+`deskhub-cli settings set unattended=on` turns on *Allow access before anyone signs in* —
+the same setting as the app's checkbox, pushed to the same service, and `access add`,
+`access remove`, `access approve` and `access clear` keep the host before sign-in in step.
+Two things to know: only administrators may talk to the service, so run the terminal as an
+administrator for those parts — a non-elevated `deskhub-cli share` still works, but without
+the secure desktop, and while that setting is on it cannot take the port over from the host
+before sign-in; and a `deskhub-cli.exe` copied anywhere else, or built from source, is not
+served, like any other copy outside the installed folder. On macOS *Allow access before
+anyone signs in* is set in the app only: `deskhub-cli settings set unattended=on` refuses
+there, as it does on Linux, which has no host before sign-in, and a change the CLI makes to
+the allowed list on a Mac reaches the host before sign-in the next time the app starts or
+stops a share. Every installer and package carries `THIRD_PARTY_NOTICES.md` and the licence
+texts of the libraries inside it.
 
 On Linux it shares a screen through the same portal and VA-API driver the app needs, and
 relies on the same `/dev/uinput` rule for remote input, so everything under

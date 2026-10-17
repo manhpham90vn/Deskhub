@@ -261,7 +261,7 @@ HostEngine（每个 app 一个实例，持有 SessionTransport）
   一个 SYSTEM agent：
 
   ```
-  Deskhub.exe (user, elevated) ── \\.\pipe\DeskhubSecureDesktop ──▶ DeskhubService.exe
+  Deskhub.exe / CLI (elevated) ── \\.\pipe\DeskhubSecureDesktop ──▶ DeskhubService.exe
        ▲                                               (LocalSystem, session 0)
        │ private pipe, its handle duplicated into          │ CreateProcessAsUser,
        │ Deskhub.exe by the service                        ▼ SYSTEM token, user session
@@ -278,18 +278,19 @@ HostEngine（每个 app 一个实例，持有 SessionTransport）
 
   到 control pipe 的每条连接都以一个 request 字节（`SecureDesktopRequest`）开头：`Agent`
   即上述流程；`Takeover` 与 `Configure` 服务于登录前访问（T-28）。开启后，service 的
-  supervisor 线程会在没有任何 `Deskhub.exe` 持有 `Takeover` 连接的时候，让
+  supervisor 线程会在 `Deskhub.exe` 与 `deskhub-cli.exe` 都不持有 `Takeover` 连接的时候，让
   `DeskhubService.exe --unattended-host` 以 SYSTEM 身份在 console session 中持续运行。该
   进程就是普通的 `SharingHost` + `HostEngine`，其 `SetConfigDir`/`SetAppDataDir` 指向
   `%ProgramData%\DeskHub`，加上一个进程级的 `UnattendedMode()` 标志，用于跳过 WGC、把每个
   `INPUT` 经由 link 转发，并发送带 `alwaysStream` 且以共享 fps 为 `maxFps` 的 `Watch`；它像
-  app 一样向 service 为每个 display 请求一个 agent，因此多显示器无需新的管线。`Deskhub.exe`
+  app 一样向 service 为每个 display 请求一个 agent，因此多显示器无需新的管线。app 与 CLI
   中的 `SharingHost::Start` 在 engine 绑定之前发送 `Takeover`：service 终止 unattended host，
   等待它退出以释放 UDP port，再回复 ack，并在该连接于 `SharingHost::Stop` 中关闭之前让它
   保持停止。`Configure` 携带一个 `UnattendedConfig`（enabled 标志，以及 `host_key.pem`、
   `authorized_keys`、`ui-settings.txt` 的文本）；service 把这三个文件原子地写入机器文件夹，
   在 key 或 settings 变化时重启该 host，并在禁用时抹除这些文件。app 会在该设置被切换时、
-  每次保存 settings 之后、允许列表每次变动之后、共享停止时以及启动时各发送一次。
+  每次保存 settings 之后、允许列表每次变动之后、共享停止时以及启动时各发送一次；Windows 上
+  CLI 则在 `settings set`、改变允许列表的 `access` 命令以及 `share` 停止时发送。
 - macOS 的登录前访问（T-28）：app 内嵌 `Contents/MacOS/DeskhubDaemon` 以及
   `Contents/Library/LaunchDaemons` 下的一个 LaunchDaemon plist，在勾选该设置时通过
   `SMAppService.daemon` 注册（一次 *Allow in background* 批准）。该 daemon 以 root 运行，
@@ -490,9 +491,15 @@ runner 上与 base commit 的 A/B 结果（偏移仅作为警告，不导致失�
   token、设置 session id，并在那里启动 agent。frame 以系统内存的形式穿过 pipe，因为 secure
   desktop 变化很少，而共享的 GPU texture 将不得不跨越完整性边界；agent 将其上限设为每秒 10 个。
   service 依据连接进程的映像路径信任 client —— 即位于其自身文件夹、在只有管理员可写的
-  `Program Files` 下的 `Deskhub.exe` —— app 也以同样方式信任服务端，因此无论是抢占 pipe 的
+  `Program Files` 下的 `Deskhub.exe` 或 `deskhub-cli.exe` —— app 也以同样方式信任服务端，因此无论是抢占 pipe 的
   进程还是另一个提权程序，都得不到 SYSTEM agent 或 viewer 的按键。这也是安装程序改为
   per-machine 的原因：位于 `%LOCALAPPDATA%` 中的 service binary 可能被用户运行的任何进程替换。
+
+- **CLI 随 Windows 安装程序一起发布，而不是自带安装程序**：service 依据其自身文件夹中的
+  映像路径信任 client，而 pipe 协议与 binary 一同定版，因此单独安装的 `deskhub-cli.exe`
+  要想得到服务，只能靠第二个 service，或者一个被两个安装程序轮流覆盖、各自带着自己版本的
+  `DeskhubService.exe`。一个安装程序把三个 exe 保持在同一版本，并把文件夹加入系统 `PATH`；
+  这也终结了便携版 CLI exe 与 winget 软件包 —— 它们再没有可以指向的安装程序。
 
 - **登录前访问运行的是 Deskhub 自己的 host，而不是第二套实现**：service 本可以长出自己的
   socket 与 encoder，但关于准入、撤销、bitrate 与 input 的每条规则都已经在 `HostEngine` 中，

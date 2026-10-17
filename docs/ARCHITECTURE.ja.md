@@ -298,7 +298,7 @@ HostEngine（app ごとに 1 インスタンス、SessionTransport を保持）
   届かなくなる。そこで各 source は SYSTEM の agent に切り替わる。
 
   ```
-  Deskhub.exe (user, elevated) ── \\.\pipe\DeskhubSecureDesktop ──▶ DeskhubService.exe
+  Deskhub.exe / CLI (elevated) ── \\.\pipe\DeskhubSecureDesktop ──▶ DeskhubService.exe
        ▲                                               (LocalSystem, session 0)
        │ private pipe, its handle duplicated into          │ CreateProcessAsUser,
        │ Deskhub.exe by the service                        ▼ SYSTEM token, user session
@@ -317,20 +317,21 @@ HostEngine（app ごとに 1 インスタンス、SessionTransport を保持）
   control pipe へのすべての接続は、要求バイト 1 つ（`SecureDesktopRequest`）で始まる。
   `Agent` は上記の流れであり、`Takeover` と `Configure` はサインイン前のアクセス（T-28）
   に用いる。これが on の間、サービスの supervisor thread は、`Takeover` 接続を保持する
-  `Deskhub.exe` が存在しない限り、`DeskhubService.exe --unattended-host` をコンソール
+  `Deskhub.exe` も `deskhub-cli.exe` も存在しない限り、`DeskhubService.exe --unattended-host` をコンソール
   session で SYSTEM として動かし続ける。このプロセスは通常の `SharingHost` + `HostEngine`
   であり、`SetConfigDir`/`SetAppDataDir` を `%ProgramData%\DeskHub` に向け、プロセス全体の
   `UnattendedMode()` フラグによって WGC を省略し、すべての `INPUT` を link 経由で送り、
   `alwaysStream` と、共有の fps を `maxFps` とした `Watch` を送る。app とまったく同じように
   display ごとに 1 つの agent をサービスへ要求するため、マルチモニタに新たな配線は
-  要らない。`Deskhub.exe` の `SharingHost::Start` は engine が bind する前に `Takeover` を
+  要らない。app と CLI の `SharingHost::Start` は engine が bind する前に `Takeover` を
   送る。サービスは unattended host を終了させ、UDP port が空くようにその終了を待ってから
   ack し、`SharingHost::Stop` でその接続が閉じるまで host を止めたままにする。`Configure`
   は `UnattendedConfig`（enabled フラグ、`host_key.pem`、`authorized_keys`、
   `ui-settings.txt` のテキスト）を運ぶ。サービスは 3 つのファイルを machine folder へ
   atomic に書き込み、key または settings が変わった場合は host を再起動し、無効化された
   場合はファイルを消去する。app はこれを、設定の切り替え時、settings の保存のたび、
-  許可済み一覧の変更のたび、共有の停止時、および起動時に 1 度送る。
+  許可済み一覧の変更のたび、共有の停止時、および起動時に 1 度送る。Windows では CLI も
+  `settings set`、許可済み一覧を変える `access` コマンド、および `share` の停止時にこれを送る。
 - macOS のサインイン前アクセス（T-28）: app は `Contents/MacOS/DeskhubDaemon` と
   `Contents/Library/LaunchDaemons` 配下の LaunchDaemon plist を同梱し、設定にチェックが
   入ると `SMAppService.daemon` で登録する（*Allow in background* の承認は 1 回）。daemon は
@@ -567,11 +568,19 @@ scaling の 2 つの判定とともに実行する（共有 runner には時間�
   システムメモリで pipe を渡るのは、secure desktop の変化が少なく、共有 GPU texture では
   integrity の境界を越えなければならないためである。agent は frame を毎秒 10 に制限する。
   サービスは接続するプロセスの image path —— 管理者のみが書き込める `Program Files` 配下の、
-  自身と同じフォルダにある `Deskhub.exe` —— によって client を信頼し、app も同じ方法で
+  自身と同じフォルダにある `Deskhub.exe` または `deskhub-cli.exe` —— によって client を信頼し、app も同じ方法で
   server を信頼する。そのため、pipe を先取りするプロセスも、他の昇格したプログラムも、
   SYSTEM の agent や viewer のキー入力を手に入れることはできない。インストーラーが
   per-machine になった理由もここにある。`%LOCALAPPDATA%` にあるサービスのバイナリは、
   ユーザーが実行するどのプロセスにも置き換えられてしまう。
+
+- **CLI は Windows のセットアップに同梱し、独自のインストーラーにはしない**: サービスは
+  自身のフォルダ内の image path で client を信頼し、pipe のプロトコルはバイナリと一緒に
+  バージョン管理されている。そのため別途インストールした `deskhub-cli.exe` に応えるには、
+  2 つ目のサービスか、2 つのインストーラーがそれぞれのバージョンで交互に上書きする
+  `DeskhubService.exe` が必要になってしまう。1 つのセットアップが 3 つの exe を同じ
+  バージョンで保持し、フォルダをシステムの `PATH` に追加する。これによりポータブル版の
+  CLI exe と winget パッケージも終了した。指し示すインストーラーがなくなったからである。
 
 - **サインイン前のアクセスは Deskhub 自身の host を動かすのであって、2 つ目の実装ではない**:
   サービスに独自の socket と encoder を持たせることもできたが、admission、revocation、

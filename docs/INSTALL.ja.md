@@ -27,9 +27,10 @@ Android 版は Google Play でも、iOS の beta は TestFlight で配布して�
 では X11 のウィンドウなので、Wayland のデスクトップでは XWayland が必要）。
 [Command line](#-command-line) を参照。
 
-macOS では Homebrew、Ubuntu・Kubuntu・Debian・Mint では
-[apt repository](#-linux) からもインストールできる。新しい release が必要になったら、
-それぞれの package manager の更新コマンドを使う。
+macOS では Homebrew、Ubuntu・Kubuntu・Debian・Mint では [apt repository](#-linux) からも
+インストールできる。新しい release が必要になったら、それぞれの package manager の
+更新コマンドを使う。Windows に package manager の経路はない。Releases からセットアップ
+ファイルをダウンロードし、新しいものを古いものの上から実行して更新する。
 
 ---
 
@@ -47,6 +48,9 @@ DeskHub をすべてのユーザー向けに `Program Files` 配下へインス�
 どの terminal でも `deskhub-cli` が使える。以前の別個の *DeskHub CLI* インストールは
 その過程で削除される。
 
+更新するには、新しいセットアップファイルを古いものの上から実行する。ファイルはその場で
+置き換えられ、`%USERPROFILE%\.deskhub` の設定と鍵は保持される。
+
 次の 3 点に注意する。
 
 - **起動のたびに Administrator を要求する。** 起動するごとに Windows が UAC の確認を表示
@@ -55,19 +59,20 @@ DeskHub をすべてのユーザー向けに `Program Files` 配下へインス�
   して起動し、確認は表示されない。
 - **Windows Firewall のルールを 1 本追加する。** 初回の share 時に app 自身が追加する。
 - **システムサービス *DeskHub Secure Desktop* が加わる。** LocalSystem として動作する。
-  初期状態では、DeskHub が画面を共有するまでは何もしない。共有中に Windows が secure
+  初期状態では、DeskHub または `deskhub-cli` が画面を共有するまでは何もしない。共有中に Windows が secure
   desktop —— インストーラーによる UAC の確認、ロック画面、Ctrl+Alt+Del —— に切り替わると、
   viewer は引き続き画面を見ることができ、そこでクリックや入力もできる。そのため viewer が
   代わりに UAC の確認に応答でき、パスワードを知っている人ならマシンのロックを解除できる。
-  Settings → Host の *Allow access before anyone signs in* にチェックを入れると、DeskHub が
+  Settings → Host の *Allow access before anyone signs in* にチェックを入れるか、管理者の
+  ターミナルから `deskhub-cli settings set unattended=on` を実行すると、app も CLI も
   共有していない間はいつでも —— PC の起動直後のサインイン画面から —— 許可済み一覧にある
   デバイスのために、サービスが独自に host も行う。何ができて何ができないかは
   [仕様](SPECIFICATION.ja.md)（T-28）を参照のこと。ソースから build してサービスなしで
   動かした場合、それらの画面は閉じるまで viewer 側で停止して見え、チェックボックスは
   灰色になる。
 
-DeskHub は Windows の設定からアンインストールできる。
-サービスも一緒に削除され、サービスが log と *Allow access before anyone signs in* が作った
+DeskHub は Windows の設定からアンインストールできる。CLI とサービスも一緒に削除され、
+サービスが log と *Allow access before anyone signs in* が作った
 コピーを保持する `%ProgramData%\DeskHub` も削除される。
 Settings と key は、フォルダを削除するまで
 `%USERPROFILE%\.deskhub` に残る。他のマシンから届いたファイルも、削除するまで
@@ -319,13 +324,23 @@ Windows でセットアップの完了後は、新しい PowerShell ウィンド
 を使わない macOS では、フルパスで実行するか自分でリンクする:
 `ln -s /Applications/Deskhub.app/Contents/MacOS/deskhub-cli /usr/local/bin/deskhub-cli`。
 
-**CLI が *DeskHub Secure Desktop* サービスを使えることはない。** 同じセットアップが入れる
-そのサービスは、隣にある `Deskhub.exe` だけに応え、`deskhub-cli.exe` には応えない。
-そのため Windows で `deskhub-cli share` を使うと、UAC の確認、ロック画面、サインイン画面が
-出ている間、viewer には停止した画面が見え、その入力はそれらの画面に届かず、*Allow access
-before anyone signs in* は Windows でも macOS でも app だけの設定である。それらが必要なら
-app を使うこと。すべてのインストーラーとパッケージは `THIRD_PARTY_NOTICES.md` と、中に
-含まれるライブラリのライセンス本文を同梱する。
+**Windows では CLI も app と同じく *DeskHub Secure Desktop* サービスを使う。** セットアップ
+が `deskhub-cli.exe` を `Deskhub.exe` とサービスの隣にインストールし、サービスはその
+フォルダにある両方のプログラムに応える。そのため `deskhub-cli share` は app とまったく
+同じように UAC の確認、ロック画面、サインイン画面の間も続き、
+`deskhub-cli settings set unattended=on` は *Allow access before anyone signs in* をオンに
+する —— app のチェックボックスと同じ設定を同じサービスへ送るものであり、`access add`、
+`access remove`、`access approve`、`access clear` はサインイン前の host を最新に保つ。
+知っておくべきことが 2 つある。サービスと話せるのは管理者だけなので、これらの部分では
+ターミナルを管理者として実行すること —— 昇格していない `deskhub-cli share` も動くが secure
+desktop は使えず、その設定がオンの間はサインイン前の host から port を引き継げない。また、
+別の場所へコピーした `deskhub-cli.exe` やソースから build したものは、インストール先
+フォルダの外にある他のコピーと同様、サービスに応えてもらえない。macOS では *Allow access
+before anyone signs in* は app の中でだけ設定できる。`deskhub-cli settings set unattended=on`
+はそこでは拒否され、サインイン前の host がない Linux でも同様である。Mac で CLI が許可済み
+一覧に加えた変更は、app が次に起動するか共有を停止したときにサインイン前の host に届く。
+すべてのインストーラーとパッケージは `THIRD_PARTY_NOTICES.md` と、中に含まれる
+ライブラリのライセンス本文を同梱する。
 
 Linux では app と同じ portal および VA-API driver で画面を共有し、remote input も同じ
 `/dev/uinput` rule に依存するため、[Linux](#-linux) の節がそのまま当てはまる。macOS で

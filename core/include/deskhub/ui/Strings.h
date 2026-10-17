@@ -82,6 +82,15 @@ inline constexpr const char* kUnattendedServiceMissingNote =
 inline constexpr const char* kUnattendedPushFailedNote =
     "The Deskhub background service did not accept the settings for access before "
     "sign-in. Check that it is running and try again.";
+inline constexpr const char* kUnattendedSyncFailedNote =
+    "The change is saved here, but the Deskhub background service did not take the new "
+    "copy for access before sign-in and keeps the previous one.";
+inline constexpr const char* kUnattendedNeedsAdminTerminal =
+    "Only administrators may talk to the DeskHub Secure Desktop service: run the terminal "
+    "as an administrator and try again.";
+inline constexpr const char* kUnattendedAppOnlyNote =
+    "The command line can switch access before anyone signs in on Windows only. On macOS "
+    "tick it in the Deskhub app; Linux hosts do not have it yet.";
 inline constexpr const char* kUnattendedApprovalNote =
     "macOS is waiting for your approval: open System Settings \xE2\x86\x92 General "
     "\xE2\x86\x92 Login Items & Extensions, allow Deskhub to run in the background, then "

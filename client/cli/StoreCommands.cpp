@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "Output.h"
+#include "Unattended.h"
 
 #include "deskhub/cli/Json.h"
 #include "deskhub/net/TrustStore.h"
@@ -121,6 +122,7 @@ ExitCode RunAccessDecision(const Command& command, bool approve) {
         PrintError("no device with that key is waiting for approval");
         return ExitCode::Failed;
     }
+    if (approve) SyncUnattended(deskhubp::LoadUiSettings());
     if (!command.quiet)
         PrintLine(approve ? "Approved: that device can connect now." : "Denied: the request was dropped.");
     return ExitCode::Ok;
@@ -207,6 +209,7 @@ ExitCode RunDevices(const Command& command) {
             PrintError("could not save the authorized key");
             return ExitCode::Failed;
         }
+        SyncUnattended(deskhubp::LoadUiSettings());
         if (!command.quiet) PrintLine(deskhub::FormatFingerprint(*fingerprint));
         return ExitCode::Ok;
     }
@@ -216,6 +219,7 @@ ExitCode RunDevices(const Command& command) {
             PrintError("could not revoke the authorized keys");
             return ExitCode::Failed;
         }
+        SyncUnattended(deskhubp::LoadUiSettings());
         if (!command.quiet) PrintLine("Every client key has been removed; nobody can connect until a key is added.");
         return ExitCode::Ok;
     }
@@ -231,6 +235,7 @@ ExitCode RunDevices(const Command& command) {
             PrintError("no allowed client has that key");
             return ExitCode::Failed;
         }
+        SyncUnattended(deskhubp::LoadUiSettings());
         if (!command.quiet) PrintLine("That client key has been removed.");
         return ExitCode::Ok;
     }
@@ -453,7 +458,19 @@ ExitCode RunSettings(const Command& command) {
             PrintError(command.key + " does not accept \"" + command.value + "\"");
             return ExitCode::Usage;
         }
+        if (updated.unattended && !current.unattended) {
+            const std::string_view blocker = UnattendedAccessBlocker();
+            if (!blocker.empty()) {
+                PrintError(std::string(blocker));
+                return ExitCode::Unsupported;
+            }
+        }
+        if (updated.unattended != current.unattended && !PushUnattended(updated)) {
+            PrintError(deskhub::ui::kUnattendedPushFailedNote);
+            return ExitCode::Failed;
+        }
         deskhubp::SaveUiSettings(updated);
+        if (updated.unattended == current.unattended) SyncUnattended(updated);
         if (!command.quiet) PrintLine(command.key + " = " + command.value);
         return ExitCode::Ok;
     }
