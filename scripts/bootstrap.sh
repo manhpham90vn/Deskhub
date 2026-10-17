@@ -136,8 +136,8 @@ Darwin)
         brew install llvm
     fi
 
-    if have java; then
-        echo "[ok]      java ($(command -v java))"
+    if /usr/libexec/java_home -v 17 >/dev/null 2>&1; then
+        echo "[ok]      JDK 17 ($(/usr/libexec/java_home -v 17))"
     else
         echo "[install] JDK 17 (Temurin)..."
         brew install --cask temurin@17
