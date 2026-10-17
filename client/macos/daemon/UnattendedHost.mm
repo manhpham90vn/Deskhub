@@ -7,9 +7,9 @@
 #include <chrono>
 #include <cstdint>
 #include <filesystem>
+#include <memory>
 #include <string>
 #include <system_error>
-#include <thread>
 #include <vector>
 
 #include "deskhub/session/host/ShareFlow.h"
@@ -29,6 +29,7 @@
 namespace {
 
 constexpr auto kPoll = std::chrono::milliseconds(500);
+constexpr auto kPollLeeway = std::chrono::milliseconds(50);
 constexpr uint64_t kRestartBackoffUs = 2'000'000;
 
 struct ConfigSnapshot {
@@ -75,13 +76,14 @@ ShareOptions UnattendedOptions(const deskhub::ui::UiSettings& settings) {
 
 class HostSupervisor {
 public:
-    void Run() {
-        while (deskhubp::UnattendedEnabled(kUnattendedMachineFolder)) {
+    bool Tick() {
+        if (deskhubp::UnattendedEnabled(kUnattendedMachineFolder)) {
             Step();
-            std::this_thread::sleep_for(kPoll);
+            return true;
         }
         StopHost("access before sign-in was switched off");
         LOGI("[Unattended] Exiting.");
+        return false;
     }
 
 private:
@@ -142,11 +144,18 @@ int RunUnattendedHost() {
         return 0;
     }
     CFRunLoopRef mainLoop = CFRunLoopGetMain();
-    std::thread supervisor([mainLoop] {
-        HostSupervisor().Run();
-        CFRunLoopStop(mainLoop);
+    auto supervisor = std::make_shared<HostSupervisor>();
+    dispatch_source_t tick =
+        dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, dispatch_get_main_queue());
+    dispatch_source_set_timer(tick, DISPATCH_TIME_NOW,
+        uint64_t(std::chrono::nanoseconds(kPoll).count()),
+        uint64_t(std::chrono::nanoseconds(kPollLeeway).count()));
+    dispatch_source_set_event_handler(tick, ^{
+      if (supervisor->Tick()) return;
+      dispatch_source_cancel(tick);
+      CFRunLoopStop(mainLoop);
     });
+    dispatch_resume(tick);
     CFRunLoopRun();
-    supervisor.join();
     return 0;
 }

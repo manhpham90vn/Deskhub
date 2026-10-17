@@ -302,13 +302,16 @@ HostEngine（每个 app 一个实例，持有 SessionTransport）
   `/Library/Application Support/Deskhub`（`deskhubp/system/MachineFolder`，root `0700`），并
   写入或移除 `/Library/LaunchAgents/com.deskhub.macos.unattended.plist` —— 一个限定于
   `LoginWindow` session 类型、运行 `DeskhubDaemon --unattended-host` 的 LaunchAgent。该进程
-  就是普通的 `SharingHost`，开启 `UnattendedMode()`，主线程跑 `CFRunLoopRun` 以便
-  `LocalInputMonitor` 能向其 dispatch，另有一个 supervisor 每 500 ms 轮询该文件夹：daemon 的
+  就是普通的 `SharingHost`，开启 `UnattendedMode()`，主线程跑 `CFRunLoopRun`，supervisor 挂在
+  500 ms 定时器上轮询该文件夹：daemon 的
   `unattended-hold` 标记存在时（app 持有的每条 `Takeover` 连接对应一个）停止 host，
   `host_key.pem` 或 `ui-settings.txt` 变化时重启，key 消失时退出。capture 与 app 一样使用
   ScreenCaptureKit（`CGDisplayStream` 自 macOS 15 起已废弃，无法再编译）；在登录窗口 session
   中 `SCShareableContent` 一无所获时，display 枚举回退到 `CGGetActiveDisplayList`。host 把自身的 Screen Recording 与 Accessibility 状态写入
   `unattended-status.txt`，daemon 在 app 的 `Status` request 中返回它，供 Settings 页显示。
+  登录前，capture 一旦启动，host 不再向 window server 询问任何东西：viewer 的输入经
+  `IOHIDSystem`（`IOHIDPostEvent`）投递，显示器矩形自 `Init` 起缓存，跳过本地输入监视器与
+  500 ms 的尺寸探测，像素缩放取自 `SCContentFilter`（§9）。
 - Shell：每个 shell 对应一个 PTY（Windows 为 `ConPTY`，其他平台为 `forkpty`），最多 8
   个。连接中断时 shell 被分离，PTY 一直保留到 shell 进程退出或 shell 被关闭，不设时间
   限制。任何已准入的 client 均可列出被保留的 shell（`TermList`/`TermListAck`）、按 id
@@ -527,6 +530,39 @@ runner 上与 base commit 的 A/B 结果（偏移仅作为警告，不导致失�
   核验会信任放在那里的任何东西。与 Windows 不同，该功能止于登录，因为 launchd 会在那一刻
   拆除 LoginWindow session；在 app 未共享时于用户自己的 session 内 host 需要一个按用户的
   agent 和第二轮 TCC 授权，留待以后的阶段。
+
+- **macOS app 的自动共享由 app 本身发起，而不是由主窗口发起**：AppKit 会恢复 app 上次退出时
+  拥有的窗口，而一个一直待在菜单栏里的 app 没有任何窗口，因此由登录项启动时 app 回来却没有
+  窗口。自动共享原先放在 `MainMenuView` 的 `.task` 里，从未运行，刚才在登录窗口还能访问的
+  Mac 就此沉默，直到有人打开窗口。现在 `DeskhubApp.init` 把 model 交给一个 task，由它推送
+  unattended 副本并开始共享；当恢复没有带回任何窗口时，`AppDelegate` 会自己打开主窗口 ——
+  它请 LaunchServices 再次打开正在运行的 app，这正是点击 Dock 所发送的 —— 于是 T-16 的
+  启动即显示窗口规则不论上一个 session 什么样都成立。`refreshPermissions` 也不再推送副本：
+  它在自动共享等待期间的每次 500 ms 显示器探测时都会运行，一秒内连接 daemon 九次；只有
+  settings 或允许列表变更、共享停止和启动时才推送。
+
+- **登录窗口的 host 通过 IOHIDSystem 而非 CoreGraphics 投递输入**：在登录窗口，WindowServer
+  接受本进程的第一条连接（ScreenCaptureKit 的那条），之后的每一条都以 *not permitted to
+  connect to or launch Window Server before login* 拒绝，因此 `CGEventCreate*`、
+  `CGEventPost`、`CGDisplayBounds` 与 `[NSScreen screens]` 在那里全部失效，而
+  `kCGEventSourceStateHIDSystemState` 这条路甚至会在 SkyLight 自己的错误处理里死锁
+  （`CGSEventSourceForID` → `CGSEventSourceShutdown`，等待一把它自己已持有的 mutex），这就是
+  第一次真机测试中 viewer 在第一次点击时卡死的原因。启动时预热事件通路、把调用挪到主线程都
+  无济于事。在 `IOHIDSystem` 连接（root，`kIOHIDParamConnectType`）上调用 `IOHIDPostEvent`
+  是旧式 VNC 服务器登录前采用的路径，因 `DeskhubDaemon` 持有 Accessibility 而可用；它自
+  macOS 11 起已被废弃，所以该调用置于诊断 pragma 之后，且仅在 `UnattendedMode()` 开启时
+  使用 —— 已登录的 app 仍然投递 CGEvent。同理，capture 运行后 host 不再向 window server 询问
+  任何东西：显示器矩形自 `Init` 起缓存，跳过尺寸探测与本地输入监视器，capture 缩放取自
+  `SCContentFilter`。
+
+- **正在共享的 Mac 在注销时最后一个退出**：loginwindow 同时要求所有 app 退出，而
+  `terminateNow` 会在 Terminal 的"仍有进程运行"对话框还拖着 session 时结束共享，于是 viewer
+  恰好在需要点击那个对话框时失明，登录窗口的 host 也因为 session 尚未结束而无法启动。对于
+  Apple Event 带有注销、关机或重启 `kAEQuitReason` 的退出请求，app 在共享期间回答
+  `terminateLater`，每秒轮询仍在运行的普通 app，只剩 Finder 时回复 `true`。另一个 app 取消
+  注销时 macOS 没有任何公开信号，因此两分钟后若其他 app 仍在运行，app 回复 `false` 并继续
+  运行：若注销其实仍在等待，那么取消它的是 app，viewer 可以重做；而退出到一个哪儿也去不了的
+  session 只会让这台 Mac 无法访问。
 
 - **只有 host 能提前结束 handshake，因此 client 留意它是如何结束的**：client 过去会为
   `AuthResult` 等待 65 秒 —— 这是批准还在一条保持的 connection 内完成时遗留下来的 —— 而

@@ -346,8 +346,8 @@ HostEngine（app ごとに 1 インスタンス、SessionTransport を保持）
   に書き、`/Library/LaunchAgents/com.deskhub.macos.unattended.plist` を書くか削除する。
   これは `LoginWindow` session type に限定された LaunchAgent で、
   `DeskhubDaemon --unattended-host` を動かす。そのプロセスは `UnattendedMode()` を
-  オンにした通常の `SharingHost` で、`LocalInputMonitor` が dispatch できるよう主スレッド
-  は `CFRunLoopRun` を回し、supervisor がフォルダを 500 ms ごとにポーリングする。daemon
+  オンにした通常の `SharingHost` で、主スレッドは `CFRunLoopRun` を回し、その上の 500 ms
+  タイマーで supervisor がフォルダをポーリングする。daemon
   の `unattended-hold` マーカー（app が保持する `Takeover` 接続 1 つにつき 1 つ）がある
   間は host を止め、`host_key.pem` か `ui-settings.txt` が変わったら再起動し、key が
   消えたら終了する。capture は app と同じ ScreenCaptureKit である（`CGDisplayStream` は
@@ -355,7 +355,11 @@ HostEngine（app ごとに 1 インスタンス、SessionTransport を保持）
   `SCShareableContent` が何も返さなければ、display の列挙は `CGGetActiveDisplayList` に
   切り替える。host は自身の Screen Recording と
   Accessibility の状態を `unattended-status.txt` に書き、daemon はそれを app の
-  `Status` 要求に返して Settings ページに表示させる。
+  `Status` 要求に返して Settings ページに表示させる。サインイン前は、capture が動き出した
+  あと host は window server に何も尋ねない。viewer の入力は `IOHIDSystem`
+  （`IOHIDPostEvent`）経由で投げ、ディスプレイの矩形は `Init` の値をキャッシュし、ローカル
+  入力モニターと 500 ms のサイズ探索は省き、ピクセルスケールは `SCContentFilter` から取る
+  （§9）。
 - Shell: shell ごとに PTY を 1 つ割り当てる（Windows は `ConPTY`、他は `forkpty`）。
   上限は 8 である。接続が切れた場合は shell を切り離し、shell プロセスが終了するか
   shell が閉じられるまで PTY を保持する。時間制限はない。許可された client はいずれも、
@@ -618,6 +622,45 @@ scaling の 2 つの判定とともに実行する（共有 runner には時間�
   その瞬間に LoginWindow session を解体するからである。app が共有していない間に利用者
   自身の session で host することには利用者ごとの agent と 2 回目の TCC 許可が必要で、
   後の段階に残してある。
+
+- **macOS app の自動共有はメインウィンドウではなく app 自身が始める**: AppKit は app が前回
+  終了したときに持っていたウィンドウを復元するが、メニューバーに住んでいた app にはウィンドウ
+  がなく、ログイン項目から起動した app はウィンドウなしで戻ってきた。自動共有は
+  `MainMenuView` の `.task` にあって一度も走らず、ログインウィンドウではつながっていた Mac が
+  誰かがウィンドウを開くまで沈黙した。いまは `DeskhubApp.init` が model を task に渡し、
+  unattended のコピーを送って共有を始める。復元がウィンドウを 1 つも戻さなかったときは
+  `AppDelegate` が自分でメインウィンドウを開く —— 実行中の app をもう一度開くよう
+  LaunchServices に頼むもので、Dock のクリックが送るものと同じ —— ので、T-16 の「起動時に
+  ウィンドウが出る」規則は前回の session がどうであれ成り立つ。`refreshPermissions` もコピーを
+  送らなくなった。自動共有が待つ間の 500 ms ごとのディスプレイ探索のたびに走り、1 秒に 9 回
+  daemon へ接続していた。送るのは settings か許可済み一覧の変更、共有の停止、起動時だけである。
+
+- **ログインウィンドウの host は CoreGraphics ではなく IOHIDSystem で入力を投げる**: ログイン
+  ウィンドウでは WindowServer はこのプロセスの最初の接続（ScreenCaptureKit のもの）を受け入れ、
+  それ以降の接続はすべて *not permitted to connect to or launch Window Server before login*
+  で拒む。そのため `CGEventCreate*`、`CGEventPost`、`CGDisplayBounds`、`[NSScreen screens]`
+  はそこでは全部失敗し、`kCGEventSourceStateHIDSystemState` の経路に至っては SkyLight 自身の
+  エラー処理の中でデッドロックする（`CGSEventSourceForID` → `CGSEventSourceShutdown` が自分で
+  握っている mutex を待つ）。最初の実機テストで viewer が最初のクリックで固まったのはこれで
+  ある。起動時にイベント経路を温めても、呼び出しを主スレッドに移しても何も変わらなかった。
+  `IOHIDSystem` への接続（root、`kIOHIDParamConnectType`）での `IOHIDPostEvent` は昔の VNC
+  サーバーがサインイン前に使っていた経路で、`DeskhubDaemon` が Accessibility を持つので動く。
+  macOS 11 以降 deprecated なので、呼び出しは診断用 pragma の内側に置き、`UnattendedMode()`
+  がオンのときだけ使う —— サインイン済みの app は従来どおり CGEvent を投げる。同じ理由で
+  capture が動いたあと host は window server に何も尋ねない。ディスプレイの矩形は `Init` の
+  値をキャッシュし、サイズ探索とローカル入力モニターは省き、capture のスケールは
+  `SCContentFilter` から取る。
+
+- **共有中の Mac はログアウト時に最後に終了する**: loginwindow はすべての app に一斉に終了を
+  求め、`terminateNow` は Terminal の「実行中のプロセスがある」ダイアログがまだ session を
+  引き留めている間に共有を終えてしまった。viewer はそのダイアログを押す必要があるまさにその
+  時に何も見えなくなり、session が終わっていないのでログインウィンドウの host も起動できな
+  かった。Apple Event にログアウト、シャットダウン、再起動の `kAEQuitReason` が付いた終了
+  要求に対して、app は共有中なら `terminateLater` を返し、動いている通常の app を 1 秒ごとに
+  数え、Finder だけになったら `true` を返す。別の app がログアウトを取り消しても macOS は
+  公開の合図を出さないので、2 分たっても他の app が残っていれば app は `false` を返して動き
+  続ける。ログアウトが実はまだ待っていたなら取り消すのは app であり viewer がやり直せる。
+  どこにも進まない session の中で終了してしまえば、Mac には届かなくなる。
 
 - **handshake を早く終えられるのはホストだけなので、クライアントはその終わり方を聞き取る**:
   クライアントは以前、`AuthResult` を 65 秒待っていた —— 承認が保持された一つの接続の中で

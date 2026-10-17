@@ -342,14 +342,17 @@ HostEngine (mỗi app một instance, sở hữu SessionTransport)
   ghi hoặc xoá `/Library/LaunchAgents/com.deskhub.macos.unattended.plist`, một LaunchAgent
   giới hạn ở session type `LoginWindow` chạy `DeskhubDaemon --unattended-host`. Tiến trình
   đó là `SharingHost` bình thường với `UnattendedMode()` bật, một main thread chạy
-  `CFRunLoopRun` để `LocalInputMonitor` dispatch lên được, và một supervisor poll thư mục
-  mỗi 500 ms: dừng host khi marker `unattended-hold` của daemon tồn tại (một cho mỗi kết
+  `CFRunLoopRun` cùng supervisor trên timer 500 ms poll thư mục: dừng host khi marker `unattended-hold` của daemon tồn tại (một cho mỗi kết
   nối `Takeover` app đang giữ), khởi động lại khi `host_key.pem` hoặc `ui-settings.txt`
   đổi, và thoát khi key biến mất. Capture là ScreenCaptureKit như trong app
   (`CGDisplayStream` đã bị bỏ từ macOS 15 và không còn biên dịch được); liệt kê màn hình rơi
   về `CGGetActiveDisplayList` khi `SCShareableContent` không trả gì trong phiên login window.
   Host ghi `unattended-status.txt` với trạng thái Screen Recording và Accessibility của chính
-  nó, thứ daemon trả về cho request `Status` của app để hiện trên trang Settings.
+  nó, thứ daemon trả về cho request `Status` của app để hiện trên trang Settings. Trước
+  đăng nhập, sau khi capture đã chạy host không hỏi window server thêm gì nữa: input của
+  viewer đi qua `IOHIDSystem` (`IOHIDPostEvent`), vùng màn hình được cache từ `Init`,
+  monitor input cục bộ và phép dò kích thước 500 ms bị bỏ qua, và scale pixel lấy từ
+  `SCContentFilter` (§9).
 - Shell: mỗi shell một PTY (`ConPTY` trên Windows, `forkpty` trên các nền tảng khác), tối
   đa 8 shell. Khi mất kết nối, shell được tách ra và PTY được giữ sống cho đến khi tiến trình shell thoát hoặc shell bị đóng — không giới hạn thời gian. Mọi client đã được chấp nhận đều có thể liệt kê các shell đang được giữ (`TermList`/`TermListAck`) và reattach một shell theo id. Mọi thao tác open, close, detach và reattach đều được ghi vào audit log kèm
   địa chỉ, tên và key. `TERM_CLOSE` được trả lời trước guard theo peer mà các message
@@ -610,6 +613,46 @@ coverage của core.
   đăng nhập, khác Windows, vì launchd tháo phiên LoginWindow ngay lúc đó; host trong phiên
   của chính người dùng khi app không share cần một agent theo người dùng và một vòng cấp
   quyền TCC nữa, để lại cho phiên sau.
+
+- **App macOS tự share từ chính app, không từ cửa sổ chính**: AppKit khôi phục những cửa sổ
+  app có lúc thoát lần trước, và một app đang nằm trong menu bar thì không có cửa sổ nào,
+  nên khi được login item khởi chạy, app quay lại mà không có cửa sổ. Phần tự share nằm
+  trong `.task` của `MainMenuView`, không bao giờ chạy, và chiếc Mac vừa tới được ở login
+  window im lặng cho tới khi có người mở cửa sổ. `DeskhubApp.init` giờ giao model cho một
+  task đẩy bản copy unattended và bắt đầu share, còn `AppDelegate` tự mở cửa sổ chính khi
+  việc khôi phục không mang cửa sổ nào về — nó nhờ LaunchServices mở lại app đang chạy,
+  đúng thứ một cú click vào Dock gửi — nên quy tắc cửa sổ hiện khi khởi động của T-16 đúng
+  bất kể phiên trước trông thế nào. `refreshPermissions` cũng không đẩy bản copy nữa: nó
+  chạy ở mỗi lần dò màn hình 500 ms trong lúc tự share chờ, chín kết nối tới daemon trong
+  một giây; chỉ thay đổi settings hoặc danh sách được phép, share dừng và lúc khởi động mới
+  đẩy.
+
+- **Host ở login window gửi input qua IOHIDSystem, không qua CoreGraphics**: ở màn đăng
+  nhập WindowServer chấp nhận kết nối đầu tiên của tiến trình này (của ScreenCaptureKit) và
+  từ chối mọi kết nối sau đó với *not permitted to connect to or launch Window Server before
+  login*, nên `CGEventCreate*`, `CGEventPost`, `CGDisplayBounds` và `[NSScreen screens]`
+  đều hỏng ở đó, và đường `kCGEventSourceStateHIDSystemState` còn deadlock ngay trong phần
+  xử lý lỗi của SkyLight (`CGSEventSourceForID` → `CGSEventSourceShutdown` chờ một mutex nó
+  đang giữ), chính là hiện tượng viewer đơ ngay cú click đầu trong lần thử thật đầu tiên.
+  Làm nóng đường event lúc khởi động hay chuyển các lệnh sang main thread đều không đổi
+  được gì. `IOHIDPostEvent` trên kết nối `IOHIDSystem` (root, `kIOHIDParamConnectType`) là
+  đường các VNC server cũ dùng trước đăng nhập và chạy được vì `DeskhubDaemon` có
+  Accessibility; nó bị đánh dấu deprecated từ macOS 11 nên lời gọi nằm sau một pragma chẩn
+  đoán và chỉ chạy khi `UnattendedMode()` bật — app đã đăng nhập vẫn gửi CGEvent. Cũng vì
+  vậy host không hỏi window server gì nữa khi capture đã chạy: vùng màn hình cache từ `Init`,
+  phép dò kích thước và monitor input cục bộ bị bỏ qua, scale capture lấy từ
+  `SCContentFilter`.
+
+- **Mac đang share là app thoát sau cùng khi logout**: loginwindow bảo mọi app thoát cùng
+  lúc, và `terminateNow` kết thúc share trong khi hộp thoại "tiến trình đang chạy" của
+  Terminal vẫn giữ phiên lại, nên viewer mù đúng lúc cần bấm hộp thoại ấy, còn host ở login
+  window không thể chạy vì phiên chưa kết thúc. Với lệnh quit mà Apple Event mang
+  `kAEQuitReason` là log out, shut down hay restart, app trả `terminateLater` khi đang share,
+  mỗi giây đếm các app thường còn chạy và trả `true` khi chỉ còn Finder. macOS không có tín
+  hiệu công khai nào khi một app khác huỷ logout, nên sau hai phút mà app khác vẫn còn thì
+  app trả `false` và tiếp tục chạy: nếu logout thật ra vẫn đang chờ thì chính app là bên huỷ
+  nó và viewer làm lại được, còn thoát vào một phiên chẳng đi đến đâu thì Mac thành không
+  tới được.
 
 - **Chỉ host mới có thể kết thúc sớm một handshake, nên client lắng nghe xem nó kết thúc
   thế nào**: client từng chờ `AuthResult` tới 65 giây — di sản từ thời việc approve diễn ra

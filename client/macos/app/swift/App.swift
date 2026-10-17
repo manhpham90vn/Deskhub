@@ -3,8 +3,14 @@ import SwiftUI
 @main
 struct DeskhubApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
-    @State private var sharing = SharingModel()
+    @State private var sharing: SharingModel
     @State private var tray = TrayPresence()
+
+    init() {
+        let sharing = SharingModel()
+        _sharing = State(initialValue: sharing)
+        Task { @MainActor in await sharing.launch() }
+    }
 
     var body: some Scene {
         Window("Deskhub", id: "main") {
@@ -163,16 +169,12 @@ private struct TrayMenu: View {
         Button(DeskhubClient.string(DHStrTrayQuit)) { NSApp.terminate(nil) }
     }
 
-    private var mainWindow: NSWindow? {
-        NSApp.windows.first { $0.identifier?.rawValue.hasPrefix("main") == true }
-    }
-
     private var mainWindowShown: Bool {
-        mainWindow?.isVisible == true
+        NSApp.deskhubMainWindow?.isVisible == true
     }
 
     private func hideMainWindow() {
-        mainWindow?.close()
+        NSApp.deskhubMainWindow?.close()
     }
 
     private func showMainWindow() {

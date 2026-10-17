@@ -12,6 +12,7 @@
 #include "deskhub/control/StreamSize.h"
 #include "deskhub/media/AudioTypes.h"
 #include "deskhubp/diag/Log.h"
+#include "deskhubp/host/UnattendedMode.h"
 #include "deskhubp/system/Clock.h"
 
 @class DeskhubStreamOutput;
@@ -196,6 +197,32 @@ deskhub::StreamSize ApplySizeLocked(ScreenCapture::Impl* impl) {
     return t;
 }
 
+void StartSizeWatch(ScreenCapture::Impl* impl) {
+    impl->sizeTimer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0,
+        dispatch_get_global_queue(QOS_CLASS_UTILITY, 0));
+    dispatch_source_set_timer(impl->sizeTimer,
+        dispatch_time(DISPATCH_TIME_NOW, 500 * NSEC_PER_MSEC),
+        500 * NSEC_PER_MSEC, 100 * NSEC_PER_MSEC);
+    dispatch_source_set_event_handler(impl->sizeTimer, ^{
+      if (!impl->running.load(std::memory_order_acquire)) return;
+      uint32_t nw = 0, nh = 0;
+      if (!CurrentSourceSize(impl->displayId, impl->scale, nw, nh)) {
+          LOGI("[Capture] Display %u disappeared.", impl->displayId);
+          impl->closed.store(true, std::memory_order_release);
+          return;
+      }
+      std::lock_guard<std::mutex> lk(impl->sizeMutex);
+      if (nw == impl->curW && nh == impl->curH) return;
+      const uint32_t oldW = impl->curW, oldH = impl->curH;
+      impl->curW = nw;
+      impl->curH = nh;
+      const deskhub::StreamSize t = ApplySizeLocked(impl);
+      LOGI("[Capture] Source resized %ux%u -> %ux%u, streaming at %ux%u.", oldW, oldH, nw, nh,
+          t.width, t.height);
+    });
+    dispatch_resume(impl->sizeTimer);
+}
+
 }
 
 ScreenCapture::ScreenCapture() : impl_(std::make_unique<Impl>()) {}
@@ -257,7 +284,8 @@ bool ScreenCapture::Start(uint64_t targetId, const deskhub::media::CaptureOption
     impl_->filter = [[SCContentFilter alloc] initWithDisplay:found
                                             excludingWindows:@[]];
 
-    impl_->scale = ScaleForFrame(srcFrame);
+    impl_->scale = deskhubp::UnattendedMode() ? double(impl_->filter.pointPixelScale)
+                                              : ScaleForFrame(srcFrame);
 
     uint32_t w = 0, h = 0;
     if (!CurrentSourceSize(displayId, impl_->scale, w, h)) {
@@ -330,30 +358,7 @@ bool ScreenCapture::Start(uint64_t targetId, const deskhub::media::CaptureOption
     }
     impl_->running.store(true, std::memory_order_release);
 
-    Impl* impl = impl_.get();
-    impl_->sizeTimer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0,
-        dispatch_get_global_queue(QOS_CLASS_UTILITY, 0));
-    dispatch_source_set_timer(impl_->sizeTimer,
-        dispatch_time(DISPATCH_TIME_NOW, 500 * NSEC_PER_MSEC),
-        500 * NSEC_PER_MSEC, 100 * NSEC_PER_MSEC);
-    dispatch_source_set_event_handler(impl_->sizeTimer, ^{
-      if (!impl->running.load(std::memory_order_acquire)) return;
-      uint32_t nw = 0, nh = 0;
-      if (!CurrentSourceSize(impl->displayId, impl->scale, nw, nh)) {
-          LOGI("[Capture] Display %u disappeared.", impl->displayId);
-          impl->closed.store(true, std::memory_order_release);
-          return;
-      }
-      std::lock_guard<std::mutex> lk(impl->sizeMutex);
-      if (nw == impl->curW && nh == impl->curH) return;
-      const uint32_t oldW = impl->curW, oldH = impl->curH;
-      impl->curW = nw;
-      impl->curH = nh;
-      const deskhub::StreamSize t = ApplySizeLocked(impl);
-      LOGI("[Capture] Source resized %ux%u -> %ux%u, streaming at %ux%u.", oldW, oldH, nw, nh,
-          t.width, t.height);
-    });
-    dispatch_resume(impl_->sizeTimer);
+    if (!deskhubp::UnattendedMode()) StartSizeWatch(impl_.get());
 
     if (impl_->cfgW != w || impl_->cfgH != h)
         LOGI("[Capture] Capturing display %u: native %ux%u -> streaming %ux%u"

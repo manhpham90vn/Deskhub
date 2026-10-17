@@ -1,5 +1,8 @@
 ﻿#import <AppKit/AppKit.h>
 #import <CoreGraphics/CoreGraphics.h>
+#import <IOKit/IOKitLib.h>
+#import <IOKit/hidsystem/IOHIDLib.h>
+#import <IOKit/hidsystem/IOLLEvent.h>
 
 #include "input/InputInjector.h"
 
@@ -8,6 +11,7 @@
 #include "deskhub/input/PointerMap.h"
 #include "deskhub/input/VirtualKeys.h"
 #include "deskhubp/diag/Log.h"
+#include "deskhubp/host/UnattendedMode.h"
 #include "deskhubp/input/LocalInput.h"
 #include "deskhubp/input/NativeKeyMap.h"
 #include "Permissions.h"
@@ -16,6 +20,8 @@
 namespace {
 
 constexpr uint64_t kRectCacheUs = 200'000;
+constexpr uint8_t kHidFullPressure = 255;
+constexpr int32_t kHidWheelPointsPerLine = 10;
 
 constexpr uint64_t kDoubleClickUs = 500'000;
 constexpr double kDoubleClickSlopPt = 4.0;
@@ -59,29 +65,66 @@ bool ButtonCodes(deskhub::MouseButton b, CGEventType& downType, CGEventType& upT
     return false;
 }
 
-CGPoint CursorPoint() {
-    CGEventRef probe = CGEventCreate(nullptr);
-    const CGPoint p = probe ? CGEventGetLocation(probe) : CGPointZero;
-    if (probe) CFRelease(probe);
-    return p;
+io_connect_t OpenHidSystem() {
+    const io_service_t service =
+        IOServiceGetMatchingService(kIOMainPortDefault, IOServiceMatching(kIOHIDSystemClass));
+    if (!service) {
+        LOGW("[Input] IOHIDSystem is not registered; input before sign-in is off.");
+        return 0;
+    }
+    io_connect_t connect = 0;
+    const kern_return_t rc =
+        IOServiceOpen(service, mach_task_self(), kIOHIDParamConnectType, &connect);
+    IOObjectRelease(service);
+    if (rc != KERN_SUCCESS) {
+        LOGW("[Input] IOHIDSystem could not be opened (0x%x); input before sign-in is off.",
+            unsigned(rc));
+        return 0;
+    }
+    LOGI("[Input] Posting input through IOHIDSystem before sign-in.");
+    return connect;
 }
 
-CGRect DesktopBounds() {
-    CGRect all = CGRectNull;
-    for (NSScreen* s in [NSScreen screens])
-        all = CGRectIsNull(all) ? s.frame : CGRectUnion(all, s.frame);
-    return CGRectIsNull(all) ? CGRectMake(0, 0, 1920, 1080) : all;
+uint32_t HidButtonType(deskhub::MouseButton btn, bool down) {
+    switch (btn) {
+        case deskhub::MouseButton::Left: return down ? NX_LMOUSEDOWN : NX_LMOUSEUP;
+        case deskhub::MouseButton::Right: return down ? NX_RMOUSEDOWN : NX_RMOUSEUP;
+        default: return down ? NX_OMOUSEDOWN : NX_OMOUSEUP;
+    }
+}
+
+uint8_t HidButtonNumber(deskhub::MouseButton btn) {
+    switch (btn) {
+        case deskhub::MouseButton::Left: return 0;
+        case deskhub::MouseButton::Right: return 1;
+        default: return 2;
+    }
+}
+
+uint32_t HidMoveType(const std::set<deskhub::MouseButton>& down) {
+    if (down.count(deskhub::MouseButton::Left)) return NX_LMOUSEDRAGGED;
+    if (down.count(deskhub::MouseButton::Right)) return NX_RMOUSEDRAGGED;
+    if (!down.empty()) return NX_OMOUSEDRAGGED;
+    return NX_MOUSEMOVED;
 }
 
 }
 
 InputInjector::InputInjector() {
+    if (deskhubp::UnattendedMode()) {
+        hid_ = OpenHidSystem();
+        return;
+    }
     source_ = (void*)CGEventSourceCreate(kCGEventSourceStateHIDSystemState);
     if (!source_) LOGW("[Input] CGEventSourceCreate failed — using default source.");
 }
 
 InputInjector::~InputInjector() {
     ReleaseAll();
+    if (hid_) {
+        IOServiceClose(hid_);
+        hid_ = 0;
+    }
     if (source_) {
         CFRelease((CGEventSourceRef)source_);
         source_ = nullptr;
@@ -90,6 +133,7 @@ InputInjector::~InputInjector() {
 
 bool InputInjector::Init(uint32_t displayId) {
     if (!displayId) return false;
+    if (deskhubp::UnattendedMode() && !hid_) return false;
     displayId_ = displayId;
     rectUs_ = 0;
 
@@ -106,9 +150,26 @@ bool InputInjector::Init(uint32_t displayId) {
     return true;
 }
 
+CGPoint InputInjector::CursorPoint() const {
+    if (deskhubp::UnattendedMode()) return CGPointMake(postedX_, postedY_);
+    CGEventRef probe = CGEventCreate(nullptr);
+    const CGPoint p = probe ? CGEventGetLocation(probe) : CGPointZero;
+    if (probe) CFRelease(probe);
+    return p;
+}
+
+CGRect InputInjector::DesktopBounds() const {
+    if (deskhubp::UnattendedMode()) return CGRectMake(rectX_, rectY_, rectW_, rectH_);
+    CGRect all = CGRectNull;
+    for (NSScreen* s in [NSScreen screens])
+        all = CGRectIsNull(all) ? s.frame : CGRectUnion(all, s.frame);
+    return CGRectIsNull(all) ? CGRectMake(0, 0, 1920, 1080) : all;
+}
+
 bool InputInjector::SourceRect(double& x, double& y, double& w, double& h) {
     const uint64_t now = NowUs();
-    if (rectUs_ && now - rectUs_ < kRectCacheUs && rectW_ > 0) {
+    const bool fresh = rectUs_ && now - rectUs_ < kRectCacheUs;
+    if (rectW_ > 0 && (fresh || deskhubp::UnattendedMode())) {
         x = rectX_;
         y = rectY_;
         w = rectW_;
@@ -159,12 +220,34 @@ void InputInjector::OnLocalUserIdle() {
     LOGI("[Input] Remote input resumed.");
 }
 
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+bool InputInjector::HidPost(uint32_t type, const void* data, uint32_t options) {
+    const IOGPoint at{SInt16(postedX_), SInt16(postedY_)};
+    const kern_return_t rc = IOHIDPostEvent(hid_, type, at,
+        static_cast<const NXEventData*>(data), kNXEventDataVersion,
+        IOOptionBits(CurrentFlags()), options | kIOHIDSetGlobalEventFlags);
+    if (rc == KERN_SUCCESS) return true;
+    LOGW("[Input] IOHIDPostEvent(%u) failed: 0x%x.", unsigned(type), unsigned(rc));
+    return false;
+}
+#pragma clang diagnostic pop
+
 void InputInjector::SendKey(int32_t vk, int32_t, bool down) {
     int32_t native = 0;
     if (!deskhubp::WinVkToNative(vk, native)) return;
     const uint16_t keycode = uint16_t(native);
 
     held_.SetKey(vk, keycode, down);
+    if (hid_) {
+        NXEventData data{};
+        data.key.keyCode = keycode;
+        data.key.charSet = NX_ASCIISET;
+        data.key.origCharSet = NX_ASCIISET;
+        const bool modifier = deskhub::ModifierKeyOf(vk) != deskhub::ModifierKey::None;
+        HidPost(modifier ? NX_FLAGSCHANGED : (down ? NX_KEYDOWN : NX_KEYUP), &data, 0);
+        return;
+    }
 
     CGEventRef ev = CGEventCreateKeyboardEvent((CGEventSourceRef)source_,
         CGKeyCode(keycode), down);
@@ -183,6 +266,15 @@ void InputInjector::PostMouseAt(double x, double y, int32_t dx, int32_t dy) {
     else if (held_.ButtonIsDown(deskhub::MouseButton::Middle))
         which = kCGMouseButtonCenter;
 
+    postedX_ = x;
+    postedY_ = y;
+    if (hid_) {
+        NXEventData data{};
+        data.mouseMove.dx = dx;
+        data.mouseMove.dy = dy;
+        HidPost(HidMoveType(held_.heldButtons()), &data, kIOHIDSetCursorPosition);
+        return;
+    }
     CGEventRef ev = CGEventCreateMouseEvent((CGEventSourceRef)source_, type,
         CGPointMake(x, y), which);
     if (!ev) return;
@@ -233,6 +325,15 @@ void InputInjector::SendButton(deskhub::MouseButton btn, bool down) {
         lastClickBtn_ = btn;
     }
     held_.SetButton(btn, down);
+    if (hid_) {
+        NXEventData data{};
+        data.mouse.click = SInt32(clickState_);
+        data.mouse.pressure = down ? kHidFullPressure : 0;
+        data.mouse.buttonNumber = HidButtonNumber(btn);
+        data.mouse.subType = NX_SUBTYPE_DEFAULT;
+        HidPost(HidButtonType(btn, down), &data, 0);
+        return;
+    }
 
     CGEventRef ev = CGEventCreateMouseEvent((CGEventSourceRef)source_,
         down ? downType : upType, p, which);
@@ -248,6 +349,14 @@ void InputInjector::SendWheel(int32_t delta) {
     if (!delta) return;
     const int32_t lines = deskhub::TakeWheelNotches(delta, wheelCarry_) * 3;
     if (!lines) return;
+    if (hid_) {
+        NXEventData data{};
+        data.scrollWheel.deltaAxis1 = SInt16(lines);
+        data.scrollWheel.fixedDeltaAxis1 = lines << 16;
+        data.scrollWheel.pointDeltaAxis1 = lines * kHidWheelPointsPerLine;
+        HidPost(NX_SCROLLWHEELMOVED, &data, 0);
+        return;
+    }
     CGEventRef ev = CGEventCreateScrollWheelEvent((CGEventSourceRef)source_,
         kCGScrollEventUnitLine, 1, lines);
     if (!ev) return;

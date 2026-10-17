@@ -343,8 +343,8 @@ HostEngine (one per app, owns SessionTransport)
   and writes or removes `/Library/LaunchAgents/com.deskhub.macos.unattended.plist`, a
   LaunchAgent limited to the `LoginWindow` session type that runs
   `DeskhubDaemon --unattended-host`. That process is the ordinary `SharingHost` with
-  `UnattendedMode()` on, a `CFRunLoopRun` main thread so `LocalInputMonitor` can dispatch
-  to it, and a supervisor polling the folder every 500 ms: it stops the host while the
+  `UnattendedMode()` on and a main thread that runs `CFRunLoopRun` with the supervisor on a
+  500 ms timer, polling the folder: it stops the host while the
   daemon's `unattended-hold` marker exists (one per `Takeover` connection the app holds),
   restarts it when `host_key.pem` or `ui-settings.txt` change, and exits when the key is
   gone. Capture is ScreenCaptureKit, as in the app (`CGDisplayStream` is obsoleted since
@@ -352,6 +352,10 @@ HostEngine (one per app, owns SessionTransport)
   `CGGetActiveDisplayList` when `SCShareableContent` lists nothing in the login window
   session. The host writes `unattended-status.txt` with its own Screen Recording and Accessibility
   state, which the daemon returns to the app's `Status` request for the Settings page.
+  Before sign-in the host asks the window server for nothing after capture has started: the
+  viewer's input goes through `IOHIDSystem` (`IOHIDPostEvent`), the display rectangle is
+  cached from `Init`, the local-input monitor and the 500 ms size probe are skipped, and
+  the pixel scale comes from the `SCContentFilter` (§9).
 - Shells: one PTY per shell (`ConPTY` on Windows, `forkpty` elsewhere), at most 8; a
   dropped connection detaches the shell and the PTY stays alive until the shell
   process exits or the shell is closed — no time limit. Any admitted client can list
@@ -622,6 +626,48 @@ line.
   LoginWindow session down at that moment; hosting inside the user's own session when the
   app is not sharing would need a per-user agent and a second round of TCC grants, and is
   left for a later phase.
+
+- **The macOS app starts its auto-share from the app, not from the main window**: AppKit
+  brings back the windows the app had when it last quit, and an app that was living in the
+  menu bar had none, so a login-item launch came back without a window. The auto-share
+  lived in the `.task` of `MainMenuView`, which never ran, and a Mac that had just been
+  reachable at the login window went silent until someone opened the window.
+  `DeskhubApp.init` now hands the model to a task that pushes the unattended copies and
+  starts the share, and `AppDelegate` opens the main window itself when restoration
+  brought none back — it asks LaunchServices to open the running app again, which is what
+  a Dock click sends — so the window-at-launch rule of T-16 holds whatever the previous
+  session looked like. `refreshPermissions` no longer pushes the copies either: it ran on
+  every 500 ms display probe while auto-share waited, nine daemon connections in a second;
+  a settings or allowed-list change, a share stopping and the launch push them.
+
+- **The login window host posts input through IOHIDSystem, not CoreGraphics**: at the login
+  window the WindowServer accepts this process's first connection (ScreenCaptureKit's) and
+  refuses every later one with *not permitted to connect to or launch Window Server before
+  login*, so `CGEventCreate*`, `CGEventPost`, `CGDisplayBounds` and `[NSScreen screens]`
+  all fail there, and the `kCGEventSourceStateHIDSystemState` path even deadlocks inside
+  SkyLight's own error handling (`CGSEventSourceForID` → `CGSEventSourceShutdown`, waiting
+  on a mutex it already holds), which the first real test showed as a viewer frozen on its
+  first click. Warming the event path at launch and moving the calls to the main thread
+  changed nothing. `IOHIDPostEvent` on an `IOHIDSystem` connection (root,
+  `kIOHIDParamConnectType`) is the route the old VNC servers took before sign-in and works
+  because `DeskhubDaemon` holds Accessibility; it has been deprecated since macOS 11, so the
+  call sits behind a diagnostic pragma and runs only with `UnattendedMode()` on — the
+  signed-in app keeps posting CGEvents. For the same reason the host stops asking the
+  window server anything once capture runs: the display rectangle is cached from `Init`,
+  the size probe and the local-input monitor are skipped, and the capture scale comes from
+  the `SCContentFilter`.
+
+- **A Mac that is sharing quits last at log-out**: loginwindow asks every app to quit at
+  once, and `terminateNow` ended the share while Terminal's "running processes" dialog still
+  held the session, so the viewer went blind exactly when it had to click that dialog, and
+  the login window host could not start because the session had not ended. For a quit whose
+  Apple Event carries a log-out, shut-down or restart `kAEQuitReason`, the app answers
+  `terminateLater` while it is sharing, polls the running regular apps once a second and
+  replies `true` once only Finder is left. macOS gives no public signal when another app
+  cancels the log-out, so after two minutes with other apps still running the app replies
+  `false` and stays up: if the log-out was in fact still waiting, it is the app that cancels
+  it and the viewer can redo it, whereas quitting into a session that is going nowhere would
+  have left the Mac unreachable.
 
 - **Only the host can end a handshake early, so the client listens for how it ended**:
   the client used to wait 65 s for an `AuthResult` — a leftover from when approval was

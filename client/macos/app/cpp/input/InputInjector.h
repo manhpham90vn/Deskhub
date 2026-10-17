@@ -1,4 +1,6 @@
 #pragma once
+#include <CoreGraphics/CoreGraphics.h>
+
 #include <cstdint>
 
 #include "deskhub/input/InputApplier.h"
@@ -29,14 +31,19 @@ public:
 
 private:
     bool SourceRect(double& x, double& y, double& w, double& h);
+    CGPoint CursorPoint() const;
+    CGRect DesktopBounds() const;
+    bool HidPost(uint32_t type, const void* data, uint32_t options);
     void PostMouseAt(double x, double y, int32_t dx, int32_t dy);
     uint64_t CurrentFlags() const;
 
     uint32_t displayId_ = 0;
     void* source_ = nullptr;
+    uint32_t hid_ = 0;
 
     double rectX_ = 0, rectY_ = 0, rectW_ = 0, rectH_ = 0;
     uint64_t rectUs_ = 0;
+    double postedX_ = 0, postedY_ = 0;
 
     uint64_t lastClickUs_ = 0;
     double lastClickX_ = 0, lastClickY_ = 0;

@@ -6,6 +6,7 @@
 
 #include "deskhubp/system/Clock.h"
 #include "deskhubp/diag/Log.h"
+#include "deskhubp/host/UnattendedMode.h"
 
 struct LocalInputMonitor::Impl {
     std::atomic<uint64_t> lastUs{0};
@@ -21,6 +22,11 @@ LocalInputMonitor::~LocalInputMonitor() {
 void LocalInputMonitor::Start() {
     Impl* im = impl_.get();
     if (im->monitor) return;
+    if (deskhubp::UnattendedMode()) {
+        LOGI("[Input] No local input monitor before sign-in: nobody sits at the login window, "
+             "and AppKit has no event connection there.");
+        return;
+    }
 
     dispatch_block_t install = ^{
       if (im->monitor) return;

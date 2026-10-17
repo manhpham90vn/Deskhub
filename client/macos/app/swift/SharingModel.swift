@@ -44,7 +44,7 @@ final class SharingModel {
     var playAudio = dh_play_audio()
     var keepAwake = dh_keep_awake()
     var transferFolder = DeskhubShare.filesFolder
-    var didAutoShare = false
+    private var didAutoShare = false
     var autoShareWaitNote = ""
     private(set) var activePort: UInt16 = 0
     private var rememberedDisplayTicks: [String: Bool] = [:]
@@ -140,7 +140,7 @@ final class SharingModel {
         if hasScreenRecording {
             screenRecordingNeedsRelaunch = false
         }
-        syncUnattended()
+        refreshUnattended()
     }
 
     func requestScreenRecording() {
@@ -291,6 +291,20 @@ final class SharingModel {
 }
 
 extension SharingModel {
+    func launch() async {
+        syncUnattended()
+        await autoShareAtLaunch()
+    }
+
+    private func autoShareAtLaunch() async {
+        guard autoShare, !didAutoShare, !isSharing, !isStarting else { return }
+        didAutoShare = true
+        refreshPermissions()
+        guard hasScreenRecording else { return }
+        guard await waitForShareSources() else { return }
+        _ = await startSharing()
+    }
+
     func runRowAction(_ row: HostRow) {
         guard isSharing else { return }
         if row.terminal {

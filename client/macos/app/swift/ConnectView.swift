@@ -54,12 +54,8 @@ struct MainMenuView: View {
             sharing.refreshPermissions()
             sharing.loadAddresses()
             recent.refresh()
-            if sharing.autoShare, !sharing.didAutoShare, !sharing.isSharing, !sharing.isStarting {
-                sharing.didAutoShare = true
-                if StartPage.index() == nil {
-                    page = .host
-                }
-                await autoShare()
+            if sharing.autoShare, StartPage.index() == nil {
+                page = .host
             }
         }
         .hostTrustAlert(connect) { beginConnect(to: $0) }
@@ -203,13 +199,6 @@ extension MainMenuView {
             return
         }
         await doShare()
-    }
-
-    private func autoShare() async {
-        sharing.refreshPermissions()
-        guard sharing.hasScreenRecording else { return }
-        guard await sharing.waitForShareSources() else { return }
-        _ = await sharing.startSharing()
     }
 
     private func doShare() async {
