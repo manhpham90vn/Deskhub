@@ -369,7 +369,7 @@ scripts, say — run it by hand: `gh workflow run publish-packages.yml -f tag=vX
 
 | Job | Publishes | Secret in the `stg` environment |
 | --- | --- | --- |
-| `homebrew` | `Casks/deskhub.rb` in `manhpham90vn/homebrew-tap`, rendered from `packaging/homebrew/deskhub.rb`; the retired `Formula/deskhub-cli.rb` is removed from the tap | `HOMEBREW_TAP_TOKEN` — fine-grained PAT, Contents: write on the tap |
+| `homebrew` | `Casks/deskhub.rb` in `manhpham90vn/homebrew-tap`, rendered from `packaging/homebrew/deskhub.rb` | `HOMEBREW_TAP_TOKEN` — fine-grained PAT, Contents: write on the tap |
 | `build-apt-repo` → `deploy-apt-repo` | a signed apt repository holding the debs of the last three releases, on GitHub Pages under `/apt` (`scripts/build-apt-repo.sh`) | `APT_GPG_PRIVATE_KEY`, `APT_GPG_PASSPHRASE` |
 
 Each needs a one-time setup before the first tag that runs it:

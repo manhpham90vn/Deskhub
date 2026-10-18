@@ -155,6 +155,7 @@ app はどのプラットフォームでも同じ区分で構成される。**Ho
 | I-9 | host の優先 | host のマシンの前にいる利用者による input が、すべてのリモート viewer に優先する。 |
 | I-10 | 同時に操作できるのは 1 viewer | 共有されている 1 つの display の viewer のうち、mouse と keyboard を操作できるのは同時に 1 つのみである。競合した場合はその display に先に参加した viewer が優先され、他の viewer の input は、操作中の viewer が **1 秒**無操作になるまで無視される。異なる display の viewer はそれぞれ別に調停される。 |
 | I-11 | view-only の強制 | host が control を無効にしている場合、または viewer が閲覧のみを選択した場合、input は host に到達せず、viewer のウィンドウは view-only である旨を表示する。 |
+| I-12 | システムキーは host に届く（デスクトップ） | viewer のウィンドウがキーボードを持っている間、Windows キー、Super キー、⌘ とそれを含むすべての組み合わせは、viewer 自身のデスクトップではなく host に送られる。Windows では `Win+C`、`Win+V`、`Win+Tab` は Copilot、クリップボード履歴、タスクビューを開かず、キー単独の押下でもスタートは開かない。Linux ではデスクトップの Super ショートカットが代わりに host に届く。Wayland では shortcuts inhibitor を通じて行い、GNOME はウィンドウごとに一度許可を求めることがある。macOS では、アプリのメニューが取ってしまう ⌘W、⌘H、⌘Q などの ⌘ ショートカットが host に送られる。viewer の OS がどのアプリにも渡さないものは OS に残る。Windows の Alt+Tab と Ctrl+Alt+Del、macOS の ⌘Tab、⌘Space、Mission Control のキーである。Linux では viewer がフォーカスを持つ間、Alt+Tab を含むすべてのキーが host に送られるため、離れるにはマウスを使う。GNOME では Super+Esc でもショートカットが戻る。host が Mac の場合、`Win` と Super は ⌘ として届くため、`Win+C` でコピー、`Win+V` で貼り付けとなり、⌘C と ⌘V と同じ動作になる。`Ctrl` は引き続き Control として届き、Mac はこれを ⌘ とは扱わない。別のウィンドウがキーボードを取れば、viewer のデスクトップのショートカットはすべて元に戻る。 |
 
 ## 9. アクセス制御と安全性
 

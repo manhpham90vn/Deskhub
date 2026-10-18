@@ -379,7 +379,7 @@ GitHub Release の作成後、`deploy.yml` は tag を `publish-packages.yml` �
 
 | Job | 公開先 | `stg` environment の secret |
 | --- | --- | --- |
-| `homebrew` | `manhpham90vn/homebrew-tap` の `Casks/deskhub.rb`。`packaging/homebrew/deskhub.rb` から生成し、廃止した `Formula/deskhub-cli.rb` は tap から削除する | `HOMEBREW_TAP_TOKEN` —— tap に Contents: write を持つ fine-grained PAT |
+| `homebrew` | `manhpham90vn/homebrew-tap` の `Casks/deskhub.rb`。`packaging/homebrew/deskhub.rb` から生成する | `HOMEBREW_TAP_TOKEN` —— tap に Contents: write を持つ fine-grained PAT |
 | `build-apt-repo` → `deploy-apt-repo` | 直近 3 つの release の deb を収めた署名付き apt repository。GitHub Pages の `/apt` に置く（`scripts/build-apt-repo.sh`） | `APT_GPG_PRIVATE_KEY`、`APT_GPG_PASSPHRASE` |
 
 いずれも、それを実行する最初の tag より前に一度だけ設定が必要である。

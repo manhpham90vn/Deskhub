@@ -338,7 +338,7 @@ GitHub Release 创建后，`deploy.yml` 将 tag 交给 `publish-packages.yml`，
 
 | Job | 发布内容 | `stg` environment 中的 secret |
 | --- | --- | --- |
-| `homebrew` | `manhpham90vn/homebrew-tap` 中的 `Casks/deskhub.rb`，由 `packaging/homebrew/deskhub.rb` 生成；已停用的 `Formula/deskhub-cli.rb` 会从 tap 中移除 | `HOMEBREW_TAP_TOKEN` —— 对该 tap 有 Contents: write 的 fine-grained PAT |
+| `homebrew` | `manhpham90vn/homebrew-tap` 中的 `Casks/deskhub.rb`，由 `packaging/homebrew/deskhub.rb` 生成 | `HOMEBREW_TAP_TOKEN` —— 对该 tap 有 Contents: write 的 fine-grained PAT |
 | `build-apt-repo` → `deploy-apt-repo` | 已签名的 apt repository，包含最近三个 release 的 deb，位于 GitHub Pages 的 `/apt`（`scripts/build-apt-repo.sh`） | `APT_GPG_PRIVATE_KEY`、`APT_GPG_PASSPHRASE` |
 
 每个 job 在首次运行它的 tag 之前都需要一次性设置：

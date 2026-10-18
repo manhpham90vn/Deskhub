@@ -1453,3 +1453,18 @@ coverage của core.
   been called"). `OpenClipboard`/`SetClipboardData` không cần apartment, nên các nút Copy và đồng bộ
   clipboard dùng chúng; nếu chuyển luồng UI sang STA thì mọi luồng worker chưa từng gọi `CoInitialize`
   sẽ mất apartment.
+
+- **Mỗi viewer desktop giành phím hệ thống khỏi desktop của chính nó khi đang giữ bàn
+  phím**: viewer gửi phím nguyên trạng, nên với host là Mac thì phím Windows hoặc Super là
+  ⌘ và copy là `Win+C` — nhưng Windows, GNOME và macOS đều xử lý phím đó trước khi bất kỳ
+  cửa sổ nào thấy nó. Viewer Windows cài hook `WH_KEYBOARD_LL` nuốt `VK_LWIN`/`VK_RWIN`
+  khi một viewer đang focus (raw input, thứ viewer đọc, vẫn báo các phím này) và đăng ký
+  raw input với `RIDEV_NOHOTKEYS`. Viewer Linux lấy active keyboard grab trên X11, nơi chỉ
+  active grab mới thắng được các passive grab của window manager, còn trên Wayland tạo một
+  `zwp_keyboard_shortcuts_inhibitor_v1` — giữ suốt vòng đời cửa sổ vì mutter hỏi người
+  dùng mỗi lần yêu cầu — qua `wl_interface` viết tay, vì dự án chỉ dùng C++ và protocol
+  chỉ có ba message. Viewer macOS trả lời `performKeyEquivalent` để menu bar không bao giờ
+  lấy phím tắt ⌘ trước. Những gì OS không giao cho ứng dụng nào — Alt+Tab và
+  Ctrl+Alt+Del, ⌘Tab và ⌘Space — cố ý được giữ lại cho OS: viewer phải luôn thoát ra
+  được. Grab trên X11 và inhibitor trên Wayland lấy tất cả, kể cả Alt+Tab; ở đó lối ra
+  là chuột, và Super+Esc của GNOME. Hoán đổi Ctrl và ⌘ đã bị bác: Ctrl+C trong terminal của host phải vẫn là Ctrl+C.

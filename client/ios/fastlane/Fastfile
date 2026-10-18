@@ -77,7 +77,7 @@ platform :ios do
       app_version: APP_VERSION,
       skip_binary_upload: true,
       skip_screenshots: false,
-      overwrite_screenshots: true,
+      overwrite_screenshots: false,
       force: true,
       precheck_include_in_app_purchases: false
     )

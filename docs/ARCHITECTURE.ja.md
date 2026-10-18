@@ -1482,3 +1482,19 @@ scaling の 2 つの判定とともに実行する（共有 runner には時間�
   called"）を返す。`OpenClipboard`/`SetClipboardData` は apartment を必要としないため、Copy ボタンと
   クリップボード同期はこれらを使う。UI スレッドを STA に切り替えると、`CoInitialize` を一度も呼ばない
   ワーカースレッドがすべて apartment を失う。
+
+- **各デスクトップ viewer は、キーボードを持っている間、システムキーを自分のデスクトップから
+  奪う**: viewer はキーをそのまま送るため、host が Mac なら Windows キーや Super キーは ⌘ であり、
+  コピーは `Win+C` になる。しかし Windows、GNOME、macOS はいずれも、どのウィンドウよりも先にその
+  キーを処理してしまう。Windows viewer は `WH_KEYBOARD_LL` フックを入れ、viewer がフォーカスを持つ
+  間 `VK_LWIN`/`VK_RWIN` を飲み込み（viewer が読む raw input には引き続き届く）、raw input を
+  `RIDEV_NOHOTKEYS` で登録する。Linux viewer は X11 ではアクティブなキーボード grab を取る。
+  ウィンドウマネージャのパッシブ grab に勝てるのはアクティブ grab だけだからである。Wayland では
+  `zwp_keyboard_shortcuts_inhibitor_v1` を作り、ウィンドウの生存期間中保持する。mutter は要求の
+  たびにユーザーへ一度確認するからである。プロジェクトは C++ のみで、このプロトコルはメッセージが
+  三つしかないため、`wl_interface` は手書きした。macOS viewer は `performKeyEquivalent` に応答し、
+  メニューバーが ⌘ ショートカットを先に取ることはない。OS がどのアプリにも渡さないもの、すなわち
+  Alt+Tab と Ctrl+Alt+Del、⌘Tab と ⌘Space は意図的に OS に残す。viewer から常に抜け出せなければ
+  ならないからである。X11 の grab と Wayland の inhibitor は Alt+Tab を含めすべてを取るため、
+  そこでの出口はマウスと、GNOME の Super+Esc である。Ctrl と ⌘ の入れ替えは却下した。host の端末での Ctrl+C は Ctrl+C のまま
+  でなければならない。

@@ -124,6 +124,7 @@ bool ViewerWindow::Build(const NetAddr& server, uint8_t sourceId, const std::str
     g_signal_connect(window_, "button-press-event", G_CALLBACK(OnButton), this);
     g_signal_connect(window_, "button-release-event", G_CALLBACK(OnButton), this);
     g_signal_connect(window_, "scroll-event", G_CALLBACK(OnScroll), this);
+    g_signal_connect(window_, "focus-in-event", G_CALLBACK(OnFocusIn), this);
     g_signal_connect(window_, "focus-out-event", G_CALLBACK(OnFocusOut), this);
     g_signal_connect(window_, "destroy", G_CALLBACK(OnDestroy), this);
 
@@ -305,27 +306,40 @@ void ViewerWindow::EndSession() {
     });
 }
 
-void ViewerWindow::GrabPointer(bool locked) {
+GdkSeatCapabilities ViewerWindow::WantedSeatGrab() const {
+    GdkSeatCapabilities caps = GdkSeatCapabilities(0);
+    if (pointer_.locked()) caps = GdkSeatCapabilities(caps | GDK_SEAT_CAPABILITY_ALL_POINTING);
+    if (keyboardFocus_ && control_ && !WaylandShortcutsInhibitor::Applies(window_))
+        caps = GdkSeatCapabilities(caps | GDK_SEAT_CAPABILITY_KEYBOARD);
+    return caps;
+}
+
+void ViewerWindow::SyncSeatGrab() {
     GdkWindow* gw = gtk_widget_get_window(window_);
     if (!gw) return;
 
+    if (keyboardFocus_ && control_ && WaylandShortcutsInhibitor::Applies(window_))
+        shortcuts_.Inhibit(window_);
+
+    const GdkSeatCapabilities wanted = WantedSeatGrab();
+    if (wanted == grabbed_) return;
     GdkDisplay* display = gtk_widget_get_display(window_);
     GdkSeat* seat = gdk_display_get_default_seat(display);
-    if (locked) {
-        GdkCursor* blank = gdk_cursor_new_for_display(display, GDK_BLANK_CURSOR);
-        gdk_seat_grab(seat, gw, GDK_SEAT_CAPABILITY_ALL_POINTING, FALSE, blank, nullptr, nullptr,
-            nullptr);
+    gdk_seat_ungrab(seat);
+    if (wanted) {
+        GdkCursor* blank =
+            pointer_.locked() ? gdk_cursor_new_for_display(display, GDK_BLANK_CURSOR) : nullptr;
+        gdk_seat_grab(seat, gw, wanted, FALSE, blank, nullptr, nullptr, nullptr);
         if (blank) g_object_unref(blank);
-    } else {
-        gdk_seat_ungrab(seat);
     }
+    grabbed_ = wanted;
     haveLastPos_ = false;
 }
 
 void ViewerWindow::ApplyLockEffect(const deskhub::PointerLockEffect& effect) {
     if (effect.releaseHeldInput) loop_.ReleaseAllInput();
     if (effect.lockChanged) {
-        GrabPointer(pointer_.locked());
+        SyncSeatGrab();
         UpdateTitle();
     }
 }
@@ -420,9 +434,18 @@ gboolean ViewerWindow::OnScroll(GtkWidget*, GdkEventScroll* e, gpointer user) {
     return TRUE;
 }
 
+gboolean ViewerWindow::OnFocusIn(GtkWidget*, GdkEventFocus*, gpointer user) {
+    auto* self = static_cast<ViewerWindow*>(user);
+    self->keyboardFocus_ = true;
+    self->SyncSeatGrab();
+    return FALSE;
+}
+
 gboolean ViewerWindow::OnFocusOut(GtkWidget*, GdkEventFocus*, gpointer user) {
     auto* self = static_cast<ViewerWindow*>(user);
+    self->keyboardFocus_ = false;
     self->ApplyLockEffect(self->pointer_.OnFocusLost());
+    self->SyncSeatGrab();
     return FALSE;
 }
 

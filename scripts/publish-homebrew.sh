@@ -28,10 +28,9 @@ deskhub_release_asset "$TAG" "$DMG" "$WORK/assets"
 git clone --depth 1 "https://x-access-token:$HOMEBREW_TAP_TOKEN@github.com/$TAP_REPO.git" "$WORK/tap"
 mkdir -p "$WORK/tap/Casks"
 render deskhub.rb "$(sha256_of "$WORK/assets/$DMG")" > "$WORK/tap/Casks/deskhub.rb"
-rm -f "$WORK/tap/Formula/deskhub-cli.rb"
 
 cd "$WORK/tap"
-git add -A Casks Formula
+git add -A Casks
 if git diff --cached --quiet; then
     echo "[ok]      $TAP_REPO already at $VERSION"
     exit 0

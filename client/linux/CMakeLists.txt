@@ -29,6 +29,13 @@ if(NOT DESKHUB_TRAY_FOUND)
         "libayatana-appindicator3-dev is missing. Run 'make bootstrap'.")
 endif()
 
+pkg_check_modules(DESKHUB_WAYLAND IMPORTED_TARGET gtk+-wayland-3.0 wayland-client)
+if(NOT DESKHUB_WAYLAND_FOUND)
+    message(${deskhub_skip_level}
+        "Deskhub: the Ubuntu app builds without keyboard-shortcuts-inhibit on Wayland — "
+        "the GTK Wayland backend or libwayland-dev is missing. Run 'make bootstrap'.")
+endif()
+
 add_executable(deskhub_app
     gtk/main.cpp
     gtk/FileSendDialog.cpp
@@ -36,6 +43,7 @@ add_executable(deskhub_app
     gtk/TerminalWindow.cpp
     gtk/TrayIcon.cpp
     gtk/ViewerWindow.cpp
+    gtk/WaylandShortcutsInhibitor.cpp
 )
 
 set_target_properties(deskhub_app PROPERTIES OUTPUT_NAME deskhub)
@@ -46,6 +54,10 @@ target_link_libraries(deskhub_app PRIVATE deskhub_linux_core PkgConfig::DESKHUB_
 if(DESKHUB_TRAY_FOUND)
     target_compile_definitions(deskhub_app PRIVATE DESKHUB_HAVE_APPINDICATOR)
     target_link_libraries(deskhub_app PRIVATE PkgConfig::DESKHUB_TRAY)
+endif()
+if(DESKHUB_WAYLAND_FOUND)
+    target_compile_definitions(deskhub_app PRIVATE DESKHUB_HAVE_WAYLAND_SHORTCUTS_INHIBIT)
+    target_link_libraries(deskhub_app PRIVATE PkgConfig::DESKHUB_WAYLAND)
 endif()
 target_compile_features(deskhub_app PRIVATE cxx_std_20)
 deskhub_target_warnings(deskhub_app)

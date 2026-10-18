@@ -4,7 +4,9 @@
 #include "deskhub/protocol/Wire.h"
 
 #include <windowsx.h>
+#include <algorithm>
 #include <cstdio>
+#include <vector>
 
 #include "deskhubp/diag/Log.h"
 #include "deskhubp/ffi/ScreenFfi.h"
@@ -26,6 +28,48 @@ deskhub::MouseButton XButtonOf(WPARAM wp) {
                                               : deskhub::MouseButton::X2;
 }
 
+HHOOK g_windowsKeyHook = nullptr;
+std::vector<HWND> g_windowsKeyOwners;
+
+bool IsWindowsKey(DWORD vk) {
+    return vk == VK_LWIN || vk == VK_RWIN;
+}
+
+bool FocusIsOnAViewer() {
+    const HWND focus = GetFocus();
+    return focus && std::find(g_windowsKeyOwners.begin(), g_windowsKeyOwners.end(), focus) !=
+                        g_windowsKeyOwners.end();
+}
+
+LRESULT CALLBACK KeepWindowsKeyFromTheShell(int code, WPARAM wp, LPARAM lp) {
+    if (code == HC_ACTION) {
+        const auto* key = reinterpret_cast<const KBDLLHOOKSTRUCT*>(lp);
+        if (IsWindowsKey(key->vkCode) && FocusIsOnAViewer()) return 1;
+    }
+    return CallNextHookEx(nullptr, code, wp, lp);
+}
+
+void ClaimWindowsKey(HWND hwnd) {
+    g_windowsKeyOwners.push_back(hwnd);
+    if (g_windowsKeyHook) return;
+    g_windowsKeyHook = SetWindowsHookExW(WH_KEYBOARD_LL, KeepWindowsKeyFromTheShell,
+        GetModuleHandleW(nullptr), 0);
+    if (!g_windowsKeyHook)
+        LOGW(
+            "[Input] SetWindowsHookEx(WH_KEYBOARD_LL) failed: %lu; Windows keeps its own "
+            "Win+key shortcuts while a viewer is focused.",
+            GetLastError());
+}
+
+void ReleaseWindowsKey(HWND hwnd) {
+    g_windowsKeyOwners.erase(
+        std::remove(g_windowsKeyOwners.begin(), g_windowsKeyOwners.end(), hwnd),
+        g_windowsKeyOwners.end());
+    if (!g_windowsKeyOwners.empty() || !g_windowsKeyHook) return;
+    UnhookWindowsHookEx(g_windowsKeyHook);
+    g_windowsKeyHook = nullptr;
+}
+
 }
 
 bool ViewerInput::Attach(HWND hwnd, DHScreen* session) {
@@ -39,11 +83,13 @@ bool ViewerInput::Attach(HWND hwnd, DHScreen* session) {
     rid[0].hwndTarget = hwnd;
     rid[1].usUsagePage = kUsagePageGeneric;
     rid[1].usUsage = kUsageKeyboard;
+    rid[1].dwFlags = RIDEV_NOHOTKEYS;
     rid[1].hwndTarget = hwnd;
     if (!RegisterRawInputDevices(rid, 2, sizeof(RAWINPUTDEVICE))) {
         LOGE("[Input] RegisterRawInputDevices failed: %lu", GetLastError());
         return false;
     }
+    ClaimWindowsKey(hwnd);
     attached_ = true;
     return true;
 }
@@ -59,6 +105,7 @@ void ViewerInput::Detach() {
     rid[1].usUsage = kUsageKeyboard;
     rid[1].dwFlags = RIDEV_REMOVE;
     RegisterRawInputDevices(rid, 2, sizeof(RAWINPUTDEVICE));
+    ReleaseWindowsKey(hwnd_);
     attached_ = false;
     hwnd_ = nullptr;
     session_ = nullptr;

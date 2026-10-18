@@ -146,6 +146,12 @@ final class RemoteVideoView: NSView {
         sendKey(event.keyCode, down: false)
     }
 
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        guard window?.firstResponder === self, model?.control != false else { return false }
+        keyDown(with: event)
+        return true
+    }
+
     private func isLockToggle(_ macKeyCode: UInt16) -> Bool {
         guard let mapped = DeskhubClient.mapKey(Int32(macKeyCode)) else { return false }
         return dh_is_lock_toggle_vk(mapped.vk)

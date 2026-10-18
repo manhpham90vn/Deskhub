@@ -40,6 +40,7 @@ trong, app iOS trong bundle của nó, và APK Android trong assets.
 | [FFmpeg](https://ffmpeg.org) 8.0 — `libavcodec`, `libavutil` | LGPL-2.1-or-later | **tĩnh** |
 | [nv-codec-headers](https://github.com/FFmpeg/nv-codec-headers) (header NVENC SDK 13.0) | MIT | chỉ header |
 | [GTK](https://www.gtk.org) 3 | LGPL-2.1-or-later | động |
+| [libwayland-client](https://wayland.freedesktop.org) | MIT | động (keyboard-shortcuts-inhibit trên Wayland) |
 | [GLib / GIO](https://gitlab.gnome.org/GNOME/glib) (`gio-2.0`, `gio-unix-2.0`; portal screen cast) | LGPL-2.1-or-later | động |
 | [PipeWire](https://pipewire.org) 0.3 | MIT | động |
 | [libva](https://github.com/intel/libva) / `libva-drm` | MIT | động |

@@ -1216,3 +1216,15 @@ runner 上与 base commit 的 A/B 结果（偏移仅作为警告，不导致失�
   在启动时失败，所有 OLE 剪贴板调用都返回 `CO_E_NOTINITIALIZED`（"Failed to put data on the clipboard …
   CoInitialize has not been called"）。`OpenClipboard`/`SetClipboardData` 不需要 apartment，因此 Copy 按钮
   与剪贴板同步使用它们；若改把 UI 线程切成 STA，所有从未调用 `CoInitialize` 的工作线程都会失去 apartment。
+
+- **每个桌面 viewer 在持有键盘时把系统键从自己的桌面夺走**：viewer 原样发送按键，因此对 Mac host
+  而言 Windows 键或 Super 键就是 ⌘，复制就是 `Win+C` —— 但 Windows、GNOME 和 macOS 都会在任何窗口
+  看到该键之前先行处理。Windows viewer 安装 `WH_KEYBOARD_LL` 钩子，在某个 viewer 持有焦点时吞掉
+  `VK_LWIN`/`VK_RWIN`（viewer 读取的 raw input 仍会报告它们），并以 `RIDEV_NOHOTKEYS` 注册 raw
+  input。Linux viewer 在 X11 上取得主动键盘 grab —— 只有主动 grab 才能胜过窗口管理器的被动 grab；
+  在 Wayland 上创建 `zwp_keyboard_shortcuts_inhibitor_v1`，并在窗口整个生命周期内保留，因为 mutter
+  对每次请求都会询问用户一次；它通过手写的 `wl_interface` 实现，因为项目只用 C++ 且该协议只有三条
+  消息。macOS viewer 响应 `performKeyEquivalent`，使菜单栏永远不会先截获 ⌘ 快捷键。OS 不交给任何
+  应用的按键 —— Alt+Tab 与 Ctrl+Alt+Del、⌘Tab 与 ⌘Space —— 有意留给 OS：viewer 必须始终可以退出。X11 grab 与 Wayland inhibitor 会拿走一切，包括 Alt+Tab；
+  那里的出路是鼠标，以及 GNOME 的 Super+Esc。
+  交换 Ctrl 与 ⌘ 的方案被否决：host 终端里的 Ctrl+C 必须仍是 Ctrl+C。

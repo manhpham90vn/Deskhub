@@ -1474,3 +1474,20 @@ line.
   been called"). `OpenClipboard`/`SetClipboardData` need no apartment, so the Copy
   buttons and the clipboard sync use them; moving the UI thread to an STA instead would
   strand every worker thread that never calls `CoInitialize`.
+
+- **Each desktop viewer takes the system key away from its own desktop while it has the
+  keyboard**: a viewer sends keys unchanged, so against a Mac the Windows or Super key is
+  ⌘ and copy is `Win+C` — but Windows, GNOME and macOS all act on that key before any
+  window sees it. The Windows viewer installs a `WH_KEYBOARD_LL` hook that swallows
+  `VK_LWIN`/`VK_RWIN` while a viewer has focus (raw input, which is what the viewer
+  reads, still reports them) and registers its raw input with `RIDEV_NOHOTKEYS`. The
+  Linux viewer takes an active keyboard grab on X11, where only an active grab beats the
+  window manager's passive ones, and on Wayland creates a
+  `zwp_keyboard_shortcuts_inhibitor_v1` — kept for the window's lifetime because mutter
+  asks the user once per request — through a hand-written `wl_interface`, since the
+  project is C++-only and the protocol has three messages. The macOS viewer answers
+  `performKeyEquivalent` so the menu bar never takes ⌘ shortcuts first. What the OS hands
+  to no application — Alt+Tab and Ctrl+Alt+Del, ⌘Tab and ⌘Space — stays with it on
+  purpose: the viewer must remain escapable. An X11 grab and a Wayland inhibitor take
+  everything, Alt+Tab included; there the mouse is the way out, and GNOME's Super+Esc. Swapping Ctrl and ⌘ was rejected: Ctrl+C in
+  a host's terminal must stay Ctrl+C.

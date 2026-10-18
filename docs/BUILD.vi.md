@@ -370,7 +370,7 @@ một trong các script này — chạy tay: `gh workflow run publish-packages.y
 
 | Job | Publish | Secret trong environment `stg` |
 | --- | --- | --- |
-| `homebrew` | `Casks/deskhub.rb` trong `manhpham90vn/homebrew-tap`, sinh từ `packaging/homebrew/deskhub.rb`; `Formula/deskhub-cli.rb` đã bỏ được xoá khỏi tap | `HOMEBREW_TAP_TOKEN` — fine-grained PAT, Contents: write trên tap |
+| `homebrew` | `Casks/deskhub.rb` trong `manhpham90vn/homebrew-tap`, sinh từ `packaging/homebrew/deskhub.rb` | `HOMEBREW_TAP_TOKEN` — fine-grained PAT, Contents: write trên tap |
 | `build-apt-repo` → `deploy-apt-repo` | apt repository đã ký, chứa deb của ba release gần nhất, trên GitHub Pages tại `/apt` (`scripts/build-apt-repo.sh`) | `APT_GPG_PRIVATE_KEY`, `APT_GPG_PASSPHRASE` |
 
 Mỗi job cần thiết lập một lần trước tag đầu tiên chạy nó:

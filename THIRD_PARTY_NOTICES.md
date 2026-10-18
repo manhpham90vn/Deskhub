@@ -37,6 +37,7 @@ them in the app bundle's `Contents/Resources`, which also covers the `deskhub-cl
 | [FFmpeg](https://ffmpeg.org) 8.0 — `libavcodec`, `libavutil` | LGPL-2.1-or-later | **static** |
 | [nv-codec-headers](https://github.com/FFmpeg/nv-codec-headers) (NVENC SDK 13.0 headers) | MIT | headers only |
 | [GTK](https://www.gtk.org) 3 | LGPL-2.1-or-later | dynamic |
+| [libwayland-client](https://wayland.freedesktop.org) | MIT | dynamic (keyboard-shortcuts-inhibit on Wayland) |
 | [GLib / GIO](https://gitlab.gnome.org/GNOME/glib) (`gio-2.0`, `gio-unix-2.0`; screen-cast portal) | LGPL-2.1-or-later | dynamic |
 | [PipeWire](https://pipewire.org) 0.3 | MIT | dynamic |
 | [libva](https://github.com/intel/libva) / `libva-drm` | MIT | dynamic |

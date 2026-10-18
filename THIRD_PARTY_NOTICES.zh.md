@@ -38,6 +38,7 @@ bundle 中，Android APK 放在其 assets 中。
 | [FFmpeg](https://ffmpeg.org) 8.0 —— `libavcodec`、`libavutil` | LGPL-2.1-or-later | **静态** |
 | [nv-codec-headers](https://github.com/FFmpeg/nv-codec-headers)（NVENC SDK 13.0 头文件） | MIT | 仅头文件 |
 | [GTK](https://www.gtk.org) 3 | LGPL-2.1-or-later | 动态 |
+| [libwayland-client](https://wayland.freedesktop.org) | MIT | 动态（Wayland 上的 keyboard-shortcuts-inhibit） |
 | [GLib / GIO](https://gitlab.gnome.org/GNOME/glib)（`gio-2.0`、`gio-unix-2.0`；屏幕共享 portal） | LGPL-2.1-or-later | 动态 |
 | [PipeWire](https://pipewire.org) 0.3 | MIT | 动态 |
 | [libva](https://github.com/intel/libva) / `libva-drm` | MIT | 动态 |

@@ -150,6 +150,7 @@ CLI 可在 Windows 和 Linux 上查看远程屏幕；macOS 上请使用 app 观�
 | I-9 | host 优先 | 位于 host 机器前的用户所产生的 input 优先于任何远端 viewer。 |
 | I-10 | 同一时刻仅一个 viewer 操作 | 在同一共享 display 的 viewer 中，同一时刻仅有一个控制 mouse 与 keyboard。发生竞争时，先加入该 display 者优先；其他 viewer 的 input 将被忽略，直至当前操作者持续 **1 秒**无操作。不同 display 的 viewer 各自独立仲裁。 |
 | I-11 | 强制 view-only | 当 host 关闭了 control，或 viewer 选择仅观看时，没有 input 能够到达 host，viewer 窗口也会显示其处于 view-only 状态。 |
+| I-12 | 系统键送往 host（桌面） | 当某个 viewer 窗口持有键盘时，Windows 键、Super 键或 ⌘ 及其参与的所有组合都送往 host，而不是 viewer 自己的桌面。在 Windows 上，`Win+C`、`Win+V` 和 `Win+Tab` 不再打开 Copilot、剪贴板历史或任务视图，单独按下该键也不会打开开始菜单。在 Linux 上，桌面的 Super 快捷键改为到达 host；在 Wayland 上通过 shortcuts inhibitor 实现，GNOME 可能会对每个窗口询问一次是否允许。在 macOS 上，原本会被应用菜单截获的 ⌘ 快捷键，如 ⌘W、⌘H 和 ⌘Q，送往 host。viewer 所在 OS 不交给任何应用的按键仍由它处理：Windows 上的 Alt+Tab 和 Ctrl+Alt+Del，macOS 上的 ⌘Tab、⌘Space 和 Mission Control 键。在 Linux 上，viewer 持有焦点时所有按键都送往 host，包括 Alt+Tab，因此请用鼠标离开；GNOME 也可通过 Super+Esc 取回其快捷键。对 Mac host，`Win` 和 Super 到达时即为 ⌘，因此 `Win+C` 复制、`Win+V` 粘贴，与 ⌘C 和 ⌘V 一致；`Ctrl` 仍以 Control 到达，Mac 不会将其视为 ⌘。一旦其他窗口取得键盘，viewer 的桌面即恢复其全部快捷键。 |
 
 ## 9. 访问控制与安全
 

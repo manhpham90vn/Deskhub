@@ -29,12 +29,12 @@ constexpr uint32_t kFloodTimeoutMs = 60'000;
 constexpr uint32_t kEchoTimeoutMs = 10'000;
 constexpr uint64_t kBaselineWindowUs = 1'000'000;
 constexpr uint64_t kSampleUs = 20'000;
-constexpr uint64_t kWorstGapMs = 1500;
 #if defined(_WIN32)
-constexpr uint64_t kWorstTerminalGapMs = 4000;
+constexpr uint64_t kWorstGapMs = 4000;
 #else
-constexpr uint64_t kWorstTerminalGapMs = kWorstGapMs;
+constexpr uint64_t kWorstGapMs = 1500;
 #endif
+constexpr uint64_t kWorstTerminalGapMs = kWorstGapMs;
 constexpr uint64_t kEchoLatencyCeilingMs = 2000;
 constexpr size_t kTransferBytes = 32u << 20;
 

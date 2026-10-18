@@ -9,6 +9,7 @@
 #include "deskhub/input/PointerLockState.h"
 #include "deskhubp/net/UdpSocket.h"
 #include "deskhubp/client/ScreenViewer.h"
+#include "gtk/WaylandShortcutsInhibitor.h"
 #include "render/VideoRenderer.h"
 
 class ViewerWindow {
@@ -31,7 +32,8 @@ private:
     bool InContent(double px, double py) const;
 
     void ApplyLockEffect(const deskhub::PointerLockEffect& effect);
-    void GrabPointer(bool locked);
+    GdkSeatCapabilities WantedSeatGrab() const;
+    void SyncSeatGrab();
     void UpdateTitle();
     void UpdateLinkLabel();
     void SizeToVideo();
@@ -46,6 +48,7 @@ private:
     static gboolean OnMotion(GtkWidget* w, GdkEventMotion* e, gpointer user);
     static gboolean OnButton(GtkWidget* w, GdkEventButton* e, gpointer user);
     static gboolean OnScroll(GtkWidget* w, GdkEventScroll* e, gpointer user);
+    static gboolean OnFocusIn(GtkWidget* w, GdkEventFocus* e, gpointer user);
     static gboolean OnFocusOut(GtkWidget* w, GdkEventFocus* e, gpointer user);
     static gboolean OnTick(GtkWidget* w, GdkFrameClock* clock, gpointer user);
     static void OnDestroy(GtkWidget* w, gpointer user);
@@ -77,6 +80,9 @@ private:
     deskhubp::ScreenViewer<AvDecoder, VideoSink*> loop_;
 
     deskhub::PointerLockState pointer_;
+    WaylandShortcutsInhibitor shortcuts_;
+    GdkSeatCapabilities grabbed_ = GdkSeatCapabilities(0);
+    bool keyboardFocus_ = false;
     double lastPx_ = 0, lastPy_ = 0;
     bool haveLastPos_ = false;
 };

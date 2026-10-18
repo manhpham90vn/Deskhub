@@ -40,6 +40,7 @@ bundle の `Contents/Resources` に収め、これは中の `deskhub-cli` と `D
 | [FFmpeg](https://ffmpeg.org) 8.0 —— `libavcodec`、`libavutil` | LGPL-2.1-or-later | **静的** |
 | [nv-codec-headers](https://github.com/FFmpeg/nv-codec-headers)（NVENC SDK 13.0 のヘッダ） | MIT | ヘッダのみ |
 | [GTK](https://www.gtk.org) 3 | LGPL-2.1-or-later | 動的 |
+| [libwayland-client](https://wayland.freedesktop.org) | MIT | 動的（Wayland の keyboard-shortcuts-inhibit） |
 | [GLib / GIO](https://gitlab.gnome.org/GNOME/glib)（`gio-2.0`、`gio-unix-2.0`。画面共有 portal） | LGPL-2.1-or-later | 動的 |
 | [PipeWire](https://pipewire.org) 0.3 | MIT | 動的 |
 | [libva](https://github.com/intel/libva) / `libva-drm` | MIT | 動的 |
