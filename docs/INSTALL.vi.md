@@ -5,9 +5,9 @@
 Chọn nền tảng của bạn bên dưới để cài bản release đã build sẵn. Bạn không cần checkout
 source. Nếu muốn tự compile Deskhub, xem [`BUILD.vi.md`](BUILD.vi.md).
 
-Bộ cài desktop và file APK Android nằm trên
-[trang Releases](https://github.com/manhpham90vn/Deskhub/releases). Bản Android cũng có
-trên Google Play, còn bản beta iOS trên TestFlight.
+Bộ cài desktop nằm trên
+[trang Releases](https://github.com/manhpham90vn/Deskhub/releases). Bản Android có trên
+Google Play, còn bản beta iOS trên TestFlight.
 
 Đây là bản dịch của [`INSTALL.md`](INSTALL.md). Nếu hai bản có khác biệt, bản tiếng Anh là
 bản chuẩn.
@@ -20,7 +20,7 @@ bản chuẩn.
 | 🐧 Fedora (Workstation và KDE spin) | `deskhub-v*-x86_64.rpm` | `sudo dnf install ./deskhub-v*-x86_64.rpm` |
 | 🐧 openSUSE Tumbleweed | `deskhub-v*-x86_64.rpm` | `sudo zypper install ./deskhub-v*-x86_64.rpm` |
 | 🐧 Distro Linux khác | — | Build từ source: [BUILD.vi.md](BUILD.vi.md) |
-| 🤖 Android | `deskhub-v*-android.apk` | Cài apk, hoặc [Google Play](https://play.google.com/store/apps/details?id=com.manhpham.deskhub) |
+| 🤖 Android | — | [Google Play](https://play.google.com/store/apps/details?id=com.manhpham.deskhub) |
 | 📱 iOS | — | [TestFlight](https://testflight.apple.com/join/7qY7wgpd) |
 
 Mọi gói desktop còn cài kèm `deskhub-cli` cho các lệnh terminal và script. Trên Windows
@@ -272,15 +272,14 @@ sudo gpasswd -d "$USER" input
 Deskhub cần **Android 8.0** trở lên. Khi làm host, Deskhub chỉ share màn hình ở chế độ
 view-only và yêu cầu **Android 10+**.
 
-**Cài apk trực tiếp** — tải `deskhub-v*-android.apk` từ
-[Releases](https://github.com/manhpham90vn/Deskhub/releases) và cài. Nếu Android từ chối
-cài đè lên bản từ Google Play, hoặc ngược lại, hãy gỡ bản kia trước — việc này xoá key của
-bản đó, nên các host phải cho thiết bị vào lại.
+Cài từ
+**[play.google.com/store/apps/details?id=com.manhpham.deskhub](https://play.google.com/store/apps/details?id=com.manhpham.deskhub)**.
+Mỗi bản release vào track internal của Google Play trước, và lên store khi được promote,
+nên store có thể chậm hơn trang Releases một chút.
 
-**Google Play** — cài từ
-[play.google.com/store/apps/details?id=com.manhpham.deskhub](https://play.google.com/store/apps/details?id=com.manhpham.deskhub).
-Bản trên Google Play có thể chậm hơn apk trên Releases: mỗi bản release vào track internal
-của Google Play trước, và chỉ lên store khi được promote.
+Các bản release đến 9.3.1 còn đính kèm apk; các bản mới hơn thì không. Máy đang chạy apk
+vẫn dùng được, nhưng Android sẽ không cài đè bản Google Play lên nó: hãy gỡ apk trước —
+việc này xoá key của bản đó, nên các host phải cho thiết bị vào lại.
 
 ## 📱 iOS
 

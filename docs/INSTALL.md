@@ -5,9 +5,9 @@
 Choose your platform below to install a prebuilt release. You do not need to check out
 the source code. If you want to build Deskhub yourself, see [`BUILD.md`](BUILD.md).
 
-Desktop installers and the Android APK are on the
-[Releases page](https://github.com/manhpham90vn/Deskhub/releases). The Android app is also
-on Google Play, and the iOS beta on TestFlight.
+Desktop installers are on the
+[Releases page](https://github.com/manhpham90vn/Deskhub/releases). The Android app is on
+Google Play, and the iOS beta on TestFlight.
 
 | Platform | File | How to install |
 | --- | --- | --- |
@@ -17,7 +17,7 @@ on Google Play, and the iOS beta on TestFlight.
 | 🐧 Fedora (Workstation & KDE spin) | `deskhub-v*-x86_64.rpm` | `sudo dnf install ./deskhub-v*-x86_64.rpm` |
 | 🐧 openSUSE Tumbleweed | `deskhub-v*-x86_64.rpm` | `sudo zypper install ./deskhub-v*-x86_64.rpm` |
 | 🐧 Other Linux distributions | — | Build from source: [BUILD.md](BUILD.md) |
-| 🤖 Android | `deskhub-v*-android.apk` | Install the apk, or [Google Play](https://play.google.com/store/apps/details?id=com.manhpham.deskhub) |
+| 🤖 Android | — | [Google Play](https://play.google.com/store/apps/details?id=com.manhpham.deskhub) |
 | 📱 iOS | — | [TestFlight](https://testflight.apple.com/join/7qY7wgpd) |
 
 Every desktop package also installs `deskhub-cli` for terminal commands and scripts. On
@@ -276,15 +276,14 @@ sudo gpasswd -d "$USER" input
 Deskhub needs **Android 8.0** or later. Hosting is a view-only screen share and needs
 **Android 10+**.
 
-**Direct apk** — download `deskhub-v*-android.apk` from
-[Releases](https://github.com/manhpham90vn/Deskhub/releases) and install it. If Android
-refuses to install it over a copy from Google Play, or the other way round, uninstall the
-other copy first — that removes its key, so hosts have to let the device in again.
+Install from
+**[play.google.com/store/apps/details?id=com.manhpham.deskhub](https://play.google.com/store/apps/details?id=com.manhpham.deskhub)**.
+Each release reaches Google Play's internal track first and the store when it is
+promoted, so the store can be a little behind the Releases page.
 
-**Google Play** — install from
-[play.google.com/store/apps/details?id=com.manhpham.deskhub](https://play.google.com/store/apps/details?id=com.manhpham.deskhub).
-Google Play can trail the apk on Releases: each release reaches Google Play's internal
-track first and the store only when it is promoted.
+Releases up to 9.3.1 also attached an apk; newer ones do not. A phone still running one
+keeps working, but Android will not install the Play copy over it: uninstall the apk
+first — that removes its key, so hosts have to let the device in again.
 
 ## 📱 iOS
 

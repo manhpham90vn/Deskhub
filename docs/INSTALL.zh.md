@@ -5,8 +5,8 @@
 按下面的平台说明安装已预先 build 的 release，无需 checkout source。如果想自行编译
 Deskhub，请参阅 [`BUILD.zh.md`](BUILD.zh.md)。
 
-桌面安装包和 Android APK 可从
-[Releases 页面](https://github.com/manhpham90vn/Deskhub/releases) 下载。Android 版也已
+桌面安装包可从
+[Releases 页面](https://github.com/manhpham90vn/Deskhub/releases) 下载。Android 版已
 上架 Google Play，iOS beta 则通过 TestFlight 获取。
 
 本文件是 [`INSTALL.md`](INSTALL.md) 的译本；若两者有出入，以英文版为准。
@@ -19,7 +19,7 @@ Deskhub，请参阅 [`BUILD.zh.md`](BUILD.zh.md)。
 | 🐧 Fedora（Workstation 与 KDE spin） | `deskhub-v*-x86_64.rpm` | `sudo dnf install ./deskhub-v*-x86_64.rpm` |
 | 🐧 openSUSE Tumbleweed | `deskhub-v*-x86_64.rpm` | `sudo zypper install ./deskhub-v*-x86_64.rpm` |
 | 🐧 其他 Linux 发行版 | — | 从源码构建：[BUILD.zh.md](BUILD.zh.md) |
-| 🤖 Android | `deskhub-v*-android.apk` | 安装 apk，或从 [Google Play](https://play.google.com/store/apps/details?id=com.manhpham.deskhub) 安装 |
+| 🤖 Android | — | 从 [Google Play](https://play.google.com/store/apps/details?id=com.manhpham.deskhub) 安装 |
 | 📱 iOS | —— | [TestFlight](https://testflight.apple.com/join/7qY7wgpd) |
 
 每个桌面软件包还会安装 `deskhub-cli`，用于 terminal 命令或脚本。在 Windows 和 Linux 上，
@@ -250,15 +250,14 @@ sudo gpasswd -d "$USER" input
 Deskhub 需要 **Android 8.0** 或更高版本。作为 host 时仅支持 view-only 的屏幕共享，并且
 需要 **Android 10+**。
 
-**直接安装 apk** —— 从
-[Releases](https://github.com/manhpham90vn/Deskhub/releases) 下载
-`deskhub-v*-android.apk` 并安装。如果 Android 拒绝用它覆盖从 Google Play 安装的版本（或
-反过来），请先卸载另一个版本 —— 这会删除该版本的 key，因此各 host 需要重新放行这台设备。
+从
+**[play.google.com/store/apps/details?id=com.manhpham.deskhub](https://play.google.com/store/apps/details?id=com.manhpham.deskhub)** 安装。
+每个 release 先进入 Google Play 的 internal track，被 promote 后才会上架，因此商店版本
+可能比 Releases 页面稍晚一些。
 
-**Google Play** —— 从
-[play.google.com/store/apps/details?id=com.manhpham.deskhub](https://play.google.com/store/apps/details?id=com.manhpham.deskhub) 安装。
-Google Play 上的版本可能落后于 Releases 上的 apk：每个 release 先进入 Google Play 的
-internal track，只有在被 promote 后才会上架。
+9.3.1 及更早的 release 还附带 apk，之后的 release 不再附带。仍在运行 apk 的手机可以继续
+使用，但 Android 不会用 Google Play 版覆盖它：请先卸载 apk —— 这会删除该版本的 key，
+因此各 host 需要重新放行这台设备。
 
 ## 📱 iOS
 

@@ -5,9 +5,9 @@
 お使いのプラットフォームを選び、build 済みの release をインストールできる。source を
 checkout する必要はない。自分でコンパイルする場合は [`BUILD.ja.md`](BUILD.ja.md) を参照。
 
-デスクトップのインストーラーと Android APK は
+デスクトップのインストーラーは
 [Releases ページ](https://github.com/manhpham90vn/Deskhub/releases) から入手できる。
-Android 版は Google Play でも、iOS の beta は TestFlight で配布している。
+Android 版は Google Play で、iOS の beta は TestFlight で配布している。
 
 本書は [`INSTALL.md`](INSTALL.md) の翻訳。食い違いがある場合は英語版が正文。
 
@@ -19,7 +19,7 @@ Android 版は Google Play でも、iOS の beta は TestFlight で配布して�
 | 🐧 Fedora（Workstation と KDE spin） | `deskhub-v*-x86_64.rpm` | `sudo dnf install ./deskhub-v*-x86_64.rpm` |
 | 🐧 openSUSE Tumbleweed | `deskhub-v*-x86_64.rpm` | `sudo zypper install ./deskhub-v*-x86_64.rpm` |
 | 🐧 その他の Linux ディストリビューション | — | ソースから build する: [BUILD.ja.md](BUILD.ja.md) |
-| 🤖 Android | `deskhub-v*-android.apk` | apk をインストール、または [Google Play](https://play.google.com/store/apps/details?id=com.manhpham.deskhub) から |
+| 🤖 Android | — | [Google Play](https://play.google.com/store/apps/details?id=com.manhpham.deskhub) から |
 | 📱 iOS | — | [TestFlight](https://testflight.apple.com/join/7qY7wgpd) |
 
 どのデスクトップパッケージも、terminal からの操作やスクリプト向けに `deskhub-cli` も
@@ -280,14 +280,14 @@ sudo gpasswd -d "$USER" input
 Deskhub には **Android 8.0** 以降が必要である。host としては view-only の画面共有のみを
 行い、**Android 10+** を必要とする。
 
-**apk を直接インストール** —— [Releases](https://github.com/manhpham90vn/Deskhub/releases)
-から `deskhub-v*-android.apk` をダウンロードしてインストールする。Google Play 版の上に
-（またはその逆に）インストールできないと Android に拒否された場合は、先にもう一方を
-アンインストールする。その key も削除されるため、各 host で改めて許可してもらう必要がある。
+**[play.google.com/store/apps/details?id=com.manhpham.deskhub](https://play.google.com/store/apps/details?id=com.manhpham.deskhub)**
+からインストールする。各 release はまず Google Play の internal track に入り、promote
+されて初めてストアに届くため、ストア版は Releases ページより少し遅れることがある。
 
-**Google Play** —— [play.google.com/store/apps/details?id=com.manhpham.deskhub](https://play.google.com/store/apps/details?id=com.manhpham.deskhub)
-からインストールする。Google Play 版は Releases の apk より遅れることがある。各 release は
-まず Google Play の internal track に入り、promote されて初めてストアに届く。
+9.3.1 までの release には apk も添付していたが、それ以降は添付しない。apk のまま動いて
+いる端末はそのまま使えるが、Android はその上に Google Play 版をインストールしない。先に
+apk をアンインストールすること。その key も削除されるため、各 host で改めて許可して
+もらう必要がある。
 
 ## 📱 iOS
 

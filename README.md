@@ -73,7 +73,7 @@ Everything else is on [Releases](https://github.com/manhpham90vn/Deskhub/release
 - **Ubuntu / Debian / Mint without the repository** — `deskhub-v*-amd64.deb`
 - **Fedora / openSUSE** — `deskhub-v*-x86_64.rpm`, installed with `dnf` or `zypper`
 - **Other Linux distributions** — build from source, see [BUILD.md](docs/BUILD.md)
-- **Android** — `deskhub-v*-android.apk`, or [Google Play](https://play.google.com/store/apps/details?id=com.manhpham.deskhub)
+- **Android** — [Google Play](https://play.google.com/store/apps/details?id=com.manhpham.deskhub)
 - **iOS** — [TestFlight](https://testflight.apple.com/join/7qY7wgpd)
 
 Details and permissions per platform: [INSTALL.md](docs/INSTALL.md).

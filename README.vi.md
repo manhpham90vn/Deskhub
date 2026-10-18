@@ -72,7 +72,7 @@ Các nền tảng còn lại lấy trên [Releases](https://github.com/manhpham9
 - **Ubuntu / Debian / Mint không dùng repository** — `deskhub-v*-amd64.deb`
 - **Fedora / openSUSE** — `deskhub-v*-x86_64.rpm`, cài bằng `dnf` hoặc `zypper`
 - **Distro Linux khác** — build từ source, xem [BUILD.vi.md](docs/BUILD.vi.md)
-- **Android** — `deskhub-v*-android.apk`, hoặc [Google Play](https://play.google.com/store/apps/details?id=com.manhpham.deskhub)
+- **Android** — [Google Play](https://play.google.com/store/apps/details?id=com.manhpham.deskhub)
 - **iOS** — [TestFlight](https://testflight.apple.com/join/7qY7wgpd)
 
 Chi tiết và quyền cần cấp trên từng nền tảng: [INSTALL.vi.md](docs/INSTALL.vi.md).

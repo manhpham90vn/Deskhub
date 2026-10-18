@@ -73,7 +73,7 @@ sudo apt install deskhub       # デスクトップ app + deskhub-cli
 - **repository を使わない Ubuntu / Debian / Mint** —— `deskhub-v*-amd64.deb`
 - **Fedora / openSUSE** —— `deskhub-v*-x86_64.rpm` を `dnf` または `zypper` でインストール
 - **その他の Linux ディストリビューション** —— ソースから build する。[BUILD.ja.md](docs/BUILD.ja.md) を参照
-- **Android** —— `deskhub-v*-android.apk`、または [Google Play](https://play.google.com/store/apps/details?id=com.manhpham.deskhub)
+- **Android** —— [Google Play](https://play.google.com/store/apps/details?id=com.manhpham.deskhub)
 - **iOS** —— [TestFlight](https://testflight.apple.com/join/7qY7wgpd)
 
 プラットフォームごとの詳細と必要な権限：[INSTALL.ja.md](docs/INSTALL.ja.md)。

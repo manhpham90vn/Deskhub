@@ -71,7 +71,7 @@ app 内部的 `Deskhub.app/Contents/MacOS/deskhub-cli`。
 - **不使用 repository 的 Ubuntu / Debian / Mint** —— `deskhub-v*-amd64.deb`
 - **Fedora / openSUSE** —— `deskhub-v*-x86_64.rpm`，用 `dnf` 或 `zypper` 安装
 - **其他 Linux 发行版** —— 从源码构建，见 [BUILD.zh.md](docs/BUILD.zh.md)
-- **Android** —— `deskhub-v*-android.apk`，或 [Google Play](https://play.google.com/store/apps/details?id=com.manhpham.deskhub)
+- **Android** —— [Google Play](https://play.google.com/store/apps/details?id=com.manhpham.deskhub)
 - **iOS** —— [TestFlight](https://testflight.apple.com/join/7qY7wgpd)
 
 各平台的详细说明与所需权限：[INSTALL.zh.md](docs/INSTALL.zh.md)。
