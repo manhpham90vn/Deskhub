@@ -91,8 +91,9 @@ void WaylandShortcutsInhibitor::Inhibit(GtkWidget* toplevel) {
 
     if (!manager_) manager_ = BindInhibitManager(gdk_wayland_display_get_wl_display(display));
     if (!manager_) {
-        LOGW("[Viewer] This Wayland compositor offers no keyboard-shortcuts-inhibit; the "
-             "desktop keeps its Super shortcuts while the viewer is focused.");
+        LOGW(
+            "[Viewer] This Wayland compositor offers no keyboard-shortcuts-inhibit; the "
+            "desktop keeps its Super shortcuts while the viewer is focused.");
         return;
     }
 
