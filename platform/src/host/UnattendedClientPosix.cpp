@@ -23,7 +23,7 @@ std::string CanonicalPath(const std::string& path) {
 
 bool OnlyRootMayWriteBeside(const std::string& socketPath) {
     const std::string folder = std::filesystem::path(socketPath).parent_path().string();
-    struct stat info {};
+    struct stat info{};
     if (stat(folder.c_str(), &info) != 0) return false;
     return info.st_uid == 0 && (info.st_mode & (S_IWGRP | S_IWOTH)) == 0;
 }

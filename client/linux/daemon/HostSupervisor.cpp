@@ -125,8 +125,9 @@ void HostSupervisor::HandOverLocked(const char* why) {
     kill(child_, SIGKILL);
     int status = 0;
     waitpid(child_, &status, 0);
-    LOGI("[Daemon] Handed over from the unattended host (pid %d) without ending its viewers' "
-         "sessions, so they redial: %s.",
+    LOGI(
+        "[Daemon] Handed over from the unattended host (pid %d) without ending its viewers' "
+        "sessions, so they redial: %s.",
         int(child_), why);
     child_ = -1;
     lastExitUs_ = NowUs();

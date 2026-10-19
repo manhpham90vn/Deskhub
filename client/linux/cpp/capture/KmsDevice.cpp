@@ -13,7 +13,6 @@
 #include <xf86drm.h>
 #include <xf86drmMode.h>
 
-
 namespace {
 
 constexpr uint32_t kMaxCards = 16;
@@ -98,7 +97,7 @@ int32_t SignedProperty(const std::map<std::string, uint64_t>& props, const char*
 }
 
 uint64_t DmaBufIdentity(int fd) {
-    struct stat info {};
+    struct stat info{};
     if (fstat(fd, &info) != 0) return 0;
     return uint64_t(info.st_ino);
 }

@@ -168,8 +168,9 @@ void ServeClient(DaemonState& state, LocalSocket control) {
     const std::optional<deskhub::UnattendedAction> action = ReadRequest(control, parser);
     if (!action) return;
     if (!Permits(rights, *action)) {
-        LOGW("[Daemon] Refused a configuration from pid %d (uid %u): it may not change access "
-             "before sign-in.",
+        LOGW(
+            "[Daemon] Refused a configuration from pid %d (uid %u): it may not change access "
+            "before sign-in.",
             peer->pid, unsigned(peer->uid));
         return;
     }

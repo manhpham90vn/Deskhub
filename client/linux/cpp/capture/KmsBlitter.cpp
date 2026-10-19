@@ -21,7 +21,6 @@ constexpr size_t kTargetCount = 3;
 constexpr size_t kMaxCachedImages = 8;
 constexpr GLuint kPositionAttribute = 0;
 constexpr GLuint kTexcoordAttribute = 1;
-constexpr GLsizei kFloatsPerVertex = 4;
 constexpr GLsizei kVerticesPerQuad = 4;
 
 constexpr const char* kVertexShader =
@@ -46,6 +45,10 @@ constexpr const char* kFragmentShader =
 
 struct Rect {
     float x0, y0, x1, y1;
+};
+
+struct Vertex {
+    GLfloat x, y, u, v;
 };
 
 struct ImportedImage {
@@ -135,15 +138,15 @@ float Ndc(float pixel, uint32_t extent) {
 void DrawQuad(const Rect& target, const Rect& source, uint32_t targetW, uint32_t targetH) {
     const float x0 = Ndc(target.x0, targetW), x1 = Ndc(target.x1, targetW);
     const float y0 = Ndc(target.y0, targetH), y1 = Ndc(target.y1, targetH);
-    const std::array<GLfloat, kFloatsPerVertex * kVerticesPerQuad> vertices = {
-        x0, y0, source.x0, source.y0,
-        x1, y0, source.x1, source.y0,
-        x0, y1, source.x0, source.y1,
-        x1, y1, source.x1, source.y1,
-    };
-    const GLsizei stride = kFloatsPerVertex * GLsizei(sizeof(GLfloat));
-    glVertexAttribPointer(kPositionAttribute, 2, GL_FLOAT, GL_FALSE, stride, vertices.data());
-    glVertexAttribPointer(kTexcoordAttribute, 2, GL_FLOAT, GL_FALSE, stride, vertices.data() + 2);
+    const std::array<Vertex, kVerticesPerQuad> vertices = {{
+        {x0, y0, source.x0, source.y0},
+        {x1, y0, source.x1, source.y0},
+        {x0, y1, source.x0, source.y1},
+        {x1, y1, source.x1, source.y1},
+    }};
+    const auto stride = GLsizei(sizeof(Vertex));
+    glVertexAttribPointer(kPositionAttribute, 2, GL_FLOAT, GL_FALSE, stride, &vertices[0].x);
+    glVertexAttribPointer(kTexcoordAttribute, 2, GL_FLOAT, GL_FALSE, stride, &vertices[0].u);
     glDrawArrays(GL_TRIANGLE_STRIP, 0, kVerticesPerQuad);
 }
 
@@ -240,8 +243,9 @@ struct KmsBlitter::Impl {
         if (warnedImport) return;
         warnedImport = true;
         const uint32_t f = buffer.format;
-        LOGE("[KMS] The GPU would not import the scanout buffer (format %c%c%c%c, modifier "
-             "0x%llx, EGL error 0x%x).",
+        LOGE(
+            "[KMS] The GPU would not import the scanout buffer (format %c%c%c%c, modifier "
+            "0x%llx, EGL error 0x%x).",
             char(f), char(f >> 8), char(f >> 16), char(f >> 24),
             static_cast<unsigned long long>(buffer.modifier), unsigned(eglGetError()));
     }
@@ -362,8 +366,9 @@ KmsBlitter::~KmsBlitter() {
 bool KmsBlitter::Open(const std::string& renderNode) {
     Close();
     if (impl_->OpenDisplay(renderNode) && impl_->OpenContext()) return true;
-    LOGE("[KMS] %s cannot import scanout buffers through EGL (dma-buf import with modifiers, "
-         "surfaceless GLES 2 and external images are all needed).",
+    LOGE(
+        "[KMS] %s cannot import scanout buffers through EGL (dma-buf import with modifiers, "
+        "surfaceless GLES 2 and external images are all needed).",
         renderNode.c_str());
     Close();
     return false;
