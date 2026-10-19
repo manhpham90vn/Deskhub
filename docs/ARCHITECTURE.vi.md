@@ -331,8 +331,11 @@ HostEngine (mỗi app một instance, sở hữu SessionTransport)
   dừng.
 - macOS trước khi đăng nhập (T-28): app nhúng `Contents/MacOS/DeskhubDaemon` và một plist
   LaunchDaemon dưới `Contents/Library/LaunchDaemons`, đăng ký qua `SMAppService.daemon` khi
-  setting được tick (một lần xác nhận *Allow in background*). Daemon chạy root và lắng nghe
-  trên Unix socket `/var/run/deskhub/control.sock` qua `ServeUnattendedControl`
+  setting được tick (một lần xác nhận *Allow in background*). Trước khi đăng ký, và lại
+  mỗi lần khởi động khi setting đang bật, app xóa `com.apple.quarantine` khỏi daemon,
+  plist của nó và `deskhub-cli`: launchd chạy daemon lúc boot như một executable trần mà
+  Gatekeeper chỉ xác minh được online, trong khi mạng lúc đó chưa lên. Daemon chạy root
+  và lắng nghe trên Unix socket `/var/run/deskhub/control.sock` qua `ServeUnattendedControl`
   (`deskhubp/host/UnattendedDaemon`, dùng chung với Linux), hàm đưa byte của mỗi kết nối
   (`deskhubp/net/LocalSocket`) qua `UnattendedControlServer`
   (`core/session/host/UnattendedControl`), cùng luồng request với pipe Windows: `Takeover`,
@@ -647,6 +650,19 @@ coverage của core.
   đăng nhập, khác Windows, vì launchd tháo phiên LoginWindow ngay lúc đó; host trong phiên
   của chính người dùng khi app không share cần một agent theo người dùng và một vòng cấp
   quyền TCC nữa, để lại cho phiên sau.
+
+- **App tự xóa cờ quarantine trên daemon của mình**: một DMG được copy tay hay qua Homebrew
+  để lại `com.apple.quarantine` trên mọi file trong bundle. Bản thân app không sao, vì
+  Gatekeeper kiểm tra cả bundle bằng ticket notarization đã staple sẵn bên trong. Daemon
+  thì không: launchd chạy `Contents/MacOS/DeskhubDaemon` lúc boot như một executable trần,
+  ticket không staple được vào executable, và tra cứu online thất bại khi mạng chưa lên,
+  nên Gatekeeper giết nó khi chưa có ai đăng nhập để hỏi, và lần từ chối ấy dính vào đường
+  dẫn bundle: lần mở app tiếp theo gặp *Apple could not verify* và phải vào System Settings
+  bấm *Open Anyway*, kể cả sau khi cài lại. Xóa cờ trên daemon, plist của nó và
+  `deskhub-cli` khi setting được tick, và lại mỗi lần app khởi động khi setting đang bật để
+  bản cập nhật cũng được xử lý, là điều duy nhất Gatekeeper cần; app chỉ chạy tới đoạn code
+  đó sau khi Gatekeeper đã cho bundle qua. Phương án còn lại, pkg, là lý do daemon cài bằng
+  installer không bao giờ gặp chuyện này, và vẫn gác lại vì các lý do ở trên.
 
 - **Linux capture scanout, qua EGL, cả trước lẫn sau khi đăng nhập**: greeter chạy trong
   một phiên riêng nơi ScreenCast portal không tồn tại, nên host đọc thứ display engine đang

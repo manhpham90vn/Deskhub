@@ -335,7 +335,11 @@ HostEngine（app ごとに 1 インスタンス、SessionTransport を保持）
   これを送る。
 - macOS のサインイン前アクセス（T-28）: app は `Contents/MacOS/DeskhubDaemon` と
   `Contents/Library/LaunchDaemons` 配下の LaunchDaemon plist を同梱し、設定にチェックが
-  入ると `SMAppService.daemon` で登録する（*Allow in background* の承認は 1 回）。daemon は
+  入ると `SMAppService.daemon` で登録する（*Allow in background* の承認は 1 回）。登録の前、
+  そして設定がオンの間はアプリ起動のたびに、app は daemon・その plist・`deskhub-cli` から
+  `com.apple.quarantine` を外す。launchd は起動時に daemon を裸の実行ファイルとして立ち上げ、
+  Gatekeeper はそれをオンラインでしか検証できず、その時点ではネットワークがまだ上がって
+  いないからである。daemon は
   root で動き、`ServeUnattendedControl`（`deskhubp/host/UnattendedDaemon`、Linux と共有）を
   通して Unix socket `/var/run/deskhub/control.sock` で待ち受ける。これは各接続のバイト列
   （`deskhubp/net/LocalSocket`）を `UnattendedControlServer`
@@ -658,6 +662,21 @@ scaling の 2 つの判定とともに実行する（共有 runner には時間�
   その瞬間に LoginWindow session を解体するからである。app が共有していない間に利用者
   自身の session で host することには利用者ごとの agent と 2 回目の TCC 許可が必要で、
   後の段階に残してある。
+
+- **app は自分の daemon の quarantine フラグを自分で外す**：手動でも Homebrew 経由でも、DMG
+  からコピーした app は bundle 内の全ファイルに `com.apple.quarantine` が付いたままになる。
+  app 自体は問題ない。Gatekeeper は bundle に staple された公証 ticket で bundle 全体を検証
+  するからである。daemon はそうではない。launchd は起動時に `Contents/MacOS/DeskhubDaemon`
+  を裸の実行ファイルとして立ち上げ、ticket は単体の実行ファイルには staple できず、
+  ネットワークが上がる前のオンライン照会は失敗する。そのため Gatekeeper は、誰もサインイン
+  しておらず尋ねる相手もいないまま daemon を殺し、その拒否が bundle のパスに貼り付いた。
+  次に app を開くと *Apple could not verify* に出迎えられ、System Settings で *Open Anyway*
+  を押す羽目になり、再インストールしても直らなかった。設定にチェックが入ったとき、そして
+  更新も同じ扱いになるよう設定がオンの間は app の起動のたびに、daemon・その plist・
+  `deskhub-cli` からフラグを外すことが、Gatekeeper が求める唯一のことである。app がその
+  コードに到達するのは、Gatekeeper がすでに bundle を通した後に限られる。もう一つの道である
+  pkg は、インストーラで入れた daemon がこの問題に決して遭わない理由だが、上記の理由から
+  引き続き採らない。
 
 - **Linux はサインインの前後を問わず、EGL を通して scanout を capture する**: greeter は
   ScreenCast portal が存在しない独自の session で動くため、host は代わりにディスプレイ

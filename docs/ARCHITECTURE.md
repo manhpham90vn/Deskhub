@@ -332,6 +332,10 @@ HostEngine (one per app, owns SessionTransport)
 - macOS before sign-in (T-28): the app embeds `Contents/MacOS/DeskhubDaemon` and a
   LaunchDaemon plist under `Contents/Library/LaunchDaemons`, registered through
   `SMAppService.daemon` when the setting is ticked (one *Allow in background* approval).
+  Before registering, and again at every start while the setting is on, the app clears
+  `com.apple.quarantine` from the daemon, its plist and `deskhub-cli`: launchd starts the
+  daemon at boot as a bare executable, which Gatekeeper can only verify online, and the
+  network is not up yet.
   The daemon runs as root and listens on the Unix socket `/var/run/deskhub/control.sock`
   through `ServeUnattendedControl` (`deskhubp/host/UnattendedDaemon`, shared with Linux),
   which feeds each connection's bytes (`deskhubp/net/LocalSocket`) through
@@ -661,6 +665,20 @@ line.
   LoginWindow session down at that moment; hosting inside the user's own session when the
   app is not sharing would need a per-user agent and a second round of TCC grants, and is
   left for a later phase.
+
+- **The app clears the quarantine flag on its own daemon**: a DMG copied by hand or by
+  Homebrew leaves `com.apple.quarantine` on every file in the bundle. The app itself is
+  fine, because Gatekeeper checks the bundle with the notarization ticket stapled inside
+  it. The daemon is not: launchd runs `Contents/MacOS/DeskhubDaemon` at boot as a bare
+  executable, tickets cannot be stapled to one, and the online lookup fails before the
+  network is up, so Gatekeeper killed it with no one signed in to ask, and the refusal
+  stuck to the bundle path: the next launch of the app met *Apple could not verify* and an
+  *Open Anyway* trip through System Settings, even after a reinstall. Clearing the flag on
+  the daemon, its plist and `deskhub-cli` when the setting is ticked, and again at every
+  app start while it is on so an update gets the same treatment, is the one thing
+  Gatekeeper needs; the app only reaches that code after Gatekeeper has already passed the
+  bundle. The alternative, a pkg, is the reason daemons from installers never have this
+  problem, and stays off the table for the reasons above.
 
 - **Linux captures the scanout, through EGL, before and after sign-in**: the greeter runs
   in a session of its own where the ScreenCast portal does not exist, so the host reads

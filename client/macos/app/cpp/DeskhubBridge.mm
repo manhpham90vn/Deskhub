@@ -116,6 +116,7 @@ bool dh_unattended_set(bool on) {
 bool dh_unattended_sync(void) {
     const deskhub::ui::UiSettings settings = deskhubp::LoadUiSettings();
     if (!settings.unattended) return true;
+    if (UnattendedDaemonInstalled()) RegisterUnattendedDaemon(true);
     if (UnattendedDaemonStatus() != DaemonStatus::Enabled) return true;
     return PushCurrentSettings(settings);
 }

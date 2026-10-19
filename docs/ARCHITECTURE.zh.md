@@ -293,7 +293,9 @@ HostEngine（每个 app 一个实例，持有 SessionTransport）
   CLI 则在 `settings set`、改变允许列表的 `access` 命令以及 `share` 停止时发送。
 - macOS 的登录前访问（T-28）：app 内嵌 `Contents/MacOS/DeskhubDaemon` 以及
   `Contents/Library/LaunchDaemons` 下的一个 LaunchDaemon plist，在勾选该设置时通过
-  `SMAppService.daemon` 注册（一次 *Allow in background* 批准）。该 daemon 以 root 运行，
+  `SMAppService.daemon` 注册（一次 *Allow in background* 批准）。注册之前，以及设置开着时每次
+  启动，app 都会清掉 daemon、其 plist 和 `deskhub-cli` 上的 `com.apple.quarantine`：launchd
+  在开机时把 daemon 当作裸可执行文件启动，Gatekeeper 只能在线核验它，而那时网络还没起来。该 daemon 以 root 运行，
   通过 `ServeUnattendedControl`（`deskhubp/host/UnattendedDaemon`，与 Linux 共用）监听 Unix
   socket `/var/run/deskhub/control.sock`，把每条连接（`deskhubp/net/LocalSocket`）的字节交给
   `UnattendedControlServer`（`core/session/host/UnattendedControl`），与 Windows pipe 使用同一套
@@ -557,6 +559,17 @@ runner 上与 base commit 的 A/B 结果（偏移仅作为警告，不导致失�
   核验会信任放在那里的任何东西。与 Windows 不同，该功能止于登录，因为 launchd 会在那一刻
   拆除 LoginWindow session；在 app 未共享时于用户自己的 session 内 host 需要一个按用户的
   agent 和第二轮 TCC 授权，留待以后的阶段。
+
+- **app 自己清掉其 daemon 上的 quarantine 标记**：手动或经 Homebrew 从 DMG 复制出来的 app，
+  bundle 里每个文件都带着 `com.apple.quarantine`。app 本身没事，因为 Gatekeeper 用 bundle 内
+  已 staple 的公证 ticket 核验整个 bundle。daemon 则不然：launchd 在开机时把
+  `Contents/MacOS/DeskhubDaemon` 当作裸可执行文件启动，ticket 无法 staple 到单个可执行文件
+  上，而网络起来之前在线查询会失败，于是 Gatekeeper 在无人登录、无人可问的情况下把它杀掉，
+  这次拒绝还粘在了 bundle 路径上：下一次打开 app 就会遇到 *Apple could not verify*，得去
+  System Settings 点 *Open Anyway*，重装也没用。在勾选设置时，以及设置开着时每次 app 启动
+  （这样更新也会得到同样处理），清掉 daemon、其 plist 和 `deskhub-cli` 上的标记，就是
+  Gatekeeper 唯一需要的；app 只有在 Gatekeeper 已经放行 bundle 之后才会走到那段代码。另一条
+  路 pkg 正是安装器装的 daemon 从不遇到此问题的原因，但出于上面的理由仍然不采用。
 
 - **Linux 在登录前后都通过 EGL 捕获 scanout**：登录界面运行在自己的 session 中，那里没有
   ScreenCast portal，所以 host 改为读取显示引擎正在 scanout 的内容。这在任何登录界面、任何

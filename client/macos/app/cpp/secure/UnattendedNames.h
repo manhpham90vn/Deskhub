@@ -14,6 +14,7 @@ inline constexpr const char* kUnattendedMachineFolder = "/Library/Application Su
 
 inline constexpr const char* kUnattendedSocketDir = "/var/run/deskhub";
 inline constexpr const char* kUnattendedDaemonExe = "DeskhubDaemon";
+inline constexpr const char* kBundledCliExe = "deskhub-cli";
 inline constexpr const char* kUnattendedHostArg = "--unattended-host";
 inline constexpr const char* kUnattendedTeamId = "UPJRMYQ38F";
 inline constexpr const char* kLaunchAgentsDir = "/Library/LaunchAgents";

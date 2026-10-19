@@ -35,6 +35,12 @@ std::string UnattendedDaemonPlistPath() {
     return contents + "/Library/LaunchDaemons/" + UnattendedDaemonPlistName();
 }
 
+std::string BundledCliPath() {
+    const std::string contents = BundleContentsPath();
+    if (contents.empty()) return {};
+    return contents + "/MacOS/" + kBundledCliExe;
+}
+
 bool UnattendedDaemonInstalled() {
     std::error_code ignored;
     return std::filesystem::is_regular_file(UnattendedDaemonPath(), ignored) &&

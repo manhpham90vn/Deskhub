@@ -8,6 +8,7 @@
 
 std::string UnattendedDaemonPath();
 std::string UnattendedDaemonPlistPath();
+std::string BundledCliPath();
 bool UnattendedDaemonInstalled();
 std::shared_ptr<void> TakeoverUnattendedHost();
 bool SendUnattendedConfig(const deskhub::UnattendedConfig& config);

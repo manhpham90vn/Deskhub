@@ -63,7 +63,7 @@
       "command": "sudo install -d /etc/apt/keyrings\ncurl -fsSL https://manhpham90vn.github.io/Deskhub/apt/deskhub.gpg | sudo tee /etc/apt/keyrings/deskhub.gpg >/dev/null\necho \"deb [arch=amd64 signed-by=/etc/apt/keyrings/deskhub.gpg] https://manhpham90vn.github.io/Deskhub/apt stable main\" | sudo tee /etc/apt/sources.list.d/deskhub.list\nsudo apt update && sudo apt install deskhub"
     }
   ],
-  "version": "v9.3.3",
+  "version": "v9.3.4",
   "translations": {
     "vi": {
       "tagline": "Remote desktop open source cho mọi nền tảng bạn đang dùng.",
