@@ -101,7 +101,7 @@ jobs:
         run: >
           scripts/apt-install.sh ninja-build pkg-config nasm
           libglib2.0-dev libepoxy-dev libegl-dev libgles-dev
-          libdrm-dev libva-dev libpipewire-0.3-dev libspa-0.2-dev
+          libdrm-dev libgbm-dev libva-dev libpipewire-0.3-dev libspa-0.2-dev
           libx11-dev libxfixes-dev
 
       - name: Cache minimal FFmpeg

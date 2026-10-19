@@ -12,15 +12,15 @@
 #include <system_error>
 #include <vector>
 
-#include "deskhub/session/host/ShareFlow.h"
 #include "deskhub/session/host/UnattendedControl.h"
 #include "deskhubp/diag/Log.h"
 #include "deskhubp/host/SharingHost.h"
+#include "deskhubp/host/UnattendedDaemon.h"
 #include "deskhubp/host/UnattendedMode.h"
+#include "deskhubp/host/UnattendedPush.h"
 #include "deskhubp/media/DisplayEnum.h"
 #include "deskhubp/system/AppDataFile.h"
 #include "deskhubp/system/Clock.h"
-#include "deskhubp/system/DeviceName.h"
 #include "deskhubp/system/HostIdentity.h"
 #include "deskhubp/system/MachineFolder.h"
 #include "deskhubp/system/UiSettingsStore.h"
@@ -46,7 +46,7 @@ ConfigSnapshot ReadSnapshot() {
 
 bool HeldByTheApp() {
     std::error_code ignored;
-    return std::filesystem::is_regular_file(deskhubp::AppDataFilePath(kUnattendedHoldFile),
+    return std::filesystem::is_regular_file(deskhubp::AppDataFilePath(deskhubp::kUnattendedHoldFile),
         ignored);
 }
 
@@ -59,19 +59,11 @@ void PublishPermissions() {
     deskhub::UnattendedStatus status;
     status.screen = PermissionOf(CGPreflightScreenCaptureAccess());
     status.input = PermissionOf(AXIsProcessTrusted());
-    deskhubp::WriteAppDataFileAtomic(kUnattendedStatusFile,
+    deskhubp::WriteAppDataFileAtomic(deskhubp::kUnattendedStatusFile,
         deskhub::SerializeUnattendedStatus(status));
     LOGI("[Unattended] Screen Recording: %s. Accessibility: %s.",
         status.screen == deskhub::UnattendedPermission::Granted ? "granted" : "not granted",
         status.input == deskhub::UnattendedPermission::Granted ? "granted" : "not granted");
-}
-
-ShareOptions UnattendedOptions(const deskhub::ui::UiSettings& settings) {
-    ShareOptions options = deskhub::ShareOptionsOf(settings, false, false);
-    options.audio = false;
-    options.clipboardSync = false;
-    if (options.deviceName.empty()) options.deviceName = deskhubp::LocalDeviceName();
-    return options;
 }
 
 class HostSupervisor {
@@ -105,7 +97,7 @@ private:
             return;
         }
         runningWith_ = ReadSnapshot();
-        const ShareOptions options = UnattendedOptions(deskhubp::LoadUiSettings());
+        const ShareOptions options = deskhubp::UnattendedShareOptions(deskhubp::LoadUiSettings());
         if (!host_.Start(displays, options)) {
             LOGE("[Unattended] Could not start the host: %s", host_.LastError().c_str());
             lastStopUs_ = NowUs();

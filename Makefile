@@ -30,7 +30,7 @@
 # Explicit per-platform build/release/run — no platform is the default:
 #   make build-windows   / release-windows   / run-windows   Win32 app, one Deskhub.exe (needs Windows + MSVC)
 #   make build-macos     / release-macos     / run-macos     macOS app — both roles (needs macOS + Xcode)
-#   make build-linux     / release-linux     / run-linux     Ubuntu app — both roles (needs Ubuntu + the -dev packages)
+#   make build-linux     / release-linux     / run-linux     Ubuntu app — both roles, plus the deskhubd daemon (needs Ubuntu + the -dev packages)
 #   make build-android   / release-android   / run-android   debug APK / release APK (unsigned)
 #   make build-ios       / release-ios       / run-ios       iOS app for the Simulator (needs macOS + Xcode)
 #
@@ -62,9 +62,10 @@
 #                       ASC_KEY_P8=<path to the .p8>, ASC_KEY_ID, ASC_ISSUER_ID and a
 #                       "Developer ID Application" identity in the keychain
 #   make verify-macos   check that Gatekeeper accepts the build that was just produced
-#   make dist-linux     One .deb (Ubuntu/Debian) + one .rpm (Fedora/openSUSE) holding the app
-#                       and deskhub-cli. Each installs the uinput udev rule from its
-#                       post-install step, so installing it replaces setup-linux-permissions
+#   make dist-linux     One .deb (Ubuntu/Debian) + one .rpm (Fedora/openSUSE) holding the app,
+#                       deskhub-cli and the deskhubd daemon. Each installs the uinput udev rule
+#                       and enables deskhubd.service from its post-install step, so installing
+#                       it replaces setup-linux-permissions
 #
 # Shared CMake tree (core + platform + whatever client the current OS builds):
 #   make debug          configure + build the debug preset

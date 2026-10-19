@@ -44,9 +44,10 @@ Deskhub shares the screen of one machine and controls it from another
 over UDP on the local network.
 
 This package contains the Linux app (host + viewer role), the deskhub-cli
-command for scripts and SSH sessions, and the udev rule that grants access
-to /dev/uinput, so remote mouse and keyboard input works without any
-manual permission setup.
+command for scripts and SSH sessions, the deskhubd service that shares the
+sign-in screen once access before sign-in is switched on, and the udev rule
+that grants access to /dev/uinput, so remote mouse and keyboard input works
+without any manual permission setup.
 
 %install
 cp -a %{pkgroot}/. %{buildroot}/
@@ -57,15 +58,33 @@ if command -v udevadm >/dev/null 2>&1; then
     modprobe uinput 2>/dev/null || :
     udevadm trigger --name-match=uinput || :
 fi
+if [ -d /run/systemd/system ]; then
+    systemctl daemon-reload || :
+    systemctl enable deskhubd.service || :
+    systemctl restart deskhubd.service || :
+fi
+
+%preun
+if [ "\$1" = 0 ] && [ -d /run/systemd/system ]; then
+    systemctl disable --now deskhubd.service || :
+fi
 
 %postun
-if [ "\$1" = 0 ] && command -v udevadm >/dev/null 2>&1; then
-    udevadm control --reload-rules || :
+if [ "\$1" = 0 ]; then
+    rm -rf /var/lib/deskhub
+    if command -v udevadm >/dev/null 2>&1; then
+        udevadm control --reload-rules || :
+    fi
+    if [ -d /run/systemd/system ]; then
+        systemctl daemon-reload || :
+    fi
 fi
 
 %files
 /usr/bin/deskhub
 /usr/bin/deskhub-cli
+/usr/libexec/deskhub/deskhubd
+/usr/lib/systemd/system/deskhubd.service
 /usr/share/applications/deskhub.desktop
 /usr/share/icons/hicolor/256x256/apps/deskhub.png
 /usr/share/icons/hicolor/512x512/apps/deskhub.png

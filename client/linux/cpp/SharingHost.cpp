@@ -9,12 +9,14 @@
 #include <vector>
 
 #include "AccessRequestListener.h"
-#include "capture/ScreenCapture.h"
+#include "capture/DisplayCapture.h"
 #include "deskhubp/diag/Log.h"
+#include "deskhubp/host/UnattendedMode.h"
 #include "deskhubp/input/LocalInput.h"
 #include "deskhubp/media/PortalScreenCast.h"
 #include "encode/HwEncoder.h"
 #include "input/InputInjector.h"
+#include "secure/ControlSocket.h"
 
 #include "deskhub/control/FrameGate.h"
 #include "deskhub/control/StreamSize.h"
@@ -25,13 +27,13 @@
 
 namespace {
 
-using LinuxSourceBase = deskhubp::HostSourceBase<ScreenCapture, InputInjector, HwEncoder>;
+using LinuxSourceBase = deskhubp::HostSourceBase<DisplayCapture, InputInjector, HwEncoder>;
 
 struct SourcePipeline : LinuxSourceBase {
     SourcePipeline(uint32_t startBps, uint32_t minBps)
         : LinuxSourceBase(startBps, minBps, deskhub::diag::ShareDiagCaps{false, true, true}) {}
 
-    uint32_t nodeId = 0;
+    uint64_t targetId = 0;
     int32_t srcX = 0, srcY = 0;
 
     deskhub::FrameGate frameGate;
@@ -92,6 +94,7 @@ bool SharingHost::Start(const std::vector<ShareSource>& sources, const ShareOpti
     policy.noUsableSourceError =
         "No usable source \xE2\x80\x94 the compositor sent no frame.";
     policy.preflight = [] {
+        if (deskhubp::UnattendedMode()) return std::string();
         if (deskhubp::PortalScreenCast::Instance().isOpen()) return std::string();
         return std::string(
             "The screen-capture permission is gone \xE2\x80\x94 press Share "
@@ -105,7 +108,7 @@ bool SharingHost::Start(const std::vector<ShareSource>& sources, const ShareOpti
     policy.source.create = [engine](const ShareSource& s,
                                uint8_t sourceId) -> std::unique_ptr<deskhubp::HostSource> {
         auto p = deskhubp::MakeHostSource<SourcePipeline>(*engine, s, sourceId);
-        p->nodeId = uint32_t(s.targetId);
+        p->targetId = s.targetId;
         p->srcX = s.x;
         p->srcY = s.y;
         return p;
@@ -211,7 +214,7 @@ bool SharingHost::Start(const std::vector<ShareSource>& sources, const ShareOpti
             }
         });
 
-        if (!p->capture.Start(p->nodeId, deskhub::media::CaptureOptions{fps, maxDim}, onFrame)) {
+        if (!p->capture.Start(p->targetId, deskhub::media::CaptureOptions{fps, maxDim}, onFrame)) {
             LOGE("[Host][%s] Failed to start capture \xE2\x80\x94 skipping this source.",
                 p->name.c_str());
             p->failed.store(true);
@@ -270,5 +273,6 @@ bool SharingHost::Start(const std::vector<ShareSource>& sources, const ShareOpti
         }
     };
 
+    if (!deskhubp::UnattendedMode()) HoldWhileSharing(TakeoverUnattendedHost());
     return StartEngine(sources, opt, std::move(policy));
 }

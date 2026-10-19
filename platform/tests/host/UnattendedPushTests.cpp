@@ -49,9 +49,27 @@ void TestEnabledCopiesTheMachineIdentity() {
     Check(RevokeAllClientKeys(), "the isolated list is cleared again");
 }
 
+void TestUnattendedHostSharesQuietly() {
+    std::printf("[push] the host before sign-in shares no sound, clipboard, terminal or files...\n");
+    deskhub::ui::UiSettings settings;
+    settings.shareAudio = true;
+    settings.clipboardSync = true;
+    settings.fps = 24;
+    settings.deviceName = "front desk";
+    const deskhub::media::ShareOptions options = deskhubp::UnattendedShareOptions(settings);
+    Check(!options.audio && !options.clipboardSync, "sound and the clipboard stay off");
+    Check(!options.terminal && !options.files, "the terminal and file transfer stay off");
+    Check(options.fps == 24 && options.deviceName == "front desk",
+        "the sharing choices and the name carry over");
+    settings.deviceName.clear();
+    Check(!deskhubp::UnattendedShareOptions(settings).deviceName.empty(),
+        "an unnamed machine falls back to its own name");
+}
+
 }
 
 void RunUnattendedPushTests() {
     TestDisabledCarriesNothing();
     TestEnabledCopiesTheMachineIdentity();
+    TestUnattendedHostSharesQuietly();
 }

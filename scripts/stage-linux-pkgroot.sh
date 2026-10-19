@@ -5,9 +5,14 @@ cd "$(dirname "$0")/.."
 DEST="${1:?usage: stage-linux-pkgroot.sh <dest-dir>}"
 BIN=out/build/x64-release/client/linux/deskhub
 CLI=out/build/x64-release/client/cli/deskhub-cli
+DAEMON=out/build/x64-release/client/linux/daemon/deskhubd
 
 [ -f "$BIN" ] || {
     echo "stage-linux-pkgroot.sh: $BIN not found - run 'make release-linux' first." >&2
+    exit 1
+}
+[ -f "$DAEMON" ] || {
+    echo "stage-linux-pkgroot.sh: $DAEMON not found - run 'make release-linux' first." >&2
     exit 1
 }
 [ -f "$CLI" ] || {
@@ -21,6 +26,28 @@ install -Dm755 "$BIN" "$DEST/usr/bin/deskhub"
 strip "$DEST/usr/bin/deskhub"
 install -Dm755 "$CLI" "$DEST/usr/bin/deskhub-cli"
 strip "$DEST/usr/bin/deskhub-cli"
+install -Dm755 "$DAEMON" "$DEST/usr/libexec/deskhub/deskhubd"
+strip "$DEST/usr/libexec/deskhub/deskhubd"
+
+mkdir -p "$DEST/usr/lib/systemd/system"
+cat > "$DEST/usr/lib/systemd/system/deskhubd.service" <<'EOF'
+[Unit]
+Description=Deskhub access before sign-in
+After=systemd-logind.service
+
+[Service]
+Type=simple
+ExecStart=/usr/libexec/deskhub/deskhubd
+Restart=on-failure
+RestartSec=2
+RuntimeDirectory=deskhub
+RuntimeDirectoryMode=0755
+StateDirectory=deskhub
+StateDirectoryMode=0700
+
+[Install]
+WantedBy=multi-user.target
+EOF
 
 install -Dm644 client/linux/icons/deskhub-256.png \
     "$DEST/usr/share/icons/hicolor/256x256/apps/deskhub.png"

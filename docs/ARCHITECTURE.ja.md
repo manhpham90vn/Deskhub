@@ -44,7 +44,7 @@ client/     OS ごとの app: windows、linux、macos、ios、android（platform
 | `platform/net` | `UdpSocket`（OS ごとの実装）、`QuicEndpoint`（quiche を pimpl の背後に配置）、`SessionTransport`、`NetInfo`（本マシン自身のアドレス） |
 | `platform/auth` | `AuthNegotiation` —— 双方が用いる唯一の key 署名 handshake。host 側の結果を持つ（3 節） |
 | `platform/client` | `HostLink`（dial、trust、auth、承認待ち、channel。すべての画面が共有）、`ScreenViewer` とその loop、`TerminalViewer` と `TerminalFeed`、`FileTransferClient` と `FileUpload`、`SourceQuery`（ブロッキング版と非同期版）、`HostProfiles`（fingerprint を key とする信頼済み host。名前と最後のアドレスを伴う） |
-| `platform/host` | `HostEngine`、`HostNetLoop`、`SharingHost`、`ShareController`、`ShareDriver`、`TerminalHost`、`FileHost`、`ViewerBroadcast`、`PairingInvite`（token を発行し、この host が表示する招待を構築する） |
+| `platform/host` | `HostEngine`、`HostNetLoop`、`SharingHost`、`ShareController`、`ShareDriver`、`TerminalHost`、`FileHost`、`ViewerBroadcast`、`PairingInvite`（token を発行し、この host が表示する招待を構築する）、そしてサインイン前のアクセス用の `UnattendedPush`、`UnattendedClient`（daemon の socket に対する app 側）、`UnattendedDaemon`（macOS と Linux の daemon 側） |
 | `platform/audio` | audio の capture（PipeWire、WASAPI）と sink（PipeWire、WASAPI、Core Audio、AAudio）、host 側の `AudioBroadcaster` と viewer 側の `AudioPlayer` |
 | `platform/media` | Opus codec、ディスプレイの列挙、Linux の xdg portal ScreenCast session、両 Apple app が使う VideoToolbox の encoder、decoder、source pipeline |
 | `platform/input` | 「host 優先」のためのローカル input の監視（`LocalInputMonitor`）と OS ごとのネイティブ key code の mapping |
@@ -330,15 +330,18 @@ HostEngine（app ごとに 1 インスタンス、SessionTransport を保持）
   `ui-settings.txt` のテキスト）を運ぶ。サービスは 3 つのファイルを machine folder へ
   atomic に書き込み、key または settings が変わった場合は host を再起動し、無効化された
   場合はファイルを消去する。app はこれを、設定の切り替え時、settings の保存のたび、
-  許可済み一覧の変更のたび、共有の停止時、および起動時に 1 度送る。Windows では CLI も
-  `settings set`、許可済み一覧を変える `access` コマンド、および `share` の停止時にこれを送る。
+  許可済み一覧の変更のたび、共有の停止時、および起動時に 1 度送る。Windows と Linux では
+  CLI も `settings set`、許可済み一覧を変える `access` コマンド、および `share` の停止時に
+  これを送る。
 - macOS のサインイン前アクセス（T-28）: app は `Contents/MacOS/DeskhubDaemon` と
   `Contents/Library/LaunchDaemons` 配下の LaunchDaemon plist を同梱し、設定にチェックが
   入ると `SMAppService.daemon` で登録する（*Allow in background* の承認は 1 回）。daemon は
-  root で動き、Unix socket `/var/run/deskhub/control.sock`（`deskhubp/net/LocalSocket`）で
-  待ち受け、各接続のバイト列を `UnattendedControlServer`
+  root で動き、`ServeUnattendedControl`（`deskhubp/host/UnattendedDaemon`、Linux と共有）を
+  通して Unix socket `/var/run/deskhub/control.sock` で待ち受ける。これは各接続のバイト列
+  （`deskhubp/net/LocalSocket`）を `UnattendedControlServer`
   （`core/session/host/UnattendedControl`）に通す。Windows の pipe と同じ要求ストリーム
-  で、`Takeover`、`Configure`、そして Windows のサービスが拒否する `Status` がある。
+  で、`Takeover`、`Configure`、そして Windows のサービスが拒否する `Status` がある。この
+  やり取りの app 側は `deskhubp/host/UnattendedClient` で、これも Linux と共有する。
   相手の信頼はコード署名で決める —— `identifier "com.deskhub.macos"` と Deskhub の
   Team ID を、接続プロセスの audit token に対して Security.framework で検証する ——
   パスでは決して決めない。`Configure` は 3 つのファイルを
@@ -360,6 +363,34 @@ HostEngine（app ごとに 1 インスタンス、SessionTransport を保持）
   （`IOHIDPostEvent`）経由で投げ、ディスプレイの矩形は `Init` の値をキャッシュし、ローカル
   入力モニターと 500 ms のサイズ探索は省き、ピクセルスケールは `SCContentFilter` から取る
   （§9）。
+- Linux のサインイン前アクセス（T-28）: `.deb` と `.rpm` は
+  `/usr/libexec/deskhub/deskhubd` と `deskhubd.service` をインストールし、インストール後の
+  処理でそれを有効化・起動する。daemon は root で動き、macOS と同じ
+  `ServeUnattendedControl` で `/run/deskhub/control.sock` を提供する。app と CLI は
+  `UnattendedClient` を通じてそこに接続し、待ち受け側が root で動き、root だけが書ける
+  socket フォルダの奥にあることをもって信頼する —— 特権のないプロセスは root プロセスの
+  `/proc/<pid>/exe` を読めないため、その側には macOS のパス確認に相当するものがない。
+  daemon は相手の `/proc/<pid>/exe` を読み、`/usr/bin/deskhub` と `/usr/bin/deskhub-cli`
+  だけに応える。`Takeover` と `Status` はどのユーザーにも、`Configure` は root または
+  `sudo`、`wheel`、`admin` のメンバーにだけ応じる（`client/linux/cpp/secure/AdminGroup`）。
+  supervisor スレッドは、コピーが存在し、`Takeover` が保持されておらず、いずれかの CRTC が
+  点灯している間は `deskhubd --unattended-host` を起動し、終了から 2 秒後、または
+  `host_key.pem` か `ui-settings.txt` が変わったときに再起動する。`Takeover` と、鍵または
+  設定の変更は、その子プロセスを即座に kill し（SIGKILL）、その終了を待ってから ack するので、
+  app が bind するときには port が空いている。正常に停止する `SharingHost` は viewer に BYE を
+  送ってセッションを終わらせるが、単に沈黙した host なら viewer は再ダイヤルし（V-8）、app の
+  共有につながる —— Windows のサービスが unattended host を terminate するのと同じ理由である。
+  設定をオフにしたときは SIGTERM で子プロセスを止め（5 秒後に SIGKILL）、viewer にセッションの
+  終了を伝える。子プロセスは `UnattendedMode()` をオンにした
+  通常の `SharingHost` で、source は KMS から得て（`ListKmsDisplays`、点灯している CRTC
+  ごとに 1 つ、`targetId` = card 番号 << 32 | CRTC id）、portal の preflight は省き、
+  `DisplayCapture` は PipeWire の `ScreenCapture` の代わりに `KmsCapture` を選び、点灯して
+  いる CRTC の集合が変わると終了する。`KmsCapture` は共有の fps で CRTC の framebuffer を
+  `drmModeGetFB2` で読み、PRIME で export し、同じ GPU の render node 上の surfaceless な
+  GLES 2 context（GBM 上の EGL）に import して、CRTC の範囲に切り出し cursor plane を
+  重ねたうえで、3 つある linear な XRGB8888 GBM buffer の 1 つへ描く。その buffer は
+  `FrameMemory::DmaBuf` として VA-API に渡る（§9）。入力は app 自身の uinput injector で、
+  そのデバイスはシステム全体に及ぶため greeter にも届く。
 - Shell: shell ごとに PTY を 1 つ割り当てる（Windows は `ConPTY`、他は `forkpty`）。
   上限は 8 である。接続が切れた場合は shell を切り離し、shell プロセスが終了するか
   shell が閉じられるまで PTY を保持する。時間制限はない。許可された client はいずれも、
@@ -520,6 +551,11 @@ macOS では 2 つ目のフォルダは `/Library/Application Support/Deskhub` �
 オフにするとコピーとログインウィンドウ agent の plist は削除される。Homebrew cask の
 `zap` はフォルダを削除し、ゴミ箱へのドラッグによるアンインストールは残す。
 
+Linux では 2 つ目のフォルダは `/var/lib/deskhub`（root `0700`）で、`deskhubd` と systemd の
+`StateDirectory=` が作る。同じ 3 つのコピー、app が共有している間の `unattended-hold`
+マーカー、daemon と host の log を保持する。設定をオフにするとコピーは削除され、パッケージ
+を削除するとフォルダが削除される。
+
 viewer が送信したファイルは別の場所に保存される。host が選択したフォルダ
 （`ui-settings.txt` の `transfer_dir`。既定は利用者のホームディレクトリ直下の
 `Deskhub`）である。`FileStore` は各ファイルを `<name>.deskhub-part` として書き込み、
@@ -622,6 +658,26 @@ scaling の 2 つの判定とともに実行する（共有 runner には時間�
   その瞬間に LoginWindow session を解体するからである。app が共有していない間に利用者
   自身の session で host することには利用者ごとの agent と 2 回目の TCC 許可が必要で、
   後の段階に残してある。
+
+- **Linux はサインインの前後を問わず、EGL を通して scanout を capture する**: greeter は
+  ScreenCast portal が存在しない独自の session で動くため、host は代わりにディスプレイ
+  エンジンが scanout しているものを読む。これはどの greeter でもどの compositor でも動き、
+  ダイアログも要らず、誰かがサインインした後も動き続ける。Linux の host が Windows と同様に
+  app が共有していない間はいつでも動くのはそのためである —— launchd が macOS の
+  LoginWindow session を終わらせるように、サインイン時に root プロセスを解体するものは
+  何もない。framebuffer はそのまま VA-API に渡さない。最初に試したマシンでは、Intel の
+  iHD ドライバーが GNOME の使う scanout buffer —— 10 ビットの `XR30` で
+  `Y_TILED_GEN12_RC_CCS_CC`、圧縮されクリアカラーの plane を持つ —— の import をすべて
+  拒否した。一方 Mesa の EGL は、compositor が依存しているため、ディスプレイエンジンが
+  scanout できるものなら何でも import する。linear な XRGB8888 buffer への GL 描画 1 回で、
+  圧縮を解き、タイルをほどき、10 ビットを 8 ビットに変換し、X11 で複数のモニターが共有する
+  framebuffer から CRTC を切り出し、framebuffer 単体にはない cursor plane を加える ——
+  すべて GPU から出ずに行う。import した image は framebuffer id ではなく dma-buf の inode
+  でキャッシュする。カーネルは解放された framebuffer id を次の buffer に渡すからである。
+  Windows の pipe と違い、socket はどの app でも引き継げるようにローカルのすべてのユーザー
+  を受け付ける。プロセスは接続した後で本物の `/usr/bin/deskhub` を `exec` できるので、
+  実行ファイルの確認は Deskhub とそれ以外を分けるだけで、サインイン前に誰が入れるかを
+  変える権利は、呼び出し元のアカウントが管理者であることに基づく。
 
 - **macOS app の自動共有はメインウィンドウではなく app 自身が始める**: AppKit は app が前回
   終了したときに持っていたウィンドウを復元するが、メニューバーに住んでいた app にはウィンドウ

@@ -65,7 +65,7 @@ Deskhub - no platform is built by default, name the one you want:
     make dist-macos      dmg signed with Developer ID + notarized + stapled
                          (ASC_KEY_P8, ASC_KEY_ID, ASC_ISSUER_ID + a Developer ID identity)
     make verify-macos    check that Gatekeeper accepts the build just produced
-    make dist-linux      Linux .deb + .rpm, each with the app, deskhub-cli and the uinput udev rule
+    make dist-linux      Linux .deb + .rpm, each with the app, deskhub-cli, deskhubd and the uinput udev rule
 
   Developer tools:
     make icons           regenerate every client icon from assets/icon_1024.png

@@ -173,7 +173,7 @@ jobs:
         run: >
           scripts/apt-install.sh ninja-build pkg-config nasm
           libgtk-3-dev libglib2.0-dev libepoxy-dev libegl-dev libgles-dev
-          libdrm-dev libva-dev libpipewire-0.3-dev libspa-0.2-dev
+          libdrm-dev libgbm-dev libva-dev libpipewire-0.3-dev libspa-0.2-dev
           libayatana-appindicator3-dev libx11-dev libxfixes-dev
 
       - name: Cache minimal FFmpeg
@@ -233,6 +233,19 @@ jobs:
           grep -q '^Exec=deskhub$' /usr/share/applications/deskhub.desktop
           test -f /usr/lib/udev/rules.d/60-deskhub-uinput.rules
           test -f /usr/lib/modules-load.d/deskhub.conf
+          test -x /usr/libexec/deskhub/deskhubd
+          test -f /usr/lib/systemd/system/deskhubd.service
+          systemctl is-enabled deskhubd.service
+          systemctl is-active deskhubd.service
+          sudo test -d /var/lib/deskhub
+          for _ in $(seq 20); do test -S /run/deskhub/control.sock && break; sleep 0.5; done
+          test -S /run/deskhub/control.sock
+          sudo apt-get remove -y deskhub
+          if sudo test -e /var/lib/deskhub; then
+            echo "::error::removing the deb left the machine folder behind"
+            exit 1
+          fi
+          sudo apt-get install -y ./out/dist/linux/deskhub_*.deb
           dpkg-deb --info out/dist/linux/deskhub_*.deb
 
       - name: Upload deb
@@ -261,6 +274,12 @@ jobs:
             test -f /usr/share/applications/deskhub.desktop
             test -f /usr/lib/udev/rules.d/60-deskhub-uinput.rules
             test -f /usr/lib/modules-load.d/deskhub.conf
+            test -x /usr/libexec/deskhub/deskhubd
+            test -f /usr/lib/systemd/system/deskhubd.service
+            if ldd /usr/libexec/deskhub/deskhubd | grep "not found"; then
+              echo "::error::deskhubd has unresolved shared libraries after dnf install"
+              exit 1
+            fi
             if ldd /usr/bin/deskhub | grep "not found"; then
               echo "::error::unresolved shared libraries after dnf install"
               exit 1

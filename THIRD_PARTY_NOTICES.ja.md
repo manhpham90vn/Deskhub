@@ -31,7 +31,8 @@ license 上の義務を一覧にする。Deskhub 自体の source は MIT Licens
 `/usr/share/doc/deskhub/licenses/LGPL-2.1.txt`）。Windows のインストーラーは実行ファイルの
 隣、すなわちインストール先フォルダとその `licenses` サブフォルダに置く。macOS app は app
 bundle の `Contents/Resources` に収め、これは中の `deskhub-cli` と `DeskhubDaemon` にも
-及ぶ。iOS app はその bundle に、Android APK はその assets に収める。
+及ぶ。iOS app はその bundle に、Android APK はその assets に収める。Linux では、同じ
+コピーが app の隣にパッケージがインストールするサービス `deskhubd` にも及ぶ。
 
 ## Linux app（`client/linux`）
 
@@ -45,12 +46,13 @@ bundle の `Contents/Resources` に収め、これは中の `deskhub-cli` と `D
 | [PipeWire](https://pipewire.org) 0.3 | MIT | 動的 |
 | [libva](https://github.com/intel/libva) / `libva-drm` | MIT | 動的 |
 | [libdrm](https://gitlab.freedesktop.org/mesa/drm) | MIT | 動的 |
+| [libgbm](https://gitlab.freedesktop.org/mesa/mesa)（Mesa） | MIT | 動的（サインイン前の画面 capture） |
 | [libepoxy](https://github.com/anholt/libepoxy) | MIT | 動的 |
 | EGL（[libglvnd](https://gitlab.freedesktop.org/glvnd/libglvnd) / Mesa） | MIT | 動的 |
 | [libayatana-appindicator](https://github.com/AyatanaIndicators/libayatana-appindicator) 3 | LGPL-2.1 または LGPL-3.0。組み込まれる一部のファイルは GPL-3.0 | 動的、任意（tray アイコン） |
 
 Linux の command line client も同じメディアスタックを link する。FFmpeg は静的に、
-GLib/GIO、PipeWire、libva、libdrm、libepoxy、EGL は動的に link する —— 後述の
+GLib/GIO、PipeWire、libva、libdrm、libgbm、libepoxy、EGL は動的に link する —— 後述の
 command line client の節を参照。
 
 ### FFmpeg（LGPL-2.1-or-later、静的 link）
@@ -98,7 +100,7 @@ audio codec を組み込んでいる。
 
 Linux では Linux app と同じメディアスタックも link する —— FFmpeg は上記 Linux app の
 節で述べた LGPL-2.1 の条件のもとで**静的**に、GLib/GIO、PipeWire、libva、libdrm、
-libepoxy、EGL は動的に link する。`connect` はリモート画面のウィンドウを開き、そのために
+libgbm、libepoxy、EGL は動的に link する。`connect` はリモート画面のウィンドウを開き、そのために
 デスクトップ app が使わないライブラリが 2 つ必要になる。
 
 | コンポーネント | License | link |

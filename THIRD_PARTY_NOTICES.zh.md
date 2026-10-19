@@ -29,7 +29,8 @@ source 仍采用 MIT License；表中各组件保留各自的 license。
 `/usr/share/doc/deskhub/licenses/LGPL-2.1.txt`）；Windows 安装程序把它们放在可执行文件旁边，
 即安装文件夹及其 `licenses` 子文件夹中；macOS app 将它们放在 app bundle 的
 `Contents/Resources` 中，同时覆盖其中的 `deskhub-cli` 与 `DeskhubDaemon`，iOS app 放在其
-bundle 中，Android APK 放在其 assets 中。
+bundle 中，Android APK 放在其 assets 中。在 Linux 上，同一份副本也覆盖软件包随 app 一起安装的
+service `deskhubd`。
 
 ## Linux app（`client/linux`）
 
@@ -43,12 +44,13 @@ bundle 中，Android APK 放在其 assets 中。
 | [PipeWire](https://pipewire.org) 0.3 | MIT | 动态 |
 | [libva](https://github.com/intel/libva) / `libva-drm` | MIT | 动态 |
 | [libdrm](https://gitlab.freedesktop.org/mesa/drm) | MIT | 动态 |
+| [libgbm](https://gitlab.freedesktop.org/mesa/mesa)（Mesa） | MIT | 动态（登录前的屏幕捕获） |
 | [libepoxy](https://github.com/anholt/libepoxy) | MIT | 动态 |
 | EGL（[libglvnd](https://gitlab.freedesktop.org/glvnd/libglvnd) / Mesa） | MIT | 动态 |
 | [libayatana-appindicator](https://github.com/AyatanaIndicators/libayatana-appindicator) 3 | LGPL-2.1 或 LGPL-3.0；编译进其中的部分文件为 GPL-3.0 | 动态，可选（tray 图标） |
 
 Linux 上的 command line client link 同一套媒体组件：FFmpeg 静态 link，GLib/GIO、
-PipeWire、libva、libdrm、libepoxy 和 EGL 动态 link —— 见下文 command line client 一节。
+PipeWire、libva、libdrm、libgbm、libepoxy 和 EGL 动态 link —— 见下文 command line client 一节。
 
 ### FFmpeg（LGPL-2.1-or-later，静态 link）
 
@@ -89,8 +91,8 @@ command line client 不使用桌面 app 的 GUI toolkit：Linux 上不依赖 GTK
 不依赖 wxWidgets。与所有 app 一样，它内嵌下文列出的 QUIC transport 和 audio codec。
 
 在 Linux 上，它还 link 与 Linux app 相同的媒体组件 —— FFmpeg **静态** link，适用上文
-Linux app 一节所述的 LGPL-2.1 条款；GLib/GIO、PipeWire、libva、libdrm、libepoxy 和 EGL
-动态 link。`connect` 会打开远程屏幕窗口，这需要桌面 app 不使用的两个额外库：
+Linux app 一节所述的 LGPL-2.1 条款；GLib/GIO、PipeWire、libva、libdrm、libgbm、libepoxy 和
+EGL 动态 link。`connect` 会打开远程屏幕窗口，这需要桌面 app 不使用的两个额外库：
 
 | 组件 | License | link 方式 |
 | --- | --- | --- |

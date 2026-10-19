@@ -77,6 +77,9 @@ int main() {
     std::printf("--- host: what the app hands the daemon for access before sign-in ---\n");
     RunUnattendedPushTests();
 
+    std::printf("--- host: the daemon that keeps access before sign-in ---\n");
+    RunUnattendedDaemonTests();
+
     std::printf("--- client: saved hosts and their pinned keys ---\n");
     RunHostProfilesTests();
 

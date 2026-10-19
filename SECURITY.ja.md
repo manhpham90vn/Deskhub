@@ -50,7 +50,7 @@ host は信頼できる network 上に置き、画面や terminal を共有す�
 | 中間者攻撃 | すべてのマシンは key を 1 つ持つ。client は host の key を —— 初回接続時に利用者が fingerprint を照合した後、または fingerprint を含む QR code から —— 固定し、以降の接続では何かを送る前に毎回照合する。信頼は key に従うため、新しいアドレスにいる host も同じ host である。一方、client が知っているアドレスに現れた*別の* key は信頼済みとしては拒否され、以前そこで応答していたマシンの名前を添えた警告とともに **New host** として表示される。「変更」として受け入れることはできず、fingerprint を示した上で改めて信頼するしかない。QR code をスキャンした client は、応答したマシンが code に印字された key を保持していることを TLS handshake で証明した後にのみ token を送る。そのアドレスにいる他のものには何も渡らない。client の署名は、TLS session から export した session 識別子と client が受け取った host key の fingerprint を対象とするため、別の host に relay された署名や、別の connection で replay された署名は検証を通らない。 |
 | viewer 同士による mouse の競合 | 1 つの host を最大 5 viewer が閲覧できるが、input を操作できるのは 1 つのみである。先に参加した viewer が優先され、後から参加した viewer の input は、先行する viewer が 1 秒間無操作になるまで破棄される。6 番目の viewer は `Busy` として拒否される。 |
 | 閲覧のみを許可したい viewer | view-only の共有はすべての host で利用でき、何らかの操作が inject される前に host 側で input の packet を破棄する。client の自主的な遵守には依存しない。Android と iOS の host は常に view-only である。 |
-| 誰もサインインしていない状態で到達できる Windows PC や Mac | 既定ではオフである。*Allow access before anyone signs in* が on の場合、Windows では *DeskHub Secure Desktop* サービスが、macOS では app 内の `DeskhubDaemon` が、app が共有していない間はいつでも —— サインイン画面も含めて。macOS では誰もサインインしていない間だけ —— host を動かす。この host は `authorized_keys` にすでにある key だけを受け入れ、同じ machine key で応答し、要求を表示することも承認することも決してない。ペアリングは誰かがサインインしている間に行うか、まったく行えない。この host が読むコピーは SYSTEM と管理者（Windows）または root（macOS）のみが開けるフォルダにあり、それを置き換えられるのはインストールされた `Deskhub.exe`、または Deskhub 自身のコード署名を持つ app だけである。Ctrl+Alt+Del は送れない。 |
+| 誰もサインインしていない状態で到達できる Windows PC、Mac、Linux マシン | 既定ではオフである。*Allow access before anyone signs in* が on の場合、Windows では *DeskHub Secure Desktop* サービスが、macOS では app 内の `DeskhubDaemon` が、Linux では `deskhubd` サービスが、app が共有していない間はいつでも —— サインイン画面も含めて。macOS では誰もサインインしていない間だけ —— host を動かす。この host は `authorized_keys` にすでにある key だけを受け入れ、同じ machine key で応答し、要求を表示することも承認することも決してない。ペアリングは誰かがサインインしている間に行うか、まったく行えない。この host が読むコピーは SYSTEM と管理者（Windows）または root（macOS、Linux）のみが開けるフォルダにあり、それを置き換えられるのはインストールされた `Deskhub.exe`、Deskhub 自身のコード署名を持つ app、または Linux では管理者が実行したインストール済みの `deskhub` か `deskhub-cli` だけである。Ctrl+Alt+Del は送れない。 |
 | 共有したまま放置されたスマートフォン | 最終的な防護は Deskhub ではなく OS が担う。Android は常駐通知を表示し、共有のたびに録画の同意を求める。iOS は broadcast のインジケータを表示し続ける。いずれも app を開かずに共有を停止できる。 |
 | 許可済み client による自機へのファイル書き込み | ファイルを送信できるのは受け入れ済みのマシンのみであり、かつ受信側が file transfer を有効にしている場合に限られる。到達したデータは受信側が選択したフォルダの外に出られない。ネットワーク上のファイル名は、いずれかのファイルが開かれる前に、パスの最後の要素へ切り詰められ、区切り文字、制御バイト、filesystem が受け付けない文字、予約デバイス名が除去される。各ファイルは `.deskhub-part` の接尾辞付きで書き込まれ、全体が到着し CRC-32 が一致した時点でのみ改名される。既存の同名ファイルは上書きされず、番号が付加される。1 batch は 32 ファイル、1 ファイル 8 GiB、合計 32 GiB に制限される。同じ名称処理は、スマートフォンやタブレットでも写真ライブラリや Downloads フォルダに到達する前に実行される。 |
 | 不正な packet | すべてのフィールドは読み取り前に境界検査を行う。parser は unit test を備え、CI では AddressSanitizer、UndefinedBehaviorSanitizer、ThreadSanitizer の下で実行され、libFuzzer により fuzz される —— すべての pull request で target ごとに 30 秒、毎晩 target ごとに 15 分。target は 9 つで、wire format、H.264 の解析（Annex B と SPS）、packet の reassembly、host 側と viewer 側の session state machine、UI テキスト、terminal の byte stream、保存される key と信頼のファイルおよび pairing link、QR code の encoder を対象とする。fuzzing で検出された crash は regression test として repo に保存し、新たな coverage は seed corpus に取り込む。 |
@@ -225,6 +225,20 @@ Extensions* で一度だけ許可を求めたうえで、root daemon として�
 コピーを保持し、誰もサインインしていない間はログインウィンドウで同じ host を動かす。
 チェックを外すと登録は解除される。
 
+Linux では `.deb` と `.rpm` が `deskhubd` をインストールする。これは root のサービスで、
+パッケージとともに有効化・起動されるが、*Allow access before anyone signs in* がオンに
+なるまでは何もしない。以後は下記のコピーを保持し、app が共有していない間はいつでも ——
+greeter も含めて —— 同じ host を動かす。デスクトップ自身のダイアログなしに画面を見るため、
+グラフィックスカードが表示している内容を root として読み取る。その host 以外に自ら接続を
+開くことはない。待ち受けるのは `/run/deskhub/control.sock` で、誰の共有でも host を
+退かせられるよう、ローカルのすべてのユーザーが開けるようになっている。ただしコピーを
+変更するのは、root または `sudo`、`wheel`、`admin` グループのメンバーが実行した、
+インストール済みの `/usr/bin/deskhub` か `/usr/bin/deskhub-cli` に対してだけである ——
+プログラムは接続した後で自分自身を `/usr/bin/deskhub` に置き換えられるため、サインイン前に
+誰が入れるかを決める確認はプログラムではなくアカウントである。したがって管理者でない
+ローカルユーザーは、socket を開いている間サインイン前の host を止めておくことはできるが、
+それが誰を受け入れるかを選ぶことは決してできない。
+
 ## 同一 network 上の攻撃者にできること
 
 画面を共有中で Deskhub が動作しているマシンと同じ LAN に第三者がいる場合、その相手は
@@ -351,6 +365,11 @@ Team ID で署名された `com.deskhub.macos`、Security.framework で検証 �
 削除される。`brew uninstall --zap deskhub` はフォルダを削除し、ゴミ箱へドラッグして
 アンインストールした場合は自分で削除する。`sudo` を持つ者はその private key を読めるが、
 それは利用者の key についても同じである。
+
+Linux では 2 つ目のフォルダは `/var/lib/deskhub` で、`deskhubd` が root で（`0700`）作り、
+root だけが読める。同じコピーと、サービスと host の log を保持する。設定をオフにすると
+コピーは削除され、パッケージを削除するとフォルダが削除される。`sudo` を持つ者はその
+private key を読めるが、それは利用者の key についても同じである。
 
 certificate は保持されない。TLS certificate は port を開くたびに `host_key.pem` から
 メモリ上で構築されるが、TLS ライブラリは certificate をファイルからしか読み込めないため、

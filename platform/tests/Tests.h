@@ -17,6 +17,7 @@ void RunAppDataFileTests();
 void RunMachineFolderTests();
 void RunLocalSocketTests();
 void RunUnattendedPushTests();
+void RunUnattendedDaemonTests();
 void RunHostProfilesTests();
 void RunHostIdentityTests();
 void RunAccessRequestsFileTests();

@@ -29,7 +29,7 @@ còn lại. Cần cài sẵn các mục sau trước khi chạy lệnh này:
 
 | OS đang dùng | Cài trước | Bootstrap sẽ cài tiếp |
 | --- | --- | --- |
-| **Ubuntu / Debian** | không cần gì ngoài apt; [Rust](https://rustup.rs) | build-essential, clang, llvm, CMake (`pipx install "cmake>=3.25,<4"` khi bản của apt cũ hơn 3.25), ninja, JDK 17, pipx, python3-venv, rpm, nasm, các package `-dev` của GTK3 / PipeWire / VA-API / tray, VA-API driver, GNOME portal, bản FFmpeg tối giản link tĩnh, cargo-ndk, quiche, opus |
+| **Ubuntu / Debian** | không cần gì ngoài apt; [Rust](https://rustup.rs) | build-essential, clang, llvm, CMake (`pipx install "cmake>=3.25,<4"` khi bản của apt cũ hơn 3.25), ninja, JDK 17, pipx, python3-venv, rpm, nasm, các package `-dev` của GTK3 / PipeWire / VA-API / GBM / tray, VA-API driver, GNOME portal, bản FFmpeg tối giản link tĩnh, cargo-ndk, quiche, opus |
 | **macOS** | [Homebrew](https://brew.sh), Xcode và command line tools, [Rust](https://rustup.rs) | cmake, ninja, pipx, LLVM của Homebrew (Apple clang không kèm runtime libFuzzer), Temurin JDK 17, cargo-ndk, quiche và opus cho Apple |
 | **Windows** | winget (App Installer), [Git for Windows](https://git-scm.com/download/win) (các build script chạy trong Git Bash của nó), Python 3 | Visual Studio Build Tools kèm C++ workload và *C++ Clang tools*, Rust, NASM, GNU make, Temurin JDK 17 và Android Studio qua winget, do `scripts/bootstrap.ps1` thực hiện |
 
@@ -314,7 +314,7 @@ Quy ước của dự án, bản rút gọn; bản đầy đủ nằm trong `CLA
 | --- | --- |
 | `make dist-macos` | một file dmg đã sign bằng Developer ID, đã notarize và staple |
 | `make verify-macos` | kiểm tra Gatekeeper trên bản vừa build |
-| `make dist-linux` | một `.deb` và một `.rpm`, mỗi gói chứa app lẫn `deskhub-cli` và cài udev rule cho uinput |
+| `make dist-linux` | một `.deb` và một `.rpm`, mỗi gói chứa app, `deskhub-cli` và service `deskhubd`, và cài udev rule cho uinput |
 
 `dist-macos` cần một identity *Developer ID Application* trong keychain và một App Store
 Connect API key để notarize: `ASC_KEY_P8` (đường dẫn tới file `.p8`), `ASC_KEY_ID` và
@@ -329,7 +329,10 @@ dưới dạng bộ cài đó — không có exe portable, vì thiếu service t
 hộp thoại UAC, màn hình khoá hay màn hình đăng nhập. Trên macOS, phase CMake của Xcode
 project cũng build `deskhub-cli` và `DeskhubDaemon`, rồi `scripts/embed-macos-daemon.sh`
 copy cả hai vào `Contents/MacOS` và ký bằng identity của app; cask Homebrew link CLI vào
-`PATH`.
+`PATH`. Trên Linux, `make release-linux` build `deskhubd` cạnh app, và
+`scripts/stage-linux-pkgroot.sh` đặt nó vào `/usr/libexec/deskhub/` cùng
+`deskhubd.service`, unit mà `.deb` và `.rpm` bật và khởi động ở bước post-install, rồi dừng
+khi gỡ package, xoá luôn `/var/lib/deskhub`.
 
 Mọi gói đều kèm `THIRD_PARTY_NOTICES.md` và các văn bản giấy phép trong `licenses/` áp dụng
 cho nó: `.deb` và `.rpm` (dưới `/usr/share/doc/deskhub/`, các văn bản — kể cả LGPL — nằm

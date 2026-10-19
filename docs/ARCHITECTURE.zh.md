@@ -43,7 +43,7 @@ client/     各 OS 的 app: windows、linux、macos、ios、android（依赖 pla
 | `platform/net` | `UdpSocket`（按 OS 实现）、`QuicEndpoint`（quiche 置于 pimpl 之后）、`SessionTransport`、`NetInfo`（本机自身的地址） |
 | `platform/auth` | `AuthNegotiation` —— 双方共用的唯一基于 key 签名的 handshake，及其 host 侧的各种结果（第 3 节） |
 | `platform/client` | `HostLink`（dial、trust、auth、等待批准、channel，由所有界面共用）、`ScreenViewer` 及其循环、`TerminalViewer` 与 `TerminalFeed`、`FileTransferClient` 与 `FileUpload`、`SourceQuery`（阻塞与异步两种形式）、`HostProfiles`（按 fingerprint 索引的受信任 host，附名称与最后地址） |
-| `platform/host` | `HostEngine`、`HostNetLoop`、`SharingHost`、`ShareController`、`ShareDriver`、`TerminalHost`、`FileHost`、`ViewerBroadcast`、`PairingInvite`（签发 token 并构造本 host 展示的 invite） |
+| `platform/host` | `HostEngine`、`HostNetLoop`、`SharingHost`、`ShareController`、`ShareDriver`、`TerminalHost`、`FileHost`、`ViewerBroadcast`、`PairingInvite`（签发 token 并构造本 host 展示的 invite），以及用于登录前访问的 `UnattendedPush`、`UnattendedClient`（app 一侧的 daemon socket）与 `UnattendedDaemon`（macOS 与 Linux daemon 一侧） |
 | `platform/audio` | audio capture（PipeWire、WASAPI）与 sink（PipeWire、WASAPI、Core Audio、AAudio），host 侧的 `AudioBroadcaster` 与 viewer 侧的 `AudioPlayer` |
 | `platform/media` | Opus codec、显示器枚举、Linux 上的 xdg portal ScreenCast session，以及两个 Apple app 共用的 VideoToolbox encoder、decoder 与 source pipeline |
 | `platform/input` | 为 "host 优先" 监测本地 input（`LocalInputMonitor`），以及各 OS 的 native key code 映射 |
@@ -289,15 +289,16 @@ HostEngine（每个 app 一个实例，持有 SessionTransport）
   保持停止。`Configure` 携带一个 `UnattendedConfig`（enabled 标志，以及 `host_key.pem`、
   `authorized_keys`、`ui-settings.txt` 的文本）；service 把这三个文件原子地写入机器文件夹，
   在 key 或 settings 变化时重启该 host，并在禁用时抹除这些文件。app 会在该设置被切换时、
-  每次保存 settings 之后、允许列表每次变动之后、共享停止时以及启动时各发送一次；Windows 上
+  每次保存 settings 之后、允许列表每次变动之后、共享停止时以及启动时各发送一次；Windows 与 Linux 上
   CLI 则在 `settings set`、改变允许列表的 `access` 命令以及 `share` 停止时发送。
 - macOS 的登录前访问（T-28）：app 内嵌 `Contents/MacOS/DeskhubDaemon` 以及
   `Contents/Library/LaunchDaemons` 下的一个 LaunchDaemon plist，在勾选该设置时通过
   `SMAppService.daemon` 注册（一次 *Allow in background* 批准）。该 daemon 以 root 运行，
-  监听 Unix socket `/var/run/deskhub/control.sock`（`deskhubp/net/LocalSocket`），把每条连接
-  的字节交给 `UnattendedControlServer`（`core/session/host/UnattendedControl`），与 Windows
-  pipe 使用同一套 request 流：`Takeover`、`Configure`，以及 Windows service 会拒绝的
-  `Status`。它凭代码签名信任对端 —— `identifier "com.deskhub.macos"` 加 Deskhub 的 Team ID，
+  通过 `ServeUnattendedControl`（`deskhubp/host/UnattendedDaemon`，与 Linux 共用）监听 Unix
+  socket `/var/run/deskhub/control.sock`，把每条连接（`deskhubp/net/LocalSocket`）的字节交给
+  `UnattendedControlServer`（`core/session/host/UnattendedControl`），与 Windows pipe 使用同一套
+  request 流：`Takeover`、`Configure`，以及 Windows service 会拒绝的 `Status`。这段对话在 app
+  一侧是 `deskhubp/host/UnattendedClient`，同样与 Linux 共用。它凭代码签名信任对端 —— `identifier "com.deskhub.macos"` 加 Deskhub 的 Team ID，
   用 Security.framework 对连接进程的 audit token 核验 —— 从不凭路径。`Configure` 把三个文件写入
   `/Library/Application Support/Deskhub`（`deskhubp/system/MachineFolder`，root `0700`），并
   写入或移除 `/Library/LaunchAgents/com.deskhub.macos.unattended.plist` —— 一个限定于
@@ -312,6 +313,28 @@ HostEngine（每个 app 一个实例，持有 SessionTransport）
   登录前，capture 一旦启动，host 不再向 window server 询问任何东西：viewer 的输入经
   `IOHIDSystem`（`IOHIDPostEvent`）投递，显示器矩形自 `Init` 起缓存，跳过本地输入监视器与
   500 ms 的尺寸探测，像素缩放取自 `SCContentFilter`（§9）。
+- Linux 的登录前访问（T-28）：`.deb` 与 `.rpm` 安装 `/usr/libexec/deskhub/deskhubd` 和
+  `deskhubd.service`，并在安装后步骤中启用并启动它。该 daemon 以 root 运行，通过与 macOS 相同的
+  `ServeUnattendedControl` 提供 `/run/deskhub/control.sock`；app 与 CLI 通过 `UnattendedClient`
+  连接它，后者之所以信任监听方，是因为它以 root 运行，且 socket 所在文件夹只有 root 可写 ——
+  无特权进程无法读取 root 进程的 `/proc/<pid>/exe`，所以这一侧没有与 macOS 路径核验对应的
+  做法。daemon 读取对端的 `/proc/<pid>/exe`，只服务 `/usr/bin/deskhub` 与
+  `/usr/bin/deskhub-cli`：`Takeover` 与 `Status` 对任何用户开放，`Configure` 只对 root 或
+  `sudo`、`wheel`、`admin` 组成员开放（`client/linux/cpp/secure/AdminGroup`）。一个 supervisor
+  线程在副本存在、没有 `Takeover` 被持有且有 CRTC 点亮时启动 `deskhubd --unattended-host`，并在
+  它退出两秒后、或 `host_key.pem` 与 `ui-settings.txt` 变化时重启它。`Takeover` 以及密钥或设置的变化
+  会直接杀掉这个子进程（SIGKILL），并在回复 ack 之前等它结束，因此 app 绑定时 port 已空出：
+  正常停止的 `SharingHost` 会给 viewer 发送 BYE，从而结束它们的会话；而一个只是沉默下来的 host
+  会让它们重新拨号（V-8）并接入 app 的共享 —— Windows 服务终止其 unattended host 也是出于同样
+  的原因。关闭该设置时则用 SIGTERM 停止子进程（五秒后 SIGKILL），让 viewer 得知会话已结束。
+  该子进程就是普通的 `SharingHost`，开启 `UnattendedMode()`：其 source 来自 KMS
+  （`ListKmsDisplays`，每个点亮的 CRTC 一个，`targetId` = card 序号 << 32 | CRTC id），跳过 portal
+  的 preflight，`DisplayCapture` 选用 `KmsCapture` 而非 PipeWire 的 `ScreenCapture`，并在点亮的
+  CRTC 集合变化时退出。`KmsCapture` 以共享 fps 用 `drmModeGetFB2` 读取 CRTC 的 framebuffer，以
+  PRIME 导出，导入同一 GPU render node 上的无 surface GLES 2 context（GBM 上的 EGL），并把它 ——
+  裁剪到该 CRTC、再叠上 cursor plane —— 绘入三块线性 XRGB8888 GBM buffer 之一，这些 buffer 以
+  `FrameMemory::DmaBuf` 进入 VA-API（§9）。输入使用 app 自己的 uinput 注入器，其设备是全系统的，
+  因此也能到达登录界面。
 - Shell：每个 shell 对应一个 PTY（Windows 为 `ConPTY`，其他平台为 `forkpty`），最多 8
   个。连接中断时 shell 被分离，PTY 一直保留到 shell 进程退出或 shell 被关闭，不设时间
   限制。任何已准入的 client 均可列出被保留的 shell（`TermList`/`TermListAck`）、按 id
@@ -449,6 +472,10 @@ root 创建（`0700`），保存同样的三份副本、host 的 `unattended-sta
 `unattended-hold` 标记，以及 daemon 与 host 的日志。关闭该设置会移除副本和登录窗口 agent 的
 plist；Homebrew cask 的 `zap` 会移除该文件夹，拖到废纸篓卸载则会把它留下。
 
+在 Linux 上，第二个文件夹是 `/var/lib/deskhub`，root `0700`，由 `deskhubd` 与 systemd 的
+`StateDirectory=` 创建，保存同样的三份副本、app 共享期间的 `unattended-hold` 标记，以及 daemon
+与 host 的日志。关闭该设置会移除副本；移除软件包会移除该文件夹。
+
 viewer 发送的文件保存在其他位置：由 host 选定的文件夹（`ui-settings.txt` 中的
 `transfer_dir`，默认为用户主目录下的 `Deskhub`）。`FileStore` 将每个文件写为
 `<name>.deskhub-part`，仅在整个文件到达且 CRC-32 匹配后改名，因此写入中途的文件不会以
@@ -530,6 +557,21 @@ runner 上与 base commit 的 A/B 结果（偏移仅作为警告，不导致失�
   核验会信任放在那里的任何东西。与 Windows 不同，该功能止于登录，因为 launchd 会在那一刻
   拆除 LoginWindow session；在 app 未共享时于用户自己的 session 内 host 需要一个按用户的
   agent 和第二轮 TCC 授权，留待以后的阶段。
+
+- **Linux 在登录前后都通过 EGL 捕获 scanout**：登录界面运行在自己的 session 中，那里没有
+  ScreenCast portal，所以 host 改为读取显示引擎正在 scanout 的内容。这在任何登录界面、任何
+  compositor 下都可行，无需对话框，并且在有人登录后依然有效 —— 这正是 Linux host 像 Windows
+  一样在 app 未共享的任何时候运行的原因：登录时没有任何机制会像 launchd 结束 macOS LoginWindow
+  session 那样拆除一个 root 进程。framebuffer 并不原样交给 VA-API：在第一台试验的机器上，
+  Intel 的 iHD 驱动拒绝了对 GNOME 所用 scanout buffer 的每一种导入方式 —— 10 位 `XR30`，带
+  `Y_TILED_GEN12_RC_CCS_CC`，压缩且带 clear-colour plane —— 而 Mesa 的 EGL 能导入显示引擎能够
+  scanout 的任何内容，因为 compositor 依赖于此。一次绘入线性 XRGB8888 buffer 的 GL 绘制即可解开
+  压缩、去 tiling、把 10 位转换为 8 位、从 X11 上多显示器共享的 framebuffer 中裁出该 CRTC，并
+  加上 framebuffer 本身所缺的 cursor plane —— 全程不离开 GPU。已导入的 image 以 dma-buf 的
+  inode 而不是 framebuffer id 缓存，因为内核会把释放的 framebuffer id 交给下一个 buffer。与
+  Windows pipe 不同，该 socket 接受本机每个用户，以便任何人的 app 都能接管；由于进程可以先连接、
+  再 `exec` 真正的 `/usr/bin/deskhub`，可执行文件检查只能把 Deskhub 与其他程序区分开，而更改
+  登录前谁能进入的权利，取决于调用者的账户是否为管理员。
 
 - **macOS app 的自动共享由 app 本身发起，而不是由主窗口发起**：AppKit 会恢复 app 上次退出时
   拥有的窗口，而一个一直待在菜单栏里的 app 没有任何窗口，因此由登录项启动时 app 回来却没有

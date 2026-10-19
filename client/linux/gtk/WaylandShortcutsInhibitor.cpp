@@ -23,7 +23,7 @@ const wl_interface* kInhibitShortcutsTypes[] = {
 
 const wl_message kManagerRequests[] = {
     {"destroy", "", kNoTypes},
-    {"inhibit_shortcuts", "nos", kInhibitShortcutsTypes},
+    {"inhibit_shortcuts", "noo", kInhibitShortcutsTypes},
 };
 const wl_interface kManagerInterface = {
     "zwp_keyboard_shortcuts_inhibit_manager_v1", kProtocolVersion, 2, kManagerRequests, 0,

@@ -121,6 +121,9 @@ private:
 
     void LoadSettings();
     void SaveSettings();
+    void AddUnattendedSetting(GtkWidget* general);
+    void ApplyUnattendedToggle();
+    void SyncUnattended();
     void PopulateBindCombo();
     void RebuildHostAddressRows();
     void BuildQrWindow();
@@ -220,6 +223,7 @@ private:
     static void OnCopyPortClicked(GtkButton* b, gpointer user);
     static gboolean OnCopiedRevertTimer(gpointer user);
     static void OnSettingChanged(GtkWidget* w, gpointer user);
+    static void OnUnattendedToggled(GtkToggleButton* button, gpointer user);
     static void OnBindChanged(GtkWidget* w, gpointer user);
     static void OnForgetDeviceClicked(GtkButton* b, gpointer user);
     static void OnForgetAllClicked(GtkButton* b, gpointer user);
@@ -309,6 +313,8 @@ private:
     GtkWidget* autoShareCheck_ = nullptr;
     GtkWidget* autostartCheck_ = nullptr;
     GtkWidget* startHiddenCheck_ = nullptr;
+    GtkWidget* unattendedCheck_ = nullptr;
+    GtkWidget* unattendedNote_ = nullptr;
     GtkWidget* clipboardCheck_ = nullptr;
     GtkWidget* shareAudioCheck_ = nullptr;
     GtkWidget* playAudioCheck_ = nullptr;

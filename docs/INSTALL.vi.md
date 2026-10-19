@@ -136,6 +136,16 @@ Mỗi gói cài app desktop thành `/usr/bin/deskhub`, thêm launcher vào menu 
 `/usr/bin/deskhub-cli` cạnh đó. Gói `deskhub-cli` riêng của các bản trước không còn: gói
 này thay thế nó, nên bản cũ được gỡ khi nâng cấp.
 
+Mỗi gói còn cài `deskhubd`, một service hệ thống (`deskhubd.service`) được bật và khởi động
+cùng gói nhưng không làm gì cho tới khi bạn bật **Allow access before anyone signs in** —
+dưới mục *Launch* trong Settings của app, hoặc bằng `deskhub-cli settings set unattended=on`.
+Chỉ root hoặc thành viên nhóm `sudo`, `wheel` hay `admin` mới bật được; nếu không, checkbox
+sẽ nói rõ điều đó. Từ đó các thiết bị đã có trong danh sách được phép thấy được màn hình
+đăng nhập và gõ mật khẩu ngay sau khi máy khởi động, và truy cập máy bất cứ khi nào app
+không share; xem [đặc tả](SPECIFICATION.vi.md) (T-28) để biết nó làm gì và không làm gì.
+Tính năng này cần card đồ hoạ Intel hoặc AMD dùng Mesa; driver độc quyền của NVIDIA chưa
+được hỗ trợ.
+
 Trên Ubuntu, Kubuntu, Debian và Mint, apt repository của Deskhub cài đúng bản deb đó và
 để `sudo apt upgrade` mang về mọi bản release sau này. Repository hỗ trợ Ubuntu 22.04 trở
 lên và Debian 12 trở lên:
@@ -257,6 +267,9 @@ rm -rf ~/.deskhub            # settings, key, client được phép và host đ�
 sudo rm -f /etc/apt/sources.list.d/deskhub.list /etc/apt/keyrings/deskhub.gpg   # apt repository, nếu đã thêm
 ```
 
+Gỡ package cũng dừng `deskhubd` và xoá `/var/lib/deskhub`, nơi nó giữ log và các bản copy
+mà *Allow access before anyone signs in* tạo ra.
+
 File máy khác gửi tới vẫn nằm trong `~/Deskhub` (hoặc thư mục bạn đã chọn) cho đến khi bạn
 xoá. `setup-uinput.sh` để lại udev
 rule, file module-load và việc bạn là thành viên nhóm `input`; hãy tự gỡ nếu không còn gì
@@ -326,10 +339,14 @@ với service, nên hãy chạy terminal dưới quyền administrator cho các 
 `deskhub-cli share` không nâng quyền vẫn chạy, nhưng không có secure desktop, và khi
 setting kia đang bật thì nó không giành lại được port từ host trước khi đăng nhập; và một
 `deskhub-cli.exe` copy đi nơi khác, hay build từ source, không được phục vụ, như mọi bản
-copy nằm ngoài thư mục đã cài. Trên macOS, *Allow access before anyone signs in* chỉ bật
-được trong app: `deskhub-cli settings set unattended=on` từ chối ở đó, cũng như trên Linux,
-nơi chưa có host trước khi đăng nhập, và thay đổi CLI thực hiện với danh sách được phép trên
-Mac sẽ tới host trước khi đăng nhập ở lần kế tiếp app khởi động hoặc dừng share. Mọi bộ cài
+copy nằm ngoài thư mục đã cài. Trên Linux, `/usr/bin/deskhub-cli` đã cài nói chuyện với
+`deskhubd` theo cùng cách: `settings set unattended=on` và các lệnh `access` giữ host trước
+khi đăng nhập luôn khớp, miễn là tài khoản của bạn là root hoặc thuộc nhóm `sudo`, `wheel`
+hay `admin` — hãy chạy nó dưới chính tài khoản của bạn, không dùng `sudo`, vì nó giao đi key
+và danh sách được phép của chính bạn. Trên macOS, *Allow access before anyone signs in* chỉ
+bật được trong app: `deskhub-cli settings set unattended=on` từ chối ở đó, và thay đổi CLI
+thực hiện với danh sách được phép trên Mac sẽ tới host trước khi đăng nhập ở lần kế tiếp app
+khởi động hoặc dừng share. Mọi bộ cài
 và gói cài đặt đều mang theo `THIRD_PARTY_NOTICES.md` và văn bản giấy phép của các thư viện
 bên trong.
 

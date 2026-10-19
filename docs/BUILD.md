@@ -26,7 +26,7 @@ yourself before running it:
 
 | Host OS | Install first | What bootstrap then does |
 | --- | --- | --- |
-| **Ubuntu / Debian** | nothing beyond apt; [Rust](https://rustup.rs) | build-essential, clang, llvm, CMake (`pipx install "cmake>=3.25,<4"` when apt's is older than 3.25), ninja, JDK 17, pipx, python3-venv, rpm, nasm, the GTK3 / PipeWire / VA-API / tray `-dev` packages, VA-API drivers, the GNOME portal, the static minimal FFmpeg, cargo-ndk, quiche, opus |
+| **Ubuntu / Debian** | nothing beyond apt; [Rust](https://rustup.rs) | build-essential, clang, llvm, CMake (`pipx install "cmake>=3.25,<4"` when apt's is older than 3.25), ninja, JDK 17, pipx, python3-venv, rpm, nasm, the GTK3 / PipeWire / VA-API / GBM / tray `-dev` packages, VA-API drivers, the GNOME portal, the static minimal FFmpeg, cargo-ndk, quiche, opus |
 | **macOS** | [Homebrew](https://brew.sh), Xcode + command line tools, [Rust](https://rustup.rs) | cmake, ninja, pipx, Homebrew LLVM (Apple clang ships no libFuzzer runtime), Temurin JDK 17, cargo-ndk, quiche and opus for Apple |
 | **Windows** | winget (App Installer), [Git for Windows](https://git-scm.com/download/win) (the build scripts run under its Git Bash), Python 3 | Visual Studio Build Tools with the C++ workload and *C++ Clang tools*, Rust, NASM, GNU make, Temurin JDK 17 and Android Studio via winget, driven by `scripts/bootstrap.ps1` |
 
@@ -312,7 +312,7 @@ House rules, in short — the full version is in `CLAUDE.md`:
 | --- | --- |
 | `make dist-macos` | a dmg signed with Developer ID, notarized and stapled |
 | `make verify-macos` | a Gatekeeper check on the build just produced |
-| `make dist-linux` | one `.deb` and one `.rpm`, each holding the app and `deskhub-cli` and installing the uinput udev rule |
+| `make dist-linux` | one `.deb` and one `.rpm`, each holding the app, `deskhub-cli` and the `deskhubd` service, and installing the uinput udev rule |
 
 `dist-macos` needs a *Developer ID Application* identity in the keychain and an App Store
 Connect API key for notarization: `ASC_KEY_P8` (the path to the `.p8` file), `ASC_KEY_ID`
@@ -328,7 +328,10 @@ as that installer — there is no portable exe, because without the service view
 see a UAC prompt, the lock screen or the sign-in screen. On macOS the Xcode project's
 CMake phase also builds `deskhub-cli` and `DeskhubDaemon`, and
 `scripts/embed-macos-daemon.sh` copies both into `Contents/MacOS` and signs them with the
-app's identity; the Homebrew cask links the CLI into `PATH`.
+app's identity; the Homebrew cask links the CLI into `PATH`. On Linux `make release-linux`
+builds `deskhubd` beside the app, and `scripts/stage-linux-pkgroot.sh` puts it in
+`/usr/libexec/deskhub/` with `deskhubd.service`, which the `.deb` and `.rpm` enable and start
+from their post-install step and stop on removal, deleting `/var/lib/deskhub` with it.
 
 Every package carries `THIRD_PARTY_NOTICES.md` and the licence texts from `licenses/`
 that apply to it: the `.deb` and `.rpm` (under `/usr/share/doc/deskhub/`, the texts — the

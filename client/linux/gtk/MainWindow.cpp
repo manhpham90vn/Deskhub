@@ -9,6 +9,8 @@
 #include <thread>
 #include <vector>
 
+#include <unistd.h>
+
 #include "AccessRequestListener.h"
 #include "deskhubp/media/DisplayEnum.h"
 #include "gtk/FileSendDialog.h"
@@ -33,6 +35,8 @@
 #include "deskhubp/system/PairingTokenFile.h"
 #include "deskhubp/system/UiSettingsStore.h"
 #include "deskhubp/host/PairingInvite.h"
+#include "secure/AdminGroup.h"
+#include "secure/ControlSocket.h"
 
 #include "deskhub/media/QualityPreset.h"
 #include "deskhub/media/SourceLabel.h"
@@ -594,6 +598,7 @@ void MainWindow::Build(GtkApplication* app) {
     });
 
     loadingSettings_ = false;
+    SyncUnattended();
 
     RefreshDeviceList();
 
@@ -1055,6 +1060,7 @@ void MainWindow::OnApproveRequestClicked(GtkButton* button, gpointer user) {
     if (client == nullptr) return;
     const deskhub::Fingerprint fingerprint = client->fingerprint;
     deskhubp::ApproveAccessRequest(fingerprint);
+    self->SyncUnattended();
     self->WithdrawAccessRequestNotification(fingerprint);
     self->RefreshAccessRequests(true);
     self->RefreshPairedDevices();
@@ -1402,6 +1408,7 @@ void MainWindow::AllowPastedClient() {
     }
     ShowInlineError(allowClientError_, "");
     gtk_entry_set_text(GTK_ENTRY(allowClientEntry_), "");
+    SyncUnattended();
     RefreshPairedDevices();
 }
 
@@ -1560,6 +1567,7 @@ void MainWindow::ForgetEveryDevice() {
     gtk_widget_destroy(dlg);
     if (!confirmed) return;
     deskhubp::ClearAuthorizedKeys();
+    SyncUnattended();
     RefreshPairedDevices();
 }
 
@@ -1569,6 +1577,7 @@ void MainWindow::OnForgetDeviceClicked(GtkButton* button, gpointer user) {
     if (row < 0 || size_t(row) >= self->pairedDevices_.size()) return;
     const deskhub::Fingerprint fingerprint = self->pairedDevices_[size_t(row)].fingerprint;
     deskhubp::ForgetAuthorizedClient(fingerprint);
+    self->SyncUnattended();
     self->RefreshPairedDevices();
 }
 
@@ -1691,6 +1700,47 @@ void MainWindow::BuildGeneralSettings(GtkWidget* general) {
     startHiddenCheck_ = gtk_check_button_new_with_label(ui::kCloseToTrayLabel);
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(startHiddenCheck_), settings_.startHidden);
     gtk_box_pack_start(GTK_BOX(general), startHiddenCheck_, FALSE, FALSE, 0);
+    AddUnattendedSetting(general);
+}
+
+void MainWindow::AddUnattendedSetting(GtkWidget* general) {
+    const bool installed = UnattendedDaemonInstalled();
+    const bool administrator = IsAdministrator(uint32_t(getuid()));
+    const bool usable = installed && administrator;
+    unattendedCheck_ = gtk_check_button_new_with_label(ui::kUnattendedLabel);
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(unattendedCheck_),
+        usable && settings_.unattended);
+    gtk_widget_set_sensitive(unattendedCheck_, usable);
+    gtk_box_pack_start(GTK_BOX(general), unattendedCheck_, FALSE, FALSE, 0);
+    const char* note = !installed       ? ui::kUnattendedServiceMissingNote
+                       : !administrator ? ui::kUnattendedNeedsAdminGroup
+                                        : ui::kUnattendedHintLinux;
+    unattendedNote_ = Hint(note);
+    gtk_box_pack_start(GTK_BOX(general), unattendedNote_, FALSE, FALSE, 0);
+    g_signal_connect(unattendedCheck_, "toggled", G_CALLBACK(OnUnattendedToggled), this);
+}
+
+void MainWindow::OnUnattendedToggled(GtkToggleButton*, gpointer user) {
+    auto* self = static_cast<MainWindow*>(user);
+    if (!self->loadingSettings_) self->ApplyUnattendedToggle();
+}
+
+void MainWindow::ApplyUnattendedToggle() {
+    settings_.unattended = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(unattendedCheck_));
+    const bool accepted = PushUnattendedAccess(settings_);
+    if (!accepted) {
+        settings_.unattended = false;
+        loadingSettings_ = true;
+        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(unattendedCheck_), FALSE);
+        loadingSettings_ = false;
+    }
+    gtk_label_set_text(GTK_LABEL(unattendedNote_),
+        accepted ? ui::kUnattendedHintLinux : ui::kUnattendedPushFailedNote);
+    deskhubp::SaveUiSettings(settings_);
+}
+
+void MainWindow::SyncUnattended() {
+    SyncUnattendedAccess(settings_);
 }
 
 GtkWidget* MainWindow::BuildSettingsPage() {
@@ -1866,6 +1916,7 @@ void MainWindow::SaveSettings() {
     ApplyTrayMode();
 
     deskhubp::SaveUiSettings(settings_);
+    SyncUnattended();
     if (!hosting_ && !hostStarting_) ShowIdleHostState();
 }
 
@@ -2373,6 +2424,7 @@ void MainWindow::StopHosting() {
     share_.StopFileShare();
     share_.sharingHost().Stop();
     shareDriver_.Join();
+    SyncUnattended();
     hosting_ = false;
     screenSharing_ = false;
     terminalRequested_ = false;

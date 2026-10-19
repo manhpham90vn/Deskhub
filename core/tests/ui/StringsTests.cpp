@@ -32,6 +32,7 @@ void TestEveryLabelSaysSomething() {
         ui::kStopDisplayAction, ui::kDisconnectViewerAction,
         ui::kAllowControlLabel, ui::kViewOnlyNote, ui::kRequestControlLabel,
         ui::kUnattendedLabel, ui::kUnattendedHintWindows, ui::kUnattendedHintMac,
+        ui::kUnattendedHintLinux, ui::kUnattendedNeedsAdminGroup,
         ui::kUnattendedServiceMissingNote, ui::kUnattendedPushFailedNote,
         ui::kUnattendedApprovalNote, ui::kUnattendedHostPermissionsHint,
         ui::kUnattendedHostScreenLabel, ui::kUnattendedHostInputLabel,

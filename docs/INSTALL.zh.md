@@ -119,6 +119,14 @@ openSUSE Tumbleweed）。openSUSE Leap 15.5 的 glibc 为 2.31，无法运行。
 `/usr/bin/deskhub-cli`。早期版本单独的 `deskhub-cli` 包已不复存在：本包取代了它，升级时
 旧包会被移除。
 
+每个软件包还会安装 `deskhubd`，这是一个系统 service（`deskhubd.service`），随软件包启用并
+启动，但在你开启 **Allow access before anyone signs in** 之前什么也不做 —— 该选项位于 app
+Settings 的 *Launch* 下，也可用 `deskhub-cli settings set unattended=on` 开启。只有 root 或
+`sudo`、`wheel`、`admin` 组的成员才能开启它，否则复选框会说明原因。开启后，已在你允许列表上的
+设备可以在机器启动后随即看到登录界面并输入密码，并在 app 未共享的任何时候访问它；它能做什么、
+不能做什么，见[规格说明](SPECIFICATION.zh.md)（T-28）。它需要使用 Mesa 的 Intel 或 AMD 显卡；
+NVIDIA 专有驱动暂不支持。
+
 在 Ubuntu、Kubuntu、Debian 和 Mint 上，Deskhub 的 apt repository 安装的是同一个 deb，
 并让 `sudo apt upgrade` 获取之后的每个 release。它支持 Ubuntu 22.04 及以上、Debian 12
 及以上：
@@ -236,6 +244,9 @@ rm -rf ~/.deskhub            # settings、key、允许的 client 与受信任的
 sudo rm -f /etc/apt/sources.list.d/deskhub.list /etc/apt/keyrings/deskhub.gpg   # apt repository（若已添加）
 ```
 
+移除软件包还会停止 `deskhubd`，并删除 `/var/lib/deskhub`，它在那里保存日志以及
+*Allow access before anyone signs in* 创建的副本。
+
 其他机器发来的文件保留在 `~/Deskhub`（或你选择的文件夹）中，直到你删除它们。
 `setup-uinput.sh` 会留下它的 udev rule、module-load 文件
 以及你在 `input` 组中的成员身份；若没有其他用途，请手动移除：
@@ -301,9 +312,11 @@ client、connection request 及受信任的 host。
 才能与该 service 通信，所以这些操作请在管理员终端中进行 —— 未提权的 `deskhub-cli share`
 仍然可用，但没有 secure desktop，并且在该设置开启期间无法从登录前的 host 手中接管端口；
 另外，复制到别处或从源码构建的 `deskhub-cli.exe`，和安装文件夹之外的任何副本一样，不会得到
-service 的服务。在 macOS 上，*Allow access before anyone signs in* 只能在 app 中开启：
-`deskhub-cli settings set unattended=on` 在那里会被拒绝，在没有登录前 host 的 Linux 上亦然；
-CLI 在 Mac 上对允许列表的更改，会在 app 下一次启动或停止共享时到达登录前的 host。每个安装
+service 的服务。在 Linux 上，已安装的 `/usr/bin/deskhub-cli` 以同样方式与 `deskhubd` 通信：
+`settings set unattended=on` 与 `access` 命令会让登录前的 host 保持同步，只要你的账户是 root
+或属于 `sudo`、`wheel`、`admin` 组 —— 请以你自己的身份运行，不要加 `sudo`，因为它交出的是你
+自己的 key 与允许列表。在 macOS 上，*Allow access before anyone signs in* 只能在 app 中开启：
+`deskhub-cli settings set unattended=on` 在那里会被拒绝；CLI 在 Mac 上对允许列表的更改，会在 app 下一次启动或停止共享时到达登录前的 host。每个安装
 程序和安装包都附带 `THIRD_PARTY_NOTICES.md` 以及其中所含库的许可证文本。
 
 在 Linux 上，它通过 app 所需的同一个 portal 和 VA-API driver 共享屏幕，remote input 也

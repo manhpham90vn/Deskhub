@@ -137,6 +137,16 @@ application menu, and installs `/usr/bin/deskhub-cli` beside it. The separate
 `deskhub-cli` package earlier releases had is gone: this package replaces it, so an old
 one is removed on upgrade.
 
+Each package also installs `deskhubd`, a system service (`deskhubd.service`) that is
+enabled and started with it but does nothing until you turn on **Allow access before
+anyone signs in** — under *Launch* in the app's Settings, or with
+`deskhub-cli settings set unattended=on`. Only root or a member of the `sudo`, `wheel` or
+`admin` group can turn it on; the checkbox says so otherwise. From then on devices already
+on your allowed list can see the login screen and type the password right after the
+machine starts, and reach it whenever the app is not sharing; see the
+[specification](SPECIFICATION.md) (T-28) for what it does and does not do. It needs Intel
+or AMD graphics with Mesa; the NVIDIA proprietary driver is not supported yet.
+
 On Ubuntu, Kubuntu, Debian and Mint, the Deskhub apt repository installs the same deb and
 lets `sudo apt upgrade` bring every later release. It serves Ubuntu 22.04 and newer, and
 Debian 12 and newer:
@@ -261,6 +271,9 @@ rm -rf ~/.deskhub            # settings, keys, allowed clients and trusted hosts
 sudo rm -f /etc/apt/sources.list.d/deskhub.list /etc/apt/keyrings/deskhub.gpg   # the apt repository, if you added it
 ```
 
+Removing the package also stops `deskhubd` and deletes `/var/lib/deskhub`, where it kept
+its logs and the copies *Allow access before anyone signs in* made.
+
 Files other machines sent you stay in `~/Deskhub` (or the folder you picked) until you
 delete them. `setup-uinput.sh` leaves
 its udev rule, its module-load file and your `input` group membership behind; remove them
@@ -331,11 +344,14 @@ Two things to know: only administrators may talk to the service, so run the term
 administrator for those parts — a non-elevated `deskhub-cli share` still works, but without
 the secure desktop, and while that setting is on it cannot take the port over from the host
 before sign-in; and a `deskhub-cli.exe` copied anywhere else, or built from source, is not
-served, like any other copy outside the installed folder. On macOS *Allow access before
-anyone signs in* is set in the app only: `deskhub-cli settings set unattended=on` refuses
-there, as it does on Linux, which has no host before sign-in, and a change the CLI makes to
-the allowed list on a Mac reaches the host before sign-in the next time the app starts or
-stops a share. Every installer and package carries `THIRD_PARTY_NOTICES.md` and the licence
+served, like any other copy outside the installed folder. On Linux the installed
+`/usr/bin/deskhub-cli` talks to `deskhubd` the same way: `settings set unattended=on` and
+the `access` commands keep the host before sign-in in step, as long as your account is root
+or in the `sudo`, `wheel` or `admin` group — run it as yourself, not with `sudo`, because
+it hands over your own key and allowed list. On macOS *Allow access before anyone signs
+in* is set in the app only: `deskhub-cli settings set unattended=on` refuses there, and a
+change the CLI makes to the allowed list on a Mac reaches the host before sign-in the next
+time the app starts or stops a share. Every installer and package carries `THIRD_PARTY_NOTICES.md` and the licence
 texts of the libraries inside it.
 
 On Linux it shares a screen through the same portal and VA-API driver the app needs, and

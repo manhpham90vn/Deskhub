@@ -173,7 +173,7 @@ Linux)
     echo "[install] apt packages for the Ubuntu app (PipeWire, VA-API, GTK3, tray, nasm)..."
     scripts/apt-install.sh \
         libgtk-3-dev libglib2.0-dev libepoxy-dev libegl-dev libgles-dev \
-        libdrm-dev libva-dev libpipewire-0.3-dev libspa-0.2-dev \
+        libdrm-dev libgbm-dev libva-dev libpipewire-0.3-dev libspa-0.2-dev \
         libayatana-appindicator3-dev \
         nasm
 

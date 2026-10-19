@@ -27,7 +27,7 @@ target 列表，不会构建 app。各 target 的说明见 [`Makefile`](../Makef
 
 | 本机 OS | 需先安装 | bootstrap 随后安装 |
 | --- | --- | --- |
-| **Ubuntu / Debian** | 除 apt 外无需其他；[Rust](https://rustup.rs) | build-essential、clang、llvm、CMake（apt 版本低于 3.25 时执行 `pipx install "cmake>=3.25,<4"`）、ninja、JDK 17、pipx、python3-venv、rpm、nasm，GTK3 / PipeWire / VA-API / tray 的 `-dev` package，VA-API driver，GNOME portal，静态的最小化 FFmpeg，cargo-ndk，quiche，opus |
+| **Ubuntu / Debian** | 除 apt 外无需其他；[Rust](https://rustup.rs) | build-essential、clang、llvm、CMake（apt 版本低于 3.25 时执行 `pipx install "cmake>=3.25,<4"`）、ninja、JDK 17、pipx、python3-venv、rpm、nasm，GTK3 / PipeWire / VA-API / GBM / tray 的 `-dev` package，VA-API driver，GNOME portal，静态的最小化 FFmpeg，cargo-ndk，quiche，opus |
 | **macOS** | [Homebrew](https://brew.sh)、Xcode 与 command line tools、[Rust](https://rustup.rs) | cmake、ninja、pipx、Homebrew 的 LLVM（Apple clang 不含 libFuzzer runtime）、Temurin JDK 17、cargo-ndk，以及面向 Apple 的 quiche 和 opus |
 | **Windows** | winget（App Installer）、[Git for Windows](https://git-scm.com/download/win)（build script 在其 Git Bash 下运行）、Python 3 | 通过 winget 安装含 C++ workload 与 *C++ Clang tools* 的 Visual Studio Build Tools、Rust、NASM、GNU make、Temurin JDK 17 和 Android Studio，由 `scripts/bootstrap.ps1` 执行 |
 
@@ -287,7 +287,7 @@ clang 构建会对未使用的 member function、template 与 exception 参数�
 | --- | --- |
 | `make dist-macos` | 使用 Developer ID sign、经 notarize 并 staple 的 dmg |
 | `make verify-macos` | 对刚构建的产物执行 Gatekeeper 检查 |
-| `make dist-linux` | 一个 `.deb` 与一个 `.rpm`，各自包含 app 与 `deskhub-cli`，并安装 uinput 的 udev rule |
+| `make dist-linux` | 一个 `.deb` 与一个 `.rpm`，各自包含 app、`deskhub-cli` 与 `deskhubd` service，并安装 uinput 的 udev rule |
 
 `dist-macos` 需要 keychain 中有 *Developer ID Application* identity，并需要用于 notarization
 的 App Store Connect API key：`ASC_KEY_P8`（`.p8` 文件的路径）、`ASC_KEY_ID` 与
@@ -300,7 +300,10 @@ Release workflow 通过 `packaging/windows/Deskhub.iss` 构建 Windows app 的 I
 运行 `--uninstall`）。Windows app 仅以该安装程序发布 —— 没有便携版 exe，因为没有该 service
 时 viewer 无法看到 UAC 提示、锁屏或登录画面。在 macOS 上，Xcode 项目的 CMake 阶段同时构建
 `deskhub-cli` 与 `DeskhubDaemon`，`scripts/embed-macos-daemon.sh` 把两者复制到
-`Contents/MacOS` 并用 app 的身份签名；Homebrew cask 会把 CLI 链接到 `PATH`。
+`Contents/MacOS` 并用 app 的身份签名；Homebrew cask 会把 CLI 链接到 `PATH`。在 Linux 上，
+`make release-linux` 会在 app 旁边构建 `deskhubd`，`scripts/stage-linux-pkgroot.sh` 把它连同
+`deskhubd.service` 放进 `/usr/libexec/deskhub/`；`.deb` 与 `.rpm` 在安装后步骤中启用并启动它，
+在移除时停止它，并一并删除 `/var/lib/deskhub`。
 
 每个安装包都附带 `THIRD_PARTY_NOTICES.md` 以及 `licenses/` 中适用于它的 licence 文本：
 `.deb` 和 `.rpm`（位于 `/usr/share/doc/deskhub/`，文本 —— 包括 LGPL —— 位于其 `licenses/`

@@ -2,7 +2,7 @@
 
 # Deskhub プライバシーポリシー
 
-_発効日: 2026 年 10 月 17 日 — バージョン 2.16_
+_発効日: 2026 年 10 月 19 日 — バージョン 2.17_
 
 > 本書は [`PRIVACY.md`](PRIVACY.md) の翻訳。内容に差がある場合は英語版を優先する。
 
@@ -49,7 +49,7 @@ analytics、crash reporting、広告、データを収集する組み込みの�
 | 利用者が入力する IPv4 アドレス（port を指定した場合はその port も）—— Deskhub は host 名の名前解決を行わない | 相手のマシンへ接続するため | 入力した端末内にのみ保持する | 利用者が変更するまでローカルに保持する |
 | 直近 10 件の接続先 host —— アドレス、最後に接続した時刻、host が自ら名乗った名前 | *Recent devices* の一覧を構成するため | 利用者の端末上、app 自身のフォルダの `recent-hosts.txt` に 1 行 1 host で保存する。Windows は `%USERPROFILE%\.deskhub`、macOS と Linux は `~/.deskhub`、iOS と Android は app のサンドボックス。送信されることはない。旧バージョンの `recent-devices.txt` は変換されず、削除される | より新しい host へ 10 件接続するか、ファイルを削除するまで保持する |
 | 共有に関する設定（frame rate、bitrate、解像度の上限、port、network アドレス、viewer による操作の可否、本端末が閲覧するマシンを操作するかどうか、clipboard sync・音声の共有・閲覧中のマシンの音声の再生・keep awake・OS 起動時の開始・自動共有・バックグラウンドモードの各トグル） | 次回 app を開いた際に settings を復元するため | 同じフォルダの `ui-settings.txt` に保存する。iOS では app と broadcast extension が共有する app group のコンテナに置く | 利用者が変更するか、ファイルを削除するまで保持する |
-| 誰もサインインしていない状態で動く host のために保持する、本端末の key、許可済み client、共有に関する設定のコピー（Windows と macOS のみ、かつ *Allow access before anyone signs in* がオンの間のみ） | すでに許可済み一覧にある端末が、コンピュータの起動直後にサインイン画面を見てパスワードを入力でき、app が動作していない間もマシンへ到達できるようにするため（macOS では誰もサインインしていない間） | app の求めに応じて —— Windows では `deskhub-cli` の求めにも応じて —— 書き込まれる。Windows では *DeskHub Secure Desktop* サービスが、`%ProgramData%\DeskHub` —— SYSTEM と管理者のみが開けるフォルダ —— の `host_key.pem`、`authorized_keys`、`ui-settings.txt` に、macOS では `DeskhubDaemon` が、root のみが開けるフォルダ `/Library/Application Support/Deskhub` の同じ 3 つのファイルに書き込む。app が —— Windows では CLI も —— 原本を変更するたびに更新される。それらを読む host は同じ場所に `access_requests` と `pairing_tokens` も書き —— macOS では自身の権限状態の記録も書き —— サービスまたは daemon の log もそこに置かれる。app 自身が送信するもの以上に送信されるものはない。同じ key、同じ fingerprint、同じ受け入れ判定である | 設定をオフにすると削除され、Windows で DeskHub をアンインストールするか macOS で `brew uninstall --zap deskhub` を実行するとフォルダ全体が削除される。macOS の app をゴミ箱へドラッグした後は、フォルダを自分で削除する |
+| 誰もサインインしていない状態で動く host のために保持する、本端末の key、許可済み client、共有に関する設定のコピー（Windows、macOS、Linux で、かつ *Allow access before anyone signs in* がオンの間のみ） | すでに許可済み一覧にある端末が、コンピュータの起動直後にサインイン画面を見てパスワードを入力でき、app が動作していない間もマシンへ到達できるようにするため（macOS では誰もサインインしていない間） | app の求めに応じて —— Windows と Linux では `deskhub-cli` の求めにも応じて —— 書き込まれる。Windows では *DeskHub Secure Desktop* サービスが、`%ProgramData%\DeskHub` —— SYSTEM と管理者のみが開けるフォルダ —— の `host_key.pem`、`authorized_keys`、`ui-settings.txt` に、macOS では `DeskhubDaemon` が、root のみが開けるフォルダ `/Library/Application Support/Deskhub` の同じ 3 つのファイルに、Linux では `deskhubd` サービスが、root のみが開けるフォルダ `/var/lib/deskhub` の同じ 3 つのファイルに書き込む。app が —— Windows と Linux では CLI も —— 原本を変更するたびに更新される。それらを読む host は同じ場所に `access_requests` と `pairing_tokens` も書き —— macOS では自身の権限状態の記録も書き —— サービスまたは daemon の log もそこに置かれる。app 自身が送信するもの以上に送信されるものはない。同じ key、同じ fingerprint、同じ受け入れ判定である | 設定をオフにすると削除され、Windows で DeskHub をアンインストールするか、Linux でパッケージを削除するか、macOS で `brew uninstall --zap deskhub` を実行するとフォルダ全体が削除される。macOS の app をゴミ箱へドラッグした後は、フォルダを自分で削除する |
 | *Start Deskhub when you log in* が作成する起動エントリ（デスクトップのみ） | ログイン時に Deskhub を起動するため | app のフォルダの外に、OS 自身の仕組みで作成される。Windows では *Deskhub* という名前の scheduled task（ログオン時に最上位の権限で実行）、Linux では `~/.config/autostart/deskhub.desktop`、macOS ではログイン項目。保持するのは app のパスのみで、何も送信しない | 設定をオフにすると削除される |
 | Linux のデスクトップが、その画面共有ダイアログで display を選択した後に発行する画面 permission の token（Linux のみ） | 以後の共有でその選択を再利用し、ダイアログが初回のみ表示されるようにするため | 同じフォルダの `portal-restore-token.txt` に保存する。この token は本マシン上の利用者自身のデスクトップ session にのみ意味を持ち、送信されない | 共有のたびに置き換わる。*Choose screens again* を選択するか、ファイルを削除すると消去される |
 | Clipboard のテキスト（clipboard sync のトグルが on で、session が動作している場合のみ） | ある端末でコピーしたテキストを他の端末で貼り付けられるようにするため | 端末間で直接送信し、転送中は encrypt（QUIC/TLS）。1 回のコピーにつき 32 KiB を上限とする。プレーンテキストのみで、画像やファイルは含まない | Deskhub は保存しない。各端末の通常のシステム clipboard 内にのみ存在する |
@@ -135,6 +135,7 @@ Ctrl+Alt+Del 画面が表示され、viewer の input もそこへ届く。
 | Windows | 管理者権限（UAC） | 昇格したウィンドウへ input を inject できるよう、app は昇格して動作する。UAC は起動のたびに確認するが、*Start Deskhub when you log in* が scheduled task を通じて起動する場合は確認しない。 |
 | Windows | システムサービス（*DeskHub Secure Desktop*） | インストーラーが追加し、LocalSystem として動作する。app または CLI が共有している間、Windows の secure desktop —— UAC の確認画面、ロック画面、サインイン画面および Ctrl+Alt+Del 画面 —— を capture し、app が他の画像と同様に viewer へ送信できるようにするとともに、viewer の mouse と keyboard の input をそこへ届ける。*Allow access before anyone signs in* がオンの場合（既定ではオフ）、どちらも共有していない間はいつでも、サインイン画面以降、3 節に記載したコピーを用い、すでに許可済みの端末だけを受け入れる独自の host も動かす。その host は *Deskhub Secure Desktop (host)* という名前のファイアウォールルールを追加する。サービスは自身の log を、SYSTEM と管理者のみが読める `%ProgramData%\DeskHub` に保持し、それ以外は何も保存しない。 |
 | Windows | Windows ファイアウォール | 共有時に、昇格した app が自身に対して *Deskhub (host)* という名前の受信 UDP ルールを、すべての network profile について 1 つ追加または更新する。他のルールは変更しない。利用者が Deskhub に対して作成した block ルールはそのまま残り、Deskhub への到達を妨げ続ける。 |
+| Linux | システムサービス（`deskhubd`） | `.deb` と `.rpm` がインストールして起動するが、*Allow access before anyone signs in* がオンになるまでは何もしない。これをオンにできるのは root か、`sudo`、`wheel`、`admin` グループのメンバーだけである。オンになると、第 3 節に記載したコピーを `/var/lib/deskhub` に保持し、app が共有していない間は —— greeter を含めて —— host を動かす。この host は root として画面をグラフィックスカードから直接読み取り、すでに許可済みの端末だけを受け入れる。その host 以外に自ら接続を開くことはなく、log はそのフォルダに置かれる。 |
 | Linux | 画面共有の同意（デスクトップの portal） | 初回はデスクトップ自身のダイアログが共有する画面を尋ねる。その回答は第 3 節に記載した token によって記憶される。 |
 | Linux | 仮想入力デバイス（`/dev/uinput`） | viewer の input を inject するために必要である。`.deb` と `.rpm` は、これを `input` グループと seat にログインしている利用者に開放する udev ルールをインストールする。 |
 | Linux | `/dev/input/event*` の読み取り | host を優先する挙動 —— マシンの前にいる人が入力や mouse の操作をしていることの検知 —— にのみ必要である。利用者が自分で自身を `input` グループに追加することで許可される。パッケージはこれを行わず、許可がなくても Deskhub は動作するが、remote input を停止することはない。Deskhub が読み取るのは入力があったかどうかだけであり、その内容は何も記録しない。 |
@@ -220,7 +221,8 @@ Windows では、*Allow access before anyone signs in* のために保持され�
 アンインストールすると log を含めてそのフォルダが削除される。macOS では
 `/Library/Application Support/Deskhub` にある。設定をオフにするとそれらは削除され、
 フォルダは `brew uninstall --zap deskhub` とともに削除される。app をゴミ箱へドラッグした
-後は自分で削除する。
+後は自分で削除する。Linux では `/var/lib/deskhub` にある。設定をオフにするとそれらは
+削除され、`.deb` または `.rpm` を削除すると log を含めてそのフォルダが削除される。
 
 他の端末から送られたファイルは app ではなく利用者に帰属する。到着後は、当該コンピュータ
 が選択したフォルダ、またはスマートフォンやタブレットの写真ライブラリ、Documents、
@@ -258,6 +260,7 @@ https://github.com/manhpham90vn/Deskhub/blob/main/PRIVACY.md
 
 | バージョン | 日付 | 変更内容 |
 |---|---|---|
+| 2.17 | 2026-10-19 | **オンにすれば、Linux マシンにも誰もサインインしていない状態で到達できるようになった。** `.deb` と `.rpm` は `deskhubd` をインストールするようになった。これは root のサービスで、*Allow access before anyone signs in* がオンになるまで —— app の設定で、または `deskhub-cli settings set unattended=on` で、root か `sudo`、`wheel`、`admin` グループのメンバーが行う —— 何もしない。オンになると、本端末の key、許可済み client、共有に関する設定のコピーを root のみが開けるフォルダ `/var/lib/deskhub` に保持し、app が共有していない間は greeter を含めて host を動かし、画面をグラフィックスカードから直接読み取る。host は接続要求と QR token をそこに書き込むことがあり、サービスと host の log もそこに置かれる。入れるのはすでに許可済みの端末だけで、新たに送信されるものはない。設定をオフにするとコピーは削除され、パッケージを削除するとフォルダが削除される。 |
 | 2.16 | 2026-10-17 | **オンにすれば、Mac にも誰もサインインしていない状態で到達できるようになった。** *Allow access before anyone signs in* が macOS にも加わった。チェックを入れると、macOS が *Login Items & Extensions* で一度だけ許可を求めたうえで、app に同梱された root daemon `DeskhubDaemon` が登録される。daemon は本端末の key、許可済み client、共有に関する設定のコピーを、root のみが開けるフォルダ `/Library/Application Support/Deskhub` に保持し、誰もサインインしていない間はログインウィンドウで host を動かす。その host は画面収録とアクセシビリティの有無を同じフォルダに記録して app が表示できるようにし、接続要求と QR token をそこに書くこともある。daemon と host の log もそこに置かれる。入れるのはすでに許可済みの端末だけで、新たに送信されるものはない。チェックを外すとコピーは削除され daemon の登録は解除される。`brew uninstall --zap deskhub` はフォルダを削除する。**Windows のコマンドラインからも同じ設定を切り替えられる。** `deskhub-cli settings set unattended=on` と `off` は app のチェックボックスと同じ働きをし、CLI の `access` コマンドも app と同様に `%ProgramData%\DeskHub` のコピーを更新する。*DeskHub Secure Desktop* サービスは、インストール済みの `Deskhub.exe` だけでなくインストール済みの `deskhub-cli.exe` からもそのコピーを受け取る。CLI はすべてのデスクトップ向けパッケージに同梱されるようになり、CLI 単体のダウンロードと winget パッケージは取り下げられた。新たに保存・送信されるものはない。 |
 | 2.15 | 2026-10-17 | **オンにすれば、Windows には誰もサインインしていない状態でも到達できるようになった。** 新しい設定 *Allow access before anyone signs in* —— 既定ではオフで、DeskHub をセットアップファイルでインストールした場合にのみ利用できる —— により、*DeskHub Secure Desktop* サービスは app が共有していない間はいつでも、Windows の起動直後のサインイン画面から、独自の host を動かす。そのためにサービスは、本端末の key、許可済み client、共有に関する設定のコピーを、SYSTEM と管理者のみが開けるフォルダ `%ProgramData%\DeskHub` に保持する。それらを読む host は接続要求と QR token もそこに書くことがあり、サービスの log も同じフォルダに置かれるようになった。受け入れられるのはすでに許可済みの端末のみであり、この host は何も表示せず、誰も承認しない。設定をオフにするとコピーは削除され、アンインストールするとフォルダは削除される。新たに送信されるものはない。 |
 | 2.14 | 2026-10-16 | **Windows では、secure desktop の間も共有が継続されるようになった。** インストーラーは DeskHub をすべてのユーザー向けにインストールし、システムサービス *DeskHub Secure Desktop* を追加するようになった。app が共有している間、このサービスは UAC の確認画面、ロック画面、サインイン画面および Ctrl+Alt+Del 画面を capture し、それらは画面の他の部分と同様に viewer へ送信される。また viewer の mouse と keyboard の input をそこへ届ける —— そのため viewer は UAC の確認に応答でき、アカウントのパスワードを知る viewer はマシンのロックを解除できる。以前のバージョンでは、これらの画面が表示されている間、viewer には停止した画像が表示されていた。新たに保存されるものはなく、サービスが独自に network 接続を開くこともない。 |

@@ -13,6 +13,8 @@ if(NOT DESKHUB_LINUX_APP OR NOT TARGET deskhub_linux_core)
     return()
 endif()
 
+add_subdirectory(daemon)
+
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(DESKHUB_GTK IMPORTED_TARGET gtk+-3.0)
 if(NOT DESKHUB_GTK_FOUND)

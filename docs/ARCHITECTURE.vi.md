@@ -45,7 +45,7 @@ client/     app theo từng OS: windows, linux, macos, ios, android (phụ thu�
 | `platform/net` | `UdpSocket` (theo từng OS), `QuicEndpoint` (quiche đặt sau pimpl), `SessionTransport`, `NetInfo` (các địa chỉ của chính máy) |
 | `platform/auth` | `AuthNegotiation` — handshake chữ ký bằng key duy nhất mà cả hai phía sử dụng, với các kết cục phía host của nó (mục 3) |
 | `platform/client` | `HostLink` (dial, trust, auth, chờ approve, channel; dùng chung cho mọi giao diện), `ScreenViewer` và vòng lặp của nó, `TerminalViewer` và `TerminalFeed`, `FileTransferClient` và `FileUpload`, `SourceQuery` (blocking và async), `HostProfiles` (các host đã trust theo fingerprint, kèm tên và địa chỉ gần nhất) |
-| `platform/host` | `HostEngine`, `HostNetLoop`, `SharingHost`, `ShareController`, `ShareDriver`, `TerminalHost`, `FileHost`, `ViewerBroadcast`, `PairingInvite` (phát hành token và dựng lời mời mà host này hiển thị) |
+| `platform/host` | `HostEngine`, `HostNetLoop`, `SharingHost`, `ShareController`, `ShareDriver`, `TerminalHost`, `FileHost`, `ViewerBroadcast`, `PairingInvite` (phát hành token và dựng lời mời mà host này hiển thị), và cho truy cập trước khi đăng nhập là `UnattendedPush`, `UnattendedClient` (phía app của socket daemon) và `UnattendedDaemon` (phía daemon của macOS và Linux) |
 | `platform/audio` | Capture audio (PipeWire, WASAPI) và sink (PipeWire, WASAPI, Core Audio, AAudio), `AudioBroadcaster` phía host và `AudioPlayer` phía viewer |
 | `platform/media` | Codec Opus, liệt kê màn hình, session ScreenCast qua xdg portal trên Linux, và encoder, decoder cùng source pipeline VideoToolbox mà cả hai app Apple dùng |
 | `platform/input` | Theo dõi input cục bộ cho cơ chế "host được ưu tiên" (`LocalInputMonitor`) và ánh xạ mã phím gốc theo từng OS |
@@ -326,16 +326,18 @@ HostEngine (mỗi app một instance, sở hữu SessionTransport)
   `authorized_keys`, nội dung `ui-settings.txt`); service ghi ba file đó atomic vào thư mục
   của máy, khởi động lại host khi key hoặc settings thay đổi, và xoá các file khi tắt. App
   gửi nó khi setting được bật hoặc tắt, sau mỗi lần lưu settings, sau mỗi thay đổi với danh
-  sách được phép, khi một phiên share dừng và một lần lúc khởi động; trên Windows CLI gửi
-  nó từ `settings set`, từ các lệnh `access` làm thay đổi danh sách được phép và khi `share`
+  sách được phép, khi một phiên share dừng và một lần lúc khởi động; trên Windows và Linux
+  CLI gửi nó từ `settings set`, từ các lệnh `access` làm thay đổi danh sách được phép và khi `share`
   dừng.
 - macOS trước khi đăng nhập (T-28): app nhúng `Contents/MacOS/DeskhubDaemon` và một plist
   LaunchDaemon dưới `Contents/Library/LaunchDaemons`, đăng ký qua `SMAppService.daemon` khi
-  setting được tick (một lần xác nhận *Allow in background*). Daemon chạy root, lắng nghe
-  trên Unix socket `/var/run/deskhub/control.sock` (`deskhubp/net/LocalSocket`) và đưa byte
-  của mỗi kết nối qua `UnattendedControlServer` (`core/session/host/UnattendedControl`),
-  cùng luồng request với pipe Windows: `Takeover`, `Configure` và một `Status` mà service
-  Windows từ chối. Nó tin peer theo chữ ký code — `identifier "com.deskhub.macos"` với Team
+  setting được tick (một lần xác nhận *Allow in background*). Daemon chạy root và lắng nghe
+  trên Unix socket `/var/run/deskhub/control.sock` qua `ServeUnattendedControl`
+  (`deskhubp/host/UnattendedDaemon`, dùng chung với Linux), hàm đưa byte của mỗi kết nối
+  (`deskhubp/net/LocalSocket`) qua `UnattendedControlServer`
+  (`core/session/host/UnattendedControl`), cùng luồng request với pipe Windows: `Takeover`,
+  `Configure` và một `Status` mà service Windows từ chối. Phía app của cuộc trao đổi đó là
+  `deskhubp/host/UnattendedClient`, cũng dùng chung với Linux. Nó tin peer theo chữ ký code — `identifier "com.deskhub.macos"` với Team
   ID của Deskhub, kiểm tra bằng Security.framework trên audit token của tiến trình kết nối
   — không bao giờ theo đường dẫn. `Configure` ghi ba file vào
   `/Library/Application Support/Deskhub` (`deskhubp/system/MachineFolder`, root `0700`) và
@@ -353,6 +355,33 @@ HostEngine (mỗi app một instance, sở hữu SessionTransport)
   viewer đi qua `IOHIDSystem` (`IOHIDPostEvent`), vùng màn hình được cache từ `Init`,
   monitor input cục bộ và phép dò kích thước 500 ms bị bỏ qua, và scale pixel lấy từ
   `SCContentFilter` (§9).
+- Linux trước khi đăng nhập (T-28): `.deb` và `.rpm` cài `/usr/libexec/deskhub/deskhubd`
+  và `deskhubd.service`, được bước post-install của chúng bật và khởi động. Daemon chạy root
+  và phục vụ `/run/deskhub/control.sock` qua cùng `ServeUnattendedControl` như macOS; app và
+  CLI tới nó qua `UnattendedClient`, vốn tin listener vì nó chạy root sau một thư mục socket
+  chỉ root ghi được — tiến trình không có đặc quyền không đọc được `/proc/<pid>/exe` của
+  tiến trình root, nên phép kiểm tra đường dẫn của macOS không có bản tương đương trên Linux
+  ở phía này. Daemon đọc `/proc/<pid>/exe` của peer và chỉ phục vụ `/usr/bin/deskhub` cùng
+  `/usr/bin/deskhub-cli`: `Takeover` và `Status` cho mọi người dùng, `Configure` chỉ cho root
+  hoặc thành viên nhóm `sudo`, `wheel` hay `admin` (`client/linux/cpp/secure/AdminGroup`).
+  Một thread supervisor spawn `deskhubd --unattended-host` bất cứ khi nào các bản copy tồn
+  tại, không có `Takeover` nào đang giữ và có ít nhất một CRTC đang sáng, và khởi động lại nó
+  hai giây sau khi nó thoát hoặc khi `host_key.pem` hay `ui-settings.txt` đổi. `Takeover`
+  và việc đổi khoá hay cài đặt giết thẳng tiến trình con đó (SIGKILL) và chờ nó thoát trước
+  khi ack, nên port đã trống khi app bind: một `SharingHost` dừng êm sẽ gửi BYE cho viewer,
+  khiến phiên của họ kết thúc, còn một host chỉ đơn giản im lặng thì khiến họ quay số lại
+  (V-8) và vào được bản chia sẻ của app — cũng là lý do service Windows terminate host
+  unattended của nó. Tắt cài đặt thì dừng tiến trình con bằng SIGTERM (SIGKILL sau năm giây),
+  để viewer được báo là phiên đã kết thúc. Tiến trình con là `SharingHost` bình thường với
+  `UnattendedMode()` bật: source lấy từ KMS (`ListKmsDisplays`, mỗi CRTC đang sáng một
+  source, `targetId` = chỉ số card << 32 | CRTC id), preflight của portal bị bỏ qua,
+  `DisplayCapture` chọn `KmsCapture` thay cho `ScreenCapture` của PipeWire, và nó thoát khi
+  tập CRTC đang sáng thay đổi. `KmsCapture` đọc framebuffer của CRTC bằng `drmModeGetFB2`
+  theo fps của phiên share, export bằng PRIME, import vào một context GLES 2 surfaceless trên
+  render node của cùng GPU (EGL trên GBM) rồi vẽ nó — cắt theo CRTC, có cursor plane ở trên —
+  vào một trong ba buffer GBM XRGB8888 linear, đi tới VA-API dưới dạng `FrameMemory::DmaBuf`
+  (§9). Input là chính uinput injector của app, mà thiết bị của nó có hiệu lực toàn hệ thống
+  nên cũng tới được greeter.
 - Shell: mỗi shell một PTY (`ConPTY` trên Windows, `forkpty` trên các nền tảng khác), tối
   đa 8 shell. Khi mất kết nối, shell được tách ra và PTY được giữ sống cho đến khi tiến trình shell thoát hoặc shell bị đóng — không giới hạn thời gian. Mọi client đã được chấp nhận đều có thể liệt kê các shell đang được giữ (`TermList`/`TermListAck`) và reattach một shell theo id. Mọi thao tác open, close, detach và reattach đều được ghi vào audit log kèm
   địa chỉ, tên và key. `TERM_CLOSE` được trả lời trước guard theo peer mà các message
@@ -515,6 +544,11 @@ marker `unattended-hold` trong lúc app share, và log của daemon lẫn host. 
 xoá các bản copy và plist của agent login window; `zap` của cask Homebrew xoá thư mục, còn
 gỡ bằng cách kéo vào Thùng rác thì để lại.
 
+Trên Linux, thư mục thứ hai là `/var/lib/deskhub`, root `0700`, do `deskhubd` và
+`StateDirectory=` của systemd tạo, chứa cùng ba bản copy, marker `unattended-hold` trong
+lúc app share, và log của daemon lẫn host. Tắt setting sẽ xoá các bản copy; gỡ package sẽ
+xoá thư mục.
+
 File do viewer gửi được lưu ở nơi khác: một thư mục do host chọn (trường `transfer_dir`
 trong `ui-settings.txt`, mặc định là `Deskhub` trong thư mục home của người dùng).
 `FileStore` ghi từng file dưới tên `<name>.deskhub-part` và chỉ đổi tên sau khi toàn bộ
@@ -613,6 +647,25 @@ coverage của core.
   đăng nhập, khác Windows, vì launchd tháo phiên LoginWindow ngay lúc đó; host trong phiên
   của chính người dùng khi app không share cần một agent theo người dùng và một vòng cấp
   quyền TCC nữa, để lại cho phiên sau.
+
+- **Linux capture scanout, qua EGL, cả trước lẫn sau khi đăng nhập**: greeter chạy trong
+  một phiên riêng nơi ScreenCast portal không tồn tại, nên host đọc thứ display engine đang
+  scan out. Cách đó chạy được với mọi greeter và mọi compositor, không cần hộp thoại, và vẫn
+  chạy sau khi có người đăng nhập, nên host Linux chạy bất cứ khi nào app không share, giống
+  Windows: không có gì tháo một tiến trình root lúc đăng nhập như cách launchd kết thúc phiên
+  LoginWindow của macOS. Framebuffer không được đưa nguyên cho VA-API: trên máy đầu tiên thử,
+  driver iHD của Intel từ chối mọi lần import buffer scanout mà GNOME dùng — `XR30` 10-bit
+  với `Y_TILED_GEN12_RC_CCS_CC`, có nén và có plane clear-colour — trong khi EGL của Mesa
+  import được mọi thứ display engine scan out được, vì compositor phụ thuộc vào điều đó. Một
+  lần vẽ GL vào buffer XRGB8888 linear giải nén, bỏ tiling, đổi 10-bit sang 8-bit, cắt CRTC
+  ra khỏi framebuffer mà nhiều màn hình dùng chung trên X11 và thêm cursor plane, thứ
+  framebuffer một mình không có — tất cả không rời GPU. Ảnh đã import được cache theo inode
+  của dma-buf, không theo framebuffer id, vì kernel giao id của framebuffer đã giải phóng cho
+  buffer kế tiếp. Khác pipe của Windows, socket nhận mọi người dùng cục bộ để app của bất kỳ
+  ai cũng giành quyền được; vì một tiến trình có thể kết nối rồi `exec` đúng
+  `/usr/bin/deskhub`, phép kiểm tra executable chỉ phân biệt Deskhub với mọi thứ khác, còn
+  quyền thay đổi ai được vào trước khi đăng nhập dựa vào việc tài khoản gọi tới là
+  administrator.
 
 - **App macOS tự share từ chính app, không từ cửa sổ chính**: AppKit khôi phục những cửa sổ
   app có lúc thoát lần trước, và một app đang nằm trong menu bar thì không có cửa sổ nào,

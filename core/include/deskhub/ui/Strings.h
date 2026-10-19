@@ -76,9 +76,13 @@ inline constexpr const char* kUnattendedHintMac =
     "while nobody is signed in: after a sign-out, and right after this Mac starts when "
     "FileVault is off. Once someone signs in, only the app shares. macOS asks you once to "
     "allow Deskhub to run in the background.";
+inline constexpr const char* kUnattendedHintLinux =
+    "Devices already on the allowed list can see the sign-in screen and type the password "
+    "right after this machine starts, and whenever Deskhub is not sharing. Needs the .deb or "
+    ".rpm install, and only an administrator may switch it.";
 inline constexpr const char* kUnattendedServiceMissingNote =
     "The Deskhub background service is not installed beside this app. Reinstall Deskhub "
-    "from its setup file or disk image to allow access before sign-in.";
+    "from its setup file, disk image or package to allow access before sign-in.";
 inline constexpr const char* kUnattendedPushFailedNote =
     "The Deskhub background service did not accept the settings for access before "
     "sign-in. Check that it is running and try again.";
@@ -88,9 +92,12 @@ inline constexpr const char* kUnattendedSyncFailedNote =
 inline constexpr const char* kUnattendedNeedsAdminTerminal =
     "Only administrators may talk to the DeskHub Secure Desktop service: run the terminal "
     "as an administrator and try again.";
+inline constexpr const char* kUnattendedNeedsAdminGroup =
+    "Only administrators may switch access before sign-in: root, or a member of the sudo, "
+    "wheel or admin group.";
 inline constexpr const char* kUnattendedAppOnlyNote =
-    "The command line can switch access before anyone signs in on Windows only. On macOS "
-    "tick it in the Deskhub app; Linux hosts do not have it yet.";
+    "The command line can switch access before anyone signs in on Windows and Linux. On "
+    "macOS tick it in the Deskhub app.";
 inline constexpr const char* kUnattendedApprovalNote =
     "macOS is waiting for your approval: open System Settings \xE2\x86\x92 General "
     "\xE2\x86\x92 Login Items & Extensions, allow Deskhub to run in the background, then "

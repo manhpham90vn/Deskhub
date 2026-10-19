@@ -140,6 +140,16 @@ Tumbleweed）。openSUSE Leap 15.5 の glibc は 2.31 のため動作しない�
 インストールする。以前のリリースにあった別個の `deskhub-cli` パッケージはなくなった。
 このパッケージがそれを置き換えるため、古いものはアップグレード時に削除される。
 
+各パッケージはシステムサービス `deskhubd`（`deskhubd.service`）もインストールする。これは
+パッケージとともに有効化・起動されるが、**Allow access before anyone signs in** をオンに
+するまでは何もしない —— app の設定の *Launch* の下、または
+`deskhub-cli settings set unattended=on` でオンにする。オンにできるのは root か、`sudo`、
+`wheel`、`admin` グループのメンバーだけで、そうでなければチェックボックスがその旨を示す。
+以後は、すでに許可済み一覧にあるデバイスが、マシンの起動直後にログイン画面を見て
+パスワードを入力でき、app が共有していない間はいつでもマシンに到達できる。何をして
+何をしないかは[仕様](SPECIFICATION.ja.md)（T-28）を参照のこと。Mesa を使う Intel または
+AMD のグラフィックスが必要で、NVIDIA のプロプライエタリドライバーにはまだ対応していない。
+
 Ubuntu、Kubuntu、Debian、Mint では、Deskhub の apt repository が同じ deb をインストール
 し、以後の release は `sudo apt upgrade` で届く。対応するのは Ubuntu 22.04 以降と
 Debian 12 以降である。
@@ -265,6 +275,9 @@ rm -rf ~/.deskhub            # settings、key、許可済み client、信頼済�
 sudo rm -f /etc/apt/sources.list.d/deskhub.list /etc/apt/keyrings/deskhub.gpg   # apt repository を追加した場合
 ```
 
+パッケージを削除すると `deskhubd` も停止し、その log と *Allow access before anyone signs in* が
+作ったコピーを保持していた `/var/lib/deskhub` も削除される。
+
 他のマシンから届いたファイルは、削除するまで `~/Deskhub`（または選んだフォルダ）に残る。
 `setup-uinput.sh` は udev rule、
 module-load ファイル、`input` グループへの所属を残すので、ほかに必要なければ手動で削除
@@ -335,10 +348,13 @@ Windows でセットアップの完了後は、新しい PowerShell ウィンド
 ターミナルを管理者として実行すること —— 昇格していない `deskhub-cli share` も動くが secure
 desktop は使えず、その設定がオンの間はサインイン前の host から port を引き継げない。また、
 別の場所へコピーした `deskhub-cli.exe` やソースから build したものは、インストール先
-フォルダの外にある他のコピーと同様、サービスに応えてもらえない。macOS では *Allow access
-before anyone signs in* は app の中でだけ設定できる。`deskhub-cli settings set unattended=on`
-はそこでは拒否され、サインイン前の host がない Linux でも同様である。Mac で CLI が許可済み
-一覧に加えた変更は、app が次に起動するか共有を停止したときにサインイン前の host に届く。
+フォルダの外にある他のコピーと同様、サービスに応えてもらえない。Linux ではインストール済みの
+`/usr/bin/deskhub-cli` が同じように `deskhubd` とやり取りする。アカウントが root であるか
+`sudo`、`wheel`、`admin` グループに属していれば、`settings set unattended=on` と `access`
+コマンドがサインイン前の host を同期させる —— `sudo` を付けず自分として実行すること。CLI は
+自分自身の key と許可済み一覧を渡すからである。macOS では *Allow access before anyone signs
+in* は app の中でだけ設定できる。`deskhub-cli settings set unattended=on` はそこでは拒否
+され、Mac で CLI が許可済み一覧に加えた変更は、app が次に起動するか共有を停止したときにサインイン前の host に届く。
 すべてのインストーラーとパッケージは `THIRD_PARTY_NOTICES.md` と、中に含まれる
 ライブラリのライセンス本文を同梱する。
 

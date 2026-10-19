@@ -29,6 +29,7 @@ and the texts in `/usr/share/doc/deskhub/licenses/` (the LGPL text, for example,
 the executables, in the install folder and its `licenses` subfolder; the macOS app carries
 them in the app bundle's `Contents/Resources`, which also covers the `deskhub-cli` and
 `DeskhubDaemon` inside it, the iOS app in its bundle, and the Android APK in its assets.
+On Linux the same copy covers `deskhubd`, the service the packages install beside the app.
 
 ## Linux app (`client/linux`)
 
@@ -42,12 +43,13 @@ them in the app bundle's `Contents/Resources`, which also covers the `deskhub-cl
 | [PipeWire](https://pipewire.org) 0.3 | MIT | dynamic |
 | [libva](https://github.com/intel/libva) / `libva-drm` | MIT | dynamic |
 | [libdrm](https://gitlab.freedesktop.org/mesa/drm) | MIT | dynamic |
+| [libgbm](https://gitlab.freedesktop.org/mesa/mesa) (Mesa) | MIT | dynamic (screen capture before sign-in) |
 | [libepoxy](https://github.com/anholt/libepoxy) | MIT | dynamic |
 | EGL ([libglvnd](https://gitlab.freedesktop.org/glvnd/libglvnd) / Mesa) | MIT | dynamic |
 | [libayatana-appindicator](https://github.com/AyatanaIndicators/libayatana-appindicator) 3 | LGPL-2.1 or LGPL-3.0; some files compiled into it are GPL-3.0 | dynamic, optional (tray icon) |
 
 The Linux command-line client links the same media stack: FFmpeg statically, and GLib/GIO,
-PipeWire, libva, libdrm, libepoxy and EGL dynamically — see the command-line client
+PipeWire, libva, libdrm, libgbm, libepoxy and EGL dynamically — see the command-line client
 section below.
 
 ### FFmpeg (LGPL-2.1-or-later, statically linked)
@@ -95,7 +97,7 @@ QUIC transport and the audio codec listed below.
 
 On Linux it also links the same media stack as the Linux app — FFmpeg **statically**
 under the same LGPL-2.1 terms described in the Linux app section above,
-plus GLib/GIO, PipeWire, libva, libdrm, libepoxy and EGL dynamically. Its `connect`
+plus GLib/GIO, PipeWire, libva, libdrm, libgbm, libepoxy and EGL dynamically. Its `connect`
 command opens a remote-screen window, which needs two libraries the desktop app does not
 use:
 

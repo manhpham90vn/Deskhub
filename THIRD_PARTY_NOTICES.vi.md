@@ -32,6 +32,7 @@ văn bản ở `/usr/share/doc/deskhub/licenses/` (ví dụ văn bản LGPL nằ
 thực thi, trong thư mục cài đặt và thư mục con `licenses`; app macOS mang chúng trong
 `Contents/Resources` của app bundle, bao phủ cả `deskhub-cli` và `DeskhubDaemon` bên
 trong, app iOS trong bundle của nó, và APK Android trong assets.
+Trên Linux, cùng bản copy ấy bao phủ cả `deskhubd`, service mà các package cài cạnh app.
 
 ## App Linux (`client/linux`)
 
@@ -45,12 +46,13 @@ trong, app iOS trong bundle của nó, và APK Android trong assets.
 | [PipeWire](https://pipewire.org) 0.3 | MIT | động |
 | [libva](https://github.com/intel/libva) / `libva-drm` | MIT | động |
 | [libdrm](https://gitlab.freedesktop.org/mesa/drm) | MIT | động |
+| [libgbm](https://gitlab.freedesktop.org/mesa/mesa) (Mesa) | MIT | động (chụp màn hình trước khi đăng nhập) |
 | [libepoxy](https://github.com/anholt/libepoxy) | MIT | động |
 | EGL ([libglvnd](https://gitlab.freedesktop.org/glvnd/libglvnd) / Mesa) | MIT | động |
 | [libayatana-appindicator](https://github.com/AyatanaIndicators/libayatana-appindicator) 3 | LGPL-2.1 hoặc LGPL-3.0; vài file được compile vào nó theo GPL-3.0 | động, tuỳ chọn (icon tray) |
 
 Command line client trên Linux link cùng bộ media này: FFmpeg link tĩnh, còn GLib/GIO,
-PipeWire, libva, libdrm, libepoxy và EGL link động — xem phần command line client bên
+PipeWire, libva, libdrm, libgbm, libepoxy và EGL link động — xem phần command line client bên
 dưới.
 
 ### FFmpeg (LGPL-2.1-or-later, link tĩnh)
@@ -98,7 +100,7 @@ liệt kê bên dưới.
 
 Trên Linux, nó còn link cùng bộ media với app Linux — FFmpeg link **tĩnh** theo đúng các
 điều khoản LGPL-2.1 đã nêu ở phần app Linux phía trên, cùng GLib/GIO, PipeWire, libva,
-libdrm, libepoxy và EGL link động. Lệnh `connect` mở cửa sổ xem màn hình từ xa, và cửa
+libdrm, libgbm, libepoxy và EGL link động. Lệnh `connect` mở cửa sổ xem màn hình từ xa, và cửa
 sổ đó cần thêm hai thư viện mà app desktop không dùng:
 
 | Thành phần | License | Cách link |

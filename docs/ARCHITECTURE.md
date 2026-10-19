@@ -42,7 +42,7 @@ client/     per-OS apps: windows, linux, macos, ios, android (depend on platform
 | `platform/net` | `UdpSocket` (per-OS), `QuicEndpoint` (quiche behind a pimpl), `SessionTransport`, `NetInfo` (the machine's own addresses) |
 | `platform/auth` | `AuthNegotiation` — the one key-signature handshake both sides speak, with its host-side outcomes (section 3) |
 | `platform/client` | `HostLink` (dial + trust + auth + approval wait + channels, shared by every surface), `ScreenViewer` and its loop, `TerminalViewer` and `TerminalFeed`, `FileTransferClient` and `FileUpload`, `SourceQuery` (blocking and async), `HostProfiles` (trusted hosts by fingerprint, with name and last address) |
-| `platform/host` | `HostEngine`, `HostNetLoop`, `SharingHost`, `ShareController`, `ShareDriver`, `TerminalHost`, `FileHost`, `ViewerBroadcast`, `PairingInvite` (issues a token and builds the invite this host shows) |
+| `platform/host` | `HostEngine`, `HostNetLoop`, `SharingHost`, `ShareController`, `ShareDriver`, `TerminalHost`, `FileHost`, `ViewerBroadcast`, `PairingInvite` (issues a token and builds the invite this host shows), and for access before sign-in `UnattendedPush`, `UnattendedClient` (the app's side of the daemon socket) and `UnattendedDaemon` (the macOS and Linux daemons' side) |
 | `platform/audio` | Audio capture (PipeWire, WASAPI) and sinks (PipeWire, WASAPI, Core Audio, AAudio), `AudioBroadcaster` on the host and `AudioPlayer` on the viewer |
 | `platform/media` | The Opus codec, display enumeration, the xdg portal ScreenCast session on Linux, and the VideoToolbox encoder, decoder and source pipeline both Apple apps use |
 | `platform/input` | Local input watching for "host wins" (`LocalInputMonitor`) and native key-code mapping per OS |
@@ -326,17 +326,19 @@ HostEngine (one per app, owns SessionTransport)
   writes the three files atomically into the machine folder, restarts the host when the
   key or the settings changed, and wipes the files when disabled. The app sends it when
   the setting is toggled, after every settings save, after every change to the allowed
-  list, when a share stops and once at start; on Windows the CLI sends it from
+  list, when a share stops and once at start; on Windows and Linux the CLI sends it from
   `settings set`, from the `access` commands that change the allowed list and when `share`
   stops.
 - macOS before sign-in (T-28): the app embeds `Contents/MacOS/DeskhubDaemon` and a
   LaunchDaemon plist under `Contents/Library/LaunchDaemons`, registered through
   `SMAppService.daemon` when the setting is ticked (one *Allow in background* approval).
-  The daemon runs as root, listens on the Unix socket `/var/run/deskhub/control.sock`
-  (`deskhubp/net/LocalSocket`) and feeds each connection's bytes through
+  The daemon runs as root and listens on the Unix socket `/var/run/deskhub/control.sock`
+  through `ServeUnattendedControl` (`deskhubp/host/UnattendedDaemon`, shared with Linux),
+  which feeds each connection's bytes (`deskhubp/net/LocalSocket`) through
   `UnattendedControlServer` (`core/session/host/UnattendedControl`), the same request
   stream as the Windows pipe: `Takeover`, `Configure` and a `Status` the Windows service
-  refuses. It trusts a peer by code signature — `identifier "com.deskhub.macos"` with
+  refuses. The app's side of that conversation is `deskhubp/host/UnattendedClient`, also
+  shared with Linux. It trusts a peer by code signature — `identifier "com.deskhub.macos"` with
   Deskhub's Team ID, checked with Security.framework against the audit token of the
   connecting process — never by path. `Configure` writes the three files into
   `/Library/Application Support/Deskhub` (`deskhubp/system/MachineFolder`, root `0700`)
@@ -356,6 +358,34 @@ HostEngine (one per app, owns SessionTransport)
   viewer's input goes through `IOHIDSystem` (`IOHIDPostEvent`), the display rectangle is
   cached from `Init`, the local-input monitor and the 500 ms size probe are skipped, and
   the pixel scale comes from the `SCContentFilter` (§9).
+- Linux before sign-in (T-28): the `.deb` and the `.rpm` install
+  `/usr/libexec/deskhub/deskhubd` and `deskhubd.service`, which their post-install step
+  enables and starts. The daemon runs as root and serves `/run/deskhub/control.sock`
+  through the same `ServeUnattendedControl` as macOS; the app and the CLI reach it through
+  `UnattendedClient`, which trusts the listener because it runs as root behind a socket
+  folder only root can write — an unprivileged process cannot read a root process's
+  `/proc/<pid>/exe`, so the macOS path check has no Linux equivalent on that side. The
+  daemon reads the peer's `/proc/<pid>/exe` and serves only `/usr/bin/deskhub` and
+  `/usr/bin/deskhub-cli`: `Takeover` and `Status` for any user, `Configure` only for root
+  or a member of `sudo`, `wheel` or `admin` (`client/linux/cpp/secure/AdminGroup`). A
+  supervisor thread spawns `deskhubd --unattended-host` whenever the copies exist, no
+  `Takeover` is held and some CRTC is lit, and restarts it two seconds after it exits or
+  when `host_key.pem` or `ui-settings.txt` change. `Takeover` and a key or settings change
+  kill that child outright (SIGKILL) and wait for it before the ack, so the port is free
+  when the app binds: a stopping `SharingHost` sends its viewers a BYE, which ends their
+  session, whereas a host that simply goes silent makes them redial (V-8) and land on the
+  app's share — the same reason the Windows service terminates its unattended host.
+  Switching the setting off stops the child with SIGTERM instead (SIGKILL after five
+  seconds), so viewers are told the session is over. The child is the ordinary `SharingHost` with `UnattendedMode()` on: its
+  sources come from KMS (`ListKmsDisplays`, one per lit CRTC, `targetId` = card index
+  << 32 | CRTC id), the portal preflight is skipped, `DisplayCapture` picks `KmsCapture`
+  instead of the PipeWire `ScreenCapture`, and it exits when the set of lit CRTCs changes.
+  `KmsCapture` reads the CRTC's framebuffer with `drmModeGetFB2` at the share fps, exports
+  it with PRIME, imports it into a surfaceless GLES 2 context on the same GPU's render node
+  (EGL on GBM) and draws it — cropped to the CRTC, with the cursor plane on top — into one
+  of three linear XRGB8888 GBM buffers that reach VA-API as `FrameMemory::DmaBuf` (§9).
+  Input is the app's own uinput injector, whose devices are system-wide and so reach the
+  greeter too.
 - Shells: one PTY per shell (`ConPTY` on Windows, `forkpty` elsewhere), at most 8; a
   dropped connection detaches the shell and the PTY stays alive until the shell
   process exits or the shell is closed — no time limit. Any admitted client can list
@@ -524,6 +554,11 @@ daemon's and the host's logs. Turning the setting off removes the copies and the
 window agent plist; the Homebrew cask's `zap` removes the folder, a drag-to-Trash
 uninstall leaves it behind.
 
+On Linux the second folder is `/var/lib/deskhub`, root `0700`, created by `deskhubd` and by
+systemd's `StateDirectory=`, holding the same three copies, the `unattended-hold` marker
+while the app shares, and the daemon's and the host's logs. Turning the setting off removes
+the copies; removing the package removes the folder.
+
 Files a viewer sends land somewhere else entirely: a folder the host picks
 (`ui-settings.txt`'s `transfer_dir`, defaulting to `Deskhub` in the user's home
 folder). `FileStore` writes each one as `<name>.deskhub-part` and renames it only
@@ -626,6 +661,26 @@ line.
   LoginWindow session down at that moment; hosting inside the user's own session when the
   app is not sharing would need a per-user agent and a second round of TCC grants, and is
   left for a later phase.
+
+- **Linux captures the scanout, through EGL, before and after sign-in**: the greeter runs
+  in a session of its own where the ScreenCast portal does not exist, so the host reads
+  what the display engine is scanning out instead. That works under any greeter and any
+  compositor, needs no dialog, and keeps working after someone signs in, which is why the
+  Linux host runs whenever the app is not sharing, as on Windows: nothing tears a root
+  process down at sign-in the way launchd ends the macOS LoginWindow session. The
+  framebuffer does not go to VA-API as it is: on the first machine tried, Intel's iHD
+  driver refused every import of the scanout buffer GNOME uses — 10-bit `XR30` with
+  `Y_TILED_GEN12_RC_CCS_CC`, compressed and with a clear-colour plane — while Mesa's EGL
+  imports whatever the display engine can scan out, because compositors depend on it. One
+  GL draw into a linear XRGB8888 buffer resolves the compression, untiles, converts 10-bit
+  to 8-bit, crops the CRTC out of a framebuffer that several monitors share on X11 and
+  adds the cursor plane, which the framebuffer alone lacks — all without leaving the GPU.
+  Imported images are cached by the dma-buf's inode, not by framebuffer id, because the
+  kernel hands a freed framebuffer id to the next buffer. Unlike the Windows pipe, the
+  socket accepts every local user so that anyone's app can take over; since a process can
+  connect and then `exec` the real `/usr/bin/deskhub`, the executable check only sorts
+  Deskhub from everything else, and the right to change who gets in before sign-in rests
+  on the caller's account being an administrator.
 
 - **The macOS app starts its auto-share from the app, not from the main window**: AppKit
   brings back the windows the app had when it last quit, and an app that was living in the

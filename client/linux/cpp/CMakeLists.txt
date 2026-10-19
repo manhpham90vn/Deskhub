@@ -2,6 +2,7 @@ find_package(PkgConfig REQUIRED)
 pkg_check_modules(DESKHUB_MEDIA IMPORTED_TARGET
     epoxy
     egl
+    gbm
     libdrm
     libva
     libva-drm
@@ -46,6 +47,9 @@ add_library(deskhub_linux_core STATIC
     SharingHost.cpp
 
     capture/ScreenCapture.cpp
+    capture/KmsDevice.cpp
+    capture/KmsBlitter.cpp
+    capture/KmsCapture.cpp
 
     encode/VaDisplay.cpp
     encode/VaEncoder.cpp
@@ -55,6 +59,9 @@ add_library(deskhub_linux_core STATIC
     render/VideoRenderer.cpp
 
     input/InputInjector.cpp
+
+    secure/AdminGroup.cpp
+    secure/ControlSocket.cpp
 )
 
 target_include_directories(deskhub_linux_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})

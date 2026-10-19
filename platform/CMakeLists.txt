@@ -190,10 +190,16 @@ else()
 endif()
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux" OR (APPLE AND NOT CMAKE_SYSTEM_NAME STREQUAL "iOS"))
-    set(deskhub_platform_local_socket src/net/LocalSocketPosix.cpp)
+    set(deskhub_platform_local_socket
+        src/net/LocalSocketPosix.cpp
+        src/host/UnattendedClientPosix.cpp
+    )
     set(deskhub_platform_local_socket_define DESKHUB_LOCAL_SOCKET=1)
 else()
-    set(deskhub_platform_local_socket src/net/LocalSocketNone.cpp)
+    set(deskhub_platform_local_socket
+        src/net/LocalSocketNone.cpp
+        src/host/UnattendedClientNone.cpp
+    )
     set(deskhub_platform_local_socket_define)
 endif()
 
@@ -232,6 +238,7 @@ add_library(platform STATIC
     src/host/HostEngine.cpp
     src/host/UnattendedMode.cpp
     src/host/UnattendedPush.cpp
+    src/host/UnattendedDaemon.cpp
     src/system/MachineFolder.cpp
     src/ffi/ClientFfi.cpp
     src/ffi/ShareFfi.cpp
@@ -349,6 +356,7 @@ if(DESKHUB_PLATFORM_TESTS)
         tests/system/AppDataFileTests.cpp
         tests/system/MachineFolderTests.cpp
         tests/host/UnattendedPushTests.cpp
+        tests/host/UnattendedDaemonTests.cpp
         tests/system/HostIdentityTests.cpp
         tests/system/AuthProofTests.cpp
         tests/system/AccessRequestsFileTests.cpp

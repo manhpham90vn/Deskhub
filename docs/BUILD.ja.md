@@ -28,7 +28,7 @@ build するプラットフォームの target を明示すること。引数な
 
 | 手元の OS | 事前に導入するもの | bootstrap が導入するもの |
 | --- | --- | --- |
-| **Ubuntu / Debian** | apt 以外に不要。加えて [Rust](https://rustup.rs) | build-essential、clang、llvm、CMake（apt のものが 3.25 より古い場合は `pipx install "cmake>=3.25,<4"`）、ninja、JDK 17、pipx、python3-venv、rpm、nasm、GTK3 / PipeWire / VA-API / tray の `-dev` package、VA-API driver、GNOME portal、静的な最小構成 FFmpeg、cargo-ndk、quiche、opus |
+| **Ubuntu / Debian** | apt 以外に不要。加えて [Rust](https://rustup.rs) | build-essential、clang、llvm、CMake（apt のものが 3.25 より古い場合は `pipx install "cmake>=3.25,<4"`）、ninja、JDK 17、pipx、python3-venv、rpm、nasm、GTK3 / PipeWire / VA-API / GBM / tray の `-dev` package、VA-API driver、GNOME portal、静的な最小構成 FFmpeg、cargo-ndk、quiche、opus |
 | **macOS** | [Homebrew](https://brew.sh)、Xcode と command line tools、[Rust](https://rustup.rs) | cmake、ninja、pipx、Homebrew の LLVM（Apple clang には libFuzzer runtime が含まれない）、Temurin JDK 17、cargo-ndk、Apple 向けの quiche および opus |
 | **Windows** | winget（App Installer）、[Git for Windows](https://git-scm.com/download/win)（build script はその Git Bash で動く）、Python 3 | C++ workload と *C++ Clang tools* を含む Visual Studio Build Tools、Rust、NASM、GNU make、Temurin JDK 17、Android Studio を winget 経由で導入する。`scripts/bootstrap.ps1` が実行する |
 
@@ -321,7 +321,7 @@ private な Kotlin コード、import、引数で失敗する。ある振る舞�
 | --- | --- |
 | `make dist-macos` | Developer ID で sign し、notarize と staple を行った dmg |
 | `make verify-macos` | 直前に build した成果物に対する Gatekeeper の検査 |
-| `make dist-linux` | `.deb` と `.rpm` を 1 つずつ。それぞれ app と `deskhub-cli` を収め、uinput の udev rule を導入する |
+| `make dist-linux` | `.deb` と `.rpm` を 1 つずつ。それぞれ app、`deskhub-cli`、`deskhubd` サービスを収め、uinput の udev rule を導入する |
 
 `dist-macos` には、keychain 内の *Developer ID Application* identity と、notarization
 用の App Store Connect API key —— `ASC_KEY_P8`（`.p8` ファイルのパス）、`ASC_KEY_ID`、
@@ -337,7 +337,10 @@ Release workflow は `packaging/windows/Deskhub.iss` から Windows app の Inno
 ロック画面、サインイン画面を見せられないからである。macOS では Xcode プロジェクトの
 CMake フェーズが `deskhub-cli` と `DeskhubDaemon` も build し、
 `scripts/embed-macos-daemon.sh` が両方を `Contents/MacOS` にコピーして app の identity で
-署名する。Homebrew cask は CLI を `PATH` にリンクする。
+署名する。Homebrew cask は CLI を `PATH` にリンクする。Linux では `make release-linux` が
+app の隣に `deskhubd` を build し、`scripts/stage-linux-pkgroot.sh` がそれを `deskhubd.service`
+とともに `/usr/libexec/deskhub/` に置く。`.deb` と `.rpm` はインストール後の処理でこの
+サービスを有効化・起動し、削除時には停止して `/var/lib/deskhub` も削除する。
 
 すべてのパッケージは `THIRD_PARTY_NOTICES.md` と、`licenses/` のうちそのパッケージに
 該当するライセンス文を同梱する。対象は `.deb` と `.rpm`（`/usr/share/doc/deskhub/` の

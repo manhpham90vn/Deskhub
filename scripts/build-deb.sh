@@ -20,7 +20,7 @@ scripts/stage-linux-pkgroot.sh "$STAGE"
 
 mkdir -p "$STAGE/debian"
 touch "$STAGE/debian/control"
-DEPENDS="$(cd "$STAGE" && dpkg-shlibdeps -O usr/bin/deskhub usr/bin/deskhub-cli | sed 's/^shlibs:Depends=//')"
+DEPENDS="$(cd "$STAGE" && dpkg-shlibdeps -O usr/bin/deskhub usr/bin/deskhub-cli usr/libexec/deskhub/deskhubd | sed 's/^shlibs:Depends=//')"
 rm -rf "$STAGE/debian"
 
 INSTALLED_SIZE="$(du -sk "$STAGE" | cut -f1)"
@@ -45,9 +45,10 @@ Description: LAN remote desktop - share and control screens
  over UDP on the local network.
  .
  This package contains the Ubuntu app (host + viewer role), the deskhub-cli
- command for scripts and SSH sessions, and the udev rule that grants access
- to /dev/uinput, so remote mouse and keyboard input works without any
- manual permission setup.
+ command for scripts and SSH sessions, the deskhubd service that shares the
+ sign-in screen once access before sign-in is switched on, and the udev rule
+ that grants access to /dev/uinput, so remote mouse and keyboard input works
+ without any manual permission setup.
 EOF
 
 cat > "$STAGE/DEBIAN/postinst" <<'EOF'
@@ -59,6 +60,20 @@ if [ "$1" = "configure" ]; then
         modprobe uinput 2>/dev/null || true
         udevadm trigger --name-match=uinput || true
     fi
+    if [ -d /run/systemd/system ]; then
+        systemctl daemon-reload || true
+        systemctl enable deskhubd.service || true
+        systemctl restart deskhubd.service || true
+    fi
+fi
+exit 0
+EOF
+
+cat > "$STAGE/DEBIAN/prerm" <<'EOF'
+#!/bin/sh
+set -e
+if [ "$1" = "remove" ] && [ -d /run/systemd/system ]; then
+    systemctl disable --now deskhubd.service || true
 fi
 exit 0
 EOF
@@ -67,14 +82,18 @@ cat > "$STAGE/DEBIAN/postrm" <<'EOF'
 #!/bin/sh
 set -e
 if [ "$1" = "remove" ] || [ "$1" = "purge" ]; then
+    rm -rf /var/lib/deskhub
     if command -v udevadm >/dev/null 2>&1; then
         udevadm control --reload-rules || true
+    fi
+    if [ -d /run/systemd/system ]; then
+        systemctl daemon-reload || true
     fi
 fi
 exit 0
 EOF
 
-chmod 755 "$STAGE/DEBIAN/postinst" "$STAGE/DEBIAN/postrm"
+chmod 755 "$STAGE/DEBIAN/postinst" "$STAGE/DEBIAN/prerm" "$STAGE/DEBIAN/postrm"
 
 dpkg-deb --build --root-owner-group "$STAGE" "$DEB" >/dev/null
 rm -rf "$STAGE"
