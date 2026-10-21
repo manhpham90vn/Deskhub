@@ -97,9 +97,9 @@ bool ViewerWindow::Build(const NetAddr& server, uint8_t sourceId, const std::str
 
     GtkWidget* header = gtk_header_bar_new();
     gtk_header_bar_set_show_close_button(GTK_HEADER_BAR(header), TRUE);
-    GtkWidget* disconnectButton = gtk_button_new_with_label(deskhub::ui::kDisconnectButton);
-    g_signal_connect(disconnectButton, "clicked", G_CALLBACK(OnDisconnectClicked), this);
-    gtk_header_bar_pack_end(GTK_HEADER_BAR(header), disconnectButton);
+    GtkWidget* fullScreenButton = gtk_button_new_with_label(deskhub::ui::kFullScreenButton);
+    g_signal_connect(fullScreenButton, "clicked", G_CALLBACK(OnFullScreenClicked), this);
+    gtk_header_bar_pack_end(GTK_HEADER_BAR(header), fullScreenButton);
     linkLabel_ = gtk_label_new("");
     gtk_header_bar_pack_end(GTK_HEADER_BAR(header), linkLabel_);
     gtk_window_set_titlebar(GTK_WINDOW(window_), header);
@@ -126,6 +126,7 @@ bool ViewerWindow::Build(const NetAddr& server, uint8_t sourceId, const std::str
     g_signal_connect(window_, "scroll-event", G_CALLBACK(OnScroll), this);
     g_signal_connect(window_, "focus-in-event", G_CALLBACK(OnFocusIn), this);
     g_signal_connect(window_, "focus-out-event", G_CALLBACK(OnFocusOut), this);
+    g_signal_connect(window_, "window-state-event", G_CALLBACK(OnWindowState), this);
     g_signal_connect(window_, "destroy", G_CALLBACK(OnDestroy), this);
 
     uint32_t sw = 0, sh = 0;
@@ -281,7 +282,7 @@ gboolean ViewerWindow::OnLinkTimer(gpointer user) {
 
 void ViewerWindow::SizeToVideo() {
     const int vw = int(loop_.videoWidth()), vh = int(loop_.videoHeight());
-    if (vw <= 0 || vh <= 0) return;
+    if (fullScreen_ || vw <= 0 || vh <= 0) return;
     if (!deskhub::ShouldRefitViewer(fittedW_, fittedH_, uint32_t(vw), uint32_t(vh))) return;
     fittedW_ = uint32_t(vw);
     fittedH_ = uint32_t(vh);
@@ -291,6 +292,13 @@ void ViewerWindow::SizeToVideo() {
         uint32_t(std::max(320, wa.width - deskhub::kViewerMarginPx)),
         uint32_t(std::max(240, wa.height - deskhub::kViewerMarginPx)));
     gtk_window_resize(GTK_WINDOW(window_), int(fitted.width), int(fitted.height));
+}
+
+void ViewerWindow::ToggleFullScreen() {
+    if (fullScreen_)
+        gtk_window_unfullscreen(GTK_WINDOW(window_));
+    else
+        gtk_window_fullscreen(GTK_WINDOW(window_));
 }
 
 void ViewerWindow::EndSession() {
@@ -346,8 +354,12 @@ void ViewerWindow::ApplyLockEffect(const deskhub::PointerLockEffect& effect) {
 
 gboolean ViewerWindow::OnKey(GtkWidget*, GdkEventKey* e, gpointer user) {
     auto* self = static_cast<ViewerWindow*>(user);
-    if (!self->control_) return FALSE;
     const bool down = e->type == GDK_KEY_PRESS;
+    if (e->keyval == GDK_KEY_F11) {
+        if (down) self->ToggleFullScreen();
+        return TRUE;
+    }
+    if (!self->control_) return FALSE;
 
     if (down && e->keyval == GDK_KEY_Escape && self->pointer_.locked()) {
         self->ApplyLockEffect(self->pointer_.OnEscape());
@@ -449,9 +461,14 @@ gboolean ViewerWindow::OnFocusOut(GtkWidget*, GdkEventFocus*, gpointer user) {
     return FALSE;
 }
 
-void ViewerWindow::OnDisconnectClicked(GtkWidget*, gpointer user) {
+void ViewerWindow::OnFullScreenClicked(GtkWidget*, gpointer user) {
+    static_cast<ViewerWindow*>(user)->ToggleFullScreen();
+}
+
+gboolean ViewerWindow::OnWindowState(GtkWidget*, GdkEventWindowState* e, gpointer user) {
     auto* self = static_cast<ViewerWindow*>(user);
-    gtk_window_close(GTK_WINDOW(self->window_));
+    self->fullScreen_ = (e->new_window_state & GDK_WINDOW_STATE_FULLSCREEN) != 0;
+    return FALSE;
 }
 
 void ViewerWindow::OnDestroy(GtkWidget*, gpointer user) {

@@ -38,6 +38,7 @@ private:
     void UpdateLinkLabel();
     void SizeToVideo();
     void EndSession();
+    void ToggleFullScreen();
 
     void PostToMain(std::function<void(ViewerWindow&)> fn);
 
@@ -52,7 +53,8 @@ private:
     static gboolean OnFocusOut(GtkWidget* w, GdkEventFocus* e, gpointer user);
     static gboolean OnTick(GtkWidget* w, GdkFrameClock* clock, gpointer user);
     static void OnDestroy(GtkWidget* w, gpointer user);
-    static void OnDisconnectClicked(GtkWidget* w, gpointer user);
+    static void OnFullScreenClicked(GtkWidget* w, gpointer user);
+    static gboolean OnWindowState(GtkWidget* w, GdkEventWindowState* e, gpointer user);
 
     GtkWidget* window_ = nullptr;
     GtkWidget* glArea_ = nullptr;
@@ -74,6 +76,7 @@ private:
     uint32_t fittedH_ = 0;
     bool control_ = true;
     bool ended_ = false;
+    bool fullScreen_ = false;
     std::function<void()> onClosed_;
 
     VideoRenderer renderer_;
