@@ -22,7 +22,7 @@ struct ConnectionWindow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            addressRow
+            disconnectRow
             stateRow
             Button(action: openDesktopSession) {
                 Text(DeskhubClient.string(DHStrOpenDesktopLabel))
@@ -68,12 +68,8 @@ struct ConnectionWindow: View {
         }
     }
 
-    private var addressRow: some View {
+    private var disconnectRow: some View {
         HStack(spacing: 12) {
-            Text(request.address)
-                .font(.system(size: 15, weight: .bold))
-                .foregroundStyle(DeskhubPalette.heading)
-                .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 0)
             Button {
                 dismiss()

@@ -102,8 +102,7 @@ struct StreamView: View {
                 ConnectionStatusBar(
                     model: model,
                     onToggleCursor: { model.cursorHidden.toggle() },
-                    onFullScreen: { NSApp.keyWindow?.toggleFullScreen(nil) },
-                    onDisconnect: onEnd
+                    onFullScreen: { NSApp.keyWindow?.toggleFullScreen(nil) }
                 )
             }
             RemoteView(

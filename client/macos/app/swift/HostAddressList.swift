@@ -13,12 +13,14 @@ struct HostAddressList: View {
                 Text(DeskhubClient.string(DHStrNoNetworkAddress)).foregroundStyle(.secondary)
             }
         } else {
-            ForEach(addresses) { addr in
-                HStack(spacing: 14) {
-                    Text(addr.name).frame(width: 150, alignment: .leading).lineLimit(1)
-                    Text(addr.ip).fontWeight(.bold).textSelection(.enabled)
-                    CopyButton { addr.ip }
-                        .frame(width: 84)
+            VStack(alignment: .leading, spacing: 6) {
+                ForEach(addresses) { addr in
+                    HStack(spacing: 14) {
+                        Text(addr.name).frame(width: 150, alignment: .leading).lineLimit(1)
+                        Text(addr.ip).fontWeight(.bold).textSelection(.enabled)
+                        CopyButton { addr.ip }
+                            .frame(width: 84)
+                    }
                 }
             }
         }

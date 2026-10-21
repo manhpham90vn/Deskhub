@@ -4,7 +4,6 @@ struct ConnectionStatusBar: View {
     let model: StreamModel
     let onToggleCursor: () -> Void
     let onFullScreen: () -> Void
-    let onDisconnect: () -> Void
 
     var body: some View {
         HStack(spacing: 10) {
@@ -14,10 +13,6 @@ struct ConnectionStatusBar: View {
                 Text(DeskhubClient.string(DHStrLinkReattaching))
             }
             Spacer(minLength: 12)
-            Text(model.address)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .truncationMode(.middle)
             if model.control {
                 Button(
                     DeskhubClient.cursorButtonLabel(hidden: model.cursorHidden),
@@ -25,7 +20,6 @@ struct ConnectionStatusBar: View {
                 )
             }
             Button(DeskhubClient.string(DHStrFullScreenButton), action: onFullScreen)
-            Button(DeskhubClient.string(DHStrDisconnectButton), action: onDisconnect)
         }
         .font(.callout)
         .padding(.horizontal, 12)
