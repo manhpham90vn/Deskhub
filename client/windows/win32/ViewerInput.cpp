@@ -132,7 +132,7 @@ void ViewerInput::OnRawInput(LPARAM lp) {
         if (kb.VKey == 0xFF) return;
         const bool down = (kb.Flags & RI_KEY_BREAK) == 0;
 
-        if (deskhub::IsViewerShortcutVk(int32_t(kb.VKey))) return;
+        if (deskhub::IsViewerShortcutVk(int32_t(kb.VKey), fullScreen_)) return;
 
         int scan = kb.MakeCode;
         if (kb.Flags & RI_KEY_E0) scan |= kScanExtended;

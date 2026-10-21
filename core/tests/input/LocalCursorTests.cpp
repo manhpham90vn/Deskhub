@@ -35,10 +35,20 @@ void TestShortcutKeysAreCanonical() {
     std::printf("[cursor] every platform agrees on the viewer's own shortcut keys...\n");
     Check(kViewerCursorToggleVk == kVkF1 + 8, "the cursor toggle is F9");
     Check(kViewerFullScreenToggleVk == kVkF1 + 10, "full screen is F11");
-    Check(IsViewerShortcutVk(kViewerCursorToggleVk) && IsViewerShortcutVk(kViewerFullScreenToggleVk),
+    Check(IsViewerShortcutVk(kViewerCursorToggleVk, false) &&
+              IsViewerShortcutVk(kViewerFullScreenToggleVk, false),
         "both are kept by the viewer");
-    Check(!IsViewerShortcutVk(kVkF1) && !IsViewerShortcutVk(kVkEscape),
+    Check(!IsViewerShortcutVk(kVkF1, false) && !IsViewerShortcutVk(kVkEscape, false),
         "other keys still reach the host");
+    Check(TogglesViewerFullScreen(kViewerFullScreenToggleVk, false) &&
+              TogglesViewerFullScreen(kViewerFullScreenToggleVk, true),
+        "F11 toggles full screen either way");
+    Check(!TogglesViewerFullScreen(kVkEscape, false) && !IsViewerShortcutVk(kVkEscape, false),
+        "Escape reaches the host while windowed");
+    Check(TogglesViewerFullScreen(kVkEscape, true) && IsViewerShortcutVk(kVkEscape, true),
+        "Escape leaves full screen and is kept by the viewer");
+    Check(!TogglesViewerFullScreen(kViewerCursorToggleVk, true),
+        "the cursor toggle never touches full screen");
     Check(VkToSet1Scancode(kViewerCursorToggleVk) != 0 &&
               VkToSet1Scancode(kViewerFullScreenToggleVk) != 0,
         "both have real scancodes, so they could be forwarded if they were not consumed");

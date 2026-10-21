@@ -60,6 +60,7 @@ endif()
 
 add_library(deskhub_win_view STATIC
     ../win32/FileSendWindow.cpp
+    ../win32/FlatButton.cpp
     ../win32/Viewer.cpp
     ../win32/ViewerInput.cpp
     ScreenFfiWin.cpp

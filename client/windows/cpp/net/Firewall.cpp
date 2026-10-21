@@ -84,6 +84,56 @@ void RemoveOwnRule(INetFwRules* rules, const wchar_t* ruleName) {
     }
 }
 
+bool IsEnabledInboundBlockFor(INetFwRule* rule, const std::wstring& exe) {
+    NET_FW_RULE_DIRECTION dir = NET_FW_RULE_DIR_OUT;
+    NET_FW_ACTION act = NET_FW_ACTION_ALLOW;
+    VARIANT_BOOL enabled = VARIANT_FALSE;
+    if (FAILED(rule->get_Direction(&dir)) || dir != NET_FW_RULE_DIR_IN) return false;
+    if (FAILED(rule->get_Action(&act)) || act != NET_FW_ACTION_BLOCK) return false;
+    if (FAILED(rule->get_Enabled(&enabled)) || enabled != VARIANT_TRUE) return false;
+    BSTR app = nullptr;
+    rule->get_ApplicationName(&app);
+    const bool match = PathEq(app, exe);
+    if (app) SysFreeString(app);
+    return match;
+}
+
+void DisableRule(INetFwRule* rule) {
+    BSTR name = nullptr;
+    rule->get_Name(&name);
+    const HRESULT hr = rule->put_Enabled(VARIANT_FALSE);
+    if (SUCCEEDED(hr))
+        LOGW("[Firewall] Disabled inbound block rule \"%ls\" that targeted Deskhub.",
+            name ? name : L"");
+    else
+        LOGE("[Firewall] Could not disable block rule \"%ls\": hr=0x%08lx", name ? name : L"",
+            (unsigned long)hr);
+    if (name) SysFreeString(name);
+}
+
+void DisableBlockRulesFor(INetFwRules* rules, const std::wstring& exe) {
+    IUnknown* unk = nullptr;
+    if (FAILED(rules->get__NewEnum(&unk)) || !unk) return;
+    IEnumVARIANT* en = nullptr;
+    if (SUCCEEDED(unk->QueryInterface(__uuidof(IEnumVARIANT), (void**)&en)) && en) {
+        VARIANT v;
+        VariantInit(&v);
+        ULONG got = 0;
+        while (en->Next(1, &v, &got) == S_OK && got) {
+            INetFwRule* rule = nullptr;
+            if (v.vt == VT_DISPATCH && v.pdispVal &&
+                SUCCEEDED(v.pdispVal->QueryInterface(__uuidof(INetFwRule), (void**)&rule)) &&
+                rule) {
+                if (IsEnabledInboundBlockFor(rule, exe)) DisableRule(rule);
+                rule->Release();
+            }
+            VariantClear(&v);
+        }
+        en->Release();
+    }
+    unk->Release();
+}
+
 bool AddOwnRule(INetFwRules* rules, const wchar_t* ruleName, const std::wstring& exe) {
     INetFwRule* rule = nullptr;
     if (FAILED(CoCreateInstance(__uuidof(NetFwRule), nullptr, CLSCTX_INPROC_SERVER,
@@ -132,6 +182,8 @@ bool EnsureFirewallRule(const wchar_t* ruleName, const std::wstring& exe) {
         LOGE("[Firewall] Could not open the firewall policy.");
         return false;
     }
+
+    DisableBlockRulesFor(rules, exe);
 
     if (InspectOwnRule(rules, ruleName, exe) == 2) {
         ReleaseRules(rules, policy);

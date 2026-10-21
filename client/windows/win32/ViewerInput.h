@@ -13,6 +13,9 @@ public:
     void Detach();
 
     bool OnMessage(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp);
+    void SetFullScreen(bool fullScreen) {
+        fullScreen_ = fullScreen;
+    }
 
 private:
     void ReleaseHeldInput();
@@ -23,4 +26,5 @@ private:
     DHScreen* session_ = nullptr;
     bool attached_ = false;
     int buttonsDown_ = 0;
+    bool fullScreen_ = false;
 };

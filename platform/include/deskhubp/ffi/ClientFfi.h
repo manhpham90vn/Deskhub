@@ -275,7 +275,7 @@ int32_t dh_vk_scancode(int32_t vk);
 
 bool dh_is_cursor_toggle_vk(int32_t vk);
 
-bool dh_is_full_screen_toggle_vk(int32_t vk);
+bool dh_is_full_screen_toggle_vk(int32_t vk, bool fullScreen);
 
 bool dh_parse_address(const char* address);
 

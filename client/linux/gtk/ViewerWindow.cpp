@@ -368,8 +368,9 @@ gboolean ViewerWindow::OnKey(GtkWidget*, GdkEventKey* e, gpointer user) {
     int32_t vk = 0, scan = 0;
     const bool mapped =
         dh_native_key_to_vk(GdkKeycodeToEvdev(e->hardware_keycode), &vk, &scan);
-    if (mapped && deskhub::IsViewerShortcutVk(vk)) {
-        if (down && vk == deskhub::kViewerFullScreenToggleVk) self->ToggleFullScreen();
+    if (mapped && deskhub::IsViewerShortcutVk(vk, self->fullScreen_)) {
+        if (down && deskhub::TogglesViewerFullScreen(vk, self->fullScreen_))
+            self->ToggleFullScreen();
         if (down && vk == deskhub::kViewerCursorToggleVk) self->ToggleLocalCursor();
         return TRUE;
     }

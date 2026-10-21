@@ -175,9 +175,11 @@ Connect 到 host 的 `100.x.y.z` 地址。
 *Start Deskhub when you log in* 通过其 scheduled task 启动它 —— 该 task 在登录时以提权
 方式运行它而不询问。它还会在共享时自动打开 firewall，添加一条名为 *Deskhub (host)* 的
 入站 UDP 规则 —— 该规则覆盖整个 app 与所有 profile，因此收窄绑定并不会收窄 firewall；这一
-便利之处也正是上述原则重要的原因。Deskhub 只替换它自己的这条规则。你自己为该 app 创建的
-block 规则会保持不变；由于 Windows 中 block 规则优先于 allow 规则，host 在你移除该规则之前
-将一直无法被访问。
+便利之处也正是上述原则重要的原因。Deskhub 只替换它自己的这条规则，同时会停用所有针对其自身可执行文件且处于启用状态的入站
+block 规则 —— 每当 Windows 的 *Allow this app?* 提示中有 profile 未勾选时，Windows 就会
+创建这样一条规则，而 block 规则优先于 allow 规则。它只停用而不删除，因此该规则仍留在
+Windows Defender Firewall 中供你查看；若想保留一条 block 规则，请让它针对端口或地址，
+而不是该 app。
 在 Windows 上，安装程序还会额外添加一项：*DeskHub Secure Desktop* service，它让共享 ——
 来自 app 或来自 `deskhub-cli` —— 在 UAC 提示或锁屏出现时得以继续。在你共享期间，viewer
 能看到这些屏幕并可在其中输入 —— 包括
@@ -385,7 +387,7 @@ token 只会被 client 发送给码中 fingerprint 所指的那台机器；随�
 之后才记录 connection request，且每个来源地址最多一条；host 自行关闭被拒绝的 connection；为每一个尚未 authenticate
 的 connection 设置期限；从 app 外部打开的 link 在被信任之前先显示 *New host* 确认；设备 key
 不进入 iOS 备份；Windows 日志中不再有来自 remote control 或 terminal 的按键码；日志文件
-仅所有者可读并会被清理到只剩最新的十个；firewall 规则不再删除你创建的 block 规则；
+仅所有者可读并会被清理到只剩最新的十个；
 以及加固的编译器与链接器选项。
 
 本清单说明的是实施意向，而非时间表。Deskhub 由一人在业余时间维护。请以当前状态为准，

@@ -605,8 +605,8 @@ bool dh_is_cursor_toggle_vk(int32_t vk) {
     return vk == deskhub::kViewerCursorToggleVk;
 }
 
-bool dh_is_full_screen_toggle_vk(int32_t vk) {
-    return vk == deskhub::kViewerFullScreenToggleVk;
+bool dh_is_full_screen_toggle_vk(int32_t vk, bool fullScreen) {
+    return deskhub::TogglesViewerFullScreen(vk, fullScreen);
 }
 
 const char* dh_cursor_button_label(bool cursorHidden) {

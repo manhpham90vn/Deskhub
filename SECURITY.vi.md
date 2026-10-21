@@ -205,9 +205,11 @@ mở app, trừ khi *Start Deskhub when you log in* khởi động nó qua sched
 app ở quyền cao lúc đăng nhập mà không hỏi. App cũng tự mở firewall khi bạn share, bằng một
 rule UDP chiều vào tên *Deskhub (host)* — rule này áp dụng cho toàn bộ app trên mọi profile,
 nên việc thu hẹp bind không làm thu hẹp firewall; đây cũng là lý do nguyên tắc ở phần trên
-có ý nghĩa. Deskhub chỉ thay thế đúng rule đó của chính nó. Rule chặn mà bạn tự tạo cho app
-được giữ nguyên, và vì Windows cho rule chặn thắng rule cho phép, host sẽ không truy cập
-được cho tới khi bạn gỡ rule đó.
+có ý nghĩa. Deskhub chỉ thay thế đúng rule đó của chính nó, và còn tắt mọi rule chặn chiều vào đang
+bật nhắm vào chính file chạy của nó — Windows tạo ra rule như vậy mỗi khi một ô profile bị
+bỏ tick trong hộp thoại *Allow this app?*, và rule chặn thắng rule cho phép. App tắt chứ
+không xoá, nên rule vẫn nằm trong Windows Defender Firewall để bạn xem; muốn giữ một rule
+chặn thì hãy nhắm nó vào port hoặc địa chỉ thay vì vào app.
 Trên Windows, trình cài đặt còn thêm một thứ nữa: service *DeskHub Secure Desktop*, giúp
 phiên share — từ app hay từ `deskhub-cli` — tiếp tục qua hộp thoại UAC hoặc màn hình khoá.
 Trong lúc bạn share, viewer thấy
@@ -460,8 +462,7 @@ authenticate, và pairing bằng QR với token một lần mà client chỉ g�
 tự đóng connection bị từ chối, deadline cho mọi connection chưa authenticate, hộp thoại xác
 nhận *New host* trước khi trust một link mở từ bên ngoài app, key thiết bị được loại khỏi
 backup iOS, không còn mã phím trong log Windows từ điều khiển từ xa hay terminal, file log
-chỉ chủ sở hữu đọc được và được dọn bớt còn mười file mới nhất, rule firewall không còn xoá
-rule chặn bạn đã tạo, và các cờ compiler cùng linker được cứng hoá.
+chỉ chủ sở hữu đọc được và được dọn bớt còn mười file mới nhất, và các cờ compiler cùng linker được cứng hoá.
 
 Danh sách này là tuyên bố về định hướng, không phải lịch trình. Deskhub do một người bảo
 trì trong thời gian rảnh. Hãy đánh giá theo hiện trạng, không theo kế hoạch.

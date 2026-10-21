@@ -208,8 +208,11 @@ host は信頼できる network 上に置き、画面や terminal を共有す�
 名前の受信 UDP ルールで firewall を自動的に開く。このルールは app 全体とすべての
 profile を対象とするため、バインドを限定しても firewall は限定されない。この利便性も、
 上記の原則が重要である理由の一つである。Deskhub が置き換えるのは自身のこのルールだけで
-ある。利用者が app に対して自ら作成した block ルールはそのまま残され、Windows では
-block ルールが allow ルールに優先するため、それを削除するまで host には到達できない。
+あるが、自身の実行ファイルを対象とする有効な受信 block ルールもすべて無効化する。
+Windows の *Allow this app?* の確認で profile のチェックが外されると Windows はそうした
+ルールを作成し、block ルールは allow ルールに優先するためである。削除ではなく無効化
+なので、ルールは Windows Defender Firewall に残り確認できる。残しておきたい block
+ルールは、app ではなくポートやアドレスを対象にすること。
 Windows ではインストーラーがもう一つ追加する。*DeskHub Secure Desktop* サービスであり、
 app からの共有も `deskhub-cli` からの共有も、UAC の確認画面やロック画面の間継続させる。
 共有している間、viewer はそれらの画面を
@@ -467,8 +470,7 @@ client が送る 1 回限りの token による QR pairing。さらに 9.0 で�
 終えていないすべての connection への期限、app の外から開かれた link を信頼する前の
 *New host* の確認、iOS のバックアップから除外されたデバイスの key、remote control でも
 terminal でも Windows の log に key code を残さないこと、所有者のみが読み取れ最新の 10 件
-に自動的に整理される log ファイル、利用者が作成した block ルールを削除しなくなった
-firewall のルール、堅牢化されたコンパイラとリンカのフラグ。
+に自動的に整理される log ファイル、堅牢化されたコンパイラとリンカのフラグ。
 
 本一覧は方針の表明であり、スケジュールではない。Deskhub は 1 名が余暇に保守している。
 計画ではなく現状に基づいて判断していただきたい。

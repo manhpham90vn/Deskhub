@@ -206,9 +206,12 @@ inject input into elevated windows: UAC asks every time you launch it, except wh
 logon without asking. It also opens the firewall for you when you share, with an
 inbound UDP rule named *Deskhub (host)* — the rule covers the whole app on every
 profile, so a narrowed bind does not narrow the firewall; that convenience is also what
-makes the rule above matter. Deskhub replaces only that rule of its own. A block rule
-you created for the app yourself is left alone, and because Windows lets a block rule
-win over an allow rule, the host then stays unreachable until you remove it.
+makes the rule above matter. Deskhub replaces only that rule of its own, and it also disables every enabled inbound
+block rule aimed at its own executable — Windows creates one whenever a profile box is
+left unticked in its *Allow this app?* prompt, and a block rule wins over an allow rule.
+It disables rather than deletes, so such a rule stays in Windows Defender Firewall for
+you to see; a block rule you want to keep must target the port or the address instead
+of the app.
 The installer adds one more thing on Windows: the *DeskHub Secure Desktop* service, which
 lets a share — from the app or from `deskhub-cli` — carry on through a UAC prompt or the
 lock screen. While you share, a viewer
@@ -469,8 +472,7 @@ source address, a host that closes a
 refused connection itself, a deadline for every connection that has not authenticated,
 a *New host* confirmation before a link opened from outside the app is trusted, a device
 key kept out of iOS backups, no key codes in the Windows logs from remote control or the
-terminal, log files readable only by their owner and pruned to the ten newest, a
-firewall rule that no longer removes block rules you made, and hardened compiler and
+terminal, log files readable only by their owner and pruned to the ten newest, and hardened compiler and
 linker flags.
 
 This list is a statement of intent, not a schedule. Deskhub is maintained by one person

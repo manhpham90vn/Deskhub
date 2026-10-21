@@ -2,7 +2,7 @@
 
 # Deskhub 隐私政策
 
-_生效日期：2026 年 10 月 19 日 —— 版本 2.17_
+_生效日期：2026 年 10 月 21 日 —— 版本 2.18_
 
 > 本文件译自 [`PRIVACY.md`](PRIVACY.md)。如有出入，以英文版为准。
 
@@ -124,7 +124,7 @@ desktop 时，已安装的 app 会继续共享：viewer 能看到 UAC 提示、�
 | macOS | Local Network | Deskhub 首次访问你 network 上的另一台设备时由 macOS 询问。仅用于 session。 |
 | Windows | 管理员权限（UAC） | app 以提权方式运行，以便向提权窗口 inject input。每次启动时 UAC 都会询问，唯一的例外是 *Start Deskhub when you log in* 通过其 scheduled task 启动它。 |
 | Windows | 系统 service（*DeskHub Secure Desktop*） | 由安装程序添加，以 LocalSystem 运行。在 app 或 CLI 共享期间，它捕获 Windows 的 secure desktop —— UAC 提示、锁屏、登录与 Ctrl+Alt+Del 画面 —— 交由 app 像其他画面一样发送给 viewer，并将 viewer 的 mouse 与 keyboard input 送达那里。开启 *Allow access before anyone signs in*（默认关闭）后，它还会在两者都未共享的任何时候 —— 从登录画面开始 —— 运行一个自己的 host，使用第 3 节所述的副本，并只准入已被允许的设备；该 host 会添加一条名为 *Deskhub Secure Desktop (host)* 的 firewall 规则。该 service 把日志保存在 `%ProgramData%\DeskHub` 中，仅 SYSTEM 与管理员可读；除此之外不存储任何内容。 |
-| Windows | Windows Firewall | 共享时，提权运行的 app 会为自己添加或刷新一条名为 *Deskhub (host)* 的入站 UDP 规则，覆盖所有 network profile。它不修改其他任何规则；你为 Deskhub 创建的 block 规则会保持不变，并使它继续无法被访问。 |
+| Windows | Windows Firewall | 共享时，提权运行的 app 会为自己添加或刷新一条名为 *Deskhub (host)* 的入站 UDP 规则，覆盖所有 network profile。它还会停用所有针对其自身程序且处于启用状态的入站 block 规则，例如在 Windows 的 *Allow this app?* 提示中某个网络类型未勾选时 Windows 添加的规则；这类规则只被停用，不会被删除。它不修改其他任何规则。 |
 | Linux | 系统 service（`deskhubd`） | 由 `.deb` 与 `.rpm` 安装并启动，在开启 *Allow access before anyone signs in* 之前保持空闲，而只有 root 或 `sudo`、`wheel`、`admin` 组的成员才能开启它。从那时起，它在 `/var/lib/deskhub` 中保管第 3 节所述的副本，并在 app 未共享的任何时候 —— 包括登录界面 —— 运行一个 host，该 host 以 root 直接从显卡读取屏幕，只准入已被允许的设备。除该 host 之外，它不会自行打开任何连接，其日志保留在该文件夹中。 |
 | Linux | 屏幕共享同意（桌面 portal） | 桌面自身的对话框会在首次共享时询问要共享哪些屏幕；该回答通过第 3 节所述的 token 被记住。 |
 | Linux | 虚拟 input 设备（`/dev/uinput`） | 用于 inject viewer 的 input。`.deb` 与 `.rpm` 会安装一条 udev 规则，将其开放给 `input` 组以及在座席上登录的用户。 |
@@ -230,6 +230,7 @@ https://github.com/manhpham90vn/Deskhub/blob/main/PRIVACY.md
 
 | 版本 | 日期 | 变更内容 |
 |---|---|---|
+| 2.18 | 2026-10-21 | **Windows：Deskhub 不再被它自己的 firewall 提示挡住。** 共享时，app 现在还会停用所有针对其自身程序且处于启用状态的 Windows Firewall 入站 block 规则 —— 即在 Windows 的 *Allow this app?* 提示中某个网络类型未勾选时 Windows 添加的那类规则 —— 而不是保留它们，这撤销了 9.0.1 中的改动。这些规则只被停用，不会被删除。没有新增存储或传输的内容。 |
 | 2.17 | 2026-10-19 | **如果你开启，Linux 机器也可在任何人登录之前被访问。** `.deb` 与 `.rpm` 现在会安装 `deskhubd`，这是一个 root service，在开启 *Allow access before anyone signs in* 之前保持空闲 —— 可在 app 的 Settings 中开启，或使用 `deskhub-cli settings set unattended=on`，须由 root 或 `sudo`、`wheel`、`admin` 组的成员操作。开启后，它在 `/var/lib/deskhub`（一个只有 root 能打开的文件夹）中保管本设备的 key、其允许的 client 及其共享设置的副本，并在 app 未共享的任何时候运行一个 host（包括登录界面），直接从显卡读取屏幕；该 host 可能在那里写入 connection request 与 QR token，service 与 host 的日志也位于那里。只有已被允许的设备能进入；不传输任何新内容。关闭该设置会删除副本；移除软件包会删除该文件夹。 |
 | 2.16 | 2026-10-17 | **如果你开启，Mac 也可在任何人登录之前被访问。** *Allow access before anyone signs in* 现已在 macOS 上提供。勾选后，macOS 会在 *Login Items & Extensions* 中请你允许一次，随后注册 app 内附带的 root daemon `DeskhubDaemon`；该 daemon 在只有 root 能打开的 `/Library/Application Support/Deskhub` 中保留本设备的 key、其允许的 client 及其共享设置的副本，并在无人登录期间于登录窗口运行一个 host。该 host 会在同一文件夹中记录自己是否拥有屏幕录制与辅助功能权限，以便 app 向你显示，也可能在那里写入 connection request 与 QR token；daemon 与 host 的日志同样位于那里。只有已被允许的设备能够进入；不传输任何新内容。取消勾选会删除副本并注销该 daemon；`brew uninstall --zap deskhub` 会删除该文件夹。**Windows 的命令行也能切换同一设置。** `deskhub-cli settings set unattended=on` 与 `off` 与 app 的复选框作用相同，CLI 的 `access` 命令也会像 app 一样刷新 `%ProgramData%\DeskHub` 中的副本，*DeskHub Secure Desktop* service 既接受来自已安装 `Deskhub.exe` 的副本，也接受来自已安装 `deskhub-cli.exe` 的副本。CLI 现在随每个桌面安装包一起发布，单独的 CLI 下载与 winget 软件包已撤下。不会存储或传输任何新内容。 |
 | 2.15 | 2026-10-17 | **如果你开启，Windows 可在任何人登录之前被访问。** 新增设置 *Allow access before anyone signs in*，默认关闭，且仅在 DeskHub 通过安装程序安装时可用；开启后，*DeskHub Secure Desktop* service 会在 app 未共享的任何时候 —— 从 Windows 启动后紧接着的登录画面开始 —— 运行一个自己的 host。为此，该 service 在 `%ProgramData%\DeskHub` 中保留本设备的 key、其允许的 client 及其共享设置的副本，该文件夹只有 SYSTEM 与管理员能打开；读取它们的 host 也可能在那里写入 connection request 与 QR token，service 的日志现在也位于该文件夹中。只有已被允许的设备才能进入；该 host 不显示任何内容，也不批准任何人。关闭该设置会删除副本，卸载则删除该文件夹。不会传输任何新内容。 |
