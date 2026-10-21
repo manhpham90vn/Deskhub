@@ -149,7 +149,7 @@ Threat model đầy đủ nằm trong [`SECURITY.vi.md`](SECURITY.vi.md).
 
 - 💻 **Công việc** — chạy Claude Code, VS Code hoặc build trên PC ở nhà, từ một laptop cấu hình thấp hoặc từ iPad.
 - 🌐 **Ứng dụng desktop** — dùng Chrome, Office hoặc phần mềm chỉ có trên máy tính từ một thiết bị khác.
-- 🎮 **Game** — tối đa 240 fps, relative mouse và scancode DirectInput, pointer lock bằng `F9`.
+- 🎮 **Game** — tối đa 240 fps và scancode DirectInput.
 - 🖥️ **Nhiều display** — share một hoặc nhiều display, mỗi display là một session riêng.
 
 <a id="platforms"></a>
@@ -172,7 +172,7 @@ Threat model đầy đủ nằm trong [`SECURITY.vi.md`](SECURITY.vi.md).
 - **Protocol riêng chạy trên QUIC** — GOP vô hạn kết hợp IDR theo yêu cầu, XOR FEC kèm gửi lại packet bị mất, adaptive bitrate, tất cả được multiplex trên một connection đã encrypt.
 - **Âm thanh đi kèm hình ảnh** — audio mix của chính máy đó, Opus 64 kbps, mỗi datagram chứa một frame 20 ms. Mất một packet đơn lẻ thường được dựng lại từ packet kế tiếp nhờ FEC in-band của Opus, một khoảng mất dài hơn chỉ tốn một phần nhỏ của giây, và cả hai đều không ảnh hưởng tới hình ảnh. Không bao giờ capture microphone.
 - **Không chỉ có màn hình** — remote shell, gửi file tới mọi host, sync clipboard dạng text thuần theo cả hai chiều, và giữ máy không sleep khi đang có session.
-- **Input thật** — relative mouse (Raw Input) và scancode cho game DirectInput. Mouse và keyboard tại máy host luôn được ưu tiên (trên Linux, khi user đã ở trong nhóm `input` — xem [Install](docs/INSTALL.vi.md#host-wins)).
+- **Input thật** — scancode cho game DirectInput. Mouse và keyboard tại máy host luôn được ưu tiên (trên Linux, khi user đã ở trong nhóm `input` — xem [Install](docs/INSTALL.vi.md#host-wins)).
 - **Core dùng chung** — protocol, FEC và bitrate control nằm trong `core/`, được compile vào mọi client.
 - **Công cụ command line** — `deskhub-cli` share màn hình, mở remote shell, gửi file, quản lý key, thiết bị được phép, host đã trust và settings, chạy từ script hoặc qua SSH; các lệnh liệt kê có `--json`. Trên Windows và Linux, lệnh này còn mở được cửa sổ xem màn hình từ xa. Xem [Build](docs/BUILD.vi.md#command-line-client).
 - **Được kiểm thử kỹ** — core có unit test chạy offline; CI chạy thêm ASan, UBSan và TSan. Chín libFuzzer target — 30 giây mỗi target trên mọi pull request, 15 phút mỗi target mỗi đêm — kiểm tra wire format, phần parse H.264, reassembly, byte stream của terminal, chuỗi UI, phần parse key và link mời, encode QR và các session state machine. Crash được phát hiện sẽ thành regression test.

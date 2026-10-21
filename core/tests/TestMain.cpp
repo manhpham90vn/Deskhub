@@ -104,7 +104,7 @@ int main() {
     RunPointerMapTests();
 
     std::printf("--- input: viewer pointer lock ---\n");
-    RunPointerLockStateTests();
+    RunLocalCursorTests();
 
     std::printf("--- input: touch trackpad cursor ---\n");
     RunTrackpadCursorTests();

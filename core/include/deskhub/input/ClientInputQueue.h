@@ -26,8 +26,6 @@ public:
 
     void MouseMoveAbsolute(int32_t nx, int32_t ny, uint64_t nowUs);
 
-    void MouseMoveRelative(int32_t dx, int32_t dy, uint64_t nowUs);
-
     void MouseButtonEvent(int32_t button, bool down, uint64_t nowUs);
 
     void MouseWheel(int32_t delta, uint64_t nowUs);

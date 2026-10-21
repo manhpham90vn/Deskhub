@@ -10,7 +10,7 @@
 #include "deskhubp/system/UiSettingsStore.h"
 #include "gtk/GtkUtil.h"
 
-#include "deskhub/input/PointerLockState.h"
+#include "deskhub/input/LocalCursor.h"
 #include "deskhub/input/PointerMap.h"
 #include "deskhub/media/ViewFit.h"
 #include "deskhub/media/ViewerTitle.h"
@@ -100,6 +100,11 @@ bool ViewerWindow::Build(const NetAddr& server, uint8_t sourceId, const std::str
     GtkWidget* fullScreenButton = gtk_button_new_with_label(deskhub::ui::kFullScreenButton);
     g_signal_connect(fullScreenButton, "clicked", G_CALLBACK(OnFullScreenClicked), this);
     gtk_header_bar_pack_end(GTK_HEADER_BAR(header), fullScreenButton);
+    if (control_) {
+        cursorButton_ = gtk_button_new_with_label(cursor_.ButtonLabel());
+        g_signal_connect(cursorButton_, "clicked", G_CALLBACK(OnCursorClicked), this);
+        gtk_header_bar_pack_end(GTK_HEADER_BAR(header), cursorButton_);
+    }
     linkLabel_ = gtk_label_new("");
     gtk_header_bar_pack_end(GTK_HEADER_BAR(header), linkLabel_);
     gtk_window_set_titlebar(GTK_WINDOW(window_), header);
@@ -109,6 +114,9 @@ bool ViewerWindow::Build(const NetAddr& server, uint8_t sourceId, const std::str
     gtk_gl_area_set_has_stencil_buffer(GTK_GL_AREA(glArea_), FALSE);
     gtk_gl_area_set_auto_render(GTK_GL_AREA(glArea_), FALSE);
     gtk_container_add(GTK_CONTAINER(window_), glArea_);
+    gtk_widget_add_events(glArea_, GDK_ENTER_NOTIFY_MASK | GDK_LEAVE_NOTIFY_MASK);
+    g_signal_connect(glArea_, "enter-notify-event", G_CALLBACK(OnCrossing), this);
+    g_signal_connect(glArea_, "leave-notify-event", G_CALLBACK(OnCrossing), this);
 
     g_signal_connect(glArea_, "render", G_CALLBACK(OnRender), this);
     g_signal_connect(glArea_, "realize", G_CALLBACK(OnRealize), this);
@@ -258,10 +266,9 @@ gboolean ViewerWindow::OnTick(GtkWidget* w, GdkFrameClock*, gpointer user) {
 }
 
 void ViewerWindow::UpdateTitle() {
-    std::string title =
-        control_ ? pointer_.TitleFor(baseTitle_, statusLine_)
-                 : deskhub::ComposeViewerTitle(baseTitle_, statusLine_,
-                       deskhub::kViewerViewOnlyHint);
+    std::string title = control_ ? deskhub::ComposeViewerTitle(baseTitle_, statusLine_)
+                                 : deskhub::ComposeViewerTitle(baseTitle_, statusLine_,
+                                       deskhub::kViewerViewOnlyHint);
     if (title == shownTitle_) return;
     shownTitle_ = std::move(title);
     gtk_window_set_title(GTK_WINDOW(window_), shownTitle_.c_str());
@@ -316,7 +323,6 @@ void ViewerWindow::EndSession() {
 
 GdkSeatCapabilities ViewerWindow::WantedSeatGrab() const {
     GdkSeatCapabilities caps = GdkSeatCapabilities(0);
-    if (pointer_.locked()) caps = GdkSeatCapabilities(caps | GDK_SEAT_CAPABILITY_ALL_POINTING);
     if (keyboardFocus_ && control_ && !WaylandShortcutsInhibitor::Applies(window_))
         caps = GdkSeatCapabilities(caps | GDK_SEAT_CAPABILITY_KEYBOARD);
     return caps;
@@ -334,96 +340,78 @@ void ViewerWindow::SyncSeatGrab() {
     GdkDisplay* display = gtk_widget_get_display(window_);
     GdkSeat* seat = gdk_display_get_default_seat(display);
     gdk_seat_ungrab(seat);
-    if (wanted) {
-        GdkCursor* blank =
-            pointer_.locked() ? gdk_cursor_new_for_display(display, GDK_BLANK_CURSOR) : nullptr;
-        gdk_seat_grab(seat, gw, wanted, FALSE, blank, nullptr, nullptr, nullptr);
-        if (blank) g_object_unref(blank);
-    }
+    if (wanted) gdk_seat_grab(seat, gw, wanted, FALSE, nullptr, nullptr, nullptr, nullptr);
     grabbed_ = wanted;
-    haveLastPos_ = false;
 }
 
-void ViewerWindow::ApplyLockEffect(const deskhub::PointerLockEffect& effect) {
-    if (effect.releaseHeldInput) loop_.ReleaseAllInput();
-    if (effect.lockChanged) {
-        SyncSeatGrab();
-        UpdateTitle();
-    }
+void ViewerWindow::ShowLocalCursor(bool show) {
+    if (show == localCursorShown_) return;
+    GdkWindow* gw = gtk_widget_get_window(window_);
+    if (!gw) return;
+    GdkCursor* blank =
+        show ? nullptr : gdk_cursor_new_for_display(gtk_widget_get_display(window_), GDK_BLANK_CURSOR);
+    gdk_window_set_cursor(gw, blank);
+    if (blank) g_object_unref(blank);
+    localCursorShown_ = show;
+}
+
+void ViewerWindow::ToggleLocalCursor() {
+    if (!control_) return;
+    cursor_.Toggle();
+    if (cursorButton_) gtk_button_set_label(GTK_BUTTON(cursorButton_), cursor_.ButtonLabel());
+    ShowLocalCursor(!cursor_.HidesOverVideo(pointerOverVideo_));
 }
 
 gboolean ViewerWindow::OnKey(GtkWidget*, GdkEventKey* e, gpointer user) {
     auto* self = static_cast<ViewerWindow*>(user);
     const bool down = e->type == GDK_KEY_PRESS;
-    if (e->keyval == GDK_KEY_F11) {
-        if (down) self->ToggleFullScreen();
+    int32_t vk = 0, scan = 0;
+    const bool mapped =
+        dh_native_key_to_vk(GdkKeycodeToEvdev(e->hardware_keycode), &vk, &scan);
+    if (mapped && deskhub::IsViewerShortcutVk(vk)) {
+        if (down && vk == deskhub::kViewerFullScreenToggleVk) self->ToggleFullScreen();
+        if (down && vk == deskhub::kViewerCursorToggleVk) self->ToggleLocalCursor();
         return TRUE;
     }
     if (!self->control_) return FALSE;
-
-    if (down && e->keyval == GDK_KEY_Escape && self->pointer_.locked()) {
-        self->ApplyLockEffect(self->pointer_.OnEscape());
-        return TRUE;
-    }
-
-    int32_t vk = 0, scan = 0;
-    if (!dh_native_key_to_vk(GdkKeycodeToEvdev(e->hardware_keycode), &vk, &scan)) return TRUE;
-    if (vk == deskhub::kViewerLockToggleVk) {
-        if (down) self->ApplyLockEffect(self->pointer_.OnToggleLockKey());
-        return TRUE;
-    }
-    self->loop_.QueueKey(vk, scan, down);
+    if (mapped) self->loop_.QueueKey(vk, scan, down);
     return TRUE;
 }
 
 gboolean ViewerWindow::OnMotion(GtkWidget*, GdkEventMotion* e, gpointer user) {
     auto* self = static_cast<ViewerWindow*>(user);
     if (!self->control_) return FALSE;
-    if (!self->pointer_.locked() && !self->InContent(e->x, e->y)) return FALSE;
-
-    if (!self->pointer_.locked()) {
-        int32_t nx = 0, ny = 0;
-        if (self->ToNormalized(e->x, e->y, nx, ny)) self->loop_.QueueMouseMoveAbs(nx, ny);
-        self->haveLastPos_ = false;
-        return TRUE;
-    }
-
-    GtkAllocation alloc{};
-    gtk_widget_get_allocation(self->window_, &alloc);
-    const double cx = alloc.width / 2.0, cy = alloc.height / 2.0;
-
-    if (self->haveLastPos_) {
-        const int32_t dx = int32_t(e->x - self->lastPx_);
-        const int32_t dy = int32_t(e->y - self->lastPy_);
-        if (dx || dy) self->loop_.QueueMouseMoveRel(dx, dy);
-    }
-    self->lastPx_ = cx;
-    self->lastPy_ = cy;
-    self->haveLastPos_ = true;
-
-    GdkWindow* gw = gtk_widget_get_window(self->window_);
-    if (gw) {
-        int ox = 0, oy = 0;
-        gdk_window_get_origin(gw, &ox, &oy);
-        gdk_device_warp(gdk_event_get_device(reinterpret_cast<GdkEvent*>(e)),
-            gtk_widget_get_screen(self->window_), ox + int(cx), oy + int(cy));
-    }
+    int32_t nx = 0, ny = 0;
+    const bool overVideo = self->ToNormalized(e->x, e->y, nx, ny);
+    self->pointerOverVideo_ = self->pointerInArea_ && overVideo;
+    self->ShowLocalCursor(!self->cursor_.HidesOverVideo(self->pointerOverVideo_));
+    if (!self->InContent(e->x, e->y)) return FALSE;
+    if (overVideo) self->loop_.QueueMouseMoveAbs(nx, ny);
     return TRUE;
+}
+
+gboolean ViewerWindow::OnCrossing(GtkWidget*, GdkEventCrossing* e, gpointer user) {
+    auto* self = static_cast<ViewerWindow*>(user);
+    if (e->detail == GDK_NOTIFY_INFERIOR) return FALSE;
+    self->pointerInArea_ = e->type == GDK_ENTER_NOTIFY;
+    if (!self->pointerInArea_) {
+        self->pointerOverVideo_ = false;
+        self->ShowLocalCursor(true);
+    }
+    return FALSE;
 }
 
 gboolean ViewerWindow::OnButton(GtkWidget*, GdkEventButton* e, gpointer user) {
     auto* self = static_cast<ViewerWindow*>(user);
     if (!self->control_) return FALSE;
-    if (!self->pointer_.locked() && !self->InContent(e->x, e->y)) return FALSE;
+    if (!self->InContent(e->x, e->y)) return FALSE;
     if (e->type != GDK_BUTTON_PRESS && e->type != GDK_BUTTON_RELEASE) return TRUE;
 
     deskhub::MouseButton btn{};
     if (!deskhub::X11ButtonToMouseButton(e->button, btn)) return TRUE;
 
-    if (!self->pointer_.locked()) {
-        int32_t nx = 0, ny = 0;
-        if (self->ToNormalized(e->x, e->y, nx, ny)) self->loop_.QueueMouseMoveAbs(nx, ny);
-    }
+    int32_t nx = 0, ny = 0;
+    if (self->ToNormalized(e->x, e->y, nx, ny)) self->loop_.QueueMouseMoveAbs(nx, ny);
     self->loop_.QueueMouseButton(int32_t(btn), e->type == GDK_BUTTON_PRESS);
     return TRUE;
 }
@@ -431,7 +419,7 @@ gboolean ViewerWindow::OnButton(GtkWidget*, GdkEventButton* e, gpointer user) {
 gboolean ViewerWindow::OnScroll(GtkWidget*, GdkEventScroll* e, gpointer user) {
     auto* self = static_cast<ViewerWindow*>(user);
     if (!self->control_) return FALSE;
-    if (!self->pointer_.locked() && !self->InContent(e->x, e->y)) return FALSE;
+    if (!self->InContent(e->x, e->y)) return FALSE;
 
     int32_t delta = 0;
     switch (e->direction) {
@@ -456,13 +444,17 @@ gboolean ViewerWindow::OnFocusIn(GtkWidget*, GdkEventFocus*, gpointer user) {
 gboolean ViewerWindow::OnFocusOut(GtkWidget*, GdkEventFocus*, gpointer user) {
     auto* self = static_cast<ViewerWindow*>(user);
     self->keyboardFocus_ = false;
-    self->ApplyLockEffect(self->pointer_.OnFocusLost());
+    self->loop_.ReleaseAllInput();
     self->SyncSeatGrab();
     return FALSE;
 }
 
 void ViewerWindow::OnFullScreenClicked(GtkWidget*, gpointer user) {
     static_cast<ViewerWindow*>(user)->ToggleFullScreen();
+}
+
+void ViewerWindow::OnCursorClicked(GtkWidget*, gpointer user) {
+    static_cast<ViewerWindow*>(user)->ToggleLocalCursor();
 }
 
 gboolean ViewerWindow::OnWindowState(GtkWidget*, GdkEventWindowState* e, gpointer user) {

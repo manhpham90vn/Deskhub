@@ -45,8 +45,6 @@ void dh_screen_release_all_input(DHScreen* s);
 
 void dh_screen_mouse_move(DHScreen* s, int32_t nx, int32_t ny);
 
-void dh_screen_mouse_move_rel(DHScreen* s, int32_t dx, int32_t dy);
-
 void dh_screen_mouse_button(DHScreen* s, int32_t button, bool down);
 
 void dh_screen_mouse_wheel(DHScreen* s, int32_t delta);

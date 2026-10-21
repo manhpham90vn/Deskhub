@@ -68,18 +68,6 @@ void ClientInputQueue::MouseMoveAbsolute(int32_t nx, int32_t ny, uint64_t nowUs)
     PushLocked(e);
 }
 
-void ClientInputQueue::MouseMoveRelative(int32_t dx, int32_t dy, uint64_t nowUs) {
-    if (dx == 0 && dy == 0) return;
-    InputEvent e;
-    e.type = InputType::MouseMove;
-    e.timestampUs = nowUs;
-    e.a = dx;
-    e.b = dy;
-    e.absolute = 0;
-    std::lock_guard<std::mutex> lk(mutex_);
-    PushLocked(e);
-}
-
 void ClientInputQueue::MouseButtonEvent(int32_t button, bool down, uint64_t nowUs) {
     InputEvent e;
     e.type = InputType::MouseButton;

@@ -11,7 +11,7 @@
 #include <memory>
 #include <mutex>
 
-#include "deskhub/input/PointerLockState.h"
+#include "deskhub/input/LocalCursor.h"
 #include "deskhub/net/TrustStore.h"
 #include "deskhub/media/ViewFit.h"
 #include "deskhub/media/ViewerTitle.h"
@@ -34,6 +34,30 @@ constexpr UINT WM_APP_SIZE = WM_APP + 2;
 constexpr UINT WM_APP_CLOSED = WM_APP + 3;
 constexpr UINT kTimerHint = 1;
 constexpr UINT kTimerClipboard = 2;
+
+constexpr int kCursorButtonId = 101;
+constexpr int kFullScreenButtonId = 102;
+constexpr int kBarHeightDip = 32;
+constexpr int kBarPaddingDip = 4;
+constexpr int kButtonWidthDip = 150;
+constexpr int kDefaultDpi = 96;
+constexpr DWORD kWindowedStyle = WS_OVERLAPPEDWINDOW;
+constexpr DWORD kFullScreenStyle = WS_POPUP;
+
+int ScreenDpi() {
+    HDC screen = GetDC(nullptr);
+    const int dpi = screen ? GetDeviceCaps(screen, LOGPIXELSY) : kDefaultDpi;
+    if (screen) ReleaseDC(nullptr, screen);
+    return dpi > 0 ? dpi : kDefaultDpi;
+}
+
+int Dip(int value) {
+    return MulDiv(value, ScreenDpi(), kDefaultDpi);
+}
+
+bool IsKeyRepeat(LPARAM lp) {
+    return (lp & (LPARAM(1) << 30)) != 0;
+}
 
 std::string ReadClipboardText(HWND owner) {
     if (!OpenClipboard(owner)) return {};
@@ -68,6 +92,8 @@ void WriteClipboardText(HWND owner, const std::string& utf8) {
 struct ViewerFrame {
     HWND hwnd = nullptr;
     HWND video = nullptr;
+    HWND cursorButton = nullptr;
+    HWND fullScreenButton = nullptr;
     DHScreen* session = nullptr;
     deskhub::OpenViewerCount* openCount = nullptr;
     bool viewOnly = false;
@@ -75,6 +101,9 @@ struct ViewerFrame {
     std::string baseTitle;
     std::wstring shownTitle;
     uint32_t fittedW = 0, fittedH = 0;
+    deskhub::LocalCursorState cursor;
+    bool fullScreen = false;
+    WINDOWPLACEMENT windowed{sizeof(WINDOWPLACEMENT)};
 
     std::mutex mu;
     std::string statsLine;
@@ -90,14 +119,73 @@ struct ViewerFrame {
         }
         RECT rc{};
         GetClientRect(hwnd, &rc);
-        const int aw = rc.right, ah = rc.bottom;
+        const int bar = fullScreen ? 0 : Dip(kBarHeightDip);
+        LayoutBar(rc.right);
+        const int aw = rc.right, ah = rc.bottom - bar;
         if (!w || !h || aw <= 0 || ah <= 0) {
-            MoveWindow(video, 0, 0, std::max(1, aw), std::max(1, ah), TRUE);
+            MoveWindow(video, 0, bar, std::max(1, aw), std::max(1, ah), TRUE);
             return;
         }
         const deskhub::ViewRect r = deskhub::FitVideoRect(aw, ah, double(w) / double(h));
-        MoveWindow(video, int(r.x), int(r.y), std::max(1, int(r.width)),
+        MoveWindow(video, int(r.x), bar + int(r.y), std::max(1, int(r.width)),
             std::max(1, int(r.height)), TRUE);
+    }
+
+    void LayoutBar(int clientWidth) {
+        const int show = fullScreen ? SW_HIDE : SW_SHOW;
+        const int pad = Dip(kBarPaddingDip);
+        const int bw = Dip(kButtonWidthDip);
+        const int bh = Dip(kBarHeightDip) - 2 * pad;
+        int x = clientWidth - pad - bw;
+        for (HWND button : {fullScreenButton, cursorButton}) {
+            if (!button) continue;
+            ShowWindow(button, show);
+            MoveWindow(button, std::max(pad, x), pad, bw, bh, TRUE);
+            x -= bw + pad;
+        }
+    }
+
+    void ToggleFullScreen() {
+        if (!fullScreen) {
+            GetWindowPlacement(hwnd, &windowed);
+            MONITORINFO mi{sizeof(MONITORINFO)};
+            GetMonitorInfoW(MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST), &mi);
+            fullScreen = true;
+            SetWindowLongPtrW(hwnd, GWL_STYLE, LONG_PTR(kFullScreenStyle | WS_VISIBLE));
+            SetWindowPos(hwnd, HWND_TOP, mi.rcMonitor.left, mi.rcMonitor.top,
+                mi.rcMonitor.right - mi.rcMonitor.left, mi.rcMonitor.bottom - mi.rcMonitor.top,
+                SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
+        } else {
+            fullScreen = false;
+            SetWindowLongPtrW(hwnd, GWL_STYLE, LONG_PTR(kWindowedStyle | WS_VISIBLE));
+            SetWindowPlacement(hwnd, &windowed);
+            SetWindowPos(hwnd, nullptr, 0, 0, 0, 0,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
+        }
+        Relayout();
+        SetFocus(video);
+    }
+
+    bool HidesCursorOverVideo() const {
+        return !viewOnly && cursor.HidesOverVideo(true);
+    }
+
+    void ToggleLocalCursor() {
+        if (viewOnly) return;
+        cursor.Toggle();
+        if (cursorButton) SetWindowTextW(cursorButton, FromUtf8(cursor.ButtonLabel()).c_str());
+        POINT p{};
+        if (GetCursorPos(&p) && WindowFromPoint(p) == video)
+            SetCursor(HidesCursorOverVideo() ? nullptr : LoadCursorW(nullptr, IDC_ARROW));
+        SetFocus(video);
+    }
+
+    bool HandleShortcut(WPARAM vk, bool down, LPARAM lp) {
+        if (!deskhub::IsViewerShortcutVk(int32_t(vk))) return false;
+        if (!down || IsKeyRepeat(lp)) return true;
+        if (int32_t(vk) == deskhub::kViewerFullScreenToggleVk) ToggleFullScreen();
+        if (int32_t(vk) == deskhub::kViewerCursorToggleVk) ToggleLocalCursor();
+        return true;
     }
 
     void UpdateTitle() {
@@ -107,9 +195,8 @@ struct ViewerFrame {
             line = statsLine;
         }
         const std::string title =
-            viewOnly
-                ? deskhub::ComposeViewerTitle(baseTitle, line, deskhub::kViewerViewOnlyHint)
-                : deskhub::PointerLockState(input.relativeMode()).TitleFor(baseTitle, line);
+            viewOnly ? deskhub::ComposeViewerTitle(baseTitle, line, deskhub::kViewerViewOnlyHint)
+                     : deskhub::ComposeViewerTitle(baseTitle, line);
         std::wstring t = FromUtf8(title);
         if (t == shownTitle) return;
         shownTitle = std::move(t);
@@ -123,12 +210,12 @@ struct ViewerFrame {
             w = videoW;
             h = videoH;
         }
-        if (!deskhub::ShouldRefitViewer(fittedW, fittedH, w, h)) return;
+        if (fullScreen || !deskhub::ShouldRefitViewer(fittedW, fittedH, w, h)) return;
         fittedW = w;
         fittedH = h;
         RECT wa{};
         SystemParametersInfoW(SPI_GETWORKAREA, 0, &wa, 0);
-        RECT wr{0, 0, LONG(w), LONG(h)};
+        RECT wr{0, 0, LONG(w), LONG(h) + Dip(kBarHeightDip)};
         AdjustWindowRect(&wr, WS_OVERLAPPEDWINDOW, TRUE);
         const deskhub::ViewSize fitted = deskhub::ScaleToFit(uint32_t(wr.right - wr.left),
             uint32_t(wr.bottom - wr.top),
@@ -142,6 +229,12 @@ struct ViewerFrame {
 LRESULT CALLBACK VideoProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
     auto* f = (ViewerFrame*)GetWindowLongPtrW(h, GWLP_USERDATA);
     if (msg == WM_LBUTTONDOWN) SetFocus(h);
+    if (f && (msg == WM_KEYDOWN || msg == WM_KEYUP) && f->HandleShortcut(wp, msg == WM_KEYDOWN, lp))
+        return 0;
+    if (f && msg == WM_SETCURSOR && LOWORD(lp) == HTCLIENT && f->HidesCursorOverVideo()) {
+        SetCursor(nullptr);
+        return TRUE;
+    }
     if (f && f->input.OnMessage(h, msg, wp, lp)) return 0;
     return DefWindowProcW(h, msg, wp, lp);
 }
@@ -151,6 +244,10 @@ LRESULT CALLBACK FrameProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
     switch (msg) {
         case WM_SIZE:
             if (f) f->Relayout();
+            return 0;
+        case WM_COMMAND:
+            if (f && LOWORD(wp) == kFullScreenButtonId) f->ToggleFullScreen();
+            if (f && LOWORD(wp) == kCursorButtonId) f->ToggleLocalCursor();
             return 0;
         case WM_TIMER:
             if (f && wp == kTimerHint) f->UpdateTitle();
@@ -227,7 +324,7 @@ std::unique_ptr<ViewerFrame> OpenFrame(const std::string& addr, uint8_t sourceId
     f->baseTitle = deskhub::ViewerBaseTitle(nameUtf8);
 
     const std::wstring initialTitle = FromUtf8(f->baseTitle);
-    f->hwnd = CreateWindowExW(0, kFrameClass, initialTitle.c_str(), WS_OVERLAPPEDWINDOW,
+    f->hwnd = CreateWindowExW(0, kFrameClass, initialTitle.c_str(), kWindowedStyle,
         CW_USEDEFAULT, CW_USEDEFAULT, 1024, 600, nullptr, nullptr,
         GetModuleHandleW(nullptr), nullptr);
     if (!f->hwnd) return nullptr;
@@ -238,6 +335,13 @@ std::unique_ptr<ViewerFrame> OpenFrame(const std::string& addr, uint8_t sourceId
     f->video = CreateWindowExW(0, kVideoClass, L"", WS_CHILD | WS_VISIBLE, 0, 0, 16, 16,
         f->hwnd, nullptr, GetModuleHandleW(nullptr), nullptr);
     SetWindowLongPtrW(f->video, GWLP_USERDATA, (LONG_PTR)f.get());
+
+    const ChildControlFactory make(f->hwnd, GetModuleHandleW(nullptr));
+    f->fullScreenButton = make(L"BUTTON", FromUtf8(deskhub::ui::kFullScreenButton).c_str(),
+        BS_PUSHBUTTON, 0, 0, 1, 1, kFullScreenButtonId);
+    if (control)
+        f->cursorButton = make(L"BUTTON", FromUtf8(f->cursor.ButtonLabel()).c_str(),
+            BS_PUSHBUTTON, 0, 0, 1, 1, kCursorButtonId);
 
     DHScreenCallbacks callbacks{};
     callbacks.user = f.get();

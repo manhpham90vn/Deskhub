@@ -33,7 +33,7 @@ client/     app theo từng OS: windows, linux, macos, ios, android (phụ thu�
 | `core/session` | Các session state machine, chia theo vai trò: `session/host` (session theo từng viewer, bảng viewer, feedback của viewer, trạng thái source pipeline, luồng share, `SourceListResponder`, file receiver), `session/client` (screen client, file sender, terminal client, luồng connect, các viewer đang mở), cùng các thành phần dùng chung đặt cạnh chúng (kiểu dữ liệu transfer, bảng terminal session, clipboard sync, link pulse và link recovery) |
 | `core/control` | Bitrate controller, quality ladder, tính kích thước stream, clock offset, cổng giới hạn fps (`FrameGate`), thống kê link (`LinkStats`), bộ điều nhịp hiển thị (`VideoPacer`) |
 | `core/media` | Các hợp đồng media mà mọi capture, encoder và decoder tuân theo (`VideoContract`, `CaptureContract`, `AudioContract`), parse H.264 Annex B và SPS, lập kế hoạch bitrate, bộ downscale RGB, `FrameMailbox` kiểu latest-wins, PCM ring, căn khung hiển thị và các kiểu dữ liệu share |
-| `core/input` | Input ở cả hai đầu: hàng đợi input và bộ gửi của client, bộ nhận và bộ áp dụng của host, ánh xạ phím và con trỏ, bảng scancode, hotkey, pointer lock và con trỏ trackpad |
+| `core/input` | Input ở cả hai đầu: hàng đợi input và bộ gửi của client, bộ nhận và bộ áp dụng của host, ánh xạ phím và con trỏ, bảng scancode, hotkey, con trỏ cục bộ và phím tắt của viewer, và con trỏ trackpad |
 | `core/terminal` | VT emulator dùng chung cho mọi client: `VtParser`, `Screen`, `KeyEncoder`, `Palette`, cùng repaint, snapshot và neo cuộn |
 | `core/transfer` | Các primitive truyền file: `Crc32` và `SafeFileName` |
 | `core/diag` | Văn bản chẩn đoán phía sau dòng trạng thái của host và viewer (`ShareDiag`, `ScreenClientDiag`, `WindowStat`) |

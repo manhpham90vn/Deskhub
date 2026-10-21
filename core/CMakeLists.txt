@@ -159,7 +159,7 @@ if(DESKHUB_CORE_TESTS)
         tests/input/Set1ScancodeTests.cpp
         tests/input/HotkeysTests.cpp
         tests/input/PointerMapTests.cpp
-        tests/input/PointerLockStateTests.cpp
+        tests/input/LocalCursorTests.cpp
         tests/input/TrackpadCursorTests.cpp
 
         tests/control/ControlTests.cpp

@@ -52,12 +52,10 @@ void TestDrainIsReadAndClear() {
 void TestFocusFlag() {
     std::printf("[cinput] any queued input asks the session for focus...\n");
     ClientInputQueue q;
-    q.MouseMoveRelative(0, 0, kT0);
-    Check(!q.wantsFocus(), "a move that was dropped as a no-op does not ask for focus");
     q.MouseWheel(0, kT0);
-    Check(!q.wantsFocus(), "neither does a zero wheel delta");
+    Check(!q.wantsFocus(), "a zero wheel delta, dropped as a no-op, does not ask for focus");
 
-    q.MouseMoveRelative(3, 4, kT0);
+    q.MouseMoveAbsolute(3, 4, kT0);
     Check(q.wantsFocus(), "a real event does");
     Drain(q, kT0);
     Check(q.wantsFocus(), "and the flag is sticky across a drain");
@@ -78,19 +76,16 @@ void TestAbsoluteClamping() {
         Check(e.type == InputType::MouseMove && e.absolute == 1, "all marked absolute");
 }
 
-void TestRelativeAndWheelSkipNoOps() {
-    std::printf("[cinput] a zero relative move or wheel notch is not sent at all...\n");
+void TestWheelSkipsNoOps() {
+    std::printf("[cinput] a zero wheel notch is not sent at all...\n");
     ClientInputQueue q;
-    q.MouseMoveRelative(0, 0, kT0);
     q.MouseWheel(0, kT0);
     Check(Drain(q, kT0).empty(), "nothing queued");
 
-    q.MouseMoveRelative(-2, 0, kT0);
     q.MouseWheel(-120, kT0);
     const auto batch = Drain(q, kT0);
-    Check(batch.size() == 2, "a non-zero move and wheel do go out");
-    Check(batch[0].a == -2 && batch[0].b == 0 && batch[0].absolute == 0, "relative move");
-    Check(batch[1].type == InputType::MouseWheel && batch[1].a == 0 && batch[1].b == -120,
+    Check(batch.size() == 1, "a non-zero wheel does go out");
+    Check(batch[0].type == InputType::MouseWheel && batch[0].a == 0 && batch[0].b == -120,
         "the wheel delta travels in b");
 }
 
@@ -248,7 +243,7 @@ void RunClientInputQueueTests() {
     TestDrainIsReadAndClear();
     TestFocusFlag();
     TestAbsoluteClamping();
-    TestRelativeAndWheelSkipNoOps();
+    TestWheelSkipsNoOps();
     TestHeldKeysAndButtonsAreReleased();
     TestRepeatedPressDoesNotDoubleRelease();
     TestKeyTapHoldsThenReleases();

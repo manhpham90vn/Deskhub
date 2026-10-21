@@ -14,9 +14,19 @@ final class RemoteVideoView: NSView {
 
     private var fittedSize: CGSize = .zero
 
-    private var pointer = DHPointerLock(locked: false)
-    var mouseLocked: Bool { pointer.locked }
-    var onLockChanged: ((Bool) -> Void)?
+    var cursorHidden = false {
+        didSet {
+            guard cursorHidden != oldValue else { return }
+            window?.invalidateCursorRects(for: self)
+        }
+    }
+
+    var onToggleCursor: (() -> Void)?
+    var onFullScreenChanged: ((Bool) -> Void)?
+
+    private static let blankCursor = NSCursor(image: NSImage(size: NSSize(width: 1, height: 1)),
+                                              hotSpot: .zero)
+    private var reportedFullScreen = false
 
     private var trackingArea: NSTrackingArea?
     private var lastFlags: NSEvent.ModifierFlags = []
@@ -62,8 +72,28 @@ final class RemoteVideoView: NSView {
         trackingArea = area
     }
 
+    override func resetCursorRects() {
+        super.resetCursorRects()
+        if cursorHidden { addCursorRect(videoRect, cursor: Self.blankCursor) }
+    }
+
+    override func layout() {
+        super.layout()
+        window?.invalidateCursorRects(for: self)
+        reportFullScreen()
+    }
+
+    private func reportFullScreen() {
+        let fullScreen = window?.styleMask.contains(.fullScreen) ?? false
+        guard fullScreen != reportedFullScreen else { return }
+        reportedFullScreen = fullScreen
+        let report = onFullScreenChanged
+        DispatchQueue.main.async { report?(fullScreen) }
+    }
+
     private func refitWindow() {
         guard let window, let screen = window.screen ?? NSScreen.main else { return }
+        guard !window.styleMask.contains(.fullScreen) else { return }
         let newW = UInt32(max(0, videoSize.width))
         let newH = UInt32(max(0, videoSize.height))
         guard dh_should_refit_viewer(
@@ -106,44 +136,26 @@ final class RemoteVideoView: NSView {
         return (nx, ny)
     }
 
-    private func apply(_ effect: DHPointerLockEffect, notify: Bool = true) {
-        if effect.releaseHeldInput { model?.releaseAllInput() }
-        if effect.lockChanged { grabPointer(pointer.locked) }
-        if notify, effect.lockChanged { onLockChanged?(pointer.locked) }
-    }
-
-    private func grabPointer(_ on: Bool) {
-        if on {
-            CGAssociateMouseAndMouseCursorPosition(0)
-            NSCursor.hide()
-        } else {
-            CGAssociateMouseAndMouseCursorPosition(1)
-            NSCursor.unhide()
-        }
-    }
-
-    func setMouseLocked(_ on: Bool, notify: Bool = true) {
-        guard pointer.locked != on else { return }
-        apply(dh_pointer_toggle_lock(&pointer), notify: notify)
-    }
-
     override func keyDown(with event: NSEvent) {
-        if isLockToggle(event.keyCode) {
-            guard model?.control != false else { return }
-            apply(dh_pointer_toggle_lock(&pointer))
-            return
-        }
-        if pointer.locked, isEscape(event.keyCode) {
-            apply(dh_pointer_escape(&pointer))
-            return
-        }
+        if handleShortcut(event) { return }
         guard !event.isARepeat else { return }
         sendKey(event.keyCode, down: true)
     }
 
     override func keyUp(with event: NSEvent) {
-        guard !isLockToggle(event.keyCode) else { return }
+        guard shortcutVk(event.keyCode) == nil else { return }
         sendKey(event.keyCode, down: false)
+    }
+
+    private func handleShortcut(_ event: NSEvent) -> Bool {
+        guard let vk = shortcutVk(event.keyCode) else { return false }
+        guard !event.isARepeat else { return true }
+        if dh_is_full_screen_toggle_vk(vk) {
+            window?.toggleFullScreen(nil)
+        } else if model?.control != false {
+            onToggleCursor?()
+        }
+        return true
     }
 
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
@@ -152,14 +164,10 @@ final class RemoteVideoView: NSView {
         return true
     }
 
-    private func isLockToggle(_ macKeyCode: UInt16) -> Bool {
-        guard let mapped = DeskhubClient.mapKey(Int32(macKeyCode)) else { return false }
-        return dh_is_lock_toggle_vk(mapped.vk)
-    }
-
-    private func isEscape(_ macKeyCode: UInt16) -> Bool {
-        guard let mapped = DeskhubClient.mapKey(Int32(macKeyCode)) else { return false }
-        return dh_is_escape_vk(mapped.vk)
+    private func shortcutVk(_ macKeyCode: UInt16) -> Int32? {
+        guard let mapped = DeskhubClient.mapKey(Int32(macKeyCode)) else { return nil }
+        let isShortcut = dh_is_cursor_toggle_vk(mapped.vk) || dh_is_full_screen_toggle_vk(mapped.vk)
+        return isShortcut ? mapped.vk : nil
     }
 
     override func flagsChanged(with event: NSEvent) {
@@ -200,12 +208,6 @@ final class RemoteVideoView: NSView {
 
     private func handleMove(_ event: NSEvent) {
         guard let model else { return }
-        if mouseLocked {
-            let dx = Int32(event.deltaX.rounded())
-            let dy = Int32(event.deltaY.rounded())
-            if dx != 0 || dy != 0 { model.mouseMoveRel(dx: dx, dy: dy) }
-            return
-        }
         let point = convert(event.locationInWindow, from: nil)
         if let norm = normalize(point) { model.mouseMove(nx: norm.nx, ny: norm.ny) }
     }
@@ -241,7 +243,7 @@ final class RemoteVideoView: NSView {
     }
 
     override func resignFirstResponder() -> Bool {
-        apply(dh_pointer_focus_lost(&pointer))
+        model?.releaseAllInput()
         return true
     }
 }
@@ -249,15 +251,18 @@ final class RemoteVideoView: NSView {
 struct RemoteView: NSViewRepresentable {
     let model: StreamModel
     let videoSize: CGSize
-    var mouseLocked: Bool = false
+    var cursorHidden: Bool = false
     let onLayerReady: (AVSampleBufferDisplayLayer?) -> Void
-    let onLockChanged: (Bool) -> Void
+    let onToggleCursor: () -> Void
+    let onFullScreenChanged: (Bool) -> Void
 
     func makeNSView(context _: Context) -> RemoteVideoView {
         let view = RemoteVideoView()
         view.model = model
         view.videoSize = videoSize
-        view.onLockChanged = onLockChanged
+        view.cursorHidden = cursorHidden
+        view.onToggleCursor = onToggleCursor
+        view.onFullScreenChanged = onFullScreenChanged
         onLayerReady(view.displayLayer)
         DispatchQueue.main.async { view.window?.makeFirstResponder(view) }
         return view
@@ -265,11 +270,11 @@ struct RemoteView: NSViewRepresentable {
 
     func updateNSView(_ nsView: RemoteVideoView, context _: Context) {
         nsView.videoSize = videoSize
-        nsView.setMouseLocked(mouseLocked, notify: false)
+        nsView.cursorHidden = cursorHidden
     }
 
     static func dismantleNSView(_ nsView: RemoteVideoView, coordinator _: ()) {
-        nsView.setMouseLocked(false)
+        nsView.cursorHidden = false
         nsView.model?.setLayer(nil)
         nsView.model = nil
     }

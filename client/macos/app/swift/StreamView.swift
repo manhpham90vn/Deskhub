@@ -74,8 +74,7 @@ struct ViewerWindow: View {
 
     private var subtitle: String {
         model.control
-            ? DeskhubClient.pointerSubtitle(locked: model.mouseLocked,
-                                            statusLine: model.statusLine)
+            ? DeskhubClient.controlSubtitle(statusLine: model.statusLine)
             : DeskhubClient.viewOnlySubtitle(statusLine: model.statusLine)
     }
 
@@ -95,16 +94,25 @@ struct ViewerWindow: View {
 struct StreamView: View {
     @Bindable var model: StreamModel
     let onEnd: () -> Void
+    @State private var fullScreen = false
 
     var body: some View {
         VStack(spacing: 0) {
-            ConnectionStatusBar(model: model, onDisconnect: onEnd)
+            if !fullScreen {
+                ConnectionStatusBar(
+                    model: model,
+                    onToggleCursor: { model.cursorHidden.toggle() },
+                    onFullScreen: { NSApp.keyWindow?.toggleFullScreen(nil) },
+                    onDisconnect: onEnd
+                )
+            }
             RemoteView(
                 model: model,
                 videoSize: videoSize,
-                mouseLocked: model.mouseLocked,
+                cursorHidden: model.control && model.cursorHidden,
                 onLayerReady: { layer in model.setLayer(layer) },
-                onLockChanged: { model.mouseLocked = $0 }
+                onToggleCursor: { model.cursorHidden.toggle() },
+                onFullScreenChanged: { fullScreen = $0 }
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Color.black)

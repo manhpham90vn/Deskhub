@@ -151,7 +151,7 @@ threat model は [`SECURITY.ja.md`](SECURITY.ja.md) を参照。
 
 - 💻 **作業** —— 性能の低いノート PC や iPad から、自宅 PC の Claude Code、VS Code、build を実行する。
 - 🌐 **デスクトップアプリ** —— 別の端末から、パソコン上の Chrome、Office などを使う。
-- 🎮 **ゲーム** —— 最大 240 fps、relative mouse と DirectInput scancode、`F9` による pointer lock。
+- 🎮 **ゲーム** —— 最大 240 fps と DirectInput scancode。
 - 🖥️ **マルチ display** —— display を 1 つまたは複数共有し、それぞれが独立した session となる。
 
 <a id="platforms"></a>
@@ -174,7 +174,7 @@ threat model は [`SECURITY.ja.md`](SECURITY.ja.md) を参照。
 - **QUIC 上の専用 protocol** —— 無限 GOP と必要時の IDR、XOR FEC と失われた packet の再送、adaptive bitrate を、encrypt 済みの connection 1 本に multiplex する。
 - **画面に音声が伴う** —— マシン自身の audio mix を Opus 64 kbps で送る。1 datagram につき 20 ms の frame を 1 つ。失われた packet が 1 つなら通常は Opus の in-band FEC で次の packet から復元され、それより長い欠落も 1 秒に満たない音声の損失にとどまり、いずれも映像には影響しない。microphone は capture しない。
 - **画面だけではない** —— remote shell、任意の host へのファイル送信、プレーンテキストの clipboard 双方向同期、session 中のスリープ防止。
-- **実際の input** —— relative mouse（Raw Input）と、DirectInput ゲーム向けの scancode。host 自身の mouse と keyboard が常に優先される（Linux ではユーザーが `input` グループに入っている場合 —— [Install](docs/INSTALL.ja.md#host-wins) を参照）。
+- **実際の input** —— DirectInput ゲーム向けの scancode。host 自身の mouse と keyboard が常に優先される（Linux ではユーザーが `input` グループに入っている場合 —— [Install](docs/INSTALL.ja.md#host-wins) を参照）。
 - **共有された core** —— protocol、FEC、bitrate control は `core/` にあり、すべての client にコンパイルされる。
 - **command line ツール** —— `deskhub-cli` で画面の共有、remote shell、ファイル送信、key・許可済みデバイス・信頼済み host・settings の管理を、スクリプトや SSH から行える。一覧系のコマンドは `--json` に対応する。Windows と Linux ではリモート画面のウィンドウも開ける。[Build](docs/BUILD.ja.md#command-line-client) を参照。
 - **core を継続的にテスト** —— オフラインの unit test に加え、CI で ASan、UBSan、TSan を実行する。9 つの libFuzzer target —— pull request ごとに各 30 秒、毎晩各 15 分 —— が wire format、H.264 の parse、reassembly、terminal の byte stream、UI の文字列、key と招待リンクの parse、QR の encode、session state machine を検査し、見つかった crash は regression test に加える。

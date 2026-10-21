@@ -29,10 +29,6 @@
         if (s) engineOf(s).QueueMouseMoveAbs(nx, ny);                               \
     }                                                                               \
                                                                                     \
-    void dh_screen_mouse_move_rel(DHScreen* s, int32_t dx, int32_t dy) {            \
-        if (s) engineOf(s).QueueMouseMoveRel(dx, dy);                               \
-    }                                                                               \
-                                                                                    \
     void dh_screen_mouse_button(DHScreen* s, int32_t button, bool down) {           \
         if (s) engineOf(s).QueueMouseButton(button, down);                          \
     }                                                                               \

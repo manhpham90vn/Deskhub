@@ -150,7 +150,7 @@ no discovery, no switch that lets strangers in. Use a network you trust or a VPN
 
 - 💻 **Work** — run Claude Code, VS Code, or builds on your home PC from a weak laptop or an iPad at a café.
 - 🌐 **Desktop apps** — use Chrome, Office, or software that only runs on your computer from another device.
-- 🎮 **Games** — up to 240 fps, relative mouse + DirectInput scancodes, `F9` pointer lock.
+- 🎮 **Games** — up to 240 fps and DirectInput scancodes.
 - 🖥️ **Multi-monitor** — share one or several displays, each as its own session.
 
 <a id="platforms"></a>
@@ -173,7 +173,7 @@ no discovery, no switch that lets strangers in. Use a network you trust or a VPN
 - **Purpose-built protocol over QUIC** — infinite GOP + on-demand IDR, XOR FEC plus retransmission of lost packets, adaptive bitrate, all multiplexed on one encrypted connection.
 - **Sound comes with the screen** — the machine's own audio mix, Opus at 64 kbps, one 20 ms frame per datagram; a single lost packet is usually rebuilt from the next one through Opus's in-band FEC, a longer gap costs a fraction of a second, and neither ever disturbs the picture. Never a microphone.
 - **More than a screen** — a remote shell, files sent to any host, plain-text clipboard sync in both directions, and keep-awake while a session is open.
-- **Real input** — relative mouse (Raw Input) + scancodes for DirectInput games; host's own mouse/keyboard always wins (on Linux, once the user is in the `input` group — see [Install](docs/INSTALL.md#host-wins)).
+- **Real input** — scancodes for DirectInput games; host's own mouse/keyboard always wins (on Linux, once the user is in the `input` group — see [Install](docs/INSTALL.md#host-wins)).
 - **One shared core** — protocol, FEC, and bitrate control live in `core/`, compiled into every client.
 - **Command-line tools** — `deskhub-cli` can share a screen, open a remote shell, send files, and manage keys, allowed devices, trusted hosts and settings, from a script or over SSH; listings take `--json`. On Windows and Linux, it can also open a remote-screen window. See [Build](docs/BUILD.md#the-command-line-client).
 - **Tested across the core** — offline unit tests, sanitizer runs in CI and nine libFuzzer targets — 30 seconds each on every pull request, 15 minutes each nightly — cover the wire format, H.264 parsing, reassembly, terminal bytes, UI text, key and invite parsing, QR encoding and session state machines. Crashes found by fuzzing become regression tests.

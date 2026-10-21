@@ -2,6 +2,8 @@ import SwiftUI
 
 struct ConnectionStatusBar: View {
     let model: StreamModel
+    let onToggleCursor: () -> Void
+    let onFullScreen: () -> Void
     let onDisconnect: () -> Void
 
     var body: some View {
@@ -16,6 +18,13 @@ struct ConnectionStatusBar: View {
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
                 .truncationMode(.middle)
+            if model.control {
+                Button(
+                    DeskhubClient.cursorButtonLabel(hidden: model.cursorHidden),
+                    action: onToggleCursor
+                )
+            }
+            Button(DeskhubClient.string(DHStrFullScreenButton), action: onFullScreen)
             Button(DeskhubClient.string(DHStrDisconnectButton), action: onDisconnect)
         }
         .font(.callout)

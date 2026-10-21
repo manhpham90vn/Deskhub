@@ -34,7 +34,7 @@ void RunScancodeTableTests();
 void RunSet1ScancodeTests();
 void RunHotkeysTests();
 void RunPointerMapTests();
-void RunPointerLockStateTests();
+void RunLocalCursorTests();
 void RunTrackpadCursorTests();
 void RunControlTests();
 void RunStreamSizeTests();

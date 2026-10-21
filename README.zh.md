@@ -147,7 +147,7 @@ passcode，没有 discovery，也没有任何放陌生人进来的开关。请�
 
 - 💻 **工作** —— 用配置较低的笔记本或 iPad，运行家中 PC 上的 Claude Code、VS Code 或 build。
 - 🌐 **桌面应用** —— 从另一台设备使用电脑上的 Chrome、Office 或其他桌面软件。
-- 🎮 **游戏** —— 最高 240 fps，relative mouse 与 DirectInput scancode，`F9` 触发 pointer lock。
+- 🎮 **游戏** —— 最高 240 fps，以及 DirectInput scancode。
 - 🖥️ **多 display** —— 共享一块或多块 display，每块各自构成一个 session。
 
 <a id="platforms"></a>
@@ -170,7 +170,7 @@ passcode，没有 discovery，也没有任何放陌生人进来的开关。请�
 - **基于 QUIC 的专用 protocol** —— 无限 GOP 配合按需 IDR、XOR FEC 加丢失 packet 的重传、adaptive bitrate，全部 multiplex 在一条已 encrypt 的 connection 上。
 - **画面附带声音** —— 机器自身的 audio mix，Opus 64 kbps，每个 datagram 承载一个 20 ms frame。单个丢失的 packet 通常可通过 Opus 的 in-band FEC 由下一个 packet 恢复，更长的中断损失零点几秒，两者都不影响画面。不会 capture microphone。
 - **不止是屏幕** —— remote shell、向任意 host 发送文件、双向同步纯文本 clipboard，以及在 session 期间保持唤醒。
-- **真实 input** —— relative mouse（Raw Input）以及面向 DirectInput 游戏的 scancode。host 本机的 mouse 和 keyboard 始终优先（在 Linux 上需要用户加入 `input` 组 —— 见 [Install](docs/INSTALL.zh.md#host-wins)）。
+- **真实 input** —— 面向 DirectInput 游戏的 scancode。host 本机的 mouse 和 keyboard 始终优先（在 Linux 上需要用户加入 `input` 组 —— 见 [Install](docs/INSTALL.zh.md#host-wins)）。
 - **共享的 core** —— protocol、FEC 和 bitrate control 位于 `core/`，编译进每一个 client。
 - **command line 工具** —— `deskhub-cli` 可共享屏幕、打开 remote shell、发送文件，并管理 key、允许的设备、受信任的 host 和 settings，可从脚本或 SSH 使用；列表类命令支持 `--json`。在 Windows 和 Linux 上，它还能打开远程屏幕窗口。见 [Build](docs/BUILD.zh.md#command-line-client)。
 - **覆盖核心功能的测试** —— core 有离线 unit test，CI 运行 ASan、UBSan 和 TSan。九个 libFuzzer target —— 每个 pull request 上各运行 30 秒，每晚各运行 15 分钟 —— 检查 wire format、H.264 parse、reassembly、terminal 的 byte stream、UI 文案、key 与邀请链接的 parse、QR 编码和 session state machine。发现的 crash 会加入 regression test。

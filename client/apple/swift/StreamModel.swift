@@ -16,7 +16,7 @@ final class StreamModel {
     var videoHeight: UInt32 = 0
     var failedToStart = false
 
-    var mouseLocked = false
+    var cursorHidden = true
 
     private var session: ScreenSession?
     private var layer: AVSampleBufferDisplayLayer?
@@ -68,7 +68,6 @@ final class StreamModel {
 
     func disconnect() {
         stopPhasePolling()
-        mouseLocked = false
         session?.stop()
         session = nil
         phase = .idle
@@ -104,11 +103,6 @@ final class StreamModel {
         session?.mouseMove(nx: nx, ny: ny)
     }
 
-    func mouseMoveRel(dx: Int32, dy: Int32) {
-        guard control else { return }
-        session?.mouseMoveRel(dx: dx, dy: dy)
-    }
-
     func mouseButton(_ button: MouseButton, down: Bool) {
         guard control else { return }
         session?.mouseButton(button, down: down)
@@ -141,7 +135,6 @@ final class StreamModel {
         videoHeight = state.videoHeight
         if phase == .ended {
             endReason = state.endReason
-            mouseLocked = false
         }
     }
 
@@ -193,7 +186,6 @@ final class StreamModel {
                     self.stopPhasePolling()
                     self.phase = .ended
                     self.endReason = reason
-                    self.mouseLocked = false
                 }
             },
             onTrustAsked: { _, _ in }

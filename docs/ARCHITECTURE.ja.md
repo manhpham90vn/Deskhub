@@ -32,7 +32,7 @@ client/     OS ごとの app: windows、linux、macos、ios、android（platform
 | `core/session` | session state machine を役割ごとに分割: `session/host`（viewer ごとの session、viewer 表、viewer feedback、source pipeline の状態、share の流れ、`SourceListResponder`、file receiver）、`session/client`（screen client、file sender、terminal client、connect の流れ、開いている viewer）、およびそれらの隣に置いた共有部品（transfer の型、terminal session 表、clipboard sync、link pulse と link recovery） |
 | `core/control` | Bitrate controller、quality ladder、stream のサイズ決定、clock offset、fps の gate（`FrameGate`）、link の統計（`LinkStats`）、表示の pacer（`VideoPacer`） |
 | `core/media` | すべての capture、encoder、decoder が従う media の契約（`VideoContract`、`CaptureContract`、`AudioContract`）、H.264 の Annex B と SPS の解析、rate の計画、RGB の downscaler、最新優先の `FrameMailbox`、PCM ring、表示の fit と share の型 |
-| `core/input` | 両端の input: client の input キューと sender、host の receiver と applier、key と pointer の mapping、scancode 表、hotkey、pointer lock、trackpad の cursor |
+| `core/input` | 両端の input: client の input キューと sender、host の receiver と applier、key と pointer の mapping、scancode 表、hotkey、viewer のローカルポインタとショートカットキー、trackpad の cursor |
 | `core/terminal` | すべての client が共有する VT emulator: `VtParser`、`Screen`、`KeyEncoder`、`Palette`、および repaint、snapshot、scroll の anchor |
 | `core/transfer` | ファイル転送の基本部品: `Crc32` と `SafeFileName` |
 | `core/diag` | host と viewer の status 行の背後にある診断テキスト（`ShareDiag`、`ScreenClientDiag`、`WindowStat`） |

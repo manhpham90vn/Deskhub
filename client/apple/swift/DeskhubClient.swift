@@ -48,8 +48,12 @@ nonisolated enum DeskhubClient {
         buffered(320) { dh_viewer_base_title(sourceName, $0, $1) }
     }
 
-    static func pointerSubtitle(locked: Bool, statusLine: String) -> String {
-        buffered(320) { dh_pointer_subtitle(DHPointerLock(locked: locked), statusLine, $0, $1) }
+    static func controlSubtitle(statusLine: String) -> String {
+        buffered(320) { dh_control_subtitle(statusLine, $0, $1) }
+    }
+
+    static func cursorButtonLabel(hidden: Bool) -> String {
+        String(cString: dh_cursor_button_label(hidden))
     }
 
     static func viewOnlySubtitle(statusLine: String) -> String {

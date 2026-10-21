@@ -1,7 +1,7 @@
 #include "deskhubp/ffi/ClientFfi.h"
 
 #include "deskhub/input/Hotkeys.h"
-#include "deskhub/input/PointerLockState.h"
+#include "deskhub/input/LocalCursor.h"
 #include "deskhub/input/Set1Scancodes.h"
 #include "deskhub/input/VirtualKeys.h"
 #include "deskhub/input/TrackpadCursor.h"
@@ -89,15 +89,6 @@ deskhub::OpenViewerCount& OpenViewers() {
     return count;
 }
 
-template <class Fn>
-DHPointerLockEffect ApplyPointerLock(DHPointerLock* state, Fn&& step) {
-    if (!state) return DHPointerLockEffect{false, false};
-    deskhub::PointerLockState s(state->locked);
-    const deskhub::PointerLockEffect e = step(s);
-    state->locked = s.locked();
-    return DHPointerLockEffect{e.lockChanged, e.releaseHeldInput};
-}
-
 }
 
 extern "C" {
@@ -167,6 +158,7 @@ const char* dh_string(DHStringId id) {
         case DHStrUnattendedHostInputLabel: return deskhub::ui::kUnattendedHostInputLabel;
         case DHStrUnattendedPermissionUnknown: return deskhub::ui::kUnattendedPermissionUnknown;
         case DHStrUnattendedOpenLoginItems: return deskhub::ui::kUnattendedOpenLoginItems;
+        case DHStrFullScreenButton: return deskhub::ui::kFullScreenButton;
         case DHStrTrustNewHostTitle: return deskhub::ui::kTrustNewHostTitle;
         case DHStrTrustNewHostAction: return deskhub::ui::kTrustNewHostAction;
         case DHStrCancelAction: return deskhub::ui::kCancelAction;
@@ -609,30 +601,22 @@ int32_t dh_vk_scancode(int32_t vk) {
     return deskhub::VkToSet1Scancode(vk);
 }
 
-bool dh_is_lock_toggle_vk(int32_t vk) {
-    return vk == deskhub::kViewerLockToggleVk;
+bool dh_is_cursor_toggle_vk(int32_t vk) {
+    return vk == deskhub::kViewerCursorToggleVk;
 }
 
-bool dh_is_escape_vk(int32_t vk) {
-    return vk == deskhub::kVkEscape;
+bool dh_is_full_screen_toggle_vk(int32_t vk) {
+    return vk == deskhub::kViewerFullScreenToggleVk;
 }
 
-DHPointerLockEffect dh_pointer_toggle_lock(DHPointerLock* state) {
-    return ApplyPointerLock(state, [](deskhub::PointerLockState& s) { return s.OnToggleLockKey(); });
+const char* dh_cursor_button_label(bool cursorHidden) {
+    return deskhub::LocalCursorState::CursorButtonLabel(cursorHidden);
 }
 
-DHPointerLockEffect dh_pointer_escape(DHPointerLock* state) {
-    return ApplyPointerLock(state, [](deskhub::PointerLockState& s) { return s.OnEscape(); });
-}
-
-DHPointerLockEffect dh_pointer_focus_lost(DHPointerLock* state) {
-    return ApplyPointerLock(state, [](deskhub::PointerLockState& s) { return s.OnFocusLost(); });
-}
-
-int dh_pointer_subtitle(DHPointerLock state, const char* statusLine, char* out, int capacity) {
+int dh_control_subtitle(const char* statusLine, char* out, int capacity) {
     if (!out || capacity <= 0) return 0;
-    const deskhub::PointerLockState s(state.locked);
-    deskhubp::CopyToBuf(out, size_t(capacity), s.SubtitleFor(statusLine ? statusLine : ""));
+    deskhubp::CopyToBuf(out, size_t(capacity),
+        deskhub::ViewerControlSubtitle(statusLine ? statusLine : ""));
     return int(std::strlen(out));
 }
 

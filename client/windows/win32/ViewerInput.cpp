@@ -1,5 +1,6 @@
 #include "ViewerInput.h"
 
+#include "deskhub/input/LocalCursor.h"
 #include "deskhub/media/ViewFit.h"
 #include "deskhub/protocol/Wire.h"
 
@@ -14,9 +15,7 @@
 namespace {
 
 constexpr USHORT kUsagePageGeneric = 0x01;
-constexpr USHORT kUsageMouse = 0x02;
 constexpr USHORT kUsageKeyboard = 0x06;
-constexpr int kToggleRelativeKey = deskhub::kViewerLockToggleVk;
 using deskhub::kScanExtended;
 
 int32_t Normalize(int v, uint32_t extent) {
@@ -77,15 +76,12 @@ bool ViewerInput::Attach(HWND hwnd, DHScreen* session) {
     hwnd_ = hwnd;
     session_ = session;
 
-    RAWINPUTDEVICE rid[2] = {};
-    rid[0].usUsagePage = kUsagePageGeneric;
-    rid[0].usUsage = kUsageMouse;
-    rid[0].hwndTarget = hwnd;
-    rid[1].usUsagePage = kUsagePageGeneric;
-    rid[1].usUsage = kUsageKeyboard;
-    rid[1].dwFlags = RIDEV_NOHOTKEYS;
-    rid[1].hwndTarget = hwnd;
-    if (!RegisterRawInputDevices(rid, 2, sizeof(RAWINPUTDEVICE))) {
+    RAWINPUTDEVICE rid{};
+    rid.usUsagePage = kUsagePageGeneric;
+    rid.usUsage = kUsageKeyboard;
+    rid.dwFlags = RIDEV_NOHOTKEYS;
+    rid.hwndTarget = hwnd;
+    if (!RegisterRawInputDevices(&rid, 1, sizeof(RAWINPUTDEVICE))) {
         LOGE("[Input] RegisterRawInputDevices failed: %lu", GetLastError());
         return false;
     }
@@ -96,53 +92,27 @@ bool ViewerInput::Attach(HWND hwnd, DHScreen* session) {
 
 void ViewerInput::Detach() {
     if (!attached_) return;
-    ApplyLockEffect(pointer_.OnFocusLost());
-    RAWINPUTDEVICE rid[2] = {};
-    rid[0].usUsagePage = kUsagePageGeneric;
-    rid[0].usUsage = kUsageMouse;
-    rid[0].dwFlags = RIDEV_REMOVE;
-    rid[1].usUsagePage = kUsagePageGeneric;
-    rid[1].usUsage = kUsageKeyboard;
-    rid[1].dwFlags = RIDEV_REMOVE;
-    RegisterRawInputDevices(rid, 2, sizeof(RAWINPUTDEVICE));
+    ReleaseHeldInput();
+    RAWINPUTDEVICE rid{};
+    rid.usUsagePage = kUsagePageGeneric;
+    rid.usUsage = kUsageKeyboard;
+    rid.dwFlags = RIDEV_REMOVE;
+    RegisterRawInputDevices(&rid, 1, sizeof(RAWINPUTDEVICE));
     ReleaseWindowsKey(hwnd_);
     attached_ = false;
     hwnd_ = nullptr;
     session_ = nullptr;
 }
 
-void ViewerInput::ToggleRelativeMode() {
-    ApplyLockEffect(pointer_.OnToggleLockKey());
-}
-
-void ViewerInput::ApplyLockEffect(const deskhub::PointerLockEffect& effect) {
-    if (effect.releaseHeldInput && session_) dh_screen_release_all_input(session_);
-    if (effect.lockChanged) GrabPointer(pointer_.locked());
-}
-
-void ViewerInput::GrabPointer(bool on) {
-    if (on) {
-        RECT r{};
-        GetClientRect(hwnd_, &r);
-        POINT tl{r.left, r.top}, br{r.right, r.bottom};
-        ClientToScreen(hwnd_, &tl);
-        ClientToScreen(hwnd_, &br);
-        RECT screen{tl.x, tl.y, br.x, br.y};
-        ClipCursor(&screen);
-        while (ShowCursor(FALSE) >= 0) {}
-        SetCapture(hwnd_);
-    } else {
-        ClipCursor(nullptr);
-        while (ShowCursor(TRUE) < 0) {}
-        if (GetCapture() == hwnd_ && buttonsDown_ == 0) ReleaseCapture();
-    }
+void ViewerInput::ReleaseHeldInput() {
+    if (session_) dh_screen_release_all_input(session_);
 }
 
 void ViewerInput::EmitButton(deskhub::MouseButton button, bool down) {
     if (down) {
         if (buttonsDown_++ == 0) SetCapture(hwnd_);
     } else if (buttonsDown_ > 0) {
-        if (--buttonsDown_ == 0 && !pointer_.locked() && GetCapture() == hwnd_) ReleaseCapture();
+        if (--buttonsDown_ == 0 && GetCapture() == hwnd_) ReleaseCapture();
     }
     if (session_) dh_screen_mouse_button(session_, int32_t(button), down);
 }
@@ -162,27 +132,11 @@ void ViewerInput::OnRawInput(LPARAM lp) {
         if (kb.VKey == 0xFF) return;
         const bool down = (kb.Flags & RI_KEY_BREAK) == 0;
 
-        if (kb.VKey == kToggleRelativeKey) {
-            if (down) ToggleRelativeMode();
-            return;
-        }
-
-        if (kb.VKey == deskhub::kVkEscape && pointer_.locked()) {
-            if (down) ApplyLockEffect(pointer_.OnEscape());
-            return;
-        }
+        if (deskhub::IsViewerShortcutVk(int32_t(kb.VKey))) return;
 
         int scan = kb.MakeCode;
         if (kb.Flags & RI_KEY_E0) scan |= kScanExtended;
         if (session_) dh_screen_key(session_, int32_t(kb.VKey), scan, down);
-        return;
-    }
-
-    if (ri->header.dwType == RIM_TYPEMOUSE && pointer_.locked()) {
-        const RAWMOUSE& m = ri->data.mouse;
-        if (m.usFlags & MOUSE_MOVE_ABSOLUTE) return;
-        if ((m.lLastX || m.lLastY) && session_)
-            dh_screen_mouse_move_rel(session_, m.lLastX, m.lLastY);
     }
 }
 
@@ -195,7 +149,6 @@ bool ViewerInput::OnMessage(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             return false;
 
         case WM_MOUSEMOVE: {
-            if (pointer_.locked()) return true;
             RECT r{};
             GetClientRect(hwnd_, &r);
             if (session_)
@@ -230,7 +183,7 @@ bool ViewerInput::OnMessage(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             return true;
 
         case WM_KILLFOCUS:
-            ApplyLockEffect(pointer_.OnFocusLost());
+            ReleaseHeldInput();
             return false;
     }
     return false;

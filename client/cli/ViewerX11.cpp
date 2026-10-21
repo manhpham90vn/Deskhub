@@ -1,7 +1,6 @@
 #include <EGL/egl.h>
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
-#include <X11/extensions/Xfixes.h>
 
 #undef None
 #undef Status
@@ -25,7 +24,7 @@
 #include "decode/AvDecoder.h"
 #include "render/VideoRenderer.h"
 
-#include "deskhub/input/PointerLockState.h"
+#include "deskhub/input/LocalCursor.h"
 #include "deskhub/input/PointerMap.h"
 #include "deskhub/media/SourceLabel.h"
 #include "deskhub/media/ViewFit.h"
@@ -37,8 +36,9 @@
 #include "deskhubp/system/UiSettingsStore.h"
 
 namespace {
-constexpr ::Window kNoWindow = 0;
 constexpr ::Cursor kNoCursor = 0;
+constexpr long kNetWmStateToggle = 2;
+constexpr long kNetWmSourceApplication = 1;
 }
 
 namespace deskhubcli {
@@ -91,7 +91,7 @@ struct Screen {
     EGLContext context = EGL_NO_CONTEXT;
     VideoRenderer renderer{};
     std::unique_ptr<Engine> engine{};
-    deskhub::PointerLockState pointer{};
+    deskhub::LocalCursorState cursor{};
 
     std::string baseTitle{};
     std::string statusLine{};
@@ -103,11 +103,9 @@ struct Screen {
     bool control = true;
     bool realized = false;
     bool closed = false;
+    bool cursorBlanked = false;
+    bool pointerOverVideo = false;
     std::string endReason{};
-
-    double lastPx = 0;
-    double lastPy = 0;
-    bool haveLastPos = false;
 };
 
 class ViewerSession {
@@ -134,14 +132,18 @@ private:
     void OnKey(Screen& screen, const XKeyEvent& key, bool down);
     void OnMotion(Screen& screen, const XMotionEvent& motion);
     void OnButton(Screen& screen, const XButtonEvent& button, bool down);
-    void ApplyLockEffect(Screen& screen, const deskhub::PointerLockEffect& effect);
-    void GrabPointer(Screen& screen, bool locked);
+    void ToggleFullScreen(Screen& screen);
+    void ToggleLocalCursor(Screen& screen);
+    void ApplyLocalCursor(Screen& screen);
     deskhub::ViewRect VideoRect(const Screen& screen) const;
 
     ::Display* display_ = nullptr;
     EGLDisplay egl_ = EGL_NO_DISPLAY;
     EglConfigChoice choice_{};
     Atom deleteWindow_ = 0;
+    Atom wmState_ = 0;
+    Atom wmStateFullScreen_ = 0;
+    ::Cursor blankCursor_ = kNoCursor;
     std::vector<std::unique_ptr<Screen>> screens_{};
     bool anyRefused_ = false;
 };
@@ -167,6 +169,15 @@ bool ViewerSession::Open(const ViewRequest& request) {
     }
 
     deleteWindow_ = XInternAtom(display_, "WM_DELETE_WINDOW", False);
+    wmState_ = XInternAtom(display_, "_NET_WM_STATE", False);
+    wmStateFullScreen_ = XInternAtom(display_, "_NET_WM_STATE_FULLSCREEN", False);
+
+    const char emptyBits[1] = {0};
+    const ::Window root = DefaultRootWindow(display_);
+    const Pixmap empty = XCreateBitmapFromData(display_, root, emptyBits, 1, 1);
+    XColor black{};
+    blankCursor_ = XCreatePixmapCursor(display_, empty, empty, &black, &black, 0, 0);
+    XFreePixmap(display_, empty);
 
     for (const deskhub::SourceInfo& source : request.sources)
         if (!OpenWindow(source, request)) return false;
@@ -292,7 +303,7 @@ deskhub::ViewRect ViewerSession::VideoRect(const Screen& screen) const {
 
 void ViewerSession::UpdateTitle(Screen& screen) {
     std::string title = screen.control
-                            ? screen.pointer.TitleFor(screen.baseTitle, screen.statusLine)
+                            ? deskhub::ComposeViewerTitle(screen.baseTitle, screen.statusLine)
                             : deskhub::ComposeViewerTitle(screen.baseTitle, screen.statusLine,
                                   deskhub::kViewerViewOnlyHint);
     if (title == screen.shownTitle) return;
@@ -323,68 +334,56 @@ void ViewerSession::Render(Screen& screen) {
     eglSwapBuffers(egl_, screen.surface);
 }
 
-void ViewerSession::GrabPointer(Screen& screen, bool locked) {
-    if (locked) {
-        XGrabPointer(display_, screen.window, True,
-            ButtonPressMask | ButtonReleaseMask | PointerMotionMask, GrabModeAsync, GrabModeAsync,
-            screen.window, kNoCursor, CurrentTime);
-        XFixesHideCursor(display_, screen.window);
-    } else {
-        XUngrabPointer(display_, CurrentTime);
-        XFixesShowCursor(display_, screen.window);
-    }
-    screen.haveLastPos = false;
+void ViewerSession::ToggleFullScreen(Screen& screen) {
+    XEvent event{};
+    event.xclient.type = ClientMessage;
+    event.xclient.window = screen.window;
+    event.xclient.message_type = wmState_;
+    event.xclient.format = 32;
+    event.xclient.data.l[0] = kNetWmStateToggle;
+    event.xclient.data.l[1] = long(wmStateFullScreen_);
+    event.xclient.data.l[3] = kNetWmSourceApplication;
+    XSendEvent(display_, DefaultRootWindow(display_), False,
+        SubstructureRedirectMask | SubstructureNotifyMask, &event);
 }
 
-void ViewerSession::ApplyLockEffect(Screen& screen, const deskhub::PointerLockEffect& effect) {
-    if (effect.releaseHeldInput) screen.engine->ReleaseAllInput();
-    if (!effect.lockChanged) return;
-    GrabPointer(screen, screen.pointer.locked());
-    UpdateTitle(screen);
+void ViewerSession::ToggleLocalCursor(Screen& screen) {
+    if (!screen.control) return;
+    screen.cursor.Toggle();
+    ApplyLocalCursor(screen);
+}
+
+void ViewerSession::ApplyLocalCursor(Screen& screen) {
+    const bool blank = screen.cursor.HidesOverVideo(screen.pointerOverVideo);
+    if (blank == screen.cursorBlanked) return;
+    if (blank)
+        XDefineCursor(display_, screen.window, blankCursor_);
+    else
+        XUndefineCursor(display_, screen.window);
+    screen.cursorBlanked = blank;
 }
 
 void ViewerSession::OnKey(Screen& screen, const XKeyEvent& key, bool down) {
-    if (!screen.control) return;
-
-    const KeySym symbol = XLookupKeysym(const_cast<XKeyEvent*>(&key), 0);
-    if (down && symbol == XK_Escape && screen.pointer.locked()) {
-        ApplyLockEffect(screen, screen.pointer.OnEscape());
-        return;
-    }
-
     const unsigned code = key.keycode;
     int32_t vk = 0, scan = 0;
     if (code < kEvdevKeycodeOffset) return;
     if (!dh_native_key_to_vk(uint16_t(code - kEvdevKeycodeOffset), &vk, &scan)) return;
-    if (vk == deskhub::kViewerLockToggleVk) {
-        if (down) ApplyLockEffect(screen, screen.pointer.OnToggleLockKey());
+    if (deskhub::IsViewerShortcutVk(vk)) {
+        if (down && vk == deskhub::kViewerFullScreenToggleVk) ToggleFullScreen(screen);
+        if (down && vk == deskhub::kViewerCursorToggleVk) ToggleLocalCursor(screen);
         return;
     }
-    screen.engine->QueueKey(vk, scan, down);
+    if (screen.control) screen.engine->QueueKey(vk, scan, down);
 }
 
 void ViewerSession::OnMotion(Screen& screen, const XMotionEvent& motion) {
     if (!screen.control) return;
 
-    if (!screen.pointer.locked()) {
-        int32_t nx = 0, ny = 0;
-        if (deskhub::NormalizePointer(motion.x, motion.y, VideoRect(screen), nx, ny))
-            screen.engine->QueueMouseMoveAbs(nx, ny);
-        screen.haveLastPos = false;
-        return;
-    }
-
-    const double cx = screen.width / 2.0;
-    const double cy = screen.height / 2.0;
-    if (screen.haveLastPos) {
-        const int32_t dx = int32_t(motion.x - screen.lastPx);
-        const int32_t dy = int32_t(motion.y - screen.lastPy);
-        if (dx || dy) screen.engine->QueueMouseMoveRel(dx, dy);
-    }
-    screen.lastPx = cx;
-    screen.lastPy = cy;
-    screen.haveLastPos = true;
-    XWarpPointer(display_, kNoWindow, screen.window, 0, 0, 0, 0, int(cx), int(cy));
+    int32_t nx = 0, ny = 0;
+    screen.pointerOverVideo =
+        deskhub::NormalizePointer(motion.x, motion.y, VideoRect(screen), nx, ny);
+    ApplyLocalCursor(screen);
+    if (screen.pointerOverVideo) screen.engine->QueueMouseMoveAbs(nx, ny);
 }
 
 void ViewerSession::OnButton(Screen& screen, const XButtonEvent& button, bool down) {
@@ -398,11 +397,9 @@ void ViewerSession::OnButton(Screen& screen, const XButtonEvent& button, bool do
     deskhub::MouseButton mouse{};
     if (!deskhub::X11ButtonToMouseButton(button.button, mouse)) return;
 
-    if (!screen.pointer.locked()) {
-        int32_t nx = 0, ny = 0;
-        if (deskhub::NormalizePointer(button.x, button.y, VideoRect(screen), nx, ny))
-            screen.engine->QueueMouseMoveAbs(nx, ny);
-    }
+    int32_t nx = 0, ny = 0;
+    if (deskhub::NormalizePointer(button.x, button.y, VideoRect(screen), nx, ny))
+        screen.engine->QueueMouseMoveAbs(nx, ny);
     screen.engine->QueueMouseButton(int32_t(mouse), down);
 }
 
@@ -429,7 +426,7 @@ void ViewerSession::HandleEvent(const XEvent& event) {
         case MotionNotify: OnMotion(*screen, event.xmotion); break;
         case ButtonPress: OnButton(*screen, event.xbutton, true); break;
         case ButtonRelease: OnButton(*screen, event.xbutton, false); break;
-        case FocusOut: ApplyLockEffect(*screen, screen->pointer.OnFocusLost()); break;
+        case FocusOut: screen->engine->ReleaseAllInput(); break;
         default: break;
     }
 }
@@ -473,6 +470,10 @@ void ViewerSession::Shutdown() {
     }
     screens_.clear();
 
+    if (blankCursor_ != kNoCursor && display_) {
+        XFreeCursor(display_, blankCursor_);
+        blankCursor_ = kNoCursor;
+    }
     if (egl_ != EGL_NO_DISPLAY) {
         eglMakeCurrent(egl_, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
         eglTerminate(egl_);

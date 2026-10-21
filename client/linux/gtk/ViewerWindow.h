@@ -6,7 +6,7 @@
 #include <string>
 
 #include "decode/AvDecoder.h"
-#include "deskhub/input/PointerLockState.h"
+#include "deskhub/input/LocalCursor.h"
 #include "deskhubp/net/UdpSocket.h"
 #include "deskhubp/client/ScreenViewer.h"
 #include "gtk/WaylandShortcutsInhibitor.h"
@@ -31,9 +31,10 @@ private:
 
     bool InContent(double px, double py) const;
 
-    void ApplyLockEffect(const deskhub::PointerLockEffect& effect);
     GdkSeatCapabilities WantedSeatGrab() const;
     void SyncSeatGrab();
+    void ShowLocalCursor(bool show);
+    void ToggleLocalCursor();
     void UpdateTitle();
     void UpdateLinkLabel();
     void SizeToVideo();
@@ -54,11 +55,14 @@ private:
     static gboolean OnTick(GtkWidget* w, GdkFrameClock* clock, gpointer user);
     static void OnDestroy(GtkWidget* w, gpointer user);
     static void OnFullScreenClicked(GtkWidget* w, gpointer user);
+    static void OnCursorClicked(GtkWidget* w, gpointer user);
+    static gboolean OnCrossing(GtkWidget* w, GdkEventCrossing* e, gpointer user);
     static gboolean OnWindowState(GtkWidget* w, GdkEventWindowState* e, gpointer user);
 
     GtkWidget* window_ = nullptr;
     GtkWidget* glArea_ = nullptr;
     GtkWidget* linkLabel_ = nullptr;
+    GtkWidget* cursorButton_ = nullptr;
     uint64_t queuedFrameSerial_ = 0;
     guint clipTimerId_ = 0;
     guint linkTimerId_ = 0;
@@ -82,10 +86,11 @@ private:
     VideoRenderer renderer_;
     deskhubp::ScreenViewer<AvDecoder, VideoSink*> loop_;
 
-    deskhub::PointerLockState pointer_;
+    deskhub::LocalCursorState cursor_;
     WaylandShortcutsInhibitor shortcuts_;
     GdkSeatCapabilities grabbed_ = GdkSeatCapabilities(0);
     bool keyboardFocus_ = false;
-    double lastPx_ = 0, lastPy_ = 0;
-    bool haveLastPos_ = false;
+    bool pointerInArea_ = false;
+    bool pointerOverVideo_ = false;
+    bool localCursorShown_ = true;
 };

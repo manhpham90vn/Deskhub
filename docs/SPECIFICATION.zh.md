@@ -134,7 +134,8 @@ CLI 可在 Windows 和 Linux 上查看远程屏幕；macOS 上请使用 app 观�
 | V-6 | 声音 | 在双方均支持的情况下（第 3 节），viewer 可听到被共享机器正在播放的声音，与画面的偏差约在一个 frame 以内。声音使用独立 channel：单个丢失的 packet 通常可由其后一个 packet 恢复，更长的中断仅损失零点几秒声音，两者都不影响画面；未播放任何内容的机器几乎不占用带宽。关闭了该功能的 viewer 不接收声音（T-23），关闭了该功能的 host 也不发送（T-22）。 |
 | V-7 | 连接状态指示 | 该指示位于 host 应答的位置 —— 桌面端为连接窗口，Android 与 iOS 为 connect 页（C-11）—— 而不在 session 窗口中。它显示 host 的地址、一个 **Disconnect**（V-5），以及说明连接状态的实时行并附带 ping，在该 host 停止应答时立即转为红色。数据来源于在已 authenticate 的连接上每秒一次的 ping，因此在打开 session 之前即已存在，并在多个 session 运行期间持续显示；桌面端上每个已打开的 host 各有一份。失去 host 的 session 窗口仍会显示正在 reattach（V-8）。 |
 | V-8 | 自动重连 | 失去 host 的 session —— network 中断，stream 停止 —— 不会立即结束。窗口保留最后一帧画面，显示正在 reattach，并以 backoff 方式重连最多一分钟；host 再次应答后画面自动恢复。仅在该时间之后，或 host 主动结束、拒绝该 session 时，窗口才会连同原因关闭。shell 窗口自行重试两分钟后报告连接丢失；shell 本体无时间限制地留在 host 上，随时可接回（H-13）。 |
-| V-9 | 全屏（Linux） | 在 Linux 上，按 `F11` 或窗口标题栏中的 **Full screen** 按钮，远端屏幕将铺满整个显示器并隐藏标题栏；再按一次 `F11` 回到窗口。`F11` 由 viewer 保留（只看 session 中亦然），永远不会发送到 host。 |
+| V-9 | 全屏（桌面） | 在 Windows、macOS 与 Linux 上，按 `F11` 或画面上方的 **Full screen (F11)** 按钮，远端屏幕将铺满整个显示器并隐藏按钮栏；再按一次 `F11` 回到窗口。`F11` 由 viewer 保留（只看 session 中亦然），永远不会发送到 host。若 Mac 键盘的功能键用于控制硬件，请按 `fn`+`F11`。 |
+| V-10 | 单一指针（桌面） | 在 Windows、macOS 与 Linux 上，当控制 host 的 session 中指针位于远端屏幕上方时，viewer 会隐藏自己的指针，只显示绘制在画面中的 host 指针。按 `F9` 或 **Show my cursor (F9)** 按钮可让 viewer 的指针重新显示在画面上，**Hide my cursor (F9)** 则再次隐藏；按钮文字始终说明下一步的动作。`F9` 由 viewer 保留，永远不会发送到 host。viewer 的指针在按钮栏上、画面两侧的黑边上、窗口外以及只看 session 中（此类 session 没有该按钮）始终显示。 |
 
 ## 8. 操作远端机器
 
@@ -142,8 +143,7 @@ CLI 可在 Windows 和 Linux 上查看远程屏幕；macOS 上请使用 app 观�
 | --- | --- | --- |
 | I-1 | Mouse | 移动、左键、右键、中键、后退键、前进键以及滚轮均发送至 host。 |
 | I-2 | Keyboard | 按下与释放事件均会发送，包括修饰键组合。 |
-| I-3 | Pointer lock（桌面） | `F9` 将 mouse 锁定到远端屏幕，供需要原始位移的游戏及其他软件使用；`F9` 或 `Esc` 解除。当前状态显示在窗口标题中。 |
-| I-4 | 失焦保护 | 失去焦点时会释放 pointer lock 以及所有仍处于按下状态的按键，因此不会有按键滞留在 host 上。 |
+| I-4 | 失焦保护 | 失去焦点时会释放所有仍处于按下状态的按键与鼠标按钮，因此不会有按键滞留在 host 上。 |
 | I-5 | 触摸 trackpad（移动端） | 在手机与平板上，视频区域充当 trackpad：拖动移动指针，点按为左键，双击为右键，长按并拖动为拖拽，双指竖直拖动为滚动。 |
 | I-6 | 指针与平移模式（移动端） | 一个开关在移动远端指针与平移放大后的画面之间切换。 |
 | I-7 | 屏幕 keyboard（移动端） | 设备 keyboard 可按需显示或隐藏，并直接向远端机器输入。 |

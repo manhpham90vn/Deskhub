@@ -5,13 +5,7 @@
 namespace deskhub {
 
 inline constexpr std::string_view kViewerConnectingStatus = "connecting...";
-inline constexpr std::string_view kViewerLockHint = "Press F9 to lock mouse";
-inline constexpr std::string_view kViewerLockedHint = "Mouse locked - press F9 to release";
 inline constexpr std::string_view kViewerViewOnlyHint = "View only - input is not sent";
-
-inline std::string_view ViewerLockHintText(bool mouseLocked) {
-    return mouseLocked ? kViewerLockedHint : kViewerLockHint;
-}
 
 inline std::string ViewerBaseTitle(std::string_view sourceName) {
     std::string base = "Deskhub - viewing";
@@ -24,13 +18,14 @@ inline std::string ViewerBaseTitle(std::string_view sourceName) {
 
 inline std::string ViewerStatusWith(std::string_view statusLine, std::string_view hint) {
     std::string s(statusLine.empty() ? kViewerConnectingStatus : statusLine);
+    if (hint.empty()) return s;
     s += " \xC2\xB7 ";
     s += hint;
     return s;
 }
 
-inline std::string ViewerStatusWithHint(std::string_view statusLine, bool mouseLocked) {
-    return ViewerStatusWith(statusLine, ViewerLockHintText(mouseLocked));
+inline std::string ViewerControlSubtitle(std::string_view statusLine) {
+    return ViewerStatusWith(statusLine, {});
 }
 
 inline std::string ViewerViewOnlySubtitle(std::string_view statusLine) {
@@ -38,12 +33,10 @@ inline std::string ViewerViewOnlySubtitle(std::string_view statusLine) {
 }
 
 inline std::string ComposeViewerTitle(std::string_view base, std::string_view statusLine,
-    std::string_view hint) {
+    std::string_view hint = {}) {
     std::string title(base);
     title += " \xE2\x80\x94 ";
-    title += statusLine.empty() ? kViewerConnectingStatus : statusLine;
-    title += " \xC2\xB7 ";
-    title += hint;
+    title += ViewerStatusWith(statusLine, hint);
     return title;
 }
 

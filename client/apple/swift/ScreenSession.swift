@@ -81,10 +81,6 @@ final class ScreenSession: @unchecked Sendable {
         dh_screen_mouse_move(handle, nx, ny)
     }
 
-    func mouseMoveRel(dx: Int32, dy: Int32) {
-        dh_screen_mouse_move_rel(handle, dx, dy)
-    }
-
     func mouseButton(_ button: MouseButton, down: Bool) {
         dh_screen_mouse_button(handle, button.rawValue, down)
     }

@@ -76,15 +76,6 @@ typedef enum {
     DHModifierCapsLock = 5,
 } DHModifier;
 
-typedef struct {
-    bool locked;
-} DHPointerLock;
-
-typedef struct {
-    bool lockChanged;
-    bool releaseHeldInput;
-} DHPointerLockEffect;
-
 typedef enum {
     DHStrAppTitle = 0,
     DHStrHostIpIntro = 1,
@@ -230,6 +221,7 @@ typedef enum {
     DHStrUnattendedHostInputLabel = 231,
     DHStrUnattendedPermissionUnknown = 232,
     DHStrUnattendedOpenLoginItems = 233,
+    DHStrFullScreenButton = 234,
 } DHStringId;
 
 typedef enum {
@@ -281,9 +273,9 @@ DHModifier dh_modifier_class(int32_t vk);
 
 int32_t dh_vk_scancode(int32_t vk);
 
-bool dh_is_lock_toggle_vk(int32_t vk);
+bool dh_is_cursor_toggle_vk(int32_t vk);
 
-bool dh_is_escape_vk(int32_t vk);
+bool dh_is_full_screen_toggle_vk(int32_t vk);
 
 bool dh_parse_address(const char* address);
 
@@ -374,13 +366,9 @@ bool dh_cursor_point(DHCursor cur, DHViewRect video, double* px, double* py);
 
 bool dh_cursor_normalize(DHCursor cur, DHViewRect video, int32_t* nx, int32_t* ny);
 
-DHPointerLockEffect dh_pointer_toggle_lock(DHPointerLock* state);
+const char* dh_cursor_button_label(bool cursorHidden);
 
-DHPointerLockEffect dh_pointer_escape(DHPointerLock* state);
-
-DHPointerLockEffect dh_pointer_focus_lost(DHPointerLock* state);
-
-int dh_pointer_subtitle(DHPointerLock state, const char* statusLine, char* out, int capacity);
+int dh_control_subtitle(const char* statusLine, char* out, int capacity);
 
 int dh_view_only_subtitle(const char* statusLine, char* out, int capacity);
 

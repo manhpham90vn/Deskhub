@@ -30,7 +30,7 @@ client/     per-OS apps: windows, linux, macos, ios, android (depend on platform
 | `core/session` | Session state machines, split by role: `session/host` (per-viewer sessions, viewer table, viewer feedback, source pipeline state, share flow, `SourceListResponder`, file receiver), `session/client` (screen client, file sender, terminal client, connect flow, open viewers), and shared pieces beside them (transfer types, terminal session table, clipboard sync, link pulse and link recovery) |
 | `core/control` | Bitrate controller, quality ladder, stream sizing, clock offset, the fps gate (`FrameGate`), link statistics (`LinkStats`), the display pacer (`VideoPacer`) |
 | `core/media` | The media contracts every capture, encoder and decoder conforms to (`VideoContract`, `CaptureContract`, `AudioContract`), H.264 Annex B and SPS parsing, rate planning, the RGB downscaler, the latest-wins `FrameMailbox`, the PCM ring, view fitting and share types |
-| `core/input` | Input on both ends: the client's input queue and sender, the host's receiver and applier, key and pointer mapping, scancode tables, hotkeys, pointer lock and the trackpad cursor |
+| `core/input` | Input on both ends: the client's input queue and sender, the host's receiver and applier, key and pointer mapping, scancode tables, hotkeys, the viewer's local cursor and shortcut keys, and the trackpad cursor |
 | `core/terminal` | The VT emulator every client shares: `VtParser`, `Screen`, `KeyEncoder`, `Palette`, plus repaint, snapshot and scroll anchoring |
 | `core/transfer` | File-transfer primitives: `Crc32` and `SafeFileName` |
 | `core/diag` | The diagnostics text behind the host and viewer status lines (`ShareDiag`, `ScreenClientDiag`, `WindowStat`) |

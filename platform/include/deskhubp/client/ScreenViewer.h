@@ -241,9 +241,6 @@ public:
     void QueueMouseMoveAbs(int32_t nx, int32_t ny) {
         input_.MouseMoveAbsolute(nx, ny, NowUs());
     }
-    void QueueMouseMoveRel(int32_t dx, int32_t dy) {
-        input_.MouseMoveRelative(dx, dy, NowUs());
-    }
     void QueueMouseButton(int32_t button, bool down) {
         input_.MouseButtonEvent(button, down, NowUs());
     }

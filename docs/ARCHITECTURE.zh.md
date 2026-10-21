@@ -31,7 +31,7 @@ client/     各 OS 的 app: windows、linux、macos、ios、android（依赖 pla
 | `core/session` | session state machine，按角色划分：`session/host`（按 viewer 的 session、viewer 表、viewer feedback、source pipeline 状态、share 流程、`SourceListResponder`、file receiver）、`session/client`（screen client、file sender、terminal client、connect 流程、已打开的 viewer），以及置于其旁的共享组件（transfer 类型、terminal session 表、clipboard sync、link pulse 与 link recovery） |
 | `core/control` | Bitrate controller、quality ladder、stream 尺寸计算、clock offset、fps gate（`FrameGate`）、link 统计（`LinkStats`）、显示 pacer（`VideoPacer`） |
 | `core/media` | 所有 capture、encoder 与 decoder 都遵循的 media contract（`VideoContract`、`CaptureContract`、`AudioContract`）、H.264 Annex B 与 SPS 解析、rate 规划、RGB downscaler、latest-wins 的 `FrameMailbox`、PCM ring、view fitting 与 share 类型 |
-| `core/input` | 两端的 input：client 的 input 队列与 sender、host 的 receiver 与 applier、key 与 pointer 映射、scancode 表、hotkey、pointer lock 与 trackpad cursor |
+| `core/input` | 两端的 input：client 的 input 队列与 sender、host 的 receiver 与 applier、key 与 pointer 映射、scancode 表、hotkey、viewer 的本地指针与快捷键，以及 trackpad cursor |
 | `core/terminal` | 所有 client 共享的 VT emulator: `VtParser`、`Screen`、`KeyEncoder`、`Palette`，以及 repaint、snapshot 与 scroll anchoring |
 | `core/transfer` | 文件传输的基础组件：`Crc32` 与 `SafeFileName` |
 | `core/diag` | host 与 viewer status 行背后的诊断文本（`ShareDiag`、`ScreenClientDiag`、`WindowStat`） |

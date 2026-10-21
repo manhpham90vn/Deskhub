@@ -37,7 +37,9 @@ inline constexpr const char* kConnectionEndedTitle = "Connection ended";
 inline constexpr const char* kDisconnected = "disconnected";
 inline constexpr const char* kSessionEnded = "Session ended";
 inline constexpr const char* kDisconnectButton = "Disconnect";
-inline constexpr const char* kFullScreenButton = "Full screen";
+inline constexpr const char* kFullScreenButton = "Full screen (F11)";
+inline constexpr const char* kShowMyCursorButton = "Show my cursor (F9)";
+inline constexpr const char* kHideMyCursorButton = "Hide my cursor (F9)";
 inline constexpr const char* kScreenRecordingRequired =
     "Screen Recording permission is required. Grant it in System Settings, then quit and "
     "reopen Deskhub.";
