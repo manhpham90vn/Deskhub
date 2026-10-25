@@ -4,7 +4,9 @@ ANDROID_OPUS_TARGETS := aarch64-linux-android x86_64-linux-android
 
 ifeq ($(OS),Windows_NT)
 ANDROID_SDK := $(if $(ANDROID_HOME),$(ANDROID_HOME),$(LOCALAPPDATA)\Android\Sdk)
-GRADLEW := set "ANDROID_HOME=$(ANDROID_SDK)" && cd client\android && .\gradlew.bat
+FIND_JDK := powershell -NoProfile -Command "(@(Get-ChildItem 'C:\Program Files\Eclipse Adoptium\jdk-17*-hotspot' -Directory -ErrorAction SilentlyContinue | Sort-Object Name -Descending) + @(Get-Item 'C:\Program Files\Android\Android Studio\jbr' -ErrorAction SilentlyContinue) | Select-Object -First 1).FullName"
+JDK_HOME := $(if $(JAVA_HOME),$(JAVA_HOME),$(shell $(FIND_JDK)))
+GRADLEW := set "ANDROID_HOME=$(ANDROID_SDK)" && set "JAVA_HOME=$(JDK_HOME)" && cd client\android && .\gradlew.bat
 ADB     := $(ANDROID_SDK)\platform-tools\adb.exe
 ANDROID_NDK_ENV := set "ANDROID_NDK_HOME=$(ANDROID_SDK)\ndk\$(ANDROID_NDK_VERSION)" &&
 else
