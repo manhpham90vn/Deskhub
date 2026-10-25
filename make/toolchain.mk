@@ -12,7 +12,7 @@ LLVM     :=
 
 BOOTSTRAP := powershell -NoProfile -ExecutionPolicy Bypass -File scripts\bootstrap.ps1
 GIT_BASH  ?= C:\Program Files\Git\bin\bash.exe
-RUNSH     := $(DEVCMD) "$(GIT_BASH)"
+RUNSH     := $(DEVCMD) set "PWD=" && "$(GIT_BASH)"
 QUICHE_FOR := $(RUNSH) scripts/build-quiche.sh
 QUICHE    := $(QUICHE_FOR) windows
 OPUS_FOR  := $(RUNSH) scripts/build-opus.sh

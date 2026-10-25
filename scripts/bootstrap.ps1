@@ -134,11 +134,26 @@ $sdkRoot = $env:ANDROID_HOME
 if (-not $sdkRoot) { $sdkRoot = Join-Path $env:LOCALAPPDATA 'Android\Sdk' }
 $androidCli = Find-CmdlineTool $sdkRoot 'android.exe'
 $sdkmanager = Find-CmdlineTool $sdkRoot 'sdkmanager.bat'
+function Find-AndroidStudio {
+    @((Join-Path $env:ProgramFiles 'Android\Android Studio\bin\studio64.exe'),
+      (Join-Path $env:LOCALAPPDATA 'Programs\Android Studio\bin\studio64.exe')) |
+        Where-Object { Test-Path $_ } | Select-Object -First 1
+}
+
 if (-not $androidCli -and -not $sdkmanager) {
-    Write-Host "[install] Android Studio (bootstrap for SDK)..."
-    winget install --id Google.AndroidStudio --exact --accept-source-agreements --accept-package-agreements
-    if ($LASTEXITCODE -ne 0) { throw "winget failed installing Android Studio (exit $LASTEXITCODE)" }
-    Write-Host "  NOTE: open Android Studio once (installs SDK + cmdline-tools), then re-run bootstrap."
+    $studio = Find-AndroidStudio
+    if ($studio) {
+        Write-Host "[ok]      Android Studio ($studio)"
+    } else {
+        Write-Host "[install] Android Studio (bootstrap for SDK)..."
+        winget install --id Google.AndroidStudio --exact --accept-source-agreements --accept-package-agreements
+        if ($LASTEXITCODE -ne 0) { throw "winget failed installing Android Studio (exit $LASTEXITCODE)" }
+    }
+    Write-Host "[action]  No Android SDK command-line tools under '$sdkRoot\cmdline-tools'."
+    Write-Host "          Android Studio does not install them on first launch: open it, go to"
+    Write-Host "          Settings > Languages & Frameworks > Android SDK > SDK Tools, tick"
+    Write-Host "          'Android SDK Command-line Tools (latest)', apply, then re-run bootstrap."
+    Write-Host "          A different SDK location goes in ANDROID_HOME."
 } else {
     Write-Host "[ok]      Android SDK ($sdkRoot)"
     $missing = Get-MissingSdkPackages $sdkRoot
