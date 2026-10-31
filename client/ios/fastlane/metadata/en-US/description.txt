@@ -1,4 +1,4 @@
-Deskhub streams the screen of your Windows, macOS or Linux computer to your iPhone or iPad and lets you control it with ultra-low latency — built for gaming, not just remote work.
+Deskhub streams your computer's screen to your iPhone or iPad and lets you control it with ultra-low latency — built for gaming, not just remote work.
 
 FEATURES
 • Live H.264 video stream with hardware decoding
@@ -23,5 +23,5 @@ GOOD TO KNOW
 Every session is encrypted end to end over QUIC/TLS — video, sound, keystrokes, files, clipboard and everything else. Access works like SSH: the computer only lets in a device its owner has let in on purpose — by pressing Approve, by showing it the QR code, or by pasting its public key — and your device remembers each computer's host key after you confirm it the first time; if that key ever changes, Deskhub refuses to connect. A device can be removed from the computer at any time. There are no accounts and no servers of ours: your device talks only to your own computer.
 
 REQUIREMENTS
-• A computer running Windows 10 or later (x64), macOS 14 or later, or a current Linux desktop (glibc 2.35+), with Deskhub 9 or newer installed — free from the project page
+• A supported computer with Deskhub 9 or newer installed — free from the project page. See the project page for supported operating systems and minimum versions.
 • Both devices on the same network, or connected through Tailscale

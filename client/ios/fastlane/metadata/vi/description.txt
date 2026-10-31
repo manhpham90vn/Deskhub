@@ -1,4 +1,4 @@
-Deskhub stream màn hình máy tính Windows, macOS hoặc Linux của bạn sang iPhone hoặc iPad và cho bạn điều khiển với độ trễ cực thấp — sinh ra cho chơi game chứ không chỉ làm việc từ xa.
+Deskhub stream màn hình máy tính của bạn sang iPhone hoặc iPad và cho bạn điều khiển với độ trễ cực thấp — sinh ra cho chơi game chứ không chỉ làm việc từ xa.
 
 TÍNH NĂNG
 • Stream video H.264, giải mã bằng phần cứng
@@ -23,5 +23,5 @@ CẦN BIẾT
 Mọi phiên đều được mã hoá đầu-cuối trên QUIC/TLS — video, âm thanh, thao tác bàn phím, file, clipboard và mọi thứ khác. Quyền truy cập hoạt động như SSH: máy tính chỉ cho vào thiết bị mà chủ máy đã chủ động cho phép — bấm Approve, cho quét mã QR, hoặc dán public key của thiết bị — và thiết bị ghi nhớ khóa host của từng máy tính sau khi bạn xác nhận ở lần đầu; nếu khóa đó thay đổi, Deskhub từ chối kết nối. Có thể gỡ một thiết bị khỏi máy tính bất cứ lúc nào. Không có tài khoản và không có máy chủ nào của chúng tôi: thiết bị chỉ nói chuyện với chính máy tính của bạn.
 
 YÊU CẦU
-• Một máy tính chạy Windows 10 trở lên (x64), macOS 14 trở lên, hoặc bản Linux desktop hiện hành (glibc 2.35+), đã cài Deskhub 9 trở lên — miễn phí, tải từ trang dự án
+• Một máy tính tương thích đã cài Deskhub 9 trở lên — miễn phí, tải từ trang dự án. Xem hệ điều hành và phiên bản tối thiểu được hỗ trợ tại trang dự án.
 • Hai thiết bị cùng mạng, hoặc nối qua Tailscale
