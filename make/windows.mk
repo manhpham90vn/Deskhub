@@ -6,8 +6,9 @@ build-windows: debug
 
 release-windows: release
 
+run-windows: export DESKHUB_RUN_ARGS = $(ARGS)
 run-windows: build-windows
-	$(APP_EXE_DEBUG) $(ARGS)
+	@powershell -NoProfile -ExecutionPolicy Bypass -File scripts\run-windows.ps1 "$(APP_EXE_DEBUG)"
 else
 build-windows release-windows run-windows:
 	@echo "make $@: run on a Windows machine (the Windows app needs MSVC)"; exit 1

@@ -147,7 +147,9 @@ if (-not $androidCli -and -not $sdkmanager) {
     } else {
         Write-Host "[install] Android Studio (bootstrap for SDK)..."
         winget install --id Google.AndroidStudio --exact --accept-source-agreements --accept-package-agreements
-        if ($LASTEXITCODE -ne 0) { throw "winget failed installing Android Studio (exit $LASTEXITCODE)" }
+        if ($LASTEXITCODE -eq $WingetAlreadyInstalled) {
+            Write-Host "[ok]      Android Studio is already installed (no upgrade available)."
+        } elseif ($LASTEXITCODE -ne 0) { throw "winget failed installing Android Studio (exit $LASTEXITCODE)" }
     }
     Write-Host "[action]  No Android SDK command-line tools under '$sdkRoot\cmdline-tools'."
     Write-Host "          Android Studio does not install them on first launch: open it, go to"
