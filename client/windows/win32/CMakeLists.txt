@@ -47,8 +47,14 @@ foreach(deskhub_wx_attempt RANGE 1 5)
     endif()
 endforeach()
 
+if(EXISTS "${deskhub_wx_archive}")
+    set(deskhub_wx_fetch_url "${deskhub_wx_archive}")
+else()
+    set(deskhub_wx_fetch_url "${deskhub_wx_url}")
+endif()
+
 FetchContent_Declare(wxwidgets
-    URL "${deskhub_wx_archive}" "${deskhub_wx_url}"
+    URL "${deskhub_wx_fetch_url}"
     URL_HASH SHA256=${deskhub_wx_sha256}
     DOWNLOAD_EXTRACT_TIMESTAMP TRUE
     SYSTEM
