@@ -16,9 +16,40 @@ if(MSVC)
     set(wxBUILD_USE_STATIC_RUNTIME ${deskhub_wx_static_runtime} CACHE BOOL "" FORCE)
 endif()
 
+set(deskhub_wx_url "https://github.com/wxWidgets/wxWidgets/releases/download/v3.3.1/wxWidgets-3.3.1.tar.bz2")
+set(deskhub_wx_sha256 "f936c8d694f9c49a367a376f99c751467150a4ed7cbf8f4723ef19b2d2d9998d")
+set(deskhub_wx_archive "${CMAKE_BINARY_DIR}/_deps/wxWidgets-3.3.1.tar.bz2")
+
+foreach(deskhub_wx_attempt RANGE 1 5)
+    if(EXISTS "${deskhub_wx_archive}")
+        file(SHA256 "${deskhub_wx_archive}" deskhub_wx_existing_sha256)
+        if(deskhub_wx_existing_sha256 STREQUAL deskhub_wx_sha256)
+            break()
+        endif()
+        file(REMOVE "${deskhub_wx_archive}")
+    endif()
+    if(deskhub_wx_attempt GREATER 1)
+        math(EXPR deskhub_wx_sleep "${deskhub_wx_attempt} * 5")
+        message(STATUS "Retrying wxWidgets download in ${deskhub_wx_sleep}s (attempt ${deskhub_wx_attempt}/5)...")
+        execute_process(COMMAND "${CMAKE_COMMAND}" -E sleep "${deskhub_wx_sleep}")
+    endif()
+    file(DOWNLOAD "${deskhub_wx_url}" "${deskhub_wx_archive}"
+        TLS_VERIFY ON
+        INACTIVITY_TIMEOUT 60
+        STATUS deskhub_wx_status
+    )
+    if(EXISTS "${deskhub_wx_archive}")
+        file(SHA256 "${deskhub_wx_archive}" deskhub_wx_existing_sha256)
+        if(deskhub_wx_existing_sha256 STREQUAL deskhub_wx_sha256)
+            break()
+        endif()
+        file(REMOVE "${deskhub_wx_archive}")
+    endif()
+endforeach()
+
 FetchContent_Declare(wxwidgets
-    URL https://github.com/wxWidgets/wxWidgets/releases/download/v3.3.1/wxWidgets-3.3.1.tar.bz2
-    URL_HASH SHA256=f936c8d694f9c49a367a376f99c751467150a4ed7cbf8f4723ef19b2d2d9998d
+    URL "${deskhub_wx_archive}" "${deskhub_wx_url}"
+    URL_HASH SHA256=${deskhub_wx_sha256}
     DOWNLOAD_EXTRACT_TIMESTAMP TRUE
     SYSTEM
     EXCLUDE_FROM_ALL

@@ -48,7 +48,7 @@ jobs:
           cache-key: host-${{ matrix.os }}
 
       - name: Configure (app off — this job only tests core/platform/integration)
-        run: cmake --preset ${{ matrix.preset }} -DDESKHUB_LINUX_APP=OFF
+        run: cmake --preset ${{ matrix.preset }} -DDESKHUB_LINUX_APP=OFF -DDESKHUB_WINDOWS_APP=OFF
 
       - name: Build the three test binaries and the perf harness
         shell: bash
@@ -121,7 +121,7 @@ jobs:
           cache-key: host-windows-latest
 
       - name: Configure (app off - this job only runs the integration suite)
-        run: cmake --preset x64-release -DDESKHUB_LINUX_APP=OFF
+        run: cmake --preset x64-release -DDESKHUB_LINUX_APP=OFF -DDESKHUB_WINDOWS_APP=OFF
 
       - name: Build the integration suite
         run: cmake --build --preset x64-release --target integration_tests
