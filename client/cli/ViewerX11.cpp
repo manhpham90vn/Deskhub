@@ -104,7 +104,6 @@ struct Screen {
     bool realized = false;
     bool closed = false;
     bool cursorBlanked = false;
-    bool fullScreen = false;
     bool pointerOverVideo = false;
     std::string endReason{};
 };
@@ -346,7 +345,6 @@ void ViewerSession::ToggleFullScreen(Screen& screen) {
     event.xclient.data.l[3] = kNetWmSourceApplication;
     XSendEvent(display_, DefaultRootWindow(display_), False,
         SubstructureRedirectMask | SubstructureNotifyMask, &event);
-    screen.fullScreen = !screen.fullScreen;
 }
 
 void ViewerSession::ToggleLocalCursor(Screen& screen) {
@@ -370,8 +368,8 @@ void ViewerSession::OnKey(Screen& screen, const XKeyEvent& key, bool down) {
     int32_t vk = 0, scan = 0;
     if (code < kEvdevKeycodeOffset) return;
     if (!dh_native_key_to_vk(uint16_t(code - kEvdevKeycodeOffset), &vk, &scan)) return;
-    if (deskhub::IsViewerShortcutVk(vk, screen.fullScreen)) {
-        if (down && deskhub::TogglesViewerFullScreen(vk, screen.fullScreen))
+    if (deskhub::IsViewerShortcutVk(vk)) {
+        if (down && deskhub::TogglesViewerFullScreen(vk))
             ToggleFullScreen(screen);
         if (down && vk == deskhub::kViewerCursorToggleVk) ToggleLocalCursor(screen);
         return;

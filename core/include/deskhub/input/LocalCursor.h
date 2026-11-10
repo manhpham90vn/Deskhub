@@ -7,12 +7,12 @@ namespace deskhub {
 inline constexpr int32_t kViewerCursorToggleVk = kVkF1 + 8;
 inline constexpr int32_t kViewerFullScreenToggleVk = kVkF1 + 10;
 
-inline bool TogglesViewerFullScreen(int32_t vk, bool fullScreen) {
-    return vk == kViewerFullScreenToggleVk || (fullScreen && vk == kVkEscape);
+inline bool TogglesViewerFullScreen(int32_t vk) {
+    return vk == kViewerFullScreenToggleVk;
 }
 
-inline bool IsViewerShortcutVk(int32_t vk, bool fullScreen) {
-    return vk == kViewerCursorToggleVk || TogglesViewerFullScreen(vk, fullScreen);
+inline bool IsViewerShortcutVk(int32_t vk) {
+    return vk == kViewerCursorToggleVk || TogglesViewerFullScreen(vk);
 }
 
 class LocalCursorState {

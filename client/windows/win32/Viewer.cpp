@@ -172,7 +172,6 @@ struct ViewerFrame {
             SetWindowPos(hwnd, nullptr, 0, 0, 0, 0,
                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
         }
-        input.SetFullScreen(fullScreen);
         Relayout();
         InvalidateRect(hwnd, nullptr, TRUE);
         SetFocus(video);
@@ -197,9 +196,9 @@ struct ViewerFrame {
     }
 
     bool HandleShortcut(WPARAM vk, bool down, LPARAM lp) {
-        if (!deskhub::IsViewerShortcutVk(int32_t(vk), fullScreen)) return false;
+        if (!deskhub::IsViewerShortcutVk(int32_t(vk))) return false;
         if (!down || IsKeyRepeat(lp)) return true;
-        if (deskhub::TogglesViewerFullScreen(int32_t(vk), fullScreen)) ToggleFullScreen();
+        if (deskhub::TogglesViewerFullScreen(int32_t(vk))) ToggleFullScreen();
         if (int32_t(vk) == deskhub::kViewerCursorToggleVk) ToggleLocalCursor();
         return true;
     }

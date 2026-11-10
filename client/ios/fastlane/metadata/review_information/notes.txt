@@ -1,7 +1,7 @@
 Deskhub provides remote desktop, terminal and file transfer for a computer the user owns or is authorized to access. The iOS client connects directly over QUIC/TLS to the Deskhub host installed on that computer. There is no account, login or Deskhub-operated connection server; demo credentials do not apply. Programs and shell commands run on the host computer.
 
 OWNERSHIP AND COMPATIBILITY
-I, Manh Pham, independently develop both the Deskhub iOS client and desktop host. Source for the submitted version: https://github.com/manhpham90vn/Deskhub/tree/v9.3.6 . The repository includes LICENSE and THIRD_PARTY_NOTICES.md.
+I, Manh Pham, independently develop both the Deskhub iOS client and desktop host. Source for the submitted version: https://github.com/manhpham90vn/Deskhub/tree/v9.3.7 . The repository includes LICENSE and THIRD_PARTY_NOTICES.md.
 References to macOS describe host operating-system compatibility. Deskhub is not affiliated with, sponsored by or endorsed by Apple. On macOS, the Deskhub host uses ScreenCaptureKit for screen capture and requests Screen Recording and Accessibility permissions. Remote screen content comes from the connected user's computer during the session.
 For the October 31 review: the English subtitle in this listing is "Remote Desktop & Terminal"; "Mac" is omitted from the subtitle and from both locales' keywords. If an item still requires rights documentation under 5.2.1, please identify the specific content, asset or hardware integration so I can address it precisely.
 

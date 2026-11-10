@@ -150,7 +150,7 @@ final class RemoteVideoView: NSView {
     private func handleShortcut(_ event: NSEvent) -> Bool {
         guard let vk = shortcutVk(event.keyCode) else { return false }
         guard !event.isARepeat else { return true }
-        if dh_is_full_screen_toggle_vk(vk, isFullScreen) {
+        if dh_is_full_screen_toggle_vk(vk) {
             window?.toggleFullScreen(nil)
         } else if model?.control != false {
             onToggleCursor?()
@@ -167,12 +167,8 @@ final class RemoteVideoView: NSView {
     private func shortcutVk(_ macKeyCode: UInt16) -> Int32? {
         guard let mapped = DeskhubClient.mapKey(Int32(macKeyCode)) else { return nil }
         let isShortcut = dh_is_cursor_toggle_vk(mapped.vk)
-            || dh_is_full_screen_toggle_vk(mapped.vk, isFullScreen)
+            || dh_is_full_screen_toggle_vk(mapped.vk)
         return isShortcut ? mapped.vk : nil
-    }
-
-    private var isFullScreen: Bool {
-        window?.styleMask.contains(.fullScreen) ?? false
     }
 
     override func flagsChanged(with event: NSEvent) {

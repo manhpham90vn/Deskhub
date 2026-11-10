@@ -1207,7 +1207,7 @@ std::string UsageText(Verb verb) {
                    "  --accept-new-host-key save the key of a host seen for the first time\n"
                    "  --approval-wait SEC   how long to wait for the host owner to approve (1-600, default 120)\n"
                    "\n"
-                   "F9 locks the pointer to the window, Escape lets it go again.\n";
+                   "F9 shows or hides the local pointer, F11 toggles full screen.\n";
         case Verb::Shell:
             return "Usage: " + program +
                    " shell ADDRESS[:PORT]|INVITE [--name NAME] [--resume ID] [--list]\n"
