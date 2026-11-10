@@ -46,7 +46,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           APT_GPG_PRIVATE_KEY: ${{ secrets.APT_GPG_PRIVATE_KEY }}
           APT_GPG_PASSPHRASE: ${{ secrets.APT_GPG_PASSPHRASE }}
-        run: scripts/build-apt-repo.sh out/pages/apt
+        run: |
+          scripts/apt-install.sh apt-utils gnupg gpgv
+          scripts/build-apt-repo.sh out/pages/apt
 
       - name: Add the site root, which points at the GitHub repository
         run: cp packaging/pages/index.html out/pages/index.html

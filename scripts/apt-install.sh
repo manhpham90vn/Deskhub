@@ -39,6 +39,8 @@ for pkg in "$@"; do
     llvm) cmd=llvm-cov ;;
     shellcheck) cmd=shellcheck ;;
     rpm) cmd=rpmbuild ;;
+    apt-utils) cmd=apt-ftparchive ;;
+    gnupg) cmd=gpg ;;
     *) cmd=$pkg ;;
     esac
     [ "$(dpkg-query -W -f='${db:Status-Status}' "$pkg" 2>/dev/null || true)" = installed ] && continue
