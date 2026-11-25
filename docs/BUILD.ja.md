@@ -8,7 +8,7 @@
 本書は [`BUILD.md`](BUILD.md) の翻訳。食い違いがある場合は英語版が正文。
 
 ```bash
-git clone --recurse-submodules https://github.com/manhpham90vn/Deskhub.git
+git clone --recurse-submodules https://github.com/Bitfaring/Deskhub.git
 cd Deskhub
 make bootstrap        # 一度だけ: この OS 向けの toolchain と依存関係
 make test             # core suite を build し、オフラインで実行
@@ -382,12 +382,12 @@ GitHub Release の作成後、`deploy.yml` は tag を `publish-packages.yml` �
 
 | Job | 公開先 | `stg` environment の secret |
 | --- | --- | --- |
-| `homebrew` | `manhpham90vn/homebrew-tap` の `Casks/deskhub.rb`。`packaging/homebrew/deskhub.rb` から生成する | `HOMEBREW_TAP_TOKEN` —— tap に Contents: write を持つ fine-grained PAT |
+| `homebrew` | `Bitfaring/homebrew-tap` の `Casks/deskhub.rb`。`packaging/homebrew/deskhub.rb` から生成する | `HOMEBREW_TAP_TOKEN` —— tap に Contents: write を持つ fine-grained PAT |
 | `build-apt-repo` → `deploy-apt-repo` | 直近 3 つの release の deb を収めた署名付き apt repository。GitHub Pages の `/apt` に置く（`scripts/build-apt-repo.sh`） | `APT_GPG_PRIVATE_KEY`、`APT_GPG_PASSPHRASE` |
 
 いずれも、それを実行する最初の tag より前に一度だけ設定が必要である。
 
-- **Homebrew** —— public repository `manhpham90vn/homebrew-tap` を作成する。中身は job が
+- **Homebrew** —— public repository `Bitfaring/homebrew-tap` を作成する。中身は job が
   書き込む。
 - **apt** —— signing key を一度だけ生成し、そのファイルを `APT_GPG_PRIVATE_KEY` として
   保存し、オフラインのバックアップも残す。全ユーザーがこの key を信頼しているため、
@@ -459,4 +459,4 @@ GitHub Release の作成後、`deploy.yml` は tag を `publish-packages.yml` �
   permission が正しく動作しない** —— `make reset-macos-permissions` を実行し、残す 1 つの
   コピーに改めて許可を与える。
 
-バグ報告と質問: [issues](https://github.com/manhpham90vn/Deskhub/issues)。
+バグ報告と質問: [issues](https://github.com/Bitfaring/Deskhub/issues)。

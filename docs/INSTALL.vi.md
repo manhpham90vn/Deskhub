@@ -6,7 +6,7 @@ Chọn nền tảng của bạn bên dưới để cài bản release đã build
 source. Nếu muốn tự compile Deskhub, xem [`BUILD.vi.md`](BUILD.vi.md).
 
 Bộ cài desktop nằm trên
-[trang Releases](https://github.com/manhpham90vn/Deskhub/releases). Bản Android có trên
+[trang Releases](https://github.com/Bitfaring/Deskhub/releases). Bản Android có trên
 Google Play, còn bản beta iOS trên TestFlight.
 
 Đây là bản dịch của [`INSTALL.md`](INSTALL.md). Nếu hai bản có khác biệt, bản tiếng Anh là
@@ -86,7 +86,7 @@ Developer ID và do Apple notarize, nên mở lên không bị Gatekeeper cảnh
 Hoặc cài qua Homebrew, sau đó `brew upgrade` sẽ giữ nó luôn mới:
 
 ```bash
-brew install --cask manhpham90vn/tap/deskhub
+brew install --cask bitfaring/tap/deskhub
 ```
 
 Để host màn hình cần hai permission của macOS. Cả hai đều xin được ngay trên trang
@@ -152,8 +152,8 @@ lên và Debian 12 trở lên:
 
 ```bash
 sudo install -d /etc/apt/keyrings
-curl -fsSL https://manhpham90vn.github.io/Deskhub/apt/deskhub.gpg | sudo tee /etc/apt/keyrings/deskhub.gpg >/dev/null
-echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/deskhub.gpg] https://manhpham90vn.github.io/Deskhub/apt stable main" \
+curl -fsSL https://bitfaring.github.io/Deskhub/apt/deskhub.gpg | sudo tee /etc/apt/keyrings/deskhub.gpg >/dev/null
+echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/deskhub.gpg] https://bitfaring.github.io/Deskhub/apt stable main" \
   | sudo tee /etc/apt/sources.list.d/deskhub.list
 sudo apt update && sudo apt install deskhub
 ```
@@ -221,7 +221,7 @@ thao tác thêm. Với bản build từ source, một lệnh là đủ; không c
 đăng nhập lại:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/manhpham90vn/Deskhub/main/scripts/setup-uinput.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/Bitfaring/Deskhub/main/scripts/setup-uinput.sh | sudo bash
 ```
 
 Nếu muốn xem nội dung script trước khi chạy bằng sudo, tải
@@ -598,5 +598,5 @@ không được giữ lại: hãy cho từng thiết bị vào và trust lại t
 - **Linux: con trỏ không di chuyển** — thiếu rule `/dev/uinput` ở mục 3.
 - **macOS: màn hình đen hoặc input không hoạt động** — kiểm tra Screen Recording và
   Accessibility trên trang Settings.
-- **Các trường hợp khác** — mở một [issue](https://github.com/manhpham90vn/Deskhub/issues)
+- **Các trường hợp khác** — mở một [issue](https://github.com/Bitfaring/Deskhub/issues)
   kèm model thiết bị, phiên bản OS và nội dung dòng status trên trang Host hoặc Client.

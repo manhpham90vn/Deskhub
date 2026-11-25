@@ -9,15 +9,15 @@
 **Deskhub 让你从另一台设备查看并操作自己的电脑。它开源、在五个平台上原生运行，
 兼顾日常工作与远程游戏所需的响应速度。**
 
-[![Release](https://img.shields.io/github/v/release/manhpham90vn/Deskhub?label=release&color=2563eb)](https://github.com/manhpham90vn/Deskhub/releases)
-[![License: MIT](https://img.shields.io/github/license/manhpham90vn/Deskhub?color=2563eb)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/Bitfaring/Deskhub?label=release&color=2563eb)](https://github.com/Bitfaring/Deskhub/releases)
+[![License: MIT](https://img.shields.io/github/license/Bitfaring/Deskhub?color=2563eb)](LICENSE)
 [![C++20](https://img.shields.io/badge/C%2B%2B-20-2563eb)](CMakeLists.txt)
 [![Platforms](https://img.shields.io/badge/runs%20on-Windows%20·%20macOS%20·%20Linux%20·%20Android%20·%20iOS-2563eb)](#platforms)
 
-[![ci](https://github.com/manhpham90vn/Deskhub/actions/workflows/ci.yml/badge.svg)](https://github.com/manhpham90vn/Deskhub/actions/workflows/ci.yml)
-[![lint](https://github.com/manhpham90vn/Deskhub/actions/workflows/lint.yml/badge.svg)](https://github.com/manhpham90vn/Deskhub/actions/workflows/lint.yml)
-[![codeql](https://github.com/manhpham90vn/Deskhub/actions/workflows/codeql.yml/badge.svg)](https://github.com/manhpham90vn/Deskhub/actions/workflows/codeql.yml)
-[![nightly](https://github.com/manhpham90vn/Deskhub/actions/workflows/nightly.yml/badge.svg)](https://github.com/manhpham90vn/Deskhub/actions/workflows/nightly.yml)
+[![ci](https://github.com/Bitfaring/Deskhub/actions/workflows/ci.yml/badge.svg)](https://github.com/Bitfaring/Deskhub/actions/workflows/ci.yml)
+[![lint](https://github.com/Bitfaring/Deskhub/actions/workflows/lint.yml/badge.svg)](https://github.com/Bitfaring/Deskhub/actions/workflows/lint.yml)
+[![codeql](https://github.com/Bitfaring/Deskhub/actions/workflows/codeql.yml/badge.svg)](https://github.com/Bitfaring/Deskhub/actions/workflows/codeql.yml)
+[![nightly](https://github.com/Bitfaring/Deskhub/actions/workflows/nightly.yml/badge.svg)](https://github.com/Bitfaring/Deskhub/actions/workflows/nightly.yml)
 
 **[安装](#install)** · [从 source 构建](docs/BUILD.zh.md) ·
 [Spec](docs/SPECIFICATION.zh.md) · [Architecture](docs/ARCHITECTURE.zh.md) ·
@@ -41,10 +41,10 @@
 ## 📦 安装
 
 在 macOS、Ubuntu、Debian 或 Mint 上，可以通过 package manager 安装；Windows 请从
-[Releases](https://github.com/manhpham90vn/Deskhub/releases) 下载安装程序：
+[Releases](https://github.com/Bitfaring/Deskhub/releases) 下载安装程序：
 
 ```bash
-brew install --cask manhpham90vn/tap/deskhub     # macOS · app + deskhub-cli
+brew install --cask bitfaring/tap/deskhub     # macOS · app + deskhub-cli
 ```
 
 在 Ubuntu / Debian / Mint 上，添加一次 apt repository，再安装这一个软件包，其中同时包含
@@ -52,8 +52,8 @@ brew install --cask manhpham90vn/tap/deskhub     # macOS · app + deskhub-cli
 
 ```bash
 sudo install -d /etc/apt/keyrings
-curl -fsSL https://manhpham90vn.github.io/Deskhub/apt/deskhub.gpg | sudo tee /etc/apt/keyrings/deskhub.gpg >/dev/null
-echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/deskhub.gpg] https://manhpham90vn.github.io/Deskhub/apt stable main" \
+curl -fsSL https://bitfaring.github.io/Deskhub/apt/deskhub.gpg | sudo tee /etc/apt/keyrings/deskhub.gpg >/dev/null
+echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/deskhub.gpg] https://bitfaring.github.io/Deskhub/apt stable main" \
   | sudo tee /etc/apt/sources.list.d/deskhub.list
 sudo apt update
 sudo apt install deskhub       # 桌面应用 + deskhub-cli
@@ -64,7 +64,7 @@ Windows 安装程序创建开始菜单和桌面快捷方式，并把安装文件
 机器 `PATH`。Homebrew cask 会把 macOS 的 `deskhub-cli` 链接到 `PATH`；使用 dmg 时它位于
 app 内部的 `Deskhub.app/Contents/MacOS/deskhub-cli`。
 
-其余平台请从 [Releases](https://github.com/manhpham90vn/Deskhub/releases) 获取：
+其余平台请从 [Releases](https://github.com/Bitfaring/Deskhub/releases) 获取：
 
 - **Windows** —— `deskhub-v*-windows-setup.exe`，应用仅此一种形式，内含 `deskhub-cli`
 - **macOS** —— `deskhub-v*-macos.dmg`，`deskhub-cli` 在 app 内部
@@ -192,7 +192,7 @@ passcode，没有 discovery，也没有任何放陌生人进来的开关。请�
 | [`PRIVACY.zh.md`](PRIVACY.zh.md) ([en](PRIVACY.md) · [vi](PRIVACY.vi.md) · [ja](PRIVACY.ja.md)) | 隐私政策 |
 | [`THIRD_PARTY_NOTICES.zh.md`](THIRD_PARTY_NOTICES.zh.md) ([en](THIRD_PARTY_NOTICES.md) · [vi](THIRD_PARTY_NOTICES.vi.md) · [ja](THIRD_PARTY_NOTICES.ja.md)) | 第三方组件与 license |
 
-问题反馈：[issues](https://github.com/manhpham90vn/Deskhub/issues) —— 请附上设备型号。
+问题反馈：[issues](https://github.com/Bitfaring/Deskhub/issues) —— 请附上设备型号。
 
 <a id="license"></a>
 

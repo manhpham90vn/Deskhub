@@ -13,7 +13,7 @@
 namespace deskhub::ui {
 
 inline constexpr const char* kAppVersion = DESKHUB_VERSION;
-inline constexpr const char* kProjectUrl = "https://github.com/manhpham90vn/Deskhub";
+inline constexpr const char* kProjectUrl = "https://github.com/Bitfaring/Deskhub";
 inline constexpr const char* kProjectLinkLabel = "GitHub";
 inline constexpr const char* kAppTitle = "Deskhub - stream & remotely control a machine";
 inline constexpr const char* kHostIpIntro =

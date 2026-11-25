@@ -473,7 +473,7 @@ Vui lòng báo cáo các vấn đề bảo mật **một cách riêng tư**, kh�
 GitHub.
 
 - **Email:** manhpv151090@gmail.com — ghi `[Deskhub security]` trong tiêu đề.
-- **Hoặc:** mở một [security advisory riêng tư](https://github.com/manhpham90vn/Deskhub/security/advisories/new)
+- **Hoặc:** mở một [security advisory riêng tư](https://github.com/Bitfaring/Deskhub/security/advisories/new)
   trên GitHub.
 
 Vui lòng nêu rõ môi trường đang chạy (OS, phiên bản Deskhub trên thanh tiêu đề hoặc trong
@@ -496,7 +496,7 @@ giảm nhẹ đã phát hành.
 ## Các phiên bản được hỗ trợ
 
 Chỉ bản release mới nhất trên
-[trang Releases](https://github.com/manhpham90vn/Deskhub/releases) được hỗ trợ. Bản vá
+[trang Releases](https://github.com/Bitfaring/Deskhub/releases) được hỗ trợ. Bản vá
 được phát hành kèm một release mới; không có backport cho các phiên bản cũ.
 
 ## Phạm vi

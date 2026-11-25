@@ -6,7 +6,7 @@
 Deskhub，请参阅 [`BUILD.zh.md`](BUILD.zh.md)。
 
 桌面安装包可从
-[Releases 页面](https://github.com/manhpham90vn/Deskhub/releases) 下载。Android 版已
+[Releases 页面](https://github.com/Bitfaring/Deskhub/releases) 下载。Android 版已
 上架 Google Play，iOS beta 则通过 TestFlight 获取。
 
 本文件是 [`INSTALL.md`](INSTALL.md) 的译本；若两者有出入，以英文版为准。
@@ -77,7 +77,7 @@ ID 进行 sign 并通过 Apple 的 notarize，因此打开时不会出现 Gateke
 也可以通过 Homebrew 安装，之后由 `brew upgrade` 保持更新：
 
 ```bash
-brew install --cask manhpham90vn/tap/deskhub
+brew install --cask bitfaring/tap/deskhub
 ```
 
 Host 一块屏幕需要两个 macOS permission。两者均可从 app 的 **Settings** 页申请；该页同时
@@ -133,8 +133,8 @@ NVIDIA 专有驱动暂不支持。
 
 ```bash
 sudo install -d /etc/apt/keyrings
-curl -fsSL https://manhpham90vn.github.io/Deskhub/apt/deskhub.gpg | sudo tee /etc/apt/keyrings/deskhub.gpg >/dev/null
-echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/deskhub.gpg] https://manhpham90vn.github.io/Deskhub/apt stable main" \
+curl -fsSL https://bitfaring.github.io/Deskhub/apt/deskhub.gpg | sudo tee /etc/apt/keyrings/deskhub.gpg >/dev/null
+echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/deskhub.gpg] https://bitfaring.github.io/Deskhub/apt stable main" \
   | sudo tee /etc/apt/sources.list.d/deskhub.list
 sudo apt update && sudo apt install deskhub
 ```
@@ -200,7 +200,7 @@ mouse 和 keyboard 通过它 inject。deb 与 rpm 已安装相应的 udev rule�
 构建时，一条命令即可完成设置，无需 clone，也无需重新登录桌面：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/manhpham90vn/Deskhub/main/scripts/setup-uinput.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/Bitfaring/Deskhub/main/scripts/setup-uinput.sh | sudo bash
 ```
 
 若希望在交给 sudo 之前先查看脚本内容，可先下载
@@ -544,5 +544,5 @@ QR code，或一次粘贴其 key。7.0.x 写入的 `client_key*.pem` 与 `host_c
 - **Linux：指针不移动** —— 缺少第 3 条中的 `/dev/uinput` rule。
 - **macOS：黑屏或 input 无响应** —— 在 Settings 页检查 Screen Recording 与
   Accessibility。
-- **其他情况** —— 提交一个 [issue](https://github.com/manhpham90vn/Deskhub/issues)，并
+- **其他情况** —— 提交一个 [issue](https://github.com/Bitfaring/Deskhub/issues)，并
   附上设备型号、OS 版本，以及 Host 或 Client 页 status 行的内容。

@@ -6,7 +6,7 @@ This guide covers building Deskhub, running its tests and preparing a release. I
 want to install the app without building it, start with [`INSTALL.md`](INSTALL.md).
 
 ```bash
-git clone --recurse-submodules https://github.com/manhpham90vn/Deskhub.git
+git clone --recurse-submodules https://github.com/Bitfaring/Deskhub.git
 cd Deskhub
 make bootstrap        # once: toolchain + dependencies for this OS
 make test             # build and run the core suite offline
@@ -372,12 +372,12 @@ scripts, say — run it by hand: `gh workflow run publish-packages.yml -f tag=vX
 
 | Job | Publishes | Secret in the `stg` environment |
 | --- | --- | --- |
-| `homebrew` | `Casks/deskhub.rb` in `manhpham90vn/homebrew-tap`, rendered from `packaging/homebrew/deskhub.rb` | `HOMEBREW_TAP_TOKEN` — fine-grained PAT, Contents: write on the tap |
+| `homebrew` | `Casks/deskhub.rb` in `Bitfaring/homebrew-tap`, rendered from `packaging/homebrew/deskhub.rb` | `HOMEBREW_TAP_TOKEN` — fine-grained PAT, Contents: write on the tap |
 | `build-apt-repo` → `deploy-apt-repo` | a signed apt repository holding the debs of the last three releases, on GitHub Pages under `/apt` (`scripts/build-apt-repo.sh`) | `APT_GPG_PRIVATE_KEY`, `APT_GPG_PASSPHRASE` |
 
 Each needs a one-time setup before the first tag that runs it:
 
-- **Homebrew** — create the public repository `manhpham90vn/homebrew-tap`; the job fills it.
+- **Homebrew** — create the public repository `Bitfaring/homebrew-tap`; the job fills it.
 - **apt** — generate the signing key once, store the file as `APT_GPG_PRIVATE_KEY` and keep
   an offline backup. Every user trusts this key: replacing it breaks their `apt update`.
 
@@ -444,4 +444,4 @@ A green local `make test` + `make lint` is not the whole story. On every pull re
   and a downloaded build** — `make reset-macos-permissions`, then grant them again to the
   one copy you keep.
 
-Bugs and questions: [issues](https://github.com/manhpham90vn/Deskhub/issues).
+Bugs and questions: [issues](https://github.com/Bitfaring/Deskhub/issues).

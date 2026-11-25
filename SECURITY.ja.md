@@ -482,7 +482,7 @@ terminal でも Windows の log に key code を残さないこと、所有者�
 
 - **メール:** manhpv151090@gmail.com —— 件名に `[Deskhub security]` を記載すること。
 - **または:** GitHub で[非公開の security
-  advisory](https://github.com/manhpham90vn/Deskhub/security/advisories/new) を作成する。
+  advisory](https://github.com/Bitfaring/Deskhub/security/advisories/new) を作成する。
 
 実行環境（OS、タイトルバーまたは [`VERSION`](VERSION) の Deskhub のバージョン）、実施
 した操作、観測された結果を記載していただきたい。proof of concept があると有用である。
@@ -500,7 +500,7 @@ packet による memory corruption や crash、データが予期せず端末外
 
 ## サポート対象のバージョン
 
-サポート対象は [Releases ページ](https://github.com/manhpham90vn/Deskhub/releases) の
+サポート対象は [Releases ページ](https://github.com/Bitfaring/Deskhub/releases) の
 最新 release のみである。修正は新しい release で提供し、旧バージョンへの backport は
 行わない。
 

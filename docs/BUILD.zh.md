@@ -8,7 +8,7 @@
 本文件是 [`BUILD.md`](BUILD.md) 的译本；若两者有出入，以英文版为准。
 
 ```bash
-git clone --recurse-submodules https://github.com/manhpham90vn/Deskhub.git
+git clone --recurse-submodules https://github.com/Bitfaring/Deskhub.git
 cd Deskhub
 make bootstrap        # 执行一次: 当前 OS 的 toolchain 与依赖
 make test             # build 并离线运行 core suite
@@ -341,12 +341,12 @@ GitHub Release 创建后，`deploy.yml` 将 tag 交给 `publish-packages.yml`，
 
 | Job | 发布内容 | `stg` environment 中的 secret |
 | --- | --- | --- |
-| `homebrew` | `manhpham90vn/homebrew-tap` 中的 `Casks/deskhub.rb`，由 `packaging/homebrew/deskhub.rb` 生成 | `HOMEBREW_TAP_TOKEN` —— 对该 tap 有 Contents: write 的 fine-grained PAT |
+| `homebrew` | `Bitfaring/homebrew-tap` 中的 `Casks/deskhub.rb`，由 `packaging/homebrew/deskhub.rb` 生成 | `HOMEBREW_TAP_TOKEN` —— 对该 tap 有 Contents: write 的 fine-grained PAT |
 | `build-apt-repo` → `deploy-apt-repo` | 已签名的 apt repository，包含最近三个 release 的 deb，位于 GitHub Pages 的 `/apt`（`scripts/build-apt-repo.sh`） | `APT_GPG_PRIVATE_KEY`、`APT_GPG_PASSPHRASE` |
 
 每个 job 在首次运行它的 tag 之前都需要一次性设置：
 
-- **Homebrew** —— 创建 public repository `manhpham90vn/homebrew-tap`，由 job 填充内容。
+- **Homebrew** —— 创建 public repository `Bitfaring/homebrew-tap`，由 job 填充内容。
 - **apt** —— 生成一次 signing key，将该文件存为 `APT_GPG_PRIVATE_KEY`，并保留离线备份。
   所有用户都信任这把 key：更换它会让他们的 `apt update` 失败。
 
@@ -410,4 +410,4 @@ GitHub Release 创建后，`deploy.yml` 将 tag 交给 `publish-packages.yml`，
 - **重新构建后，或在本地 build 与下载版本之间切换后，macOS 的 permission 行为异常** ——
   执行 `make reset-macos-permissions`，然后只对保留的那一份副本重新授权。
 
-问题与提问：[issues](https://github.com/manhpham90vn/Deskhub/issues)。
+问题与提问：[issues](https://github.com/Bitfaring/Deskhub/issues)。

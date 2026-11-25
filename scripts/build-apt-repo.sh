@@ -5,7 +5,7 @@ source scripts/tools.sh
 
 OUT=${1:?usage: build-apt-repo.sh OUT_DIR}
 KEEP_RELEASES=${APT_KEEP_RELEASES:-3}
-REPO=manhpham90vn/Deskhub
+REPO=Bitfaring/Deskhub
 SUITE=stable
 COMPONENT=main
 ARCH=amd64

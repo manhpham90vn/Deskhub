@@ -9,15 +9,15 @@
 **Deskhub を使えば、別の端末から自分のパソコンの画面を見て操作できる。オープンソースで、
 5 つのプラットフォームで native に動作し、作業にもゲームにも応えられる操作感を目指している。**
 
-[![Release](https://img.shields.io/github/v/release/manhpham90vn/Deskhub?label=release&color=2563eb)](https://github.com/manhpham90vn/Deskhub/releases)
-[![License: MIT](https://img.shields.io/github/license/manhpham90vn/Deskhub?color=2563eb)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/Bitfaring/Deskhub?label=release&color=2563eb)](https://github.com/Bitfaring/Deskhub/releases)
+[![License: MIT](https://img.shields.io/github/license/Bitfaring/Deskhub?color=2563eb)](LICENSE)
 [![C++20](https://img.shields.io/badge/C%2B%2B-20-2563eb)](CMakeLists.txt)
 [![Platforms](https://img.shields.io/badge/runs%20on-Windows%20·%20macOS%20·%20Linux%20·%20Android%20·%20iOS-2563eb)](#platforms)
 
-[![ci](https://github.com/manhpham90vn/Deskhub/actions/workflows/ci.yml/badge.svg)](https://github.com/manhpham90vn/Deskhub/actions/workflows/ci.yml)
-[![lint](https://github.com/manhpham90vn/Deskhub/actions/workflows/lint.yml/badge.svg)](https://github.com/manhpham90vn/Deskhub/actions/workflows/lint.yml)
-[![codeql](https://github.com/manhpham90vn/Deskhub/actions/workflows/codeql.yml/badge.svg)](https://github.com/manhpham90vn/Deskhub/actions/workflows/codeql.yml)
-[![nightly](https://github.com/manhpham90vn/Deskhub/actions/workflows/nightly.yml/badge.svg)](https://github.com/manhpham90vn/Deskhub/actions/workflows/nightly.yml)
+[![ci](https://github.com/Bitfaring/Deskhub/actions/workflows/ci.yml/badge.svg)](https://github.com/Bitfaring/Deskhub/actions/workflows/ci.yml)
+[![lint](https://github.com/Bitfaring/Deskhub/actions/workflows/lint.yml/badge.svg)](https://github.com/Bitfaring/Deskhub/actions/workflows/lint.yml)
+[![codeql](https://github.com/Bitfaring/Deskhub/actions/workflows/codeql.yml/badge.svg)](https://github.com/Bitfaring/Deskhub/actions/workflows/codeql.yml)
+[![nightly](https://github.com/Bitfaring/Deskhub/actions/workflows/nightly.yml/badge.svg)](https://github.com/Bitfaring/Deskhub/actions/workflows/nightly.yml)
 
 **[インストール](#install)** · [source から build](docs/BUILD.ja.md) ·
 [Spec](docs/SPECIFICATION.ja.md) · [Architecture](docs/ARCHITECTURE.ja.md) ·
@@ -41,10 +41,10 @@
 ## 📦 インストール
 
 macOS、Ubuntu、Debian、Mint では package manager からインストールできる。Windows では
-[Releases](https://github.com/manhpham90vn/Deskhub/releases) からインストーラーを入手する。
+[Releases](https://github.com/Bitfaring/Deskhub/releases) からインストーラーを入手する。
 
 ```bash
-brew install --cask manhpham90vn/tap/deskhub     # macOS · app + deskhub-cli
+brew install --cask bitfaring/tap/deskhub     # macOS · app + deskhub-cli
 ```
 
 Ubuntu / Debian / Mint では、apt repository を一度追加し、app と `deskhub-cli` を
@@ -52,8 +52,8 @@ Ubuntu / Debian / Mint では、apt repository を一度追加し、app と `des
 
 ```bash
 sudo install -d /etc/apt/keyrings
-curl -fsSL https://manhpham90vn.github.io/Deskhub/apt/deskhub.gpg | sudo tee /etc/apt/keyrings/deskhub.gpg >/dev/null
-echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/deskhub.gpg] https://manhpham90vn.github.io/Deskhub/apt stable main" \
+curl -fsSL https://bitfaring.github.io/Deskhub/apt/deskhub.gpg | sudo tee /etc/apt/keyrings/deskhub.gpg >/dev/null
+echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/deskhub.gpg] https://bitfaring.github.io/Deskhub/apt stable main" \
   | sudo tee /etc/apt/sources.list.d/deskhub.list
 sudo apt update
 sudo apt install deskhub       # デスクトップ app + deskhub-cli
@@ -65,7 +65,7 @@ sudo apt install deskhub       # デスクトップ app + deskhub-cli
 をマシンの `PATH` に追加する。Homebrew cask は macOS の `deskhub-cli` を `PATH` にリンク
 する。dmg の場合は app の中、`Deskhub.app/Contents/MacOS/deskhub-cli` にある。
 
-その他のプラットフォームは [Releases](https://github.com/manhpham90vn/Deskhub/releases) から：
+その他のプラットフォームは [Releases](https://github.com/Bitfaring/Deskhub/releases) から：
 
 - **Windows** —— `deskhub-v*-windows-setup.exe`。app はこの形式のみで、`deskhub-cli` を
   同梱する
@@ -196,7 +196,7 @@ threat model は [`SECURITY.ja.md`](SECURITY.ja.md) を参照。
 | [`PRIVACY.ja.md`](PRIVACY.ja.md) ([en](PRIVACY.md) · [vi](PRIVACY.vi.md) · [zh](PRIVACY.zh.md)) | プライバシーポリシー |
 | [`THIRD_PARTY_NOTICES.ja.md`](THIRD_PARTY_NOTICES.ja.md) ([en](THIRD_PARTY_NOTICES.md) · [vi](THIRD_PARTY_NOTICES.vi.md) · [zh](THIRD_PARTY_NOTICES.zh.md)) | サードパーティ製コンポーネントと license |
 
-バグ報告と意見: [issues](https://github.com/manhpham90vn/Deskhub/issues) —— 端末の機種名
+バグ報告と意見: [issues](https://github.com/Bitfaring/Deskhub/issues) —— 端末の機種名
 を添えてほしい。
 
 <a id="license"></a>

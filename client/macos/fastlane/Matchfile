@@ -1,4 +1,4 @@
-git_url(ENV["MATCH_GIT_URL"] || "git@github.com:manhpham90vn/Deskhub_certificate.git")
+git_url(ENV["MATCH_GIT_URL"] || "git@github.com:Bitfaring/certificate.git")
 storage_mode("git")
 git_branch("main")
 type("developer_id")

@@ -6,7 +6,7 @@ Choose your platform below to install a prebuilt release. You do not need to che
 the source code. If you want to build Deskhub yourself, see [`BUILD.md`](BUILD.md).
 
 Desktop installers are on the
-[Releases page](https://github.com/manhpham90vn/Deskhub/releases). The Android app is on
+[Releases page](https://github.com/Bitfaring/Deskhub/releases). The Android app is on
 Google Play, and the iOS beta on TestFlight.
 
 | Platform | File | How to install |
@@ -85,7 +85,7 @@ warning.
 Or through Homebrew, which `brew upgrade` then keeps current:
 
 ```bash
-brew install --cask manhpham90vn/tap/deskhub
+brew install --cask bitfaring/tap/deskhub
 ```
 
 Hosting a screen needs two macOS permissions, both requested from the **Settings** page
@@ -153,8 +153,8 @@ Debian 12 and newer:
 
 ```bash
 sudo install -d /etc/apt/keyrings
-curl -fsSL https://manhpham90vn.github.io/Deskhub/apt/deskhub.gpg | sudo tee /etc/apt/keyrings/deskhub.gpg >/dev/null
-echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/deskhub.gpg] https://manhpham90vn.github.io/Deskhub/apt stable main" \
+curl -fsSL https://bitfaring.github.io/Deskhub/apt/deskhub.gpg | sudo tee /etc/apt/keyrings/deskhub.gpg >/dev/null
+echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/deskhub.gpg] https://bitfaring.github.io/Deskhub/apt stable main" \
   | sudo tee /etc/apt/sources.list.d/deskhub.list
 sudo apt update && sudo apt install deskhub
 ```
@@ -224,7 +224,7 @@ for you — nothing to do. On a build from source, one command sets it up, with 
 and no re-login on the desktop:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/manhpham90vn/Deskhub/main/scripts/setup-uinput.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/Bitfaring/Deskhub/main/scripts/setup-uinput.sh | sudo bash
 ```
 
 Prefer reading before piping to sudo? Download
@@ -616,5 +616,5 @@ not carried over: let each device in and trust each host again, as described abo
 - **macOS: a black screen or dead input** — check Screen Recording and Accessibility on
   the Settings page.
 - **Still stuck** — open an
-  [issue](https://github.com/manhpham90vn/Deskhub/issues) and include your device model,
+  [issue](https://github.com/Bitfaring/Deskhub/issues) and include your device model,
   OS version and what the status line on the Host or Client page says.

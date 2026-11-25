@@ -9,15 +9,15 @@
 **Deskhub giúp bạn xem và điều khiển máy tính từ một thiết bị khác. App mã nguồn mở,
 chạy native trên năm nền tảng và hướng tới trải nghiệm mượt mà khi làm việc hoặc chơi game.**
 
-[![Release](https://img.shields.io/github/v/release/manhpham90vn/Deskhub?label=release&color=2563eb)](https://github.com/manhpham90vn/Deskhub/releases)
-[![License: MIT](https://img.shields.io/github/license/manhpham90vn/Deskhub?color=2563eb)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/Bitfaring/Deskhub?label=release&color=2563eb)](https://github.com/Bitfaring/Deskhub/releases)
+[![License: MIT](https://img.shields.io/github/license/Bitfaring/Deskhub?color=2563eb)](LICENSE)
 [![C++20](https://img.shields.io/badge/C%2B%2B-20-2563eb)](CMakeLists.txt)
 [![Platforms](https://img.shields.io/badge/ch%E1%BA%A1y%20tr%C3%AAn-Windows%20·%20macOS%20·%20Linux%20·%20Android%20·%20iOS-2563eb)](#platforms)
 
-[![ci](https://github.com/manhpham90vn/Deskhub/actions/workflows/ci.yml/badge.svg)](https://github.com/manhpham90vn/Deskhub/actions/workflows/ci.yml)
-[![lint](https://github.com/manhpham90vn/Deskhub/actions/workflows/lint.yml/badge.svg)](https://github.com/manhpham90vn/Deskhub/actions/workflows/lint.yml)
-[![codeql](https://github.com/manhpham90vn/Deskhub/actions/workflows/codeql.yml/badge.svg)](https://github.com/manhpham90vn/Deskhub/actions/workflows/codeql.yml)
-[![nightly](https://github.com/manhpham90vn/Deskhub/actions/workflows/nightly.yml/badge.svg)](https://github.com/manhpham90vn/Deskhub/actions/workflows/nightly.yml)
+[![ci](https://github.com/Bitfaring/Deskhub/actions/workflows/ci.yml/badge.svg)](https://github.com/Bitfaring/Deskhub/actions/workflows/ci.yml)
+[![lint](https://github.com/Bitfaring/Deskhub/actions/workflows/lint.yml/badge.svg)](https://github.com/Bitfaring/Deskhub/actions/workflows/lint.yml)
+[![codeql](https://github.com/Bitfaring/Deskhub/actions/workflows/codeql.yml/badge.svg)](https://github.com/Bitfaring/Deskhub/actions/workflows/codeql.yml)
+[![nightly](https://github.com/Bitfaring/Deskhub/actions/workflows/nightly.yml/badge.svg)](https://github.com/Bitfaring/Deskhub/actions/workflows/nightly.yml)
 
 **[Cài đặt](#install)** · [Build từ source](docs/BUILD.vi.md) ·
 [Spec](docs/SPECIFICATION.vi.md) · [Architecture](docs/ARCHITECTURE.vi.md) ·
@@ -41,10 +41,10 @@ chạy native trên năm nền tảng và hướng tới trải nghiệm mượt
 ## 📦 Cài đặt
 
 Có thể cài Deskhub qua package manager trên macOS, Ubuntu, Debian hoặc Mint; trên Windows,
-tải bộ cài từ [Releases](https://github.com/manhpham90vn/Deskhub/releases):
+tải bộ cài từ [Releases](https://github.com/Bitfaring/Deskhub/releases):
 
 ```bash
-brew install --cask manhpham90vn/tap/deskhub     # macOS · app + deskhub-cli
+brew install --cask bitfaring/tap/deskhub     # macOS · app + deskhub-cli
 ```
 
 Trên Ubuntu / Debian / Mint, thêm apt repository một lần, sau đó cài gói duy nhất, trong
@@ -52,8 +52,8 @@ Trên Ubuntu / Debian / Mint, thêm apt repository một lần, sau đó cài g�
 
 ```bash
 sudo install -d /etc/apt/keyrings
-curl -fsSL https://manhpham90vn.github.io/Deskhub/apt/deskhub.gpg | sudo tee /etc/apt/keyrings/deskhub.gpg >/dev/null
-echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/deskhub.gpg] https://manhpham90vn.github.io/Deskhub/apt stable main" \
+curl -fsSL https://bitfaring.github.io/Deskhub/apt/deskhub.gpg | sudo tee /etc/apt/keyrings/deskhub.gpg >/dev/null
+echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/deskhub.gpg] https://bitfaring.github.io/Deskhub/apt stable main" \
   | sudo tee /etc/apt/sources.list.d/deskhub.list
 sudo apt update
 sudo apt install deskhub       # app desktop + deskhub-cli
@@ -64,7 +64,7 @@ Gói này thêm Deskhub vào menu ứng dụng và cài `deskhub` cùng `deskhub
 cài đặt (có `deskhub-cli.exe`) vào `PATH` của máy. Cask Homebrew link `deskhub-cli` trên
 macOS vào `PATH`; với dmg thì nó nằm trong app, ở `Deskhub.app/Contents/MacOS/deskhub-cli`.
 
-Các nền tảng còn lại lấy trên [Releases](https://github.com/manhpham90vn/Deskhub/releases):
+Các nền tảng còn lại lấy trên [Releases](https://github.com/Bitfaring/Deskhub/releases):
 
 - **Windows** — `deskhub-v*-windows-setup.exe`, dạng duy nhất của app, có sẵn
   `deskhub-cli` bên trong
@@ -194,7 +194,7 @@ Mọi tài liệu đều được xuất bản bằng tiếng Anh, kèm bản d�
 | [`PRIVACY.vi.md`](PRIVACY.vi.md) ([en](PRIVACY.md) · [zh](PRIVACY.zh.md) · [ja](PRIVACY.ja.md)) | Chính sách quyền riêng tư |
 | [`THIRD_PARTY_NOTICES.vi.md`](THIRD_PARTY_NOTICES.vi.md) ([en](THIRD_PARTY_NOTICES.md) · [zh](THIRD_PARTY_NOTICES.zh.md) · [ja](THIRD_PARTY_NOTICES.ja.md)) | Thành phần bên thứ ba và license |
 
-Báo lỗi và góp ý: [issues](https://github.com/manhpham90vn/Deskhub/issues) — vui lòng ghi
+Báo lỗi và góp ý: [issues](https://github.com/Bitfaring/Deskhub/issues) — vui lòng ghi
 kèm model thiết bị.
 
 <a id="license"></a>
