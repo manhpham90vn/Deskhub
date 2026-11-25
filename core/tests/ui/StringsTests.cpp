@@ -57,7 +57,8 @@ void TestEveryLabelSaysSomething() {
         ui::kDenyAction, ui::kCameraDenied, ui::kInviteHostMismatch, ui::kInviteInvalid,
         ui::kAuthAwaitingApproval, ui::kTrustNewHostTitle, ui::kTrustNewHostAction,
         ui::kCancelAction, ui::kDeviceNameHint, ui::kAuthNotPairedCliHint,
-        ui::kAuthDeclined, ui::kAuthDeviceRemoved, ui::kAuthRateLimited};
+        ui::kAuthDeclined, ui::kAuthDeviceRemoved, ui::kAuthRateLimited, ui::kMuteSoundButton,
+        ui::kUnmuteSoundButton};
     const std::string prompt = ui::TrustNewHostPrompt("192.168.1.10:47777", "SHA256:abc");
     Check(Contains(prompt, "192.168.1.10:47777") && Contains(prompt, "SHA256:abc"),
         "the first-connection prompt names the host and shows its whole fingerprint");

@@ -121,6 +121,7 @@ class StreamActivity : ComponentActivity() {
         currentSourceId = intent.getIntExtra("source", 0)
         sources = readSources(intent)
         screenPx = NativeClient.screenSizePx(this)
+        NativeClient.setAudioMuted(false)
         session =
             NativeClient.nativeStart(
                 address,
@@ -269,6 +270,8 @@ private fun StreamScreen(
     }
 
     var keyboardOn by remember { mutableStateOf(false) }
+    val playsSound = remember { NativeClient.playAudio() }
+    var soundMuted by remember { mutableStateOf(false) }
     var keyView by remember { mutableStateOf<KeyInputView?>(null) }
     LaunchedEffect(keyboardOn) {
         val v = keyView ?: return@LaunchedEffect
@@ -474,9 +477,15 @@ private fun StreamScreen(
                     statusLine = statusLine,
                     streaming = streaming,
                     keyboardOn = keyboardOn,
+                    playsSound = playsSound,
+                    soundMuted = soundMuted,
                     sources = sources,
                     currentSourceId = currentSourceId,
                     onToggleKeyboard = { keyboardOn = !keyboardOn },
+                    onToggleSound = {
+                        soundMuted = !soundMuted
+                        NativeClient.setAudioMuted(soundMuted)
+                    },
                     onSwitchSource = onSwitchSource,
                     onCollapse = { controlsOpen = false },
                 )
@@ -606,9 +615,12 @@ private fun ControlPanel(
     statusLine: String,
     streaming: Boolean,
     keyboardOn: Boolean,
+    playsSound: Boolean,
+    soundMuted: Boolean,
     sources: List<NativeClient.Source>,
     currentSourceId: Int,
     onToggleKeyboard: () -> Unit,
+    onToggleSound: () -> Unit,
     onSwitchSource: (Int) -> Unit,
     onCollapse: () -> Unit,
 ) {
@@ -686,6 +698,9 @@ private fun ControlPanel(
         ) {
             OutlinedButton(onClick = onToggleKeyboard, enabled = streaming) {
                 Text(if (keyboardOn) "Hide keyboard" else "Keyboard")
+            }
+            if (playsSound) {
+                OutlinedButton(onClick = onToggleSound) { Text(NativeClient.soundButtonLabel(soundMuted)) }
             }
             if (sources.size > 1) {
                 OutlinedButton(onClick = { pickerOpen = true }) { Text("Display") }

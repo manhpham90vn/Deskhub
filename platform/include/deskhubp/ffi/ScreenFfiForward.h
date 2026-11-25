@@ -73,6 +73,10 @@
         return int(std::strlen(out));                                               \
     }                                                                               \
                                                                                     \
+    void dh_screen_set_audio_muted(DHScreen* s, bool muted) {                       \
+        if (s) engineOf(s).SetAudioMuted(muted);                                    \
+    }                                                                               \
+                                                                                    \
     void dh_screen_accept_key(DHScreen* s) {                                        \
         deskhubp::AcceptFfiScreenKey(s);                                            \
     }                                                                               \

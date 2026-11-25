@@ -7,6 +7,7 @@
 
 #include "decode/AvDecoder.h"
 #include "deskhub/input/LocalCursor.h"
+#include "deskhub/media/AudioMute.h"
 #include "deskhubp/net/UdpSocket.h"
 #include "deskhubp/client/ScreenViewer.h"
 #include "gtk/WaylandShortcutsInhibitor.h"
@@ -35,6 +36,7 @@ private:
     void SyncSeatGrab();
     void ShowLocalCursor(bool show);
     void ToggleLocalCursor();
+    void ToggleSound();
     void UpdateTitle();
     void UpdateLinkLabel();
     void SizeToVideo();
@@ -56,6 +58,7 @@ private:
     static void OnDestroy(GtkWidget* w, gpointer user);
     static void OnFullScreenClicked(GtkWidget* w, gpointer user);
     static void OnCursorClicked(GtkWidget* w, gpointer user);
+    static void OnSoundClicked(GtkWidget* w, gpointer user);
     static gboolean OnCrossing(GtkWidget* w, GdkEventCrossing* e, gpointer user);
     static gboolean OnWindowState(GtkWidget* w, GdkEventWindowState* e, gpointer user);
 
@@ -63,6 +66,7 @@ private:
     GtkWidget* glArea_ = nullptr;
     GtkWidget* linkLabel_ = nullptr;
     GtkWidget* cursorButton_ = nullptr;
+    GtkWidget* soundButton_ = nullptr;
     uint64_t queuedFrameSerial_ = 0;
     guint clipTimerId_ = 0;
     guint linkTimerId_ = 0;
@@ -87,6 +91,7 @@ private:
     deskhubp::ScreenViewer<AvDecoder, VideoSink*> loop_;
 
     deskhub::LocalCursorState cursor_;
+    deskhub::media::AudioMuteState sound_;
     WaylandShortcutsInhibitor shortcuts_;
     GdkSeatCapabilities grabbed_ = GdkSeatCapabilities(0);
     bool keyboardFocus_ = false;

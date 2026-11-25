@@ -29,6 +29,7 @@ static_assert(int32_t(deskhub::MouseButton::Left) == 1 &&
 namespace {
 
 DHScreen* g_session = nullptr;
+bool g_soundMuted = false;
 ANativeWindow* g_window = nullptr;
 
 jclass g_nativeClientClass = nullptr;
@@ -639,6 +640,7 @@ Java_com_deskhub_app_NativeClient_nativeStart(JNIEnv* env, jobject, jstring addr
     callbacks.onTrustAsked = NotifySessionTrustAsked;
 
     g_session = dh_screen_start(addr.c_str(), uint8_t(sourceId), g_window, &callbacks);
+    dh_screen_set_audio_muted(g_session, g_soundMuted);
     g_callbackSession.store(g_session, std::memory_order_release);
     return jlong(reinterpret_cast<uintptr_t>(g_session));
 }
@@ -660,6 +662,17 @@ Java_com_deskhub_app_NativeClient_nativeStop(JNIEnv*, jobject, jlong handle) {
     dh_screen_stop(g_session);
     g_callbackSession.store(nullptr, std::memory_order_release);
     g_session = nullptr;
+}
+
+JNIEXPORT void JNICALL
+Java_com_deskhub_app_NativeClient_nativeSetAudioMuted(JNIEnv*, jobject, jboolean muted) {
+    g_soundMuted = muted == JNI_TRUE;
+    dh_screen_set_audio_muted(g_session, g_soundMuted);
+}
+
+JNIEXPORT jstring JNICALL
+Java_com_deskhub_app_NativeClient_nativeSoundButtonLabel(JNIEnv* env, jobject, jboolean muted) {
+    return env->NewStringUTF(dh_sound_button_label(muted == JNI_TRUE));
 }
 
 JNIEXPORT void JNICALL

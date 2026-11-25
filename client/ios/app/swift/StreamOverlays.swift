@@ -158,6 +158,13 @@ struct StreamControlPanel: View {
                 .buttonStyle(.deskhubOutlined())
                 .disabled(!streaming)
 
+            if model.playsSound {
+                Button(DeskhubClient.soundButtonLabel(muted: model.soundMuted)) {
+                    model.soundMuted.toggle()
+                }
+                .buttonStyle(.deskhubOutlined())
+            }
+
             if session.sources.count > 1 {
                 Button("Display") { displayPickerOpen = true }
                     .buttonStyle(.deskhubOutlined())

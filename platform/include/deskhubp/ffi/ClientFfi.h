@@ -368,6 +368,8 @@ bool dh_cursor_normalize(DHCursor cur, DHViewRect video, int32_t* nx, int32_t* n
 
 const char* dh_cursor_button_label(bool cursorHidden);
 
+const char* dh_sound_button_label(bool muted);
+
 int dh_control_subtitle(const char* statusLine, char* out, int capacity);
 
 int dh_view_only_subtitle(const char* statusLine, char* out, int capacity);

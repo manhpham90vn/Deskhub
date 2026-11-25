@@ -509,6 +509,14 @@ object NativeClient {
 
     fun clipOffer(text: String) = nativeClipOffer(text)
 
+    private external fun nativeSetAudioMuted(muted: Boolean)
+
+    private external fun nativeSoundButtonLabel(muted: Boolean): String
+
+    fun setAudioMuted(muted: Boolean) = nativeSetAudioMuted(muted)
+
+    fun soundButtonLabel(muted: Boolean): String = nativeSoundButtonLabel(muted)
+
     fun clipTake(): String = nativeClipTake()
 
     private external fun nativeDeviceName(): String

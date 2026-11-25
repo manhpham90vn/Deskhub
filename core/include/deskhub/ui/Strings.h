@@ -40,6 +40,8 @@ inline constexpr const char* kDisconnectButton = "Disconnect";
 inline constexpr const char* kFullScreenButton = "Full screen (F11)";
 inline constexpr const char* kShowMyCursorButton = "Show my cursor (F9)";
 inline constexpr const char* kHideMyCursorButton = "Hide my cursor (F9)";
+inline constexpr const char* kMuteSoundButton = "Mute sound";
+inline constexpr const char* kUnmuteSoundButton = "Unmute sound";
 inline constexpr const char* kScreenRecordingRequired =
     "Screen Recording permission is required. Grant it in System Settings, then quit and "
     "reopen Deskhub.";

@@ -102,6 +102,7 @@ struct StreamView: View {
                 ConnectionStatusBar(
                     model: model,
                     onToggleCursor: { model.cursorHidden.toggle() },
+                    onToggleSound: { model.soundMuted.toggle() },
                     onFullScreen: { NSApp.keyWindow?.toggleFullScreen(nil) }
                 )
             }

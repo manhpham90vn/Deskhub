@@ -33,6 +33,10 @@ public:
 
     void Push(const deskhub::AudioPacketView& packet);
 
+    void SetMuted(bool muted) {
+        muted_.store(muted, std::memory_order_relaxed);
+    }
+
     bool running() const {
         return running_.load(std::memory_order_acquire);
     }
@@ -57,6 +61,7 @@ private:
     std::thread thread_;
     std::atomic<bool> running_{false};
     std::atomic<bool> quit_{false};
+    std::atomic<bool> muted_{false};
     std::atomic<uint64_t> decodeFailures_{0};
 };
 

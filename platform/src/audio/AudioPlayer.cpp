@@ -3,6 +3,7 @@
 #include "deskhubp/diag/Log.h"
 #include "deskhubp/system/Clock.h"
 
+#include <algorithm>
 #include <vector>
 
 namespace deskhubp {
@@ -62,9 +63,10 @@ void AudioPlayer::Run() {
 
         if (frame) {
             const size_t samples = Fill(*frame, pcm);
-            if (samples == format_.samplesPerFrame)
+            if (samples == format_.samplesPerFrame) {
+                if (muted_.load(std::memory_order_relaxed)) std::fill(pcm.begin(), pcm.end(), 0);
                 sink_.Write(pcm);
-            else
+            } else
                 decodeFailures_.fetch_add(1, std::memory_order_relaxed);
         }
 

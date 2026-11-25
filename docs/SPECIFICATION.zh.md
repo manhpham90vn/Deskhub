@@ -136,6 +136,7 @@ CLI 可在 Windows 和 Linux 上查看远程屏幕；macOS 上请使用 app 观�
 | V-8 | 自动重连 | 失去 host 的 session —— network 中断，stream 停止 —— 不会立即结束。窗口保留最后一帧画面，显示正在 reattach，并以 backoff 方式重连最多一分钟；host 再次应答后画面自动恢复。仅在该时间之后，或 host 主动结束、拒绝该 session 时，窗口才会连同原因关闭。shell 窗口自行重试两分钟后报告连接丢失；shell 本体无时间限制地留在 host 上，随时可接回（H-13）。 |
 | V-9 | 全屏（桌面） | 在 Windows、macOS 与 Linux 上，按 `F11` 或画面上方的 **Full screen (F11)** 按钮，远端屏幕将铺满整个显示器并隐藏按钮栏；再按一次 `F11` 回到窗口。`F11` 由 viewer 保留（只看 session 中亦然），永远不会发送到 host。若 Mac 键盘的功能键用于控制硬件，请按 `fn`+`F11`。 |
 | V-10 | 单一指针（桌面） | 在 Windows、macOS 与 Linux 上，当控制 host 的 session 中指针位于远端屏幕上方时，viewer 会隐藏自己的指针，只显示绘制在画面中的 host 指针。按 `F9` 或 **Show my cursor (F9)** 按钮可让 viewer 的指针重新显示在画面上，**Hide my cursor (F9)** 则再次隐藏；按钮文字始终说明下一步的动作。`F9` 由 viewer 保留，永远不会发送到 host。viewer 的指针在按钮栏上、画面两侧的黑边上、窗口外以及只看 session 中（此类 session 没有该按钮）始终显示。 |
+| V-11 | 静音 | 当 viewer 播放 host 的声音时（V-6、T-23），所有 viewer 都提供 **Mute sound** 按钮——Windows 和 Linux 上位于 **Show my cursor** 旁边，macOS 上位于按钮栏中，Android 和 iOS 上位于 session 控制面板中——仅查看的 session 也有。它只让当前窗口静音：host 继续播放、继续发送，因此 **Unmute sound** 可立即恢复声音，并与画面保持同步。按钮显示的是它下一步将执行的操作。新 session 始终以有声状态开始，切换到其他显示器时保留该选择。 |
 
 ## 8. 操作远端机器
 

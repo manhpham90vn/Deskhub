@@ -56,6 +56,7 @@ void RunSourceLabelTests();
 void RunViewerTitleTests();
 void RunFrameMailboxTests();
 void RunPcmRingTests();
+void RunAudioMuteTests();
 void RunRgbDownscaleTests();
 void RunSourceListResponderTests();
 void RunSecureDesktopWireTests();

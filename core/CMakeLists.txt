@@ -185,6 +185,7 @@ if(DESKHUB_CORE_TESTS)
         tests/media/FrameMailboxTests.cpp
         tests/media/RgbDownscaleTests.cpp
         tests/media/PcmRingTests.cpp
+        tests/media/AudioMuteTests.cpp
 
         tests/session/SourceListResponderTests.cpp
         tests/session/SecureDesktopWireTests.cpp

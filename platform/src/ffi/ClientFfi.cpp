@@ -2,6 +2,7 @@
 
 #include "deskhub/input/Hotkeys.h"
 #include "deskhub/input/LocalCursor.h"
+#include "deskhub/media/AudioMute.h"
 #include "deskhub/input/Set1Scancodes.h"
 #include "deskhub/input/VirtualKeys.h"
 #include "deskhub/input/TrackpadCursor.h"
@@ -611,6 +612,10 @@ bool dh_is_full_screen_toggle_vk(int32_t vk) {
 
 const char* dh_cursor_button_label(bool cursorHidden) {
     return deskhub::LocalCursorState::CursorButtonLabel(cursorHidden);
+}
+
+const char* dh_sound_button_label(bool muted) {
+    return deskhub::media::AudioMuteState::SoundButtonLabel(muted);
 }
 
 int dh_control_subtitle(const char* statusLine, char* out, int capacity) {
