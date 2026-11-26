@@ -253,7 +253,8 @@ things fail either one, and none of them is a millisecond figure picked out of t
   run.
 - **How the cost scales**: each `-scaling` row runs the same work at 4× the input and
   fails when the time grows far faster than the input — the shape an accidental O(n²)
-  has.
+  has. The ratio is measured up to three times and the lowest one is kept, since a busy
+  runner only ever makes it look worse.
 - **Drift against the recorded baseline**: `make perf-baseline` writes
   `out/perf/baseline.txt` and `out/perf/platform-baseline.txt` on an idle machine, later
   runs report the change on every row and fail past 25 %. The files describe that one

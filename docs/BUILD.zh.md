@@ -234,7 +234,8 @@ seed 与 dictionary 开始 fuzz。`make fuzz-coverage` 显示 corpus 实际覆�
 - **每单位的 allocation 次数**，通过替换全局 `operator new` 精确计数。若某条 path 开始
   按 packet 或按 frame 进行 allocation，则在任何机器、任何一次运行中都会失败。
 - **开销随输入的增长方式**：每一行 `-scaling` 以 4 倍输入执行相同工作，当耗时的增长远
-  快于输入时即判定失败 —— 这正是无意引入 O(n²) 时的特征。
+  快于输入时即判定失败 —— 这正是无意引入 O(n²) 时的特征。该比值最多测量三次并取最低值，
+  因为繁忙的 runner 只会让它显得更差。
 - **相对已记录 baseline 的偏移**：`make perf-baseline` 在空闲机器上生成
   `out/perf/baseline.txt` 与 `out/perf/platform-baseline.txt`，此后每次运行按行报告变化，
   超过 25 % 即失败。这些文件描述的是特定的一台机器，因此不纳入 git。
