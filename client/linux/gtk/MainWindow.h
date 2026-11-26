@@ -193,6 +193,7 @@ private:
     void ShowHostTable(bool sharing);
     bool TerminalTicked() const;
     bool FilesTicked() const;
+    void RememberHostServiceTicks();
     std::vector<HostMonitor> TickedMonitors() const;
     static std::vector<HostMonitor> ListMonitors();
     static bool MatchesTickedMonitor(const ShareSource& source,
@@ -227,6 +228,7 @@ private:
     static void OnBindChanged(GtkWidget* w, gpointer user);
     static void OnForgetDeviceClicked(GtkButton* b, gpointer user);
     static void OnForgetAllClicked(GtkButton* b, gpointer user);
+    static void OnTerminalTickToggled(GtkToggleButton* b, gpointer user);
     static void OnFilesTickToggled(GtkToggleButton* b, gpointer user);
     static void OnTransferDirClicked(GtkButton* b, gpointer user);
     static void OnDeviceRowActivated(GtkTreeView* view, GtkTreePath* path,

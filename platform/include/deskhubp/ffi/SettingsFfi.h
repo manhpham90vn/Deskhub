@@ -80,6 +80,12 @@ void dh_set_transfer_dir(const char* dir);
 bool dh_share_audio(void);
 void dh_set_share_audio(bool on);
 
+bool dh_share_terminal(void);
+void dh_set_share_terminal(bool on);
+
+bool dh_share_files(void);
+void dh_set_share_files(bool on);
+
 bool dh_play_audio(void);
 void dh_set_play_audio(bool on);
 

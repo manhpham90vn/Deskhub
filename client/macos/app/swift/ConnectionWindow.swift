@@ -39,16 +39,18 @@ struct ConnectionWindow: View {
                     dh_settings_save(stored.fps, stored.bitrateMbps, stored.maxDim, stored.port,
                                      stored.allowInput, on)
                 }
-            Button(action: openTerminalSession) {
-                Text(DeskhubClient.string(DHStrOpenShellLabel))
-                    .frame(maxWidth: .infinity)
+            if request.caps.terminal {
+                Button(action: openTerminalSession) {
+                    Text(DeskhubClient.string(DHStrOpenShellLabel))
+                        .frame(maxWidth: .infinity)
+                }
             }
-            .disabled(!request.caps.terminal)
-            Button(action: openFilesSession) {
-                Text(DeskhubClient.string(DHStrOpenFilesLabel))
-                    .frame(maxWidth: .infinity)
+            if request.caps.files {
+                Button(action: openFilesSession) {
+                    Text(DeskhubClient.string(DHStrOpenFilesLabel))
+                        .frame(maxWidth: .infinity)
+                }
             }
-            .disabled(!request.caps.files)
             deskhubHint(DeskhubClient.string(DHStrMobileHostNote))
         }
         .padding(16)

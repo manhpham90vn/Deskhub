@@ -22,8 +22,8 @@ final class SharingModel {
     var rows: [HostRow] = []
     var shareSources: [ShareSource] = []
     var tickedSources: Set<UInt32> = []
-    var shareTerminal = true
-    var shareFiles = true
+    var shareTerminal = dh_share_terminal()
+    var shareFiles = dh_share_files()
 
     var hasScreenRecording = false
     var hasAccessibility = false

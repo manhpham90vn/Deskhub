@@ -465,15 +465,17 @@ private:
         g_signal_connect(controlCheck_, "toggled", G_CALLBACK(OnControlToggled), this);
         gtk_box_pack_start(GTK_BOX(box), controlCheck_, FALSE, FALSE, 0);
 
-        GtkWidget* shell = StandardButton(ui::kOpenShellLabel);
-        gtk_widget_set_sensitive(shell, caps_.terminal);
-        g_signal_connect(shell, "clicked", G_CALLBACK(OnOpenShell), this);
-        gtk_box_pack_start(GTK_BOX(box), shell, FALSE, FALSE, 0);
+        if (caps_.terminal) {
+            GtkWidget* shell = StandardButton(ui::kOpenShellLabel);
+            g_signal_connect(shell, "clicked", G_CALLBACK(OnOpenShell), this);
+            gtk_box_pack_start(GTK_BOX(box), shell, FALSE, FALSE, 0);
+        }
 
-        GtkWidget* files = StandardButton(ui::kOpenFilesLabel);
-        gtk_widget_set_sensitive(files, caps_.files);
-        g_signal_connect(files, "clicked", G_CALLBACK(OnOpenFiles), this);
-        gtk_box_pack_start(GTK_BOX(box), files, FALSE, FALSE, 0);
+        if (caps_.files) {
+            GtkWidget* files = StandardButton(ui::kOpenFilesLabel);
+            g_signal_connect(files, "clicked", G_CALLBACK(OnOpenFiles), this);
+            gtk_box_pack_start(GTK_BOX(box), files, FALSE, FALSE, 0);
+        }
 
         gtk_box_pack_start(GTK_BOX(box), Hint(ui::kMobileHostNote), FALSE, FALSE, 0);
         gtk_widget_show_all(window_);
@@ -720,10 +722,11 @@ GtkWidget* MainWindow::BuildHostPage() {
     displayChecksBox_ = gtk_box_new(GTK_ORIENTATION_VERTICAL, 6);
     gtk_box_pack_start(GTK_BOX(pickerBox), displayChecksBox_, FALSE, FALSE, 0);
     hostTerminalCheck_ = gtk_check_button_new_with_label(ui::kTerminalPickerLabel);
-    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(hostTerminalCheck_), TRUE);
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(hostTerminalCheck_), settings_.shareTerminal);
+    g_signal_connect(hostTerminalCheck_, "toggled", G_CALLBACK(OnTerminalTickToggled), this);
     gtk_box_pack_start(GTK_BOX(pickerBox), hostTerminalCheck_, FALSE, FALSE, 0);
     hostFilesCheck_ = gtk_check_button_new_with_label(ui::kFilesPickerLabel);
-    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(hostFilesCheck_), TRUE);
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(hostFilesCheck_), settings_.shareFiles);
     g_signal_connect(hostFilesCheck_, "toggled", G_CALLBACK(OnFilesTickToggled), this);
     gtk_box_pack_start(GTK_BOX(pickerBox), hostFilesCheck_, FALSE, FALSE, 0);
     hostPickerFrame_ = ListFrame(pickerBox, kListH + 40);
@@ -1585,8 +1588,19 @@ void MainWindow::OnForgetAllClicked(GtkButton*, gpointer user) {
     static_cast<MainWindow*>(user)->ForgetEveryDevice();
 }
 
+void MainWindow::RememberHostServiceTicks() {
+    settings_.shareTerminal = TerminalTicked();
+    settings_.shareFiles = FilesTicked();
+    deskhubp::SaveUiSettings(settings_);
+}
+
+void MainWindow::OnTerminalTickToggled(GtkToggleButton*, gpointer user) {
+    static_cast<MainWindow*>(user)->RememberHostServiceTicks();
+}
+
 void MainWindow::OnFilesTickToggled(GtkToggleButton*, gpointer user) {
     auto* self = static_cast<MainWindow*>(user);
+    self->RememberHostServiceTicks();
     if (!self->Sharing()) self->ShowIdleHostState();
 }
 

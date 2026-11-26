@@ -61,6 +61,8 @@ void ApplyKeyValue(UiSettings& out, std::string_view key, std::string_view value
     if (key == "start_hidden") out.startHidden = *v != 0;
     if (key == "keep_awake") out.keepAwake = *v != 0;
     if (key == "unattended") out.unattended = *v != 0;
+    if (key == "share_terminal") out.shareTerminal = *v != 0;
+    if (key == "share_files") out.shareFiles = *v != 0;
 }
 
 }
@@ -141,6 +143,8 @@ std::string SerializeUiSettings(const UiSettings& settings) {
     out += std::string("start_hidden=") + (settings.startHidden ? "1" : "0") + '\n';
     out += std::string("keep_awake=") + (settings.keepAwake ? "1" : "0") + '\n';
     out += std::string("unattended=") + (settings.unattended ? "1" : "0") + '\n';
+    out += std::string("share_terminal=") + (settings.shareTerminal ? "1" : "0") + '\n';
+    out += std::string("share_files=") + (settings.shareFiles ? "1" : "0") + '\n';
     out += "transfer_dir=" + TruncateSettingsPath(settings.transferDir) + '\n';
     return out;
 }
@@ -153,6 +157,8 @@ UiSettings UnattendedHostSettings(const UiSettings& settings) {
     forHost.autostart = false;
     forHost.autoShare = false;
     forHost.startHidden = false;
+    forHost.shareTerminal = false;
+    forHost.shareFiles = false;
     return forHost;
 }
 
