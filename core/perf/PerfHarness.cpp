@@ -106,6 +106,7 @@ constexpr double kMinimumBatchNanos = 5'000'000.0;
 constexpr double kWarmUpNanos = 200'000'000.0;
 constexpr uint64_t kMaxBatchRuns = 1u << 22;
 constexpr int kDefaultRepeats = 7;
+constexpr int kScalingAttempts = 3;
 constexpr double kDefaultTolerance = 0.25;
 
 int g_failures = 0;
@@ -345,16 +346,24 @@ void MeasureScaling(const ScalingWorkload& workload) {
     small();
     large();
 
-    const Timing smallTiming = TimeRun(small);
-    const Timing largeTiming = TimeRun(large);
-    if (smallTiming.nanosPerRun <= 0.0) {
-        Fail(workload.name, "measured no time at all for the small case");
-        return;
+    double timeRatio = 0.0;
+    double nanosPerUnit = 0.0;
+    for (int attempt = 0; attempt < kScalingAttempts; ++attempt) {
+        const Timing smallTiming = TimeRun(small);
+        const Timing largeTiming = TimeRun(large);
+        if (smallTiming.nanosPerRun <= 0.0) {
+            Fail(workload.name, "measured no time at all for the small case");
+            return;
+        }
+        const double ratio = largeTiming.nanosPerRun / smallTiming.nanosPerRun;
+        if (attempt == 0 || ratio < timeRatio) {
+            timeRatio = ratio;
+            nanosPerUnit = largeTiming.nanosPerRun / double(workload.largeUnits);
+        }
+        if (timeRatio <= workload.maxTimeRatio) break;
     }
 
     const double workRatio = double(workload.largeUnits) / double(workload.smallUnits);
-    const double timeRatio = largeTiming.nanosPerRun / smallTiming.nanosPerRun;
-    const double nanosPerUnit = largeTiming.nanosPerRun / double(workload.largeUnits);
 
     std::printf("%-38s %11s ns/%-8s %5.1fx work -> %5.2fx time", workload.name,
         FormatCost(nanosPerUnit).c_str(), workload.unit, workRatio, timeRatio);

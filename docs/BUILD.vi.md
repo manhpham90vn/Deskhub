@@ -254,7 +254,8 @@ không tiêu chí nào là một ngưỡng mili-giây được chọn tùy tiệ
   máy, trong mọi lần chạy.
 - **Cách chi phí tăng theo input**: mỗi dòng `-scaling` chạy cùng khối lượng công việc với
   input gấp 4 lần và fail khi thời gian tăng nhanh hơn input rất nhiều — dấu hiệu của một
-  thuật toán O(n²) vô tình được đưa vào.
+  thuật toán O(n²) vô tình được đưa vào. Tỉ lệ này được đo tối đa ba lần và giữ lại giá
+  trị thấp nhất, vì runner bận chỉ có thể làm nó trông tệ hơn.
 - **Độ lệch so với baseline đã ghi**: `make perf-baseline` ghi `out/perf/baseline.txt`
   và `out/perf/platform-baseline.txt` trên một máy đang rảnh; các lần chạy sau báo mức
   chênh lệch theo từng dòng và fail khi vượt 25 %. Các file này mô tả riêng một máy nên
