@@ -171,6 +171,7 @@ int main() {
 
     std::printf("--- media: PCM ring (drop-oldest, silence padding) ---\n");
     RunPcmRingTests();
+    RunAudioMuteTests();
 
     std::printf("--- source list for authenticated viewers (LIST_SOURCES + PING) ---\n");
     RunSourceListResponderTests();

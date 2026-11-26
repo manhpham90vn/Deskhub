@@ -39,7 +39,7 @@ Recommends: xdg-desktop-portal, va-driver-all
 Provides: deskhub-cli
 Replaces: deskhub-cli
 Conflicts: deskhub-cli
-Homepage: https://github.com/manhpham90vn/Deskhub
+Homepage: https://github.com/Bitfaring/Deskhub
 Description: LAN remote desktop - share and control screens
  Deskhub shares the screen of one machine and controls it from another
  over UDP on the local network.

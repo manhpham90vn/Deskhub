@@ -118,6 +118,10 @@ final class ScreenSession: @unchecked Sendable {
         dh_screen_clip_offer(handle, text)
     }
 
+    func setAudioMuted(_ muted: Bool) {
+        dh_screen_set_audio_muted(handle, muted)
+    }
+
     func takeClipboard() -> String? {
         let text = DeskhubClient.buffered(33000) { dh_screen_clip_take(handle, $0, $1) }
         return text.isEmpty ? nil : text

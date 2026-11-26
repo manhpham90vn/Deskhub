@@ -21,7 +21,7 @@ Deskhub は remote desktop のアプリケーションであり、利用者の�
 
 - **開発者:** Manh Pham
 - **連絡先:** manhpv151090@gmail.com
-- **プロジェクトページ:** https://github.com/manhpham90vn/Deskhub
+- **プロジェクトページ:** https://github.com/Bitfaring/Deskhub
 
 ## 2. 要旨
 
@@ -194,7 +194,7 @@ App は上記以外の permission を要求しない。将来のバージョン�
   しない。デバイス名は転送中 encrypt されるが host に表示され、接続要求にも表示され、
   コピーする public key にも埋め込まれるため、この項目に機微な情報を入力しないこと。Deskhub を Internet に直接公開しないこと。完全な threat model、保護
   される範囲、保護されない範囲、脆弱性の報告方法は
-  [`SECURITY.ja.md`](https://github.com/manhpham90vn/Deskhub/blob/main/SECURITY.ja.md)
+  [`SECURITY.ja.md`](https://github.com/Bitfaring/Deskhub/blob/main/SECURITY.ja.md)
   に記載している。
 - 旧バージョンが残したデータは変換されない。以前の `paired_devices` の一覧、以前の
   有効化の印、以前の `auth_salt` ファイルは削除され、古い `ui-settings.txt` にある
@@ -256,7 +256,7 @@ Deskhub は開発者にデータを送信しない。VPN 経由で接続する�
 本ソフトウェアのデータの取り扱いが変更される場合（たとえば将来のバージョンが任意の
 crash reporting を追加する場合）、本ポリシーはその変更が**出荷される前に**更新し、
 新しい発効日と下記の変更履歴を付す。最新版は常に次の場所で公開する。
-https://github.com/manhpham90vn/Deskhub/blob/main/PRIVACY.md
+https://github.com/Bitfaring/Deskhub/blob/main/PRIVACY.md
 
 | バージョン | 日付 | 変更内容 |
 |---|---|---|
@@ -295,4 +295,4 @@ https://github.com/manhpham90vn/Deskhub/blob/main/PRIVACY.md
 本ポリシーまたは Deskhub のプライバシーに関する問い合わせ:
 
 - **メール:** manhpv151090@gmail.com
-- **Issues:** https://github.com/manhpham90vn/Deskhub/issues
+- **Issues:** https://github.com/Bitfaring/Deskhub/issues

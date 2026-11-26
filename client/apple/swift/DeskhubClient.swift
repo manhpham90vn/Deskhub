@@ -56,6 +56,10 @@ nonisolated enum DeskhubClient {
         String(cString: dh_cursor_button_label(hidden))
     }
 
+    static func soundButtonLabel(muted: Bool) -> String {
+        String(cString: dh_sound_button_label(muted))
+    }
+
     static func viewOnlySubtitle(statusLine: String) -> String {
         buffered(320) { dh_view_only_subtitle(statusLine, $0, $1) }
     }

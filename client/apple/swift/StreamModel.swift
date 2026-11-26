@@ -17,6 +17,10 @@ final class StreamModel {
     var failedToStart = false
 
     var cursorHidden = true
+    let playsSound = dh_play_audio()
+    var soundMuted = false {
+        didSet { session?.setAudioMuted(soundMuted) }
+    }
 
     private var session: ScreenSession?
     private var layer: AVSampleBufferDisplayLayer?
@@ -47,6 +51,7 @@ final class StreamModel {
         failedToStart = false
         session = opened
         opened.setLayer(layer)
+        opened.setAudioMuted(soundMuted)
         refresh()
         startPhasePolling()
     }

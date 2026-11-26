@@ -105,6 +105,12 @@ bool ViewerWindow::Build(const NetAddr& server, uint8_t sourceId, const std::str
         g_signal_connect(cursorButton_, "clicked", G_CALLBACK(OnCursorClicked), this);
         gtk_header_bar_pack_end(GTK_HEADER_BAR(header), cursorButton_);
     }
+    const bool playsSound = deskhubp::LoadUiSettings().playAudio;
+    if (playsSound) {
+        soundButton_ = gtk_button_new_with_label(sound_.ButtonLabel());
+        g_signal_connect(soundButton_, "clicked", G_CALLBACK(OnSoundClicked), this);
+        gtk_header_bar_pack_end(GTK_HEADER_BAR(header), soundButton_);
+    }
     linkLabel_ = gtk_label_new("");
     gtk_header_bar_pack_end(GTK_HEADER_BAR(header), linkLabel_);
     gtk_window_set_titlebar(GTK_WINDOW(window_), header);
@@ -146,7 +152,7 @@ bool ViewerWindow::Build(const NetAddr& server, uint8_t sourceId, const std::str
     cfg.screenW = sw;
     cfg.screenH = sh;
     cfg.displayName = deskhubp::SessionDeviceName();
-    cfg.wantsAudio = deskhubp::LoadUiSettings().playAudio;
+    cfg.wantsAudio = playsSound;
     cfg.onStatus = [this](const char* status) {
         std::string line = status ? status : "";
         PostToMain([line = std::move(line)](ViewerWindow& v) {
@@ -362,6 +368,12 @@ void ViewerWindow::ToggleLocalCursor() {
     ShowLocalCursor(!cursor_.HidesOverVideo(pointerOverVideo_));
 }
 
+void ViewerWindow::ToggleSound() {
+    sound_.Toggle();
+    loop_.SetAudioMuted(sound_.muted());
+    if (soundButton_) gtk_button_set_label(GTK_BUTTON(soundButton_), sound_.ButtonLabel());
+}
+
 gboolean ViewerWindow::OnKey(GtkWidget*, GdkEventKey* e, gpointer user) {
     auto* self = static_cast<ViewerWindow*>(user);
     const bool down = e->type == GDK_KEY_PRESS;
@@ -456,6 +468,10 @@ void ViewerWindow::OnFullScreenClicked(GtkWidget*, gpointer user) {
 
 void ViewerWindow::OnCursorClicked(GtkWidget*, gpointer user) {
     static_cast<ViewerWindow*>(user)->ToggleLocalCursor();
+}
+
+void ViewerWindow::OnSoundClicked(GtkWidget*, gpointer user) {
+    static_cast<ViewerWindow*>(user)->ToggleSound();
 }
 
 gboolean ViewerWindow::OnWindowState(GtkWidget*, GdkEventWindowState* e, gpointer user) {

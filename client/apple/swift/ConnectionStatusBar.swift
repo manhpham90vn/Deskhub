@@ -3,6 +3,7 @@ import SwiftUI
 struct ConnectionStatusBar: View {
     let model: StreamModel
     let onToggleCursor: () -> Void
+    let onToggleSound: () -> Void
     let onFullScreen: () -> Void
 
     var body: some View {
@@ -13,6 +14,12 @@ struct ConnectionStatusBar: View {
                 Text(DeskhubClient.string(DHStrLinkReattaching))
             }
             Spacer(minLength: 12)
+            if model.playsSound {
+                Button(
+                    DeskhubClient.soundButtonLabel(muted: model.soundMuted),
+                    action: onToggleSound
+                )
+            }
             if model.control {
                 Button(
                     DeskhubClient.cursorButtonLabel(hidden: model.cursorHidden),

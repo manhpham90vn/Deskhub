@@ -399,7 +399,7 @@ token 只会被 client 发送给码中 fingerprint 所指的那台机器；随�
 
 - **邮件：** manhpv151090@gmail.com —— 请在标题中注明 `[Deskhub security]`。
 - **或者：** 在 GitHub 上创建[非公开的 security
-  advisory](https://github.com/manhpham90vn/Deskhub/security/advisories/new)。
+  advisory](https://github.com/Bitfaring/Deskhub/security/advisories/new)。
 
 请注明运行环境（OS、标题栏或 [`VERSION`](VERSION) 中的 Deskhub 版本）、执行的操作，以及
 观察到的结果。提供 proof of concept 会很有帮助。
@@ -416,7 +416,7 @@ release notes 的致谢。
 
 ## 支持的版本
 
-仅支持 [Releases 页面](https://github.com/manhpham90vn/Deskhub/releases)上的最新
+仅支持 [Releases 页面](https://github.com/Bitfaring/Deskhub/releases)上的最新
 release。修复随新的 release 发布，不向旧版本 backport。
 
 ## 适用范围

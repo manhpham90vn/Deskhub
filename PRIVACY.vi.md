@@ -21,7 +21,7 @@ Phần mềm do một lập trình viên cá nhân phát triển và phát hành
 
 - **Lập trình viên:** Manh Pham
 - **Liên hệ:** manhpv151090@gmail.com
-- **Trang dự án:** https://github.com/manhpham90vn/Deskhub
+- **Trang dự án:** https://github.com/Bitfaring/Deskhub
 
 ## 2. Tóm tắt
 
@@ -198,7 +198,7 @@ nhật.
   không nên đặt thông tin nhạy cảm vào trường này. Không phơi Deskhub trực tiếp ra
   Internet. Threat model đầy đủ, gồm phạm vi được bảo vệ, phạm vi không được bảo vệ và
   cách báo lỗ hổng, nằm trong
-  [`SECURITY.vi.md`](https://github.com/manhpham90vn/Deskhub/blob/main/SECURITY.vi.md).
+  [`SECURITY.vi.md`](https://github.com/Bitfaring/Deskhub/blob/main/SECURITY.vi.md).
 - Dữ liệu do các phiên bản trước để lại không được chuyển đổi: danh sách `paired_devices`
   cũ, dấu kích hoạt cũ và file `auth_salt` cũ bị xoá, còn dòng passcode trong một
   `ui-settings.txt` cũ bị gỡ ở lần đầu file được nạp. Một file
@@ -258,7 +258,7 @@ giữa các thiết bị của bạn trên network đó, như mô tả ở mục
 Nếu cách Phần mềm xử lý dữ liệu thay đổi (ví dụ một phiên bản trong tương lai bổ sung
 crash reporting tuỳ chọn), chính sách này sẽ được cập nhật **trước khi** thay đổi được
 phát hành, kèm một ngày hiệu lực mới và một mục changelog bên dưới. Phiên bản hiện hành
-luôn được công bố tại: https://github.com/manhpham90vn/Deskhub/blob/main/PRIVACY.md
+luôn được công bố tại: https://github.com/Bitfaring/Deskhub/blob/main/PRIVACY.md
 
 | Phiên bản | Ngày | Nội dung thay đổi |
 |---|---|---|
@@ -297,4 +297,4 @@ luôn được công bố tại: https://github.com/manhpham90vn/Deskhub/blob/ma
 Với mọi câu hỏi về chính sách này hoặc về quyền riêng tư trong Deskhub:
 
 - **Email:** manhpv151090@gmail.com
-- **Issues:** https://github.com/manhpham90vn/Deskhub/issues
+- **Issues:** https://github.com/Bitfaring/Deskhub/issues

@@ -6,7 +6,7 @@
 checkout する必要はない。自分でコンパイルする場合は [`BUILD.ja.md`](BUILD.ja.md) を参照。
 
 デスクトップのインストーラーは
-[Releases ページ](https://github.com/manhpham90vn/Deskhub/releases) から入手できる。
+[Releases ページ](https://github.com/Bitfaring/Deskhub/releases) から入手できる。
 Android 版は Google Play で、iOS の beta は TestFlight で配布している。
 
 本書は [`INSTALL.md`](INSTALL.md) の翻訳。食い違いがある場合は英語版が正文。
@@ -89,7 +89,7 @@ Deskhub には macOS 14 Sonoma 以降が必要である。
 Homebrew からもインストールでき、以後は `brew upgrade` で最新に保たれる。
 
 ```bash
-brew install --cask manhpham90vn/tap/deskhub
+brew install --cask bitfaring/tap/deskhub
 ```
 
 画面を host するには macOS の permission が 2 つ必要である。いずれも app の
@@ -156,8 +156,8 @@ Debian 12 以降である。
 
 ```bash
 sudo install -d /etc/apt/keyrings
-curl -fsSL https://manhpham90vn.github.io/Deskhub/apt/deskhub.gpg | sudo tee /etc/apt/keyrings/deskhub.gpg >/dev/null
-echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/deskhub.gpg] https://manhpham90vn.github.io/Deskhub/apt stable main" \
+curl -fsSL https://bitfaring.github.io/Deskhub/apt/deskhub.gpg | sudo tee /etc/apt/keyrings/deskhub.gpg >/dev/null
+echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/deskhub.gpg] https://bitfaring.github.io/Deskhub/apt stable main" \
   | sudo tee /etc/apt/sources.list.d/deskhub.list
 sudo apt update && sudo apt install deskhub
 ```
@@ -227,7 +227,7 @@ mouse と keyboard はここから inject される。deb と rpm は udev rule 
 デスクトップの再ログインも必要ない。
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/manhpham90vn/Deskhub/main/scripts/setup-uinput.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/Bitfaring/Deskhub/main/scripts/setup-uinput.sh | sudo bash
 ```
 
 sudo に渡す前に内容を確認したい場合は、先に
@@ -616,5 +616,5 @@ host は信頼されたままである。変わるのはデバイスがサイン
 - **Linux: ポインタが動かない** —— 要件 3 の `/dev/uinput` rule が導入されていない。
 - **macOS: 画面が黒い、または input が効かない** —— Settings ページで Screen Recording
   と Accessibility を確認する。
-- **その他の場合** —— [issue](https://github.com/manhpham90vn/Deskhub/issues) を作成し、
+- **その他の場合** —— [issue](https://github.com/Bitfaring/Deskhub/issues) を作成し、
   端末の機種、OS のバージョン、Host または Client ページの status 行の内容を添えてほしい。

@@ -50,12 +50,12 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
 <body>
 <main>
 <h1>Deskhub apt repository</h1>
-<p class="muted">Signed packages of <a href="https://github.com/manhpham90vn/Deskhub">Deskhub</a>, the LAN remote desktop, for Ubuntu 22.04+ and Debian 12+ on amd64.</p>
+<p class="muted">Signed packages of <a href="https://github.com/Bitfaring/Deskhub">Deskhub</a>, the LAN remote desktop, for Ubuntu 22.04+ and Debian 12+ on amd64.</p>
 
 <h2>Install</h2>
 <pre>sudo install -d /etc/apt/keyrings
-curl -fsSL https://manhpham90vn.github.io/Deskhub/apt/deskhub.gpg | sudo tee /etc/apt/keyrings/deskhub.gpg &gt;/dev/null
-echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/deskhub.gpg] https://manhpham90vn.github.io/Deskhub/apt stable main" \
+curl -fsSL https://bitfaring.github.io/Deskhub/apt/deskhub.gpg | sudo tee /etc/apt/keyrings/deskhub.gpg &gt;/dev/null
+echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/deskhub.gpg] https://bitfaring.github.io/Deskhub/apt stable main" \
   | sudo tee /etc/apt/sources.list.d/deskhub.list
 sudo apt update &amp;&amp; sudo apt install deskhub</pre>
 <p>The package installs both the desktop app and the <code>deskhub-cli</code> command in <code>/usr/bin</code>. Later releases arrive with <code>sudo apt upgrade</code>; an older separate <code>deskhub-cli</code> package is replaced by it.</p>
@@ -67,7 +67,7 @@ sudo rm -f /etc/apt/sources.list.d/deskhub.list /etc/apt/keyrings/deskhub.gpg</p
 <h2>Signing key</h2>
 <p><a href="deskhub.gpg">deskhub.gpg</a> (binary) · <a href="deskhub.asc">deskhub.asc</a> (armored) — fingerprint <code>@FINGERPRINT@</code></p>
 
-<p class="muted">Every platform and the full guide: <a href="https://github.com/manhpham90vn/Deskhub/blob/main/docs/INSTALL.md">INSTALL.md</a></p>
+<p class="muted">Every platform and the full guide: <a href="https://github.com/Bitfaring/Deskhub/blob/main/docs/INSTALL.md">INSTALL.md</a></p>
 </main>
 </body>
 </html>

@@ -9,7 +9,7 @@ cài app để sử dụng, hãy bắt đầu từ [`INSTALL.vi.md`](INSTALL.vi.
 chuẩn.
 
 ```bash
-git clone --recurse-submodules https://github.com/manhpham90vn/Deskhub.git
+git clone --recurse-submodules https://github.com/Bitfaring/Deskhub.git
 cd Deskhub
 make bootstrap        # một lần: toolchain và dependency cho OS hiện tại
 make test             # build và chạy core suite ở chế độ offline
@@ -373,12 +373,12 @@ một trong các script này — chạy tay: `gh workflow run publish-packages.y
 
 | Job | Publish | Secret trong environment `stg` |
 | --- | --- | --- |
-| `homebrew` | `Casks/deskhub.rb` trong `manhpham90vn/homebrew-tap`, sinh từ `packaging/homebrew/deskhub.rb` | `HOMEBREW_TAP_TOKEN` — fine-grained PAT, Contents: write trên tap |
+| `homebrew` | `Casks/deskhub.rb` trong `Bitfaring/homebrew-tap`, sinh từ `packaging/homebrew/deskhub.rb` | `HOMEBREW_TAP_TOKEN` — fine-grained PAT, Contents: write trên tap |
 | `build-apt-repo` → `deploy-apt-repo` | apt repository đã ký, chứa deb của ba release gần nhất, trên GitHub Pages tại `/apt` (`scripts/build-apt-repo.sh`) | `APT_GPG_PRIVATE_KEY`, `APT_GPG_PASSPHRASE` |
 
 Mỗi job cần thiết lập một lần trước tag đầu tiên chạy nó:
 
-- **Homebrew** — tạo repository public `manhpham90vn/homebrew-tap`; job sẽ tự điền nội dung.
+- **Homebrew** — tạo repository public `Bitfaring/homebrew-tap`; job sẽ tự điền nội dung.
 - **apt** — tạo signing key một lần, lưu file đó làm `APT_GPG_PRIVATE_KEY` và giữ một bản
   backup offline. Mọi người dùng đều trust key này: thay key sẽ làm hỏng `apt update` của họ.
 
@@ -447,4 +447,4 @@ request, CI thực hiện:
   lại giữa bản build tại máy và bản tải về** — chạy `make reset-macos-permissions`, rồi cấp
   lại quyền cho đúng một bản sao mà bạn giữ lại.
 
-Báo lỗi và đặt câu hỏi: [issues](https://github.com/manhpham90vn/Deskhub/issues).
+Báo lỗi và đặt câu hỏi: [issues](https://github.com/Bitfaring/Deskhub/issues).

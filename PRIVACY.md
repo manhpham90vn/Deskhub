@@ -23,7 +23,7 @@ The Software is developed and published by an individual developer:
 
 - **Developer:** Manh Pham
 - **Contact:** manhpv151090@gmail.com
-- **Project page:** https://github.com/manhpham90vn/Deskhub
+- **Project page:** https://github.com/Bitfaring/Deskhub
 
 ## 2. The short version
 
@@ -204,7 +204,7 @@ new permission, it will be requested in-context and this policy will be updated.
   you copy, so do not put anything sensitive in it. Never
   expose Deskhub to the Internet directly. The full threat model — what is
   protected, what is not, and how to report a vulnerability — is in
-  [`SECURITY.md`](https://github.com/manhpham90vn/Deskhub/blob/main/SECURITY.md).
+  [`SECURITY.md`](https://github.com/Bitfaring/Deskhub/blob/main/SECURITY.md).
 - Data left by earlier versions is not converted: the old `paired_devices` list, the
   old activation marker and the old `auth_salt` file are deleted, and a passcode line
   in an old `ui-settings.txt` is removed the first time the file is loaded. An
@@ -265,7 +265,7 @@ If the Software's data practices ever change (for example, if a future
 version adds optional crash reporting), this policy will be updated **before**
 the change ships, with a new effective date and a changelog entry below. The
 current version is always published at:
-https://github.com/manhpham90vn/Deskhub/blob/main/PRIVACY.md
+https://github.com/Bitfaring/Deskhub/blob/main/PRIVACY.md
 
 | Version | Date | Change |
 |---|---|---|
@@ -304,4 +304,4 @@ https://github.com/manhpham90vn/Deskhub/blob/main/PRIVACY.md
 For any question about this policy or about privacy in Deskhub:
 
 - **Email:** manhpv151090@gmail.com
-- **Issues:** https://github.com/manhpham90vn/Deskhub/issues
+- **Issues:** https://github.com/Bitfaring/Deskhub/issues

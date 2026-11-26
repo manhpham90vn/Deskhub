@@ -12,6 +12,7 @@
 #include <mutex>
 
 #include "deskhub/input/LocalCursor.h"
+#include "deskhub/media/AudioMute.h"
 #include "deskhub/net/TrustStore.h"
 #include "deskhub/media/ViewFit.h"
 #include "deskhub/media/ViewerTitle.h"
@@ -38,6 +39,7 @@ constexpr UINT kTimerClipboard = 2;
 
 constexpr int kCursorButtonId = 101;
 constexpr int kFullScreenButtonId = 102;
+constexpr int kSoundButtonId = 103;
 constexpr int kBarHeightDip = 36;
 constexpr int kBarPaddingDip = 6;
 constexpr int kDefaultDpi = 96;
@@ -94,6 +96,7 @@ struct ViewerFrame {
     HWND video = nullptr;
     HWND cursorButton = nullptr;
     HWND fullScreenButton = nullptr;
+    HWND soundButton = nullptr;
     DHScreen* session = nullptr;
     deskhub::OpenViewerCount* openCount = nullptr;
     bool viewOnly = false;
@@ -102,6 +105,7 @@ struct ViewerFrame {
     std::wstring shownTitle;
     uint32_t fittedW = 0, fittedH = 0;
     deskhub::LocalCursorState cursor;
+    deskhub::media::AudioMuteState sound;
     bool fullScreen = false;
     WINDOWPLACEMENT windowed{sizeof(WINDOWPLACEMENT)};
 
@@ -136,7 +140,7 @@ struct ViewerFrame {
         const int pad = Dip(kBarPaddingDip);
         const int bh = Dip(kBarHeightDip) - 2 * pad;
         int right = clientWidth - pad;
-        for (HWND button : {fullScreenButton, cursorButton}) {
+        for (HWND button : {fullScreenButton, cursorButton, soundButton}) {
             if (!button) continue;
             const int bw = FlatButtonWidth(button);
             ShowWindow(button, show);
@@ -192,6 +196,17 @@ struct ViewerFrame {
         POINT p{};
         if (GetCursorPos(&p) && WindowFromPoint(p) == video)
             SetCursor(HidesCursorOverVideo() ? nullptr : LoadCursorW(nullptr, IDC_ARROW));
+        SetFocus(video);
+    }
+
+    void ToggleSound() {
+        sound.Toggle();
+        dh_screen_set_audio_muted(session, sound.muted());
+        if (soundButton) {
+            SetWindowTextW(soundButton, FromUtf8(sound.ButtonLabel()).c_str());
+            Relayout();
+            InvalidateRect(hwnd, nullptr, TRUE);
+        }
         SetFocus(video);
     }
 
@@ -270,6 +285,7 @@ LRESULT CALLBACK FrameProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         case WM_COMMAND:
             if (f && LOWORD(wp) == kFullScreenButtonId) f->ToggleFullScreen();
             if (f && LOWORD(wp) == kCursorButtonId) f->ToggleLocalCursor();
+            if (f && LOWORD(wp) == kSoundButtonId) f->ToggleSound();
             return 0;
         case WM_TIMER:
             if (f && wp == kTimerHint) f->UpdateTitle();
@@ -363,6 +379,9 @@ std::unique_ptr<ViewerFrame> OpenFrame(const std::string& addr, uint8_t sourceId
     if (control)
         f->cursorButton = CreateFlatButton(
             f->hwnd, FromUtf8(f->cursor.ButtonLabel()).c_str(), kCursorButtonId);
+    if (deskhubp::LoadUiSettings().playAudio)
+        f->soundButton = CreateFlatButton(
+            f->hwnd, FromUtf8(f->sound.ButtonLabel()).c_str(), kSoundButtonId);
 
     DHScreenCallbacks callbacks{};
     callbacks.user = f.get();

@@ -68,14 +68,14 @@ jobs:
 
           ---
 
-          📦 **Installing** — every platform, one page: [INSTALL.md](https://github.com/manhpham90vn/Deskhub/blob/main/docs/INSTALL.md).
+          📦 **Installing** — every platform, one page: [INSTALL.md](https://github.com/Bitfaring/Deskhub/blob/main/docs/INSTALL.md).
           Every desktop package carries `deskhub-cli`, the same client without a window for a script or an SSH session.
           The macOS dmg is attached by its own job and may show up a few minutes later.
           Android is on [Google Play](https://play.google.com/store/apps/details?id=com.manhpham.deskhub) and iOS on [TestFlight](https://testflight.apple.com/join/7qY7wgpd); the apk is no longer attached here.
 
           🔒 **Before you share a screen** — sessions are encrypted (QUIC/TLS) and a host admits only the client keys
           you allow, but it is still a service on an open port: use a network you trust or a VPN, and never port-forward
-          UDP 47777. Full threat model in [SECURITY.md](https://github.com/manhpham90vn/Deskhub/blob/main/SECURITY.md).
+          UDP 47777. Full threat model in [SECURITY.md](https://github.com/Bitfaring/Deskhub/blob/main/SECURITY.md).
           EOF
 
       - name: Create release

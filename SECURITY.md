@@ -483,7 +483,7 @@ in their spare time. Treat the current state as the state, not the plan.
 Please report security issues **privately** — not as a public GitHub issue.
 
 - **Email:** manhpv151090@gmail.com — put `[Deskhub security]` in the subject.
-- **Or:** open a [private security advisory](https://github.com/manhpham90vn/Deskhub/security/advisories/new)
+- **Or:** open a [private security advisory](https://github.com/Bitfaring/Deskhub/security/advisories/new)
   on GitHub.
 
 Please include what you were running (OS, Deskhub version from the title bar or
@@ -504,7 +504,7 @@ mitigation.
 
 ## Supported versions
 
-Only the most recent release on the [Releases page](https://github.com/manhpham90vn/Deskhub/releases)
+Only the most recent release on the [Releases page](https://github.com/Bitfaring/Deskhub/releases)
 is supported. Fixes ship in a new release; there are no backports to older versions.
 
 ## Scope

@@ -26,7 +26,7 @@ deskhub_release_asset() {
     local tag=$1 name=$2 dir=$3
     mkdir -p "$dir"
     curl -fsSL --retry 3 --retry-delay 10 --retry-all-errors -o "$dir/$name" \
-        "https://github.com/manhpham90vn/Deskhub/releases/download/$tag/$name"
+        "https://github.com/Bitfaring/Deskhub/releases/download/$tag/$name"
 }
 
 deskhub_tools_venv_dir() {

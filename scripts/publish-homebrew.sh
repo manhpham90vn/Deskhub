@@ -5,7 +5,7 @@ source scripts/tools.sh
 
 TAG=${1:?usage: publish-homebrew.sh vX.Y.Z}
 VERSION=${TAG#v}
-TAP_REPO=${TAP_REPO:-manhpham90vn/homebrew-tap}
+TAP_REPO=${TAP_REPO:-Bitfaring/homebrew-tap}
 TAP_BRANCH=${TAP_BRANCH:-main}
 
 : "${HOMEBREW_TAP_TOKEN:?publish-homebrew.sh: HOMEBREW_TAP_TOKEN must hold a token with contents write access to $TAP_REPO.}"

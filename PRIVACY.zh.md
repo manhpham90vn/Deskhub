@@ -19,7 +19,7 @@ Deskhub 是一款 remote desktop 应用：它将你某台电脑的屏幕 stream 
 
 - **开发者：** Manh Pham
 - **联系方式：** manhpv151090@gmail.com
-- **项目页面：** https://github.com/manhpham90vn/Deskhub
+- **项目页面：** https://github.com/Bitfaring/Deskhub
 
 ## 2. 概要
 
@@ -175,7 +175,7 @@ App 不申请上表所列之外的任何 permission。若将来的版本需要�
   public key 中，因此不应在其中填入敏感信息。
   请勿将 Deskhub 直接暴露到 Internet。完整的 threat model，包括保护范围、不受保护的
   范围以及漏洞报告方式，见
-  [`SECURITY.zh.md`](https://github.com/manhpham90vn/Deskhub/blob/main/SECURITY.zh.md)。
+  [`SECURITY.zh.md`](https://github.com/Bitfaring/Deskhub/blob/main/SECURITY.zh.md)。
 - 早期版本遗留的数据不会被转换：旧的 `paired_devices` 列表、旧的启用标记以及旧的
   `auth_salt` 文件会被删除，旧 `ui-settings.txt` 中的 passcode 行会在首次加载该文件时被
   移除。无法读取的 `authorized_keys` 或 `known_hosts` 文件在其无法读取
@@ -226,7 +226,7 @@ Deskhub 不向开发者发送数据。如果通过 VPN 连接，session 数据�
 
 若本软件的数据处理方式发生变化（例如未来版本增加可选的 crash reporting），本政策将在
 该变更**发布之前**更新，并附新的生效日期与下方的变更记录。当前版本始终发布于：
-https://github.com/manhpham90vn/Deskhub/blob/main/PRIVACY.md
+https://github.com/Bitfaring/Deskhub/blob/main/PRIVACY.md
 
 | 版本 | 日期 | 变更内容 |
 |---|---|---|
@@ -265,4 +265,4 @@ https://github.com/manhpham90vn/Deskhub/blob/main/PRIVACY.md
 关于本政策或 Deskhub 隐私方面的任何问题：
 
 - **邮件：** manhpv151090@gmail.com
-- **Issues：** https://github.com/manhpham90vn/Deskhub/issues
+- **Issues：** https://github.com/Bitfaring/Deskhub/issues

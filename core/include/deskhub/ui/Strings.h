@@ -13,7 +13,7 @@
 namespace deskhub::ui {
 
 inline constexpr const char* kAppVersion = DESKHUB_VERSION;
-inline constexpr const char* kProjectUrl = "https://github.com/manhpham90vn/Deskhub";
+inline constexpr const char* kProjectUrl = "https://github.com/Bitfaring/Deskhub";
 inline constexpr const char* kProjectLinkLabel = "GitHub";
 inline constexpr const char* kAppTitle = "Deskhub - stream & remotely control a machine";
 inline constexpr const char* kHostIpIntro =
@@ -40,6 +40,8 @@ inline constexpr const char* kDisconnectButton = "Disconnect";
 inline constexpr const char* kFullScreenButton = "Full screen (F11)";
 inline constexpr const char* kShowMyCursorButton = "Show my cursor (F9)";
 inline constexpr const char* kHideMyCursorButton = "Hide my cursor (F9)";
+inline constexpr const char* kMuteSoundButton = "Mute sound";
+inline constexpr const char* kUnmuteSoundButton = "Unmute sound";
 inline constexpr const char* kScreenRecordingRequired =
     "Screen Recording permission is required. Grant it in System Settings, then quit and "
     "reopen Deskhub.";

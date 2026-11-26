@@ -34,7 +34,7 @@ Version: $VERSION
 Release: 1
 Summary: LAN remote desktop - share and control screens
 License: MIT
-URL: https://github.com/manhpham90vn/Deskhub
+URL: https://github.com/Bitfaring/Deskhub
 Recommends: xdg-desktop-portal
 Provides: deskhub-cli = $VERSION
 Obsoletes: deskhub-cli < $VERSION

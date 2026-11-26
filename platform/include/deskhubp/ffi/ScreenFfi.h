@@ -54,6 +54,8 @@ void dh_screen_mouse_wheel_notches(DHScreen* s, int32_t notches);
 void dh_screen_clip_offer(DHScreen* s, const char* text);
 int dh_screen_clip_take(DHScreen* s, char* out, int capacity);
 
+void dh_screen_set_audio_muted(DHScreen* s, bool muted);
+
 typedef struct {
     DHPhase phase;
     uint32_t videoWidth;

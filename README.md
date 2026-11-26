@@ -9,15 +9,15 @@
 **Deskhub lets you view and control your computer from another device. It is open source,
 runs natively across five platforms, and is built for responsive work and play.**
 
-[![Release](https://img.shields.io/github/v/release/manhpham90vn/Deskhub?label=release&color=2563eb)](https://github.com/manhpham90vn/Deskhub/releases)
-[![License: MIT](https://img.shields.io/github/license/manhpham90vn/Deskhub?color=2563eb)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/Bitfaring/Deskhub?label=release&color=2563eb)](https://github.com/Bitfaring/Deskhub/releases)
+[![License: MIT](https://img.shields.io/github/license/Bitfaring/Deskhub?color=2563eb)](LICENSE)
 [![C++20](https://img.shields.io/badge/C%2B%2B-20-2563eb)](CMakeLists.txt)
 [![Platforms](https://img.shields.io/badge/runs%20on-Windows%20·%20macOS%20·%20Linux%20·%20Android%20·%20iOS-2563eb)](#platforms)
 
-[![ci](https://github.com/manhpham90vn/Deskhub/actions/workflows/ci.yml/badge.svg)](https://github.com/manhpham90vn/Deskhub/actions/workflows/ci.yml)
-[![lint](https://github.com/manhpham90vn/Deskhub/actions/workflows/lint.yml/badge.svg)](https://github.com/manhpham90vn/Deskhub/actions/workflows/lint.yml)
-[![codeql](https://github.com/manhpham90vn/Deskhub/actions/workflows/codeql.yml/badge.svg)](https://github.com/manhpham90vn/Deskhub/actions/workflows/codeql.yml)
-[![nightly](https://github.com/manhpham90vn/Deskhub/actions/workflows/nightly.yml/badge.svg)](https://github.com/manhpham90vn/Deskhub/actions/workflows/nightly.yml)
+[![ci](https://github.com/Bitfaring/Deskhub/actions/workflows/ci.yml/badge.svg)](https://github.com/Bitfaring/Deskhub/actions/workflows/ci.yml)
+[![lint](https://github.com/Bitfaring/Deskhub/actions/workflows/lint.yml/badge.svg)](https://github.com/Bitfaring/Deskhub/actions/workflows/lint.yml)
+[![codeql](https://github.com/Bitfaring/Deskhub/actions/workflows/codeql.yml/badge.svg)](https://github.com/Bitfaring/Deskhub/actions/workflows/codeql.yml)
+[![nightly](https://github.com/Bitfaring/Deskhub/actions/workflows/nightly.yml/badge.svg)](https://github.com/Bitfaring/Deskhub/actions/workflows/nightly.yml)
 
 **[Install](#install)** · [Build from source](docs/BUILD.md) ·
 [Spec](docs/SPECIFICATION.md) · [Architecture](docs/ARCHITECTURE.md) ·
@@ -41,10 +41,10 @@ runs natively across five platforms, and is built for responsive work and play.*
 ## 📦 Install
 
 Install through a package manager on macOS, Ubuntu, Debian or Mint; on Windows, download
-the setup file from [Releases](https://github.com/manhpham90vn/Deskhub/releases):
+the setup file from [Releases](https://github.com/Bitfaring/Deskhub/releases):
 
 ```bash
-brew install --cask manhpham90vn/tap/deskhub     # macOS · app + deskhub-cli
+brew install --cask bitfaring/tap/deskhub     # macOS · app + deskhub-cli
 ```
 
 On Ubuntu / Debian / Mint, add the apt repository once, then install the one package,
@@ -52,8 +52,8 @@ which carries the app and `deskhub-cli`:
 
 ```bash
 sudo install -d /etc/apt/keyrings
-curl -fsSL https://manhpham90vn.github.io/Deskhub/apt/deskhub.gpg | sudo tee /etc/apt/keyrings/deskhub.gpg >/dev/null
-echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/deskhub.gpg] https://manhpham90vn.github.io/Deskhub/apt stable main" \
+curl -fsSL https://bitfaring.github.io/Deskhub/apt/deskhub.gpg | sudo tee /etc/apt/keyrings/deskhub.gpg >/dev/null
+echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/deskhub.gpg] https://bitfaring.github.io/Deskhub/apt stable main" \
   | sudo tee /etc/apt/sources.list.d/deskhub.list
 sudo apt update
 sudo apt install deskhub       # desktop app + deskhub-cli
@@ -65,7 +65,7 @@ in `/usr/bin`. Windows setup adds Start Menu and Desktop shortcuts and puts its 
 `deskhub-cli` into `PATH`; from the dmg it sits inside the app, at
 `Deskhub.app/Contents/MacOS/deskhub-cli`.
 
-Everything else is on [Releases](https://github.com/manhpham90vn/Deskhub/releases):
+Everything else is on [Releases](https://github.com/Bitfaring/Deskhub/releases):
 
 - **Windows** — `deskhub-v*-windows-setup.exe`, the only form the app comes in, with
   `deskhub-cli` inside
@@ -196,7 +196,7 @@ authoritative one.
 | [`PRIVACY.md`](PRIVACY.md) ([vi](PRIVACY.vi.md) · [zh](PRIVACY.zh.md) · [ja](PRIVACY.ja.md)) | Privacy policy |
 | [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) ([vi](THIRD_PARTY_NOTICES.vi.md) · [zh](THIRD_PARTY_NOTICES.zh.md) · [ja](THIRD_PARTY_NOTICES.ja.md)) | Third-party components and licences |
 
-Bugs and feedback: [issues](https://github.com/manhpham90vn/Deskhub/issues) — include your
+Bugs and feedback: [issues](https://github.com/Bitfaring/Deskhub/issues) — include your
 device model.
 
 <a id="license"></a>

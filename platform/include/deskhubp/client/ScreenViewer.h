@@ -278,6 +278,10 @@ public:
         return player_.running();
     }
 
+    void SetAudioMuted(bool muted) {
+        player_.SetMuted(muted);
+    }
+
 private:
     static constexpr size_t kMaxQueuedFrames = 3;
     static constexpr uint64_t kSlowDecodeMs = 20;
