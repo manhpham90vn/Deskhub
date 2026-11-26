@@ -42,7 +42,7 @@ host は信頼できる network 上に置き、画面や terminal を共有す�
 
 | | |
 |---|---|
-| 開発者へのデータの流出 | 該当するデータは存在しない。サーバ、アカウント、telemetry、データを収集するサードパーティ SDK のいずれもない。[`PRIVACY.ja.md`](PRIVACY.ja.md) を参照。 |
+| 開発者へのデータの流出 | 該当するデータは存在しない。サーバ、アカウント、telemetry、データを収集するサードパーティ SDK のいずれもない。[プライバシーポリシー](https://bitfaring.com/products/deskhub/privacy/ja/) を参照。 |
 | トラフィックの盗聴 | すべての session は QUIC/TLS の内部で動作する。video の frame、キー入力、clipboard のテキスト、terminal のバイト列は 2 台の間で encrypt される。パケットキャプチャから得られるのは通信量と時刻であり、内容ではない。port に到達する未 encrypt の packet は破棄され、client が authenticate するまで host は application レベルで何も —— 共有内容さえも —— 送信しない。 |
 | リモートの viewer との操作の競合 | host を優先する。実際の mouse または keyboard を操作した時点で remote input は停止する。Windows と macOS の host は初期状態でこれを行う。Linux の host がこれを行うのは、Deskhub を実行する利用者が `/dev/input/event*` を読み取れる場合 —— 実際には `input` グループへの所属で、パッケージはこれを付与しない —— に限られる。所属がなければ log にその旨が一度記録され、remote input は一切停止しない。 |
 | キーの押下状態の残留 | リモート側が押している状態のキーは、session の終了時、または viewer が切り替わった時点で自動的に解放される。 |
@@ -134,7 +134,7 @@ host は信頼できる network 上に置き、画面や terminal を共有す�
   その枠は再び開放され、次に到達した `Hello` が使用する。送信元は許可済みの key で
   admission を通過したマシンであればよい。
 - **共有は display 全体を公開する。** 単一のウィンドウではなく、そのモニタ上のすべての
-  通知、ポップアップ、ウィンドウが対象となる。[`PRIVACY.ja.md` §3.4](PRIVACY.ja.md) を
+  通知、ポップアップ、ウィンドウが対象となる。[プライバシーポリシー §3.4](https://bitfaring.com/products/deskhub/privacy/ja/) を
   参照。
 - **host となるスマートフォンやタブレットは端末全体を公開する。** Android と iOS も
   host になれるが、送出されるのは画面全体である。銀行の app、ワンタイムコード、

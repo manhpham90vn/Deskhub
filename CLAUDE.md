@@ -171,7 +171,6 @@ translation that lags behind its English original is a bug.
 | `docs/SPECIFICATION.md` | `docs/SPECIFICATION.{vi,zh,ja}.md` | Feature spec — behaviour only, no implementation detail |
 | `docs/ARCHITECTURE.md` | `docs/ARCHITECTURE.{vi,zh,ja}.md` | How it is built — layers, threads, wire protocol, design decisions |
 | `SECURITY.md` | `SECURITY.{vi,zh,ja}.md` | Threat model, hardening, vulnerability reports |
-| `PRIVACY.md` | `PRIVACY.{vi,zh,ja}.md` | Privacy policy — versioned, with a changelog table |
 | `THIRD_PARTY_NOTICES.md` | `THIRD_PARTY_NOTICES.{vi,zh,ja}.md` | Third-party components and licences |
 
 Rules for these files:
@@ -183,9 +182,12 @@ Rules for these files:
   exists.
 - Cross-language link integrity is not enforced by CI — check relative links resolve
   before you finish.
-- `PRIVACY.md` is a published legal document: any behaviour change that touches what is
-  stored or transmitted needs a new version number, a new effective date, and a changelog
-  row — in all four languages.
+- The privacy policy is a published legal document maintained in the Bitfaring admin
+  (admin.bitfaring.com → Products → Deskhub → Privacy, one version per language) and
+  published at https://bitfaring.com/products/deskhub/privacy/ (`/vi/`, `/zh/`, `/ja/`).
+  There is no copy in this repo. Any behaviour change that touches what is
+  stored or transmitted needs the policy updated there — a new version number, a new
+  effective date and a changelog row, in all four languages — then "Publish website".
 - `CLAUDE.md`, the store listings under `client/android/fastlane/metadata/android/vi/`
   and `client/ios/fastlane/metadata/vi/`, and the working plan `docs/UNATTENDED_PLAN.md`
   (Vietnamese only, deleted once the work it describes ships) are outside this scheme.

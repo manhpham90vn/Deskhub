@@ -39,7 +39,7 @@ or terminal.
 
 | | |
 |---|---|
-| Data reaching the developer | Nothing does. There are no servers, no accounts, no telemetry, no third-party SDKs that collect data. See [`PRIVACY.md`](PRIVACY.md). |
+| Data reaching the developer | Nothing does. There are no servers, no accounts, no telemetry, no third-party SDKs that collect data. See [privacy policy](https://bitfaring.com/products/deskhub/privacy/). |
 | Someone reading your traffic | Every session runs inside QUIC/TLS — video frames, keystrokes, clipboard text and terminal bytes are all encrypted between the two machines. A packet capture yields traffic volume and timing, not content. Unencrypted packets arriving at the port are dropped, and the host sends nothing at the application level — not even what it shares — before a client has authenticated. |
 | A remote viewer fighting you for the machine | "Host wins": the moment you touch the real mouse or keyboard, remote input is paused. Windows and macOS hosts do this out of the box. A Linux host does it only when the user running Deskhub can read `/dev/input/event*` — in practice, membership of the `input` group, which the packages do not grant; without it the log says so once and remote input is never paused. |
 | Keys left stuck down | Any key the remote side is holding is released automatically when the session ends or the viewer switches away. |
@@ -134,7 +134,7 @@ This is the honest list. Nothing below is solved today:
   its slot reopens and the next `Hello` to arrive takes it — from any machine that has
   passed admission with an allowed key.
 - **Sharing exposes the entire display.** Not one window: every notification, popup and
-  window on that monitor. See [`PRIVACY.md` §3.4](PRIVACY.md).
+  window on that monitor. See [privacy policy §3.4](https://bitfaring.com/products/deskhub/privacy/).
 - **A phone or tablet host exposes the whole phone.** Android and iOS can host too, and
   what they stream is the entire screen — banking apps, one-time codes, messages, every
   password you type while sharing. The stream is encrypted like any other session, but

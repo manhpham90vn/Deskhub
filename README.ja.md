@@ -193,7 +193,7 @@ threat model は [`SECURITY.ja.md`](SECURITY.ja.md) を参照。
 | [Specification](docs/SPECIFICATION.ja.md) ([en](docs/SPECIFICATION.md) · [vi](docs/SPECIFICATION.vi.md) · [zh](docs/SPECIFICATION.zh.md)) | Deskhub が何をするか。実装の詳細は扱わない |
 | [Architecture](docs/ARCHITECTURE.ja.md) ([en](docs/ARCHITECTURE.md) · [vi](docs/ARCHITECTURE.vi.md) · [zh](docs/ARCHITECTURE.zh.md)) | layer、thread、wire protocol、設計判断 |
 | [`SECURITY.ja.md`](SECURITY.ja.md) ([en](SECURITY.md) · [vi](SECURITY.vi.md) · [zh](SECURITY.zh.md)) | Threat model と脆弱性の報告方法 |
-| [`PRIVACY.ja.md`](PRIVACY.ja.md) ([en](PRIVACY.md) · [vi](PRIVACY.vi.md) · [zh](PRIVACY.zh.md)) | プライバシーポリシー |
+| [プライバシーポリシー](https://bitfaring.com/products/deskhub/privacy/ja/) ([en](https://bitfaring.com/products/deskhub/privacy/) · [vi](https://bitfaring.com/products/deskhub/privacy/vi/) · [zh](https://bitfaring.com/products/deskhub/privacy/zh/)) | プライバシーポリシー |
 | [`THIRD_PARTY_NOTICES.ja.md`](THIRD_PARTY_NOTICES.ja.md) ([en](THIRD_PARTY_NOTICES.md) · [vi](THIRD_PARTY_NOTICES.vi.md) · [zh](THIRD_PARTY_NOTICES.zh.md)) | サードパーティ製コンポーネントと license |
 
 バグ報告と意見: [issues](https://github.com/Bitfaring/Deskhub/issues) —— 端末の機種名
