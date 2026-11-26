@@ -197,6 +197,26 @@ void dh_set_share_audio(bool on) {
     deskhubp::SaveUiSettings(out);
 }
 
+bool dh_share_terminal(void) {
+    return deskhubp::LoadUiSettings().shareTerminal;
+}
+
+void dh_set_share_terminal(bool on) {
+    ui::UiSettings out = deskhubp::LoadUiSettings();
+    out.shareTerminal = on;
+    deskhubp::SaveUiSettings(out);
+}
+
+bool dh_share_files(void) {
+    return deskhubp::LoadUiSettings().shareFiles;
+}
+
+void dh_set_share_files(bool on) {
+    ui::UiSettings out = deskhubp::LoadUiSettings();
+    out.shareFiles = on;
+    deskhubp::SaveUiSettings(out);
+}
+
 bool dh_play_audio(void) {
     return deskhubp::LoadUiSettings().playAudio;
 }

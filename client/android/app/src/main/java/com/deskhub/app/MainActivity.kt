@@ -1770,17 +1770,19 @@ private fun AddressScreen(
                 NativeClient.setClientControl(it)
             }
 
-            OutlinedButton(
-                onClick = onOpenShell,
-                enabled = authed.terminal,
-                modifier = Modifier.fillMaxWidth(),
-            ) { Text(NativeClient.string(NativeClient.STR_OPEN_SHELL_LABEL)) }
+            if (authed.terminal) {
+                OutlinedButton(
+                    onClick = onOpenShell,
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text(NativeClient.string(NativeClient.STR_OPEN_SHELL_LABEL)) }
+            }
 
-            OutlinedButton(
-                onClick = onOpenFileSend,
-                enabled = authed.files,
-                modifier = Modifier.fillMaxWidth(),
-            ) { Text(NativeClient.string(NativeClient.STR_OPEN_FILES_LABEL)) }
+            if (authed.files) {
+                OutlinedButton(
+                    onClick = onOpenFileSend,
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text(NativeClient.string(NativeClient.STR_OPEN_FILES_LABEL)) }
+            }
         }
 
         if (authed == null) {

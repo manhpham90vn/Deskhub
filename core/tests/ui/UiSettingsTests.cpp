@@ -27,6 +27,8 @@ void TestRoundTrip() {
     s.startHidden = true;
     s.keepAwake = false;
     s.unattended = true;
+    s.shareTerminal = false;
+    s.shareFiles = false;
     Check(ui::ParseUiSettings(ui::SerializeUiSettings(s)) == s,
         "serialize then parse is identity");
 }
@@ -58,6 +60,9 @@ void TestUnattendedHostKeepsOnlySharingChoices() {
     s.startHidden = true;
     s.unattended = true;
     const ui::UiSettings host = ui::UnattendedHostSettings(s);
+    ui::UiSettings unticked = s;
+    unticked.shareTerminal = false;
+    unticked.shareFiles = false;
     Check(host.fps == 30 && host.port == 48000 && !host.allowInput && host.deviceName == "office",
         "frame rate, port, control and the device name carry over");
     Check(!host.shareAudio && !host.playAudio && !host.clipboardSync,
@@ -65,6 +70,10 @@ void TestUnattendedHostKeepsOnlySharingChoices() {
     Check(!host.autostart && !host.autoShare && !host.startHidden,
         "launch choices that belong to the app are not copied");
     Check(host.unattended, "the copy still says the feature is on");
+    Check(!host.shareTerminal && !host.shareFiles,
+        "the host before sign-in offers no shell and takes no files");
+    Check(ui::UnattendedHostSettings(unticked) == host,
+        "so ticking those boxes on the Host tab leaves the copy alone and the service running");
 }
 
 void TestBindIpPersistence() {
@@ -102,6 +111,25 @@ void TestBehaviorTogglesPersist() {
     Check(ui::ParseUiSettings("keep_awake=1").keepAwake, "and on");
     Check(ui::ParseUiSettings("keep_awake=x").keepAwake,
         "junk in keep awake falls back to on");
+}
+
+void TestHostServiceTicksPersist() {
+    std::printf("[settings] the shell and file ticks on the Host tab are remembered...\n");
+    const ui::UiSettings defaults;
+    Check(defaults.shareTerminal && defaults.shareFiles,
+        "a first launch offers the shell and file transfer, as the tab always did");
+    Check(!ui::ParseUiSettings("share_terminal=0").shareTerminal, "an unticked shell stays off");
+    Check(!ui::ParseUiSettings("share_files=0").shareFiles, "unticked file transfer stays off");
+    Check(ui::ParseUiSettings("share_terminal=1\nshare_files=1") == defaults,
+        "and both come back on");
+    Check(ui::ParseUiSettings("share_terminal=x").shareTerminal,
+        "junk falls back to the old default, on");
+    ui::UiSettings s;
+    s.shareFiles = false;
+    const std::string text = ui::SerializeUiSettings(s);
+    Check(text.find("share_terminal=1\n") != std::string::npos &&
+              text.find("share_files=0\n") != std::string::npos,
+        "both keys are written");
 }
 
 void TestDeviceNamePersistence() {
@@ -251,6 +279,7 @@ void RunUiSettingsTests() {
     TestRoundTrip();
     TestBindIpPersistence();
     TestBehaviorTogglesPersist();
+    TestHostServiceTicksPersist();
     TestDeviceNamePersistence();
     TestLegacySettingsAreDiscarded();
     TestRetiredSecretsAreStrippedFromTheFile();

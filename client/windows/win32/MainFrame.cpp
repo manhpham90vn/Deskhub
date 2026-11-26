@@ -661,6 +661,7 @@ private:
     void UpdateHostRows(const std::vector<ShareSourceStatus>& rows);
     wxWindow* BuildHostTable(wxWindow* parent);
     wxScrolledWindow* BuildSourcePicker(wxWindow* parent);
+    void RememberHostServiceTicks();
     wxButton* MakeRowAction(wxWindow* parent, const ui::HostRow& ref);
     wxButton* MakeRowAttach(wxWindow* parent, const ui::HostRow& ref);
     wxButton* MakeRowOpenFolder(wxWindow* parent);
@@ -1086,11 +1087,13 @@ wxScrolledWindow* MainFrame::BuildSourcePicker(wxWindow* parent) {
     displayChecksBox_ = new wxBoxSizer(wxVERTICAL);
     picker->Add(displayChecksBox_, wxSizerFlags().Expand());
     hostTerminalCheck_ = new wxCheckBox(frame, wxID_ANY, ToWx(ui::kTerminalPickerLabel));
-    hostTerminalCheck_->SetValue(true);
+    hostTerminalCheck_->SetValue(settings_.shareTerminal);
+    hostTerminalCheck_->Bind(wxEVT_CHECKBOX, [this](wxCommandEvent&) { RememberHostServiceTicks(); });
     picker->Add(hostTerminalCheck_, wxSizerFlags().Border(wxTOP, FromDIP(kPickerGap)));
     hostFilesCheck_ = new wxCheckBox(frame, wxID_ANY, ToWx(ui::kFilesPickerLabel));
-    hostFilesCheck_->SetValue(true);
+    hostFilesCheck_->SetValue(settings_.shareFiles);
     hostFilesCheck_->Bind(wxEVT_CHECKBOX, [this](wxCommandEvent&) {
+        RememberHostServiceTicks();
         if (!Sharing()) ShowIdleHostState();
     });
     picker->Add(hostFilesCheck_, wxSizerFlags().Border(wxTOP, FromDIP(kPickerGap)));
@@ -1837,6 +1840,12 @@ void MainFrame::RefreshDisplayChoices() {
     }
     hostPickerFrame_->FitInside();
     ShowHostTable(false);
+}
+
+void MainFrame::RememberHostServiceTicks() {
+    settings_.shareTerminal = TerminalTicked();
+    settings_.shareFiles = FilesTicked();
+    deskhubp::SaveUiSettings(settings_);
 }
 
 bool MainFrame::TerminalTicked() const {
@@ -2648,17 +2657,19 @@ ConnectionFrame::ConnectionFrame(MainFrame* owner, std::string address, deskhub:
     controlRow->Add(controlCtrl, wxSizerFlags().CentreVertical());
     sizer->Add(controlRow, row);
 
-    auto* openShellBtn = MakeButton(panel, ToWx(ui::kOpenShellLabel));
-    openShellBtn->SetName("open-shell");
-    openShellBtn->Enable(caps_.terminal);
-    openShellBtn->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { OpenShellSession(); });
-    sizer->Add(openShellBtn, wideRow);
+    if (caps_.terminal) {
+        auto* openShellBtn = MakeButton(panel, ToWx(ui::kOpenShellLabel));
+        openShellBtn->SetName("open-shell");
+        openShellBtn->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { OpenShellSession(); });
+        sizer->Add(openShellBtn, wideRow);
+    }
 
-    auto* openFilesBtn = MakeButton(panel, ToWx(ui::kOpenFilesLabel));
-    openFilesBtn->SetName("open-files");
-    openFilesBtn->Enable(caps_.files);
-    openFilesBtn->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { OpenFileSendSession(); });
-    sizer->Add(openFilesBtn, wideRow);
+    if (caps_.files) {
+        auto* openFilesBtn = MakeButton(panel, ToWx(ui::kOpenFilesLabel));
+        openFilesBtn->SetName("open-files");
+        openFilesBtn->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { OpenFileSendSession(); });
+        sizer->Add(openFilesBtn, wideRow);
+    }
 
     sizer->Add(MakeHint(panel, ToWx(ui::kMobileHostNote)), row);
 

@@ -97,13 +97,15 @@ struct ConnectView: View {
             .tint(DeskhubPalette.accent)
             .onChange(of: model.settings.clientControl) { _, _ in model.settings.save() }
 
-            Button(DeskhubClient.string(DHStrOpenShellLabel), action: model.openShell)
-                .buttonStyle(.iosOutlined(fullWidth: true))
-                .disabled(!model.connect.canOpenShell)
+            if model.connect.canOpenShell {
+                Button(DeskhubClient.string(DHStrOpenShellLabel), action: model.openShell)
+                    .buttonStyle(.iosOutlined(fullWidth: true))
+            }
 
-            Button(DeskhubClient.string(DHStrOpenFilesLabel), action: model.openFileSend)
-                .buttonStyle(.iosOutlined(fullWidth: true))
-                .disabled(!model.connect.canOpenFiles)
+            if model.connect.canOpenFiles {
+                Button(DeskhubClient.string(DHStrOpenFilesLabel), action: model.openFileSend)
+                    .buttonStyle(.iosOutlined(fullWidth: true))
+            }
         }
     }
 

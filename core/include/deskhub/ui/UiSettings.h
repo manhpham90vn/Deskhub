@@ -25,6 +25,8 @@ struct UiSettings {
     bool startHidden = false;
     bool keepAwake = true;
     bool unattended = false;
+    bool shareTerminal = true;
+    bool shareFiles = true;
     std::string transferDir{};
 
     bool operator==(const UiSettings&) const = default;

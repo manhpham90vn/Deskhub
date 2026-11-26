@@ -71,6 +71,8 @@ struct HostPage: View {
         .task { await sharing.refreshShareSources() }
         .onAppear { sharing.loadAddresses() }
         .onChange(of: sharing.bindIp) { _, _ in sharing.save() }
+        .onChange(of: sharing.shareTerminal) { _, on in dh_set_share_terminal(on) }
+        .onChange(of: sharing.shareFiles) { _, on in dh_set_share_files(on) }
     }
 
     private func attachShell(_ row: HostRow) {
