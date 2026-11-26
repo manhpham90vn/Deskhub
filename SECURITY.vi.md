@@ -41,7 +41,7 @@ hình hoặc terminal.
 
 | | |
 |---|---|
-| Dữ liệu tới tay người phát triển | Không có dữ liệu nào. Không server, không tài khoản, không telemetry, không SDK bên thứ ba nào thu thập dữ liệu. Xem [`PRIVACY.vi.md`](PRIVACY.vi.md). |
+| Dữ liệu tới tay người phát triển | Không có dữ liệu nào. Không server, không tài khoản, không telemetry, không SDK bên thứ ba nào thu thập dữ liệu. Xem [Chính sách quyền riêng tư](https://bitfaring.com/products/deskhub/privacy/vi/). |
 | Việc đọc trộm lưu lượng | Mọi session đều chạy bên trong QUIC/TLS: frame video, phím gõ, văn bản clipboard và byte terminal đều được encrypt giữa hai máy. Việc bắt gói chỉ cho biết khối lượng và thời điểm, không cho biết nội dung. Packet chưa encrypt tới port đều bị loại bỏ, và host không gửi gì ở tầng ứng dụng — kể cả nội dung đang share — trước khi client authenticate. |
 | Viewer từ xa tranh quyền điều khiển | Host được ưu tiên: ngay khi bạn thao tác với mouse hoặc keyboard thật, remote input bị tạm dừng. Host trên Windows và macOS làm việc này ngay từ đầu. Host trên Linux chỉ làm được khi tài khoản chạy Deskhub đọc được `/dev/input/event*` — trên thực tế là phải thuộc nhóm `input`, điều mà các gói cài đặt không cấp; nếu không, log ghi lại một lần và remote input không bao giờ bị tạm dừng. |
 | Phím bị kẹt | Mọi phím mà phía từ xa đang giữ đều được nhả tự động khi session kết thúc hoặc viewer chuyển sang cửa sổ khác. |
@@ -135,7 +135,7 @@ hình hoặc terminal.
   mất kết nối, vị trí đó được mở lại và `Hello` tới tiếp theo sẽ chiếm chỗ, miễn là máy gửi
   đã qua admission bằng một key được phép.
 - **Việc share phơi ra toàn bộ display.** Không phải một cửa sổ, mà là mọi notification,
-  popup và cửa sổ trên màn hình đó. Xem [`PRIVACY.vi.md` §3.4](PRIVACY.vi.md).
+  popup và cửa sổ trên màn hình đó. Xem [Chính sách quyền riêng tư §3.4](https://bitfaring.com/products/deskhub/privacy/vi/).
 - **Host là điện thoại hoặc tablet phơi ra toàn bộ thiết bị.** Android và iOS cũng host
   được, và nội dung chúng stream là toàn bộ màn hình: app ngân hàng, mã một lần, tin nhắn,
   mọi mật khẩu bạn nhập trong khi share. Stream được encrypt như mọi session khác, nhưng

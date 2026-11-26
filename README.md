@@ -193,7 +193,7 @@ authoritative one.
 | [Specification](docs/SPECIFICATION.md) ([vi](docs/SPECIFICATION.vi.md) · [zh](docs/SPECIFICATION.zh.md) · [ja](docs/SPECIFICATION.ja.md)) | What Deskhub does, with no implementation detail |
 | [Architecture](docs/ARCHITECTURE.md) ([vi](docs/ARCHITECTURE.vi.md) · [zh](docs/ARCHITECTURE.zh.md) · [ja](docs/ARCHITECTURE.ja.md)) | Layers, threads, wire protocol, decisions |
 | [`SECURITY.md`](SECURITY.md) ([vi](SECURITY.vi.md) · [zh](SECURITY.zh.md) · [ja](SECURITY.ja.md)) | Threat model and how to report a vulnerability |
-| [`PRIVACY.md`](PRIVACY.md) ([vi](PRIVACY.vi.md) · [zh](PRIVACY.zh.md) · [ja](PRIVACY.ja.md)) | Privacy policy |
+| [Privacy policy](https://bitfaring.com/products/deskhub/privacy/) ([vi](https://bitfaring.com/products/deskhub/privacy/vi/) · [zh](https://bitfaring.com/products/deskhub/privacy/zh/) · [ja](https://bitfaring.com/products/deskhub/privacy/ja/)) | Privacy policy |
 | [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) ([vi](THIRD_PARTY_NOTICES.vi.md) · [zh](THIRD_PARTY_NOTICES.zh.md) · [ja](THIRD_PARTY_NOTICES.ja.md)) | Third-party components and licences |
 
 Bugs and feedback: [issues](https://github.com/Bitfaring/Deskhub/issues) — include your

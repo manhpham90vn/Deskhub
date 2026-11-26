@@ -171,7 +171,6 @@ translation that lags behind its English original is a bug.
 | `docs/SPECIFICATION.md` | `docs/SPECIFICATION.{vi,zh,ja}.md` | Feature spec — behaviour only, no implementation detail |
 | `docs/ARCHITECTURE.md` | `docs/ARCHITECTURE.{vi,zh,ja}.md` | How it is built — layers, threads, wire protocol, design decisions |
 | `SECURITY.md` | `SECURITY.{vi,zh,ja}.md` | Threat model, hardening, vulnerability reports |
-| `PRIVACY.md` | `PRIVACY.{vi,zh,ja}.md` | Pointer only: the policy is published at https://bitfaring.com/products/deskhub/privacy/ |
 | `THIRD_PARTY_NOTICES.md` | `THIRD_PARTY_NOTICES.{vi,zh,ja}.md` | Third-party components and licences |
 
 Rules for these files:
@@ -186,7 +185,7 @@ Rules for these files:
 - The privacy policy is a published legal document maintained in the Bitfaring admin
   (admin.bitfaring.com → Products → Deskhub → Privacy, one version per language) and
   published at https://bitfaring.com/products/deskhub/privacy/ (`/vi/`, `/zh/`, `/ja/`).
-  The `PRIVACY*.md` files here only point there. Any behaviour change that touches what is
+  There is no copy in this repo. Any behaviour change that touches what is
   stored or transmitted needs the policy updated there — a new version number, a new
   effective date and a changelog row, in all four languages — then "Publish website".
 - `CLAUDE.md`, the store listings under `client/android/fastlane/metadata/android/vi/`

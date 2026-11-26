@@ -191,7 +191,7 @@ Mọi tài liệu đều được xuất bản bằng tiếng Anh, kèm bản d�
 | [Specification](docs/SPECIFICATION.vi.md) ([en](docs/SPECIFICATION.md) · [zh](docs/SPECIFICATION.zh.md) · [ja](docs/SPECIFICATION.ja.md)) | Deskhub làm được gì, không đề cập chi tiết triển khai |
 | [Architecture](docs/ARCHITECTURE.vi.md) ([en](docs/ARCHITECTURE.md) · [zh](docs/ARCHITECTURE.zh.md) · [ja](docs/ARCHITECTURE.ja.md)) | Các layer, thread, wire protocol và các quyết định thiết kế |
 | [`SECURITY.vi.md`](SECURITY.vi.md) ([en](SECURITY.md) · [zh](SECURITY.zh.md) · [ja](SECURITY.ja.md)) | Threat model và cách báo lỗ hổng |
-| [`PRIVACY.vi.md`](PRIVACY.vi.md) ([en](PRIVACY.md) · [zh](PRIVACY.zh.md) · [ja](PRIVACY.ja.md)) | Chính sách quyền riêng tư |
+| [Chính sách quyền riêng tư](https://bitfaring.com/products/deskhub/privacy/vi/) ([en](https://bitfaring.com/products/deskhub/privacy/) · [zh](https://bitfaring.com/products/deskhub/privacy/zh/) · [ja](https://bitfaring.com/products/deskhub/privacy/ja/)) | Chính sách quyền riêng tư |
 | [`THIRD_PARTY_NOTICES.vi.md`](THIRD_PARTY_NOTICES.vi.md) ([en](THIRD_PARTY_NOTICES.md) · [zh](THIRD_PARTY_NOTICES.zh.md) · [ja](THIRD_PARTY_NOTICES.ja.md)) | Thành phần bên thứ ba và license |
 
 Báo lỗi và góp ý: [issues](https://github.com/Bitfaring/Deskhub/issues) — vui lòng ghi

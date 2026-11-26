@@ -189,7 +189,7 @@ passcode，没有 discovery，也没有任何放陌生人进来的开关。请�
 | [Specification](docs/SPECIFICATION.zh.md) ([en](docs/SPECIFICATION.md) · [vi](docs/SPECIFICATION.vi.md) · [ja](docs/SPECIFICATION.ja.md)) | Deskhub 做什么，不涉及实现细节 |
 | [Architecture](docs/ARCHITECTURE.zh.md) ([en](docs/ARCHITECTURE.md) · [vi](docs/ARCHITECTURE.vi.md) · [ja](docs/ARCHITECTURE.ja.md)) | 分层、thread、wire protocol 与设计决策 |
 | [`SECURITY.zh.md`](SECURITY.zh.md) ([en](SECURITY.md) · [vi](SECURITY.vi.md) · [ja](SECURITY.ja.md)) | Threat model 与漏洞报告方式 |
-| [`PRIVACY.zh.md`](PRIVACY.zh.md) ([en](PRIVACY.md) · [vi](PRIVACY.vi.md) · [ja](PRIVACY.ja.md)) | 隐私政策 |
+| [隐私政策](https://bitfaring.com/products/deskhub/privacy/zh/) ([en](https://bitfaring.com/products/deskhub/privacy/) · [vi](https://bitfaring.com/products/deskhub/privacy/vi/) · [ja](https://bitfaring.com/products/deskhub/privacy/ja/)) | 隐私政策 |
 | [`THIRD_PARTY_NOTICES.zh.md`](THIRD_PARTY_NOTICES.zh.md) ([en](THIRD_PARTY_NOTICES.md) · [vi](THIRD_PARTY_NOTICES.vi.md) · [ja](THIRD_PARTY_NOTICES.ja.md)) | 第三方组件与 license |
 
 问题反馈：[issues](https://github.com/Bitfaring/Deskhub/issues) —— 请附上设备型号。

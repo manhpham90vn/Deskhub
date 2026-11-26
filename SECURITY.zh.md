@@ -37,7 +37,7 @@ Connect 到 host 的 `100.x.y.z` 地址。
 
 | | |
 |---|---|
-| 数据流向开发者 | 不存在此类数据。没有服务器、账号、telemetry，也没有收集数据的第三方 SDK。见 [`PRIVACY.zh.md`](PRIVACY.zh.md)。 |
+| 数据流向开发者 | 不存在此类数据。没有服务器、账号、telemetry，也没有收集数据的第三方 SDK。见 [隐私政策](https://bitfaring.com/products/deskhub/privacy/zh/)。 |
 | 流量被读取 | 每个 session 都运行在 QUIC/TLS 之内：video frame、按键、clipboard 文本与 terminal 字节在两台机器之间均为 encrypt 状态。抓包只能得到流量规模与时间信息，得不到内容。到达该 port 的未 encrypt packet 一律丢弃，且在 client 完成 authenticate 之前，host 不发送任何应用层内容 —— 包括其共享内容。 |
 | 远端 viewer 争夺机器的控制权 | host 优先：一旦操作真实的 mouse 或 keyboard，remote input 即被暂停。Windows 与 macOS 的 host 开箱即用。Linux 的 host 仅在运行 Deskhub 的用户能够读取 `/dev/input/event*` 时才这样做 —— 实际上即属于 `input` 组，而安装包不会授予这一权限；缺少该权限时，日志会提示一次，remote input 永远不会被暂停。 |
 | 按键滞留 | 远端仍处于按下状态的按键，会在 session 结束或 viewer 切换时自动释放。 |
@@ -116,7 +116,7 @@ Connect 到 host 的 `100.x.y.z` 地址。
 - **viewer 名额在沉默 5 秒后自动释放。** 若你的 viewer 掉线，该名额将重新开放，下一个
   到达的 `Hello` 即可占用，只要发送方已使用允许的 key 通过 admission。
 - **共享会暴露整块 display。** 不是单个窗口，而是该显示器上的每一条通知、每一个弹窗与
-  每一个窗口。见 [`PRIVACY.zh.md` §3.4](PRIVACY.zh.md)。
+  每一个窗口。见 [隐私政策 §3.4](https://bitfaring.com/products/deskhub/privacy/zh/)。
 - **手机或平板作为 host 时会暴露整台设备。** Android 与 iOS 同样可以作为 host，其推送
   的是整块屏幕：银行 app、一次性验证码、消息，以及共享期间输入的所有密码。该 stream
   与其他 session 一样经过 encrypt，但所有被接受的 viewer 都能看到全部内容。移动端 host
